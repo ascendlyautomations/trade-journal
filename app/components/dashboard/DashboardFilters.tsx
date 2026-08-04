@@ -13,6 +13,7 @@ import {
   DASHBOARD_MOBILE_ACTION_BTN_CLASS,
   DASHBOARD_MOBILE_PUBLIC_BTN_BASE,
 } from "./dashboardHeaderMobileUi"
+import { DASHBOARD_MOBILE_FILTER_MARGIN_CLASS } from "./dashboardMobileUi"
 import type { GearDraftState } from "./dashboardGearTypes"
 
 export type DashboardFiltersProps = {
@@ -107,7 +108,7 @@ export default function DashboardFilters({
   return (
     <div>
       <TradeFilterBar
-        className="mt-1.5 mb-2 md:mt-2.5 md:mb-3"
+        className={DASHBOARD_MOBILE_FILTER_MARGIN_CLASS}
         mobileThreeRowLayout
         leading={<DashboardPlanIndicator isPro={isPro} />}
         leadingOverlay

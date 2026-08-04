@@ -2,7 +2,6 @@
 
 import {
   READABLE_EMPTY_CLASS,
-  READABLE_HELPER_CLASS,
   READABLE_LABEL_CLASS,
   READABLE_PRIMARY_CLASS,
   READABLE_SECONDARY_CLASS,
@@ -35,10 +34,19 @@ export const dashboardInsightMetricNegativeClass =
 export const dashboardInsightMetricNeutralClass = `text-[11px] md:text-sm font-semibold ${READABLE_PRIMARY_CLASS}`
 
 /** Compact widget subsection label (e.g. Trades by Session). */
-export const dashboardWidgetSubtitleClass = `mb-1.5 text-[11px] md:mb-2 md:text-sm ${READABLE_HELPER_CLASS}`
+export const dashboardWidgetSubtitleClass = `mb-1.5 text-[11px] md:mb-2 md:text-sm text-gray-200 md:text-gray-400`
 
-/** Stat card metric title under a value. */
-export const dashboardStatLabelClass = `mb-0.5 text-[11px] md:mb-1 md:text-sm ${READABLE_LABEL_CLASS}`
+/** Stat card metric title — brighter on mobile for navy contrast. */
+export const dashboardStatLabelClass = `mb-0.5 text-[11px] md:mb-1 md:text-sm text-gray-200 md:text-gray-400`
 
 /** Card section heading inside a widget (Streaks, Trading Hours, …). */
 export const dashboardWidgetSectionTitleClass = `mb-1.5 max-md:mb-1 text-[11px] font-semibold md:mb-2 md:text-sm ${READABLE_SECTION_TITLE_CLASS}`
+
+/**
+ * Mobile-only nested card labels (Hold Time cells, streak titles, etc.).
+ * Prefer over gray-400/500 on navy — values stay white.
+ */
+export const dashboardMobileNestedLabelClass = "text-[10px] text-gray-200"
+
+/** Mobile helper / caption under a value. */
+export const dashboardMobileHelperClass = "text-[10px] text-gray-300"

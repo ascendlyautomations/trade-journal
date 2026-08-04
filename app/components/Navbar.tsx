@@ -40,6 +40,7 @@ import {
 import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
 import { isNativeIos } from "@/lib/nativePlatform"
 import { NATIVE_IOS_OPEN_APP_MENU_EVENT } from "@/lib/nativeIosAppMenu"
+import { useMobileAutoHideNavbar } from "@/app/components/useMobileAutoHideNavbar"
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -70,7 +71,6 @@ export default function Navbar() {
   const [hasFetchedMessages, setHasFetchedMessages] = useState(false)
   const [hasFetchedAdmin, setHasFetchedAdmin] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [iosNavbarHidden, setIosNavbarHidden] = useState(false)
 
   const router = useRouter()
   const isHomePage = pathname === "/"
@@ -158,40 +158,23 @@ export default function Navbar() {
       setAccountMenuOpen(false)
       setMoreSubmenu(null)
       setIsOpen(true)
-      setIosNavbarHidden(false)
     }
     window.addEventListener(NATIVE_IOS_OPEN_APP_MENU_EVENT, onOpen)
     return () => window.removeEventListener(NATIVE_IOS_OPEN_APP_MENU_EVENT, onOpen)
   }, [])
 
-  // Capacitor iOS only: Instagram/X-style hide on scroll down, show on scroll up.
-  useEffect(() => {
-    if (!isNativeIos()) return
-    setIosNavbarHidden(false)
-    let lastY = window.scrollY
-
-    const onScroll = () => {
-      if (isOpen) {
-        setIosNavbarHidden(false)
-        lastY = window.scrollY
-        return
-      }
-      const y = window.scrollY
-      if (y <= 8) {
-        setIosNavbarHidden(false)
-      } else if (y > lastY + 2) {
-        setIosNavbarHidden(true)
-      } else if (y < lastY - 1) {
-        setIosNavbarHidden(false)
-      }
-      lastY = y
-    }
-
-    window.addEventListener("scroll", onScroll, { passive: true })
-    return () => window.removeEventListener("scroll", onScroll)
-  }, [pathname, isOpen])
-
   const mobileMenuOpen = isOpen && showMobileNav
+  const forceNavbarVisible =
+    mobileMenuOpen ||
+    Boolean(activeMenu) ||
+    accountMenuOpen ||
+    reviewModalOpen ||
+    bugReportModalOpen
+
+  const mobileNavbarHidden = useMobileAutoHideNavbar({
+    forceVisible: forceNavbarVisible,
+    resetKey: pathname,
+  })
 
   useModalScrollLock(mobileMenuOpen)
 
@@ -785,7 +768,7 @@ export default function Navbar() {
     <div
       ref={navRef}
       className={`fixed left-0 top-0 z-[9999] w-full bg-[#0b1f3a] pt-[var(--safe-area-top)] text-gray-100 transition-transform duration-200 ease-out will-change-transform ${
-        iosNavbarHidden && !mobileMenuOpen ? "-translate-y-full" : "translate-y-0"
+        mobileNavbarHidden ? "max-md:-translate-y-full md:translate-y-0" : "translate-y-0"
       } ${
         mobileMenuOpen
           ? "flex max-h-[100dvh] flex-col overflow-hidden md:block md:max-h-none md:overflow-visible"

@@ -89,10 +89,10 @@ html.tt-native-ios [data-tt-messages-inbox] [data-tt-messages-inbox-actions] {
   gap: 0.5rem;
 }
 
-/* Dashboard — tighten mobile rhythm on the shared surface. */
+/* Dashboard — horizontal safe-area only. Vertical rhythm is gap-2 via page pt/pb. */
 html.tt-native-ios [data-tt-native-surface="dashboard"] {
-  padding-top: 0.75rem;
-  padding-bottom: 1rem;
+  padding-top: 0;
+  padding-bottom: 0;
   padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
   padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
 }
@@ -148,6 +148,14 @@ html.tradetraxs-demo-banner-active {
 @media (min-width: 640px) {
   html.tradetraxs-demo-banner-active {
     --demo-banner-height: 3.5rem;
+  }
+}
+
+/* Dashboard mobile tab control: stick under the fixed navbar. Native iOS uses
+   a full-bleed scrollport with static header padding, so sticky offset matches web. */
+@media (max-width: 767px) {
+  .tt-dashboard-tab-sticky {
+    top: var(--app-header-offset);
   }
 }
 
@@ -627,6 +635,27 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   }
   50% {
     opacity: 0.55;
+  }
+}
+
+@keyframes ttDashTabIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Fade only — no translate (avoids scroll/layout jump on tab switch). */
+@keyframes ttDashTabFade {
+  from {
+    opacity: 0.72;
+  }
+  to {
+    opacity: 1;
   }
 }
 

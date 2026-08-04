@@ -1,7 +1,7 @@
 "use client"
 
 import { formatDecimal, formatRR } from "@/lib/formatDisplay"
-import { memo } from "react"
+import { memo, type ReactNode } from "react"
 
 type ProfileOverviewStatsProps = {
   visible: boolean
@@ -26,6 +26,21 @@ function formatMoney(value: number) {
       })}`
 }
 
+function StatCard({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-center md:p-4">
+      <p className="text-xs text-gray-200 md:text-gray-400">{label}</p>
+      {children}
+    </div>
+  )
+}
+
 function ProfileOverviewStats({
   visible,
   isPrivate,
@@ -38,21 +53,19 @@ function ProfileOverviewStats({
 }: ProfileOverviewStatsProps) {
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6 md:gap-4">
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-          <p className="text-xs text-gray-400">Trades</p>
+      {/* Mobile: 3×2 dense grid (Dashboard gap-2). md+: 3 cols, xl: 6. */}
+      <div className="grid grid-cols-3 gap-2 md:grid-cols-3 md:gap-4 xl:grid-cols-6">
+        <StatCard label="Trades">
           <p className="text-lg font-semibold tabular-nums text-white">
             {visible ? totalTrades : "—"}
           </p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-          <p className="text-xs text-gray-400">Win %</p>
+        </StatCard>
+        <StatCard label="Win %">
           <p className="text-lg font-semibold tabular-nums text-white">
             {visible ? `${formatDecimal(winRate)}%` : "—"}
           </p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-          <p className="text-xs text-gray-400">Net P&amp;L</p>
+        </StatCard>
+        <StatCard label="Net P&L">
           <p
             className={`text-lg font-semibold tabular-nums ${
               !visible
@@ -64,21 +77,18 @@ function ProfileOverviewStats({
           >
             {visible ? formatMoney(totalPnl) : "—"}
           </p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-          <p className="text-xs text-gray-400">Payout Total</p>
-          <p className="text-lg font-semibold tabular-nums text-emerald-400">
-            {payoutTotal != null ? formatMoney(payoutTotal) : "—"}
-          </p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-          <p className="text-xs text-gray-400">Avg RR</p>
+        </StatCard>
+        <StatCard label="Avg RR">
           <p className="text-lg font-semibold tabular-nums text-white">
             {visible ? formatRR(averageRr) : "—"}
           </p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-          <p className="text-xs text-gray-400">Streak</p>
+        </StatCard>
+        <StatCard label="Payout Total">
+          <p className="text-lg font-semibold tabular-nums text-emerald-400">
+            {payoutTotal != null ? formatMoney(payoutTotal) : "—"}
+          </p>
+        </StatCard>
+        <StatCard label="Streak">
           <p
             className={`text-lg font-semibold tabular-nums ${
               streakLabel.startsWith("W")
@@ -90,11 +100,11 @@ function ProfileOverviewStats({
           >
             {streakLabel}
           </p>
-        </div>
+        </StatCard>
       </div>
 
       {!visible && isPrivate ? (
-        <p className="text-center text-xs text-gray-400">
+        <p className="text-center text-xs text-gray-300 md:text-gray-400">
           Follow to unlock trading stats in this row.
         </p>
       ) : null}

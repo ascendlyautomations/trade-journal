@@ -196,8 +196,9 @@ export default function ProfileTradeCard({
       </div>
       {desc ? (
         <ExpandableText
-          className="min-w-0 px-1 text-xs leading-relaxed text-white md:text-sm"
+          className="min-w-0 px-0.5 text-xs leading-snug text-white md:px-1 md:leading-relaxed md:text-sm"
           textClassName="break-words text-white"
+          collapsedLines={3}
           stopPropagation
         >
           {desc}
@@ -221,11 +222,11 @@ export default function ProfileTradeCard({
       }`
 
   const tradeAuthorHeader = (
-    <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
+    <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-3 py-2 md:px-4 md:py-3">
+      <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
         <ProfileAvatarImg
           src={profile.avatar_url}
-          className="h-10 w-10 shrink-0 ring-2 ring-white/10"
+          className="h-9 w-9 shrink-0 ring-2 ring-white/10 md:h-10 md:w-10"
         />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-white">
@@ -295,6 +296,34 @@ export default function ProfileTradeCard({
     </div>
   )
 
+  /** Mobile feed: ~35% shorter media frame with cover crop. Desktop unchanged. */
+  const tradeFeedImage = imageSrc ? (
+    <>
+      <div className="relative h-[min(46dvh,280px)] w-full overflow-hidden md:hidden">
+        <TradeScreenshotImage
+          src={imageSrc}
+          preset="feed-thumb"
+          objectFit="cover"
+          onClick={onImageClick}
+          logContext="profile-trade-card-mobile"
+          className="h-full w-full"
+        />
+      </div>
+      <div className="hidden md:block">
+        <TradeScreenshotImage
+          src={imageSrc}
+          preset="feed-thumb"
+          onClick={onImageClick}
+          logContext="profile-trade-card"
+        />
+      </div>
+    </>
+  ) : (
+    <div className="flex min-h-[4rem] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] py-6 text-xs text-gray-400 md:min-h-[5rem] md:py-8">
+      No screenshot
+    </div>
+  )
+
   if (inDetailModal) {
     return (
       <article className={cardShellClass}>
@@ -344,14 +373,16 @@ export default function ProfileTradeCard({
                     onCommentsFocus={() => setCommentsFocused(true)}
                   />
                 }
-                engagementClassName="shrink-0 border-t border-white/10 px-4 py-2 md:border-t-0"
+                engagementClassName="shrink-0 border-t border-white/10 px-3 py-1.5 md:border-t-0 md:px-4 md:py-2"
                 collapsibleContent={
-                  <div className="space-y-3 px-4 pb-3 pt-4">{tradeDetails}</div>
+                  <div className="space-y-2 px-3 pb-2 pt-3 md:space-y-3 md:px-4 md:pb-3 md:pt-4">
+                    {tradeDetails}
+                  </div>
                 }
                 comments={
                   commentsExpanded ? (
                     <TradeSocialCommentsSection
-                      className="px-4 pb-4"
+                      className="px-3 pb-3 md:px-4 md:pb-4"
                       scrollContainerRef={commentsScrollRef}
                     />
                   ) : null
@@ -364,7 +395,7 @@ export default function ProfileTradeCard({
               {imageSrc ? (
                 <div className="shrink-0 md:hidden">{tradeImageBlock}</div>
               ) : null}
-              <div className="space-y-3 p-4">{tradeDetails}</div>
+              <div className="space-y-2 p-3 md:space-y-3 md:p-4">{tradeDetails}</div>
             </>
           )}
         </div>
@@ -390,18 +421,7 @@ export default function ProfileTradeCard({
     >
       {tradeAuthorHeader}
 
-      {imageSrc ? (
-        <TradeScreenshotImage
-          src={imageSrc}
-          preset="feed-thumb"
-          onClick={onImageClick}
-          logContext="profile-trade-card"
-        />
-      ) : (
-        <div className="flex min-h-[5rem] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] py-8 text-xs text-gray-400">
-          No screenshot
-        </div>
-      )}
+      {tradeFeedImage}
 
       {showInteractions ? (
         <div onKeyDown={(e) => e.stopPropagation()}>
@@ -413,17 +433,19 @@ export default function ProfileTradeCard({
             onRequestComments={commentsExpanded ? undefined : onOpenComments}
             scrollToCommentsOnMount={scrollToCommentsOnMount}
           >
-            <div className="border-t border-white/10 px-4 py-2">
+            <div className="border-t border-white/10 px-3 py-1.5 md:px-4 md:py-2">
               <TradeSocialEngagementBar />
             </div>
-            <div className="space-y-3 px-4 pb-3">{tradeDetails}</div>
+            <div className="space-y-2 px-3 pb-2 md:space-y-3 md:px-4 md:pb-3">
+              {tradeDetails}
+            </div>
             {commentsExpanded ? (
-              <TradeSocialCommentsSection className="px-4 pb-4" />
+              <TradeSocialCommentsSection className="px-3 pb-3 md:px-4 md:pb-4" />
             ) : null}
           </TradeSocialProvider>
         </div>
       ) : (
-        <div className="space-y-3 p-4">{tradeDetails}</div>
+        <div className="space-y-2 p-3 md:space-y-3 md:p-4">{tradeDetails}</div>
       )}
     </article>
   )

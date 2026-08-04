@@ -34,6 +34,8 @@ type DashboardAnalyticsProps = {
   longShortPerformance: ComponentProps<typeof DashboardLongShort>["performance"]
   holdTimeStats: ComponentProps<typeof DashboardHoldTime>["stats"]
   totalTrades: number
+  /** Force Long vs Short comparison table (mobile Analytics tab). */
+  longShortLayout?: ComponentProps<typeof DashboardLongShort>["layout"]
 }
 
 function formatNumber(value: number) {
@@ -49,11 +51,12 @@ function DashboardAnalytics({
   longShortPerformance,
   holdTimeStats,
   totalTrades,
+  longShortLayout = "auto",
 }: DashboardAnalyticsProps) {
   return (
-    <>
-      <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch">
-        <div className="h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-2.5 md:p-4 lg:col-span-2">
+    <div className="flex flex-col gap-2 max-md:gap-2 md:gap-3">
+      <div className="grid grid-cols-1 gap-2 max-md:gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch">
+        <div className="h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-2.5 max-md:px-2 max-md:pb-1.5 max-md:pt-1.5 md:p-4 lg:col-span-2">
           <h3 className={dashboardInsightTitleClass}>Symbol Performance</h3>
 
           {symbolPerformanceRows.length === 0 ? (
@@ -65,7 +68,7 @@ function DashboardAnalytics({
           ) : (
             <table className="w-full min-w-[520px] text-[11px] md:text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-gray-400">
+                <tr className="border-b border-white/10 text-gray-200 md:text-gray-400">
                   <th className="py-1.5 text-center md:py-2">Ticker</th>
                   <th className="py-1.5 text-center md:py-2">Trades</th>
                   <th className="py-1.5 text-center md:py-2">Win %</th>
@@ -112,16 +115,17 @@ function DashboardAnalytics({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch">
+      <div className="grid grid-cols-1 gap-2 max-md:gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch">
         <DashboardLongShort
           performance={longShortPerformance}
           totalTrades={totalTrades}
+          layout={longShortLayout}
         />
         <div className="lg:col-span-2">
           <DashboardHoldTime stats={holdTimeStats} totalTrades={totalTrades} />
         </div>
       </div>
-    </>
+    </div>
   )
 }
 

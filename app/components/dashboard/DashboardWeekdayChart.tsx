@@ -73,14 +73,12 @@ export default function DashboardWeekdayChart({
 }: DashboardWeekdayChartProps) {
   const showEmpty = totalTrades === 0
 
-  // Empty blue under the plot came from:
-  // 1) card padding-bottom (p-2.5)
-  // 2) title mb-2
-  // 3) h-full stretching the card past title+chart
-  // 4) LineChart margin.bottom (transparent SVG → card shows through)
-  // ResponsiveContainer height stays 280 on both breakpoints.
+  // Mobile chart height ~30% shorter than desktop (190 vs 280) — denser Analytics tab.
+  const MOBILE_CHART_HEIGHT = 190
+  const DESKTOP_CHART_HEIGHT = 280
+
   return (
-    <div className="flex h-full min-h-[260px] flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md max-md:h-auto max-md:min-h-0 max-md:px-2.5 max-md:pb-1 max-md:pt-2 md:min-h-[300px] md:p-4">
+    <div className="flex h-full min-h-[260px] flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md max-md:h-auto max-md:min-h-0 max-md:px-2 max-md:pb-1 max-md:pt-1.5 md:min-h-[300px] md:p-4">
       <h2 className="mb-2 text-xs font-semibold text-blue-300 max-md:mb-1 md:mb-3 md:text-base">
         P&amp;L by Weekday
       </h2>
@@ -93,15 +91,15 @@ export default function DashboardWeekdayChart({
       ) : (
         <>
           <div className="w-full overflow-hidden md:hidden">
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={MOBILE_CHART_HEIGHT}>
               <WeekdayLineChart
                 data={data}
-                margin={{ top: 8, right: 12, left: 8, bottom: 4 }}
+                margin={{ top: 4, right: 8, left: 4, bottom: 0 }}
               />
             </ResponsiveContainer>
           </div>
           <div className="hidden w-full overflow-hidden md:block">
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={DESKTOP_CHART_HEIGHT}>
               <WeekdayLineChart
                 data={data}
                 margin={{ top: 10, right: 20, left: 20, bottom: 20 }}

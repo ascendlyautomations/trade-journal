@@ -1,10 +1,17 @@
 "use client"
 
 import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
-import { DASHBOARD_MOBILE_CARD_PAD_CLASS, DASHBOARD_MOBILE_CARD_TITLE_CLASS } from "@/app/components/dashboard/dashboardMobileUi"
+import {
+  DASHBOARD_MOBILE_CARD_PAD_CLASS,
+  DASHBOARD_MOBILE_CARD_TITLE_CLASS,
+} from "@/app/components/dashboard/dashboardMobileUi"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatDecimal, formatRR } from "@/lib/formatDisplay"
-import type { DirectionEdge, LongShortPerformance } from "@/lib/dashboardLongShortStats"
+import type {
+  DirectionEdge,
+  LongShortPerformance,
+  LongShortSideStats,
+} from "@/lib/dashboardLongShortStats"
 
 function formatNumber(value: number) {
   if (value === null || value === undefined) return "-"
@@ -129,13 +136,13 @@ function DirectionEdgePanel({ edge }: { edge: DirectionEdge }) {
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 p-2.5 md:p-4">
-      <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 md:mb-2 md:text-xs">
+      <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-200 md:mb-2 md:text-xs md:text-gray-400">
         Direction Edge
       </h3>
       <p className={`text-xs font-medium leading-snug md:text-sm ${verdictClass}`}>
         {edge.message}
       </p>
-      <div className="mt-3 space-y-1 text-[11px] md:text-xs text-gray-400">
+      <div className="mt-3 space-y-1 text-[11px] text-gray-200 md:text-xs md:text-gray-400">
         <p>
           <span className="font-medium text-gray-200">Expectancy:</span>{" "}
           Long {formatExpectancy(edge.longExpectancy)} · Short{" "}
@@ -151,20 +158,226 @@ function DirectionEdgePanel({ edge }: { edge: DirectionEdge }) {
   )
 }
 
+function pnlClass(value: number | null | undefined) {
+  if (value == null) return "text-gray-400"
+  return value >= 0 ? "text-green-400" : "text-red-400"
+}
+
+function pfClass(value: number | null | undefined) {
+  if (value == null) return "text-gray-400"
+  return value >= 1 ? "text-green-400" : "text-red-400"
+}
+
+type CompareRow = {
+  label: string
+  long: string
+  short: string
+  longClass?: string
+  shortClass?: string
+}
+
+function buildCompareRows(
+  long: LongShortSideStats | null,
+  short: LongShortSideStats | null
+): CompareRow[] {
+  return [
+    {
+      label: "Trades",
+      long: long ? formatNumber(long.totalTrades) : "—",
+      short: short ? formatNumber(short.totalTrades) : "—",
+    },
+    {
+      label: "Total P&L",
+      long: long ? formatCurrency(long.totalPnL) : "—",
+      short: short ? formatCurrency(short.totalPnL) : "—",
+      longClass: long ? pnlClass(long.totalPnL) : undefined,
+      shortClass: short ? pnlClass(short.totalPnL) : undefined,
+    },
+    {
+      label: "Avg P&L",
+      long: long ? formatCurrency(long.avgPnL) : "—",
+      short: short ? formatCurrency(short.avgPnL) : "—",
+      longClass: long ? pnlClass(long.avgPnL) : undefined,
+      shortClass: short ? pnlClass(short.avgPnL) : undefined,
+    },
+    {
+      label: "Best Trade",
+      long: long?.bestTrade != null ? formatCurrency(long.bestTrade) : "—",
+      short: short?.bestTrade != null ? formatCurrency(short.bestTrade) : "—",
+      longClass: long?.bestTrade != null ? "text-green-400" : undefined,
+      shortClass: short?.bestTrade != null ? "text-green-400" : undefined,
+    },
+    {
+      label: "Worst Trade",
+      long: long?.worstTrade != null ? formatCurrency(long.worstTrade) : "—",
+      short: short?.worstTrade != null ? formatCurrency(short.worstTrade) : "—",
+      longClass: long?.worstTrade != null ? "text-red-400" : undefined,
+      shortClass: short?.worstTrade != null ? "text-red-400" : undefined,
+    },
+    {
+      label: "Win Rate",
+      long: long ? `${long.winRate.toFixed(1)}%` : "—",
+      short: short ? `${short.winRate.toFixed(1)}%` : "—",
+    },
+    {
+      label: "Avg RR",
+      long: long ? formatAvgRR(long.avgRR) : "—",
+      short: short ? formatAvgRR(short.avgRR) : "—",
+    },
+    {
+      label: "Profit Factor",
+      long: long ? formatDecimal(long.profitFactor) : "—",
+      short: short ? formatDecimal(short.profitFactor) : "—",
+      longClass: long ? pfClass(long.profitFactor) : undefined,
+      shortClass: short ? pfClass(short.profitFactor) : undefined,
+    },
+    {
+      label: "Expectancy",
+      long: long ? formatCurrency(long.expectancy) : "—",
+      short: short ? formatCurrency(short.expectancy) : "—",
+      longClass: long ? pnlClass(long.expectancy) : undefined,
+      shortClass: short ? pnlClass(short.expectancy) : undefined,
+    },
+    {
+      label: "Best Win Streak",
+      long: long ? formatNumber(long.bestWinStreak) : "—",
+      short: short ? formatNumber(short.bestWinStreak) : "—",
+    },
+  ]
+}
+
+/**
+ * Full-width 3-column comparison table:
+ * label | Long | Short — never stacked side cards.
+ */
+function LongShortCompareTable({
+  long,
+  short,
+  edge,
+}: {
+  long: LongShortSideStats | null
+  short: LongShortSideStats | null
+  edge: DirectionEdge
+}) {
+  const rows = buildCompareRows(long, short)
+
+  return (
+    <div className="w-full min-w-0 space-y-2">
+      <table
+        className="w-full border-collapse"
+        style={{ tableLayout: "fixed", width: "100%" }}
+      >
+        <colgroup>
+          <col style={{ width: "36%" }} />
+          <col style={{ width: "32%" }} />
+          <col style={{ width: "32%" }} />
+        </colgroup>
+        <thead>
+          <tr className="border-b border-white/10">
+            <th scope="col" className="py-1.5 pr-2 text-left font-normal" />
+            <th
+              scope="col"
+              className="px-1 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-emerald-400"
+            >
+              Long
+            </th>
+            <th
+              scope="col"
+              className="px-1 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-sky-400"
+            >
+              Short
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr
+              key={row.label}
+              className="border-b border-white/5 last:border-b-0"
+            >
+              <th
+                scope="row"
+                className="py-1.5 pr-2 text-left text-[11px] font-normal text-gray-200"
+              >
+                {row.label}
+              </th>
+              <td
+                className={`px-1 py-1.5 text-center text-[11px] font-semibold tabular-nums whitespace-nowrap ${
+                  row.longClass ?? "text-gray-200"
+                }`}
+              >
+                {row.long}
+              </td>
+              <td
+                className={`px-1 py-1.5 text-center text-[11px] font-semibold tabular-nums whitespace-nowrap ${
+                  row.shortClass ?? "text-gray-200"
+                }`}
+              >
+                {row.short}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <DirectionEdgePanel edge={edge} />
+    </div>
+  )
+}
+
+function LongShortStackedCards({
+  performance,
+}: {
+  performance: LongShortPerformance
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-2 md:gap-3">
+      {performance.long ? (
+        <SideCard
+          label="Long"
+          accentClass="text-emerald-400"
+          stats={performance.long}
+        />
+      ) : (
+        <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-gray-400 md:p-4">
+          No long trades in current filters.
+        </div>
+      )}
+      {performance.short ? (
+        <SideCard
+          label="Short"
+          accentClass="text-sky-400"
+          stats={performance.short}
+        />
+      ) : (
+        <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-gray-400 md:p-4">
+          No short trades in current filters.
+        </div>
+      )}
+      <DirectionEdgePanel edge={performance.directionEdge} />
+    </div>
+  )
+}
+
 export type DashboardLongShortProps = {
   performance: LongShortPerformance
   totalTrades?: number
+  /**
+   * Force the mobile comparison table (used by the mobile Analytics tab so
+   * breakpoint CSS cannot fall back to stacked Long/Short cards).
+   */
+  layout?: "compare" | "stacked" | "auto"
 }
 
 export default function DashboardLongShort({
   performance,
   totalTrades = 0,
+  layout = "auto",
 }: DashboardLongShortProps) {
   const showEmpty = totalTrades === 0
 
   return (
     <div
-      className={`flex h-full min-h-[180px] flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md max-md:h-auto md:min-h-[200px] md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`}
+      className={`flex h-full min-h-[180px] flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md max-md:h-auto max-md:min-h-0 md:min-h-[200px] md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`}
     >
       <h2
         className={`mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-base ${DASHBOARD_MOBILE_CARD_TITLE_CLASS}`}
@@ -182,32 +395,29 @@ export default function DashboardLongShort({
           variant="needs-direction"
           className="py-8"
         />
+      ) : layout === "compare" ? (
+        <LongShortCompareTable
+          long={performance.long}
+          short={performance.short}
+          edge={performance.directionEdge}
+        />
+      ) : layout === "stacked" ? (
+        <LongShortStackedCards performance={performance} />
       ) : (
-        <div className="grid grid-cols-1 gap-2 md:gap-3">
-          {performance.long ? (
-            <SideCard
-              label="Long"
-              accentClass="text-emerald-400"
-              stats={performance.long}
+        <>
+          {/* Mobile: comparison table across full card width */}
+          <div className="block w-full min-w-0 md:hidden">
+            <LongShortCompareTable
+              long={performance.long}
+              short={performance.short}
+              edge={performance.directionEdge}
             />
-          ) : (
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3 md:p-4 text-xs text-gray-400">
-              No long trades in current filters.
-            </div>
-          )}
-          {performance.short ? (
-            <SideCard
-              label="Short"
-              accentClass="text-sky-400"
-              stats={performance.short}
-            />
-          ) : (
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3 md:p-4 text-xs text-gray-400">
-              No short trades in current filters.
-            </div>
-          )}
-          <DirectionEdgePanel edge={performance.directionEdge} />
-        </div>
+          </div>
+          {/* Desktop: original stacked cards */}
+          <div className="hidden md:block">
+            <LongShortStackedCards performance={performance} />
+          </div>
+        </>
       )}
     </div>
   )

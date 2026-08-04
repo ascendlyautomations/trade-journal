@@ -45,6 +45,140 @@ type DashboardInsightsProps = {
   insightBestWeekday: string | null
   insightBestWeekdayAvg: number
   bestSetup: BestSetup | null
+  /**
+   * Mobile tab split. Desktop / default keeps `"all"`.
+   * - performance: Performance Insights card only
+   * - records: setups, advanced edge, risk, warnings
+   */
+  sections?: "all" | "performance" | "records"
+}
+
+function PerformanceInsightsCard({
+  totalTrades,
+  hasTradingDayTimeSource,
+  insights,
+  insightBestSymbol,
+  insightBestSymbolAvg,
+  insightBestWeekday,
+  insightBestWeekdayAvg,
+}: Pick<
+  DashboardInsightsProps,
+  | "totalTrades"
+  | "hasTradingDayTimeSource"
+  | "insights"
+  | "insightBestSymbol"
+  | "insightBestSymbolAvg"
+  | "insightBestWeekday"
+  | "insightBestWeekdayAvg"
+>) {
+  return (
+    <div className={dashboardInsightCardClass}>
+      <h3 className={dashboardInsightTitleClass}>Performance Insights</h3>
+      <p className={dashboardInsightHelperClass}>
+        Data-driven highlights (min. 3 trades per session, symbol, or direction).
+        Respects current filters.
+      </p>
+      {totalTrades > 0 && !hasTradingDayTimeSource ? (
+        <p className="mb-3 text-xs md:text-sm leading-relaxed text-amber-200/90">
+          Trading day stats use entry/exit times with a 6PM EST session rollover.
+          Add entry/exit times to unlock these insights.
+        </p>
+      ) : null}
+      {insights.length > 0 || insightBestSymbol || insightBestWeekday ? (
+        <div className="space-y-2">
+          {insights.map((text, index) => (
+            <p
+              key={`${index}-${text.slice(0, 24)}`}
+              className={dashboardInsightBodyClass}
+            >
+              • <PerformanceInsightLine text={text} />
+            </p>
+          ))}
+          {insightBestSymbol ? (
+            <p className={dashboardInsightBodyClass}>
+              •{" "}
+              <SymbolInsightLine
+                symbol={insightBestSymbol}
+                avgPnL={insightBestSymbolAvg}
+              />
+            </p>
+          ) : null}
+          {insightBestWeekday ? (
+            <p className={dashboardInsightBodyClass}>
+              •{" "}
+              <WeekdayInsightLine
+                weekday={insightBestWeekday}
+                avgPnL={insightBestWeekdayAvg}
+              />
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className={dashboardInsightEmptyClass}>
+          Not enough sample size yet. Need at least 3 trades in a session,
+          symbol, or direction bucket (with current filters).
+        </p>
+      )}
+    </div>
+  )
+}
+
+function BestSetupCard({
+  bestSetup,
+  wide,
+}: {
+  bestSetup: BestSetup | null
+  wide?: boolean
+}) {
+  return (
+    <div className={`${dashboardInsightCardClass} ${wide ? "md:col-span-2" : ""}`}>
+      <h3 className={dashboardInsightTitleClass}>Best Performing Strategy</h3>
+      {bestSetup ? (
+        <div className={`space-y-2 ${dashboardInsightBodyClass}`}>
+          <p>
+            <span className={dashboardInsightLabelClass}>Strategy:</span>{" "}
+            <span className={dashboardInsightMetricPositiveClass}>
+              {bestSetup.strategy}
+            </span>
+          </p>
+          <p>
+            <span className={dashboardInsightLabelClass}>Win rate:</span>{" "}
+            <span
+              className={
+                bestSetup.winRate > 50
+                  ? dashboardInsightMetricPositiveClass
+                  : dashboardInsightMetricNegativeClass
+              }
+            >
+              {bestSetup.winRate.toFixed(1)}%
+            </span>
+          </p>
+          <p>
+            <span className={dashboardInsightLabelClass}>Total P&amp;L:</span>{" "}
+            <span
+              className={`tabular-nums ${
+                bestSetup.totalPnL >= 0
+                  ? dashboardInsightMetricPositiveClass
+                  : dashboardInsightMetricNegativeClass
+              }`}
+            >
+              {formatCurrency(bestSetup.totalPnL)}
+            </span>
+          </p>
+          <p>
+            <span className={dashboardInsightLabelClass}>Trades:</span>{" "}
+            <span className={dashboardInsightMetricNeutralClass}>
+              {bestSetup.trades}
+            </span>
+          </p>
+        </div>
+      ) : (
+        <p className={dashboardInsightEmptyClass}>
+          Need at least 3 trades with the same strategy to rank setups.
+        </p>
+      )}
+    </div>
+  )
 }
 
 function DashboardInsights({
@@ -63,125 +197,46 @@ function DashboardInsights({
   insightBestWeekday,
   insightBestWeekdayAvg,
   bestSetup,
+  sections = "all",
 }: DashboardInsightsProps) {
+  const includePerformance = sections === "all" || sections === "performance"
+  const includeRecords = sections === "all" || sections === "records"
+
+  const showPerformanceCard = includePerformance && showInsights
+  const showBestSetupCard = includeRecords && showBestSetup
+  const showNarrativeRow =
+    includeRecords && (showInsights || showWorstSetup || showWarnings)
+
   return (
     <>
-      {showInsights || showBestSetup ? (
+      {showPerformanceCard || (sections === "all" && showBestSetupCard) ? (
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-3">
-          {showInsights ? (
-            <div className={dashboardInsightCardClass}>
-              <h3 className={dashboardInsightTitleClass}>Performance Insights</h3>
-              <p className={dashboardInsightHelperClass}>
-                Data-driven highlights (min. 3 trades per session, symbol, or
-                direction). Respects current filters.
-              </p>
-              {totalTrades > 0 && !hasTradingDayTimeSource ? (
-                <p className="mb-3 text-xs md:text-sm leading-relaxed text-amber-200/90">
-                  Trading day stats use entry/exit times with a 6PM EST session
-                  rollover. Add entry/exit times to unlock these insights.
-                </p>
-              ) : null}
-              {insights.length > 0 ||
-              insightBestSymbol ||
-              insightBestWeekday ? (
-                <div className="space-y-2">
-                  {insights.map((text, index) => (
-                    <p
-                      key={`${index}-${text.slice(0, 24)}`}
-                      className={dashboardInsightBodyClass}
-                    >
-                      • <PerformanceInsightLine text={text} />
-                    </p>
-                  ))}
-                  {insightBestSymbol ? (
-                    <p className={dashboardInsightBodyClass}>
-                      •{" "}
-                      <SymbolInsightLine
-                        symbol={insightBestSymbol}
-                        avgPnL={insightBestSymbolAvg}
-                      />
-                    </p>
-                  ) : null}
-                  {insightBestWeekday ? (
-                    <p className={dashboardInsightBodyClass}>
-                      •{" "}
-                      <WeekdayInsightLine
-                        weekday={insightBestWeekday}
-                        avgPnL={insightBestWeekdayAvg}
-                      />
-                    </p>
-                  ) : null}
-                </div>
-              ) : (
-                <p className={dashboardInsightEmptyClass}>
-                  Not enough sample size yet. Need at least 3 trades in a session,
-                  symbol, or direction bucket (with current filters).
-                </p>
-              )}
-            </div>
+          {showPerformanceCard ? (
+            <PerformanceInsightsCard
+              totalTrades={totalTrades}
+              hasTradingDayTimeSource={hasTradingDayTimeSource}
+              insights={insights}
+              insightBestSymbol={insightBestSymbol}
+              insightBestSymbolAvg={insightBestSymbolAvg}
+              insightBestWeekday={insightBestWeekday}
+              insightBestWeekdayAvg={insightBestWeekdayAvg}
+            />
           ) : null}
 
-          {showBestSetup ? (
-            <div
-              className={`${dashboardInsightCardClass} ${
-                !showInsights ? "md:col-span-2" : ""
-              }`}
-            >
-              <h3 className={dashboardInsightTitleClass}>
-                Best Performing Strategy
-              </h3>
-              {bestSetup ? (
-                <div className={`space-y-2 ${dashboardInsightBodyClass}`}>
-                  <p>
-                    <span className={dashboardInsightLabelClass}>Strategy:</span>{" "}
-                    <span className={dashboardInsightMetricPositiveClass}>
-                      {bestSetup.strategy}
-                    </span>
-                  </p>
-                  <p>
-                    <span className={dashboardInsightLabelClass}>Win rate:</span>{" "}
-                    <span
-                      className={
-                        bestSetup.winRate > 50
-                          ? dashboardInsightMetricPositiveClass
-                          : dashboardInsightMetricNegativeClass
-                      }
-                    >
-                      {bestSetup.winRate.toFixed(1)}%
-                    </span>
-                  </p>
-                  <p>
-                    <span className={dashboardInsightLabelClass}>
-                      Total P&amp;L:
-                    </span>{" "}
-                    <span
-                      className={`tabular-nums ${
-                        bestSetup.totalPnL >= 0
-                          ? dashboardInsightMetricPositiveClass
-                          : dashboardInsightMetricNegativeClass
-                      }`}
-                    >
-                      {formatCurrency(bestSetup.totalPnL)}
-                    </span>
-                  </p>
-                  <p>
-                    <span className={dashboardInsightLabelClass}>Trades:</span>{" "}
-                    <span className={dashboardInsightMetricNeutralClass}>
-                      {bestSetup.trades}
-                    </span>
-                  </p>
-                </div>
-              ) : (
-                <p className={dashboardInsightEmptyClass}>
-                  Need at least 3 trades with the same strategy to rank setups.
-                </p>
-              )}
-            </div>
+          {sections === "all" && showBestSetupCard ? (
+            <BestSetupCard bestSetup={bestSetup} wide={!showInsights} />
           ) : null}
         </div>
       ) : null}
 
-      {showInsights || showWorstSetup || showWarnings ? (
+      {/* Mobile Records tab: Best Setup sits with narrative insights. */}
+      {sections === "records" && showBestSetupCard ? (
+        <div className="grid grid-cols-1 gap-2">
+          <BestSetupCard bestSetup={bestSetup} />
+        </div>
+      ) : null}
+
+      {showNarrativeRow ? (
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-3">
           {showInsights ? (
             <div className={dashboardInsightCardClass}>

@@ -20,6 +20,7 @@ import { isRoomSharePost } from "@/lib/roomSharePost"
 import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { ConfirmModal } from "@/app/components/ui"
+import ExpandableText from "@/app/components/ui/ExpandableText"
 import { devLog } from "@/lib/devLog"
 import type { FeedLikeMeta } from "@/app/components/feed/FeedPostCard"
 import type {
@@ -259,11 +260,11 @@ export default function ProfilePostCard({
       }`
 
   const postAuthorHeader = (
-    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 p-4">
-      <div className="flex min-w-0 items-center gap-3">
+    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 px-3 py-2 md:p-4">
+      <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
         <ProfileAvatarImg
           src={profile.avatar_url}
-          className="h-10 w-10 ring-2 ring-white/10"
+          className="h-9 w-9 ring-2 ring-white/10 md:h-10 md:w-10"
         />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-white">
@@ -415,12 +416,19 @@ export default function ProfilePostCard({
   ) : null
 
   const postContentBlock = (
-    <div className="shrink-0 space-y-3 p-4">
+    <div className="shrink-0 space-y-2 px-3 py-2.5 md:space-y-3 md:p-4">
       {post.content ? (
-        <p className="px-1 text-sm leading-relaxed text-white">{post.content}</p>
+        <ExpandableText
+          className="min-w-0 text-sm leading-snug text-white md:leading-relaxed"
+          textClassName="break-words text-white"
+          collapsedLines={3}
+          stopPropagation
+        >
+          {post.content}
+        </ExpandableText>
       ) : null}
       {showInteractions ? (
-        <div className="border-t border-white/10 pt-3">
+        <div className="border-t border-white/10 pt-2 md:pt-3">
           {postEngagementRow}
           {!inDetailModal ? commentsPanel : null}
         </div>
@@ -429,9 +437,16 @@ export default function ProfilePostCard({
   )
 
   const postCollapsibleContent = (
-    <div className="shrink-0 space-y-3 p-4">
+    <div className="shrink-0 space-y-2 px-3 py-2.5 md:space-y-3 md:p-4">
       {post.content ? (
-        <p className="px-1 text-sm leading-relaxed text-white">{post.content}</p>
+        <ExpandableText
+          className="min-w-0 text-sm leading-snug text-white md:leading-relaxed"
+          textClassName="break-words text-white"
+          collapsedLines={3}
+          stopPropagation
+        >
+          {post.content}
+        </ExpandableText>
       ) : null}
     </div>
   )
@@ -531,7 +546,7 @@ export default function ProfilePostCard({
                 )
               }
               engagement={postEngagementRow}
-              engagementClassName="shrink-0 border-b border-white/10 px-4 py-2"
+              engagementClassName="shrink-0 border-b border-white/10 px-3 py-1.5 md:px-4 md:py-2"
               collapsibleContent={postCollapsibleContent}
               comments={postCommentsPanel}
             />
@@ -562,21 +577,34 @@ export default function ProfilePostCard({
       {postAuthorHeader}
 
       {isRoomSharePost(post) ? (
-        <div className="p-4" onClick={(e) => e.stopPropagation()}>
+        <div className="p-3 md:p-4" onClick={(e) => e.stopPropagation()}>
           <FeedRoomShareCard
             post={post}
             viewerUserId={currentUserId ?? null}
           />
         </div>
       ) : imgSrc ? (
-        <div className="w-full">
-          <TradeScreenshotImage
-            src={imgSrc}
-            preset="feed-thumb"
-            className="rounded-none"
-            logContext="profile-post-card"
-          />
-        </div>
+        <>
+          <div className="relative h-[min(46dvh,280px)] w-full overflow-hidden md:hidden">
+            <TradeScreenshotImage
+              src={imgSrc}
+              preset="feed-thumb"
+              objectFit="cover"
+              className="h-full w-full rounded-none"
+              logContext="profile-post-card-mobile"
+              onClick={onImageClick}
+            />
+          </div>
+          <div className="hidden w-full md:block">
+            <TradeScreenshotImage
+              src={imgSrc}
+              preset="feed-thumb"
+              className="rounded-none"
+              logContext="profile-post-card"
+              onClick={onImageClick}
+            />
+          </div>
+        </>
       ) : null}
 
       {postContentBlock}

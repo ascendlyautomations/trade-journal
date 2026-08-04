@@ -30,7 +30,7 @@ export default function ProfilePostsTab({
   renderPost,
 }: ProfilePostsTabProps) {
   return (
-    <div className="mt-4 w-full pb-8">
+    <div className="mt-1 w-full pb-8 sm:mt-4">
       {!ready ? (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {Array.from({ length: 2 }).map((_, i) => (
@@ -62,7 +62,7 @@ export default function ProfilePostsTab({
           <p className="text-center text-sm text-gray-400">No posts yet.</p>
         )
       ) : (
-        <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 md:gap-y-8">
           {posts.map((post) => (
             <div key={post.id} id={`post-${post.id}`}>
               {renderPost(post)}

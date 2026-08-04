@@ -60,11 +60,9 @@ export default function DashboardEquityCurve({
   const showEmpty = totalTrades === 0 || data.length === 0
 
   if (variant === "mobile") {
-    // Whitespace sources (mobile): card padding-bottom, title mb, LineChart margin.bottom.
-    // Chart size stays fixed at 268 — only those spacers are tightened.
+    // Chart-first: no title. Keep chart height; tighten card chrome only.
     return (
-      <div className="w-full block overflow-visible rounded-xl border border-white/10 bg-white/10 px-2.5 pb-1 pt-2 backdrop-blur-md md:hidden">
-        <h2 className="mb-1 text-xs font-semibold text-blue-300">Equity Curve</h2>
+      <div className="w-full block overflow-visible rounded-xl border border-white/10 bg-white/10 px-2 pb-1 pt-1.5 backdrop-blur-md md:hidden">
         {showEmpty ? (
           <ChartEmptyState />
         ) : (

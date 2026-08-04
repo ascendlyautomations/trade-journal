@@ -107,7 +107,7 @@ import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useDeleteReelC
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import ProfileAchievementsTab from "../../components/profile/ProfileAchievementsTab"
 import ProfileCalendarTab from "../../components/profile/ProfileCalendarTab"
-import ProfileHeader from "../../components/profile/ProfileHeader"
+import { PlatformProfileHeader } from "../../components/platform"
 import ProfileOverviewStats from "../../components/profile/ProfileOverviewStats"
 import ProfilePostsTab from "../../components/profile/ProfilePostsTab"
 import ProfileReelsTab from "../../components/profile/ProfileReelsTab"
@@ -118,7 +118,14 @@ import ProfileTabs, {
   type ProfileTab,
 } from "../../components/profile/ProfileTabs"
 import ProfileTradesTab from "../../components/profile/ProfileTradesTab"
+import { useMobileTradeDetailSwipe } from "../../components/profile/useMobileTradeDetailSwipe"
+import {
+  PROFILE_TRADES_PAGE_SIZE_DESKTOP,
+  PROFILE_TRADES_PAGE_SIZE_MOBILE,
+  resolveProfileTradesPageSize,
+} from "../../components/profile/profileTradesPagination"
 import TradeCard from "../../components/profile/ProfileTradeCard"
+import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import PostCard from "../../components/profile/ProfilePostCard"
 import QuickTradeModal from "../../components/QuickTradeModal"
 import ReelComposerModal from "../../components/profile/ReelComposerModal"
@@ -232,7 +239,7 @@ function mergeUniqueById<T extends { id: string | number }>(
 
 function ProfilePageContent() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
-  const PAGE_SIZE = 5
+  const PAGE_SIZE = PROFILE_TRADES_PAGE_SIZE_DESKTOP
 
   const params = useParams()
   const router = useRouter()
@@ -667,25 +674,30 @@ function ProfilePageContent() {
   ])
 
   const fetchTradesForProfile = useCallback(
-    async (forProfileId: string, offset: number) => {
+    async (
+      forProfileId: string,
+      offset: number,
+      pageSize: number = resolveProfileTradesPageSize()
+    ) => {
       const isOwner =
         currentUserId != null && String(currentUserId) === String(forProfileId)
 
       if (isDemoModeActive() && isDemoProfileId(forProfileId)) {
         const rows = getDemoProfileTrades(forProfileId, currentUserId)
         return {
-          rows: rows.slice(offset, offset + PAGE_SIZE),
-          hasMore: rows.length > offset + PAGE_SIZE,
+          rows: rows.slice(offset, offset + pageSize),
+          hasMore: rows.length > offset + pageSize,
         }
       }
 
+      // Inclusive range end fetches pageSize + 1 rows to detect hasMore.
       const { data, error } = await supabase
         .from("trades")
         .select(tradeSelectForViewer(isOwner))
         .eq("user_id", forProfileId)
         .eq("is_public", true)
         .order("created_at", { ascending: false })
-        .range(offset, offset + PAGE_SIZE)
+        .range(offset, offset + pageSize)
 
       if (error) {
         console.error("profile trades page fetch:", error)
@@ -694,8 +706,8 @@ function ProfilePageContent() {
 
       const rows = sanitizeTradesForViewer(data || [], { isOwner })
       return {
-        rows: rows.slice(0, PAGE_SIZE),
-        hasMore: rows.length > PAGE_SIZE,
+        rows: rows.slice(0, pageSize),
+        hasMore: rows.length > pageSize,
       }
     },
     [currentUserId]
@@ -3249,6 +3261,66 @@ function ProfilePageContent() {
     achievementsReady,
   })
 
+  const isMobileViewport = useMaxMdViewport()
+
+  // Mobile grid expects ~12 tiles initially; top up when cache/desktop fetch left fewer.
+  useEffect(() => {
+    if (!isMobileViewport) return
+    if (!profile?.id || !canViewTrades || !tradesReady) return
+    if (!tradeHasMore || tradesLoading) return
+    if (allTrades.length >= PROFILE_TRADES_PAGE_SIZE_MOBILE) return
+    void loadMoreTrades()
+  }, [
+    allTrades.length,
+    canViewTrades,
+    isMobileViewport,
+    loadMoreTrades,
+    profile?.id,
+    tradeHasMore,
+    tradesLoading,
+    tradesReady,
+  ])
+
+  const openTradeDetail = useCallback(
+    (trade: (typeof sortedTrades)[number], focusComments = false) => {
+      setTradeDetailFocusComments(focusComments)
+      setSelectedTradeDetail({ ...trade, currentUserId })
+    },
+    [currentUserId]
+  )
+
+  const openTradeDetailFromGrid = useCallback(
+    (trade: (typeof sortedTrades)[number]) => {
+      openTradeDetail(trade, false)
+    },
+    [openTradeDetail]
+  )
+
+  const selectedTradeIndex = useMemo(() => {
+    if (!selectedTradeDetail?.id) return -1
+    return sortedTrades.findIndex(
+      (row) => String(row.id) === String(selectedTradeDetail.id)
+    )
+  }, [selectedTradeDetail?.id, sortedTrades])
+
+  const goToAdjacentTrade = useCallback(
+    (direction: -1 | 1) => {
+      if (selectedTradeIndex < 0) return
+      const next = sortedTrades[selectedTradeIndex + direction]
+      if (!next) return
+      setTradeDetailFocusComments(false)
+      setScreenshotLightboxUrl(null)
+      setSelectedTradeDetail({ ...next, currentUserId })
+    },
+    [currentUserId, selectedTradeIndex, sortedTrades]
+  )
+
+  const tradeDetailSwipe = useMobileTradeDetailSwipe({
+    enabled: isMobileViewport && selectedTradeDetail != null,
+    onPrev: () => goToAdjacentTrade(-1),
+    onNext: () => goToAdjacentTrade(1),
+  })
+
   if (!profileId) {
     return (
       <>
@@ -3421,8 +3493,8 @@ function ProfilePageContent() {
             ])
           }}
         >
-        <div className="mx-auto max-w-5xl space-y-4 px-4 pt-4 pb-6 sm:px-6 lg:px-8">
-          <ProfileHeader
+        <div className="mx-auto max-w-5xl space-y-2 pt-3 pb-6 pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] sm:space-y-4 sm:px-6 sm:pt-4 lg:px-8">
+          <PlatformProfileHeader
             profile={profile}
             currentUserId={currentUserId}
             storyTriggerRef={profileStoryTriggerRef}
@@ -3472,7 +3544,7 @@ function ProfilePageContent() {
 
           <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
-          <div className="mt-3 space-y-6 px-2 md:mt-4 md:px-0">
+          <div className="mt-2 space-y-6 sm:mt-3 md:mt-4">
             {activeTab === "trades" && (
               <ProfileTradesTab
                 trades={sortedTrades}
@@ -3481,6 +3553,7 @@ function ProfilePageContent() {
                 canView={canViewTrades}
                 hasMore={hasMore}
                 onLoadMore={loadMoreTrades}
+                onOpenTrade={openTradeDetailFromGrid}
                 renderTrade={(trade) => (
                   <TradeCard
                     trade={trade}
@@ -3501,14 +3574,8 @@ function ProfilePageContent() {
                       void handleDeleteTrade(String(trade.id))
                     }
                     showInteractions
-                    onOpenDetail={() => {
-                      setTradeDetailFocusComments(false)
-                      setSelectedTradeDetail({ ...trade, currentUserId })
-                    }}
-                    onOpenComments={() => {
-                      setTradeDetailFocusComments(true)
-                      setSelectedTradeDetail({ ...trade, currentUserId })
-                    }}
+                    onOpenDetail={() => openTradeDetail(trade, false)}
+                    onOpenComments={() => openTradeDetail(trade, true)}
                   />
                 )}
               />
@@ -3784,33 +3851,42 @@ function ProfilePageContent() {
             setScreenshotLightboxUrl(null)
           }}
         >
-          <TradeCard
-            inDetailModal
-            trade={selectedTradeDetail}
-            profile={profile}
-            currentUserId={currentUserId}
-            shareProfile={viewerShareProfile}
-            canManageTrade={currentUserId === profile.id}
-            attachedReel={
-              tradeReelsByTradeId[String(selectedTradeDetail.id)] ?? null
-            }
-            onOpenReplay={() => {
-              const reel =
-                tradeReelsByTradeId[String(selectedTradeDetail.id)]
-              if (reel) openReelDetail(reel)
-            }}
-            onStartEditTrade={() => {
-              openEditTradeModal(selectedTradeDetail)
-              setSelectedTradeDetail(null)
-            }}
-            onTogglePinTrade={() => void handlePinTrade(selectedTradeDetail)}
-            onDeleteTrade={() => void handleDeleteTrade(String(selectedTradeDetail.id))}
-            showInteractions={true}
-            commentsExpanded
-            scrollToCommentsOnMount={tradeDetailFocusComments}
-            disableOpen
-            onImageClick={setScreenshotLightboxUrl}
-          />
+          <div
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            onTouchStart={tradeDetailSwipe.onTouchStart}
+            onTouchEnd={tradeDetailSwipe.onTouchEnd}
+          >
+            <TradeCard
+              key={String(selectedTradeDetail.id)}
+              inDetailModal
+              trade={selectedTradeDetail}
+              profile={profile}
+              currentUserId={currentUserId}
+              shareProfile={viewerShareProfile}
+              canManageTrade={currentUserId === profile.id}
+              attachedReel={
+                tradeReelsByTradeId[String(selectedTradeDetail.id)] ?? null
+              }
+              onOpenReplay={() => {
+                const reel =
+                  tradeReelsByTradeId[String(selectedTradeDetail.id)]
+                if (reel) openReelDetail(reel)
+              }}
+              onStartEditTrade={() => {
+                openEditTradeModal(selectedTradeDetail)
+                setSelectedTradeDetail(null)
+              }}
+              onTogglePinTrade={() => void handlePinTrade(selectedTradeDetail)}
+              onDeleteTrade={() =>
+                void handleDeleteTrade(String(selectedTradeDetail.id))
+              }
+              showInteractions={true}
+              commentsExpanded
+              scrollToCommentsOnMount={tradeDetailFocusComments}
+              disableOpen
+              onImageClick={setScreenshotLightboxUrl}
+            />
+          </div>
         </DetailModalShell>
       ) : null}
 

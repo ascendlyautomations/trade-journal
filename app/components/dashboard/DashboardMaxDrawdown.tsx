@@ -34,7 +34,7 @@ export default function DashboardMaxDrawdown({
             <p className="text-xs font-semibold tabular-nums text-red-400 md:text-lg">
               {formatCurrency(maxDrawdown)}
             </p>
-            <p className="mt-1 text-[11px] md:text-xs text-gray-400">
+            <p className="mt-1 text-[11px] text-gray-200 md:text-xs md:text-gray-400">
               Largest peak-to-trough drop on cumulative P&amp;L.
             </p>
           </>

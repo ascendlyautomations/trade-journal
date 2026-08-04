@@ -44,16 +44,16 @@ function ProfileTabs({
   onTabChange,
 }: ProfileTabsProps) {
   return (
-    <div className="mt-4 flex justify-around border-b border-white/10 sm:mt-6 sm:justify-start sm:gap-6 sm:pb-2">
+    <div className="mt-0 flex justify-around border-b border-white/10 sm:mt-6 sm:justify-start sm:gap-6 sm:pb-2">
       {tabs.map(({ id, label, mobileLabel, ariaLabel }) => (
         <button
           key={id}
           type="button"
           aria-label={ariaLabel}
-          className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
+          className={`border-b-2 py-1.5 text-sm font-medium sm:py-0 ${
             activeTab === id
               ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
-              : "border-transparent text-gray-400 sm:border-b-0"
+              : "border-transparent text-gray-300 sm:border-b-0 sm:text-gray-400"
           }`}
           onClick={() => onTabChange(id)}
         >

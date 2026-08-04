@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic"
 import { memo, type ComponentProps, type ReactNode } from "react"
+import DashboardMobileProTabs from "./DashboardMobileProTabs"
 import DashboardStatsGrid from "./DashboardStatsGrid"
 
 const DashboardEquityCurve = dynamic(() => import("./DashboardEquityCurve"), {
@@ -16,6 +17,26 @@ const DashboardSessionChart = dynamic(() => import("./DashboardSessionChart"), {
 const DashboardMaxDrawdown = dynamic(() => import("./DashboardMaxDrawdown"), {
   loading: () => <div className="h-24 animate-pulse rounded-xl bg-white/5" />,
 })
+
+type MobileProTabsProps = Omit<
+  ComponentProps<typeof DashboardMobileProTabs>,
+  | "weekdaySlot"
+  | "sessionsSlot"
+  | "maxDrawdownSlot"
+  | "recentTrades"
+  | "streakData"
+  | "hourData"
+  | "bestWinStreak"
+  | "showSessions"
+  | "avgWin"
+  | "bestTrade"
+  | "avgLoss"
+  | "biggestLoss"
+  | "bestDay"
+  | "worstDay"
+  | "totalTrades"
+  | "deferredSectionsReady"
+>
 
 type DashboardChartsProps = Omit<
   ComponentProps<typeof DashboardStatsGrid>,
@@ -37,6 +58,8 @@ type DashboardChartsProps = Omit<
   avgDay: number
   consistency: number
   recentTrades: ReactNode
+  /** When set, Pro mobile renders Overview / Analytics / Records tabs. */
+  mobileProTabs?: MobileProTabsProps
 }
 
 function ChartSkeleton({ className }: { className: string }) {
@@ -77,6 +100,7 @@ function DashboardCharts({
   hourData,
   showSessions,
   bestWinStreak,
+  mobileProTabs,
 }: DashboardChartsProps) {
   const weekdayChart = deferredSectionsReady ? (
     <DashboardWeekdayChart data={weekdayData} totalTrades={totalTrades} />
@@ -84,8 +108,20 @@ function DashboardCharts({
     <ChartSkeleton className="h-48" />
   )
 
-  const sessionChart = deferredSectionsReady ? (
+  const sessionChartDesktop = deferredSectionsReady ? (
     <DashboardSessionChart
+      variant="desktop"
+      sessionPieData={sessionPieData}
+      sessionBuckets={sessionBuckets}
+      totalTrades={totalTrades}
+    />
+  ) : (
+    <ChartSkeleton className="h-48" />
+  )
+
+  const sessionChartMobile = deferredSectionsReady ? (
+    <DashboardSessionChart
+      variant="mobile"
       sessionPieData={sessionPieData}
       sessionBuckets={sessionBuckets}
       totalTrades={totalTrades}
@@ -104,70 +140,93 @@ function DashboardCharts({
     <ChartSkeleton className="h-48" />
   )
 
-  return (
-    <div className="grid gap-2 overflow-visible max-md:gap-2 md:gap-3 lg:grid-cols-3">
-      <DashboardStatsGrid
-        isPro={isPro}
+  const maxDrawdownSlot =
+    isPro && showDrawdown ? (
+      <DashboardMaxDrawdown
+        variant="compact"
+        maxDrawdown={maxDrawdown}
         totalTrades={totalTrades}
-        winRate={winRate}
-        avgRR={avgRR}
-        totalPnL={totalPnL}
-        profitFactor={profitFactor}
-        avgWin={avgWin}
-        bestTrade={bestTrade}
-        avgLoss={avgLoss}
-        biggestLoss={biggestLoss}
-        bestDay={bestDay}
-        worstDay={worstDay}
-        showEquity={showEquity}
-        mobileEquitySlot={mobileEquity}
-        mobileWeekdayPnlSlot={weekdayChart}
-        expectancyData={expectancyData}
-        streakData={streakData}
-        hourData={hourData}
-        showSessions={showSessions}
-        mobileSessionsSlot={sessionChart}
-        bestWinStreak={bestWinStreak}
-        maxDrawdownSlot={
-          isPro && showDrawdown ? (
-            <DashboardMaxDrawdown
-              variant="compact"
-              maxDrawdown={maxDrawdown}
+      />
+    ) : null
+
+  return (
+    <div className="flex flex-col gap-2 max-md:gap-2 md:contents">
+      <div className="grid gap-2 overflow-visible max-md:gap-2 md:gap-3 lg:grid-cols-3">
+        <DashboardStatsGrid
+          isPro={isPro}
+          totalTrades={totalTrades}
+          winRate={winRate}
+          avgRR={avgRR}
+          totalPnL={totalPnL}
+          profitFactor={profitFactor}
+          avgWin={avgWin}
+          bestTrade={bestTrade}
+          avgLoss={avgLoss}
+          biggestLoss={biggestLoss}
+          bestDay={bestDay}
+          worstDay={worstDay}
+          showEquity={showEquity}
+          mobileEquitySlot={mobileEquity}
+          expectancyData={expectancyData}
+          streakData={streakData}
+          hourData={hourData}
+          showSessions={showSessions}
+          bestWinStreak={bestWinStreak}
+          maxDrawdownSlot={maxDrawdownSlot}
+        />
+
+        <div className="hidden space-y-2 overflow-visible md:block md:space-y-3 lg:col-span-2">
+          {showEquity && deferredSectionsReady ? (
+            <DashboardEquityCurve
+              variant="desktop"
+              isPro={isPro}
+              data={equityData}
+              profitFactor={isPro ? profitFactor : undefined}
+              currentStreak={isPro ? currentStreak : undefined}
+              avgDay={isPro ? avgDay : undefined}
+              consistency={isPro ? consistency : undefined}
               totalTrades={totalTrades}
             />
-          ) : null
-        }
-      />
+          ) : showEquity ? (
+            <ChartSkeleton className="h-72" />
+          ) : null}
 
-      <div className="space-y-2 overflow-visible md:space-y-3 lg:col-span-2">
-        {showEquity && deferredSectionsReady ? (
-          <DashboardEquityCurve
-            variant="desktop"
-            isPro={isPro}
-            data={equityData}
-            profitFactor={isPro ? profitFactor : undefined}
-            currentStreak={isPro ? currentStreak : undefined}
-            avgDay={isPro ? avgDay : undefined}
-            consistency={isPro ? consistency : undefined}
-            totalTrades={totalTrades}
-          />
-        ) : showEquity ? (
-          <ChartSkeleton className="h-72" />
-        ) : null}
-
-        {isPro ? (
-          <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-2">
-            {showSessions ? (
-              <>
-                <div className="hidden md:block">{recentTrades}</div>
-                <div className="hidden md:block">{sessionChart}</div>
-              </>
-            ) : (
-              <div className="hidden md:block lg:col-span-2">{recentTrades}</div>
-            )}
-          </div>
-        ) : null}
+          {isPro ? (
+            <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-2">
+              {showSessions ? (
+                <>
+                  <div className="hidden md:block">{recentTrades}</div>
+                  <div className="hidden md:block">{sessionChartDesktop}</div>
+                </>
+              ) : (
+                <div className="hidden md:block lg:col-span-2">{recentTrades}</div>
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
+
+      {isPro && mobileProTabs ? (
+        <DashboardMobileProTabs
+          {...mobileProTabs}
+          deferredSectionsReady={deferredSectionsReady}
+          weekdaySlot={weekdayChart}
+          sessionsSlot={sessionChartMobile}
+          showSessions={showSessions}
+          hourData={hourData}
+          streakData={streakData}
+          bestWinStreak={bestWinStreak}
+          maxDrawdownSlot={maxDrawdownSlot}
+          recentTrades={recentTrades}
+          avgWin={avgWin}
+          bestTrade={bestTrade}
+          avgLoss={avgLoss}
+          biggestLoss={biggestLoss}
+          bestDay={bestDay}
+          worstDay={worstDay}
+          totalTrades={totalTrades}
+        />
+      ) : null}
     </div>
   )
 }
