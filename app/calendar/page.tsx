@@ -39,7 +39,8 @@ export default function CalendarPage() {
   const router = useRouter()
   const { user, profile: shareProfile, loading: profileLoading } = useUserProfile()
   const { trades, loading: tradesLoading, refresh: refreshTrades } = useCachedTrades(
-    user?.id
+    user?.id,
+    { fullHistory: true }
   )
   const {
     accounts: accountRows,

@@ -11,14 +11,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import {
   buildPostSummaries,
-  buildTradeSummaries,
-  buildTraderTradeMeta,
   enrichExploreProfilesWithSocialCounts,
-  EXPLORE_TRADE_ROW_LIMIT,
   fetchExploreSocialCounts,
+  fetchExploreTradeMetaAggregates,
   mergeExploreProfiles,
   rankExploreDiscoverList,
   type ExploreProfile,
+  type ExploreTradeMetaPayload,
 } from "@/lib/exploreDiscover"
 import {
   discoverFilterAvailability,
@@ -33,7 +32,6 @@ import {
   getDemoExploreFollowingIds,
   getDemoExploreFollowsYouIds,
   getDemoExploreProfiles,
-  getDemoExploreTradeMetaRows,
   searchDemoExploreProfiles,
 } from "@/lib/demo/demoExplore"
 import { useUserProfile } from "@/lib/UserProfileProvider"
@@ -58,11 +56,9 @@ const SEARCH_INPUT_CLASS =
 const FILTER_TOGGLE_CLASS =
   "inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm font-medium text-white transition hover:bg-white/10"
 
-type TradeMetaRow = {
-  user_id: string
-  session?: string | null
-  ticker?: string | null
-  created_at?: string
+const EMPTY_TRADE_META: ExploreTradeMetaPayload = {
+  tradeSummaries: {},
+  tradeMetaByUserId: {},
 }
 
 export default function ExplorePage() {
@@ -74,7 +70,8 @@ export default function ExplorePage() {
   const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set())
   const [followsYouIds, setFollowsYouIds] = useState<Set<string>>(new Set())
   const [profiles, setProfiles] = useState<ExploreProfile[]>([])
-  const [metaTrades, setMetaTrades] = useState<TradeMetaRow[]>([])
+  const [tradeMetaPayload, setTradeMetaPayload] =
+    useState<ExploreTradeMetaPayload>(EMPTY_TRADE_META)
   const [postSummaries, setPostSummaries] = useState<
     ReturnType<typeof buildPostSummaries>
   >({})
@@ -122,24 +119,8 @@ export default function ExplorePage() {
   }
 
   async function loadTradeMetaRows() {
-    if (isDemoModeActive()) {
-      setMetaTrades(getDemoExploreTradeMetaRows())
-      return
-    }
-
-    const { data, error } = await supabase
-      .from("trades")
-      .select("user_id, session, ticker, created_at, pnl")
-      .eq("is_public", true)
-      .order("created_at", { ascending: false })
-      .limit(EXPLORE_TRADE_ROW_LIMIT)
-
-    if (error) {
-      console.error("[explore] trade meta fetch error:", error)
-      return
-    }
-
-    setMetaTrades((data || []) as TradeMetaRow[])
+    const payload = await fetchExploreTradeMetaAggregates()
+    setTradeMetaPayload(payload)
   }
 
   async function fetchProfileBatch(
@@ -287,7 +268,7 @@ export default function ExplorePage() {
       setFollowingIds(new Set(followingIdsArr))
       setRequestedIds(new Set())
       setFollowsYouIds(new Set(followsYouIdsArr))
-      setMetaTrades(getDemoExploreTradeMetaRows())
+      setTradeMetaPayload(await fetchExploreTradeMetaAggregates())
       setPostSummaries({})
       setHasMoreProfiles(false)
 
@@ -392,15 +373,8 @@ export default function ExplorePage() {
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
-  const tradeMetaByUserId = useMemo(
-    () => buildTraderTradeMeta(metaTrades),
-    [metaTrades]
-  )
-
-  const tradeSummaries = useMemo(
-    () => buildTradeSummaries(metaTrades),
-    [metaTrades]
-  )
+  const tradeMetaByUserId = tradeMetaPayload.tradeMetaByUserId
+  const tradeSummaries = tradeMetaPayload.tradeSummaries
 
   const filterAvailability = useMemo(
     () =>

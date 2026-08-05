@@ -1,9 +1,12 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
-import {
-  deleteCommentNotificationByCommentId,
-  deleteLegacyCommentNotification,
-} from "./commentNotifications"
+import { deleteLegacyCommentNotification } from "./commentNotifications"
 import { devLog } from "./devLog"
+
+function dispatchNotificationRefresh() {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new CustomEvent("notification-update"))
+  window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+}
 
 export type FeedCommentRow = {
   id: string
@@ -111,14 +114,10 @@ async function cleanupCommentNotifications(
     reelId?: string | null
   }
 ) {
-  await deleteCommentNotificationByCommentId(
-    supabase,
-    params.commentId,
-    params.senderId
-  )
-
+  // comment_id-backed rows are removed by sync_delete_comment_notification.
+  // Only legacy rows (pre-comment_id) still need an API DELETE.
   await deleteLegacyCommentNotification(supabase, {
-    senderId: params.senderId,
+    senderUserId: params.senderId,
     content: params.content,
     postId: params.postId,
     tradeId: params.tradeId,
@@ -126,6 +125,7 @@ async function cleanupCommentNotifications(
     achievementPostId: params.achievementPostId,
     reelId: params.reelId,
   })
+  dispatchNotificationRefresh()
 }
 
 function noProfilePostRowDeletedError(): PostgrestError {

@@ -91,6 +91,106 @@ html.tt-native-ios [data-tt-messages-inbox] [data-tt-messages-inbox-search] {
   background-color: var(--tt-surface-elevated);
 }
 
+/* Trade Rooms — immersive conversation surface (native iOS only). */
+html.tt-native-ios [data-tt-native-surface="community"] {
+  /* Safe-area only — no extra page gutter (Apple Messages-like). */
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+html.tt-native-ios [data-tt-native-surface="community"] [data-tt-trade-rooms-shell] {
+  max-width: none;
+  border-radius: 0;
+  border-width: 0;
+  background-color: transparent;
+  background-image: none;
+}
+
+html.tt-native-ios [data-tt-native-surface="community"] [data-tt-trade-rooms-aside] {
+  background-color: transparent;
+  background-image: none;
+}
+
+html.tt-native-ios [data-tt-native-surface="community"] [data-tt-trade-rooms-controls] {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+html.tt-native-ios [data-tt-native-surface="community"] [data-tt-trade-rooms-discover] {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  padding-top: 0.75rem;
+  padding-bottom: 1rem;
+}
+
+html.tt-native-ios
+  [data-tt-native-surface="community"]
+  [data-tt-trade-rooms-discover-inner] {
+  max-width: none;
+}
+
+html.tt-native-ios
+  [data-tt-native-surface="community"]
+  [data-tt-trade-rooms-explore] {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+/* ~8pt from content edge — matches iMessage horizontal rhythm. */
+html.tt-native-ios [data-tt-native-surface="community"] .tt-trade-rooms-chat {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+/* Tighter vertical rhythm between posts (still spaced, not stacked islands). */
+html.tt-native-ios
+  [data-tt-native-surface="community"]
+  .tt-trade-rooms-message-list
+  > :not([hidden])
+  ~ :not([hidden]) {
+  margin-top: 0.5rem;
+}
+
+/*
+ * Posts embedded in the room surface — keep fill + radius, soften elevation
+ * so the blue room reads as the container.
+ */
+html.tt-native-ios
+  [data-tt-native-surface="community"]
+  [data-room-message-id] {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 0.75rem;
+  background-color: rgb(15 23 42 / 0.32);
+  box-shadow: none;
+}
+
+/* Content images expand with the post (not avatars). Override max-w-xs. */
+html.tt-native-ios
+  [data-tt-native-surface="community"]
+  [data-room-message-id]
+  button.cursor-zoom-in {
+  max-width: 100%;
+  width: 100%;
+  display: block;
+}
+
+html.tt-native-ios
+  [data-tt-native-surface="community"]
+  [data-room-message-id]
+  button.cursor-zoom-in
+  img,
+html.tt-native-ios
+  [data-tt-native-surface="community"]
+  [data-room-message-id]
+  .max-w-xs {
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+}
+
 /* Dashboard — horizontal safe-area only. Vertical rhythm is gap-2 via page pt/pb. */
 html.tt-native-ios [data-tt-native-surface="dashboard"] {
   padding-top: 0;

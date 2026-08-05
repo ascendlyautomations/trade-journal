@@ -6,7 +6,7 @@ import PlatformBottomNavigation from "../PlatformBottomNavigation"
 /**
  * Native iOS chrome layout — scrollport + tab bar.
  * `safeAreaOnlyTopInset`: no website Navbar (Dashboard / Feed / Calendar /
- * Trades / Messages inbox / Add Trade) — pad with safe-area-top only.
+ * Trades / Messages inbox / Trade Rooms / Add Trade) — pad with safe-area-top only.
  */
 export default function NativeIosAppChrome({
   children,

@@ -10,7 +10,9 @@ import { ensureOwnAchievementsLoaded } from "./userAchievementsCache"
 let warmedUserId: string | null = null
 let prefetchGeneration = 0
 
-/** Prefetch core caches after auth — speeds first navigation to dashboard, trades, and settings. */
+/** Prefetch core caches after auth — recent trades window + accounts only.
+ * Full trade history is loaded on-demand by dashboard/journal/etc.
+ */
 export function warmAppDataCaches(
   supabase: SupabaseClient,
   userId: string

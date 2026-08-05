@@ -1,10 +1,51 @@
 import { NextResponse } from "next/server"
+import { unstable_cache } from "next/cache"
 import { supabaseServiceRole } from "../../_lib/getRouteUser"
 import type { TradeForLeaderboard } from "@/lib/leaderboardChart"
 
 const PAGE_SIZE = 1000
+/** Soft TTL — rankings refresh on next miss; filter UX stays client-side. */
+const LEADERBOARD_TRADES_REVALIDATE_SECONDS = 60
 
-async function fetchViaRpc(): Promise<TradeForLeaderboard[] | null> {
+async function fetchViaKeysetRpc(): Promise<TradeForLeaderboard[] | null> {
+  const allTrades: TradeForLeaderboard[] = []
+  let afterCreatedAt: string | null = null
+  let afterUserId: string | null = null
+
+  while (true) {
+    const { data, error } = await supabaseServiceRole.rpc(
+      "leaderboard_trade_rows_page",
+      {
+        p_after_created_at: afterCreatedAt,
+        p_after_user_id: afterUserId,
+        p_limit: PAGE_SIZE,
+      }
+    )
+
+    if (error) {
+      if (
+        error.code === "PGRST202" ||
+        error.message?.includes("leaderboard_trade_rows_page")
+      ) {
+        return null
+      }
+      console.error("[api/leaderboard/trades] keyset rpc error:", error)
+      return null
+    }
+
+    const batch = (data || []) as TradeForLeaderboard[]
+    allTrades.push(...batch)
+    if (batch.length < PAGE_SIZE) break
+
+    const last = batch[batch.length - 1]
+    afterCreatedAt = last.created_at
+    afterUserId = last.user_id
+  }
+
+  return allTrades
+}
+
+async function fetchViaOffsetRpc(): Promise<TradeForLeaderboard[] | null> {
   const allTrades: TradeForLeaderboard[] = []
   let offset = 0
 
@@ -21,7 +62,7 @@ async function fetchViaRpc(): Promise<TradeForLeaderboard[] | null> {
       ) {
         return null
       }
-      console.error("[api/leaderboard/trades] rpc error:", error)
+      console.error("[api/leaderboard/trades] offset rpc error:", error)
       return null
     }
 
@@ -51,35 +92,61 @@ async function fetchViaJoin(): Promise<TradeForLeaderboard[]> {
   )
 
   const allTrades: TradeForLeaderboard[] = []
-  let from = 0
+  let afterCreatedAt: string | null = null
+  let afterUserId: string | null = null
 
   while (true) {
-    const { data, error } = await supabaseServiceRole
+    let query = supabaseServiceRole
       .from("trades")
       .select("user_id, pnl, rr, created_at, account_type, mode")
       .eq("is_public", true)
       .order("created_at", { ascending: true })
-      .range(from, from + PAGE_SIZE - 1)
+      .order("user_id", { ascending: true })
+      .limit(PAGE_SIZE)
+
+    if (afterCreatedAt && afterUserId) {
+      // Keyset: (created_at, user_id) > cursor
+      query = query.or(
+        `created_at.gt.${afterCreatedAt},and(created_at.eq.${afterCreatedAt},user_id.gt.${afterUserId})`
+      )
+    }
+
+    const { data, error } = await query
 
     if (error) {
       console.error("[api/leaderboard/trades] trades error:", error)
       break
     }
 
-    const batch = ((data || []) as TradeForLeaderboard[]).filter((t) =>
-      publicUserIds.has(t.user_id)
-    )
+    const raw = (data || []) as TradeForLeaderboard[]
+    const batch = raw.filter((t) => publicUserIds.has(t.user_id))
     allTrades.push(...batch)
 
-    if (!data || data.length < PAGE_SIZE) break
-    from += PAGE_SIZE
+    if (raw.length < PAGE_SIZE) break
+    const last = raw[raw.length - 1]
+    afterCreatedAt = last.created_at
+    afterUserId = last.user_id
   }
 
   return allTrades
 }
 
+async function loadLeaderboardTradesUncached(): Promise<TradeForLeaderboard[]> {
+  return (
+    (await fetchViaKeysetRpc()) ??
+    (await fetchViaOffsetRpc()) ??
+    (await fetchViaJoin())
+  )
+}
+
+const getCachedLeaderboardTrades = unstable_cache(
+  loadLeaderboardTradesUncached,
+  ["leaderboard-trade-rows-v1"],
+  { revalidate: LEADERBOARD_TRADES_REVALIDATE_SECONDS }
+)
+
 /** Aggregated leaderboard inputs: public trades from public-profile users only. */
 export async function GET() {
-  const trades = (await fetchViaRpc()) ?? (await fetchViaJoin())
+  const trades = await getCachedLeaderboardTrades()
   return NextResponse.json(trades)
 }

@@ -144,7 +144,9 @@ export default function Dashboard() {
     setProfile,
     refreshProfile,
   } = useUserProfile()
-  const { trades, loading: tradesLoading } = useCachedTrades(user?.id)
+  const { trades, loading: tradesLoading } = useCachedTrades(user?.id, {
+    fullHistory: true,
+  })
   const { accounts: accountRows, loading: accountsLoading } =
     useCachedAccounts(user?.id)
   const isPro = isProActive(profile)
@@ -278,7 +280,10 @@ export default function Dashboard() {
     if (!currentUserId) return
 
     await Promise.all([
-      ensureTradesLoaded(supabase, currentUserId, { force: true }),
+      ensureTradesLoaded(supabase, currentUserId, {
+        force: true,
+        fullHistory: true,
+      }),
       ensureAccountsLoaded(supabase, currentUserId, { force: true }),
     ])
   }, [user?.id])

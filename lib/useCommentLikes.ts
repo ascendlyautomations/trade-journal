@@ -12,7 +12,7 @@ import {
   type CommentLikeNotificationParent,
   type CommentLikeSource,
 } from "@/lib/commentLikes"
-import { randomId } from "@/lib/randomId"
+import { buildRealtimeInFilter } from "@/lib/realtimeFilters"
 
 export function useCommentLikes(args: {
   source: CommentLikeSource | null
@@ -68,7 +68,14 @@ export function useCommentLikes(args: {
   useEffect(() => {
     if (!source || !hasComments || isDemoModeActive()) return
 
-    const topic = `comment-likes-${source}-${randomId()}`
+    const ids = commentIdsKey.split(",").filter(Boolean)
+    const idFilter = buildRealtimeInFilter("comment_id", ids)
+    // Too many visible comments: keep source-scoped filter (client still gates).
+    const filter = idFilter
+      ? idFilter
+      : `comment_source=eq.${source}`
+
+    const topic = `comment-likes-${source}-${commentIdsKey.slice(0, 48) || "empty"}`
     const channel = supabase.channel(topic)
 
     channel.on(
@@ -77,13 +84,20 @@ export function useCommentLikes(args: {
         event: "*",
         schema: "public",
         table: "comment_likes",
-        filter: `comment_source=eq.${source}`,
+        filter,
       },
       (payload) => {
         const row = (payload.new ?? payload.old) as {
           comment_id?: string
           user_id?: string
+          comment_source?: string
         } | null
+        if (
+          row?.comment_source != null &&
+          String(row.comment_source) !== source
+        ) {
+          return
+        }
         const commentId = row?.comment_id != null ? String(row.comment_id) : ""
         const actorUserId = row?.user_id != null ? String(row.user_id) : ""
         if (!commentId || !visibleIdsRef.current.has(commentId)) return
@@ -112,7 +126,7 @@ export function useCommentLikes(args: {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [source, hasComments])
+  }, [source, hasComments, commentIdsKey])
 
   const isCommentLikeBusy = useCallback(
     (commentId: string) => Boolean(busyCommentIds[commentId]),

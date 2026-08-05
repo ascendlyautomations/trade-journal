@@ -109,21 +109,18 @@ export async function ensureLikeNotification(
   dispatchNotificationRefresh()
 }
 
-/** Remove all like notifications for this actor + target when the user unlikes. */
-export async function deleteLikeNotification(
-  supabase: SupabaseClient,
-  params: LikeNotificationParams
-): Promise<void> {
-  const response = await authFetch(supabase, "DELETE", params.target)
-  if (!response) return
-  if (!response.ok) {
-    console.error(
-      "Like notification delete error:",
-      response.status,
-      await response.text()
-    )
-    return
-  }
+/**
+ * Unlike paths: DB sync_delete_like_notification already removes the row.
+ * Only refresh local unread badges — avoid a duplicate notifications DELETE.
+ */
+export function refreshLikeNotificationUi(): void {
+  dispatchNotificationRefresh()
+}
 
+/** @deprecated Prefer refreshLikeNotificationUi — kept for any remaining API callers. */
+export async function deleteLikeNotification(
+  _supabase: SupabaseClient,
+  _params: LikeNotificationParams
+): Promise<void> {
   dispatchNotificationRefresh()
 }

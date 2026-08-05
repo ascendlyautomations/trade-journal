@@ -15,6 +15,7 @@ import CreateFirstTradeRoomCard from "../components/CreateFirstTradeRoomCard"
 import ExploreMoreTradeRoomsCard from "../components/ExploreMoreTradeRoomsCard"
 import EmptyState from "../components/ui/EmptyState"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import {
   SkeletonCommunityPage,
   SkeletonLeaderboardRow,
@@ -22,6 +23,7 @@ import {
 } from "../components/ui/skeletons"
 import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
+import { buildRealtimeInFilter } from "@/lib/realtimeFilters"
 import { compressImage, compressScreenshot } from "@/lib/compressImage"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
@@ -255,34 +257,7 @@ function ActionSpinner({ className = "border-current" }: { className?: string })
   )
 }
 
-function normalizeRoomMessageSeenBy(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return []
-  return raw.map((x) => String(x)).filter(Boolean)
-}
-
-function isMissingRoomReadCursorRpc(error: {
-  code?: string
-  message?: string
-}): boolean {
-  const message = String(error.message ?? "").toLowerCase()
-  return (
-    error.code === "PGRST202" ||
-    error.code === "42883" ||
-    message.includes("could not find the function") ||
-    message.includes("schema cache")
-  )
-}
-
-function roomMessageIsUnreadForUser(
-  msg: { user_id: string; seen_by?: unknown },
-  userId: string
-): boolean {
-  if (msg.user_id === userId) return false
-  const seen = normalizeRoomMessageSeenBy(msg.seen_by)
-  return !seen.includes(userId)
-}
-
-/** Per-room unread: true if any message from others lacks current user in seen_by. */
+/** Per-room unread via read-cursor RPC only (no unlimited seen_by scans). */
 async function fetchUnreadByRoomIds(
   roomIds: string[],
   userId: string
@@ -309,28 +284,10 @@ async function fetchUnreadByRoomIds(
     }
     return unread
   }
-  if (!isMissingRoomReadCursorRpc(cursorError)) {
-    console.error("fetchUnreadByRoomIds cursor:", cursorError)
-    return unread
-  }
 
-  // Deployment-safe fallback only until the read-cursor migration is available.
-  const { data, error } = await supabase
-    .from("room_messages")
-    .select("room_id, user_id, seen_by")
-    .in("room_id", roomIds)
-    .neq("user_id", userId)
-
-  if (error) {
-    console.error("fetchUnreadByRoomIds:", error)
-    return unread
-  }
-
-  for (const row of data ?? []) {
-    if (roomMessageIsUnreadForUser(row, userId)) {
-      unread[String(row.room_id)] = true
-    }
-  }
+  // Missing or failing cursor RPC: fail closed (no room badges). Never fall
+  // back to an unbounded room_messages SELECT (Phase 2 Disk IO safety).
+  console.error("fetchUnreadByRoomIds cursor:", cursorError)
   return unread
 }
 
@@ -341,33 +298,10 @@ async function markAllRoomMessagesSeenForUser(roomId: string, userId: string) {
     p_room_id: roomId,
   })
   if (!cursorError) return
-  if (!isMissingRoomReadCursorRpc(cursorError)) {
-    console.error("markAllRoomMessagesSeenForUser cursor:", cursorError)
-    return
-  }
 
-  // Deployment-safe fallback only until the read-cursor migration is available.
-  const { data, error } = await supabase
-    .from("room_messages")
-    .select("id, user_id, seen_by")
-    .eq("room_id", roomId)
-    .neq("user_id", userId)
-
-  if (error) {
-    console.error("markAllRoomMessagesSeenForUser read:", error)
-    return
-  }
-
-  const pending = (data ?? []).filter(
-    (row) => !normalizeRoomMessageSeenBy(row.seen_by).includes(userId)
-  )
-
-  await Promise.all(
-    pending.map((row) => {
-      const next = [...normalizeRoomMessageSeenBy(row.seen_by), userId]
-      return supabase.from("room_messages").update({ seen_by: next }).eq("id", row.id)
-    })
-  )
+  // Cursor RPC unavailable or failed: fail closed. Never SELECT/update
+  // unbounded room history via seen_by (Phase 2 Disk IO safety).
+  console.error("markAllRoomMessagesSeenForUser cursor:", cursorError)
 }
 
 /** Cache key: room + active section + section id layout (so channel / section changes miss cache correctly). */
@@ -403,6 +337,7 @@ function roomMessageMatchesSectionFilter(
 function CommunityContent() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
+  const nativeIos = useIsNativeIos()
   const viewSharedTrade = useCallback(
     (trade: { id?: string | null }) => {
       router.push(getSharedTradeViewHref(String(trade?.id ?? "")))
@@ -558,6 +493,19 @@ function CommunityContent() {
       ...pinnedMessages.map((m) => m.id),
     ])
   }, [messages, pinnedMessages])
+
+  const roomVisibleMessageIdsKey = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...messages.map((m) => String(m.id)),
+          ...pinnedMessages.map((m) => String(m.id)),
+        ]),
+      ]
+        .sort()
+        .join(","),
+    [messages, pinnedMessages]
+  )
 
   // TODO: Re-enable room scroll persistence after beta
   // const scrollPersistRoomRef = useRef<string | null>(null)
@@ -2905,46 +2853,107 @@ function CommunityContent() {
         }
       }
     )
-    channel.on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "room_message_reactions",
-      },
-      (payload) => {
-        const eventType = payload.eventType
-        const row = (payload.new ?? payload.old) as
-          | RoomMessageReactionRow
-          | undefined
-        if (!row?.message_id || !roomMessageIdsRef.current.has(row.message_id)) {
-          return
-        }
 
-        if (eventType === "INSERT" && payload.new) {
-          patchMessageReaction(
-            row.message_id,
-            payload.new as RoomMessageReactionRow,
-            "insert"
-          )
-          return
-        }
-
-        if (eventType === "DELETE" && payload.old) {
-          patchMessageReaction(
-            row.message_id,
-            payload.old as RoomMessageReactionRow,
-            "delete"
-          )
-        }
-      }
+    const visibleMessageIds = roomVisibleMessageIdsKey
+      ? roomVisibleMessageIdsKey.split(",").filter(Boolean)
+      : []
+    const reactionFilter = buildRealtimeInFilter(
+      "message_id",
+      visibleMessageIds
     )
+
+    if (reactionFilter) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "room_message_reactions",
+          filter: reactionFilter,
+        },
+        (payload) => {
+          const eventType = payload.eventType
+          const row = (payload.new ?? payload.old) as
+            | RoomMessageReactionRow
+            | undefined
+          if (!row?.message_id || !roomMessageIdsRef.current.has(row.message_id)) {
+            return
+          }
+
+          if (eventType === "INSERT" && payload.new) {
+            patchMessageReaction(
+              row.message_id,
+              payload.new as RoomMessageReactionRow,
+              "insert"
+            )
+            return
+          }
+
+          if (eventType === "DELETE" && payload.old) {
+            patchMessageReaction(
+              row.message_id,
+              payload.old as RoomMessageReactionRow,
+              "delete"
+            )
+          }
+        }
+      )
+    } else if (visibleMessageIds.length > 0) {
+      // Too many visible messages for one in-(...) filter: register per-id filters
+      // (capped) instead of listening to every room's reactions globally.
+      for (const messageId of visibleMessageIds.slice(0, 100)) {
+        channel.on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "room_message_reactions",
+            filter: `message_id=eq.${messageId}`,
+          },
+          (payload) => {
+            const eventType = payload.eventType
+            const row = (payload.new ?? payload.old) as
+              | RoomMessageReactionRow
+              | undefined
+            if (
+              !row?.message_id ||
+              !roomMessageIdsRef.current.has(row.message_id)
+            ) {
+              return
+            }
+
+            if (eventType === "INSERT" && payload.new) {
+              patchMessageReaction(
+                row.message_id,
+                payload.new as RoomMessageReactionRow,
+                "insert"
+              )
+              return
+            }
+
+            if (eventType === "DELETE" && payload.old) {
+              patchMessageReaction(
+                row.message_id,
+                payload.old as RoomMessageReactionRow,
+                "delete"
+              )
+            }
+          }
+        )
+      }
+    }
+
     channel.subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [selectedRoomId, needsJoin, patchMessageReaction])
+  }, [
+    selectedRoomId,
+    needsJoin,
+    patchMessageReaction,
+    roomVisibleMessageIdsKey,
+  ])
 
   useEffect(() => {
     if (!selectedRoomId || needsJoin || !user?.id) {
@@ -3405,10 +3414,23 @@ function CommunityContent() {
           void handleToggleChannelNotification(sectionId, enabled)
         }
       />
-      <div className="flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white">
-        <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:flex-row md:overflow-hidden">
-          <aside className="shrink-0 border-b border-white/10 bg-[#0b1220]/80 md:w-72 md:border-b-0 md:border-r">
-            <div className="border-b border-white/10 px-3 py-1.5 md:px-4 md:py-3">
+      <div
+        data-tt-native-surface="community"
+        data-tt-trade-rooms
+        className="flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white"
+      >
+        <div
+          data-tt-trade-rooms-shell
+          className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:flex-row md:overflow-hidden"
+        >
+          <aside
+            data-tt-trade-rooms-aside
+            className="shrink-0 border-b border-white/10 bg-[#0b1220]/80 md:w-72 md:border-b-0 md:border-r"
+          >
+            <div
+              data-tt-trade-rooms-controls
+              className="border-b border-white/10 px-3 py-1.5 md:px-4 md:py-3"
+            >
               <h1 className="sr-only">Trade Rooms</h1>
               <p className="hidden text-lg font-semibold text-blue-300 md:block" aria-hidden>
                 {rooms.length > 0 ? "My Trade Rooms" : "Trade Rooms"}
@@ -4024,7 +4046,7 @@ function CommunityContent() {
 
               <NativeIosPullToRefresh
                 scrollRef={messagesScrollRef}
-                className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3"
+                className="tt-trade-rooms-chat min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3"
                 onRefresh={async () => {
                   if (selectedRoomId) {
                     await refetchSections()
@@ -4044,7 +4066,7 @@ function CommunityContent() {
               {!selectedRoomId ? (
                 <p className="text-sm text-gray-400">Pick a room to start chatting.</p>
               ) : loadingMessages ? (
-                <div className="space-y-3">
+                <div className="tt-trade-rooms-message-list space-y-3">
                   {Array.from({ length: 6 }).map((_, i) => (
                     <SkeletonMessage key={i} />
                   ))}
@@ -4063,7 +4085,7 @@ function CommunityContent() {
                   ) : null}
                   {pinnedMessages.length > 0 ? (
                     <div
-                      className={`space-y-3 ${
+                      className={`tt-trade-rooms-message-list space-y-3 ${
                         messages.length > 0 ? "mb-3" : ""
                       }`}
                     >
@@ -4190,6 +4212,9 @@ function CommunityContent() {
                                   onViewTrade={viewSharedTrade}
                                   deferUntilVisible
                                   optimizeMessagePreview
+                                  className={
+                                    nativeIos ? "w-full max-w-full" : undefined
+                                  }
                                 />
                               ) : editingMessageId === msg.id &&
                                 canEditRoomMessage(user?.id, msg) ? (
@@ -4245,7 +4270,7 @@ function CommunityContent() {
                     </div>
                   ) : null}
                   {messages.length > 0 ? (
-                <div className="space-y-3">
+                <div className="tt-trade-rooms-message-list space-y-3">
                   {messages.map((msg) => {
                     const parentMessage = resolveParentMessage(msg, messagesById)
                     const parentTargetId = String(
@@ -4356,6 +4381,9 @@ function CommunityContent() {
                             onViewTrade={viewSharedTrade}
                             deferUntilVisible
                             optimizeMessagePreview
+                            className={
+                              nativeIos ? "w-full max-w-full" : undefined
+                            }
                           />
                         ) : editingMessageId === msg.id &&
                           canEditRoomMessage(user?.id, msg) ? (

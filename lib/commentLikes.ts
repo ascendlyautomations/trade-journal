@@ -3,8 +3,8 @@ import { isAchievementFeedPost } from "@/lib/achievementPostEngagement"
 import { isProfileFeedPost } from "@/lib/profilePostEngagement"
 import { isReelFeedPost } from "@/lib/reelEngagement"
 import {
-  deleteLikeNotification,
   ensureLikeNotification,
+  refreshLikeNotificationUi,
 } from "./likeNotifications"
 import { hapticLight } from "@/lib/nativeHaptics"
 
@@ -166,15 +166,7 @@ export async function toggleCommentLike(
       }
 
       if (authorUserId) {
-        await deleteLikeNotification(client, {
-          recipientUserId: authorUserId,
-          senderUserId: userId,
-          target: buildCommentLikeNotificationTarget(
-            commentId,
-            commentSource,
-            notificationParent
-          ),
-        })
+        refreshLikeNotificationUi()
       }
 
       return true

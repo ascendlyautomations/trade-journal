@@ -30,7 +30,12 @@ function getAccountsLoadingServerSnapshot(): boolean {
   return false
 }
 
-export function useCachedTrades(userId: string | null | undefined) {
+export function useCachedTrades(
+  userId: string | null | undefined,
+  options?: { fullHistory?: boolean }
+) {
+  const fullHistory = options?.fullHistory === true
+
   const trades = useSyncExternalStore(
     subscribeAppDataCache,
     () => getTradesSnapshot(userId),
@@ -45,13 +50,16 @@ export function useCachedTrades(userId: string | null | undefined) {
 
   useEffect(() => {
     if (!userId) return
-    void ensureTradesLoaded(supabase, userId)
-  }, [userId])
+    void ensureTradesLoaded(supabase, userId, { fullHistory })
+  }, [userId, fullHistory])
 
   const refresh = useCallback(async () => {
     if (!userId) return []
-    return ensureTradesLoaded(supabase, userId, { force: true })
-  }, [userId])
+    return ensureTradesLoaded(supabase, userId, {
+      force: true,
+      fullHistory,
+    })
+  }, [userId, fullHistory])
 
   return { trades, loading, refresh }
 }

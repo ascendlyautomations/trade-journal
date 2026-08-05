@@ -270,6 +270,19 @@ export function enrichExploreProfilesWithSocialCounts(
   }))
 }
 
+function isMissingExploreRpc(error: {
+  code?: string
+  message?: string
+}): boolean {
+  const message = String(error.message ?? "").toLowerCase()
+  return (
+    error.code === "PGRST202" ||
+    error.code === "42883" ||
+    message.includes("could not find the function") ||
+    message.includes("schema cache")
+  )
+}
+
 export async function fetchExploreSocialCounts(
   profileIds: string[]
 ): Promise<ExploreSocialCounts> {
@@ -281,6 +294,29 @@ export async function fetchExploreSocialCounts(
   }
 
   const unique = [...new Set(profileIds)]
+  const { data, error } = await supabase.rpc("explore_social_counts", {
+    p_profile_ids: unique,
+  })
+
+  if (!error) {
+    for (const row of (data ?? []) as Array<{
+      profile_id: string
+      followers_count: number | string
+      following_count: number | string
+    }>) {
+      const id = String(row.profile_id)
+      followers[id] = Number(row.followers_count) || 0
+      following[id] = Number(row.following_count) || 0
+    }
+    return { followers, following }
+  }
+
+  if (!isMissingExploreRpc(error)) {
+    console.error("[explore] social counts RPC:", error)
+    return { followers, following }
+  }
+
+  // Deployment-safe fallback until explore_social_counts is available.
   const [followersRes, followingRes] = await Promise.all([
     supabase.from("followers").select("following_id").in("following_id", unique),
     supabase.from("followers").select("follower_id").in("follower_id", unique),
@@ -297,6 +333,131 @@ export async function fetchExploreSocialCounts(
   }
 
   return { followers, following }
+}
+
+export type ExploreTradeMetaPayload = {
+  tradeSummaries: Record<string, UserTradeSummary>
+  tradeMetaByUserId: Record<string, TraderTradeMeta>
+}
+
+type ExploreTradeMetaAggregateRow = {
+  row_kind: string
+  user_id: string
+  trade_count: number | string | null
+  win_count: number | string | null
+  total_pnl: number | string | null
+  last_trade_at: string | null
+  session: string | null
+  ticker: string | null
+  freq: number | string | null
+}
+
+/**
+ * Explore trade meta from the same recent-public window as the prior client
+ * pull (EXPLORE_TRADE_ROW_LIMIT), returned as aggregates instead of raw rows.
+ */
+export async function fetchExploreTradeMetaAggregates(
+  limit = EXPLORE_TRADE_ROW_LIMIT
+): Promise<ExploreTradeMetaPayload> {
+  const empty: ExploreTradeMetaPayload = {
+    tradeSummaries: {},
+    tradeMetaByUserId: {},
+  }
+
+  if (isDemoModeActive()) {
+    const { getDemoExploreTradeMetaRows } = await import("./demo/demoExplore")
+    const rows = getDemoExploreTradeMetaRows()
+    return {
+      tradeSummaries: buildTradeSummaries(rows),
+      tradeMetaByUserId: buildTraderTradeMeta(rows),
+    }
+  }
+
+  const { data, error } = await supabase.rpc("explore_trade_meta_aggregates", {
+    p_limit: limit,
+  })
+
+  if (error) {
+    if (!isMissingExploreRpc(error)) {
+      console.error("[explore] trade meta aggregates RPC:", error)
+      return empty
+    }
+
+    // Deployment-safe fallback: same 3000-row window, client-side aggregate.
+    const { data: rows, error: rowsError } = await supabase
+      .from("trades")
+      .select("user_id, session, ticker, created_at, pnl")
+      .eq("is_public", true)
+      .order("created_at", { ascending: false })
+      .limit(limit)
+
+    if (rowsError) {
+      console.error("[explore] trade meta fetch error:", rowsError)
+      return empty
+    }
+
+    const list = rows || []
+    return {
+      tradeSummaries: buildTradeSummaries(list),
+      tradeMetaByUserId: buildTraderTradeMeta(list),
+    }
+  }
+
+  const tradeSummaries: Record<string, UserTradeSummary> = {}
+  const sessionCounts: Record<string, Record<string, number>> = {}
+  const symbolCounts: Record<string, Record<string, number>> = {}
+
+  for (const row of (data ?? []) as ExploreTradeMetaAggregateRow[]) {
+    const userId = String(row.user_id)
+    if (!userId) continue
+
+    if (row.row_kind === "summary") {
+      tradeSummaries[userId] = {
+        tradeCount: Number(row.trade_count) || 0,
+        winCount: Number(row.win_count) || 0,
+        totalPnl: Number(row.total_pnl) || 0,
+        lastTradeAt: row.last_trade_at ?? null,
+      }
+      continue
+    }
+
+    if (row.row_kind === "session") {
+      const session = normalizeSessionBucket(row.session)
+      if (!session) continue
+      if (!sessionCounts[userId]) sessionCounts[userId] = {}
+      sessionCounts[userId][session] =
+        (sessionCounts[userId][session] ?? 0) + (Number(row.freq) || 0)
+      continue
+    }
+
+    if (row.row_kind === "ticker") {
+      const ticker = String(row.ticker ?? "").trim().toUpperCase()
+      if (!ticker) continue
+      if (!symbolCounts[userId]) symbolCounts[userId] = {}
+      symbolCounts[userId][ticker] =
+        (symbolCounts[userId][ticker] ?? 0) + (Number(row.freq) || 0)
+    }
+  }
+
+  const tradeMetaByUserId: Record<string, TraderTradeMeta> = {}
+  for (const userId of new Set([
+    ...Object.keys(sessionCounts),
+    ...Object.keys(symbolCounts),
+  ])) {
+    const sessions = sessionCounts[userId] ?? {}
+    const dominantSession = (
+      Object.entries(sessions).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+    ) as DashboardSessionBucket | null
+
+    const symbols = Object.entries(symbolCounts[userId] ?? {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([symbol]) => symbol)
+
+    tradeMetaByUserId[userId] = { dominantSession, topSymbols: symbols }
+  }
+
+  return { tradeSummaries, tradeMetaByUserId }
 }
 
 export function buildTraderTradeMeta(

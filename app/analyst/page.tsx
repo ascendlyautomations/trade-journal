@@ -469,7 +469,9 @@ export default function AnalystPage() {
 
 function AnalystPageContent() {
   const { user, profile, loading: profileLoading } = useUserProfile()
-  const { trades, loading: tradesLoading } = useCachedTrades(user?.id)
+  const { trades, loading: tradesLoading } = useCachedTrades(user?.id, {
+    fullHistory: true,
+  })
   const pageReady =
     (!profileLoading || profile != null) &&
     !(tradesLoading && trades.length === 0 && getCachedTrades(user?.id) == null)

@@ -4,7 +4,6 @@ import { isDemoUserId } from "./demo/constants"
 import {
   getDemoUnreadCountForConversation,
   getDemoUnreadMessageCount,
-  getDemoUnreadMessageRows,
 } from "./demo/demoMessages"
 import { isDemoSupabaseBlocked } from "./demo/demoSupabaseGuard"
 import { fetchMutedConversationIds } from "./conversationMemberPreferences"
@@ -82,7 +81,8 @@ async function fetchCursorUnreadCounts(
     p_conversation_ids: conversationIds,
   })
   if (error) {
-    if (isMissingReadCursorRpc(error)) return null
+    // Missing or failing cursor RPC: fail closed. Never fall back to an
+    // unbounded messages SELECT (Phase 2 Disk IO safety).
     console.error("[messageUnread] cursor unread counts:", error)
     return new Map()
   }
@@ -94,7 +94,7 @@ async function fetchCursorUnreadCounts(
   )
 }
 
-/** Batch unread counts, using read cursors with a legacy seen_by fallback. */
+/** Batch unread counts via read-cursor RPC only (no unlimited seen_by scans). */
 export async function fetchUnreadCountsForConversations(
   userId: string,
   conversationIds: string[],
@@ -104,44 +104,8 @@ export async function fetchUnreadCountsForConversations(
   if (!conversationIds.length) return result
 
   const cursorCounts = await fetchCursorUnreadCounts(conversationIds, client)
-  if (cursorCounts) {
-    for (const id of conversationIds) result[id] = cursorCounts.get(id) ?? 0
-    return result
-  }
-
-  const rows = await fetchUnreadMessageRows(userId, conversationIds, client)
-  for (const row of rows) {
-    if (!row.sender_id || row.sender_id === userId) continue
-    if (normalizeSeenBy(row.seen_by).includes(userId)) continue
-    result[row.conversation_id] = (result[row.conversation_id] ?? 0) + 1
-  }
+  for (const id of conversationIds) result[id] = cursorCounts.get(id) ?? 0
   return result
-}
-
-/** Unread rows for conversations the user participates in (same filters as messages list). */
-export async function fetchUnreadMessageRows(
-  userId: string,
-  conversationIds: string[],
-  client: SupabaseClient = supabase
-): Promise<{ conversation_id: string; seen_by: unknown; sender_id: string | null }[]> {
-  if (!conversationIds.length) return []
-  if (isDemoSupabaseBlocked() && isDemoUserId(userId)) {
-    return getDemoUnreadMessageRows(userId, conversationIds)
-  }
-
-  const { data, error } = await client
-    .from("messages")
-    .select("conversation_id, seen_by, sender_id")
-    .in("conversation_id", conversationIds)
-    .not("sender_id", "is", null)
-    .neq("sender_id", userId)
-
-  if (error) {
-    console.error("[messageUnread] fetchUnreadMessageRows:", error)
-    return []
-  }
-
-  return data || []
 }
 
 /** Per-conversation unread count (matches `fetchUnreadCountForConversation` on messages list). */
@@ -166,11 +130,7 @@ export async function fetchUnreadCountForConversation(
   const hidden = await fetchHiddenBlockedDmConversationIds(client)
   if (hidden.has(conversationId)) return 0
   const cursorCounts = await fetchCursorUnreadCounts([conversationId], client)
-  if (cursorCounts) {
-    return cursorCounts.get(conversationId) ?? 0
-  }
-  const rows = await fetchUnreadMessageRows(userId, [conversationId], client)
-  return countUnreadFromRows(rows, userId)
+  return cursorCounts.get(conversationId) ?? 0
 }
 
 /** Total unread DM/conversation messages for Navbar badge. */
@@ -189,14 +149,9 @@ export async function fetchTotalUnreadMessageCount(
   if (!activeIds.length) return 0
 
   const cursorCounts = await fetchCursorUnreadCounts(activeIds, client)
-  if (cursorCounts) {
-    let total = 0
-    for (const id of activeIds) total += cursorCounts.get(id) ?? 0
-    return total
-  }
-
-  const rows = await fetchUnreadMessageRows(userId, activeIds, client)
-  return countUnreadFromRows(rows, userId)
+  let total = 0
+  for (const id of activeIds) total += cursorCounts.get(id) ?? 0
+  return total
 }
 
 export type MarkConversationUnreadResult =

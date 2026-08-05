@@ -59,6 +59,10 @@ import {
 import { ensureCommentNotificationsForInsert } from "@/lib/commentNotifications"
 import { toggleContentLike } from "@/lib/toggleContentLike"
 import {
+  ensureLikeNotification,
+  refreshLikeNotificationUi,
+} from "@/lib/likeNotifications"
+import {
   PROFILE_POST_COMMENT_INSERT_SELECT,
   insertProfilePostCommentNotifications,
   profilePostOwnerUserId,
@@ -1219,11 +1223,16 @@ function ProfilePageContent() {
     reelsRequested,
   ])
 
+  const profileReelIdsKey = useMemo(
+    () => profileReels.map((row) => String(row.id)).sort().join(","),
+    [profileReels]
+  )
+
   useEffect(() => {
-    if (activeTab !== "reels" || !profile?.id || profileReels.length === 0) return
+    if (activeTab !== "reels" || !profile?.id || !profileReelIdsKey) return
     if (isDemoModeActive()) return
 
-    const reelIds = profileReels.map((row) => String(row.id))
+    const reelIds = profileReelIdsKey.split(",").filter(Boolean)
     const channel = supabase.channel(`profile-reel-likes-${profile.id}`)
 
     const refreshReelLike = (reelId: string) => {
@@ -1259,7 +1268,7 @@ function ProfilePageContent() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [activeTab, profile?.id, profileReels, currentUserId])
+  }, [activeTab, profile?.id, profileReelIdsKey, currentUserId])
 
   useEffect(() => {
     // See posts effect: don't clear cached achievements while profile is restoring.
@@ -3144,11 +3153,7 @@ function ProfilePageContent() {
           .eq("user_id", currentUserId)
         if (error) return
         if (ownerId) {
-          await deleteLikeNotification(supabase, {
-            recipientUserId: String(ownerId),
-            senderUserId: currentUserId,
-            target: { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
-          })
+          refreshLikeNotificationUi()
         }
         setFeedDeepLinkLikeMeta({
           count: Math.max(0, meta.count - 1),

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { isDemoUserId } from "./demo/constants"
-import { getTradesSnapshot } from "./appDataCache"
+import { ensureFullTradesHistory, getTradesSnapshot } from "./appDataCache"
 import type { MilestoneSignals } from "./userMilestones"
 import {
   buildStreakStats,
@@ -103,7 +103,32 @@ export function isUserStreaksLoading(userId: string | null | undefined): boolean
   return streaksByUser.get(userId)?.loading === true
 }
 
-async function fetchMilestoneSignals(
+function isMissingStreakRpc(error: {
+  code?: string
+  message?: string
+}): boolean {
+  const message = String(error.message ?? "").toLowerCase()
+  return (
+    error.code === "PGRST202" ||
+    error.code === "42883" ||
+    message.includes("could not find the function") ||
+    message.includes("schema cache")
+  )
+}
+
+type StreakBundleRow = {
+  onboarding_completed: boolean
+  trade_count: number | string
+  public_trade_count: number | string
+  profile_post_count: number | string
+  reel_count: number | string
+  comment_count: number | string
+  likes_received_count: number | string
+  posting_timestamps: string[] | null
+}
+
+/** Legacy path: ID dumps + .in() head counts (pre-RPC). */
+async function fetchMilestoneSignalsLegacy(
   supabase: SupabaseClient,
   userId: string,
   trades: readonly any[],
@@ -153,7 +178,9 @@ async function fetchMilestoneSignals(
   ])
 
   const feedPostIds = (feedPostsRes.data ?? []).map((row) => String(row.id))
-  const profilePostIds = (profilePostsListRes.data ?? []).map((row) => String(row.id))
+  const profilePostIds = (profilePostsListRes.data ?? []).map((row) =>
+    String(row.id)
+  )
   const reelIds = (reelsListRes.data ?? []).map((row) => String(row.id))
 
   const [feedLikesRes, profilePostLikesRes, reelLikesRes] = await Promise.all([
@@ -197,7 +224,7 @@ async function fetchMilestoneSignals(
   }
 }
 
-async function fetchPostingTimestamps(
+async function fetchPostingTimestampsLegacy(
   supabase: SupabaseClient,
   userId: string,
   trades: readonly any[]
@@ -211,10 +238,91 @@ async function fetchPostingTimestamps(
     supabase.from("reels").select("created_at").eq("user_id", userId),
   ])
 
-  const postTimes = (postsRes.data ?? []).map((row) => String(row.created_at ?? ""))
-  const reelTimes = (reelsRes.data ?? []).map((row) => String(row.created_at ?? ""))
+  const postTimes = (postsRes.data ?? []).map((row) =>
+    String(row.created_at ?? "")
+  )
+  const reelTimes = (reelsRes.data ?? []).map((row) =>
+    String(row.created_at ?? "")
+  )
 
   return [...publicTradeTimes, ...postTimes, ...reelTimes]
+}
+
+/**
+ * Milestone signals + posting timestamps in one aggregate RPC.
+ * tradeCount / publicTradeCount stay derived from the full trades cache so
+ * journal/winning streaks and milestone trade counts share one source of truth.
+ */
+async function fetchStreakMilestoneBundle(
+  supabase: SupabaseClient,
+  userId: string,
+  trades: readonly any[],
+  hints?: { onboardingCompleted?: boolean | null }
+): Promise<{ signals: MilestoneSignals; postingTimestamps: string[] }> {
+  const tradeCount = trades.length
+  const publicTradeCount = trades.filter((t) => t.is_public === true).length
+  const hasOnboardingHint = typeof hints?.onboardingCompleted === "boolean"
+
+  const { data, error } = await supabase.rpc("user_streak_milestone_bundle", {
+    p_user_id: userId,
+  })
+
+  if (error) {
+    if (isMissingStreakRpc(error)) {
+      const [signals, postingTimestamps] = await Promise.all([
+        fetchMilestoneSignalsLegacy(supabase, userId, trades, hints),
+        fetchPostingTimestampsLegacy(supabase, userId, trades),
+      ])
+      return { signals, postingTimestamps }
+    }
+    console.error("[streaks] milestone bundle RPC:", error)
+    return {
+      signals: {
+        ...EMPTY_MILESTONE_SIGNALS,
+        onboardingCompleted: hasOnboardingHint
+          ? hints!.onboardingCompleted === true
+          : false,
+        tradeCount,
+        publicTradeCount,
+      },
+      postingTimestamps: trades
+        .filter((t) => t.is_public === true)
+        .map((t) => String(t.created_at ?? "")),
+    }
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as StreakBundleRow | null
+  if (!row) {
+    return {
+      signals: {
+        ...EMPTY_MILESTONE_SIGNALS,
+        onboardingCompleted: hasOnboardingHint
+          ? hints!.onboardingCompleted === true
+          : false,
+        tradeCount,
+        publicTradeCount,
+      },
+      postingTimestamps: [],
+    }
+  }
+
+  const signals: MilestoneSignals = {
+    onboardingCompleted: hasOnboardingHint
+      ? hints!.onboardingCompleted === true
+      : row.onboarding_completed === true,
+    tradeCount,
+    publicTradeCount,
+    profilePostCount: Number(row.profile_post_count) || 0,
+    reelCount: Number(row.reel_count) || 0,
+    commentCount: Number(row.comment_count) || 0,
+    likesReceivedCount: Number(row.likes_received_count) || 0,
+  }
+
+  const postingTimestamps = (row.posting_timestamps ?? []).map((ts) =>
+    String(ts ?? "")
+  )
+
+  return { signals, postingTimestamps }
 }
 
 function computeSnapshot(
@@ -275,13 +383,13 @@ export async function ensureUserStreaksLoaded(
   })
   notify()
 
+  // Streak trade counts must match full journal history (not the 120 warm window).
+  await ensureFullTradesHistory(supabase, userId).catch(() => [])
   const trades = [...getTradesSnapshot(userId)]
-  const [postingTimestamps, milestoneSignals] = await Promise.all([
-    fetchPostingTimestamps(supabase, userId, trades),
-    fetchMilestoneSignals(supabase, userId, trades, {
+  const { signals: milestoneSignals, postingTimestamps } =
+    await fetchStreakMilestoneBundle(supabase, userId, trades, {
       onboardingCompleted: options?.onboardingCompleted,
-    }),
-  ])
+    })
 
   const snapshot = computeSnapshot(trades, postingTimestamps, milestoneSignals)
 

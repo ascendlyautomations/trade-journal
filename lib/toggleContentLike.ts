@@ -12,8 +12,8 @@ import {
   type LikeMeta,
 } from "@/lib/optimisticMutation"
 import {
-  deleteLikeNotification,
   ensureLikeNotification,
+  refreshLikeNotificationUi,
 } from "@/lib/likeNotifications"
 
 export type ContentLikeKind = "post" | "profile_post" | "achievement_post" | "trade"
@@ -75,22 +75,7 @@ export async function toggleContentLike(
       }
 
       if (ownerUserId) {
-        await deleteLikeNotification(client, {
-          recipientUserId: String(ownerUserId),
-          senderUserId: userId,
-          target:
-            kind === "profile_post"
-              ? { kind: "profile_post", profilePostId: contentId }
-              : kind === "achievement_post"
-                ? { kind: "achievement_post", achievementPostId: contentId }
-                : kind === "trade"
-                  ? { kind: "trade", tradeId: contentId }
-                  : {
-                      kind: "post",
-                      postId: contentId,
-                      tradeId: tradeId ?? null,
-                    },
-        })
+        refreshLikeNotificationUi()
       }
 
       return true

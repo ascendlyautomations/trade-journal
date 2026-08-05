@@ -46,7 +46,7 @@ export default function TradesPage() {
   const { user, profile: gateProfile, loading: profileLoading } = useUserProfile()
   const nativeIos = useIsNativeIos()
   const { trades: cachedTrades, loading: tradesLoading, refresh: refreshTrades } =
-    useCachedTrades(user?.id)
+    useCachedTrades(user?.id, { fullHistory: true })
   const {
     accounts: accountRows,
     loading: accountsLoading,

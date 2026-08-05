@@ -8,6 +8,7 @@ import { isAppCalendarPath } from "@/lib/calendarPath"
 import { isAppDashboardPath } from "@/lib/dashboardPath"
 import { isAppFeedPath } from "@/lib/feedPath"
 import { isAppMessagesInboxPath } from "@/lib/messagesPath"
+import { isAppCommunityPath } from "@/lib/communityPath"
 import { isAppTradesPath } from "@/lib/tradesPath"
 import { isDmConversationPath } from "@/lib/messageRoutes"
 import { usePlatformPresentation } from "./usePlatformPresentation"
@@ -19,7 +20,7 @@ import WebAppChrome from "./web/WebAppChrome"
  * Root app chrome presentation adapter.
  *
  * Native iOS tab roots (Dashboard / Feed / Calendar / Trades / Messages /
- * Add Trade): hide the website Navbar; pad with safe-area-top only.
+ * Trade Rooms / Add Trade): hide the website Navbar; pad with safe-area-top only.
  */
 export default function PlatformChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -34,6 +35,7 @@ export default function PlatformChrome({ children }: { children: ReactNode }) {
       isAppCalendarPath(pathname) ||
       isAppTradesPath(pathname) ||
       isAppMessagesInboxPath(pathname) ||
+      isAppCommunityPath(pathname) ||
       isAppAddTradePath(pathname))
 
   if (!showAppNavbar) {

@@ -6,7 +6,11 @@ import dynamic from "next/dynamic"
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
-import { feedbackPresets } from "@/lib/feedbackPresets"
+import { fetchFeedEngagementMaps } from "@/lib/feedEngagementCounts"
+import {
+  buildRealtimeInFilter,
+  stableIdKey,
+} from "@/lib/realtimeFilters"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
   deleteFeedComment,
@@ -209,6 +213,11 @@ function FeedPageContent() {
   const feedInitKeyRef = useRef<string | null>(null)
   const hasLoadedFeedRef = useRef(false)
   const followingIdsRef = useRef<string[]>([])
+  const [followingRealtimeKey, setFollowingRealtimeKey] = useState("")
+  const setFollowingIds = useCallback((ids: string[]) => {
+    followingIdsRef.current = ids
+    setFollowingRealtimeKey(stableIdKey(ids))
+  }, [])
   const [likesByPost, setLikesByPost] = useState<Record<string, LikeMeta>>({})
   const [commentCountsByPost, setCommentCountsByPost] = useState<
     Record<string, number>
@@ -297,7 +306,7 @@ function FeedPageContent() {
     if (!defaultModeResolvedRef.current) {
       const explore = readExploreSession()
       if (explore?.currentUserId === user.id) {
-        followingIdsRef.current = explore.followingIds
+        setFollowingIds(explore.followingIds)
         if (explore.followingIds.length > 0) {
           setMode("following")
         }
@@ -306,7 +315,7 @@ function FeedPageContent() {
     }
 
     setFeedDefaultModeReady(true)
-  }, [user?.id])
+  }, [user?.id, setFollowingIds])
 
   const buildFeedSnapshot = useCallback(
     (
@@ -757,13 +766,13 @@ function FeedPageContent() {
           !isAchievementFeedPost(p) &&
           !isReelFeedPost(p)
       )
-      .map((p) => p.id)
+      .map((p) => String(p.id))
     const profileIds = postList
       .filter((p) => isProfileFeedPost(p))
-      .map((p) => p.id)
+      .map((p) => String(p.id))
     const achievementIds = postList
       .filter((p) => isAchievementFeedPost(p))
-      .map((p) => p.id)
+      .map((p) => String(p.id))
     const reelIds = [
       ...postList.filter((p) => isReelFeedPost(p)).map((p) => String(p.id)),
       ...postList
@@ -778,113 +787,22 @@ function FeedPageContent() {
         .map(String),
     ].filter((id, index, arr) => arr.indexOf(id) === index)
 
-    const [
-      { data: tradeLikesRows },
-      { data: tradeCommentsRows },
-      { data: profileLikesRows },
-      { data: profileCommentsRows },
-      { data: achievementLikesRows },
-      { data: achievementCommentsRows },
-      { data: reelLikesRows },
-      { data: reelCommentsRows },
-    ] = await Promise.all([
-      tradeIds.length
-        ? supabase.from("likes").select("post_id, user_id").in("post_id", tradeIds)
-        : Promise.resolve({ data: [] as { post_id: string; user_id: string }[] }),
-      tradeIds.length
-        ? supabase.from("comments").select("post_id").in("post_id", tradeIds)
-        : Promise.resolve({ data: [] as any[] }),
-      profileIds.length
-        ? supabase
-            .from("profile_post_likes")
-            .select("profile_post_id, user_id")
-            .in("profile_post_id", profileIds)
-        : Promise.resolve({ data: [] as { profile_post_id: string; user_id: string }[] }),
-      profileIds.length
-        ? supabase
-            .from("profile_post_comments")
-            .select("profile_post_id")
-            .in("profile_post_id", profileIds)
-        : Promise.resolve({ data: [] as any[] }),
-      achievementIds.length
-        ? supabase
-            .from("achievement_post_likes")
-            .select("achievement_post_id, user_id")
-            .in("achievement_post_id", achievementIds)
-        : Promise.resolve({
-            data: [] as { achievement_post_id: string; user_id: string }[],
-          }),
-      achievementIds.length
-        ? supabase
-            .from("achievement_post_comments")
-            .select("achievement_post_id")
-            .in("achievement_post_id", achievementIds)
-        : Promise.resolve({ data: [] as any[] }),
-      reelIds.length
-        ? supabase
-            .from("reel_likes")
-            .select("reel_id, user_id")
-            .in("reel_id", reelIds)
-        : Promise.resolve({
-            data: [] as { reel_id: string; user_id: string }[],
-          }),
-      reelIds.length
-        ? supabase
-            .from("reel_comments")
-            .select("reel_id")
-            .in("reel_id", reelIds)
-        : Promise.resolve({ data: [] as any[] }),
-    ])
+    const seedIds = [
+      ...postList.map((p) => String(p.id)),
+      ...reelIds,
+    ].filter((id, index, arr) => arr.indexOf(id) === index)
 
-    const likesMap: Record<string, LikeMeta> = {}
-    const commentCountsMap: Record<string, number> = {}
-    for (const p of postList) {
-      const key = String(p.id)
-      likesMap[key] = { count: 0, liked: false }
-      commentCountsMap[key] = 0
-    }
-
-    for (const row of tradeLikesRows || []) {
-      const pid = String(row.post_id)
-      if (!likesMap[pid]) likesMap[pid] = { count: 0, liked: false }
-      likesMap[pid].count++
-      if (currentUser && row.user_id === currentUser.id) likesMap[pid].liked = true
-    }
-    for (const row of profileLikesRows || []) {
-      const pid = String(row.profile_post_id)
-      if (!likesMap[pid]) likesMap[pid] = { count: 0, liked: false }
-      likesMap[pid].count++
-      if (currentUser && row.user_id === currentUser.id) likesMap[pid].liked = true
-    }
-    for (const row of achievementLikesRows || []) {
-      const pid = String(row.achievement_post_id)
-      if (!likesMap[pid]) likesMap[pid] = { count: 0, liked: false }
-      likesMap[pid].count++
-      if (currentUser && row.user_id === currentUser.id) likesMap[pid].liked = true
-    }
-    for (const row of reelLikesRows || []) {
-      const pid = String(row.reel_id)
-      if (!likesMap[pid]) likesMap[pid] = { count: 0, liked: false }
-      likesMap[pid].count++
-      if (currentUser && row.user_id === currentUser.id) likesMap[pid].liked = true
-    }
-
-    for (const c of tradeCommentsRows || []) {
-      const pid = String(c.post_id)
-      commentCountsMap[pid] = (commentCountsMap[pid] ?? 0) + 1
-    }
-    for (const c of profileCommentsRows || []) {
-      const pid = String(c.profile_post_id)
-      commentCountsMap[pid] = (commentCountsMap[pid] ?? 0) + 1
-    }
-    for (const c of achievementCommentsRows || []) {
-      const pid = String(c.achievement_post_id)
-      commentCountsMap[pid] = (commentCountsMap[pid] ?? 0) + 1
-    }
-    for (const c of reelCommentsRows || []) {
-      const pid = String(c.reel_id)
-      commentCountsMap[pid] = (commentCountsMap[pid] ?? 0) + 1
-    }
+    const { likesMap, commentCountsMap } = await fetchFeedEngagementMaps(
+      supabase,
+      {
+        tradeIds,
+        profileIds,
+        achievementIds,
+        reelIds,
+        seedIds,
+        currentUserId: currentUser?.id ?? null,
+      }
+    )
 
     const enriched = postList.map((p) => {
       const key = String(p.id)
@@ -1128,7 +1046,7 @@ function FeedPageContent() {
         const followingIds = await fetchFollowingIds(supabase, userId)
         if (!isActive()) return
 
-        followingIdsRef.current = followingIds
+        setFollowingIds(followingIds)
         if (mode === "following") {
           setFollowingStoryUserIds([...new Set([...followingIds, userId])])
         }
@@ -1514,14 +1432,25 @@ function FeedPageContent() {
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "trades") return
+    // Following feed: wait for follow graph; skip when empty (nothing to listen for).
+    if (mode === "following" && !followingRealtimeKey) return
 
     const userId = user.id
     const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-trade-posts-${userId}`)
+    const authorFilter =
+      mode === "following"
+        ? buildRealtimeInFilter("user_id", followingIdsRef.current)
+        : null
 
     channel.on(
       "postgres_changes",
-      { event: "INSERT", schema: "public", table: "posts" },
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "posts",
+        ...(authorFilter ? { filter: authorFilter } : {}),
+      },
       async (payload) => {
         const row = payload.new as Record<string, unknown>
         const authorId = String(row.user_id ?? "")
@@ -1584,19 +1513,29 @@ function FeedPageContent() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [user?.id, mode, contentType, persistFeedSnapshot])
+  }, [user?.id, mode, contentType, followingRealtimeKey, persistFeedSnapshot])
 
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "posts") return
+    if (mode === "following" && !followingRealtimeKey) return
 
     const userId = user.id
     const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-profile-posts-${userId}`)
+    const authorFilter =
+      mode === "following"
+        ? buildRealtimeInFilter("user_id", followingIdsRef.current)
+        : null
 
     channel.on(
       "postgres_changes",
-      { event: "INSERT", schema: "public", table: "profile_posts" },
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "profile_posts",
+        ...(authorFilter ? { filter: authorFilter } : {}),
+      },
       async (payload) => {
         const row = payload.new as Record<string, unknown>
         const authorId = String(row.user_id ?? "")
@@ -1656,19 +1595,29 @@ function FeedPageContent() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [user?.id, mode, contentType, persistFeedSnapshot])
+  }, [user?.id, mode, contentType, followingRealtimeKey, persistFeedSnapshot])
 
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "achievements") return
+    if (mode === "following" && !followingRealtimeKey) return
 
     const userId = user.id
     const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-achievement-posts-${userId}`)
+    const authorFilter =
+      mode === "following"
+        ? buildRealtimeInFilter("user_id", followingIdsRef.current)
+        : null
 
     channel.on(
       "postgres_changes",
-      { event: "INSERT", schema: "public", table: "achievement_posts" },
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "achievement_posts",
+        ...(authorFilter ? { filter: authorFilter } : {}),
+      },
       async (payload) => {
         const row = payload.new as Record<string, unknown>
         const authorId = String(row.user_id ?? "")
@@ -1729,19 +1678,29 @@ function FeedPageContent() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [user?.id, mode, contentType, persistFeedSnapshot])
+  }, [user?.id, mode, contentType, followingRealtimeKey, persistFeedSnapshot])
 
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "reels") return
+    if (mode === "following" && !followingRealtimeKey) return
 
     const userId = user.id
     const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-reels-${userId}`)
+    const authorFilter =
+      mode === "following"
+        ? buildRealtimeInFilter("user_id", followingIdsRef.current)
+        : null
 
     channel.on(
       "postgres_changes",
-      { event: "INSERT", schema: "public", table: "reels" },
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "reels",
+        ...(authorFilter ? { filter: authorFilter } : {}),
+      },
       async (payload) => {
         const row = payload.new as Record<string, unknown>
         const authorId = String(row.user_id ?? "")
@@ -1809,15 +1768,23 @@ function FeedPageContent() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [user?.id, mode, contentType, persistFeedSnapshot])
+  }, [user?.id, mode, contentType, followingRealtimeKey, persistFeedSnapshot])
+
+  const feedReelIdsKey = useMemo(
+    () =>
+      stableIdKey(
+        posts.filter((p) => isReelFeedPost(p)).map((p) => String(p.id))
+      ),
+    [posts]
+  )
 
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
 
     const userId = user.id
-    const reelIds = postsRef.current
-      .filter((p) => isReelFeedPost(p))
-      .map((p) => String(p.id))
+    const reelIds = feedReelIdsKey
+      ? feedReelIdsKey.split(",").filter(Boolean)
+      : []
 
     if (reelIds.length === 0) return
 
@@ -1870,7 +1837,7 @@ function FeedPageContent() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [user?.id, posts, persistFeedSnapshot])
+  }, [user?.id, feedReelIdsKey, persistFeedSnapshot])
 
   useEffect(() => {
     const handleScroll = () => {

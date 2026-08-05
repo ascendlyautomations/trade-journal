@@ -1653,22 +1653,41 @@ export default function DMPage() {
 
     if (!cached.newestTimestamp) return
 
-    const { data: incoming } = await queryDmMessages((select) => {
-      let query = supabase
-        .from("messages")
-        .select(select)
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true })
-      query = cached.newestMessageId
-        ? query.or(
-            `created_at.gt.${cached.newestTimestamp},and(created_at.eq.${cached.newestTimestamp},id.gt.${cached.newestMessageId})`
-          )
-        : query.gt("created_at", cached.newestTimestamp)
-      return query
-    })
+    // Bounded catch-up: page newer messages instead of an unlimited SELECT.
+    const SYNC_PAGE_SIZE = messagePageSize
+    const SYNC_MAX_PAGES = 20
+    const incoming: any[] = []
+    let cursorTs = cached.newestTimestamp
+    let cursorId = cached.newestMessageId ?? null
 
-    if (!incoming?.length) return
+    for (let page = 0; page < SYNC_MAX_PAGES; page++) {
+      const pageCursorTs = cursorTs
+      const pageCursorId = cursorId
+      const { data: batch } = await queryDmMessages((select) => {
+        let query = supabase
+          .from("messages")
+          .select(select)
+          .eq("conversation_id", conversationId)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .limit(SYNC_PAGE_SIZE)
+        query = pageCursorId
+          ? query.or(
+              `created_at.gt.${pageCursorTs},and(created_at.eq.${pageCursorTs},id.gt.${pageCursorId})`
+            )
+          : query.gt("created_at", pageCursorTs)
+        return query
+      })
+
+      if (!batch?.length) break
+      incoming.push(...batch)
+      const last = batch[batch.length - 1]
+      cursorTs = String(last.created_at)
+      cursorId = String(last.id)
+      if (batch.length < SYNC_PAGE_SIZE) break
+    }
+
+    if (!incoming.length) return
 
     const deletedIds = await fetchConversationDeletedMessageIds(
       currentUserId,

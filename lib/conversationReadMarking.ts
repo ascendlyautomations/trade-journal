@@ -2,7 +2,6 @@ import { supabase } from "./supabaseClient"
 import { isDemoSupabaseBlocked } from "./demo/demoSupabaseGuard"
 import {
   dispatchUnreadMessagesRefresh,
-  normalizeSeenBy,
 } from "./messageUnread"
 
 const RECENT_MARK_MS = 8_000
@@ -55,33 +54,12 @@ export async function markConversationMessagesSeen(
         return
       }
 
-      // Deployment-safe fallback only while the read-cursor migration rolls out.
-      const { data: rows, error: fetchErr } = await supabase
-        .from("messages")
-        .select("id, sender_id, seen_by")
-        .eq("conversation_id", conversationId)
-
-      if (fetchErr) {
-        console.error("[conversationReadMarking] fetch error:", fetchErr)
-        return
-      }
-
-      const updates: Promise<unknown>[] = []
-      for (const row of rows || []) {
-        if (!row.sender_id || row.sender_id === userId) continue
-        const seenBy = normalizeSeenBy(row.seen_by)
-        if (seenBy.includes(userId)) continue
-        updates.push(
-          supabase
-            .from("messages")
-            .update({ seen_by: [...seenBy, userId] })
-            .eq("id", row.id)
-        )
-      }
-
-      if (updates.length > 0) {
-        await Promise.all(updates)
-      }
+      // Cursor RPC unavailable: fail closed. Never SELECT/update unbounded
+      // conversation history via seen_by (Phase 2 Disk IO safety).
+      console.error(
+        "[conversationReadMarking] mark_conversation_read unavailable; skipping mark-read"
+      )
+      return
     }
 
     recentMarks.set(key, Date.now())

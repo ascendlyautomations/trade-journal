@@ -10,8 +10,8 @@ import {
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { ensureCommentNotificationsForInsert } from "./commentNotifications"
 import {
-  deleteLikeNotification,
   ensureLikeNotification,
+  refreshLikeNotificationUi,
 } from "./likeNotifications"
 
 export type ReelLikeMeta = { count: number; liked: boolean }
@@ -211,11 +211,7 @@ export async function toggleReelLike(
       }
 
       if (ownerUserId) {
-        await deleteLikeNotification(client, {
-          recipientUserId: ownerUserId,
-          senderUserId: userId,
-          target: { kind: "reel", reelId },
-        })
+        refreshLikeNotificationUi()
       }
 
       return true

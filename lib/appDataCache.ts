@@ -17,7 +17,10 @@ const DEFAULT_STALE_MS = 5 * 60 * 1000
 /** Native dashboard soft freshness window (SWR still serves stale). */
 const NATIVE_DASHBOARD_SOFT_MS = 45_000
 
-/** Recent window for first interactive dashboard paint; full history loads after. */
+/**
+ * Recent window for first interactive paint (auth warm + dashboard stage 1).
+ * Full history is loaded only when a screen explicitly requests it.
+ */
 export const INITIAL_TRADES_LIMIT = 120
 
 type CacheEntry<T> = {
@@ -421,14 +424,35 @@ export async function ensureAccountsLoaded(
   return next
 }
 
+export function isTradesHistoryComplete(
+  userId: string | null | undefined
+): boolean {
+  if (!userId) return false
+  return tradesByUser.get(userId)?.historyComplete === true
+}
+
 /**
- * Background full-history fetch. Does not flip `loading`, so recent trades
- * stay usable for an interactive dashboard while history catches up.
+ * Full-history fetch for screens that need every trade (dashboard metrics,
+ * journal, calendar, analyst, streaks). Does not flip `loading`, so the
+ * recent window stays interactive while history catches up.
+ *
+ * Auth warm / generic prefetch must NOT call this — only explicit consumers.
  */
-async function ensureFullTradesHistory(
+export async function ensureFullTradesHistory(
   supabase: SupabaseClient,
   userId: string
 ): Promise<any[]> {
+  if (isDemoUserId(userId)) {
+    const cached = getCachedTrades(userId)
+    if (!cached) setTradesCache(userId, DEMO_TRADES, { historyComplete: true })
+    return getCachedTrades(userId) ?? DEMO_TRADES
+  }
+
+  const entry = tradesByUser.get(userId)
+  if (entry && !entry.invalidated && entry.historyComplete && !entry.loading) {
+    return entry.data
+  }
+
   const existing = tradesHistoryInFlight.get(userId)
   if (existing) return existing
 
@@ -455,10 +479,20 @@ async function ensureFullTradesHistory(
   return promise
 }
 
+export type EnsureTradesLoadedOptions = {
+  force?: boolean
+  isRetry?: boolean
+  /**
+   * When true, also load full trade history after the recent window.
+   * Default false — auth warm and unrelated screens stay on the 120-trade window.
+   */
+  fullHistory?: boolean
+}
+
 export async function ensureTradesLoaded(
   supabase: SupabaseClient,
   userId: string,
-  options?: { force?: boolean; isRetry?: boolean }
+  options?: EnsureTradesLoadedOptions
 ): Promise<any[]> {
   if (isDemoUserId(userId)) {
     const cached = getCachedTrades(userId)
@@ -466,6 +500,7 @@ export async function ensureTradesLoaded(
     return getCachedTrades(userId) ?? DEMO_TRADES
   }
 
+  const wantFullHistory = options?.fullHistory === true
   const cached = getCachedTrades(userId)
   const entry = tradesByUser.get(userId)
   if (cached && !options?.force) {
@@ -475,10 +510,13 @@ export async function ensureTradesLoaded(
       isNativeIos() &&
       isStale(entry.fetchedAt, NATIVE_DASHBOARD_SOFT_MS)
     ) {
-      void ensureTradesLoaded(supabase, userId, { force: true })
+      void ensureTradesLoaded(supabase, userId, {
+        force: true,
+        fullHistory: wantFullHistory,
+      })
     }
-    // Fresh recent window: unblock UI now, finish history in the background.
-    if (!entry?.historyComplete) {
+    // Recent window is enough for warm/prefetch; full history only on demand.
+    if (wantFullHistory && !entry?.historyComplete) {
       void ensureFullTradesHistory(supabase, userId)
     }
     return cached
@@ -508,7 +546,7 @@ export async function ensureTradesLoaded(
   })
   if (!wasLoading) notify()
 
-  // Stage 1: recent trades only — dashboard becomes interactive sooner.
+  // Stage 1: recent trades only — UI becomes interactive sooner.
   const { data, error } = await supabase
     .from("trades")
     .select(TRADES_APP_SELECT)
@@ -531,7 +569,10 @@ export async function ensureTradesLoaded(
     // One delayed retry recovers transient startup failures (token refresh).
     if (!options?.isRetry) {
       setTimeout(() => {
-        void ensureTradesLoaded(supabase, userId, { isRetry: true })
+        void ensureTradesLoaded(supabase, userId, {
+          isRetry: true,
+          fullHistory: wantFullHistory,
+        })
       }, 4000)
     }
     return previousData
@@ -541,8 +582,8 @@ export async function ensureTradesLoaded(
   const historyComplete = next.length < INITIAL_TRADES_LIMIT
   setTradesCache(userId, next, { historyComplete })
 
-  // Stage 2: remaining history after first paint (no loading flip).
-  if (!historyComplete) {
+  // Stage 2: only when a consumer explicitly needs complete history.
+  if (wantFullHistory && !historyComplete) {
     void ensureFullTradesHistory(supabase, userId)
   }
 
