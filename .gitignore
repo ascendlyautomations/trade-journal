@@ -41,3 +41,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# iOS client secrets (public anon key / URLs — still do not commit)
+native-ios/TradeTraxs/TradeTraxs/Config/Secrets.plist
