@@ -34,6 +34,7 @@ enum AppIcon: String, CaseIterable, Sendable {
     case empty = "tray"
     case lock = "lock.fill"
     case sparkles = "sparkles"
+    case more = "ellipsis"
 
     /// Future custom asset name (Asset Catalog). Nil means SF Symbol.
     var customAssetName: String? { nil }

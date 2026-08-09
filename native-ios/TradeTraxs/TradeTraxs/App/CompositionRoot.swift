@@ -72,12 +72,27 @@ enum CompositionRoot {
             "Auth state after cold launch: \(String(describing: authState), privacy: .public)"
         )
 
+        let currentUserProfile = CurrentUserProfileStore(
+            profiles: data.profiles,
+            session: data.session,
+            imagePipeline: data.imagePipeline
+        )
+
+        // Session caches belong to the authenticated user — invalidate on logout / switch.
+        authentication.coordinator.invalidateSessionCaches = {
+            SessionScopedCaches.invalidate(
+                currentUserProfile: currentUserProfile,
+                data: data
+            )
+        }
+
         return AppEnvironment(
             configuration: configuration,
             featureFlags: featureFlags,
             dependencies: dependencies,
             lifecycle: lifecycle,
-            themeManager: themeManager
+            themeManager: themeManager,
+            currentUserProfile: currentUserProfile
         )
     }
 

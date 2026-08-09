@@ -1,8 +1,20 @@
 import Foundation
+import OSLog
 
 nonisolated struct DefaultFeedRepository: FeedRepository {
     private let supabase: SupabaseInfrastructure
     private let cache: CacheStack
+
+    /// Exact web `PROFILE_REELS_SELECT` from `lib/reels.ts`.
+    private static let profileReelsSelect =
+        "id,user_id,caption,video_url,thumbnail_url,duration_seconds,visibility,trade_id,kind,created_at,updated_at,trades!reels_trade_id_fkey(id,public_description,is_public,ticker,direction,pnl,rr)"
+
+    /// Exact web `REEL_ROW_SELECT` fallback.
+    private static let reelRowSelect =
+        "id,user_id,caption,video_url,thumbnail_url,duration_seconds,visibility,trade_id,kind,created_at,updated_at"
+
+    private static let reelTradeJoinSelect =
+        "id,public_description,is_public,ticker,direction,pnl,rr"
 
     init(supabase: SupabaseInfrastructure, cache: CacheStack = .placeholder()) {
         self.supabase = supabase
@@ -49,6 +61,22 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             query: [SupabaseQuery.select("*"), SupabaseQuery.eq("id", id.rawValue)]
         )
         return try mapPost(dto)
+    }
+
+    func posts(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post> {
+        let rows: [FeedDTO.Post] = try await supabase.database.select(
+            FeedDTO.Post.self,
+            from: "posts",
+            query: SupabaseQuery.page(page) + [
+                SupabaseQuery.select("*"),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+            ]
+        )
+        let items = rows.compactMap { try? mapPost($0) }
+        return CursorPage(
+            items: items,
+            nextCursor: SupabaseQuery.nextCursor(items: rows, limit: page.limit) { $0.created_at }
+        )
     }
 
     func createPost(_ post: Post) async throws -> Post {
@@ -176,33 +204,76 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     }
 
     func reel(id: ReelID) async throws -> Reel {
-        struct Row: Codable {
-            var id: String?
-            var user_id: String?
-            var video_url: String?
-            var thumbnail_url: String?
-            var caption: String?
-            var trade_id: String?
-            var created_at: String?
-        }
-        let row: Row = try await supabase.database.selectOne(
-            Row.self,
+        let row: ProfileReelRow = try await supabase.database.selectOne(
+            ProfileReelRow.self,
             from: "reels",
-            query: [SupabaseQuery.select("*"), SupabaseQuery.eq("id", id.rawValue)]
+            query: [
+                SupabaseQuery.select(Self.reelRowSelect),
+                SupabaseQuery.eq("id", id.rawValue),
+            ]
         )
-        guard let reelID = row.id, let author = row.user_id, let video = row.video_url else {
+        guard let mapped = mapReel(row) else {
             throw AppError.domain(.notFound(entity: "reel", id: id.rawValue))
         }
-        return Reel(
-            id: ReelID(reelID),
-            authorProfileID: ProfileID(author),
-            video: MediaReference(id: video, kind: .video, altText: nil),
-            thumbnail: row.thumbnail_url.map { MediaReference(id: $0, kind: .image, altText: nil) },
-            caption: row.caption,
-            visibility: .public,
-            linkedTradeID: row.trade_id.map { TradeID($0) },
-            createdAt: ISO8601.date(from: row.created_at) ?? Date()
+        return mapped
+    }
+
+    func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
+        let rows: [ProfileReelRow] = try await supabase.database.select(
+            ProfileReelRow.self,
+            from: "reels",
+            query: SupabaseQuery.page(page) + [
+                SupabaseQuery.select(Self.reelRowSelect),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+            ]
         )
+        let items = rows.compactMap(mapReel)
+        return CursorPage(
+            items: items,
+            nextCursor: SupabaseQuery.nextCursor(items: rows, limit: page.limit) { $0.created_at }
+        )
+    }
+
+    func profileReels(for profileID: ProfileID) async throws -> [Reel] {
+        // Mirror web `fetchUserProfileReels`: embed query → filter; fallback hydrate.
+        let rows: [ProfileReelRow]
+        do {
+            rows = try await supabase.database.select(
+                ProfileReelRow.self,
+                from: "reels",
+                query: [
+                    SupabaseQuery.select(Self.profileReelsSelect),
+                    SupabaseQuery.eq("user_id", profileID.rawValue),
+                    URLQueryItem(name: "order", value: "created_at.desc"),
+                ]
+            )
+        } catch {
+            AppLog.networking.error(
+                "Profile reels embed failed — falling back — \(String(describing: error), privacy: .public)"
+            )
+            let fallback: [ProfileReelRow] = try await supabase.database.select(
+                ProfileReelRow.self,
+                from: "reels",
+                query: [
+                    SupabaseQuery.select(Self.reelRowSelect),
+                    SupabaseQuery.eq("user_id", profileID.rawValue),
+                    URLQueryItem(name: "order", value: "created_at.desc"),
+                ]
+            )
+            rows = try await hydrateReelsWithTrades(fallback)
+        }
+
+        return rows
+            .filter(Self.isReelListedOnProfile)
+            .compactMap { row in
+                let mapped = mapReel(row)
+                if mapped == nil {
+                    AppLog.networking.error(
+                        "Skipping reel \(row.id ?? "unknown", privacy: .public) — mapping failed"
+                    )
+                }
+                return mapped
+            }
     }
 
     func createReel(_ reel: Reel) async throws -> Reel {
@@ -220,29 +291,165 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             caption: reel.caption,
             trade_id: reel.linkedTradeID?.rawValue
         )
-        struct Row: Codable {
-            var id: String?
-            var user_id: String?
-            var video_url: String?
-            var thumbnail_url: String?
-            var caption: String?
-            var trade_id: String?
-            var created_at: String?
+        let row: ProfileReelRow = try await supabase.database.insert(
+            body,
+            into: "reels",
+            returning: ProfileReelRow.self
+        )
+        return mapReel(row) ?? reel
+    }
+
+    // MARK: - Profile reel DTOs (web `ReelRow` + trade embed)
+
+    private struct ProfileReelRow: Codable {
+        var id: String?
+        var user_id: String?
+        var caption: String?
+        var video_url: String?
+        var thumbnail_url: String?
+        var duration_seconds: Int?
+        var visibility: String?
+        var trade_id: String?
+        var kind: String?
+        var created_at: String?
+        var updated_at: String?
+        /// PostgREST may return object or single-element array for many-to-one embeds.
+        var trades: TradeJoinBox?
+    }
+
+    private struct ReelTradeJoin: Codable {
+        var id: String?
+        var public_description: String?
+        var is_public: Bool?
+        var ticker: String?
+        var direction: String?
+        var pnl: FlexibleNumber?
+        var rr: FlexibleNumber?
+    }
+
+    /// Decodes either a single embedded trade object or an array.
+    private struct TradeJoinBox: Codable {
+        var trades: [ReelTradeJoin]
+
+        init(trades: [ReelTradeJoin]) {
+            self.trades = trades
         }
-        let row: Row = try await supabase.database.insert(body, into: "reels", returning: Row.self)
-        guard let id = row.id, let author = row.user_id, let video = row.video_url else {
-            return reel
+
+        init(from decoder: Decoder) throws {
+            if let single = try? ReelTradeJoin(from: decoder) {
+                trades = [single]
+                return
+            }
+            trades = try [ReelTradeJoin](from: decoder)
         }
+
+        func encode(to encoder: Encoder) throws {
+            try trades.encode(to: encoder)
+        }
+    }
+
+    private func mapReel(_ row: ProfileReelRow) -> Reel? {
+        guard let reelID = row.id,
+              let author = row.user_id,
+              let video = row.video_url?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !video.isEmpty else {
+            return nil
+        }
+        let thumb = row.thumbnail_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let visibility: ContentVisibility = (row.visibility?.lowercased() == "private") ? .private : .public
+        let caption: String? = {
+            if let tradeCaption = resolveTradeCaption(row) { return tradeCaption }
+            let raw = row.caption?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (raw?.isEmpty == false) ? raw : nil
+        }()
         return Reel(
-            id: ReelID(id),
+            id: ReelID(reelID),
             authorProfileID: ProfileID(author),
             video: MediaReference(id: video, kind: .video, altText: nil),
-            thumbnail: row.thumbnail_url.map { MediaReference(id: $0, kind: .image, altText: nil) },
-            caption: row.caption,
-            visibility: reel.visibility,
+            thumbnail: thumb.flatMap { $0.isEmpty ? nil : MediaReference(id: $0, kind: .image, altText: nil) },
+            caption: caption,
+            visibility: visibility,
             linkedTradeID: row.trade_id.map { TradeID($0) },
+            durationSeconds: row.duration_seconds,
             createdAt: ISO8601.date(from: row.created_at) ?? Date()
         )
+    }
+
+    /// Web `isReelListedOnProfile`.
+    private static func isReelListedOnProfile(_ row: ProfileReelRow) -> Bool {
+        let tradeID = row.trade_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !tradeID.isEmpty {
+            return resolveTradeJoin(row)?.is_public == true
+        }
+        return true
+    }
+
+    private static func resolveTradeJoin(_ row: ProfileReelRow) -> ReelTradeJoin? {
+        row.trades?.trades.first
+    }
+
+    private func resolveTradeCaption(_ row: ProfileReelRow) -> String? {
+        let tradeID = row.trade_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !tradeID.isEmpty else { return nil }
+        let raw = Self.resolveTradeJoin(row)?.public_description?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (raw?.isEmpty == false) ? raw : nil
+    }
+
+    private func hydrateReelsWithTrades(_ rows: [ProfileReelRow]) async throws -> [ProfileReelRow] {
+        let tradeIDs = Array(
+            Set(
+                rows.compactMap { row -> String? in
+                    let id = row.trade_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    return id.isEmpty ? nil : id
+                }
+            )
+        )
+        guard !tradeIDs.isEmpty else { return rows }
+
+        struct TradeRow: Codable {
+            var id: String?
+            var public_description: String?
+            var is_public: Bool?
+            var ticker: String?
+            var direction: String?
+            var pnl: FlexibleNumber?
+            var rr: FlexibleNumber?
+        }
+
+        // PostgREST `in` filter — same as web hydrate.
+        let joined = tradeIDs.map { "\"\($0)\"" }.joined(separator: ",")
+        let trades: [TradeRow] = try await supabase.database.select(
+            TradeRow.self,
+            from: "trades",
+            query: [
+                SupabaseQuery.select(Self.reelTradeJoinSelect),
+                URLQueryItem(name: "id", value: "in.(\(joined))"),
+            ]
+        )
+        let byID = Dictionary(uniqueKeysWithValues: trades.compactMap { row -> (String, ReelTradeJoin)? in
+            guard let id = row.id else { return nil }
+            return (
+                id,
+                ReelTradeJoin(
+                    id: row.id,
+                    public_description: row.public_description,
+                    is_public: row.is_public,
+                    ticker: row.ticker,
+                    direction: row.direction,
+                    pnl: row.pnl,
+                    rr: row.rr
+                )
+            )
+        })
+
+        return rows.map { row in
+            var copy = row
+            if let tradeID = row.trade_id, let join = byID[tradeID] {
+                copy.trades = TradeJoinBox(trades: [join])
+            }
+            return copy
+        }
     }
 
     private func mapPost(_ dto: FeedDTO.Post) throws -> Post {
@@ -256,6 +463,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             media: [],
             visibility: .public,
             linkedTradeID: dto.trade_id.map { TradeID($0) },
+            isPinned: false,
             createdAt: created,
             updatedAt: ISO8601.date(from: dto.updated_at) ?? created
         )

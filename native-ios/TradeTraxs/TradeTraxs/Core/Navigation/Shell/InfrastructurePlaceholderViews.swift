@@ -25,21 +25,22 @@ struct AuthInfrastructureView: View {
     let coordinator: NavigationCoordinator
     let authenticationCoordinator: AuthenticationCoordinator
     @Bindable var authenticationManager: AuthenticationManager
+    let allowsDevelopmentBypass: Bool
 
     var body: some View {
         NavigationStack(path: authPath) {
-            AuthRoutePlaceholder(
+            AuthRouteView(
                 route: .login,
-                coordinator: coordinator,
+                navigationCoordinator: coordinator,
                 authenticationCoordinator: authenticationCoordinator,
-                authenticationManager: authenticationManager
+                allowsDevelopmentBypass: allowsDevelopmentBypass
             )
             .navigationDestination(for: AuthRoute.self) { route in
-                AuthRoutePlaceholder(
+                AuthRouteView(
                     route: route,
-                    coordinator: coordinator,
+                    navigationCoordinator: coordinator,
                     authenticationCoordinator: authenticationCoordinator,
-                    authenticationManager: authenticationManager
+                    allowsDevelopmentBypass: allowsDevelopmentBypass
                 )
             }
         }
@@ -50,87 +51,5 @@ struct AuthInfrastructureView: View {
             get: { store.paths.auth },
             set: { store.paths.auth = $0 }
         )
-    }
-}
-
-private struct AuthRoutePlaceholder: View {
-    let route: AuthRoute
-    let coordinator: NavigationCoordinator
-    let authenticationCoordinator: AuthenticationCoordinator
-    @Bindable var authenticationManager: AuthenticationManager
-    @State private var statusMessage: String?
-
-    var body: some View {
-        VStack(spacing: 20) {
-            NavigationInfrastructurePlaceholder(
-                title: authTitle(route),
-                subtitle: "Authentication platform — feature UI arrives later.",
-                systemImage: "person.badge.key"
-            )
-
-            if let statusMessage {
-                Text(statusMessage)
-                    .experienceStyle(.footnote, color: ExperienceColor.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, ExperienceSpacing.xl)
-            }
-
-            ExperienceButton(
-                title: "Continue",
-                kind: .primary,
-                accessibilityIdentifier: "auth.continue"
-            ) {
-                Task {
-                    do {
-                        try await authenticationCoordinator.continueAsDevelopmentSessionIfAllowed()
-                        ExperienceHaptics.play(.success)
-                        statusMessage = nil
-                    } catch let authError as AuthenticationError {
-                        ExperienceHaptics.play(.warning)
-                        statusMessage = UserFacingError.map(authError).message
-                    } catch {
-                        ExperienceHaptics.play(.warning)
-                        statusMessage = UserFacingError.map(AppError.from(.unknown(error.localizedDescription))).message
-                    }
-                }
-            }
-            .padding(.horizontal, ExperienceSpacing.xl)
-
-            if route == .login {
-                ExperienceButton(
-                    title: "Onboarding",
-                    kind: .secondary,
-                    accessibilityIdentifier: "auth.onboarding"
-                ) {
-                    coordinator.open(.auth(.onboarding))
-                }
-                .padding(.horizontal, ExperienceSpacing.xl)
-            }
-
-            if authenticationManager.state.isAuthenticated {
-                ExperienceButton(
-                    title: "Sign Out",
-                    kind: .destructive,
-                    accessibilityIdentifier: "auth.signOut"
-                ) {
-                    Task {
-                        await authenticationCoordinator.logout()
-                    }
-                }
-                .padding(.horizontal, ExperienceSpacing.xl)
-            }
-        }
-        .padding()
-        .navigationTitle(authTitle(route))
-    }
-
-    private func authTitle(_ route: AuthRoute) -> String {
-        switch route {
-        case .login: return "Login"
-        case .resetPassword: return "Reset Password"
-        case .onboarding: return "Onboarding"
-        case .choosePlan: return "Choose Plan"
-        case .finishTrial: return "Finish Trial"
-        }
     }
 }

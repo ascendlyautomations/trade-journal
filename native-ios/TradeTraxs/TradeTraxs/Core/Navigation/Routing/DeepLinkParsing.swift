@@ -9,13 +9,13 @@ protocol DeepLinkParsing: Sendable {
 ///
 /// Supports:
 /// - `https://www.tradetraxs.com/...` / `https://tradetraxs.com/...`
-/// - `com.tradetraxs.ios://...`
+/// - `tradetraxs://...` / `com.tradetraxs.ios://...`
 ///
 /// Features never parse URLs themselves — they only consume destinations.
 struct DeepLinkParser: DeepLinkParsing {
     func parse(url: URL) -> AppDestination? {
         let scheme = (url.scheme ?? "").lowercased()
-        if scheme == "com.tradetraxs.ios" {
+        if scheme == "tradetraxs" || scheme == "com.tradetraxs.ios" {
             return parseCustomScheme(url)
         }
         if scheme == "https" || scheme == "http" {
@@ -47,9 +47,25 @@ struct DeepLinkParser: DeepLinkParsing {
 
         switch first {
         case "login", "auth":
+            if let second = parts[safe: 1] {
+                switch second {
+                case "onboarding":
+                    return .auth(.onboarding)
+                case "reset-password", "forgot-password", "resetPassword":
+                    return .auth(.resetPassword)
+                case "choose-plan":
+                    return .auth(.choosePlan)
+                case "finish-trial":
+                    return .auth(.finishTrial)
+                default:
+                    return .auth(.login)
+                }
+            }
             return .auth(.login)
         case "onboarding":
             return .auth(.onboarding)
+        case "reset-password", "forgot-password", "resetPassword":
+            return .auth(.resetPassword)
         case "choose-plan":
             return .auth(.choosePlan)
         case "dashboard", "home":

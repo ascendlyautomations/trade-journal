@@ -14,6 +14,11 @@ final class NetworkingFoundationTests: XCTestCase {
             mapper.map(data: nil, response: HTTPURLResponse(url: url, statusCode: 403, httpVersion: nil, headerFields: nil), error: nil),
             .forbidden
         )
+        let rlsBody = Data(#"{"code":"42501","message":"new row violates row-level security policy for table \"messages\""}"#.utf8)
+        XCTAssertEqual(
+            mapper.map(data: rlsBody, response: HTTPURLResponse(url: url, statusCode: 403, httpVersion: nil, headerFields: nil), error: nil),
+            .validation(message: String(data: rlsBody, encoding: .utf8)!)
+        )
         XCTAssertEqual(
             mapper.map(data: nil, response: HTTPURLResponse(url: url, statusCode: 429, httpVersion: nil, headerFields: ["Retry-After": "2"]), error: nil),
             .rateLimited(retryAfter: 2)

@@ -5,22 +5,28 @@ nonisolated enum TradeMapper: DTOMapper {
     typealias DomainModel = Trade
 
     static func mapToDomain(_ dto: DTO) throws -> Trade {
-        guard let id = dto.id else { throw MappingError.missingField("id") }
-        guard let owner = dto.user_id else { throw MappingError.missingField("user_id") }
-        guard let ticker = dto.ticker else { throw MappingError.missingField("ticker") }
+        guard let id = dto.id, !id.isEmpty else { throw MappingError.missingField("id") }
+        guard let owner = dto.user_id, !owner.isEmpty else { throw MappingError.missingField("user_id") }
+
+        let ticker = dto.ticker?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !ticker.isEmpty else { throw MappingError.missingField("ticker") }
 
         let entryAt =
             ISO8601.date(from: dto.entry_time)
             ?? ISO8601.date(from: dto.created_at)
             ?? ISO8601.date(from: dto.date)
+            ?? ISO8601.date(from: dto.trade_date)
         guard let entryAt else { throw MappingError.missingField("entry_time") }
 
         let side = mapSide(dto.direction)
-        let mode = TradeMode(rawValue: dto.mode ?? "") ?? .live
+        let mode = mapMode(dto.mode ?? dto.account_type)
         let quantity = DecimalParser.parseFlexible(dto.contracts) ?? 0
         let visibility: ContentVisibility = (dto.is_public == true) ? .public : .private
         let createdAt = ISO8601.date(from: dto.created_at) ?? entryAt
         let pnl = DecimalParser.parseFlexible(dto.pnl)
+
+        let note = dto.notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let imageURL = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return Trade(
             id: TradeID(id),
@@ -40,6 +46,8 @@ nonisolated enum TradeMapper: DTOMapper {
             sessionLabel: dto.session,
             visibility: visibility,
             publicCaption: dto.public_description,
+            thumbnail: imageURL.flatMap { $0.isEmpty ? nil : MediaReference(id: $0, kind: .image, altText: nil) },
+            notePreview: note.flatMap { $0.isEmpty ? nil : String($0.prefix(140)) },
             createdAt: createdAt,
             updatedAt: createdAt
         )
@@ -53,6 +61,7 @@ nonisolated enum TradeMapper: DTOMapper {
             ticker: domain.symbol.ticker,
             direction: domain.side == .long ? "Long" : "Short",
             mode: domain.mode.rawValue,
+            account_type: nil,
             contracts: FlexibleNumber(domain.quantity),
             entry_price: FlexibleNumber(domain.entryPrice),
             exit_price: FlexibleNumber(domain.exitPrice),
@@ -63,11 +72,13 @@ nonisolated enum TradeMapper: DTOMapper {
             points: FlexibleNumber(domain.points),
             session: domain.sessionLabel,
             is_public: domain.visibility == .public,
+            is_pinned: nil,
             public_description: domain.publicCaption,
-            image_url: nil,
-            notes: nil,
+            image_url: domain.thumbnail?.id,
+            notes: domain.notePreview,
             created_at: ISO8601.string(from: domain.createdAt),
-            date: ISO8601.string(from: domain.createdAt)
+            date: ISO8601.string(from: domain.createdAt),
+            trade_date: nil
         )
     }
 
@@ -101,6 +112,21 @@ nonisolated enum TradeMapper: DTOMapper {
             return .long
         }
     }
+
+    private static func mapMode(_ raw: String?) -> TradeMode {
+        switch (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "backtest":
+            return .backtest
+        case "sim":
+            return .sim
+        case "replay":
+            return .replay
+        case "copy", "copy_traded", "copytraded":
+            return .copyTraded
+        default:
+            return .live
+        }
+    }
 }
 
 nonisolated enum ProfileMapper: DTOMapper {
@@ -117,13 +143,17 @@ nonisolated enum ProfileMapper: DTOMapper {
             username: username,
             displayName: dto.name ?? username,
             bio: dto.bio,
-            avatar: dto.avatar_url.map { MediaReference(id: $0, kind: .image, altText: nil) },
-            traderType: dto.trader_type.flatMap { TraderType(rawValue: $0) },
-            tradingStyle: nil,
-            primaryMarket: nil,
-            startedTradingAt: nil,
+            avatar: dto.avatar_url.flatMap { url in
+                let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : MediaReference(id: trimmed, kind: .image, altText: nil)
+            },
+            traderType: TraderType.parse(dto.trader_type),
+            tradingStyle: dto.trading_style,
+            primaryMarket: dto.primary_market,
+            startedTradingAt: ISO8601.date(from: dto.started_trading),
             isPrivate: dto.is_private ?? false,
-            isCreator: dto.is_creator ?? false,
+            // Web Profile does not select `is_creator` (column absent in production).
+            isCreator: false,
             createdAt: ISO8601.date(from: dto.created_at) ?? Date(timeIntervalSince1970: 0)
         )
     }
@@ -136,8 +166,11 @@ nonisolated enum ProfileMapper: DTOMapper {
             bio: domain.bio,
             avatar_url: domain.avatar?.id,
             trader_type: domain.traderType?.rawValue,
+            trading_style: domain.tradingStyle,
+            primary_market: domain.primaryMarket,
+            started_trading: domain.startedTradingAt.map(ISO8601.string(from:)),
             is_private: domain.isPrivate,
-            is_creator: domain.isCreator,
+            is_creator: nil,
             is_pro: nil,
             subscription_status: nil,
             created_at: ISO8601.string(from: domain.createdAt),
@@ -161,13 +194,44 @@ nonisolated enum MessageMapper: DTOMapper {
             throw MappingError.missingField("created_at")
         }
 
+        let tradeID = dto.trade_id.flatMap { raw -> TradeID? in
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : TradeID(trimmed)
+        }
+        let isTrade = (dto.type?.lowercased() == "trade") || tradeID != nil
+        let imageURL = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attachments: [MessageAttachment] = {
+            if let tradeID {
+                return [
+                    MessageAttachment(
+                        id: tradeID.rawValue,
+                        media: MediaReference(id: tradeID.rawValue, kind: .file, altText: "Shared trade"),
+                        tradeID: tradeID
+                    ),
+                ]
+            }
+            guard let imageURL, !imageURL.isEmpty else { return [] }
+            return [
+                MessageAttachment(
+                    id: imageURL,
+                    media: MediaReference(id: imageURL, kind: .image, altText: nil),
+                    tradeID: nil
+                ),
+            ]
+        }()
+        let kind: MessageKind = {
+            if isTrade { return .tradeShare }
+            if let raw = dto.kind, let parsed = MessageKind(rawValue: raw) { return parsed }
+            return attachments.isEmpty ? .text : .media
+        }()
+
         return Message(
             id: MessageID(id),
             conversationID: ConversationID(conversationID),
             senderProfileID: ProfileID(sender),
-            kind: MessageKind(rawValue: dto.kind ?? "") ?? .text,
-            body: dto.body ?? dto.content,
-            attachments: [],
+            kind: kind,
+            body: isTrade ? nil : (dto.body ?? dto.content),
+            attachments: attachments,
             replyToMessageID: nil,
             createdAt: createdAt,
             isReadByViewer: dto.is_read ?? false
@@ -181,8 +245,11 @@ nonisolated enum MessageMapper: DTOMapper {
             sender_id: domain.senderProfileID.rawValue,
             sender_profile_id: domain.senderProfileID.rawValue,
             kind: domain.kind.rawValue,
+            type: domain.kind == .tradeShare ? "trade" : nil,
             body: domain.body,
             content: domain.body,
+            image_url: domain.kind == .tradeShare ? nil : domain.attachments.first?.media.id,
+            trade_id: domain.attachments.first?.tradeID?.rawValue,
             created_at: ISO8601.string(from: domain.createdAt),
             is_read: domain.isReadByViewer
         )
@@ -276,16 +343,37 @@ nonisolated enum TradingAccountMapper {
     static func mapToDomain(_ dto: TradeDTO.Account) throws -> TradingAccount {
         guard let id = dto.id else { throw MappingError.missingField("id") }
         guard let owner = dto.user_id else { throw MappingError.missingField("user_id") }
-        guard let name = dto.name else { throw MappingError.missingField("name") }
+        // Web `accounts.name` is canonical; `account_name` is only the free-plan registry.
+        guard let name = dto.name ?? dto.account_name, !name.isEmpty else {
+            throw MappingError.missingField("name")
+        }
+        let sizeValue = DecimalParser.parseFlexible(dto.account_size)
+            ?? DecimalParser.parseFlexible(dto.size)
         return TradingAccount(
             id: TradingAccountID(id),
             ownerProfileID: ProfileID(owner),
             name: name,
-            category: TradingAccountCategory(rawValue: dto.category ?? "") ?? .personal,
-            mode: TradingAccountMode(rawValue: dto.mode ?? "") ?? .live,
-            size: DecimalParser.parseFlexible(dto.size).map { Money(amount: $0) },
+            category: TradingAccountCategory(rawValue: dto.category ?? dto.account_type ?? "") ?? .personal,
+            mode: mapAccountMode(dto.mode),
+            size: sizeValue.map { Money(amount: $0) },
             isActive: dto.is_active ?? true,
             canAddTrades: dto.can_add_trades ?? true
         )
+    }
+
+    /// Web account mode strings — case-insensitive (`Funded` / `Evaluation` / `Live`).
+    private static func mapAccountMode(_ raw: String?) -> TradingAccountMode {
+        switch (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "eval", "evaluation":
+            return .evaluation
+        case "funded":
+            return .funded
+        case "sim":
+            return .sim
+        case "backtest":
+            return .backtest
+        default:
+            return .live
+        }
     }
 }

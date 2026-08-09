@@ -11,6 +11,8 @@ struct AppEnvironment {
     let dependencies: DependencyContainer
     let lifecycle: AppLifecycleHandler
     let themeManager: ThemeManager
+    /// Session-scoped authenticated profile cache (header + tab avatar).
+    let currentUserProfile: CurrentUserProfileStore
 
     /// Convenience access: CompositionRoot → AppEnvironment → DependencyContainer → Navigation
     var navigation: NavigationEnvironment { dependencies.navigation }

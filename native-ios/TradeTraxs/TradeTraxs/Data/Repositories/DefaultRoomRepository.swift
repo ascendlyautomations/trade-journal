@@ -4,6 +4,13 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
     private let supabase: SupabaseInfrastructure
     private let cache: CacheStack
 
+    /// Exact web Community `loadMemberRooms` embed (`app/community/page.tsx`).
+    /// Do not request `member_count` — that column does not exist on `rooms`.
+    private static let memberRoomSelect = """
+    room_id,room:rooms!room_members_room_id_fkey(\
+    id,name,description,slug,image_url,owner_user_id,show_on_profile)
+    """
+
     init(supabase: SupabaseInfrastructure, cache: CacheStack = .placeholder()) {
         self.supabase = supabase
         self.cache = cache
@@ -15,22 +22,59 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
             from: "rooms",
             query: [SupabaseQuery.select("*"), SupabaseQuery.eq("id", id.rawValue)]
         )
-        return try mapRoom(dto)
+        var room = try mapRoom(dto)
+        // Exact web `loadMemberStats` active count:
+        // room_members where room_id = ? and left_at is null (count exact).
+        if let active = try? await supabase.database.count(
+            from: "room_members",
+            query: [
+                SupabaseQuery.eq("room_id", id.rawValue),
+                URLQueryItem(name: "left_at", value: "is.null"),
+            ]
+        ) {
+            room.memberCount = active
+        }
+        return room
     }
 
     func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
+        // Exact web Profile ownership query (`app/profile/[id]/page.tsx`):
+        // rooms where owner_user_id = profile.id (not owner_id).
         let rows: [RoomDTO.Room] = try await supabase.database.select(
             RoomDTO.Room.self,
             from: "rooms",
             query: SupabaseQuery.page(page) + [
                 SupabaseQuery.select("*"),
-                SupabaseQuery.eq("owner_id", profileID.rawValue),
+                SupabaseQuery.eq("owner_user_id", profileID.rawValue),
             ]
         )
         let items = try rows.map(mapRoom)
         return CursorPage(
             items: items,
             nextCursor: SupabaseQuery.nextCursor(items: rows, limit: page.limit) { $0.created_at }
+        )
+    }
+
+    func memberRooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
+        let rows: [RoomDTO.MemberRoomRow] = try await supabase.database.select(
+            RoomDTO.MemberRoomRow.self,
+            from: "room_members",
+            query: [
+                SupabaseQuery.select(Self.memberRoomSelect),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                URLQueryItem(name: "left_at", value: "is.null"),
+            ]
+        )
+        let items = rows.compactMap { row -> TradeRoom? in
+            guard let room = row.room else { return nil }
+            return try? mapRoom(room)
+        }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        let limited = Array(items.prefix(page.limit))
+        return CursorPage(
+            items: limited,
+            nextCursor: items.count > page.limit ? limited.last?.id.rawValue : nil
         )
     }
 
@@ -79,14 +123,52 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
         )
     }
 
+    func channels(roomID: RoomID) async throws -> [RoomChannel] {
+        // Exact web Community `loadSections`:
+        // room_sections select id, room_id, name, position, allow_members_chat
+        // where room_id = ? order by position ascending.
+        let rows: [RoomDTO.Channel] = try await supabase.database.select(
+            RoomDTO.Channel.self,
+            from: "room_sections",
+            query: [
+                SupabaseQuery.select("id, room_id, name, position, allow_members_chat"),
+                SupabaseQuery.eq("room_id", roomID.rawValue),
+                URLQueryItem(name: "order", value: "position.asc"),
+            ]
+        )
+        return rows.compactMap(mapChannel)
+    }
+
     func messages(roomID: RoomID, page: PageRequest) async throws -> CursorPage<RoomMessage> {
+        try await messages(roomID: roomID, channel: nil, page: page)
+    }
+
+    func messages(
+        roomID: RoomID,
+        channel: RoomChannel?,
+        page: PageRequest
+    ) async throws -> CursorPage<RoomMessage> {
+        // Web `applySectionFiltersToQuery` / `sectionMessageFilter`.
+        var query = SupabaseQuery.page(page) + [
+            SupabaseQuery.select("*"),
+            SupabaseQuery.eq("room_id", roomID.rawValue),
+        ]
+        if let channel {
+            if channel.isGeneral {
+                query.append(
+                    URLQueryItem(
+                        name: "or",
+                        value: "(section_id.eq.\(channel.id.rawValue),section_id.is.null)"
+                    )
+                )
+            } else {
+                query.append(SupabaseQuery.eq("section_id", channel.id.rawValue))
+            }
+        }
         let rows: [RoomDTO.Message] = try await supabase.database.select(
             RoomDTO.Message.self,
             from: "room_messages",
-            query: SupabaseQuery.page(page) + [
-                SupabaseQuery.select("*"),
-                SupabaseQuery.eq("room_id", roomID.rawValue),
-            ]
+            query: query
         )
         let items = rows.compactMap(mapMessage)
         return CursorPage(
@@ -96,15 +178,47 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
     }
 
     func send(_ message: RoomMessage) async throws -> RoomMessage {
+        // Web community inserts use `user_id` + `section_id` (active channel).
+        // Trade shares match `sendTradeMessage`.
+        if let tradeID = message.attachedTradeID {
+            struct TradeBody: Encodable {
+                var room_id: String
+                var user_id: String
+                var type: String
+                var trade_id: String
+                var content: String
+                var section_id: String?
+            }
+            let body = TradeBody(
+                room_id: message.roomID.rawValue,
+                user_id: message.senderProfileID.rawValue,
+                type: "trade",
+                trade_id: tradeID.rawValue,
+                content: "Shared a trade",
+                section_id: message.channelID?.rawValue
+            )
+            let dto: RoomDTO.Message = try await supabase.database.insert(
+                body,
+                into: "room_messages",
+                returning: RoomDTO.Message.self
+            )
+            guard let mapped = mapMessage(dto) else { return message }
+            return mapped
+        }
+
         struct Body: Encodable {
             var room_id: String
-            var sender_id: String
+            var user_id: String
             var content: String?
+            var type: String
+            var section_id: String?
         }
         let body = Body(
             room_id: message.roomID.rawValue,
-            sender_id: message.senderProfileID.rawValue,
-            content: message.body
+            user_id: message.senderProfileID.rawValue,
+            content: message.body,
+            type: message.media.isEmpty ? "text" : "image",
+            section_id: message.channelID?.rawValue
         )
         let dto: RoomDTO.Message = try await supabase.database.insert(
             body,
@@ -153,8 +267,8 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
 
     private func mapRoom(_ dto: RoomDTO.Room) throws -> TradeRoom {
         guard let id = dto.id else { throw MappingError.missingField("id") }
-        let owner = dto.owner_id ?? dto.owner_profile_id
-        guard let owner else { throw MappingError.missingField("owner_id") }
+        let owner = dto.owner_user_id ?? dto.owner_id ?? dto.owner_profile_id
+        guard let owner else { throw MappingError.missingField("owner_user_id") }
         guard let name = dto.name else { throw MappingError.missingField("name") }
         return TradeRoom(
             id: RoomID(id),
@@ -166,6 +280,40 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
             memberCount: dto.member_count ?? 0,
             showsOnProfile: dto.show_on_profile ?? true,
             createdAt: ISO8601.date(from: dto.created_at) ?? Date()
+        )
+    }
+
+    func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] {
+        let raw = roomIDs.map(\.rawValue)
+        guard !raw.isEmpty else { return [:] }
+        struct Params: Encodable { var p_room_ids: [String] }
+        do {
+            let data = try await supabase.database.rpcData(
+                functionName: "get_room_unread_counts",
+                parametersJSON: try JSONEncoder().encode(Params(p_room_ids: raw))
+            )
+            let rows = try JSONDecoder().decode([RoomDTO.RoomUnreadCountRow].self, from: data)
+            var map: [RoomID: Int] = [:]
+            for row in rows {
+                guard let id = row.room_id else { continue }
+                map[RoomID(id)] = row.unread_count ?? 0
+            }
+            return map
+        } catch {
+            // Web fail-closed.
+            return [:]
+        }
+    }
+
+    func markRead(roomID: RoomID) async throws {
+        // Exact web Community `markAllRoomMessagesSeenForUser` → RPC `mark_room_read`.
+        struct Params: Encodable {
+            var p_room_id: String
+        }
+        let data = try JSONEncoder().encode(Params(p_room_id: roomID.rawValue))
+        _ = try await supabase.database.rpcData(
+            functionName: "mark_room_read",
+            parametersJSON: data
         )
     }
 
@@ -182,18 +330,41 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
 
     private func mapMessage(_ dto: RoomDTO.Message) -> RoomMessage? {
         guard let id = dto.id, let roomID = dto.room_id else { return nil }
-        let sender = dto.sender_id ?? dto.sender_profile_id
+        let sender = dto.sender_id ?? dto.sender_profile_id ?? dto.user_id
         guard let sender else { return nil }
+        let tradeID = dto.trade_id.flatMap { raw -> TradeID? in
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : TradeID(trimmed)
+        }
+        let imageURL = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let media: [MediaReference] = {
+            guard let imageURL, !imageURL.isEmpty else { return [] }
+            return [MediaReference(id: imageURL, kind: .image, altText: nil)]
+        }()
         return RoomMessage(
             id: RoomMessageID(id),
             roomID: RoomID(roomID),
             senderProfileID: ProfileID(sender),
             body: dto.body ?? dto.content,
-            attachedTradeID: nil,
-            media: [],
+            attachedTradeID: tradeID,
+            media: media,
             parentMessageID: nil,
+            channelID: dto.section_id.map { RoomChannelID($0) },
             isPinned: dto.is_pinned ?? false,
             createdAt: ISO8601.date(from: dto.created_at) ?? Date()
+        )
+    }
+
+    private func mapChannel(_ dto: RoomDTO.Channel) -> RoomChannel? {
+        guard let id = dto.id, let roomID = dto.room_id else { return nil }
+        let name = dto.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !name.isEmpty else { return nil }
+        return RoomChannel(
+            id: RoomChannelID(id),
+            roomID: RoomID(roomID),
+            name: name,
+            position: dto.position ?? 0,
+            allowMembersChat: dto.allow_members_chat ?? true
         )
     }
 }

@@ -59,6 +59,10 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var sessionLabel: String?
     var visibility: ContentVisibility
     var publicCaption: String?
+    /// Primary screenshot from the trade row (`image_url`) when present.
+    var thumbnail: MediaReference?
+    /// Short note preview from the trade row (`notes`) when present.
+    var notePreview: String?
     var createdAt: Date
     var updatedAt: Date
 }

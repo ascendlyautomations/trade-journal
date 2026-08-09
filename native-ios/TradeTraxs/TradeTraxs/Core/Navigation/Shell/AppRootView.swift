@@ -1,35 +1,45 @@
 import SwiftUI
 
-/// Root application chrome: Auth stack ↔ retained Main tabs + modal surface.
+/// Root application chrome: Splash → Auth stack ↔ retained Main tabs + modal surface.
 struct AppRootView: View {
-    /// Same observation pattern as before Theme Engine — `@Bindable` on the
-    /// `@Observable` navigation graph (not a SwiftUI `Binding` wrapper).
     @Bindable var navigation: NavigationEnvironment
-    /// Theme Engine owner. `@Bindable` tracks `@Observable` theme changes without
-    /// requiring a `Binding<ThemeManager>` at the call site.
     @Bindable var themeManager: ThemeManager
     @Bindable var authenticationManager: AuthenticationManager
     let authenticationCoordinator: AuthenticationCoordinator
     let authenticationLifecycle: AuthenticationLifecycle
+    @Bindable var currentUserProfile: CurrentUserProfileStore
+    let allowsDevelopmentBypass: Bool
+
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isLaunchBootstrapping = true
 
     var body: some View {
         Group {
-            switch navigation.store.sessionPhase {
-            case .unauthenticated:
-                AuthInfrastructureView(
-                    store: navigation.store,
-                    coordinator: navigation.coordinator,
-                    authenticationCoordinator: authenticationCoordinator,
-                    authenticationManager: authenticationManager
-                )
-            case .authenticated:
-                MainTabShellView(
-                    store: navigation.store,
-                    coordinator: navigation.coordinator
-                )
+            if isLaunchBootstrapping {
+                SplashView()
+            } else {
+                switch navigation.store.sessionPhase {
+                case .unauthenticated:
+                    AuthInfrastructureView(
+                        store: navigation.store,
+                        coordinator: navigation.coordinator,
+                        authenticationCoordinator: authenticationCoordinator,
+                        authenticationManager: authenticationManager,
+                        allowsDevelopmentBypass: allowsDevelopmentBypass
+                    )
+                case .authenticated:
+                    MainTabShellView(
+                        store: navigation.store,
+                        coordinator: navigation.coordinator,
+                        authenticationCoordinator: authenticationCoordinator,
+                        currentUserProfile: currentUserProfile
+                    )
+                    .task {
+                        currentUserProfile.loadIfNeeded()
+                    }
+                }
             }
         }
         .applyThemeEnvironment(themeManager.themeEnvironment)
@@ -37,6 +47,14 @@ struct AppRootView: View {
         .animation(
             ThemeAnimation.preferred(reduceMotion: reduceMotion),
             value: themeManager.selectedIdentifier
+        )
+        .animation(
+            ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
+            value: isLaunchBootstrapping
+        )
+        .animation(
+            ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
+            value: navigation.store.sessionPhase
         )
         .sheet(item: sheetBinding) { destination in
             sheetContent(destination)
@@ -50,6 +68,12 @@ struct AppRootView: View {
             themeManager.updateInterfaceStyle(colorScheme)
             Task {
                 await authenticationLifecycle.applicationDidLaunch()
+                ExperienceMotion.withAnimation(
+                    ExperienceMotion.navigation,
+                    reduceMotion: reduceMotion
+                ) {
+                    isLaunchBootstrapping = false
+                }
             }
         }
         .onChange(of: colorScheme) { _, newStyle in
@@ -66,6 +90,8 @@ struct AppRootView: View {
                 }
             }
         }
+        // Session-scoped caches (profile, Messages inbox, engagement, detail seeds)
+        // are invalidated by ``AuthenticationCoordinator`` — not here.
         .onOpenURL { url in
             _ = navigation.deepLinkRouter.route(
                 url: url,

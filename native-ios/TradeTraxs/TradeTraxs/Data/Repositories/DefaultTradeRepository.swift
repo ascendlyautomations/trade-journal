@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Production ``TradeRepository`` backed by Supabase PostgREST / RPC.
 nonisolated struct DefaultTradeRepository: TradeRepository {
@@ -21,7 +22,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             TradeDTO.Trade.self,
             from: "trades",
             query: [
-                SupabaseQuery.select("*"),
+                SupabaseQuery.select(TradeDTO.profileListSelect),
                 SupabaseQuery.eq("id", id.rawValue),
             ]
         )
@@ -31,12 +32,17 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     func trades(
         ownedBy profileID: ProfileID,
         accountID: TradingAccountID?,
-        page: PageRequest
+        page: PageRequest,
+        publicOnly: Bool
     ) async throws -> CursorPage<Trade> {
         var query = SupabaseQuery.page(page) + [
-            SupabaseQuery.select("*"),
+            SupabaseQuery.select(publicOnly ? TradeDTO.profileListSelect : "*"),
             SupabaseQuery.eq("user_id", profileID.rawValue),
         ]
+        if publicOnly {
+            // Mirror web Profile: `.eq("is_public", true)`.
+            query.append(SupabaseQuery.eq("is_public", "true"))
+        }
         if let accountID {
             query.append(SupabaseQuery.eq("account_id", accountID.rawValue))
         }
@@ -45,7 +51,8 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             from: "trades",
             query: query
         )
-        let items = try rows.map(TradeMapper.mapToDomain)
+        // Soft-skip malformed rows — never fail the entire Profile list (web soft-empty).
+        let items = Self.mapTradesSkippingFailures(rows)
         return CursorPage(
             items: items,
             nextCursor: SupabaseQuery.nextCursor(items: rows, limit: page.limit) { $0.created_at }
@@ -87,7 +94,6 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
 
     func images(for tradeID: TradeID) async throws -> [TradeImage] {
         let trade = try await trade(id: tradeID)
-        // Screenshot lives on the trade row today (`image_url`).
         _ = trade
         let rows: [TradeDTO.Trade] = try await supabase.database.select(
             TradeDTO.Trade.self,
@@ -137,7 +143,8 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         let page = try await trades(
             ownedBy: profileID,
             accountID: nil,
-            page: PageRequest(limit: 500)
+            page: PageRequest(limit: 500),
+            publicOnly: false
         )
         let inInterval = page.items.filter {
             $0.entryAt >= interval.start && $0.entryAt <= interval.end
@@ -160,15 +167,44 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
+        // Mirror web `loadTradingAccounts` / `ACCOUNTS_SELECT` — `trades.account_id` → `accounts.id`.
+        // Do NOT query `user_accounts` (free-plan name registry; different UUIDs).
         let rows: [TradeDTO.Account] = try await supabase.database.select(
             TradeDTO.Account.self,
-            from: "user_accounts",
+            from: "accounts",
             query: [
-                SupabaseQuery.select("*"),
+                // Web `ACCOUNTS_SELECT` fields needed for trade account identity.
+                SupabaseQuery.select(
+                    "id,user_id,name,account_size,mode,category,is_active,can_add_trades"
+                ),
                 SupabaseQuery.eq("user_id", profileID.rawValue),
-                URLQueryItem(name: "order", value: "created_at.desc"),
             ]
         )
-        return try rows.map(TradingAccountMapper.mapToDomain)
+        return rows.compactMap { dto in
+            do {
+                return try TradingAccountMapper.mapToDomain(dto)
+            } catch {
+                AppLog.networking.error(
+                    "Skipping accounts row — \(String(describing: error), privacy: .public)"
+                )
+                return nil
+            }
+        }
+    }
+
+    // MARK: - Mapping
+
+    private static func mapTradesSkippingFailures(_ rows: [TradeDTO.Trade]) -> [Trade] {
+        rows.compactMap { dto in
+            do {
+                return try TradeMapper.mapToDomain(dto)
+            } catch {
+                let id = dto.id ?? "unknown"
+                AppLog.networking.error(
+                    "Skipping trade \(id, privacy: .public) — \(String(describing: error), privacy: .public)"
+                )
+                return nil
+            }
+        }
     }
 }

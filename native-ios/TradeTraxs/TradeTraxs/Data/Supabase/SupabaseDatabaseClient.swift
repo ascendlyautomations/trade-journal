@@ -17,11 +17,18 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
         query: [URLQueryItem]
     ) async throws -> T
 
+    /// Exact row count via PostgREST `Prefer: count=exact` (web `{ count: "exact", head: true }`).
+    func count(from table: String, query: [URLQueryItem]) async throws -> Int
+
     func insert<Body: Encodable, T: Decodable>(
         _ body: Body,
         into table: String,
+        query: [URLQueryItem],
         returning type: T.Type
     ) async throws -> T
+
+    /// PostgREST insert with `return=minimal` — required for conversation shell before participants exist (RLS).
+    func insert<Body: Encodable>(_ body: Body, into table: String) async throws
 
     func update<Body: Encodable, T: Decodable>(
         _ body: Body,
@@ -42,6 +49,15 @@ extension SupabaseDatabaseExecuting {
         query: [URLQueryItem] = []
     ) async throws -> [T] {
         try await select(type, from: table, query: query, headers: [:])
+    }
+
+    /// Convenience — insert with representation and no query filters (legacy call sites).
+    func insert<Body: Encodable, T: Decodable>(
+        _ body: Body,
+        into table: String,
+        returning type: T.Type
+    ) async throws -> T {
+        try await insert(body, into: table, query: [], returning: type)
     }
 }
 
@@ -95,9 +111,45 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
         }
     }
 
+    func count(from table: String, query: [URLQueryItem]) async throws -> Int {
+        var items = query
+        if !items.contains(where: { $0.name == "select" }) {
+            items.insert(SupabaseQuery.select("id"), at: 0)
+        }
+        if !items.contains(where: { $0.name == "limit" }) {
+            items.append(URLQueryItem(name: "limit", value: "0"))
+        }
+        let response = try await transport.send(
+            host: .supabase,
+            path: "/rest/v1/\(table)",
+            method: .get,
+            queryItems: items,
+            headers: [
+                "Prefer": "count=exact",
+                "Accept": "application/json",
+            ]
+        )
+        return Self.parseExactCount(from: response) ?? 0
+    }
+
+    private static func parseExactCount(from response: HTTPResponse) -> Int? {
+        let headers = response.httpURLResponse.allHeaderFields
+        let contentRange = headers.first { key, _ in
+            String(describing: key).lowercased() == "content-range"
+        }?.value as? String
+        guard let contentRange else { return nil }
+        // Forms: "0-0/123", "*/123", "0-24/123"
+        guard let slash = contentRange.lastIndex(of: "/") else { return nil }
+        let total = contentRange[contentRange.index(after: slash)...]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if total == "*" { return nil }
+        return Int(total)
+    }
+
     func insert<Body: Encodable, T: Decodable>(
         _ body: Body,
         into table: String,
+        query: [URLQueryItem],
         returning type: T.Type
     ) async throws -> T {
         let data = try transport.encodeJSON(body)
@@ -105,6 +157,7 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
             host: .supabase,
             path: "/rest/v1/\(table)",
             method: .post,
+            queryItems: query,
             headers: [
                 "Prefer": "return=representation",
                 "Accept": "application/vnd.pgrst.object+json",
@@ -120,6 +173,20 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
             }
             return first
         }
+    }
+
+    func insert<Body: Encodable>(_ body: Body, into table: String) async throws {
+        let data = try transport.encodeJSON(body)
+        _ = try await transport.send(
+            host: .supabase,
+            path: "/rest/v1/\(table)",
+            method: .post,
+            headers: [
+                "Prefer": "return=minimal",
+                "Accept": "application/json",
+            ],
+            body: data
+        )
     }
 
     func update<Body: Encodable, T: Decodable>(
@@ -195,12 +262,23 @@ nonisolated struct UnconfiguredSupabaseDatabaseClient: SupabaseDatabaseExecuting
         throw AppError.authentication(.notConfigured)
     }
 
+    func count(from table: String, query: [URLQueryItem]) async throws -> Int {
+        _ = (table, query)
+        throw AppError.authentication(.notConfigured)
+    }
+
     func insert<Body: Encodable, T: Decodable>(
         _ body: Body,
         into table: String,
+        query: [URLQueryItem],
         returning type: T.Type
     ) async throws -> T {
-        _ = (body, table, type)
+        _ = (body, table, query, type)
+        throw AppError.authentication(.notConfigured)
+    }
+
+    func insert<Body: Encodable>(_ body: Body, into table: String) async throws {
+        _ = (body, table)
         throw AppError.authentication(.notConfigured)
     }
 

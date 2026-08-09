@@ -2,10 +2,12 @@ import Foundation
 
 nonisolated protocol TradeRepository: Sendable {
     func trade(id: TradeID) async throws -> Trade
+    /// - Parameter publicOnly: When `true`, mirrors web Profile (`is_public = true`).
     func trades(
         ownedBy profileID: ProfileID,
         accountID: TradingAccountID?,
-        page: PageRequest
+        page: PageRequest,
+        publicOnly: Bool
     ) async throws -> CursorPage<Trade>
     func save(_ draft: TradeDraft) async throws -> Trade
     func update(_ trade: Trade) async throws -> Trade

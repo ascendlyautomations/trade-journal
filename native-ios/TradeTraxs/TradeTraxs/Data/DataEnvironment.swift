@@ -14,8 +14,11 @@ final class DataEnvironment {
     let imagePipeline: any ImagePipeline
     let uploadService: any UploadService
     let downloadService: any DownloadService
+    let objectStorage: any ObjectStorageProviding
     let edgeFunctions: any EdgeFunctionClient
     let rpc: any RPCClient
+    /// Profile / Feed list → detail seed cache (no duplicate entity fetches).
+    let detailCache: DetailPresentationCache
 
     let trades: any TradeRepository
     let profiles: any ProfileRepository
@@ -32,6 +35,10 @@ final class DataEnvironment {
     let referrals: any ReferralRepository
     let authentication: any AuthenticationRepository
     let home: any HomeRepository
+    /// Platform likes/comments — content-agnostic (Trade / Post / Clip / Feed).
+    let interactions: any InteractionRepository
+    /// Session-scoped engagement cache shared by lists + detail.
+    let engagementStore: EngagementStore
 
     init(
         configuration: DataConfiguration,
@@ -43,8 +50,10 @@ final class DataEnvironment {
         imagePipeline: any ImagePipeline,
         uploadService: any UploadService,
         downloadService: any DownloadService,
+        objectStorage: any ObjectStorageProviding,
         edgeFunctions: any EdgeFunctionClient,
         rpc: any RPCClient,
+        detailCache: DetailPresentationCache,
         trades: any TradeRepository,
         profiles: any ProfileRepository,
         feed: any FeedRepository,
@@ -59,7 +68,9 @@ final class DataEnvironment {
         achievements: any AchievementRepository,
         referrals: any ReferralRepository,
         authentication: any AuthenticationRepository,
-        home: any HomeRepository
+        home: any HomeRepository,
+        interactions: any InteractionRepository,
+        engagementStore: EngagementStore
     ) {
         self.configuration = configuration
         self.supabase = supabase
@@ -70,8 +81,10 @@ final class DataEnvironment {
         self.imagePipeline = imagePipeline
         self.uploadService = uploadService
         self.downloadService = downloadService
+        self.objectStorage = objectStorage
         self.edgeFunctions = edgeFunctions
         self.rpc = rpc
+        self.detailCache = detailCache
         self.trades = trades
         self.profiles = profiles
         self.feed = feed
@@ -87,6 +100,8 @@ final class DataEnvironment {
         self.referrals = referrals
         self.authentication = authentication
         self.home = home
+        self.interactions = interactions
+        self.engagementStore = engagementStore
     }
 
     static func make(
@@ -101,13 +116,23 @@ final class DataEnvironment {
             networking: networking,
             session: session
         )
-        let cache = CacheStack.placeholder()
+        let imageCache = InMemoryImageCache()
+        let cache = CacheStack(
+            memory: PlaceholderMemoryCache(),
+            disk: PlaceholderDiskCache(),
+            images: imageCache,
+            queries: PlaceholderQueryCache()
+        )
         let persistence = PlaceholderPersistenceProvider()
         let realtimeHub = RealtimeHub(realtime: supabase.realtime)
-        let imagePipeline = PlaceholderImagePipeline(cache: cache.images)
         let storage = SupabaseObjectStorageProvider(storage: supabase.storage)
         let uploadService = DefaultUploadService(storage: storage)
         let downloadService = DefaultDownloadService(storage: storage)
+        let imagePipeline = DefaultImagePipeline(
+            cache: imageCache,
+            storage: storage,
+            downloadService: downloadService
+        )
         let edgeFunctions = DefaultEdgeFunctionClient(provider: supabase.edgeFunctions)
         let rpc = DefaultRPCClient(provider: supabase.rpc, database: supabase.database)
 
@@ -117,6 +142,22 @@ final class DataEnvironment {
 
         AppLog.application.info(
             "DataEnvironment ready — Supabase configured=\(supabase.client.isConfigured, privacy: .public)"
+        )
+
+        let defaultProfiles = DefaultProfileRepository(
+            supabase: supabase,
+            cache: cache,
+            session: session
+        )
+        #if DEBUG
+        let profiles: any ProfileRepository = DevelopmentProfileRepository(wrapping: defaultProfiles)
+        #else
+        let profiles: any ProfileRepository = defaultProfiles
+        #endif
+
+        let interactions: any InteractionRepository = DefaultInteractionRepository(
+            supabase: supabase,
+            session: session
         )
 
         return DataEnvironment(
@@ -129,12 +170,14 @@ final class DataEnvironment {
             imagePipeline: imagePipeline,
             uploadService: uploadService,
             downloadService: downloadService,
+            objectStorage: storage,
             edgeFunctions: edgeFunctions,
             rpc: rpc,
+            detailCache: DetailPresentationCache(),
             trades: DefaultTradeRepository(supabase: supabase, cache: cache, session: session),
-            profiles: DefaultProfileRepository(supabase: supabase, cache: cache, session: session),
+            profiles: profiles,
             feed: DefaultFeedRepository(supabase: supabase, cache: cache),
-            messages: DefaultMessageRepository(supabase: supabase, cache: cache),
+            messages: DefaultMessageRepository(supabase: supabase, cache: cache, session: session),
             rooms: DefaultRoomRepository(supabase: supabase, cache: cache),
             notifications: DefaultNotificationRepository(
                 supabase: supabase,
@@ -149,7 +192,9 @@ final class DataEnvironment {
             achievements: DefaultAchievementRepository(supabase: supabase, cache: cache),
             referrals: DefaultReferralRepository(supabase: supabase, cache: cache),
             authentication: DefaultAuthenticationRepository(manager: authenticationManager),
-            home: DefaultHomeRepository(supabase: supabase, cache: cache, session: session)
+            home: DefaultHomeRepository(supabase: supabase, cache: cache, session: session),
+            interactions: interactions,
+            engagementStore: EngagementStore(repository: interactions)
         )
     }
 }

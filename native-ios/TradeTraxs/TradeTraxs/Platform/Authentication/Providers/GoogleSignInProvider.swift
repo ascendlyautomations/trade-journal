@@ -1,17 +1,35 @@
 import Foundation
 
-/// Google Sign In → Supabase `id_token` exchange.
-///
-/// Presentation / Google SDK UI arrives with Auth screens. This provider accepts an
-/// injectable credential source so the Authentication Platform stays UI-agnostic.
+nonisolated protocol GoogleSignInPerforming: Sendable {
+    func signIn() async throws -> AuthenticationSession
+}
+
+/// Google Sign In → Supabase session.
 nonisolated struct GoogleSignInProvider: OAuthProviding {
     let kind: AuthenticationProviderKind = .google
+    private let performer: any GoogleSignInPerforming
+
+    init(performer: any GoogleSignInPerforming) {
+        self.performer = performer
+    }
+
+    func signIn() async throws -> AuthenticationSession {
+        try await performer.signIn()
+    }
+
+    func signOut(session: AuthenticationSession) async throws {
+        _ = session
+    }
+}
+
+/// ID-token exchange path (tests / future Google SDK).
+nonisolated struct GoogleIDTokenSignInPerformer: GoogleSignInPerforming {
     private let backend: any AuthenticationBackend
     private let credentialSource: any GoogleCredentialProviding
 
     init(
         backend: any AuthenticationBackend,
-        credentialSource: any GoogleCredentialProviding = UnavailableGoogleCredentialSource()
+        credentialSource: any GoogleCredentialProviding
     ) {
         self.backend = backend
         self.credentialSource = credentialSource
@@ -25,10 +43,6 @@ nonisolated struct GoogleSignInProvider: OAuthProviding {
             nonce: credential.nonce
         )
     }
-
-    func signOut(session: AuthenticationSession) async throws {
-        try await backend.signOut(accessToken: session.accessToken)
-    }
 }
 
 nonisolated struct GoogleIDCredentialPayload: Sendable {
@@ -40,14 +54,12 @@ nonisolated protocol GoogleCredentialProviding: Sendable {
     func requestCredential() async throws -> GoogleIDCredentialPayload
 }
 
-/// Placeholder until Google Sign-In SDK / Auth UI presentation is wired.
 nonisolated struct UnavailableGoogleCredentialSource: GoogleCredentialProviding {
     func requestCredential() async throws -> GoogleIDCredentialPayload {
         throw AuthenticationError.providerUnavailable(.google)
     }
 }
 
-/// Test / future UI adapter that supplies a ready ID token.
 nonisolated struct StaticGoogleCredentialSource: GoogleCredentialProviding {
     let payload: GoogleIDCredentialPayload
 

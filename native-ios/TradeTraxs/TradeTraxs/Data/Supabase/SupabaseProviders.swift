@@ -69,7 +69,11 @@ nonisolated struct LiveSupabaseStorageProvider: SupabaseStorageProviding {
     func publicURL(bucket: String, path: String) -> URL? {
         guard let base = transport.configuration.supabaseURL else { return nil }
         let cleaned = path.hasPrefix("/") ? String(path.dropFirst()) : path
-        return base.appendingPathComponent("storage/v1/object/public/\(bucket)/\(cleaned)")
+        // String concat — `appendingPathComponent` percent-encodes `/` in multi-segment paths
+        // (e.g. `{userId}/{timestamp}-file.jpg`) and breaks public object URLs.
+        var root = base.absoluteString
+        while root.hasSuffix("/") { root.removeLast() }
+        return URL(string: "\(root)/storage/v1/object/public/\(bucket)/\(cleaned)")
     }
 
     func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String {
@@ -110,13 +114,29 @@ nonisolated struct LiveSupabaseStorageProvider: SupabaseStorageProviding {
     }
 }
 
-/// Realtime connection lifecycle only — no product channel subscriptions in Phase 4B.
+/// Realtime websocket + shared `postgres_changes` joins for DMs and Trade Rooms.
 nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding, @unchecked Sendable {
+    private struct WatchSpec: Sendable {
+        var topic: String
+        var table: String
+        var filter: String
+        /// Key used to route inbound events (`room:{id}` / `dm:{id}`).
+        var routeKey: String
+        /// Column that identifies the route (`room_id` / `conversation_id`).
+        var routeColumn: String
+    }
+
     private let configuration: AppConfiguration
     private let lock = NSLock()
     private var webSocketTask: URLSessionWebSocketTask?
     private var _isConnected = false
     private let session: URLSession
+    private var receiveLoopRunning = false
+    private var heartbeatTask: Task<Void, Never>?
+    private var refCounter = 0
+    private var continuations: [String: [AsyncStream<MessageRealtimeSignal>.Continuation]] = [:]
+    private var joinedTopics: Set<String> = []
+    private var specsByRouteKey: [String: WatchSpec] = [:]
 
     init(configuration: AppConfiguration, urlSession: URLSession = .shared) {
         self.configuration = configuration
@@ -140,6 +160,12 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             url: base.appendingPathComponent("realtime/v1/websocket"),
             resolvingAgainstBaseURL: false
         )
+        // URLSessionWebSocketTask requires ws/wss — map https → wss (http → ws).
+        if components?.scheme?.lowercased() == "https" {
+            components?.scheme = "wss"
+        } else if components?.scheme?.lowercased() == "http" {
+            components?.scheme = "ws"
+        }
         components?.queryItems = [
             URLQueryItem(name: "apikey", value: anon),
             URLQueryItem(name: "vsn", value: "1.0.0"),
@@ -154,16 +180,374 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         webSocketTask = task
         _isConnected = true
         lock.unlock()
+        startReceiveLoopIfNeeded()
+        startHeartbeat()
     }
 
     func disconnect() async {
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
         lock.lock()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         _isConnected = false
+        receiveLoopRunning = false
+        for values in continuations.values {
+            for continuation in values {
+                continuation.finish()
+            }
+        }
+        continuations.removeAll()
+        joinedTopics.removeAll()
+        specsByRouteKey.removeAll()
         lock.unlock()
     }
+
+    /// Web Community `room-${id}` + `room_messages` filter.
+    func watchRoomMessages(roomID: String, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        watch(
+            WatchSpec(
+                topic: "realtime:room-\(roomID)",
+                table: "room_messages",
+                filter: "room_id=eq.\(roomID)",
+                routeKey: "room:\(roomID)",
+                routeColumn: "room_id"
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingRoomMessages(roomID: String) async {
+        await stopWatch(routeKey: "room:\(roomID)")
+    }
+
+    /// Web DM thread `messages` filter `conversation_id=eq.${id}`.
+    func watchConversationMessages(
+        conversationID: String,
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        watch(
+            WatchSpec(
+                topic: "realtime:dm-\(conversationID)",
+                table: "messages",
+                filter: "conversation_id=eq.\(conversationID)",
+                routeKey: "dm:\(conversationID)",
+                routeColumn: "conversation_id"
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingConversationMessages(conversationID: String) async {
+        await stopWatch(routeKey: "dm:\(conversationID)")
+    }
+
+    /// Inbox read-cursor sync — `conversation_member_preferences` for the signed-in user.
+    /// `MessageRealtimeSignal.conversationID` carries the affected conversation.
+    func watchConversationReadCursors(
+        userID: String,
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        watch(
+            WatchSpec(
+                topic: "realtime:dm-read-\(userID)",
+                table: "conversation_member_preferences",
+                filter: "user_id=eq.\(userID)",
+                routeKey: "dm-read:\(userID)",
+                routeColumn: "conversation_id"
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingConversationReadCursors(userID: String) async {
+        await stopWatch(routeKey: "dm-read:\(userID)")
+    }
+
+    /// Inbox — `room_messages` for the viewer's member rooms (unread bump when not open).
+    func watchMemberRoomMessages(
+        roomIDs: [String],
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        let sorted = Array(Set(roomIDs)).sorted()
+        let filter: String
+        if sorted.count == 1 {
+            filter = "room_id=eq.\(sorted[0])"
+        } else {
+            filter = "room_id=in.(\(sorted.joined(separator: ",")))"
+        }
+        return watch(
+            WatchSpec(
+                topic: "realtime:member-rooms",
+                table: "room_messages",
+                filter: filter,
+                routeKey: "member-rooms",
+                routeColumn: "room_id"
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingMemberRoomMessages() async {
+        await stopWatch(routeKey: "member-rooms")
+    }
+
+    /// Inbox read-cursor sync — `room_members` for the signed-in user.
+    func watchRoomReadCursors(
+        userID: String,
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        watch(
+            WatchSpec(
+                topic: "realtime:room-read-\(userID)",
+                table: "room_members",
+                filter: "user_id=eq.\(userID)",
+                routeKey: "room-read:\(userID)",
+                routeColumn: "room_id"
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingRoomReadCursors(userID: String) async {
+        await stopWatch(routeKey: "room-read:\(userID)")
+    }
+
+    private func watch(
+        _ spec: WatchSpec,
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        AsyncStream { continuation in
+            Task {
+                try? await self.ensureConnected()
+                self.lock.lock()
+                self.continuations[spec.routeKey, default: []].append(continuation)
+                self.specsByRouteKey[spec.routeKey] = spec
+                let needsJoin = !self.joinedTopics.contains(spec.topic)
+                if needsJoin {
+                    self.joinedTopics.insert(spec.topic)
+                }
+                self.lock.unlock()
+                if needsJoin {
+                    await self.joinChannel(spec, accessToken: accessToken)
+                }
+                continuation.onTermination = { _ in }
+            }
+        }
+    }
+
+    private func stopWatch(routeKey: String) async {
+        lock.lock()
+        let continuations = continuations.removeValue(forKey: routeKey) ?? []
+        let spec = specsByRouteKey.removeValue(forKey: routeKey)
+        if let topic = spec?.topic {
+            joinedTopics.remove(topic)
+        }
+        lock.unlock()
+        for continuation in continuations {
+            continuation.finish()
+        }
+        if let spec {
+            await leaveChannel(topic: spec.topic)
+        }
+    }
+
+    private func ensureConnected() async throws {
+        if isConnected { return }
+        try await connect()
+    }
+
+    private func nextRef() -> String {
+        lock.lock()
+        refCounter += 1
+        let value = refCounter
+        lock.unlock()
+        return String(value)
+    }
+
+    private func joinChannel(_ spec: WatchSpec, accessToken: String?) async {
+        let ref = nextRef()
+        let config: [String: Any] = [
+            "broadcast": ["ack": false, "self": false],
+            "presence": ["key": ""],
+            "postgres_changes": [
+                [
+                    "event": "*",
+                    "schema": "public",
+                    "table": spec.table,
+                    "filter": spec.filter,
+                ],
+            ],
+        ]
+        var payload: [String: Any] = ["config": config]
+        if let accessToken, !accessToken.isEmpty {
+            payload["access_token"] = accessToken
+        }
+        await sendJSON([
+            "topic": spec.topic,
+            "event": "phx_join",
+            "payload": payload,
+            "ref": ref,
+            "join_ref": ref,
+        ])
+    }
+
+    private func leaveChannel(topic: String) async {
+        let ref = nextRef()
+        await sendJSON([
+            "topic": topic,
+            "event": "phx_leave",
+            "payload": [:],
+            "ref": ref,
+        ])
+    }
+
+    private func startHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = Task { [weak self] in
+            while let self, !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 25_000_000_000)
+                guard !Task.isCancelled else { break }
+                let ref = self.nextRef()
+                await self.sendJSON([
+                    "topic": "phoenix",
+                    "event": "heartbeat",
+                    "payload": [:],
+                    "ref": ref,
+                ])
+            }
+        }
+    }
+
+    private func startReceiveLoopIfNeeded() {
+        lock.lock()
+        if receiveLoopRunning {
+            lock.unlock()
+            return
+        }
+        receiveLoopRunning = true
+        lock.unlock()
+        Task { [weak self] in
+            await self?.receiveLoop()
+        }
+    }
+
+    private func receiveLoop() async {
+        while !Task.isCancelled {
+            lock.lock()
+            let task = webSocketTask
+            let connected = _isConnected
+            lock.unlock()
+            guard connected, let task else { break }
+            do {
+                let message = try await task.receive()
+                switch message {
+                case .string(let text):
+                    handleIncoming(text)
+                case .data(let data):
+                    if let text = String(data: data, encoding: .utf8) {
+                        handleIncoming(text)
+                    }
+                @unknown default:
+                    break
+                }
+            } catch {
+                break
+            }
+        }
+        lock.lock()
+        receiveLoopRunning = false
+        _isConnected = false
+        lock.unlock()
+    }
+
+    private func handleIncoming(_ text: String) {
+        guard let data = text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return }
+
+        let event = object["event"] as? String ?? ""
+        guard event == "postgres_changes" || event == "INSERT" || event == "UPDATE" || event == "DELETE"
+        else { return }
+
+        let payload = object["payload"] as? [String: Any] ?? [:]
+        let dataPayload = (payload["data"] as? [String: Any]) ?? payload
+        let type = (dataPayload["type"] as? String)
+            ?? (dataPayload["eventType"] as? String)
+            ?? event
+        let record = (dataPayload["record"] as? [String: Any])
+            ?? (dataPayload["new"] as? [String: Any])
+        let oldRecord = dataPayload["old_record"] as? [String: Any]
+            ?? dataPayload["old"] as? [String: Any]
+        let messageID = (record?["id"] as? String)
+            ?? (oldRecord?["id"] as? String)
+
+        let kind: MessageRealtimeSignal.Kind
+        switch type.uppercased() {
+        case "INSERT": kind = .insert
+        case "UPDATE": kind = .update
+        case "DELETE": kind = .delete
+        default: kind = .insert
+        }
+
+        lock.lock()
+        let specs = Array(specsByRouteKey.values)
+        let allContinuations = continuations
+        lock.unlock()
+
+        for spec in specs {
+            let scope = (record?[spec.routeColumn] as? String)
+                ?? (oldRecord?[spec.routeColumn] as? String)
+            // Inbox watches are filtered by user_id / multi-room `in` lists; route keys
+            // do not end with the row's room/conversation id — match by route key instead.
+            let scopedMatch: Bool
+            if spec.routeKey.hasPrefix("dm-read:")
+                || spec.routeKey.hasPrefix("room-read:")
+                || spec.routeKey == "member-rooms"
+            {
+                scopedMatch = scope != nil
+            } else {
+                scopedMatch = scope.map { spec.routeKey.hasSuffix(":\($0)") } ?? false
+            }
+            guard scopedMatch else { continue }
+            let signal = MessageRealtimeSignal(
+                kind: kind,
+                messageID: messageID,
+                conversationID: scope
+            )
+            for continuation in allContinuations[spec.routeKey] ?? [] {
+                continuation.yield(signal)
+            }
+        }
+    }
+
+    private func sendJSON(_ object: [String: Any]) async {
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(withJSONObject: object, options: []),
+              let text = String(data: data, encoding: .utf8)
+        else { return }
+        lock.lock()
+        let task = webSocketTask
+        lock.unlock()
+        try? await task?.send(.string(text))
+    }
 }
+
+/// Shared signal for DM `messages` and Trade Room `room_messages` postgres_changes.
+nonisolated struct MessageRealtimeSignal: Sendable {
+    enum Kind: String, Sendable {
+        case insert
+        case update
+        case delete
+    }
+
+    var kind: Kind
+    var messageID: String?
+    /// Populated from the postgres_changes filter column (e.g. `conversation_id`).
+    var conversationID: String? = nil
+}
+
+typealias RoomRealtimeSignal = MessageRealtimeSignal
 
 nonisolated struct LiveSupabaseRPCProvider: SupabaseRPCProviding {
     private let database: any SupabaseDatabaseExecuting

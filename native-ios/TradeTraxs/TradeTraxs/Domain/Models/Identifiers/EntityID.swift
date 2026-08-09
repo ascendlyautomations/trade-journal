@@ -100,6 +100,13 @@ nonisolated struct RoomMessageID: Hashable, Codable, Sendable, RawRepresentable 
     init(_ rawValue: String) { self.rawValue = rawValue }
 }
 
+/// Web `room_sections.id` — a Trade Room channel (subroom).
+nonisolated struct RoomChannelID: Hashable, Codable, Sendable, RawRepresentable {
+    let rawValue: String
+    init(rawValue: String) { self.rawValue = rawValue }
+    init(_ rawValue: String) { self.rawValue = rawValue }
+}
+
 nonisolated struct NotificationID: Hashable, Codable, Sendable, RawRepresentable {
     let rawValue: String
     init(rawValue: String) { self.rawValue = rawValue }

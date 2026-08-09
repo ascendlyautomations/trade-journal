@@ -28,20 +28,29 @@ enum FeedRoute: Hashable, Codable, Sendable {
     case leaderboard
     case rooms
     case room(RoomID)
+    case roomMembers(RoomID)
+    case roomInfo(RoomID)
 }
 
-/// Messages tab push hierarchy (DMs).
+/// Messages tab push hierarchy (DMs + Trade Rooms opened from inbox).
 enum MessagesRoute: Hashable, Codable, Sendable {
     case thread(ConversationID)
     case sharedTrade(TradeID)
     case sharedPost(PostID)
     case sharedReel(ReelID)
     case profile(ProfileID)
+    case room(RoomID)
+    case roomMembers(RoomID)
+    case roomInfo(RoomID)
 }
 
 /// Profile (You) tab push hierarchy.
 enum ProfileRoute: Hashable, Codable, Sendable {
     case activity
+    /// Followers list for a profile (own or other).
+    case followers(ProfileID)
+    /// Following list for a profile (own or other).
+    case following(ProfileID)
     case followRequests
     case settings(SettingsSection?)
     case referrals
@@ -51,8 +60,11 @@ enum ProfileRoute: Hashable, Codable, Sendable {
     case trade(TradeID)
     case post(PostID)
     case reel(ReelID)
+    case achievement(AchievementID)
     case rooms
     case room(RoomID)
+    case roomMembers(RoomID)
+    case roomInfo(RoomID)
 }
 
 enum SettingsSection: String, Hashable, Codable, Sendable {

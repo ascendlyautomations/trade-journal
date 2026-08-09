@@ -18,7 +18,11 @@ final class SupabaseIntegrationTests: XCTestCase {
     func testRepositoryDependencyInjection() {
         let environment = CompositionRoot.bootstrap()
         XCTAssertTrue(environment.data.trades is DefaultTradeRepository)
+        #if DEBUG
+        XCTAssertTrue(environment.data.profiles is DevelopmentProfileRepository)
+        #else
         XCTAssertTrue(environment.data.profiles is DefaultProfileRepository)
+        #endif
         XCTAssertTrue(environment.data.feed is DefaultFeedRepository)
         XCTAssertTrue(environment.data.home is DefaultHomeRepository)
         XCTAssertTrue(environment.data.authentication is DefaultAuthenticationRepository)
@@ -43,6 +47,8 @@ final class SupabaseIntegrationTests: XCTestCase {
             sessionLabel: "NY",
             visibility: .public,
             publicCaption: "fade",
+            thumbnail: nil,
+            notePreview: nil,
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_700_000_100)
         )

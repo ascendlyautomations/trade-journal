@@ -1,18 +1,17 @@
 import SwiftUI
 
 private struct AppEnvironmentKey: EnvironmentKey {
-    /// Preview / fallback only. Production sets the value from ``TradeTraxsApp``.
-    ///
-    /// Use `static var` (not `let`) so bootstrap is not forced through a
-    /// mismatched actor-isolated constant during EnvironmentKey type-checking.
+    /// SwiftUI reads `defaultValue` frequently (including during re-renders).
+    /// Must be side-effect free after first resolution — never call bootstrap here.
     static var defaultValue: AppEnvironment {
-        CompositionRoot.bootstrap()
+        AppLaunchEnvironment.shared
     }
 }
 
 private struct NavigationEnvironmentKey: EnvironmentKey {
+    /// Share the same process graph — do not bootstrap a second time.
     static var defaultValue: NavigationEnvironment {
-        CompositionRoot.bootstrap().navigation
+        AppLaunchEnvironment.shared.navigation
     }
 }
 

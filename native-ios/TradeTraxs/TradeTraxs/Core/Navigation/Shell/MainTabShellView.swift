@@ -7,8 +7,19 @@ import SwiftUI
 struct MainTabShellView: View {
     @Bindable var store: NavigationStore
     let coordinator: NavigationCoordinator
+    let authenticationCoordinator: AuthenticationCoordinator
+    @Bindable var currentUserProfile: CurrentUserProfileStore
 
     var body: some View {
+        // `tabBarMinimizeBehavior` is iOS 26+; on iOS 18 the tab bar never minimizes.
+        if #available(iOS 26.0, *) {
+            tabView.tabBarMinimizeBehavior(.never)
+        } else {
+            tabView
+        }
+    }
+
+    private var tabView: some View {
         TabView(selection: tabSelection) {
             Tab(TabIdentifier.home.displayName, systemImage: TabIdentifier.home.systemImage, value: TabIdentifier.home) {
                 HomeNavigationStack(store: store, coordinator: coordinator)
@@ -19,17 +30,33 @@ struct MainTabShellView: View {
             }
 
             Tab(TabIdentifier.create.displayName, systemImage: TabIdentifier.create.systemImage, value: TabIdentifier.create) {
-                // Content unused — Create selection is intercepted as an action.
-                Color.clear
-                    .accessibilityHidden(true)
+                // Action tab — selection is intercepted; keep a real view so the tab bar never blanks.
+                CreateTabPlaceholder()
             }
 
             Tab(TabIdentifier.messages.displayName, systemImage: TabIdentifier.messages.systemImage, value: TabIdentifier.messages) {
                 MessagesNavigationStack(store: store, coordinator: coordinator)
             }
 
-            Tab(TabIdentifier.profile.displayName, systemImage: TabIdentifier.profile.systemImage, value: TabIdentifier.profile) {
-                ProfileNavigationStack(store: store, coordinator: coordinator)
+            // Profile tab uses a Label so we can swap in the session avatar UIImage
+            // (alwaysOriginal + pre-clipped). Falls back to the SF Symbol when unset.
+            Tab(value: TabIdentifier.profile) {
+                ProfileNavigationStack(
+                    store: store,
+                    coordinator: coordinator,
+                    authenticationCoordinator: authenticationCoordinator,
+                    currentUserProfile: currentUserProfile
+                )
+            } label: {
+                Label {
+                    Text(TabIdentifier.profile.displayName)
+                } icon: {
+                    if let avatar = currentUserProfile.tabBarAvatarUIImage {
+                        Image(uiImage: avatar)
+                    } else {
+                        Image(systemName: TabIdentifier.profile.systemImage)
+                    }
+                }
             }
         }
     }
@@ -108,6 +135,7 @@ struct HomeNavigationStack: View {
 struct FeedNavigationStack: View {
     @Bindable var store: NavigationStore
     let coordinator: NavigationCoordinator
+    @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
         NavigationStack(path: feedPath) {
@@ -128,12 +156,7 @@ struct FeedNavigationStack: View {
                 }
             }
             .navigationDestination(for: FeedRoute.self) { route in
-                NavigationInfrastructurePlaceholder(
-                    title: feedTitle(route),
-                    subtitle: String(describing: route),
-                    systemImage: "rectangle.stack"
-                )
-                .navigationTitle(feedTitle(route))
+                feedDestination(route)
             }
         }
     }
@@ -145,6 +168,53 @@ struct FeedNavigationStack: View {
         )
     }
 
+    @ViewBuilder
+    private func feedDestination(_ route: FeedRoute) -> some View {
+        switch route {
+        case .profile(let profileID):
+            ProfileView(
+                profileID: profileID,
+                currentUserProfile: appEnvironment.currentUserProfile,
+                navigationCoordinator: coordinator,
+                data: appEnvironment.data
+            )
+        case .rooms:
+            TradeRoomsHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .feed
+            )
+        case .room(let roomID):
+            RoomConversationView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .feed
+            )
+        case .roomMembers(let roomID):
+            RoomMembersView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .feed
+            )
+        case .roomInfo(let roomID):
+            RoomInfoView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .feed
+            )
+        default:
+            NavigationInfrastructurePlaceholder(
+                title: feedTitle(route),
+                subtitle: String(describing: route),
+                systemImage: "rectangle.stack"
+            )
+            .navigationTitle(feedTitle(route))
+        }
+    }
+
     private func feedTitle(_ route: FeedRoute) -> String {
         switch route {
         case .post: return "Post"
@@ -154,8 +224,10 @@ struct FeedNavigationStack: View {
         case .profile: return "Profile"
         case .explore: return "Explore"
         case .leaderboard: return "Leaderboard"
-        case .rooms: return "Rooms"
-        case .room: return "Room"
+        case .rooms: return "Trade Rooms"
+        case .room: return "Trade Room"
+        case .roomMembers: return "Members"
+        case .roomInfo: return "Room Info"
         }
     }
 }
@@ -163,29 +235,16 @@ struct FeedNavigationStack: View {
 struct MessagesNavigationStack: View {
     @Bindable var store: NavigationStore
     let coordinator: NavigationCoordinator
+    @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
         NavigationStack(path: messagesPath) {
-            NavigationInfrastructurePlaceholder(
-                title: "Messages",
-                subtitle: "DM inbox root — threads push here.",
-                systemImage: TabIdentifier.messages.systemImage
+            MessagesHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
             )
-            .navigationTitle("Messages")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Sample Thread") {
-                        coordinator.open(.messages(.thread(ConversationID("sample"))))
-                    }
-                }
-            }
             .navigationDestination(for: MessagesRoute.self) { route in
-                NavigationInfrastructurePlaceholder(
-                    title: messagesTitle(route),
-                    subtitle: String(describing: route),
-                    systemImage: "bubble.left"
-                )
-                .navigationTitle(messagesTitle(route))
+                messagesDestination(route)
             }
         }
     }
@@ -197,13 +256,60 @@ struct MessagesNavigationStack: View {
         )
     }
 
+    @ViewBuilder
+    private func messagesDestination(_ route: MessagesRoute) -> some View {
+        switch route {
+        case .thread(let conversationID):
+            ConversationView(
+                conversationID: conversationID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .profile(let profileID):
+            ProfileView(
+                profileID: profileID,
+                currentUserProfile: appEnvironment.currentUserProfile,
+                navigationCoordinator: coordinator,
+                data: appEnvironment.data
+            )
+        case .room(let roomID):
+            RoomConversationView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .roomMembers(let roomID):
+            RoomMembersView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .roomInfo(let roomID):
+            RoomInfoView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        default:
+            NavigationInfrastructurePlaceholder(
+                title: messagesTitle(route),
+                subtitle: String(describing: route),
+                systemImage: "bubble.left"
+            )
+            .navigationTitle(messagesTitle(route))
+        }
+    }
+
     private func messagesTitle(_ route: MessagesRoute) -> String {
         switch route {
-        case .thread: return "Thread"
+        case .thread: return "Conversation"
         case .sharedTrade: return "Shared Trade"
         case .sharedPost: return "Shared Post"
         case .sharedReel: return "Shared Reel"
         case .profile: return "Profile"
+        case .room: return "Trade Room"
+        case .roomMembers: return "Members"
+        case .roomInfo: return "Room Info"
         }
     }
 }
@@ -211,34 +317,20 @@ struct MessagesNavigationStack: View {
 struct ProfileNavigationStack: View {
     @Bindable var store: NavigationStore
     let coordinator: NavigationCoordinator
+    let authenticationCoordinator: AuthenticationCoordinator
+    @Bindable var currentUserProfile: CurrentUserProfileStore
+    @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
         NavigationStack(path: profilePath) {
-            NavigationInfrastructurePlaceholder(
-                title: "Profile",
-                subtitle: "You — Activity, Settings, account gateway.",
-                systemImage: TabIdentifier.profile.systemImage
+            ProfileView(
+                store: currentUserProfile,
+                navigationCoordinator: coordinator,
+                authenticationCoordinator: authenticationCoordinator,
+                data: appEnvironment.data
             )
-            .navigationTitle("Profile")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Settings", systemImage: "gearshape") {
-                        coordinator.open(.profile(.settings(nil)))
-                    }
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Sign Out") {
-                        coordinator.markUnauthenticated()
-                    }
-                }
-            }
             .navigationDestination(for: ProfileRoute.self) { route in
-                NavigationInfrastructurePlaceholder(
-                    title: profileTitle(route),
-                    subtitle: String(describing: route),
-                    systemImage: "person"
-                )
-                .navigationTitle(profileTitle(route))
+                profileDestination(route)
             }
         }
     }
@@ -250,9 +342,80 @@ struct ProfileNavigationStack: View {
         )
     }
 
+    @ViewBuilder
+    private func profileDestination(_ route: ProfileRoute) -> some View {
+        switch route {
+        case .trade(let tradeID):
+            TradeDetailView(tradeID: tradeID, data: appEnvironment.data)
+        case .post(let postID):
+            PostDetailView(postID: postID, data: appEnvironment.data)
+        case .reel(let reelID):
+            ClipDetailView(reelID: reelID, data: appEnvironment.data)
+        case .achievement(let achievementID):
+            AchievementDetailView(achievementID: achievementID, data: appEnvironment.data)
+        case .followers(let profileID):
+            FollowListView(
+                kind: .followers,
+                listOwnerID: profileID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .following(let profileID):
+            FollowListView(
+                kind: .following,
+                listOwnerID: profileID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .otherProfile(let profileID):
+            ProfileView(
+                profileID: profileID,
+                currentUserProfile: currentUserProfile,
+                navigationCoordinator: coordinator,
+                data: appEnvironment.data
+            )
+        case .rooms:
+            TradeRoomsHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .profile
+            )
+        case .room(let roomID):
+            RoomConversationView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .profile
+            )
+        case .roomMembers(let roomID):
+            RoomMembersView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .profile
+            )
+        case .roomInfo(let roomID):
+            RoomInfoView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .profile
+            )
+        default:
+            NavigationInfrastructurePlaceholder(
+                title: profileTitle(route),
+                subtitle: String(describing: route),
+                systemImage: "person"
+            )
+            .navigationTitle(profileTitle(route))
+        }
+    }
+
     private func profileTitle(_ route: ProfileRoute) -> String {
         switch route {
         case .activity: return "Activity"
+        case .followers: return "Followers"
+        case .following: return "Following"
         case .followRequests: return "Follow Requests"
         case .settings: return "Settings"
         case .referrals: return "Referrals"
@@ -262,8 +425,20 @@ struct ProfileNavigationStack: View {
         case .trade: return "Trade"
         case .post: return "Post"
         case .reel: return "Reel"
-        case .rooms: return "Rooms"
-        case .room: return "Room"
+        case .achievement: return "Achievement"
+        case .rooms: return "Trade Rooms"
+        case .room: return "Trade Room"
+        case .roomMembers: return "Members"
+        case .roomInfo: return "Room Info"
         }
+    }
+}
+
+/// Create tab content is never shown — coordinator intercepts selection.
+private struct CreateTabPlaceholder: View {
+    var body: some View {
+        Color.clear
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityHidden(true)
     }
 }

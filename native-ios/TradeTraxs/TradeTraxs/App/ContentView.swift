@@ -13,7 +13,9 @@ struct ContentView: View {
             themeManager: appEnvironment.themeManager,
             authenticationManager: appEnvironment.authentication.manager,
             authenticationCoordinator: appEnvironment.authentication.coordinator,
-            authenticationLifecycle: appEnvironment.authentication.lifecycle
+            authenticationLifecycle: appEnvironment.authentication.lifecycle,
+            currentUserProfile: appEnvironment.currentUserProfile,
+            allowsDevelopmentBypass: appEnvironment.authentication.configuration.allowsDevelopmentSessionBypass
         )
     }
 }
@@ -25,8 +27,11 @@ struct ContentView: View {
         themeManager: environment.themeManager,
         authenticationManager: environment.authentication.manager,
         authenticationCoordinator: environment.authentication.coordinator,
-        authenticationLifecycle: environment.authentication.lifecycle
+        authenticationLifecycle: environment.authentication.lifecycle,
+        currentUserProfile: environment.currentUserProfile,
+        allowsDevelopmentBypass: environment.authentication.configuration.allowsDevelopmentSessionBypass
     )
     .environment(\.appEnvironment, environment)
     .environment(environment.themeManager)
+    .environment(environment.currentUserProfile)
 }

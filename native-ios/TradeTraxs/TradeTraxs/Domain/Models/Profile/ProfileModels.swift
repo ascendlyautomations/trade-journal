@@ -1,9 +1,22 @@
 import Foundation
 
+/// Web `TRADER_TYPE_OPTIONS` — stored/displayed as title case (`Futures`, `Options`, `Investor`).
 nonisolated enum TraderType: String, Hashable, Codable, Sendable {
-    case futures
-    case options
-    case investor
+    case futures = "Futures"
+    case options = "Options"
+    case investor = "Investor"
+
+    /// Accepts web title-case and legacy lowercase raw values.
+    static func parse(_ raw: String?) -> TraderType? {
+        let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if let exact = TraderType(rawValue: trimmed) { return exact }
+        switch trimmed.lowercased() {
+        case "futures": return .futures
+        case "options": return .options
+        case "investor": return .investor
+        default: return nil
+        }
+    }
 }
 
 nonisolated enum FollowState: String, Hashable, Codable, Sendable {
@@ -54,6 +67,22 @@ nonisolated struct ProfileStats: Hashable, Codable, Sendable {
     var profileID: ProfileID
     var followerCount: Int
     var followingCount: Int
+    /// Count of `profile_posts` rows (web Profile wall).
+    var postCount: Int
+    /// Legacy total (unused by Profile overview). Prefer ``publicTradeCount``.
     var tradeCount: Int
+    /// Public non-backtest trade count — mirrors web overview `Trades`.
     var publicTradeCount: Int
+    /// Public non-backtest win rate as `0...1` (web displays ×100).
+    var winRate: Decimal? = nil
+    /// Public non-backtest profit factor; `nil` when there are no losses (web).
+    var profitFactor: Decimal? = nil
+    /// Public non-backtest net PnL (web overview).
+    var netPnL: Decimal? = nil
+    /// Mean stored RR over public non-backtest trades with finite RR (web Avg RR).
+    var averageRR: Decimal? = nil
+    /// Sum of payout achievement values — web overview `overviewPayoutTotal`.
+    var payoutTotal: Decimal? = nil
+    /// Not on web Profile — kept for forward compatibility; always `nil` today.
+    var expectancy: Decimal? = nil
 }

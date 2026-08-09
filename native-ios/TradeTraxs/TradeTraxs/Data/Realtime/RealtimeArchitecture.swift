@@ -151,4 +151,84 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
     }
 
     var isConnected: Bool { realtime.isConnected }
+
+    /// Web Community room channel — idle until `room_messages` postgres_changes arrive.
+    func watchRoomMessages(roomID: RoomID, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchRoomMessages(roomID: roomID.rawValue, accessToken: accessToken)
+    }
+
+    func stopWatchingRoomMessages(roomID: RoomID) async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingRoomMessages(roomID: roomID.rawValue)
+    }
+
+    /// Web DM thread — idle until `messages` postgres_changes arrive.
+    func watchConversationMessages(
+        conversationID: ConversationID,
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchConversationMessages(
+            conversationID: conversationID.rawValue,
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingConversationMessages(conversationID: ConversationID) async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingConversationMessages(conversationID: conversationID.rawValue)
+    }
+
+    /// Inbox — idle until `conversation_member_preferences` changes for the viewer.
+    func watchConversationReadCursors(
+        userID: String,
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchConversationReadCursors(userID: userID, accessToken: accessToken)
+    }
+
+    func stopWatchingConversationReadCursors(userID: String) async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingConversationReadCursors(userID: userID)
+    }
+
+    /// Inbox — idle until `room_messages` arrive for member rooms.
+    func watchMemberRoomMessages(
+        roomIDs: [String],
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchMemberRoomMessages(roomIDs: roomIDs, accessToken: accessToken)
+    }
+
+    func stopWatchingMemberRoomMessages() async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingMemberRoomMessages()
+    }
+
+    /// Inbox — idle until `room_members` read-cursor changes for the viewer.
+    func watchRoomReadCursors(
+        userID: String,
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchRoomReadCursors(userID: userID, accessToken: accessToken)
+    }
+
+    func stopWatchingRoomReadCursors(userID: String) async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingRoomReadCursors(userID: userID)
+    }
 }

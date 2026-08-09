@@ -8,10 +8,10 @@ nonisolated enum AchievementTier: String, Hashable, Codable, Sendable {
 }
 
 nonisolated enum AchievementKind: String, Hashable, Codable, Sendable {
-    case propFirmPayout
-    case liveTradingPayout
-    case passedEvaluation
-    case milestone
+    case propFirmPayout = "prop_firm_payout"
+    case liveTradingPayout = "live_trading_payout"
+    case passedEvaluation = "passed_eval"
+    case milestone = "milestone"
 }
 
 nonisolated struct Achievement: Hashable, Codable, Sendable, Identifiable {
@@ -19,12 +19,16 @@ nonisolated struct Achievement: Hashable, Codable, Sendable, Identifiable {
     var ownerProfileID: ProfileID
     var kind: AchievementKind
     var title: String
+    var description: String?
     var tier: AchievementTier
     var value: Money?
+    var valueText: String?
+    var firm: String?
     var accountID: TradingAccountID?
     var image: MediaReference?
     var isPublic: Bool
     var isFeatured: Bool
+    var sortOrder: Int
     var achievedAt: Date
 }
 

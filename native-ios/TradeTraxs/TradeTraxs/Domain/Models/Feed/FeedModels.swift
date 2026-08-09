@@ -43,6 +43,8 @@ nonisolated struct Post: Hashable, Codable, Sendable, Identifiable {
     var media: [MediaReference]
     var visibility: ContentVisibility
     var linkedTradeID: TradeID?
+    /// Web Profile client sort key (`profile_posts.is_pinned` when present).
+    var isPinned: Bool
     var createdAt: Date
     var updatedAt: Date
 }
@@ -85,5 +87,7 @@ nonisolated struct Reel: Hashable, Codable, Sendable, Identifiable {
     var caption: String?
     var visibility: ContentVisibility
     var linkedTradeID: TradeID?
+    /// Seconds when provided by `reels.duration_seconds`.
+    var durationSeconds: Int?
     var createdAt: Date
 }

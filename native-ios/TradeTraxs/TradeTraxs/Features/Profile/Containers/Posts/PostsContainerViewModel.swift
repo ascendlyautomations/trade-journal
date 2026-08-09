@@ -1,0 +1,79 @@
+import Foundation
+import Observation
+
+@Observable
+@MainActor
+final class PostsContainerViewModel {
+    private(set) var state: ProfileSectionLoadState = .idle
+    private(set) var items: [Post] = []
+
+    private let profileID: ProfileID
+    private let profiles: any ProfileRepository
+    private let navigationCoordinator: NavigationCoordinator
+    private let detailCache: DetailPresentationCache
+    private var loadTask: Task<Void, Never>?
+    private var hasLoaded = false
+
+    init(
+        profileID: ProfileID,
+        profiles: any ProfileRepository,
+        navigationCoordinator: NavigationCoordinator,
+        detailCache: DetailPresentationCache
+    ) {
+        self.profileID = profileID
+        self.profiles = profiles
+        self.navigationCoordinator = navigationCoordinator
+        self.detailCache = detailCache
+    }
+
+    func loadIfNeeded() {
+        guard !hasLoaded, loadTask == nil else { return }
+        loadTask = Task { await performLoad() }
+    }
+
+    func refresh() async {
+        loadTask?.cancel()
+        await performLoad()
+    }
+
+    func loadMoreIfNeeded() async {
+        // Web Profile Posts loads the full wall in one request.
+    }
+
+    func openPost(_ post: Post) {
+        ExperienceHaptics.play(.selection)
+        detailCache.seed(post)
+        navigationCoordinator.open(.profile(.post(post.id)))
+    }
+
+    private func performLoad() async {
+        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            hasLoaded = true
+            items = ProfilePostFixtures.samples(owner: profileID)
+            detailCache.seed(posts: items)
+            state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            loadTask = nil
+            return
+        }
+
+        state = items.isEmpty ? .loading : state
+        do {
+            // Web: `profile_posts` select * / user_id / created_at desc (+ pinned client sort).
+            let page = try await profiles.wallPosts(
+                for: profileID,
+                page: PageRequest(limit: 500)
+            )
+            guard !Task.isCancelled else { return }
+            items = page.items
+            detailCache.seed(posts: items)
+            hasLoaded = true
+            state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+        } catch {
+            guard !Task.isCancelled else { return }
+            if items.isEmpty {
+                state = .failed(message: ProfileSectionSupport.message(for: error))
+            }
+        }
+        loadTask = nil
+    }
+}

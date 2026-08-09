@@ -33,6 +33,27 @@ nonisolated struct RoomMembership: Hashable, Codable, Sendable {
     var notificationsEnabled: Bool
 }
 
+/// Web `room_sections` row — a channel inside a Trade Room workspace.
+nonisolated struct RoomChannel: Hashable, Codable, Sendable, Identifiable {
+    var id: RoomChannelID
+    var roomID: RoomID
+    var name: String
+    var position: Int
+    var allowMembersChat: Bool
+
+    /// Display label like `# general`.
+    var displayTitle: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "# channel" }
+        if trimmed.hasPrefix("#") { return trimmed }
+        return "# \(trimmed)"
+    }
+
+    var isGeneral: Bool {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "general"
+    }
+}
+
 nonisolated struct RoomMessage: Hashable, Codable, Sendable, Identifiable {
     var id: RoomMessageID
     var roomID: RoomID
@@ -41,6 +62,8 @@ nonisolated struct RoomMessage: Hashable, Codable, Sendable, Identifiable {
     var attachedTradeID: TradeID?
     var media: [MediaReference]
     var parentMessageID: RoomMessageID?
+    /// Web `room_messages.section_id` — owning channel.
+    var channelID: RoomChannelID?
     var isPinned: Bool
     var createdAt: Date
 }

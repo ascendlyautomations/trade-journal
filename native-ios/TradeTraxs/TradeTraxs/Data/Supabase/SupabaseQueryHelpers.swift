@@ -16,6 +16,12 @@ nonisolated enum SupabaseQuery {
         URLQueryItem(name: column, value: "eq.\(value)")
     }
 
+    /// PostgREST `column=in.(a,b,c)`.
+    static func isIn(_ column: String, _ values: [String]) -> URLQueryItem {
+        let joined = values.joined(separator: ",")
+        return URLQueryItem(name: column, value: "in.(\(joined))")
+    }
+
     static func select(_ columns: String) -> URLQueryItem {
         URLQueryItem(name: "select", value: columns)
     }

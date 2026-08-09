@@ -126,6 +126,10 @@ extension SemanticColorPalette {
     var skeleton: Color { fillPrimary }
     var disabled: Color { textQuaternary }
     var focus: Color { accent }
+
+    /// Incoming DM / Trade Room bubble fill — slightly darker than the screen
+    /// so bubbles separate cleanly (same family as segmented-control track / `fillPrimary`).
+    var incomingMessageBubble: Color { fillPrimary }
 }
 
 /// Static facade — resolves through the active Theme Engine palette.
@@ -160,6 +164,7 @@ enum ExperienceColor {
     static var fillPrimary: Color { palette.fillPrimary }
     static var fillSecondary: Color { palette.fillSecondary }
     static var fillTertiary: Color { palette.fillTertiary }
+    static var incomingMessageBubble: Color { palette.incomingMessageBubble }
 
     static var success: Color { palette.success }
     static var warning: Color { palette.warning }

@@ -5,9 +5,18 @@ import OSLog
 ///
 /// Navigation remains the routing authority; this coordinator only calls
 /// ``NavigationCoordinator/markAuthenticated()`` / ``markUnauthenticated()``.
+///
+/// Also owns **session-scoped cache invalidation** so Features never reset stores
+/// on logout / account switch.
 final class AuthenticationCoordinator {
     private let authenticationManager: AuthenticationManager
     private let navigation: NavigationEnvironment
+
+    /// Bound by ``CompositionRoot`` after session stores exist (MainActor).
+    var invalidateSessionCaches: (@MainActor () -> Void)?
+
+    /// Last authenticated user — detects account switches without an intervening logout.
+    private var boundUserID: UserID?
 
     init(
         authenticationManager: AuthenticationManager,
@@ -25,32 +34,43 @@ final class AuthenticationCoordinator {
 
     func signIn(email: String, password: String) async throws {
         try await authenticationManager.signIn(email: email, password: password)
+        await bindAuthenticatedUser()
         navigation.coordinator.markAuthenticated()
     }
 
     func signUp(email: String, password: String) async throws {
         try await authenticationManager.signUp(email: email, password: password)
+        await bindAuthenticatedUser()
         navigation.coordinator.markAuthenticated()
     }
 
     func signInWithApple() async throws {
         try await authenticationManager.signInWithApple()
+        await bindAuthenticatedUser()
         navigation.coordinator.markAuthenticated()
     }
 
     func signInWithGoogle() async throws {
         try await authenticationManager.signInWithGoogle()
+        await bindAuthenticatedUser()
         navigation.coordinator.markAuthenticated()
     }
 
     /// Infrastructure Continue — uses development session when allowed (Debug).
     func continueAsDevelopmentSessionIfAllowed() async throws {
         try await authenticationManager.issueDevelopmentSession()
+        await bindAuthenticatedUser()
         navigation.coordinator.markAuthenticated()
+    }
+
+    func requestPasswordReset(email: String) async throws {
+        try await authenticationManager.requestPasswordReset(email: email)
     }
 
     func logout() async {
         await authenticationManager.logout()
+        await invalidateCachesForSessionChange()
+        boundUserID = nil
         navigation.coordinator.markUnauthenticated()
     }
 
@@ -61,6 +81,10 @@ final class AuthenticationCoordinator {
 
     func syncNavigation(with state: AuthenticationState) {
         if state.isAuthenticated {
+            // Cold restore / already authenticated — bind without wiping empty caches.
+            if boundUserID == nil {
+                boundUserID = state.session?.userID
+            }
             if navigation.store.sessionPhase != .authenticated {
                 navigation.coordinator.markAuthenticated()
             }
@@ -68,6 +92,26 @@ final class AuthenticationCoordinator {
             if navigation.store.sessionPhase != .unauthenticated {
                 navigation.coordinator.markUnauthenticated()
             }
+            if boundUserID != nil {
+                boundUserID = nil
+                Task { await invalidateCachesForSessionChange() }
+            }
+        }
+    }
+
+    // MARK: - Session cache lifecycle
+
+    private func bindAuthenticatedUser() async {
+        let newID = authenticationManager.state.session?.userID
+        if let previous = boundUserID, let newID, previous != newID {
+            await invalidateCachesForSessionChange()
+        }
+        boundUserID = newID
+    }
+
+    private func invalidateCachesForSessionChange() async {
+        await MainActor.run {
+            invalidateSessionCaches?()
         }
     }
 }

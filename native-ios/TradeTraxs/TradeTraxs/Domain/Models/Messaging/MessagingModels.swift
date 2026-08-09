@@ -7,10 +7,17 @@ nonisolated enum MessageKind: String, Hashable, Codable, Sendable {
     case system
 }
 
+/// Domain conversation — mirrors web inbox row fields (`DmConversationRow` + unread/mute).
 nonisolated struct Conversation: Hashable, Codable, Sendable, Identifiable {
     var id: ConversationID
     var participantProfileIDs: [ProfileID]
+    /// Group name, or peer display name for 1:1 (web `displayName` / profile `name`).
     var title: String?
+    /// Peer `@username` for 1:1 DMs (nil for groups).
+    var peerUsername: String?
+    var avatar: MediaReference?
+    var isGroup: Bool
+    var isPinned: Bool
     var lastMessagePreview: String?
     var lastMessageAt: Date?
     var unreadCount: Int

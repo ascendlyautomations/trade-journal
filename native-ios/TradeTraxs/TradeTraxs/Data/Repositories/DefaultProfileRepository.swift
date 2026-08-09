@@ -1,9 +1,15 @@
 import Foundation
+import OSLog
 
 nonisolated struct DefaultProfileRepository: ProfileRepository {
     private let supabase: SupabaseInfrastructure
     private let cache: CacheStack
     private let session: any SessionProviding
+
+    /// Exact web Profile select from `app/profile/[id]/page.tsx` (`PUBLIC_PROFILE_SELECT`).
+    /// Do not add columns the web does not request.
+    private static let publicProfileSelect =
+        "id,username,name,bio,avatar_url,trading_style,trader_type,primary_market,started_trading,is_private,created_at"
 
     init(
         supabase: SupabaseInfrastructure,
@@ -24,15 +30,22 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
     }
 
     func profile(id: ProfileID) async throws -> Profile {
+        let cacheKey = "profile:\(id.rawValue)"
+        if let cached = cache.memory.value(forKey: cacheKey, as: Profile.self) {
+            return cached
+        }
+
         let dto: ProfileDTO.Profile = try await supabase.database.selectOne(
             ProfileDTO.Profile.self,
             from: "profiles",
             query: [
-                SupabaseQuery.select("*"),
+                SupabaseQuery.select(Self.publicProfileSelect),
                 SupabaseQuery.eq("id", id.rawValue),
             ]
         )
-        return try ProfileMapper.mapToDomain(dto)
+        let profile = try ProfileMapper.mapToDomain(dto)
+        cache.memory.set(profile, forKey: cacheKey)
+        return profile
     }
 
     func profile(username: String) async throws -> Profile {
@@ -40,11 +53,13 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             ProfileDTO.Profile.self,
             from: "profiles",
             query: [
-                SupabaseQuery.select("*"),
+                SupabaseQuery.select(Self.publicProfileSelect),
                 SupabaseQuery.eq("username", username),
             ]
         )
-        return try ProfileMapper.mapToDomain(dto)
+        let profile = try ProfileMapper.mapToDomain(dto)
+        cache.memory.set(profile, forKey: "profile:\(profile.id.rawValue)")
+        return profile
     }
 
     func updateProfile(_ profile: Profile) async throws -> Profile {
@@ -62,32 +77,112 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             query: [SupabaseQuery.eq("id", profile.id.rawValue)],
             returning: ProfileDTO.Profile.self
         )
-        return try ProfileMapper.mapToDomain(dto)
+        let updated = try ProfileMapper.mapToDomain(dto)
+        cache.memory.set(updated, forKey: "profile:\(updated.id.rawValue)")
+        cache.memory.remove(forKey: "profile-stats:\(updated.id.rawValue)")
+        return updated
     }
 
     func stats(for profileID: ProfileID) async throws -> ProfileStats {
-        struct Params: Encodable { var p_user_id: String }
-        let data = try JSONEncoder().encode(Params(p_user_id: profileID.rawValue))
-        let raw = try await supabase.database.rpcData(
-            functionName: "user_streak_milestone_bundle",
-            parametersJSON: data
+        let cacheKey = "profile-stats:\(profileID.rawValue)"
+        if let cached = cache.memory.value(forKey: cacheKey, as: ProfileStats.self) {
+            return cached
+        }
+
+        // Mirror web Profile: followers + posts + summary trades + payout achievement total.
+        // Payouts = web `sumPayoutAchievementTotals` over visible public achievements.
+        async let followersTask = followerCount(of: profileID)
+        async let followingTask = followingCount(of: profileID)
+        async let postsTask = profilePostCount(of: profileID)
+        async let summaryTask = fetchSummaryTrades(for: profileID)
+        async let payoutTask = fetchPayoutTotal(for: profileID)
+
+        let (followers, following, posts, summary, payoutTotal) = try await (
+            followersTask,
+            followingTask,
+            postsTask,
+            summaryTask,
+            payoutTask
         )
-        let rows = try JSONDecoder().decode([HomeDTO.StreakBundle].self, from: raw)
-        let bundle = rows.first
-        return ProfileStats(
+
+        let overview = ProfileOverviewMetrics.compute(
+            from: summary.map {
+                ProfileOverviewMetrics.TradeInput(
+                    pnl: DecimalParser.parseFlexible($0.pnl),
+                    rr: DecimalParser.parseFlexible($0.rr),
+                    mode: $0.mode,
+                    accountType: $0.account_type
+                )
+            }
+        )
+
+        let stats = ProfileStats(
             profileID: profileID,
-            followerCount: 0,
-            followingCount: 0,
-            tradeCount: bundle?.trade_count ?? 0,
-            publicTradeCount: bundle?.public_trade_count ?? 0
+            followerCount: followers,
+            followingCount: following,
+            postCount: posts,
+            tradeCount: overview.publicTradeCount,
+            publicTradeCount: overview.publicTradeCount,
+            winRate: overview.winRate,
+            profitFactor: overview.profitFactor,
+            netPnL: overview.netPnL,
+            averageRR: overview.averageRR,
+            payoutTotal: payoutTotal,
+            expectancy: overview.expectancy
         )
+        cache.memory.set(stats, forKey: cacheKey)
+        return stats
+    }
+
+    func wallPosts(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post> {
+        // Web Profile: select * / user_id / created_at desc — full list (no range).
+        let limit = max(page.limit, 500)
+        var query: [URLQueryItem] = [
+            SupabaseQuery.select("*"),
+            SupabaseQuery.eq("user_id", profileID.rawValue),
+            URLQueryItem(name: "order", value: "created_at.desc"),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        if let cursor = page.cursor, !cursor.isEmpty {
+            query.append(URLQueryItem(name: "created_at", value: "lt.\(cursor)"))
+        }
+        let rows: [FeedDTO.ProfileWallPost] = try await supabase.database.select(
+            FeedDTO.ProfileWallPost.self,
+            from: "profile_posts",
+            query: query
+        )
+        let items = rows.compactMap(Self.mapWallPost)
+        // Web client re-sort: pinned first, then created_at desc.
+        let sorted = items.sorted { lhs, rhs in
+            if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
+            return lhs.createdAt > rhs.createdAt
+        }
+        return CursorPage(
+            items: sorted,
+            nextCursor: SupabaseQuery.nextCursor(items: rows, limit: limit) { $0.created_at }
+        )
+    }
+
+    func wallPost(id: PostID) async throws -> Post {
+        let dto: FeedDTO.ProfileWallPost = try await supabase.database.selectOne(
+            FeedDTO.ProfileWallPost.self,
+            from: "profile_posts",
+            query: [
+                SupabaseQuery.select("*"),
+                SupabaseQuery.eq("id", id.rawValue),
+            ]
+        )
+        guard let mapped = Self.mapWallPost(dto) else {
+            throw AppError.domain(.notFound(entity: "post", id: id.rawValue))
+        }
+        return mapped
     }
 
     func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState {
         struct Row: Codable { var follower_id: String?; var following_id: String? }
         let rows: [Row] = try await supabase.database.select(
             Row.self,
-            from: "follows",
+            from: "followers",
             query: [
                 SupabaseQuery.select("follower_id,following_id"),
                 SupabaseQuery.eq("follower_id", viewer.rawValue),
@@ -105,24 +200,28 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         }
         _ = try await supabase.database.insert(
             Body(follower_id: viewer.rawValue, following_id: target.rawValue),
-            into: "follows",
+            into: "followers",
             returning: Body.self
         )
+        cache.memory.remove(forKey: "profile-stats:\(viewer.rawValue)")
+        cache.memory.remove(forKey: "profile-stats:\(target.rawValue)")
     }
 
     func unfollow(from viewer: ProfileID, to target: ProfileID) async throws {
         try await supabase.database.delete(
-            from: "follows",
+            from: "followers",
             query: [
                 SupabaseQuery.eq("follower_id", viewer.rawValue),
                 SupabaseQuery.eq("following_id", target.rawValue),
             ]
         )
+        cache.memory.remove(forKey: "profile-stats:\(viewer.rawValue)")
+        cache.memory.remove(forKey: "profile-stats:\(target.rawValue)")
     }
 
     func followers(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile> {
         try await relatedProfiles(
-            table: "follows",
+            table: "followers",
             foreignKey: "following_id",
             profileKey: "follower_id",
             profileID: profileID,
@@ -132,7 +231,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
 
     func following(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile> {
         try await relatedProfiles(
-            table: "follows",
+            table: "followers",
             foreignKey: "follower_id",
             profileKey: "following_id",
             profileID: profileID,
@@ -146,6 +245,76 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         return Creator(id: profile.id, profileID: profile.id, isVerified: false, headline: nil)
     }
 
+    // MARK: - Private (web-parity sources)
+
+    /// Web `sumPayoutAchievementTotals` over `fetchVisibleProfileAchievements` rows.
+    private func fetchPayoutTotal(for profileID: ProfileID) async throws -> Decimal {
+        struct Row: Codable, Sendable {
+            var achievement_type: String?
+            var value_numeric: FlexibleNumber?
+        }
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "achievements",
+            query: [
+                SupabaseQuery.select("achievement_type,value_numeric"),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                SupabaseQuery.eq("is_public", "true"),
+            ]
+        )
+        return rows.reduce(Decimal(0)) { partial, row in
+            guard Self.isPayoutAchievementType(row.achievement_type) else { return partial }
+            return partial + (DecimalParser.parseFlexible(row.value_numeric) ?? 0)
+        }
+    }
+
+    /// Web `isPayoutAchievementType`.
+    private static func isPayoutAchievementType(_ raw: String?) -> Bool {
+        let type = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return type == "prop_firm_payout"
+            || type == "live_trading_payout"
+            || type == "payout"
+    }
+
+    /// Web: `.from("followers").select("*", { count: "exact", head: true }).eq("following_id", id)`
+    private func followerCount(of profileID: ProfileID) async throws -> Int {
+        try await supabase.database.count(
+            from: "followers",
+            query: [SupabaseQuery.eq("following_id", profileID.rawValue)]
+        )
+    }
+
+    /// Web: `.eq("follower_id", id)` head count.
+    private func followingCount(of profileID: ProfileID) async throws -> Int {
+        try await supabase.database.count(
+            from: "followers",
+            query: [SupabaseQuery.eq("follower_id", profileID.rawValue)]
+        )
+    }
+
+    /// Web wall length from `profile_posts`.
+    private func profilePostCount(of profileID: ProfileID) async throws -> Int {
+        try await supabase.database.count(
+            from: "profile_posts",
+            query: [SupabaseQuery.eq("user_id", profileID.rawValue)]
+        )
+    }
+
+    /// Web `fetchSummaryTrades` — public trades, summary columns only.
+    private func fetchSummaryTrades(for profileID: ProfileID) async throws -> [TradeDTO.SummaryTrade] {
+        try await supabase.database.select(
+            TradeDTO.SummaryTrade.self,
+            from: "trades",
+            query: [
+                SupabaseQuery.select(TradeDTO.profileSummarySelect),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                SupabaseQuery.eq("is_public", "true"),
+                URLQueryItem(name: "order", value: "created_at.desc"),
+            ]
+        )
+    }
+
+    /// Web `fetchFollowListPage` — edge IDs then `profiles` by `in.(…)`.
     private func relatedProfiles(
         table: String,
         foreignKey: String,
@@ -153,21 +322,81 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         profileID: ProfileID,
         page: PageRequest
     ) async throws -> CursorPage<Profile> {
-        struct Edge: Codable { var id: String? }
-        // Fall back to empty when graph shape differs; keeps Features isolated from schema drift.
-        do {
-            let edges: [Edge] = try await supabase.database.select(
-                Edge.self,
-                from: table,
-                query: SupabaseQuery.page(page) + [
-                    SupabaseQuery.select(profileKey),
-                    SupabaseQuery.eq(foreignKey, profileID.rawValue),
-                ]
-            )
-            _ = edges
-        } catch {
+        struct Edge: Codable {
+            var follower_id: String?
+            var following_id: String?
+            var created_at: String?
+        }
+
+        let edges: [Edge] = try await supabase.database.select(
+            Edge.self,
+            from: table,
+            query: SupabaseQuery.page(page) + [
+                SupabaseQuery.select("\(profileKey),created_at"),
+                SupabaseQuery.eq(foreignKey, profileID.rawValue),
+            ]
+        )
+
+        var seen = Set<String>()
+        var orderedIDs: [String] = []
+        for edge in edges {
+            let raw: String?
+            switch profileKey {
+            case "follower_id": raw = edge.follower_id
+            case "following_id": raw = edge.following_id
+            default: raw = nil
+            }
+            guard let id = raw, !id.isEmpty, seen.insert(id).inserted else { continue }
+            orderedIDs.append(id)
+        }
+
+        guard !orderedIDs.isEmpty else {
             return CursorPage(items: [], nextCursor: nil)
         }
-        return CursorPage(items: [], nextCursor: nil)
+
+        let rows: [ProfileDTO.Profile] = try await supabase.database.select(
+            ProfileDTO.Profile.self,
+            from: "profiles",
+            query: [
+                SupabaseQuery.select(Self.publicProfileSelect),
+                SupabaseQuery.isIn("id", orderedIDs),
+            ]
+        )
+
+        var byID: [String: Profile] = [:]
+        for dto in rows {
+            guard let mapped = try? ProfileMapper.mapToDomain(dto) else { continue }
+            byID[mapped.id.rawValue] = mapped
+        }
+
+        let items = orderedIDs.compactMap { byID[$0] }
+        return CursorPage(
+            items: items,
+            nextCursor: SupabaseQuery.nextCursor(items: edges, limit: page.limit) { $0.created_at }
+        )
+    }
+
+    private static func mapWallPost(_ dto: FeedDTO.ProfileWallPost) -> Post? {
+        guard let id = dto.id, let author = dto.user_id else {
+            AppLog.networking.error("Skipping profile_posts row — missing id/user_id")
+            return nil
+        }
+        let created = ISO8601.date(from: dto.created_at) ?? Date()
+        let media: [MediaReference] = {
+            guard let url = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !url.isEmpty else { return [] }
+            return [MediaReference(id: url, kind: .image, altText: nil)]
+        }()
+        return Post(
+            id: PostID(id),
+            authorProfileID: ProfileID(author),
+            body: dto.content ?? "",
+            media: media,
+            visibility: .public,
+            linkedTradeID: nil,
+            isPinned: dto.is_pinned ?? false,
+            createdAt: created,
+            updatedAt: created
+        )
     }
 }

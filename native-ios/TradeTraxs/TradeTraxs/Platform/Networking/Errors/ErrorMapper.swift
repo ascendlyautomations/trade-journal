@@ -21,6 +21,12 @@ nonisolated struct NetworkErrorMapper: Sendable {
         case 401:
             return .unauthorized
         case 403:
+            // Preserve PostgREST/RLS bodies (e.g. 42501). Empty 403 stays forbidden.
+            if let message = data.flatMap({ String(data: $0, encoding: .utf8) }),
+               !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                return .validation(message: message)
+            }
             return .forbidden
         case 408:
             return .timeout

@@ -3,6 +3,13 @@ import Foundation
 // DTOs exist ONLY in Data. Snake_case Codable shapes mirror Supabase transport, not Domain.
 
 nonisolated enum TradeDTO {
+    /// Mirrors web `PUBLIC_TRADE_SELECT` / owner list fields used by Profile.
+    static let profileListSelect =
+        "id,user_id,account_id,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode"
+
+    /// Mirrors web `PROFILE_SUMMARY_TRADE_SELECT`.
+    static let profileSummarySelect = "id,created_at,pnl,rr,mode,account_type"
+
     struct Trade: Codable, Sendable {
         var id: String?
         var user_id: String?
@@ -10,6 +17,7 @@ nonisolated enum TradeDTO {
         var ticker: String?
         var direction: String?
         var mode: String?
+        var account_type: String?
         var contracts: FlexibleNumber?
         var entry_price: FlexibleNumber?
         var exit_price: FlexibleNumber?
@@ -20,11 +28,23 @@ nonisolated enum TradeDTO {
         var points: FlexibleNumber?
         var session: String?
         var is_public: Bool?
+        var is_pinned: Bool?
         var public_description: String?
         var image_url: String?
         var notes: String?
         var created_at: String?
         var date: String?
+        var trade_date: String?
+    }
+
+    /// Lightweight overview row — web `fetchSummaryTrades`.
+    struct SummaryTrade: Codable, Sendable {
+        var id: String?
+        var created_at: String?
+        var pnl: FlexibleNumber?
+        var rr: FlexibleNumber?
+        var mode: String?
+        var account_type: String?
     }
 
     struct Image: Codable, Sendable {
@@ -45,9 +65,16 @@ nonisolated enum TradeDTO {
     struct Account: Codable, Sendable {
         var id: String?
         var user_id: String?
+        /// Production column on `accounts` (web `ACCOUNTS_SELECT`).
         var name: String?
+        /// Legacy / `user_accounts` registry column — not used for trade account resolution.
+        var account_name: String?
+        var account_type: String?
         var category: String?
         var mode: String?
+        /// Web `accounts.account_size`.
+        var account_size: FlexibleNumber?
+        /// Legacy alias — prefer `account_size`.
         var size: FlexibleNumber?
         var is_active: Bool?
         var can_add_trades: Bool?
@@ -87,6 +114,9 @@ nonisolated enum ProfileDTO {
         var bio: String?
         var avatar_url: String?
         var trader_type: String?
+        var trading_style: String?
+        var primary_market: String?
+        var started_trading: String?
         var is_private: Bool?
         var is_creator: Bool?
         var is_pro: Bool?
@@ -133,6 +163,16 @@ nonisolated enum FeedDTO {
         var updated_at: String?
     }
 
+    /// Web Profile wall row from `profile_posts` (not the feed `posts` table).
+    struct ProfileWallPost: Codable, Sendable {
+        var id: String?
+        var user_id: String?
+        var content: String?
+        var image_url: String?
+        var created_at: String?
+        var is_pinned: Bool?
+    }
+
     struct Comment: Codable, Sendable {
         var id: String?
         var post_id: String?
@@ -145,14 +185,88 @@ nonisolated enum FeedDTO {
 }
 
 nonisolated enum MessageDTO {
+    /// Web `DmConversationRow` shape from `fetchUserDmConversations`.
     struct Conversation: Codable, Sendable {
         var id: String?
-        var participant_ids: [String]?
-        var last_message_preview: String?
+        var is_group: Bool?
+        var is_pinned: Bool?
+        var name: String?
+        var avatar_url: String?
+        var last_message: String?
         var last_message_at: String?
+        var participants: [Participant]?
+    }
+
+    struct Participant: Codable, Sendable {
+        var user_id: String?
+        var profiles: EmbeddedProfile?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            user_id = try container.decodeIfPresent(String.self, forKey: .user_id)
+            if let single = try? container.decodeIfPresent(EmbeddedProfile.self, forKey: .profiles) {
+                profiles = single
+            } else if let many = try? container.decodeIfPresent([EmbeddedProfile].self, forKey: .profiles) {
+                profiles = many.first
+            } else {
+                profiles = nil
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(user_id, forKey: .user_id)
+            try container.encodeIfPresent(profiles, forKey: .profiles)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case user_id, profiles
+        }
+    }
+
+    struct EmbeddedProfile: Codable, Sendable {
+        var id: String?
+        var username: String?
+        var avatar_url: String?
+        var name: String?
+    }
+
+    struct MembershipRow: Codable, Sendable {
+        var conversation_id: String?
+        var user_id: String?
+    }
+
+    struct HiddenBlockedRow: Codable, Sendable {
+        var conversation_id: String?
+    }
+
+    struct UnreadCountRow: Decodable, Sendable {
+        var conversation_id: String?
         var unread_count: Int?
-        var updated_at: String?
-        var created_at: String?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            conversation_id = try container.decodeIfPresent(String.self, forKey: .conversation_id)
+            if let int = try? container.decodeIfPresent(Int.self, forKey: .unread_count) {
+                unread_count = int
+            } else if let string = try? container.decodeIfPresent(String.self, forKey: .unread_count),
+                      let parsed = Int(string)
+            {
+                unread_count = parsed
+            } else if let double = try? container.decodeIfPresent(Double.self, forKey: .unread_count) {
+                unread_count = Int(double)
+            } else {
+                unread_count = nil
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case conversation_id, unread_count
+        }
+    }
+
+    struct MutedPreferenceRow: Codable, Sendable {
+        var conversation_id: String?
     }
 
     struct Message: Codable, Sendable {
@@ -161,8 +275,13 @@ nonisolated enum MessageDTO {
         var sender_id: String?
         var sender_profile_id: String?
         var kind: String?
+        /// Web `messages.type` (`text` / `trade` / …).
+        var type: String?
         var body: String?
         var content: String?
+        /// Web DM image column (`messages.image_url`).
+        var image_url: String?
+        var trade_id: String?
         var created_at: String?
         var is_read: Bool?
     }
@@ -173,6 +292,7 @@ nonisolated enum RoomDTO {
         var id: String?
         var owner_id: String?
         var owner_profile_id: String?
+        var owner_user_id: String?
         var name: String?
         var slug: String?
         var description: String?
@@ -187,10 +307,24 @@ nonisolated enum RoomDTO {
         var room_id: String?
         var sender_id: String?
         var sender_profile_id: String?
+        var user_id: String?
+        var type: String?
         var body: String?
         var content: String?
+        var image_url: String?
+        var trade_id: String?
+        var section_id: String?
         var created_at: String?
         var is_pinned: Bool?
+    }
+
+    /// Web `room_sections` — Trade Room channels.
+    struct Channel: Codable, Sendable {
+        var id: String?
+        var room_id: String?
+        var name: String?
+        var position: Int?
+        var allow_members_chat: Bool?
     }
 
     struct Membership: Codable, Sendable {
@@ -198,6 +332,51 @@ nonisolated enum RoomDTO {
         var user_id: String?
         var role: String?
         var joined_at: String?
+    }
+
+    /// Web Community `loadMemberRooms` row (`room_members` + rooms embed).
+    struct MemberRoomRow: Decodable, Sendable {
+        var room_id: String?
+        var room: Room?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            room_id = try container.decodeIfPresent(String.self, forKey: .room_id)
+            if let single = try? container.decodeIfPresent(Room.self, forKey: .room) {
+                room = single
+            } else if let many = try? container.decodeIfPresent([Room].self, forKey: .room) {
+                room = many.first
+            } else {
+                room = nil
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case room_id, room
+        }
+    }
+
+    struct RoomUnreadCountRow: Decodable, Sendable {
+        var room_id: String?
+        var unread_count: Int?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            room_id = try container.decodeIfPresent(String.self, forKey: .room_id)
+            if let int = try? container.decodeIfPresent(Int.self, forKey: .unread_count) {
+                unread_count = int
+            } else if let string = try? container.decodeIfPresent(String.self, forKey: .unread_count),
+                      let parsed = Int(string)
+            {
+                unread_count = parsed
+            } else {
+                unread_count = nil
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case room_id, unread_count
+        }
     }
 }
 
@@ -276,15 +455,83 @@ nonisolated enum AnalyticsDTO {
 }
 
 nonisolated enum AchievementDTO {
+    /// Exact web `ACHIEVEMENT_SELECT` (owner) — commas only, no whitespace variants required.
+    static let ownerSelect =
+        "id,user_id,achievement_type,title,description,badge_key,tier,category,value_numeric,value_text,currency,account_type,account_name,account_size,account_id,mode,firm,image_url,achieved_at,created_at,updated_at,is_featured,is_public,sort_order,metadata"
+
+    /// Exact web `PUBLIC_ACHIEVEMENT_SELECT` (visitor) — omits account_name/size/id.
+    static let publicSelect =
+        "id,user_id,achievement_type,title,description,badge_key,tier,category,value_numeric,value_text,currency,account_type,mode,firm,image_url,achieved_at,created_at,updated_at,is_featured,is_public,sort_order,metadata"
+
     struct Achievement: Codable, Sendable {
         var id: String?
-        var owner_profile_id: String?
         var user_id: String?
-        var kind: String?
+        var achievement_type: String?
         var title: String?
+        var description: String?
+        var badge_key: String?
         var tier: String?
-        var is_public: Bool?
+        var category: String?
+        var value_numeric: FlexibleNumber?
+        var value_text: String?
+        var currency: String?
+        var account_type: String?
+        var account_name: String?
+        var account_size: FlexibleNumber?
+        var account_id: String?
+        var mode: String?
+        var firm: String?
+        var image_url: String?
         var achieved_at: String?
+        var created_at: String?
+        var updated_at: String?
+        var is_featured: Bool?
+        var is_public: Bool?
+        var sort_order: Int?
+        var metadata: JSONVoid?
+    }
+}
+
+/// Swallow arbitrary JSON (object/array/scalar) so optional jsonb columns never fail decoding.
+nonisolated enum JSONVoid: Codable, Sendable, Equatable {
+    case discarded
+
+    private struct AnyKey: CodingKey {
+        var stringValue: String
+        init?(stringValue: String) { self.stringValue = stringValue }
+        var intValue: Int? { nil }
+        init?(intValue: Int) { nil }
+    }
+
+    init(from decoder: Decoder) throws {
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            while !unkeyed.isAtEnd {
+                _ = try? unkeyed.decode(JSONVoid.self)
+            }
+            self = .discarded
+            return
+        }
+        if let keyed = try? decoder.container(keyedBy: AnyKey.self) {
+            for key in keyed.allKeys {
+                _ = try? keyed.decode(JSONVoid.self, forKey: key)
+            }
+            self = .discarded
+            return
+        }
+        let single = try decoder.singleValueContainer()
+        if single.decodeNil() {
+            self = .discarded
+            return
+        }
+        _ = (try? single.decode(Bool.self))
+            ?? (try? single.decode(Double.self)).map { _ in true }
+            ?? (try? single.decode(String.self)).map { _ in true }
+        self = .discarded
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encodeNil()
     }
 }
 
