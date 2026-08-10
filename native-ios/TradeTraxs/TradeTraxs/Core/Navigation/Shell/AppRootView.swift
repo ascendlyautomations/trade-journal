@@ -13,6 +13,7 @@ struct AppRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appEnvironment) private var appEnvironment
     @State private var isLaunchBootstrapping = true
 
     var body: some View {
@@ -147,11 +148,22 @@ struct AppRootView: View {
     @ViewBuilder
     private func fullScreenContent(_ destination: FullScreenDestination) -> some View {
         NavigationStack {
-            NavigationInfrastructurePlaceholder(
-                title: fullScreenTitle(destination),
-                subtitle: "Full-screen cover infrastructure",
-                systemImage: "arrow.up.left.and.arrow.down.right"
-            )
+            Group {
+                switch destination {
+                case .storyViewer(let storyID):
+                    FeedStoryViewerView(
+                        storyID: storyID,
+                        data: appEnvironment.data,
+                        onClose: { navigation.coordinator.dismissFullScreen() }
+                    )
+                default:
+                    NavigationInfrastructurePlaceholder(
+                        title: fullScreenTitle(destination),
+                        subtitle: "Full-screen cover infrastructure",
+                        systemImage: "arrow.up.left.and.arrow.down.right"
+                    )
+                }
+            }
             .navigationTitle(fullScreenTitle(destination))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

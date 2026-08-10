@@ -122,8 +122,7 @@ struct DeepLinkParser: DeepLinkParsing {
             }
             return .tab(.profile)
         case "settings":
-            let section = parts[safe: 1].flatMap(SettingsSection.init(rawValue:))
-            return .profile(.settings(section))
+            return parseSettings(Array(parts.dropFirst()))
         case "app", "input-trade", "input":
             return .compose(.trade)
         case "import":
@@ -159,6 +158,25 @@ struct DeepLinkParser: DeepLinkParsing {
             return .feed(.room(RoomID(id)))
         }
         return .feed(.rooms)
+    }
+
+    /// Builds Settings stack: home → section → optional leaf (e.g. notifications/messages).
+    private func parseSettings(_ parts: [String]) -> AppDestination {
+        guard let first = parts.first else {
+            return .settingsStack([.home])
+        }
+        // Nested: settings/notifications/messages
+        if first == "notifications", let leaf = parts[safe: 1] {
+            let leafRoute = SettingsRoute.fromDeepLinkSegment(leaf) ?? .notificationsMessages
+            return .settingsStack([.home, .notifications, leafRoute])
+        }
+        guard let route = SettingsRoute.fromDeepLinkSegment(first) else {
+            return .settingsStack([.home])
+        }
+        if route == .home {
+            return .settingsStack([.home])
+        }
+        return .settingsStack([.home, route])
     }
 }
 

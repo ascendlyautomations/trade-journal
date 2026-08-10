@@ -76,34 +76,16 @@ struct MainTabShellView: View {
 struct HomeNavigationStack: View {
     @Bindable var store: NavigationStore
     let coordinator: NavigationCoordinator
+    @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
         NavigationStack(path: homePath) {
-            NavigationInfrastructurePlaceholder(
-                title: "Home",
-                subtitle: "Today cockpit root — feature UI arrives later.",
-                systemImage: TabIdentifier.home.systemImage
+            DashboardHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
             )
-            .navigationTitle("Home")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Activity", systemImage: "bell") {
-                        coordinator.open(.profile(.activity))
-                    }
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Trades") {
-                        coordinator.open(.home(.trades))
-                    }
-                }
-            }
             .navigationDestination(for: HomeRoute.self) { route in
-                NavigationInfrastructurePlaceholder(
-                    title: homeTitle(route),
-                    subtitle: String(describing: route),
-                    systemImage: "chart.line.uptrend.xyaxis"
-                )
-                .navigationTitle(homeTitle(route))
+                homeDestination(route)
             }
         }
     }
@@ -113,6 +95,49 @@ struct HomeNavigationStack: View {
             get: { store.paths.home },
             set: { store.paths.home = $0 }
         )
+    }
+
+    @ViewBuilder
+    private func homeDestination(_ route: HomeRoute) -> some View {
+        switch route {
+        case .tradeDetail(let tradeID):
+            TradeDetailView(tradeID: tradeID, data: appEnvironment.data)
+        case .trades:
+            // Reuse Profile trades list chrome via owner profile push later —
+            // keep a focused placeholder that still opens trade detail from Dashboard.
+            NavigationInfrastructurePlaceholder(
+                title: "Trades",
+                subtitle: "Full trades list — open from Profile for now.",
+                systemImage: "list.bullet.rectangle"
+            )
+            .navigationTitle("Trades")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Profile Trades") {
+                        coordinator.open(.tab(.profile))
+                    }
+                }
+            }
+        case .calendar:
+            NavigationInfrastructurePlaceholder(
+                title: "Calendar",
+                subtitle: "Trading calendar arrives in a later pass.",
+                systemImage: "calendar"
+            )
+            .navigationTitle("Calendar")
+        case .propFirm(let accountID):
+            PropFirmDetailView(
+                accountID: accountID,
+                data: appEnvironment.data
+            )
+        default:
+            NavigationInfrastructurePlaceholder(
+                title: homeTitle(route),
+                subtitle: String(describing: route),
+                systemImage: "chart.line.uptrend.xyaxis"
+            )
+            .navigationTitle(homeTitle(route))
+        }
     }
 
     private func homeTitle(_ route: HomeRoute) -> String {
@@ -139,18 +164,16 @@ struct FeedNavigationStack: View {
 
     var body: some View {
         NavigationStack(path: feedPath) {
-            NavigationInfrastructurePlaceholder(
-                title: "Feed",
-                subtitle: "Social root — Explore, Rooms, Leaderboard push here.",
-                systemImage: TabIdentifier.feed.systemImage
+            FeedHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
             )
-            .navigationTitle("Feed")
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Explore", systemImage: "magnifyingglass") {
+                    Button("Search", systemImage: "magnifyingglass") {
                         coordinator.open(.feed(.explore))
                     }
-                    Button("Rooms", systemImage: "person.3") {
+                    Button("Community", systemImage: "person.3") {
                         coordinator.open(.feed(.rooms))
                     }
                 }
@@ -171,6 +194,14 @@ struct FeedNavigationStack: View {
     @ViewBuilder
     private func feedDestination(_ route: FeedRoute) -> some View {
         switch route {
+        case .trade(let tradeID):
+            TradeDetailView(tradeID: tradeID, data: appEnvironment.data)
+        case .post(let postID):
+            PostDetailView(postID: postID, data: appEnvironment.data)
+        case .reel(let reelID):
+            ClipDetailView(reelID: reelID, data: appEnvironment.data)
+        case .achievement(let achievementID):
+            AchievementDetailView(achievementID: achievementID, data: appEnvironment.data)
         case .profile(let profileID):
             ProfileView(
                 profileID: profileID,
@@ -205,6 +236,12 @@ struct FeedNavigationStack: View {
                 navigationCoordinator: coordinator,
                 navigationHost: .feed
             )
+        case .story(let storyID):
+            FeedStoryViewerView(
+                storyID: storyID,
+                data: appEnvironment.data,
+                onClose: { coordinator.pop() }
+            )
         default:
             NavigationInfrastructurePlaceholder(
                 title: feedTitle(route),
@@ -218,9 +255,10 @@ struct FeedNavigationStack: View {
     private func feedTitle(_ route: FeedRoute) -> String {
         switch route {
         case .post: return "Post"
-        case .reel: return "Reel"
+        case .reel: return "Clip"
         case .story: return "Story"
         case .trade: return "Trade"
+        case .achievement: return "Achievement"
         case .profile: return "Profile"
         case .explore: return "Explore"
         case .leaderboard: return "Leaderboard"
@@ -401,6 +439,22 @@ struct ProfileNavigationStack: View {
                 navigationCoordinator: coordinator,
                 navigationHost: .profile
             )
+        case .settings(let settingsRoute):
+            SettingsDestinationView(
+                route: settingsRoute,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                authenticationCoordinator: authenticationCoordinator,
+                currentUserProfile: currentUserProfile
+            )
+        case .help:
+            SettingsSupportView()
+                .navigationTitle("Help")
+        case .affiliate:
+            SettingsAffiliateView(data: appEnvironment.data)
+        case .referrals:
+            SettingsAffiliateView(data: appEnvironment.data)
+                .navigationTitle("Referrals")
         default:
             NavigationInfrastructurePlaceholder(
                 title: profileTitle(route),
@@ -417,7 +471,7 @@ struct ProfileNavigationStack: View {
         case .followers: return "Followers"
         case .following: return "Following"
         case .followRequests: return "Follow Requests"
-        case .settings: return "Settings"
+        case .settings(let settingsRoute): return settingsRoute.title
         case .referrals: return "Referrals"
         case .affiliate: return "Affiliate"
         case .help: return "Help"

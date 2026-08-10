@@ -4,6 +4,7 @@ import OSLog
 nonisolated struct DefaultFeedRepository: FeedRepository {
     private let supabase: SupabaseInfrastructure
     private let cache: CacheStack
+    private let session: any SessionProviding
 
     /// Exact web `PROFILE_REELS_SELECT` from `lib/reels.ts`.
     private static let profileReelsSelect =
@@ -16,41 +17,334 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     private static let reelTradeJoinSelect =
         "id,public_description,is_public,ticker,direction,pnl,rr"
 
-    init(supabase: SupabaseInfrastructure, cache: CacheStack = .placeholder()) {
+    /// Web `FEED_POSTS_SELECT` profile join — enough for FeedItem + TradeRepository hydrate.
+    private static let tradeFeedSelect =
+        "id,user_id,trade_id,created_at,image_url,profiles(username,avatar_url,name)"
+
+    /// Web `FEED_PROFILE_POSTS_SELECT` (core columns + profiles embed).
+    private static let profileFeedSelect =
+        "id,user_id,content,image_url,created_at,profiles(username,avatar_url,name)"
+
+    /// Web `FEED_REELS_SELECT` without trade embed (list identity + profiles).
+    private static let reelFeedSelect =
+        "id,user_id,caption,video_url,thumbnail_url,duration_seconds,visibility,trade_id,kind,created_at,profiles(username,avatar_url,name)"
+
+    /// Web `FEED_ACHIEVEMENT_POSTS_SELECT` (identity + public achievement + profiles).
+    private static let achievementFeedSelect =
+        "id,user_id,achievement_id,created_at,achievements(id,title,description,achievement_type,badge_key,tier,value_text,value_numeric,currency,image_url,achieved_at,is_public,is_featured,category,firm,metadata),profiles(username,avatar_url,name)"
+
+    init(
+        supabase: SupabaseInfrastructure,
+        cache: CacheStack = .placeholder(),
+        session: any SessionProviding
+    ) {
         self.supabase = supabase
         self.cache = cache
+        self.session = session
     }
 
+    /// Web `topUpMergedFeedBuffer` first page — trades + profile_posts + reels + achievement_posts.
     func feed(scope: FeedScope, page: PageRequest) async throws -> CursorPage<FeedItem> {
-        _ = scope
-        // Public trade posts power the social feed today.
-        let rows: [FeedDTO.Post] = try await supabase.database.select(
-            FeedDTO.Post.self,
-            from: "posts",
-            query: SupabaseQuery.page(page) + [SupabaseQuery.select("*")]
+        let viewerID = await session.currentUserID?.rawValue
+        let followingIDs = try await fetchFollowingIDs(viewerID: viewerID)
+
+        if scope == .following, followingIDs.isEmpty {
+            return CursorPage(items: [], nextCursor: nil)
+        }
+
+        async let tradeBatch = fetchTradeFeedBatch(
+            scope: scope,
+            viewerID: viewerID,
+            followingIDs: followingIDs,
+            page: page
         )
-        let items: [FeedItem] = rows.compactMap { post in
-            guard let id = post.id, let author = post.user_id else { return nil }
-            let created = ISO8601.date(from: post.created_at) ?? Date()
-            return FeedItem(
+        async let profileBatch = fetchProfileFeedBatch(
+            scope: scope,
+            viewerID: viewerID,
+            followingIDs: followingIDs,
+            page: page
+        )
+        async let reelBatch = fetchReelFeedBatch(
+            scope: scope,
+            viewerID: viewerID,
+            followingIDs: followingIDs,
+            page: page
+        )
+        async let achievementBatch = fetchAchievementFeedBatch(
+            scope: scope,
+            viewerID: viewerID,
+            followingIDs: followingIDs,
+            page: page
+        )
+
+        let (trades, posts, reels, achievements) = try await (
+            tradeBatch, profileBatch, reelBatch, achievementBatch
+        )
+
+        // Web `dedupeFeedItems` — skip trade-attached reels (they render on the trade card).
+        let standaloneReels = reels.filter { item in
+            guard let tradeID = item.tradeID?.rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            else { return true }
+            return tradeID.isEmpty
+        }
+
+        var merged = trades + posts + standaloneReels + achievements
+        merged.sort { $0.createdAt > $1.createdAt }
+
+        let limited = Array(merged.prefix(page.limit))
+        let next = limited.count >= page.limit
+            ? ISO8601.string(from: limited.last?.createdAt ?? Date())
+            : nil
+        return CursorPage(items: limited, nextCursor: next)
+    }
+
+    // MARK: - Web feed batches (`lib/feedContent.ts`)
+
+    private func fetchFollowingIDs(viewerID: String?) async throws -> [String] {
+        guard let viewerID, !viewerID.isEmpty else { return [] }
+        struct Row: Codable { var following_id: String? }
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "followers",
+            query: [
+                SupabaseQuery.select("following_id"),
+                SupabaseQuery.eq("follower_id", viewerID),
+            ]
+        )
+        return rows.compactMap { row in
+            let id = row.following_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return id.isEmpty ? nil : id
+        }
+    }
+
+    private func scopeQueryItems(
+        scope: FeedScope,
+        viewerID: String?,
+        followingIDs: [String]
+    ) -> [URLQueryItem]? {
+        var items: [URLQueryItem] = []
+        if let viewerID, !viewerID.isEmpty {
+            items.append(URLQueryItem(name: "user_id", value: "neq.\(viewerID)"))
+        }
+        switch scope {
+        case .following:
+            guard !followingIDs.isEmpty else { return nil }
+            items.append(SupabaseQuery.isIn("user_id", followingIDs))
+        case .global:
+            if !followingIDs.isEmpty {
+                let joined = followingIDs.joined(separator: ",")
+                items.append(URLQueryItem(name: "user_id", value: "not.in.(\(joined))"))
+            }
+        }
+        return items
+    }
+
+    private func feedPageQuery(
+        select: String,
+        scope: FeedScope,
+        viewerID: String?,
+        followingIDs: [String],
+        page: PageRequest,
+        extra: [URLQueryItem] = []
+    ) -> [URLQueryItem]? {
+        guard let scoped = scopeQueryItems(
+            scope: scope,
+            viewerID: viewerID,
+            followingIDs: followingIDs
+        ) else { return nil }
+        return [SupabaseQuery.select(select)]
+            + SupabaseQuery.page(page)
+            + scoped
+            + extra
+    }
+
+    private func fetchTradeFeedBatch(
+        scope: FeedScope,
+        viewerID: String?,
+        followingIDs: [String],
+        page: PageRequest
+    ) async throws -> [FeedItem] {
+        guard let query = feedPageQuery(
+            select: Self.tradeFeedSelect,
+            scope: scope,
+            viewerID: viewerID,
+            followingIDs: followingIDs,
+            page: page
+        ) else { return [] }
+        let rows: [FeedDTO.TradeFeedRow] = try await supabase.database.select(
+            FeedDTO.TradeFeedRow.self,
+            from: "posts",
+            query: query
+        )
+        return rows.compactMap { row -> FeedItem? in
+            guard let id = row.id, let author = row.user_id else { return nil }
+            // Web `normalizeTradeFeedItem` — posts table rows are trade feed cards.
+            return makeFeedItem(
                 id: id,
-                kind: post.trade_id == nil ? .post : .trade,
-                authorProfileID: ProfileID(author),
-                createdAt: created,
-                tradeID: post.trade_id.map { TradeID($0) },
-                postID: PostID(id),
+                kind: .trade,
+                author: author,
+                createdAt: row.created_at,
+                tradeID: row.trade_id,
+                postID: id,
                 reelID: nil,
-                storyID: nil,
                 achievementID: nil,
-                caption: post.body ?? post.content,
-                likeCount: 0,
-                commentCount: 0,
-                viewerHasLiked: false
+                caption: nil,
+                mediaURL: row.image_url,
+                profiles: row.profiles?.profile
             )
         }
-        return CursorPage(
-            items: items,
-            nextCursor: SupabaseQuery.nextCursor(items: rows, limit: page.limit) { $0.created_at }
+    }
+
+    private func fetchProfileFeedBatch(
+        scope: FeedScope,
+        viewerID: String?,
+        followingIDs: [String],
+        page: PageRequest
+    ) async throws -> [FeedItem] {
+        guard let query = feedPageQuery(
+            select: Self.profileFeedSelect,
+            scope: scope,
+            viewerID: viewerID,
+            followingIDs: followingIDs,
+            page: page
+        ) else { return [] }
+        let rows: [FeedDTO.ProfileFeedRow] = try await supabase.database.select(
+            FeedDTO.ProfileFeedRow.self,
+            from: "profile_posts",
+            query: query
+        )
+        return rows.compactMap { row -> FeedItem? in
+            guard let id = row.id, let author = row.user_id else { return nil }
+            return makeFeedItem(
+                id: id,
+                kind: .post,
+                author: author,
+                createdAt: row.created_at,
+                tradeID: nil,
+                postID: id,
+                reelID: nil,
+                achievementID: nil,
+                caption: row.content,
+                mediaURL: row.image_url,
+                profiles: row.profiles?.profile
+            )
+        }
+    }
+
+    private func fetchReelFeedBatch(
+        scope: FeedScope,
+        viewerID: String?,
+        followingIDs: [String],
+        page: PageRequest
+    ) async throws -> [FeedItem] {
+        guard let query = feedPageQuery(
+            select: Self.reelFeedSelect,
+            scope: scope,
+            viewerID: viewerID,
+            followingIDs: followingIDs,
+            page: page
+        ) else { return [] }
+        let rows: [FeedDTO.ReelFeedRow] = try await supabase.database.select(
+            FeedDTO.ReelFeedRow.self,
+            from: "reels",
+            query: query
+        )
+        return rows.compactMap { row -> FeedItem? in
+            guard let id = row.id, let author = row.user_id else { return nil }
+            return makeFeedItem(
+                id: id,
+                kind: .reel,
+                author: author,
+                createdAt: row.created_at,
+                tradeID: row.trade_id,
+                postID: nil,
+                reelID: id,
+                achievementID: nil,
+                caption: row.caption,
+                mediaURL: row.thumbnail_url ?? row.video_url,
+                profiles: row.profiles?.profile
+            )
+        }
+    }
+
+    private func fetchAchievementFeedBatch(
+        scope: FeedScope,
+        viewerID: String?,
+        followingIDs: [String],
+        page: PageRequest
+    ) async throws -> [FeedItem] {
+        guard let query = feedPageQuery(
+            select: Self.achievementFeedSelect,
+            scope: scope,
+            viewerID: viewerID,
+            followingIDs: followingIDs,
+            page: page,
+            extra: [URLQueryItem(name: "achievements.is_public", value: "eq.true")]
+        ) else { return [] }
+        let rows: [FeedDTO.AchievementFeedRow] = try await supabase.database.select(
+            FeedDTO.AchievementFeedRow.self,
+            from: "achievement_posts",
+            query: query
+        )
+        return rows.compactMap { row -> FeedItem? in
+            guard let id = row.id, let author = row.user_id else { return nil }
+            let achievementID = row.achievement_id
+                ?? row.achievements?.achievement?.id
+            return makeFeedItem(
+                id: id,
+                kind: .achievement,
+                author: author,
+                createdAt: row.created_at,
+                tradeID: nil,
+                postID: nil,
+                reelID: nil,
+                achievementID: achievementID,
+                caption: row.achievements?.achievement?.title,
+                mediaURL: row.achievements?.achievement?.image_url,
+                profiles: row.profiles?.profile
+            )
+        }
+    }
+
+    private func makeFeedItem(
+        id: String,
+        kind: FeedItemKind,
+        author: String,
+        createdAt: String?,
+        tradeID: String?,
+        postID: String?,
+        reelID: String?,
+        achievementID: String?,
+        caption: String?,
+        mediaURL: String?,
+        profiles: FeedDTO.EmbeddedAuthor?
+    ) -> FeedItem {
+        let username = profiles?.username?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = profiles?.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let avatar = profiles?.avatar_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let media = mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return FeedItem(
+            id: id,
+            kind: kind,
+            authorProfileID: ProfileID(author),
+            createdAt: ISO8601.date(from: createdAt) ?? Date(),
+            tradeID: tradeID.flatMap { $0.isEmpty ? nil : TradeID($0) },
+            postID: postID.map { PostID($0) },
+            reelID: reelID.map { ReelID($0) },
+            storyID: nil,
+            achievementID: achievementID.map { AchievementID($0) },
+            caption: caption,
+            likeCount: 0,
+            commentCount: 0,
+            viewerHasLiked: false,
+            authorUsername: (username?.isEmpty == false) ? username : nil,
+            authorDisplayName: {
+                if let name, !name.isEmpty { return name }
+                if let username, !username.isEmpty { return username }
+                return nil
+            }(),
+            authorAvatarURL: (avatar?.isEmpty == false) ? avatar : nil,
+            mediaURL: (media?.isEmpty == false) ? media : nil
         )
     }
 

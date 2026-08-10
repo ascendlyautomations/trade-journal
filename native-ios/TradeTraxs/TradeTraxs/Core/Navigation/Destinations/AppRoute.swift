@@ -8,7 +8,7 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case tradeDetail(TradeID)
     case calendar
     case tools
-    case propFirm
+    case propFirm(TradingAccountID)
     case analyst
     case backtest
     case achievements
@@ -23,6 +23,7 @@ enum FeedRoute: Hashable, Codable, Sendable {
     case reel(ReelID)
     case story(StoryID)
     case trade(TradeID)
+    case achievement(AchievementID)
     case profile(ProfileID)
     case explore
     case leaderboard
@@ -52,7 +53,8 @@ enum ProfileRoute: Hashable, Codable, Sendable {
     /// Following list for a profile (own or other).
     case following(ProfileID)
     case followRequests
-    case settings(SettingsSection?)
+    /// Hierarchical Settings destination — push multiple cases for nested stacks.
+    case settings(SettingsRoute)
     case referrals
     case affiliate
     case help
@@ -67,14 +69,84 @@ enum ProfileRoute: Hashable, Codable, Sendable {
     case roomInfo(RoomID)
 }
 
-enum SettingsSection: String, Hashable, Codable, Sendable {
+/// Settings navigation hierarchy (Instagram / Apple Settings style).
+///
+/// Deep-link segments match web `/settings#…` where applicable.
+/// Nested leaves (e.g. Messages notification prefs) use hyphenated segments.
+enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
+    case home
     case account
-    case subscription
+    case security
     case profile
-    case tradingAccounts = "trading-accounts"
     case notifications
+    case notificationsMessages = "notifications-messages"
+    case notificationsSocial = "notifications-social"
+    case notificationsRooms = "notifications-rooms"
+    case notificationsAchievements = "notifications-achievements"
+    case notificationsProduct = "notifications-product"
+    case subscription
+    case tradingAccounts = "trading-accounts"
+    case propFirm = "prop-firm"
+    case privacy
     case affiliate
+    case support
+    case about
+    case legalTerms = "legal-terms"
+    case legalPrivacy = "legal-privacy"
+    case legalCommunityGuidelines = "legal-community-guidelines"
+    case legalRefund = "legal-refund"
+
+    var title: String {
+        switch self {
+        case .home: return "Settings"
+        case .account: return "Account"
+        case .security: return "Security"
+        case .profile: return "Profile"
+        case .notifications: return "Notifications"
+        case .notificationsMessages: return "Messages"
+        case .notificationsSocial: return "Social Activity"
+        case .notificationsRooms: return "Trade Rooms"
+        case .notificationsAchievements: return "Achievements"
+        case .notificationsProduct: return "Product Updates"
+        case .subscription: return "Subscription"
+        case .tradingAccounts: return "Trading Accounts"
+        case .propFirm: return "Prop Firm"
+        case .privacy: return "Privacy"
+        case .affiliate: return "Referrals"
+        case .support: return "Help & Support"
+        case .about: return "About TradeTraxs"
+        case .legalTerms: return "Terms & Conditions"
+        case .legalPrivacy: return "Privacy Policy"
+        case .legalCommunityGuidelines: return "Community Guidelines"
+        case .legalRefund: return "Refund Policy"
+        }
+    }
+
+    /// Parses web hash / path segments, including trading-accounts aliases.
+    static func fromDeepLinkSegment(_ raw: String) -> SettingsRoute? {
+        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let exact = SettingsRoute(rawValue: key) { return exact }
+        switch key {
+        case "rules", "dashboard-risk", "copy-trading-groups":
+            return .tradingAccounts
+        case "messages":
+            return .notificationsMessages
+        case "terms", "terms-of-service":
+            return .legalTerms
+        case "privacy-policy":
+            return .legalPrivacy
+        case "community-guidelines":
+            return .legalCommunityGuidelines
+        case "refund", "refund-policy":
+            return .legalRefund
+        default:
+            return nil
+        }
+    }
 }
+
+/// Legacy web settings tab names — retained for call-site clarity.
+typealias SettingsSection = SettingsRoute
 
 /// Auth stack routes (pre-main-shell).
 enum AuthRoute: Hashable, Codable, Sendable {

@@ -12,6 +12,8 @@ enum AppDestination: Hashable, Sendable {
     case feed(FeedRoute)
     case messages(MessagesRoute)
     case profile(ProfileRoute)
+    /// Hierarchical Settings path (always includes ``SettingsRoute/home`` as the base).
+    case settingsStack([SettingsRoute])
     case sheet(SheetDestination)
     case fullScreen(FullScreenDestination)
     case compose(ComposeKind)

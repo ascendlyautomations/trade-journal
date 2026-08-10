@@ -40,4 +40,8 @@ nonisolated struct BillingStatus: Hashable, Codable, Sendable {
     var dailyPostLimit: Int?
     var dailyMessageLimit: Int?
     var maxTradeEntryAccounts: Int?
+    var trialEndsAt: Date? = nil
+    var currentPeriodEndsAt: Date? = nil
+    var billingInterval: BillingInterval? = nil
+    var cancelAtPeriodEnd: Bool = false
 }

@@ -160,7 +160,8 @@ final class MessagesHomeViewModel {
 
     func openSettings() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.profile(.settings(.notifications)))
+        // Messages gear → Settings → Notifications → Messages (hierarchical back stack).
+        navigationCoordinator.openSettings([.home, .notifications, .notificationsMessages])
     }
 
     func presentNewChat() {

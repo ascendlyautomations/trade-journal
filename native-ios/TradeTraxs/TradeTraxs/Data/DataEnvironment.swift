@@ -33,6 +33,7 @@ final class DataEnvironment {
     let analytics: any AnalyticsRepository
     let achievements: any AchievementRepository
     let referrals: any ReferralRepository
+    let notificationPreferences: any NotificationPreferencesRepository
     let authentication: any AuthenticationRepository
     let home: any HomeRepository
     /// Platform likes/comments — content-agnostic (Trade / Post / Clip / Feed).
@@ -67,6 +68,7 @@ final class DataEnvironment {
         analytics: any AnalyticsRepository,
         achievements: any AchievementRepository,
         referrals: any ReferralRepository,
+        notificationPreferences: any NotificationPreferencesRepository,
         authentication: any AuthenticationRepository,
         home: any HomeRepository,
         interactions: any InteractionRepository,
@@ -98,6 +100,7 @@ final class DataEnvironment {
         self.analytics = analytics
         self.achievements = achievements
         self.referrals = referrals
+        self.notificationPreferences = notificationPreferences
         self.authentication = authentication
         self.home = home
         self.interactions = interactions
@@ -176,7 +179,7 @@ final class DataEnvironment {
             detailCache: DetailPresentationCache(),
             trades: DefaultTradeRepository(supabase: supabase, cache: cache, session: session),
             profiles: profiles,
-            feed: DefaultFeedRepository(supabase: supabase, cache: cache),
+            feed: DefaultFeedRepository(supabase: supabase, cache: cache, session: session),
             messages: DefaultMessageRepository(supabase: supabase, cache: cache, session: session),
             rooms: DefaultRoomRepository(supabase: supabase, cache: cache),
             notifications: DefaultNotificationRepository(
@@ -191,6 +194,10 @@ final class DataEnvironment {
             analytics: DefaultAnalyticsRepository(supabase: supabase),
             achievements: DefaultAchievementRepository(supabase: supabase, cache: cache),
             referrals: DefaultReferralRepository(supabase: supabase, cache: cache),
+            notificationPreferences: DefaultNotificationPreferencesRepository(
+                supabase: supabase,
+                cache: cache
+            ),
             authentication: DefaultAuthenticationRepository(manager: authenticationManager),
             home: DefaultHomeRepository(supabase: supabase, cache: cache, session: session),
             interactions: interactions,

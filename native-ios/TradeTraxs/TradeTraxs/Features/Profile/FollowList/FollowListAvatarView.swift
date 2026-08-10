@@ -5,6 +5,7 @@ import UIKit
 struct FollowListAvatarView: View {
     let profile: Profile
     let imagePipeline: any ImagePipeline
+    var size: CGFloat = 48
 
     @State private var image: Image?
 
@@ -15,7 +16,7 @@ struct FollowListAvatarView: View {
                 username: profile.username
             ),
             image: image,
-            size: 48
+            size: size
         )
         .task(id: profile.avatar?.id) {
             await load()

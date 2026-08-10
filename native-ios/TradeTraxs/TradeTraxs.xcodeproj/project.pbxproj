@@ -43,7 +43,6 @@
 				Features/Messages/.gitkeep,
 				Features/Notifications/.gitkeep,
 				Features/Profile/.gitkeep,
-				Features/Settings/.gitkeep,
 				Features/TradeRooms/.gitkeep,
 				Features/Trades/.gitkeep,
 				Platform/Images/.gitkeep,

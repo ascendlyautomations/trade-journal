@@ -175,7 +175,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             query: [
                 // Web `ACCOUNTS_SELECT` fields needed for trade account identity.
                 SupabaseQuery.select(
-                    "id,user_id,name,account_size,mode,category,is_active,can_add_trades"
+                    "id,user_id,name,account_size,mode,category,is_active,can_add_trades,consistency,max_drawdown,daily_drawdown,profit_target,winning_days,winning_day_threshold,payout_drawdown_behavior"
                 ),
                 SupabaseQuery.eq("user_id", profileID.rawValue),
             ]

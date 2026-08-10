@@ -349,15 +349,31 @@ nonisolated enum TradingAccountMapper {
         }
         let sizeValue = DecimalParser.parseFlexible(dto.account_size)
             ?? DecimalParser.parseFlexible(dto.size)
+        let category = mapCategory(dto.category ?? dto.account_type)
+        let rules: PropFirmAccountRules? = {
+            guard category == .propFirm else { return nil }
+            return PropFirmAccountRules(
+                consistencyPercent: DecimalParser.parseFlexible(dto.consistency),
+                maxDrawdown: DecimalParser.parseFlexible(dto.max_drawdown),
+                dailyDrawdown: DecimalParser.parseFlexible(dto.daily_drawdown),
+                profitTarget: DecimalParser.parseFlexible(dto.profit_target),
+                winningDaysRequired: DecimalParser.parseFlexible(dto.winning_days).map {
+                    NSDecimalNumber(decimal: $0).intValue
+                },
+                winningDayThreshold: DecimalParser.parseFlexible(dto.winning_day_threshold),
+                payoutDrawdownBehavior: dto.payout_drawdown_behavior
+            )
+        }()
         return TradingAccount(
             id: TradingAccountID(id),
             ownerProfileID: ProfileID(owner),
             name: name,
-            category: TradingAccountCategory(rawValue: dto.category ?? dto.account_type ?? "") ?? .personal,
+            category: category,
             mode: mapAccountMode(dto.mode),
             size: sizeValue.map { Money(amount: $0) },
             isActive: dto.is_active ?? true,
-            canAddTrades: dto.can_add_trades ?? true
+            canAddTrades: dto.can_add_trades ?? true,
+            propFirmRules: rules
         )
     }
 
@@ -374,6 +390,26 @@ nonisolated enum TradingAccountMapper {
             return .backtest
         default:
             return .live
+        }
+    }
+
+    /// Normalizes DB / web category strings (`Prop Firm`, `prop_firm`, `propFirm`).
+    private static func mapCategory(_ raw: String?) -> TradingAccountCategory {
+        let normalized = (raw ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "-", with: "")
+        switch normalized {
+        case "propfirm", "prop":
+            return .propFirm
+        case "broker":
+            return .broker
+        case "backtest":
+            return .backtest
+        default:
+            return .personal
         }
     }
 }

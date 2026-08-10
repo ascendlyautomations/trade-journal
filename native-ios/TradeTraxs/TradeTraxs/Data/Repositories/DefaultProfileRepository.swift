@@ -69,6 +69,8 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             bio: profile.bio,
             avatar_url: profile.avatar?.id,
             trader_type: profile.traderType?.rawValue,
+            trading_style: profile.tradingStyle,
+            primary_market: profile.primaryMarket,
             is_private: profile.isPrivate
         )
         let dto: ProfileDTO.Profile = try await supabase.database.update(

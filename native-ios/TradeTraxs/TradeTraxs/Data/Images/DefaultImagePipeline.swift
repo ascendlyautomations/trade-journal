@@ -3,9 +3,13 @@ import ImageIO
 
 /// Production image pipeline: memory cache → public storage URL or HTTPS → optional downsample.
 ///
-/// Mirrors web `tradeScreenshotSrc` / `postImageSrc`: storage paths resolve to
-/// `/storage/v1/object/public/{bucket}/{path}` rather than authenticated object GET
-/// (screenshots bucket has no SELECT RLS).
+/// Mirrors web `postImageSrc` / `tradeScreenshotPublicUrl`:
+/// `/storage/v1/object/public/{bucket}/{path}` (not authenticated object GET).
+///
+/// Web feed display uses storage transforms when available and **falls back to this
+/// original object URL**. Feed/detail should request `maxPixelSize: nil` so native
+/// renders the same bytes — longest-edge client downsampling under-fills portrait
+/// width on 3× screens and SwiftUI upscales → blur.
 nonisolated struct DefaultImagePipeline: ImagePipeline {
     private let cache: any ImageCaching
     private let storage: any ObjectStorageProviding
@@ -32,6 +36,24 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
 
         let raw = try await fetch(reference: request.reference, purpose: request.purpose)
         let data = Self.downsampleIfNeeded(raw, maxPixelSize: request.maxPixelSize)
+        if ImageFidelityTrace.isEnabled {
+            let before = ImageFidelityTrace.pixelSize(of: raw)
+            let after = ImageFidelityTrace.pixelSize(of: data)
+            ImageFidelityTrace.log(
+                ImageFidelityTrace.StageReport(
+                    stage: "pipeline/after-downsample",
+                    url: request.reference.id,
+                    byteCount: data.count,
+                    pixelSize: after,
+                    resizingNote: request.maxPixelSize.map { "maxPixelSize=\($0)" } ?? "maxPixelSize=nil (passthrough)",
+                    fidelityNote: {
+                        guard let before, let after else { return nil }
+                        if before == after { return "bytes unchanged vs download" }
+                        return "CHANGED \(before.label) → \(after.label)"
+                    }()
+                )
+            )
+        }
         await cache.setImageData(data, forKey: key)
         return data
     }
@@ -69,8 +91,21 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
             storage: storage
         ) {
             let (data, response) = try await urlSession.data(from: url)
+            let status = (response as? HTTPURLResponse)?.statusCode
             if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                 throw AppError.network(.server(statusCode: http.statusCode, message: nil))
+            }
+            if ImageFidelityTrace.isEnabled {
+                ImageFidelityTrace.log(
+                    ImageFidelityTrace.StageReport(
+                        stage: "pipeline/http-response",
+                        url: url.absoluteString,
+                        httpStatus: status,
+                        byteCount: data.count,
+                        pixelSize: ImageFidelityTrace.pixelSize(of: data),
+                        resizingNote: "raw bytes before downsampleIfNeeded"
+                    )
+                )
             }
             return data
         }
@@ -91,33 +126,67 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
         }
     }
 
-    /// ImageIO downsample off the caller's cooperative thread (pipeline is nonisolated).
+    /// ImageIO downsample for **list thumbnails only** (avatars, 96pt cards).
+    ///
+    /// Feed/detail pass `maxPixelSize: nil` and receive original object bytes.
+    /// When a budget is set, it is treated as a **minimum width-or-height floor for the
+    /// displayed axis**: we size so neither edge of the decoded bitmap is smaller than
+    /// `maxPixelSize` after aspect-fit (avoids portrait under-width → SwiftUI upscale blur).
     private static func downsampleIfNeeded(_ data: Data, maxPixelSize: Int?) -> Data {
         guard let maxPixelSize, maxPixelSize > 0 else { return data }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return data }
 
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let pixelWidth = (properties?[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue ?? 0
+        let pixelHeight = (properties?[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue ?? 0
+        guard pixelWidth > 0, pixelHeight > 0 else { return data }
+
+        // Longest-edge target that keeps *both* edges ≥ maxPixelSize when possible.
+        // Portrait 3:4 needing width ≥ W requires longest(height) ≥ W × 4/3.
+        let aspect = Double(pixelWidth) / Double(pixelHeight)
+        let longestNeeded: Int = {
+            if aspect >= 1 {
+                // Landscape — width is longest.
+                return maxPixelSize
+            } else {
+                // Portrait — height is longest; size height so width == maxPixelSize.
+                return Int((Double(maxPixelSize) / aspect).rounded(.up))
+            }
+        }()
+
+        let longestEdge = max(pixelWidth, pixelHeight)
+        if longestEdge <= longestNeeded {
+            return data
+        }
+
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+            kCGImageSourceThumbnailMaxPixelSize: longestNeeded,
             kCGImageSourceShouldCacheImmediately: true,
         ]
         guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
             return data
         }
 
+        let sourceType = CGImageSourceGetType(source) as String?
+        let preferJPEG = sourceType == "public.jpeg" || sourceType == "public.heic" || sourceType == "public.heif"
+        let uti: CFString = preferJPEG ? "public.jpeg" as CFString : "public.png" as CFString
+
         let mutable = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
             mutable,
-            "public.jpeg" as CFString,
+            uti,
             1,
             nil
         ) else {
             return data
         }
-        CGImageDestinationAddImage(destination, cgImage, [
-            kCGImageDestinationLossyCompressionQuality: 0.9,
-        ] as CFDictionary)
+        var destinationOptions: [CFString: Any] = [:]
+        if preferJPEG {
+            destinationOptions[kCGImageDestinationLossyCompressionQuality] = 0.95
+        }
+        CGImageDestinationAddImage(destination, cgImage, destinationOptions as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return data }
         return mutable as Data
     }

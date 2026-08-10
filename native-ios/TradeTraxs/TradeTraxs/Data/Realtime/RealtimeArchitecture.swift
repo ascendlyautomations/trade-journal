@@ -231,4 +231,17 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
         await live.stopWatchingRoomReadCursors(userID: userID)
     }
+
+    /// Home Feed — idle until `posts` postgres_changes arrive.
+    func watchFeedPosts(accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchFeedPosts(accessToken: accessToken)
+    }
+
+    func stopWatchingFeedPosts() async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingFeedPosts()
+    }
 }

@@ -38,6 +38,18 @@ enum ProfilePostFixtures {
                 createdAt: now.addingTimeInterval(-120_000),
                 updatedAt: now.addingTimeInterval(-120_000)
             ),
+            /// Text-only — feed Layout B (no media container / likes below caption).
+            Post(
+                id: PostID("dev-post-text-only"),
+                authorProfileID: profileID,
+                body: "No screenshot today — just process. Waited for the open, skipped the first impulse, and only took the second touch at the level. Size stayed small. That is the edge.",
+                media: [],
+                visibility: .public,
+                linkedTradeID: nil,
+                isPinned: false,
+                createdAt: now.addingTimeInterval(-5_000),
+                updatedAt: now.addingTimeInterval(-5_000)
+            ),
         ]
     }
 

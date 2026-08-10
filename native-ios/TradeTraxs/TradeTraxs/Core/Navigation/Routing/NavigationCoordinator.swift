@@ -35,6 +35,8 @@ final class NavigationCoordinator {
             pushMessages(route)
         case .profile(let route):
             pushProfile(route)
+        case .settingsStack(let routes):
+            openSettings(routes)
         case .sheet(let sheet):
             present(sheet: sheet)
         case .fullScreen(let cover):
@@ -151,6 +153,37 @@ final class NavigationCoordinator {
         selectTab(.profile)
         store.paths.profile.append(route)
         emit(.pushed(tab: .profile, description: String(describing: route)))
+    }
+
+    /// Opens Settings with a proper back stack (home → section → leaf).
+    ///
+    /// Replaces any existing Settings routes on the Profile path so repeated opens
+    /// do not stack duplicate Settings roots.
+    func openSettings(_ routes: [SettingsRoute]) {
+        var normalized = routes
+        if normalized.isEmpty {
+            normalized = [.home]
+        }
+        if normalized.first != .home {
+            normalized.insert(.home, at: 0)
+        }
+        // Deduplicate consecutive identical routes.
+        var unique: [SettingsRoute] = []
+        for route in normalized where unique.last != route {
+            unique.append(route)
+        }
+
+        ensureAuthenticatedOrStash(.settingsStack(unique))
+        guard store.sessionPhase == .authenticated else { return }
+        selectTab(.profile)
+        store.paths.profile.removeAll {
+            if case .settings = $0 { return true }
+            return false
+        }
+        for route in unique {
+            store.paths.profile.append(.settings(route))
+        }
+        emit(.pushed(tab: .profile, description: "settingsStack:\(unique.map(\.rawValue).joined(separator: "/"))"))
     }
 
     func pop() {

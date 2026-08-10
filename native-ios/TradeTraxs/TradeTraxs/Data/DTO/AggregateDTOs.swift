@@ -78,6 +78,14 @@ nonisolated enum TradeDTO {
         var size: FlexibleNumber?
         var is_active: Bool?
         var can_add_trades: Bool?
+        /// Prop Firm Mode rule columns (web propfirm page select).
+        var consistency: FlexibleNumber?
+        var max_drawdown: FlexibleNumber?
+        var daily_drawdown: FlexibleNumber?
+        var profit_target: FlexibleNumber?
+        var winning_days: FlexibleNumber?
+        var winning_day_threshold: FlexibleNumber?
+        var payout_drawdown_behavior: String?
     }
 
     struct InsertBody: Encodable, Sendable {
@@ -131,6 +139,8 @@ nonisolated enum ProfileDTO {
         var bio: String?
         var avatar_url: String?
         var trader_type: String?
+        var trading_style: String?
+        var primary_market: String?
         var is_private: Bool?
     }
 }
@@ -171,6 +181,115 @@ nonisolated enum FeedDTO {
         var image_url: String?
         var created_at: String?
         var is_pinned: Bool?
+        var profiles: EmbeddedAuthor?
+    }
+
+    /// Web feed join `profiles(username, avatar_url)` (+ optional `name`).
+    struct EmbeddedAuthor: Codable, Sendable {
+        var id: String?
+        var username: String?
+        var avatar_url: String?
+        var name: String?
+
+        init(id: String? = nil, username: String? = nil, avatar_url: String? = nil, name: String? = nil) {
+            self.id = id
+            self.username = username
+            self.avatar_url = avatar_url
+            self.name = name
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(String.self, forKey: .id)
+            username = try container.decodeIfPresent(String.self, forKey: .username)
+            avatar_url = try container.decodeIfPresent(String.self, forKey: .avatar_url)
+            name = try container.decodeIfPresent(String.self, forKey: .name)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, username, avatar_url, name
+        }
+    }
+
+    /// Web trade feed row — `posts` + `profiles(username, avatar_url)`.
+    struct TradeFeedRow: Codable, Sendable {
+        var id: String?
+        var user_id: String?
+        var trade_id: String?
+        var created_at: String?
+        var image_url: String?
+        var profiles: ProfilesBox?
+    }
+
+    /// Web profile feed row — `profile_posts` + profiles embed.
+    struct ProfileFeedRow: Codable, Sendable {
+        var id: String?
+        var user_id: String?
+        var content: String?
+        var image_url: String?
+        var created_at: String?
+        var profiles: ProfilesBox?
+    }
+
+    /// Web reel feed row — `reels` + profiles embed.
+    struct ReelFeedRow: Codable, Sendable {
+        var id: String?
+        var user_id: String?
+        var caption: String?
+        var video_url: String?
+        var thumbnail_url: String?
+        var duration_seconds: Int?
+        var visibility: String?
+        var trade_id: String?
+        var created_at: String?
+        var profiles: ProfilesBox?
+    }
+
+    /// Web achievement feed row — `achievement_posts` + profiles (+ nested achievement).
+    struct AchievementFeedRow: Codable, Sendable {
+        var id: String?
+        var user_id: String?
+        var achievement_id: String?
+        var created_at: String?
+        var profiles: ProfilesBox?
+        var achievements: AchievementBox?
+    }
+
+    /// PostgREST may return object or single-element array for many-to-one embeds.
+    struct ProfilesBox: Codable, Sendable {
+        var profile: EmbeddedAuthor?
+
+        init(from decoder: Decoder) throws {
+            if let single = try? EmbeddedAuthor(from: decoder) {
+                profile = single
+                return
+            }
+            let many = try? [EmbeddedAuthor](from: decoder)
+            profile = many?.first
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encodeNil()
+        }
+    }
+
+    struct AchievementBox: Codable, Sendable {
+        var achievement: AchievementDTO.Achievement?
+
+        init(from decoder: Decoder) throws {
+            if let single = try? AchievementDTO.Achievement(from: decoder) {
+                achievement = single
+                return
+            }
+            let many = try? [AchievementDTO.Achievement](from: decoder)
+            achievement = many?.first
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encodeNil()
+        }
     }
 
     struct Comment: Codable, Sendable {

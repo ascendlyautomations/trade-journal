@@ -34,6 +34,14 @@ nonisolated struct FeedItem: Hashable, Codable, Sendable, Identifiable {
     var likeCount: Int
     var commentCount: Int
     var viewerHasLiked: Bool
+    /// Web feed embed `profiles.username` — seeded into DetailPresentationCache (no N+1).
+    var authorUsername: String? = nil
+    /// Web feed embed `profiles` display label (`name` when present, else username).
+    var authorDisplayName: String? = nil
+    /// Web feed embed `profiles.avatar_url`.
+    var authorAvatarURL: String? = nil
+    /// Card media for profile posts / reel thumbs / achievement images when present on the row.
+    var mediaURL: String? = nil
 }
 
 nonisolated struct Post: Hashable, Codable, Sendable, Identifiable {

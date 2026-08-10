@@ -12,6 +12,7 @@ final class DetailPresentationCache {
     private var posts: [PostID: Post] = [:]
     private var reels: [ReelID: Reel] = [:]
     private var achievements: [AchievementID: Achievement] = [:]
+    private var storiesByID: [StoryID: Story] = [:]
     private var profilesByID: [ProfileID: Profile] = [:]
     private var statsByProfile: [ProfileID: ProfileStats] = [:]
     private var ownedTradeRooms: [ProfileID: TradeRoom] = [:]
@@ -101,6 +102,20 @@ final class DetailPresentationCache {
         for achievement in items {
             achievements[achievement.id] = achievement
         }
+    }
+
+    func seed(_ story: Story) {
+        storiesByID[story.id] = story
+    }
+
+    func seed(stories items: [Story]) {
+        for story in items {
+            storiesByID[story.id] = story
+        }
+    }
+
+    func story(id: StoryID) -> Story? {
+        storiesByID[id]
     }
 
     func seedAccountName(_ name: String, for accountID: TradingAccountID) {

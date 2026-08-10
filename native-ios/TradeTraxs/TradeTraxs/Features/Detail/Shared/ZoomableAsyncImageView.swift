@@ -9,6 +9,7 @@ struct ZoomableAsyncImageView: View {
     var maxPixelSize: Int? = 2_048
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.displayScale) private var displayScale
     @State private var uiImage: UIImage?
     @State private var didFail = false
 
@@ -24,7 +25,7 @@ struct ZoomableAsyncImageView: View {
                 ExperienceLoadingSpinner()
             }
         }
-        .task(id: reference?.id) {
+        .task(id: "\(reference?.id ?? "")|\(displayScale)") {
             await load()
         }
     }
@@ -45,8 +46,9 @@ struct ZoomableAsyncImageView: View {
                     allowsProgressiveLoading: true
                 )
             )
+            let scale = displayScale
             let decoded = await Task.detached(priority: .userInitiated) {
-                UIImage(data: data)
+                UIImage(data: data, scale: scale)
             }.value
             guard let decoded else {
                 didFail = true

@@ -37,6 +37,15 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
         returning type: T.Type
     ) async throws -> T
 
+    /// PostgREST upsert (`Prefer: resolution=merge-duplicates`).
+    func upsert<Body: Encodable, T: Decodable>(
+        _ body: Body,
+        into table: String,
+        onConflict: String,
+        returning type: T.Type,
+        select: String
+    ) async throws -> T
+
     func delete(from table: String, query: [URLQueryItem]) async throws
 
     func rpcData(functionName: String, parametersJSON: Data?) async throws -> Data
@@ -218,6 +227,39 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
         }
     }
 
+    func upsert<Body: Encodable, T: Decodable>(
+        _ body: Body,
+        into table: String,
+        onConflict: String,
+        returning type: T.Type,
+        select: String
+    ) async throws -> T {
+        let data = try transport.encodeJSON(body)
+        let response = try await transport.send(
+            host: .supabase,
+            path: "/rest/v1/\(table)",
+            method: .post,
+            queryItems: [
+                URLQueryItem(name: "on_conflict", value: onConflict),
+                SupabaseQuery.select(select),
+            ],
+            headers: [
+                "Prefer": "resolution=merge-duplicates,return=representation",
+                "Accept": "application/vnd.pgrst.object+json",
+            ],
+            body: data
+        )
+        do {
+            return try transport.decoder.decode(type, from: response)
+        } catch {
+            let rows = try transport.decoder.decode([T].self, from: response)
+            guard let first = rows.first else {
+                throw AppError.unknown(message: "Upsert returned empty representation")
+            }
+            return first
+        }
+    }
+
     func delete(from table: String, query: [URLQueryItem]) async throws {
         _ = try await transport.send(
             host: .supabase,
@@ -289,6 +331,17 @@ nonisolated struct UnconfiguredSupabaseDatabaseClient: SupabaseDatabaseExecuting
         returning type: T.Type
     ) async throws -> T {
         _ = (body, table, query, type)
+        throw AppError.authentication(.notConfigured)
+    }
+
+    func upsert<Body: Encodable, T: Decodable>(
+        _ body: Body,
+        into table: String,
+        onConflict: String,
+        returning type: T.Type,
+        select: String
+    ) async throws -> T {
+        _ = (body, table, onConflict, type, select)
         throw AppError.authentication(.notConfigured)
     }
 

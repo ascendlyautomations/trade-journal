@@ -74,6 +74,11 @@ final class AuthenticationCoordinator {
         navigation.coordinator.markUnauthenticated()
     }
 
+    /// Authenticated session email when present (nil for development bypass).
+    var sessionEmail: String? {
+        authenticationManager.state.session?.email
+    }
+
     func handleUnauthorizedFromNetwork() async {
         AppLog.authentication.info("Unauthorized — forcing logout")
         await logout()

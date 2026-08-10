@@ -313,6 +313,24 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         await stopWatch(routeKey: "room-read:\(userID)")
     }
 
+    /// Home Feed — idle until `posts` postgres_changes arrive (web Community feed path).
+    func watchFeedPosts(accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        watch(
+            WatchSpec(
+                topic: "realtime:feed-posts",
+                table: "posts",
+                filter: "id=neq.00000000-0000-0000-0000-000000000000",
+                routeKey: "feed-posts",
+                routeColumn: "id"
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingFeedPosts() async {
+        await stopWatch(routeKey: "feed-posts")
+    }
+
     private func watch(
         _ spec: WatchSpec,
         accessToken: String?
@@ -504,6 +522,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             if spec.routeKey.hasPrefix("dm-read:")
                 || spec.routeKey.hasPrefix("room-read:")
                 || spec.routeKey == "member-rooms"
+                || spec.routeKey == "feed-posts"
             {
                 scopedMatch = scope != nil
             } else {

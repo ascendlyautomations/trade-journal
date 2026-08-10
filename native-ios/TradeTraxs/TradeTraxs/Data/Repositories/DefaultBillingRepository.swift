@@ -10,16 +10,19 @@ nonisolated struct DefaultBillingRepository: BillingRepository {
     }
 
     func status(for profileID: ProfileID) async throws -> BillingStatus {
-        let dto: ProfileDTO.Profile = try await supabase.database.selectOne(
-            ProfileDTO.Profile.self,
+        let dto: BillingProfileDTO = try await supabase.database.selectOne(
+            BillingProfileDTO.self,
             from: "profiles",
             query: [
-                SupabaseQuery.select("id,is_pro,subscription_status"),
+                SupabaseQuery.select(
+                    "id,is_pro,subscription_status,trial_end,current_period_end,billing_interval,cancel_at_period_end"
+                ),
                 SupabaseQuery.eq("id", profileID.rawValue),
             ]
         )
         let isPro = dto.is_pro == true
         let lifecycle = mapLifecycle(dto.subscription_status)
+        let interval = mapInterval(dto.billing_interval)
         return BillingStatus(
             profileID: profileID,
             plan: isPro ? .pro : .free,
@@ -28,22 +31,26 @@ nonisolated struct DefaultBillingRepository: BillingRepository {
             dailyTradeLimit: isPro ? nil : 10,
             dailyPostLimit: isPro ? nil : 5,
             dailyMessageLimit: isPro ? nil : 50,
-            maxTradeEntryAccounts: isPro ? nil : 3
+            maxTradeEntryAccounts: isPro ? nil : 3,
+            trialEndsAt: dto.trial_end.flatMap(ISO8601.date(from:)),
+            currentPeriodEndsAt: dto.current_period_end.flatMap(ISO8601.date(from:)),
+            billingInterval: interval,
+            cancelAtPeriodEnd: dto.cancel_at_period_end == true
         )
     }
 
     func subscription(for profileID: ProfileID) async throws -> Subscription? {
         let status = try await status(for: profileID)
-        guard status.plan == .pro else { return nil }
+        guard status.plan == .pro || status.lifecycle == .trialing else { return nil }
         return Subscription(
             id: SubscriptionID(profileID.rawValue),
             profileID: profileID,
             plan: status.plan,
-            interval: .monthly,
+            interval: status.billingInterval,
             lifecycle: status.lifecycle,
-            trialEndsAt: nil,
-            renewsAt: nil,
-            canceledAt: nil
+            trialEndsAt: status.trialEndsAt,
+            renewsAt: status.currentPeriodEndsAt,
+            canceledAt: status.cancelAtPeriodEnd ? status.currentPeriodEndsAt : nil
         )
     }
 
@@ -67,4 +74,27 @@ nonisolated struct DefaultBillingRepository: BillingRepository {
             return .none
         }
     }
+
+    private func mapInterval(_ raw: String?) -> BillingInterval? {
+        switch raw?.lowercased() {
+        case "month", "monthly":
+            return .monthly
+        case "six_month", "six-month", "6month", "semiannual":
+            return .sixMonth
+        case "year", "yearly", "annual":
+            return .yearly
+        default:
+            return nil
+        }
+    }
+}
+
+nonisolated struct BillingProfileDTO: Codable, Sendable {
+    var id: String?
+    var is_pro: Bool?
+    var subscription_status: String?
+    var trial_end: String?
+    var current_period_end: String?
+    var billing_interval: String?
+    var cancel_at_period_end: Bool?
 }

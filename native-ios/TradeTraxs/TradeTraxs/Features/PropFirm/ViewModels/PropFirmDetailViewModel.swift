@@ -1,0 +1,134 @@
+import Foundation
+import Observation
+
+@Observable
+@MainActor
+final class PropFirmDetailViewModel {
+    let accountID: TradingAccountID
+    private(set) var snapshot: PropFirmStatusSnapshot?
+    private(set) var isLoading = false
+    private(set) var errorMessage: String?
+
+    private let trades: any TradeRepository
+    private let session: any SessionProviding
+    private let detailCache: DetailPresentationCache
+    private let realtimeHub: RealtimeHub?
+
+    private var hasLoaded = false
+    private var watchedChannel: RealtimeChannelID?
+    private var realtimeTask: Task<Void, Never>?
+
+    init(
+        accountID: TradingAccountID,
+        trades: any TradeRepository,
+        session: any SessionProviding,
+        detailCache: DetailPresentationCache,
+        realtimeHub: RealtimeHub? = nil
+    ) {
+        self.accountID = accountID
+        self.trades = trades
+        self.session = session
+        self.detailCache = detailCache
+        self.realtimeHub = realtimeHub
+    }
+
+    func loadIfNeeded() async {
+        guard !hasLoaded else { return }
+        await refresh()
+    }
+
+    func refresh() async {
+        isLoading = snapshot == nil
+        errorMessage = nil
+        let userID = await session.currentUserID
+        let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
+
+        do {
+            let accounts: [TradingAccount]
+            if let cached = detailCache.accounts(for: profileID),
+               cached.contains(where: { $0.id == accountID })
+            {
+                accounts = cached
+            } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+                accounts = PropFirmFixtures.accounts(owner: profileID)
+                detailCache.seed(accounts: accounts, for: profileID)
+            } else {
+                accounts = try await trades.accounts(for: profileID)
+                detailCache.seed(accounts: accounts, for: profileID)
+            }
+
+            guard let account = accounts.first(where: { $0.id == accountID }),
+                  account.isPropFirmAccount
+            else {
+                snapshot = nil
+                errorMessage = "This account is not a prop-firm account."
+                isLoading = false
+                return
+            }
+
+            let tradeList: [Trade]
+            if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+                tradeList = PropFirmFixtures.trades(owner: profileID, accountID: accountID)
+            } else if let cached = detailCache.publicTrades(for: profileID) {
+                // Prefer seeded dashboard trades when present; else fetch.
+                let scoped = cached.filter { $0.accountID == accountID }
+                if scoped.isEmpty {
+                    let page = try await trades.trades(
+                        ownedBy: profileID,
+                        accountID: accountID,
+                        page: PageRequest(limit: 500),
+                        publicOnly: false
+                    )
+                    tradeList = page.items
+                    detailCache.seed(trades: page.items)
+                } else {
+                    tradeList = scoped
+                }
+            } else {
+                let page = try await trades.trades(
+                    ownedBy: profileID,
+                    accountID: accountID,
+                    page: PageRequest(limit: 500),
+                    publicOnly: false
+                )
+                tradeList = page.items
+                detailCache.seed(trades: page.items)
+            }
+
+            snapshot = PropFirmStatusSnapshot.build(account: account, trades: tradeList)
+            hasLoaded = true
+            await startRealtime(profileID: profileID)
+        } catch {
+            errorMessage = ProfileSectionSupport.message(for: error)
+        }
+        isLoading = false
+    }
+
+    func onDisappear() {
+        Task { await stopRealtime() }
+    }
+
+    private func startRealtime(profileID: ProfileID) async {
+        guard let realtimeHub else { return }
+        await stopRealtime()
+        let channel = RealtimeChannelID(
+            kind: .profile,
+            topic: "propfirm:\(accountID.rawValue)"
+        )
+        watchedChannel = channel
+        try? await realtimeHub.subscriptions.subscribe(channel)
+        realtimeTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+            }
+        }
+    }
+
+    private func stopRealtime() async {
+        realtimeTask?.cancel()
+        realtimeTask = nil
+        guard let realtimeHub, let channel = watchedChannel else { return }
+        try? await realtimeHub.subscriptions.unsubscribe(channel)
+        watchedChannel = nil
+    }
+}

@@ -28,6 +28,42 @@ nonisolated enum TradingAccountMode: String, Hashable, Codable, Sendable {
     case backtest
 }
 
+/// Prop-firm rule columns on `accounts` — source of truth mirrors web `PropfirmAccountRules`.
+nonisolated struct PropFirmAccountRules: Hashable, Codable, Sendable {
+    /// DB `consistency` — max single winning trade as % of total winning-trade profit.
+    var consistencyPercent: Decimal?
+    /// DB `max_drawdown` — trailing max loss limit ($).
+    var maxDrawdown: Decimal?
+    /// DB `daily_drawdown` — worst single futures-day loss cap ($).
+    var dailyDrawdown: Decimal?
+    /// DB `profit_target`.
+    var profitTarget: Decimal?
+    /// DB `winning_days` — minimum **winning** days (not all trading days).
+    var winningDaysRequired: Int?
+    /// DB `winning_day_threshold` — min daily net to count as a winning day.
+    var winningDayThreshold: Decimal?
+    /// DB `payout_drawdown_behavior`: `reset_to_account` | `keep_trailing`.
+    var payoutDrawdownBehavior: String?
+
+    init(
+        consistencyPercent: Decimal? = nil,
+        maxDrawdown: Decimal? = nil,
+        dailyDrawdown: Decimal? = nil,
+        profitTarget: Decimal? = nil,
+        winningDaysRequired: Int? = nil,
+        winningDayThreshold: Decimal? = nil,
+        payoutDrawdownBehavior: String? = nil
+    ) {
+        self.consistencyPercent = consistencyPercent
+        self.maxDrawdown = maxDrawdown
+        self.dailyDrawdown = dailyDrawdown
+        self.profitTarget = profitTarget
+        self.winningDaysRequired = winningDaysRequired
+        self.winningDayThreshold = winningDayThreshold
+        self.payoutDrawdownBehavior = payoutDrawdownBehavior
+    }
+}
+
 /// Broker / prop / personal account under a profile.
 nonisolated struct TradingAccount: Hashable, Codable, Sendable, Identifiable {
     var id: TradingAccountID
@@ -38,6 +74,10 @@ nonisolated struct TradingAccount: Hashable, Codable, Sendable, Identifiable {
     var size: Money?
     var isActive: Bool
     var canAddTrades: Bool
+    /// Present when category is prop firm and rule columns are loaded.
+    var propFirmRules: PropFirmAccountRules? = nil
+
+    var isPropFirmAccount: Bool { category == .propFirm }
 }
 
 /// Core journal trade aggregate root.

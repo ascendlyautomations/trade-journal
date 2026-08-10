@@ -45,6 +45,9 @@ struct TradeTraxsApp: App {
                 applyOtherProfileScreenshotLaunchArgumentsIfNeeded()
                 applyMessagesScreenshotLaunchArgumentsIfNeeded()
                 applyTradeRoomsScreenshotLaunchArgumentsIfNeeded()
+                applyFeedScreenshotLaunchArgumentsIfNeeded()
+                applyDashboardScreenshotLaunchArgumentsIfNeeded()
+                applySettingsScreenshotLaunchArgumentsIfNeeded()
                 #endif
             }
             .onChange(of: scenePhase) { _, newPhase in
@@ -292,6 +295,73 @@ struct TradeTraxsApp: App {
                     .feed(.roomMembers(TradeRoomsFixtures.deskRoomID))
                 )
             }
+        }
+    }
+
+    private func applyFeedScreenshotLaunchArgumentsIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-uitesting-feed-home") || args.contains("-uitesting-feed-text-only") else {
+            return
+        }
+
+        Task { @MainActor in
+            try? await appEnvironment.authentication.coordinator.continueAsDevelopmentSessionIfAllowed()
+            let viewerID = ProfileID(
+                await appEnvironment.authentication.sessionBridge.currentUserID?.rawValue
+                    ?? FeedFixtures.viewerID.rawValue
+            )
+            FeedFixtures.seedDetailCache(appEnvironment.data.detailCache, viewerID: viewerID)
+            appEnvironment.navigation.store.selectedTab = .feed
+            try? await Task.sleep(nanoseconds: 600_000_000)
+        }
+    }
+
+    private func applyDashboardScreenshotLaunchArgumentsIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-uitesting-dashboard-home")
+            || args.contains("-uitesting-dashboard-propfirm")
+            || args.contains("-uitesting-propfirm-detail")
+        else { return }
+
+        Task { @MainActor in
+            try? await appEnvironment.authentication.coordinator.continueAsDevelopmentSessionIfAllowed()
+            appEnvironment.navigation.store.selectedTab = .home
+            try? await Task.sleep(nanoseconds: 900_000_000)
+
+            if args.contains("-uitesting-propfirm-detail") {
+                appEnvironment.navigation.coordinator.open(
+                    .home(.propFirm(PropFirmFixtures.accountID))
+                )
+            }
+        }
+    }
+
+    private func applySettingsScreenshotLaunchArgumentsIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        let wantsHome = args.contains("-uitesting-settings-home")
+        let wantsAccount = args.contains("-uitesting-settings-account")
+        let wantsNotifications = args.contains("-uitesting-settings-notifications")
+        let wantsMessages = args.contains("-uitesting-settings-notifications-messages")
+        let wantsSubscription = args.contains("-uitesting-settings-subscription")
+        let wantsPrivacy = args.contains("-uitesting-settings-privacy")
+        guard wantsHome || wantsAccount || wantsNotifications || wantsMessages
+            || wantsSubscription || wantsPrivacy
+        else { return }
+
+        Task { @MainActor in
+            try? await appEnvironment.authentication.coordinator.continueAsDevelopmentSessionIfAllowed()
+            // Allow splash → authenticated shell to settle before pushing Settings.
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+
+            var stack: [SettingsRoute] = [.home]
+            if wantsAccount { stack.append(.account) }
+            else if wantsMessages { stack.append(contentsOf: [.notifications, .notificationsMessages]) }
+            else if wantsNotifications { stack.append(.notifications) }
+            else if wantsSubscription { stack.append(.subscription) }
+            else if wantsPrivacy { stack.append(.privacy) }
+
+            appEnvironment.navigation.coordinator.openSettings(stack)
+            try? await Task.sleep(nanoseconds: 500_000_000)
         }
     }
     #endif

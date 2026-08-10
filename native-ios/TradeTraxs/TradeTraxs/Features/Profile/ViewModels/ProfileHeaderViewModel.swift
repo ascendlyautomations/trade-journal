@@ -70,12 +70,12 @@ final class ProfileHeaderViewModel {
 
     func openSettings() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.profile(.settings(nil)))
+        navigationCoordinator.openSettings([.home])
     }
 
     func openEditProfile() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.profile(.settings(.profile)))
+        navigationCoordinator.openSettings([.home, .profile])
     }
 
     func presentShare() {
