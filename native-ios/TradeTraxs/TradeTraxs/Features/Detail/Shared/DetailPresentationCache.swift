@@ -18,6 +18,7 @@ final class DetailPresentationCache {
     private var ownedTradeRooms: [ProfileID: TradeRoom] = [:]
     private var ownedTradeRoomResolved: Set<ProfileID> = []
     private var accountNames: [TradingAccountID: String] = [:]
+    private var accountNumbers: [TradingAccountID: String] = [:]
     private var accountModes: [TradingAccountID: TradingAccountMode] = [:]
     private var accountSizes: [TradingAccountID: Decimal] = [:]
     /// Full `accounts` rows keyed by profile — session reuse for Stats / Detail.
@@ -140,7 +141,8 @@ final class DetailPresentationCache {
         }
     }
 
-    /// Seeds name / mode / size from linked `accounts` rows (one cache write).
+    /// Seeds name / mode / size / number from linked `accounts` rows (one cache write).
+    /// Names stay raw (no account number) so public surfaces never inherit owner titles.
     func seed(accounts: [TradingAccount]) {
         seed(accountNames: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) }))
         seed(accountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) }))
@@ -149,6 +151,19 @@ final class DetailPresentationCache {
             return (account.id, amount)
         }
         seed(accountSizes: Dictionary(uniqueKeysWithValues: sizes))
+        let numbers = accounts.compactMap { account -> (TradingAccountID, String)? in
+            guard let number = TradingAccountDisplay.normalizedAccountNumber(account.accountNumber) else {
+                return nil
+            }
+            return (account.id, number)
+        }
+        seed(accountNumbers: Dictionary(uniqueKeysWithValues: numbers))
+    }
+
+    func seed(accountNumbers numbers: [TradingAccountID: String]) {
+        for (id, number) in numbers {
+            accountNumbers[id] = number
+        }
     }
 
     /// Seeds accounts for a profile and marks the profile as resolved for the session.
@@ -228,6 +243,10 @@ final class DetailPresentationCache {
         accountNames[accountID]
     }
 
+    func accountNumber(for accountID: TradingAccountID) -> String? {
+        accountNumbers[accountID]
+    }
+
     func accountMode(for accountID: TradingAccountID) -> TradingAccountMode? {
         accountModes[accountID]
     }
@@ -243,6 +262,15 @@ final class DetailPresentationCache {
         statsByProfile = [:]
     }
 
+    /// Remove one trade from detail + public profile list seeds (delete path).
+    func removeTrade(id: TradeID) {
+        trades[id] = nil
+        for key in publicTradesByProfile.keys {
+            publicTradesByProfile[key]?.removeAll { $0.id == id }
+        }
+        statsByProfile = [:]
+    }
+
     /// Drop all session seeds when the authenticated user changes.
     func removeAll() {
         trades = [:]
@@ -255,6 +283,7 @@ final class DetailPresentationCache {
         ownedTradeRooms = [:]
         ownedTradeRoomResolved = []
         accountNames = [:]
+        accountNumbers = [:]
         accountModes = [:]
         accountSizes = [:]
         accountsByProfile = [:]

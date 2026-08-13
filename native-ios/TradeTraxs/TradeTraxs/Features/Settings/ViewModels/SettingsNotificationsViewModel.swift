@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 @Observable
 @MainActor
@@ -14,25 +15,38 @@ final class SettingsNotificationsViewModel {
     private let repository: any NotificationPreferencesRepository
     private let session: any SessionProviding
     private let navigationCoordinator: NavigationCoordinator
+    private let pushNotifications: PushNotificationCenter?
 
     private(set) var phase: Phase = .idle
     private(set) var preferences: NotificationPreferences?
     private(set) var saveError: String?
+    /// iOS system permission — never confuse with in-app preference toggles.
+    private(set) var systemAuthorization: SystemNotificationAuthorizationStatus = .notDetermined
     private var hasLoaded = false
     private var inflightKeys: Set<NotificationPreferenceKey> = []
 
     init(
         repository: any NotificationPreferencesRepository,
         session: any SessionProviding,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        pushNotifications: PushNotificationCenter? = nil
     ) {
         self.repository = repository
         self.session = session
         self.navigationCoordinator = navigationCoordinator
+        self.pushNotifications = pushNotifications
     }
 
     var masterEnabled: Bool {
         preferences?.values[.notificationsEnabled] ?? true
+    }
+
+    var systemPushStatusLabel: String {
+        systemAuthorization.settingsLabel
+    }
+
+    var showsOpenSystemSettings: Bool {
+        !systemAuthorization.isEnabled
     }
 
     func loadIfNeeded() {
@@ -45,6 +59,7 @@ final class SettingsNotificationsViewModel {
         if preferences == nil {
             phase = .loading
         }
+        systemAuthorization = await SystemNotificationAuthorization.currentStatus()
         do {
             guard let userID = await session.currentUserID else {
                 phase = .failed("Not signed in")
@@ -60,6 +75,20 @@ final class SettingsNotificationsViewModel {
                 saveError = error.localizedDescription
             }
         }
+    }
+
+    func openSystemSettings() {
+        if let pushNotifications {
+            pushNotifications.openSystemSettings()
+            return
+        }
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    func refreshSystemAuthorization() async {
+        systemAuthorization = await SystemNotificationAuthorization.currentStatus()
+        await pushNotifications?.refreshAuthorizationStatus()
     }
 
     func openCategory(_ category: NotificationPreferenceCategory) {

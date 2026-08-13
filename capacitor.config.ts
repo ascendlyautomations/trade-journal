@@ -29,7 +29,9 @@ const appOrigin = isProduction
   : `http://${devServerHost}:3000`
 
 const config: CapacitorConfig = {
-  // Must match Xcode PRODUCT_BUNDLE_IDENTIFIER and lib/nativeIosIdentity.ts
+  // LEGACY Capacitor shell only — not the production app.
+  // Canonical native identity is com.tradetraxs.TradeTraxs (lib/nativeIosIdentity.ts).
+  // Keep this distinct so a leftover Capacitor build cannot steal the native App ID.
   appId: 'com.tradetraxs.ios',
   appName: 'TradeTraxs',
   // Stub directory required by Capacitor sync. Not the application bundle.

@@ -13,6 +13,11 @@ final class AddTradeViewModel {
         case failed(String)
     }
 
+    enum Mode: Equatable {
+        case create
+        case edit(TradeID)
+    }
+
     enum Field: Hashable {
         case symbol
         case entry
@@ -24,6 +29,7 @@ final class AddTradeViewModel {
     }
 
     private(set) var phase: Phase = .idle
+    private(set) var mode: Mode = .create
     private(set) var accounts: [TradingAccount] = []
     private(set) var selectedAccountID: TradingAccountID?
     private(set) var fieldErrors: [Field: String] = [:]
@@ -65,12 +71,18 @@ final class AddTradeViewModel {
     private let detailCache: DetailPresentationCache
     private let uploadService: any UploadService
     private let objectStorage: any ObjectStorageProviding
+    private let imagePipeline: (any ImagePipeline)?
     private let onDismiss: () -> Void
 
     private var viewerID: ProfileID?
     private var saveTask: Task<Void, Never>?
     private var hasLoadedAccounts = false
     private var hasLoadedReels = false
+    private var editingTrade: Trade?
+    private var editingOriginalAccountID: TradingAccountID?
+    private var existingImageURL: String?
+    private var removeExistingScreenshot = false
+    private var hydratedFingerprint: String?
     private static var lastAccountID: TradingAccountID?
 
     #if DEBUG
@@ -84,6 +96,8 @@ final class AddTradeViewModel {
         detailCache: DetailPresentationCache,
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
+        imagePipeline: (any ImagePipeline)? = nil,
+        mode: Mode = .create,
         onDismiss: @escaping () -> Void
     ) {
         self.trades = trades
@@ -92,7 +106,26 @@ final class AddTradeViewModel {
         self.detailCache = detailCache
         self.uploadService = uploadService
         self.objectStorage = objectStorage
+        self.imagePipeline = imagePipeline
+        self.mode = mode
         self.onDismiss = onDismiss
+    }
+
+    var isEditing: Bool {
+        if case .edit = mode { return true }
+        return false
+    }
+
+    var navigationTitle: String {
+        isEditing ? "Edit Trade" : "Add Trade"
+    }
+
+    var primarySaveTitle: String {
+        isEditing ? "Save Changes" : "Save Trade"
+    }
+
+    var loadFailureTitle: String {
+        isEditing ? "Couldn't open Edit Trade" : "Couldn't open Add Trade"
     }
 
     var selectedAccount: TradingAccount? {
@@ -107,6 +140,17 @@ final class AddTradeViewModel {
         accounts.filter { $0.isActive && !$0.canAddTrades }
     }
 
+    /// Picker list — edit mode keeps the original account even when read-only.
+    var accountsForPicker: [TradingAccount] {
+        var list = eligibleAccounts
+        if let selected = selectedAccount,
+           !list.contains(where: { $0.id == selected.id })
+        {
+            list.insert(selected, at: 0)
+        }
+        return list
+    }
+
     var recentSymbols: [String] {
         if let viewerID, viewerID.rawValue.hasPrefix("dev.") {
             return AddTradeFixtures.recentSymbols
@@ -117,7 +161,15 @@ final class AddTradeViewModel {
     }
 
     var hasUnsavedChanges: Bool {
-        !symbolText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if isEditing {
+            return formFingerprint != hydratedFingerprint
+                || screenshotData != nil
+                || removeExistingScreenshot
+                || reelDraft != nil
+                || linkedReel != nil
+                || tradeAwaitingClip != nil
+        }
+        return !symbolText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !pnlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !entryPriceText.isEmpty
             || !exitPriceText.isEmpty
@@ -204,7 +256,8 @@ final class AddTradeViewModel {
 
     func selectAccount(_ id: TradingAccountID) {
         guard let account = accounts.first(where: { $0.id == id }) else { return }
-        guard account.canAddTrades else {
+        let keepOriginal = isEditing && id == editingOriginalAccountID
+        guard account.canAddTrades || keepOriginal else {
             formError = "This account is read-only and cannot accept new trades."
             return
         }
@@ -232,17 +285,20 @@ final class AddTradeViewModel {
 
     func setScreenshot(_ image: UIImage?) {
         guard let image else {
-            screenshotData = nil
-            screenshotPreview = nil
+            clearScreenshot()
             return
         }
         screenshotPreview = image
         screenshotData = Self.prepareScreenshotJPEG(image)
+        removeExistingScreenshot = false
     }
 
     func clearScreenshot() {
         screenshotData = nil
         screenshotPreview = nil
+        if existingImageURL != nil {
+            removeExistingScreenshot = true
+        }
     }
 
     func applyClipVideo(from url: URL, contentType: String?) {
@@ -337,6 +393,7 @@ final class AddTradeViewModel {
             accounts = AddTradeFixtures.accounts(owner: viewerID)
             detailCache.seed(accounts: accounts, for: viewerID)
             selectDefaultAccount()
+            guard await hydrateEditTradeIfNeeded() else { return }
             phase = .ready
             #if DEBUG
             AddTradeLoadProbe.noteRequest("fixtures")
@@ -346,7 +403,7 @@ final class AddTradeViewModel {
         }
 
         guard let viewerID else {
-            phase = .failed("Sign in to add trades.")
+            phase = .failed(isEditing ? "Sign in to edit trades." : "Sign in to add trades.")
             return
         }
 
@@ -356,6 +413,7 @@ final class AddTradeViewModel {
         {
             accounts = cached
             selectDefaultAccount()
+            guard await hydrateEditTradeIfNeeded() else { return }
             phase = .ready
             #if DEBUG
             AddTradeLoadProbe.noteRequest("accountsCache", blocking: false)
@@ -369,6 +427,7 @@ final class AddTradeViewModel {
         }
 
         await refreshAccountsFromNetwork(viewerID: viewerID, forceNetwork: false)
+        guard await hydrateEditTradeIfNeeded() else { return }
         #if DEBUG
         lastProbe = AddTradeLoadProbe.usableForm(loaded: ["accounts"])
         #endif
@@ -386,7 +445,9 @@ final class AddTradeViewModel {
                 forceNetwork: forceNetwork
             )
             accounts = loaded
-            selectDefaultAccount()
+            if editingTrade == nil {
+                selectDefaultAccount()
+            }
             phase = .ready
         } catch {
             if accounts.isEmpty {
@@ -398,6 +459,7 @@ final class AddTradeViewModel {
     }
 
     private func selectDefaultAccount() {
+        if case .edit = mode, selectedAccountID != nil { return }
         if let last = Self.lastAccountID,
            eligibleAccounts.contains(where: { $0.id == last })
         {
@@ -405,6 +467,102 @@ final class AddTradeViewModel {
             return
         }
         selectedAccountID = eligibleAccounts.first?.id
+    }
+
+    @discardableResult
+    private func hydrateEditTradeIfNeeded() async -> Bool {
+        guard case .edit(let tradeID) = mode else { return true }
+        do {
+            let trade: Trade
+            if let cached = detailCache.trade(id: tradeID) {
+                trade = cached
+            } else if let viewerID, viewerID.rawValue.hasPrefix("dev.") {
+                throw AppError.unknown(message: "Trade not found")
+            } else {
+                trade = try await trades.trade(id: tradeID)
+                detailCache.seed(trade)
+            }
+            apply(trade: trade)
+            await loadExistingScreenshotPreviewIfNeeded()
+            return true
+        } catch {
+            phase = .failed(Self.userMessage(for: error))
+            return false
+        }
+    }
+
+    private func apply(trade: Trade) {
+        editingTrade = trade
+        editingOriginalAccountID = trade.accountID
+        selectedAccountID = trade.accountID
+        symbolText = trade.symbol.ticker
+        side = trade.side
+        entryPriceText = Self.decimalFieldText(trade.entryPrice)
+        exitPriceText = Self.decimalFieldText(trade.exitPrice)
+        contractsText = Self.decimalFieldText(trade.quantity).isEmpty ? "1" : Self.decimalFieldText(trade.quantity)
+        pnlText = Self.decimalFieldText(trade.realizedPnL?.amount)
+        pointsText = Self.decimalFieldText(trade.points)
+        rrText = Self.decimalFieldText(trade.riskReward)
+        entryAt = trade.entryAt
+        if let exit = trade.exitAt {
+            exitAt = exit
+            includeExitTime = true
+        } else {
+            exitAt = trade.entryAt
+            includeExitTime = false
+        }
+        strategyText = trade.strategy ?? ""
+        notesText = trade.notePreview ?? ""
+        publicCaptionText = trade.publicCaption ?? ""
+        shareToProfile = trade.visibility == .public
+        existingImageURL = trade.thumbnail?.id
+        removeExistingScreenshot = false
+        screenshotData = nil
+        hydratedFingerprint = formFingerprint
+    }
+
+    private func loadExistingScreenshotPreviewIfNeeded() async {
+        guard let urlString = existingImageURL, !urlString.isEmpty else { return }
+        guard screenshotPreview == nil else { return }
+        guard let pipeline = imagePipeline else { return }
+        do {
+            let data = try await pipeline.data(
+                for: ImageRequest(
+                    reference: MediaReference(id: urlString, kind: .image, altText: nil),
+                    purpose: .tradeScreenshot
+                )
+            )
+            if let image = UIImage(data: data) {
+                screenshotPreview = image
+            }
+        } catch {
+            // Preview is optional — save still preserves existingImageURL.
+        }
+    }
+
+    private var formFingerprint: String {
+        [
+            selectedAccountID?.rawValue ?? "",
+            symbolText,
+            side.rawValue,
+            entryPriceText,
+            exitPriceText,
+            contractsText,
+            pnlText,
+            pointsText,
+            rrText,
+            String(entryAt.timeIntervalSince1970),
+            includeExitTime ? String(exitAt.timeIntervalSince1970) : "nil",
+            strategyText,
+            notesText,
+            publicCaptionText,
+            shareToProfile ? "1" : "0",
+        ].joined(separator: "|")
+    }
+
+    private static func decimalFieldText(_ value: Decimal?) -> String {
+        guard let value else { return "" }
+        return NSDecimalNumber(decimal: value).stringValue
     }
 
     private func performSave() async {
@@ -437,6 +595,12 @@ final class AddTradeViewModel {
             saveTask = nil
             return
         }
+        let keepOriginalAccount = isEditing && account.id == editingOriginalAccountID
+        guard account.canAddTrades || keepOriginalAccount else {
+            formError = "Choose an account that can accept trades."
+            saveTask = nil
+            return
+        }
 
         phase = .saving
         var uploadedStoragePath: String?
@@ -448,11 +612,23 @@ final class AddTradeViewModel {
                 uploadedStoragePath = uploaded.storagePath
                 imageURL = uploaded.publicURL
                 isUploadingMedia = false
+            } else if isEditing {
+                imageURL = removeExistingScreenshot ? nil : existingImageURL
             }
 
             let ticker = symbolText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             let quantity = Self.parseDecimal(contractsText) ?? 1
             let pnl = Self.parseDecimal(pnlText) ?? 0
+            // Edit preserves a manually-set session when present; create auto-detects.
+            let sessionLabel: String = {
+                if isEditing, let existing = editingTrade?.sessionLabel?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !existing.isEmpty
+                {
+                    return existing
+                }
+                return TradingSessionLabel.session(from: entryAt) ?? "NY"
+            }()
             let draft = TradeDraft(
                 accountID: account.id,
                 accountName: account.name,
@@ -470,7 +646,7 @@ final class AddTradeViewModel {
                 realizedPnL: Money(amount: pnl),
                 riskReward: Self.parseOptionalRiskReward(rrText),
                 points: Self.parseDecimal(pointsText) ?? 0,
-                sessionLabel: TradingSessionLabel.session(from: entryAt) ?? "NY",
+                sessionLabel: sessionLabel,
                 strategy: Self.nilIfEmpty(strategyText),
                 visibility: shareToProfile ? .public : .private,
                 publicCaption: Self.nilIfEmpty(publicCaptionText),
@@ -480,13 +656,23 @@ final class AddTradeViewModel {
 
             let trade: Trade
             if let viewerID, viewerID.rawValue.hasPrefix("dev.") {
-                trade = Self.fixtureTrade(from: draft, owner: viewerID)
+                if let previous = editingTrade {
+                    trade = Self.fixtureUpdatedTrade(from: draft, previous: previous)
+                } else {
+                    trade = Self.fixtureTrade(from: draft, owner: viewerID)
+                }
+            } else if let previous = editingTrade {
+                trade = try await trades.update(id: previous.id, draft: draft, previous: previous)
             } else {
                 trade = try await trades.save(draft)
             }
 
             detailCache.seed(trade)
-            TradeJournalMutationStore.shared.noteCreated(trade)
+            if isEditing {
+                TradeJournalMutationStore.shared.noteUpdated(trade)
+            } else {
+                TradeJournalMutationStore.shared.noteCreated(trade)
+            }
             Self.lastAccountID = account.id
 
             do {
@@ -589,7 +775,10 @@ final class AddTradeViewModel {
         if ticker.isEmpty {
             errors[.symbol] = "Symbol is required"
         }
-        if selectedAccountID == nil || selectedAccount?.canAddTrades != true {
+        let keepOriginalAccount = isEditing && selectedAccountID == editingOriginalAccountID
+        if selectedAccountID == nil
+            || (selectedAccount?.canAddTrades != true && !keepOriginalAccount)
+        {
             formError = "Choose an eligible trading account."
         }
         if Self.parseDecimal(contractsText) == nil {
@@ -729,9 +918,34 @@ final class AddTradeViewModel {
             publicCaption: draft.publicCaption,
             thumbnail: draft.imageURL.map { MediaReference(id: $0, kind: .image, altText: nil) },
             notePreview: draft.noteBody.map { String($0.prefix(140)) },
+            strategy: draft.strategy,
             createdAt: .now,
             updatedAt: .now
         )
+    }
+
+    private static func fixtureUpdatedTrade(from draft: TradeDraft, previous: Trade) -> Trade {
+        var trade = previous
+        trade.accountID = draft.accountID
+        trade.symbol = draft.symbol
+        trade.side = draft.side
+        trade.mode = draft.mode
+        trade.quantity = draft.quantity
+        trade.entryPrice = draft.entryPrice
+        trade.exitPrice = draft.exitPrice
+        trade.entryAt = draft.entryAt
+        trade.exitAt = draft.exitAt
+        trade.realizedPnL = draft.realizedPnL
+        trade.riskReward = draft.riskReward
+        trade.points = draft.points
+        trade.sessionLabel = draft.sessionLabel
+        trade.visibility = draft.visibility
+        trade.publicCaption = draft.publicCaption
+        trade.thumbnail = draft.imageURL.map { MediaReference(id: $0, kind: .image, altText: nil) }
+        trade.notePreview = draft.noteBody.map { String($0.prefix(140)) }
+        trade.strategy = draft.strategy
+        trade.updatedAt = .now
+        return trade
     }
 
     private static func userMessage(for error: Error) -> String {

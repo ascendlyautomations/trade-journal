@@ -11,7 +11,7 @@ final class BackgroundTransferSupport: NSObject, @unchecked Sendable {
 
     init(
         configuration: NetworkConfiguration,
-        sessionIdentifier: String = "com.tradetraxs.ios.background.transfer"
+        sessionIdentifier: String = "com.tradetraxs.TradeTraxs.background.transfer"
     ) {
         self.configuration = configuration
         self.sessionIdentifier = sessionIdentifier

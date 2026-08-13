@@ -39,6 +39,8 @@ enum ActivityFixtures {
                 messagePreview: nil,
                 reportID: nil,
                 affiliateHref: nil,
+                isReply: false,
+                isMention: false,
                 createdAt: now.addingTimeInterval(-120),
                 isRead: false
             ),
@@ -65,6 +67,8 @@ enum ActivityFixtures {
                 messagePreview: nil,
                 reportID: nil,
                 affiliateHref: nil,
+                isReply: false,
+                isMention: false,
                 createdAt: now.addingTimeInterval(-3_600),
                 isRead: false
             ),
@@ -91,6 +95,8 @@ enum ActivityFixtures {
                 messagePreview: nil,
                 reportID: nil,
                 affiliateHref: nil,
+                isReply: false,
+                isMention: false,
                 createdAt: now.addingTimeInterval(-10_800),
                 isRead: true
             ),
@@ -117,6 +123,8 @@ enum ActivityFixtures {
                 messagePreview: "check this NQ level",
                 reportID: nil,
                 affiliateHref: nil,
+                isReply: false,
+                isMention: true,
                 createdAt: now.addingTimeInterval(-90_000),
                 isRead: true
             ),
@@ -143,6 +151,8 @@ enum ActivityFixtures {
                 messagePreview: nil,
                 reportID: ReportID("weekly_last"),
                 affiliateHref: nil,
+                isReply: false,
+                isMention: false,
                 createdAt: now.addingTimeInterval(-200_000),
                 isRead: true
             ),

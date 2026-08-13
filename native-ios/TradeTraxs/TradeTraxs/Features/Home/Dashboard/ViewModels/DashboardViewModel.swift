@@ -18,7 +18,6 @@ final class DashboardViewModel {
     private(set) var phase: DashboardLoadPhase = .idle
     private(set) var summary: DashboardChartMetrics.Summary?
     private(set) var accounts: [TradingAccount] = []
-    private(set) var recentTrades: [Trade] = []
     private(set) var accountNames: [TradingAccountID: String] = [:]
     private(set) var isRefreshing = false
 
@@ -65,6 +64,9 @@ final class DashboardViewModel {
         case .all:
             return "All Accounts"
         case .account(let id):
+            if let account = accounts.first(where: { $0.id == id }) {
+                return TradingAccountDisplay.title(for: account, audience: .owner)
+            }
             return accountNames[id] ?? "Account"
         }
     }
@@ -128,14 +130,7 @@ final class DashboardViewModel {
     }
 
     func accountMenuTitle(for account: TradingAccount) -> String {
-        if account.isPropFirmAccount {
-            let size = account.size.map { DashboardViewModel.compactSize($0.amount) }
-            if let size {
-                return "\(account.name) \(size)  PROP"
-            }
-            return "\(account.name)  PROP"
-        }
-        return account.name
+        TradingAccountDisplay.title(for: account, audience: .owner)
     }
 
     func openPropFirmDetails() {
@@ -205,14 +200,16 @@ final class DashboardViewModel {
         isRefreshing = false
     }
 
-    /// Mutation observer — patch when possible; never full refetch for a single insert.
+    /// Mutation observer — patch when possible; never full refetch for a single insert/update/delete.
     func handleJournalMutation() {
-        if let trade = TradeJournalMutationStore.shared.latestCreatedTrade {
+        switch TradeJournalMutationStore.shared.latest {
+        case .created(let trade), .updated(let trade):
             upsertTrade(trade)
-            return
+        case .deleted(let id, _):
+            removeTrade(id: id)
+        case .bulkImport, .none:
+            Task { await refresh() }
         }
-        // Bulk import — revalidate once.
-        Task { await refresh() }
     }
 
     func handleAccountMutation() {
@@ -244,13 +241,13 @@ final class DashboardViewModel {
         navigationCoordinator.openSettings([.tradingAccounts])
     }
 
-    func openTrade(_ trade: Trade) {
-        detailCache.seed(trade)
-        navigationCoordinator.open(.home(.tradeDetail(trade.id)))
-    }
-
     func openTradesList() {
         navigationCoordinator.open(.home(.trades))
+    }
+
+    func openReports() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.open(.home(.reports))
     }
 
     func onDisappear() {
@@ -502,6 +499,14 @@ final class DashboardViewModel {
         recompute()
     }
 
+    private func removeTrade(id: TradeID) {
+        guard hasLoaded else { return }
+        SessionNetworkProbe.record(.localMutation, resource: "dashboard.trades.remove", detail: id.rawValue)
+        detailCache.removeTrade(id: id)
+        tradeInputs.removeAll { $0.trade.id == id }
+        recompute()
+    }
+
     private func reloadAccountsOnly() async {
         guard let profileID else { return }
         do {
@@ -542,18 +547,6 @@ final class DashboardViewModel {
             payoutTotal: payoutTotal
         )
         summary = result
-        recentTrades = tradeInputs
-            .map(\.trade)
-            .filter { trade in
-                switch accountFilter {
-                case .all: return true
-                case .account(let id): return trade.accountID == id
-                }
-            }
-            .filter { dateRange.contains($0.exitAt ?? $0.entryAt) }
-            .sorted { $0.createdAt > $1.createdAt }
-            .prefix(8)
-            .map { $0 }
     }
 
     // MARK: - Realtime (idle subscribe — no polling)

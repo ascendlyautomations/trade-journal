@@ -17,6 +17,7 @@ enum SheetDestination: String, Identifiable, Hashable, Codable, Sendable {
 /// Focused multi-step flows — compose, import, onboarding adjacent, upgrade, media.
 enum FullScreenDestination: Hashable, Identifiable, Codable, Sendable {
     case addTrade
+    case editTrade(TradeID)
     case importCSV
     case importReview
     case newPost
@@ -30,6 +31,7 @@ enum FullScreenDestination: Hashable, Identifiable, Codable, Sendable {
     var id: String {
         switch self {
         case .addTrade: return "addTrade"
+        case .editTrade(let id): return "editTrade.\(id.rawValue)"
         case .importCSV: return "importCSV"
         case .importReview: return "importReview"
         case .newPost: return "newPost"

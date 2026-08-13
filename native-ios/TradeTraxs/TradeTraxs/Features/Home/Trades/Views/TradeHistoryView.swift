@@ -164,7 +164,7 @@ struct TradeHistoryView: View {
                 ForEach(viewModel.items) { trade in
                     TradeJournalCard(
                         trade: trade,
-                        accountName: trade.accountID.flatMap { viewModel.accountNames[$0] },
+                        accountName: viewModel.displayAccountTitle(for: trade.accountID),
                         imagePipeline: imagePipeline,
                         onOpen: { viewModel.openTrade(trade) }
                     )

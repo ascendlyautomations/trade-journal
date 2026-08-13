@@ -2,8 +2,11 @@ import Foundation
 import OSLog
 import SwiftUI
 
-/// Clean lifecycle entry points. No business logic — log + future hooks only.
+/// Clean lifecycle entry points. No business logic — log + push refresh hooks.
 final class AppLifecycleHandler {
+    /// Bound by ``TradeTraxsApp`` after composition.
+    var pushNotifications: PushNotificationCenter?
+
     func handle(scenePhase: ScenePhase) {
         switch scenePhase {
         case .active:
@@ -19,7 +22,10 @@ final class AppLifecycleHandler {
 
     func applicationDidBecomeActive() {
         AppLog.application.info("Lifecycle: foreground / active")
-        // Future: refresh entitlements, resume realtime, etc.
+        Task { @MainActor in
+            await pushNotifications?.refreshAuthorizationStatus()
+            pushNotifications?.syncBadgeFromActivity()
+        }
     }
 
     func applicationWillResignActive() {

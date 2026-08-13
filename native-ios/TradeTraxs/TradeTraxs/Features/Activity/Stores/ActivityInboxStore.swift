@@ -47,6 +47,7 @@ final class ActivityInboxStore {
         hasLoaded = true
         hasBootstrappedUnread = true
         lastLoadedAt = .now
+        AppIconBadgeController.shared.setBadge(self.unreadCount, animated: true)
     }
 
     func append(page items: [ActivityNotification], nextCursor: String?) {
@@ -89,12 +90,14 @@ final class ActivityInboxStore {
         }
         items = Self.sortNewestFirst(next)
         hasLoaded = true
+        AppIconBadgeController.shared.setBadge(unreadCount, animated: true)
     }
 
     func remove(id: NotificationID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         if !items[index].isRead {
             unreadCount = max(0, unreadCount - 1)
+            AppIconBadgeController.shared.setBadge(unreadCount, animated: true)
         }
         items.remove(at: index)
     }
@@ -106,6 +109,7 @@ final class ActivityInboxStore {
         // Reassign for Observation.
         items = items
         unreadCount = max(0, unreadCount - 1)
+        AppIconBadgeController.shared.setBadge(unreadCount, animated: true)
     }
 
     func markAllReadLocally() {
@@ -115,10 +119,12 @@ final class ActivityInboxStore {
             return copy
         }
         unreadCount = 0
+        AppIconBadgeController.shared.setBadge(0, animated: true)
     }
 
     func setUnreadCount(_ count: Int) {
         unreadCount = max(0, count)
+        AppIconBadgeController.shared.setBadge(unreadCount, animated: true)
     }
 
     /// Dashboard bell path — unread count + Realtime only (no Activity feed hydration).
@@ -342,6 +348,7 @@ final class ActivityInboxStore {
         startedForUserID = nil
         isStarting = false
         isBootstrappingUnread = false
+        AppIconBadgeController.shared.clear()
     }
 
     func resetForTesting() {

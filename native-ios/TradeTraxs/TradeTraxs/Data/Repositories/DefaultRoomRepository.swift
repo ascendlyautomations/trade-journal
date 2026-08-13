@@ -17,18 +17,28 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
     }
 
     func room(id: RoomID) async throws -> TradeRoom {
-        let dto: RoomDTO.Room = try await supabase.database.selectOne(
+        // Push / community deep links may pass slug in the `room` query — resolve id then slug.
+        let dto: RoomDTO.Room
+        if let byID = try? await supabase.database.selectOne(
             RoomDTO.Room.self,
             from: "rooms",
             query: [SupabaseQuery.select("*"), SupabaseQuery.eq("id", id.rawValue)]
-        )
+        ) {
+            dto = byID
+        } else {
+            dto = try await supabase.database.selectOne(
+                RoomDTO.Room.self,
+                from: "rooms",
+                query: [SupabaseQuery.select("*"), SupabaseQuery.eq("slug", id.rawValue)]
+            )
+        }
         var room = try mapRoom(dto)
         // Exact web `loadMemberStats` active count:
         // room_members where room_id = ? and left_at is null (count exact).
         if let active = try? await supabase.database.count(
             from: "room_members",
             query: [
-                SupabaseQuery.eq("room_id", id.rawValue),
+                SupabaseQuery.eq("room_id", room.id.rawValue),
                 URLQueryItem(name: "left_at", value: "is.null"),
             ]
         ) {

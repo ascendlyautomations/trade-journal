@@ -69,7 +69,7 @@ nonisolated struct PropFirmStatusSnapshot: Hashable, Sendable, Identifiable {
 
         return PropFirmStatusSnapshot(
             accountID: account.id,
-            accountName: account.name,
+            accountName: TradingAccountDisplay.title(for: account, audience: .owner),
             phaseLabel: phaseLabel,
             statusLabel: statusLabel,
             startingBalance: metrics.startingBalance,

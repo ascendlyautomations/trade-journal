@@ -26,6 +26,9 @@ struct TradeTraxsApp: App {
             .environment(appEnvironment.currentUserProfile)
             .onAppear {
                 appDelegate.lifecycle = appEnvironment.lifecycle
+                appDelegate.pushNotifications = appEnvironment.pushNotifications
+                appEnvironment.lifecycle.pushNotifications = appEnvironment.pushNotifications
+                appEnvironment.pushNotifications.bindIfNeeded()
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-uitesting-reset-auth") {
                     Task {

@@ -13,7 +13,8 @@ enum AddTradeFixtures {
                 mode: .live,
                 size: Money(amount: 25_000),
                 isActive: true,
-                canAddTrades: true
+                canAddTrades: true,
+                accountNumber: "10001"
             ),
             TradingAccount(
                 id: TradingAccountID("dev.addtrade.prop"),
@@ -24,6 +25,7 @@ enum AddTradeFixtures {
                 size: Money(amount: 50_000),
                 isActive: true,
                 canAddTrades: true,
+                accountNumber: "500123",
                 propFirmRules: PropFirmAccountRules(maxDrawdown: 2_000, profitTarget: 3_000)
             ),
             TradingAccount(
@@ -34,7 +36,8 @@ enum AddTradeFixtures {
                 mode: .live,
                 size: Money(amount: 10_000),
                 isActive: true,
-                canAddTrades: false
+                canAddTrades: false,
+                accountNumber: "99999"
             ),
         ]
     }

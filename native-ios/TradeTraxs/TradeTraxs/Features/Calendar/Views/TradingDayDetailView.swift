@@ -127,7 +127,7 @@ struct TradingDayDetailView: View {
                 ForEach(viewModel.dayTrades) { trade in
                     ProfileTradeCard(
                         trade: trade,
-                        accountName: trade.accountID.flatMap { viewModel.accountNames[$0] },
+                        accountName: viewModel.displayAccountTitle(for: trade.accountID),
                         imagePipeline: imagePipeline,
                         engagementStore: engagementStore,
                         showsOwnerActions: false,
@@ -152,6 +152,7 @@ final class CalendarDayDetailLoader {
     private(set) var summary: TradingDaySummary?
     private(set) var dayTrades: [Trade] = []
     private(set) var accountNames: [TradingAccountID: String] = [:]
+    private var accounts: [TradingAccount] = []
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
@@ -172,6 +173,21 @@ final class CalendarDayDetailLoader {
         self.detailCache = detailCache
     }
 
+    func displayAccountTitle(for accountID: TradingAccountID?) -> String? {
+        guard let accountID else { return nil }
+        if let account = accounts.first(where: { $0.id == accountID }) {
+            return TradingAccountDisplay.optionalTitle(
+                name: account.name,
+                accountNumber: account.accountNumber,
+                audience: .owner
+            )
+        }
+        return TradingAccountDisplay.optionalTitle(
+            name: accountNames[accountID],
+            audience: .owner
+        )
+    }
+
     func loadIfNeeded() {
         guard !hasLoaded else { return }
         hasLoaded = true
@@ -184,10 +200,10 @@ final class CalendarDayDetailLoader {
         let userID = await session.currentUserID
         let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
 
-        if let accounts = SessionAccountsStore.shared.cached(for: profileID)
+        if let loaded = SessionAccountsStore.shared.cached(for: profileID)
             ?? detailCache.accounts(for: profileID)
         {
-            accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+            applyAccounts(loaded)
         }
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
@@ -204,13 +220,13 @@ final class CalendarDayDetailLoader {
         }
 
         do {
-            if accountNames.isEmpty {
-                let accounts = try await SessionAccountsStore.shared.accounts(
+            if accounts.isEmpty {
+                let loaded = try await SessionAccountsStore.shared.accounts(
                     for: profileID,
                     detailCache: detailCache,
                     repository: trades
                 )
-                accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+                applyAccounts(loaded)
             }
 
             // Day detail is a reader of the month session cache owned by Calendar home.
@@ -252,6 +268,11 @@ final class CalendarDayDetailLoader {
     func openTrade(_ trade: Trade, navigation: NavigationCoordinator) {
         detailCache.seed(trade)
         navigation.open(.home(.tradeDetail(trade.id)))
+    }
+
+    private func applyAccounts(_ loaded: [TradingAccount]) {
+        accounts = loaded
+        accountNames = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0.name) })
     }
 
     private func apply(_ trades: [Trade]) {

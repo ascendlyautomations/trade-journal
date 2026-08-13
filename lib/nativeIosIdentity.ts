@@ -1,15 +1,16 @@
 /**
- * Production iOS application identity.
+ * Production iOS application identity — native Swift app is the single source of truth.
  *
  * Must stay identical across:
- * - Xcode PRODUCT_BUNDLE_IDENTIFIER
- * - Capacitor `appId`
- * - Info.plist CFBundleURLSchemes / CFBundleURLName
- * - APNs topic (APNS_BUNDLE_ID / default)
+ * - Xcode PRODUCT_BUNDLE_IDENTIFIER (`native-ios/TradeTraxs`)
+ * - APNs topic (`APNS_BUNDLE_ID` / default)
  * - Apple Developer App ID
- * - Future Sign in with Apple / Associated Domains bindings
+ * - Apple App Site Association `appID`
+ *
+ * Custom URL scheme is registered separately in Info.plist (`tradetraxs`) and is
+ * intentionally not required to equal the bundle identifier.
  */
-export const NATIVE_IOS_APP_ID = "com.tradetraxs.ios" as const
+export const NATIVE_IOS_APP_ID = "com.tradetraxs.TradeTraxs" as const
 
-/** Custom URL scheme used for native OAuth return (same string as the App ID). */
-export const NATIVE_IOS_URL_SCHEME = NATIVE_IOS_APP_ID
+/** Custom URL scheme from native Info.plist / OAuth return path. */
+export const NATIVE_IOS_URL_SCHEME = "tradetraxs" as const

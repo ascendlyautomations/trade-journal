@@ -79,12 +79,27 @@ enum CompositionRoot {
             detailCache: data.detailCache
         )
 
+        let pushNotifications = PushNotificationCenter(
+            tokenClient: DevicePushTokenClient(transport: transport),
+            navigation: navigation
+        )
+        pushNotifications.attachNotificationsRepository(data.notifications)
+
         // Session caches belong to the authenticated user — invalidate on logout / switch.
         authentication.coordinator.invalidateSessionCaches = {
+            pushNotifications.unregisterForLogout()
             SessionScopedCaches.invalidate(
                 currentUserProfile: currentUserProfile,
                 data: data
             )
+        }
+        authentication.coordinator.onAuthenticatedSessionBound = {
+            pushNotifications.syncRegistrationForAuthenticatedSession()
+        }
+
+        // Cold restore already authenticated — register once the graph exists.
+        if authentication.manager.state.isAuthenticated {
+            pushNotifications.syncRegistrationForAuthenticatedSession()
         }
 
         return AppEnvironment(
@@ -93,7 +108,8 @@ enum CompositionRoot {
             dependencies: dependencies,
             lifecycle: lifecycle,
             themeManager: themeManager,
-            currentUserProfile: currentUserProfile
+            currentUserProfile: currentUserProfile,
+            pushNotifications: pushNotifications
         )
     }
 

@@ -27,6 +27,8 @@ nonisolated protocol TradeRepository: Sendable {
     ) async throws -> CursorPage<Trade>
     func save(_ draft: TradeDraft) async throws -> Trade
     func update(_ trade: Trade) async throws -> Trade
+    /// Web `InputTradeForm` edit path — draft fields + preserve `created_at` / sync public post.
+    func update(id: TradeID, draft: TradeDraft, previous: Trade) async throws -> Trade
     func delete(id: TradeID) async throws
     func images(for tradeID: TradeID) async throws -> [TradeImage]
     func notes(for tradeID: TradeID) async throws -> [TradeNote]
@@ -61,6 +63,37 @@ extension TradeRepository {
             }
         }
         return result
+    }
+
+    /// Default for stubs — synthesize domain trade then call ``update(_:)``.
+    func update(id: TradeID, draft: TradeDraft, previous: Trade) async throws -> Trade {
+        var trade = previous
+        trade.id = id
+        trade.accountID = draft.accountID
+        trade.symbol = draft.symbol
+        trade.side = draft.side
+        trade.mode = draft.mode
+        trade.quantity = draft.quantity
+        trade.entryPrice = draft.entryPrice
+        trade.exitPrice = draft.exitPrice
+        trade.entryAt = draft.entryAt
+        trade.exitAt = draft.exitAt
+        trade.realizedPnL = draft.realizedPnL
+        trade.riskReward = draft.riskReward
+        trade.points = draft.points
+        trade.sessionLabel = draft.sessionLabel
+        trade.strategy = draft.strategy
+        trade.visibility = draft.visibility
+        trade.publicCaption = draft.publicCaption
+        trade.notePreview = draft.noteBody
+        if let imageURL = draft.imageURL, !imageURL.isEmpty {
+            trade.thumbnail = MediaReference(id: imageURL, kind: .image, altText: nil)
+        } else {
+            // nil / empty clears screenshot (web `removeScreenshot`).
+            trade.thumbnail = nil
+        }
+        trade.updatedAt = Date()
+        return try await update(trade)
     }
 
     func createAccount(ownerID: ProfileID, draft: TradingAccountDraft) async throws -> TradingAccount {

@@ -42,6 +42,10 @@ final class DataEnvironment {
     let interactions: any InteractionRepository
     /// Session-scoped engagement cache shared by lists + detail.
     let engagementStore: EngagementStore
+    /// Shared BFF AI contracts (analyze-trade, future coach endpoints).
+    let ai: any AIRepository
+    /// Dashboard Trading Reports — web-parity deterministic generator + notify.
+    let tradingReports: any TradingReportRepository
 
     init(
         configuration: DataConfiguration,
@@ -76,7 +80,9 @@ final class DataEnvironment {
         authentication: any AuthenticationRepository,
         home: any HomeRepository,
         interactions: any InteractionRepository,
-        engagementStore: EngagementStore
+        engagementStore: EngagementStore,
+        ai: any AIRepository,
+        tradingReports: any TradingReportRepository
     ) {
         self.configuration = configuration
         self.supabase = supabase
@@ -111,6 +117,8 @@ final class DataEnvironment {
         self.home = home
         self.interactions = interactions
         self.engagementStore = engagementStore
+        self.ai = ai
+        self.tradingReports = tradingReports
     }
 
     static func make(
@@ -168,6 +176,12 @@ final class DataEnvironment {
             supabase: supabase,
             session: session
         )
+        let tradesRepository: any TradeRepository = DefaultTradeRepository(
+            supabase: supabase,
+            cache: cache,
+            session: session
+        )
+        let detailCache = DetailPresentationCache()
 
         return DataEnvironment(
             configuration: configuration,
@@ -182,8 +196,8 @@ final class DataEnvironment {
             objectStorage: storage,
             edgeFunctions: edgeFunctions,
             rpc: rpc,
-            detailCache: DetailPresentationCache(),
-            trades: DefaultTradeRepository(supabase: supabase, cache: cache, session: session),
+            detailCache: detailCache,
+            trades: tradesRepository,
             profiles: profiles,
             feed: DefaultFeedRepository(supabase: supabase, cache: cache, session: session),
             messages: DefaultMessageRepository(supabase: supabase, cache: cache, session: session),
@@ -212,7 +226,14 @@ final class DataEnvironment {
             authentication: DefaultAuthenticationRepository(manager: authenticationManager),
             home: DefaultHomeRepository(supabase: supabase, cache: cache, session: session),
             interactions: interactions,
-            engagementStore: EngagementStore(repository: interactions)
+            engagementStore: EngagementStore(repository: interactions),
+            ai: DefaultAIRepository(supabase: supabase, session: session),
+            tradingReports: DefaultTradingReportRepository(
+                trades: tradesRepository,
+                session: session,
+                detailCache: detailCache,
+                supabase: supabase
+            )
         )
     }
 }

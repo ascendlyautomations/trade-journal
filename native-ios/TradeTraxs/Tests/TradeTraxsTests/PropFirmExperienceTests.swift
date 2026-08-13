@@ -100,7 +100,11 @@ final class PropFirmExperienceTests: XCTestCase {
         if let prop = viewModel.accounts.first(where: \.isPropFirmAccount) {
             viewModel.setAccountFilter(.account(prop.id))
             XCTAssertNotNil(viewModel.propFirmStatus)
-            XCTAssertTrue(viewModel.accountMenuTitle(for: prop).contains("PROP"))
+            XCTAssertEqual(
+                viewModel.accountMenuTitle(for: prop),
+                TradingAccountDisplay.title(for: prop, audience: .owner)
+            )
+            XCTAssertTrue(viewModel.accountMenuTitle(for: prop).contains("•"))
 
             store.sessionPhase = .authenticated
             viewModel.openPropFirmDetails()

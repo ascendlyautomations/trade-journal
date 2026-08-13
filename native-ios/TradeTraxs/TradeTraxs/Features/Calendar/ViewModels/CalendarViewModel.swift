@@ -47,7 +47,11 @@ final class CalendarViewModel {
     var accountFilterTitle: String {
         switch accountFilter {
         case .all: return "All Accounts"
-        case .account(let id): return accountNames[id] ?? "Account"
+        case .account(let id):
+            if let account = accounts.first(where: { $0.id == id }) {
+                return TradingAccountDisplay.title(for: account, audience: .owner)
+            }
+            return accountNames[id] ?? "Account"
         }
     }
 
@@ -59,10 +63,7 @@ final class CalendarViewModel {
     }
 
     func accountMenuTitle(for account: TradingAccount) -> String {
-        if account.isPropFirmAccount {
-            return "\(account.name)"
-        }
-        return account.name
+        TradingAccountDisplay.title(for: account, audience: .owner)
     }
 
     func loadIfNeeded() {
@@ -86,11 +87,14 @@ final class CalendarViewModel {
     }
 
     func handleJournalMutation() {
-        if let trade = TradeJournalMutationStore.shared.latestCreatedTrade {
+        switch TradeJournalMutationStore.shared.latest {
+        case .created(let trade), .updated(let trade):
             applyRealtimeUpsert(trade)
-            return
+        case .deleted(let id, _):
+            applyRealtimeDelete(id: id)
+        case .bulkImport, .none:
+            Task { await refresh() }
         }
-        Task { await refresh() }
     }
 
     func handleAccountMutation() {

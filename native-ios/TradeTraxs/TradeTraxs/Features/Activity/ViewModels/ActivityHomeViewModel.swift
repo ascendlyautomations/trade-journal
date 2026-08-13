@@ -77,7 +77,18 @@ final class ActivityHomeViewModel {
 
     func open(_ row: ActivityRowModel) {
         if row.isUnread {
-            markRead(id: row.id)
+            for id in row.groupedNotificationIDs {
+                markRead(id: id)
+            }
+        }
+        if let roomID = row.notification.roomID,
+           row.notification.kind == .roomMention || row.notification.kind == .roomJoin
+        {
+            RoomNavigationFocusStore.shared.seed(
+                roomID: roomID,
+                sectionID: row.notification.sectionID,
+                messageID: row.notification.roomMessageID?.rawValue
+            )
         }
         let destination = ActivityNotificationRouting.appDestination(
             for: row.notification,

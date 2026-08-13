@@ -51,9 +51,7 @@ final class TradeDetailExperienceTests: XCTestCase {
         let trade = ProfileTradeFixtures.samples(owner: profileID)[0]
         let cache = environment.data.detailCache
         cache.seed(trade)
-        cache.seed(accountNames: ProfileTradeFixtures.accountNames())
-        cache.seed(accountModes: ProfileTradeFixtures.accountModes())
-        cache.seed(accountSizes: ProfileTradeFixtures.accountSizes())
+        cache.seed(accounts: PropFirmFixtures.accounts(owner: profileID), for: profileID)
 
         let viewModel = TradeDetailViewModel(
             tradeID: trade.id,
@@ -61,7 +59,8 @@ final class TradeDetailExperienceTests: XCTestCase {
             profiles: environment.data.profiles,
             session: environment.data.session,
             imagePipeline: environment.data.imagePipeline,
-            cache: cache
+            cache: cache,
+            navigationCoordinator: environment.navigation.coordinator
         )
         viewModel.loadIfNeeded()
         for _ in 0..<30 {
@@ -69,7 +68,9 @@ final class TradeDetailExperienceTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
         XCTAssertEqual(viewModel.accountName, "Alpha Futures")
-        XCTAssertEqual(viewModel.accountIdentityLine, "Alpha Futures 50K Eval")
+        // Non-owner session → public title never includes account number.
+        XCTAssertEqual(viewModel.accountIdentityLine, "Alpha Futures")
+        XCTAssertFalse(viewModel.accountIdentityLine?.contains("500123") == true)
         XCTAssertEqual(viewModel.mediaReference?.id.contains("http"), true)
     }
 
@@ -82,47 +83,34 @@ final class TradeDetailExperienceTests: XCTestCase {
         XCTAssertEqual(TradeDisplay.sideTitle(.short), "Short")
     }
 
-    func testAccountIdentityLineCombinesNameSizeAndStatus() {
+    func testAccountIdentityLineUsesOwnerVersusPublicRules() {
         XCTAssertEqual(
             TradeDisplay.accountIdentityLine(
                 name: "Alpha Futures",
                 size: 50_000,
-                mode: .evaluation
+                mode: .evaluation,
+                accountNumber: "500123",
+                audience: .owner
             ),
-            "Alpha Futures 50K Eval"
+            "Alpha Futures • 500123"
         )
         XCTAssertEqual(
             TradeDisplay.accountIdentityLine(
                 name: "Alpha Futures",
-                size: 150_000,
-                mode: .funded
+                size: 50_000,
+                mode: .evaluation,
+                accountNumber: "500123",
+                audience: .public
             ),
-            "Alpha Futures 150K Funded"
-        )
-        XCTAssertEqual(
-            TradeDisplay.accountIdentityLine(
-                name: "Topstep",
-                size: 100_000,
-                mode: .funded
-            ),
-            "Topstep 100K Funded"
+            "Alpha Futures"
         )
         XCTAssertEqual(
             TradeDisplay.accountIdentityLine(
                 name: "Tradovate Personal",
-                size: nil,
-                mode: .live
+                accountNumber: nil,
+                audience: .owner
             ),
-            "Tradovate Personal Live"
-        )
-        // Do not duplicate size when already present in the name.
-        XCTAssertEqual(
-            TradeDisplay.accountIdentityLine(
-                name: "Apex 50K",
-                size: 50_000,
-                mode: .funded
-            ),
-            "Apex 50K Funded"
+            "Tradovate Personal"
         )
     }
 

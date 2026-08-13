@@ -96,8 +96,13 @@ nonisolated enum ActivityNotificationFormatting {
 
     static func roomChannelTitle(roomName: String?, sectionName: String?) -> String {
         let room = roomName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let section = sectionName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !room.isEmpty, !section.isEmpty { return "\(room) · \(section)" }
+        let rawSection = sectionName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let section: String = {
+            guard !rawSection.isEmpty else { return "" }
+            if rawSection.hasPrefix("#") { return rawSection }
+            return "#\(rawSection)"
+        }()
+        if !room.isEmpty, !section.isEmpty { return "\(room) • \(section)" }
         if !room.isEmpty { return room }
         if !section.isEmpty { return section }
         return "Trade Room"

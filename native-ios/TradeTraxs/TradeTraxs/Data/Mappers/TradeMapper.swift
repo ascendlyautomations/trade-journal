@@ -124,6 +124,41 @@ nonisolated enum TradeMapper: DTOMapper {
         )
     }
 
+    /// Web edit save — preserve `created_at`; write denormalized account columns like insert.
+    static func updateBody(from draft: TradeDraft, createdAt: Date) -> TradeDTO.UpdateBody {
+        let tradeDate = TradingSessionLabel.easternTradeDateString(from: draft.entryAt)
+        let session = draft.sessionLabel
+            ?? TradingSessionLabel.session(from: draft.entryAt)
+            ?? "NY"
+        let modeLabel = draft.accountModeLabel ?? draft.mode.rawValue
+        return TradeDTO.UpdateBody(
+            account_id: draft.accountID?.rawValue,
+            account_name: draft.accountName,
+            account_size: draft.accountSizeLabel,
+            account_type: modeLabel,
+            account_category: draft.accountCategoryLabel,
+            ticker: draft.symbol.ticker.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+            direction: draft.side == .long ? "Long" : "Short",
+            mode: modeLabel,
+            contracts: NSDecimalNumber(decimal: draft.quantity).doubleValue,
+            entry_price: draft.entryPrice.map { NSDecimalNumber(decimal: $0).doubleValue },
+            exit_price: draft.exitPrice.map { NSDecimalNumber(decimal: $0).doubleValue },
+            entry_time: ISO8601.string(from: draft.entryAt),
+            exit_time: draft.exitAt.map(ISO8601.string(from:)),
+            trade_date: tradeDate,
+            pnl: draft.realizedPnL.map { NSDecimalNumber(decimal: $0.amount).doubleValue } ?? 0,
+            rr: draft.riskReward.map { NSDecimalNumber(decimal: $0).doubleValue },
+            points: draft.points.map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0,
+            session: session,
+            strategy: Self.nilIfEmpty(draft.strategy),
+            notes: Self.nilIfEmpty(draft.noteBody),
+            image_url: draft.imageURL,
+            is_public: draft.visibility == .public,
+            public_description: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            created_at: ISO8601.string(from: createdAt)
+        )
+    }
+
     private static func nilIfEmpty(_ value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)

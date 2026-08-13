@@ -13,6 +13,8 @@ struct AppEnvironment {
     let themeManager: ThemeManager
     /// Session-scoped authenticated profile cache (header + tab avatar).
     let currentUserProfile: CurrentUserProfileStore
+    /// Centralized APNs registration + notification routing.
+    let pushNotifications: PushNotificationCenter
 
     /// Convenience access: CompositionRoot → AppEnvironment → DependencyContainer → Navigation
     var navigation: NavigationEnvironment { dependencies.navigation }

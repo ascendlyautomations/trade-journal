@@ -9,9 +9,7 @@ final class DetailExperienceTests: XCTestCase {
         let profileID = ProfileID("dev.detail-trade")
         let trade = ProfileTradeFixtures.samples(owner: profileID)[0]
         cache.seed(trade)
-        cache.seed(accountNames: ProfileTradeFixtures.accountNames())
-        cache.seed(accountModes: ProfileTradeFixtures.accountModes())
-        cache.seed(accountSizes: ProfileTradeFixtures.accountSizes())
+        cache.seed(accounts: PropFirmFixtures.accounts(owner: profileID), for: profileID)
 
         let viewModel = TradeDetailViewModel(
             tradeID: trade.id,
@@ -19,7 +17,8 @@ final class DetailExperienceTests: XCTestCase {
             profiles: environment.data.profiles,
             session: environment.data.session,
             imagePipeline: environment.data.imagePipeline,
-            cache: cache
+            cache: cache,
+            navigationCoordinator: environment.navigation.coordinator
         )
         viewModel.loadIfNeeded()
         for _ in 0..<20 {
@@ -31,7 +30,8 @@ final class DetailExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.trade?.id, trade.id)
         XCTAssertEqual(viewModel.trade?.symbol.ticker, "NQ")
         XCTAssertEqual(viewModel.accountName, "Alpha Futures")
-        XCTAssertEqual(viewModel.accountIdentityLine, "Alpha Futures 50K Eval")
+        // Public audience when session user ≠ trade owner.
+        XCTAssertEqual(viewModel.accountIdentityLine, "Alpha Futures")
         XCTAssertFalse(viewModel.notes.isEmpty)
     }
 

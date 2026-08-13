@@ -300,6 +300,53 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         return try TradeMapper.mapToDomain(dto)
     }
 
+    func update(id: TradeID, draft: TradeDraft, previous: Trade) async throws -> Trade {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let body = TradeMapper.updateBody(from: draft, createdAt: previous.createdAt)
+        let dto: TradeDTO.Trade = try await supabase.database.update(
+            body,
+            table: "trades",
+            query: [SupabaseQuery.eq("id", id.rawValue)],
+            returning: TradeDTO.Trade.self
+        )
+        let trade = try TradeMapper.mapToDomain(dto)
+
+        // Web edit: upsert public feed post, or delete when privatized.
+        if draft.visibility == .public {
+            struct PostUpsertRow: Decodable { var trade_id: String? }
+            let post = TradeDTO.TradePostInsertBody(
+                user_id: userID.rawValue,
+                trade_id: trade.id.rawValue,
+                image_url: draft.imageURL,
+                pnl: draft.realizedPnL.map { NSDecimalNumber(decimal: $0.amount).doubleValue },
+                rr: draft.riskReward.map { NSDecimalNumber(decimal: $0).doubleValue },
+                caption: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            )
+            do {
+                _ = try await supabase.database.upsert(
+                    post,
+                    into: "posts",
+                    onConflict: "trade_id",
+                    returning: PostUpsertRow.self,
+                    select: "trade_id"
+                )
+            } catch {
+                AppLog.networking.error(
+                    "Public trade post upsert failed — \(String(describing: error), privacy: .public)"
+                )
+            }
+        } else if previous.visibility == .public {
+            try? await supabase.database.delete(
+                from: "posts",
+                query: [SupabaseQuery.eq("trade_id", id.rawValue)]
+            )
+        }
+
+        return trade
+    }
+
     func delete(id: TradeID) async throws {
         struct Params: Encodable { var p_trade_id: String }
         let data = try JSONEncoder().encode(Params(p_trade_id: id.rawValue))

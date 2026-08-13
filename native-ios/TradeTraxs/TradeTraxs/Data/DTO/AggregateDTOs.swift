@@ -154,6 +154,72 @@ nonisolated enum TradeDTO {
         var rr: Double?
         var caption: String
     }
+
+    /// Partial update body — mirrors web `InputTradeForm` edit `updateRow` core journal columns.
+    /// Psychology / review-only columns are omitted so native edit does not wipe web-only fields.
+    struct UpdateBody: Encodable, Sendable {
+        var account_id: String?
+        var account_name: String?
+        var account_size: String?
+        var account_type: String?
+        var account_category: String?
+        var ticker: String
+        var direction: String
+        var mode: String?
+        var contracts: Double
+        var entry_price: Double?
+        var exit_price: Double?
+        var entry_time: String?
+        var exit_time: String?
+        var trade_date: String?
+        var pnl: Double?
+        var rr: Double?
+        var points: Double?
+        var session: String?
+        var strategy: String?
+        var notes: String?
+        /// Explicit optional — always encoded (null clears screenshot like web `removeScreenshot`).
+        var image_url: String?
+        var is_public: Bool
+        var public_description: String?
+        var created_at: String
+
+        enum CodingKeys: String, CodingKey {
+            case account_id, account_name, account_size, account_type, account_category
+            case ticker, direction, mode, contracts
+            case entry_price, exit_price, entry_time, exit_time, trade_date
+            case pnl, rr, points, session, strategy, notes, image_url
+            case is_public, public_description, created_at
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(account_id, forKey: .account_id)
+            try container.encodeIfPresent(account_name, forKey: .account_name)
+            try container.encodeIfPresent(account_size, forKey: .account_size)
+            try container.encodeIfPresent(account_type, forKey: .account_type)
+            try container.encodeIfPresent(account_category, forKey: .account_category)
+            try container.encode(ticker, forKey: .ticker)
+            try container.encode(direction, forKey: .direction)
+            try container.encodeIfPresent(mode, forKey: .mode)
+            try container.encode(contracts, forKey: .contracts)
+            try container.encodeIfPresent(entry_price, forKey: .entry_price)
+            try container.encodeIfPresent(exit_price, forKey: .exit_price)
+            try container.encodeIfPresent(entry_time, forKey: .entry_time)
+            try container.encodeIfPresent(exit_time, forKey: .exit_time)
+            try container.encodeIfPresent(trade_date, forKey: .trade_date)
+            try container.encodeIfPresent(pnl, forKey: .pnl)
+            try container.encodeIfPresent(rr, forKey: .rr)
+            try container.encodeIfPresent(points, forKey: .points)
+            try container.encodeIfPresent(session, forKey: .session)
+            try container.encodeIfPresent(strategy, forKey: .strategy)
+            try container.encodeIfPresent(notes, forKey: .notes)
+            try container.encode(image_url, forKey: .image_url)
+            try container.encode(is_public, forKey: .is_public)
+            try container.encodeIfPresent(public_description, forKey: .public_description)
+            try container.encode(created_at, forKey: .created_at)
+        }
+    }
 }
 
 nonisolated enum ProfileDTO {

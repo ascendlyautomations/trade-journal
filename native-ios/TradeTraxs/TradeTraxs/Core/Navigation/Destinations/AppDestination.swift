@@ -38,6 +38,10 @@ struct NotificationDestination: Hashable, Sendable {
     let conversationID: ConversationID?
     let roomID: RoomID?
     let reportID: ReportID?
+    /// Trade Room channel (`section_id`) when present.
+    let sectionID: String?
+    /// Trade Room / comment message id for highlight deep links.
+    let messageID: String?
     let rawUserInfo: [String: String]
 
     enum NotificationCategory: String, Hashable, Codable, Sendable {
@@ -48,6 +52,34 @@ struct NotificationDestination: Hashable, Sendable {
         case followRequest
         case tradingReport
         case unknown
+    }
+
+    init(
+        category: NotificationCategory,
+        threadID: String?,
+        tradeID: TradeID?,
+        postID: PostID?,
+        reelID: ReelID?,
+        profileID: ProfileID?,
+        conversationID: ConversationID?,
+        roomID: RoomID?,
+        reportID: ReportID?,
+        sectionID: String? = nil,
+        messageID: String? = nil,
+        rawUserInfo: [String: String]
+    ) {
+        self.category = category
+        self.threadID = threadID
+        self.tradeID = tradeID
+        self.postID = postID
+        self.reelID = reelID
+        self.profileID = profileID
+        self.conversationID = conversationID
+        self.roomID = roomID
+        self.reportID = reportID
+        self.sectionID = sectionID
+        self.messageID = messageID
+        self.rawUserInfo = rawUserInfo
     }
 }
 

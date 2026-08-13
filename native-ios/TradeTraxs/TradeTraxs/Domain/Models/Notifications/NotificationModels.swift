@@ -79,6 +79,10 @@ nonisolated struct ActivityNotification: Hashable, Codable, Sendable, Identifiab
     var messagePreview: String?
     var reportID: ReportID?
     var affiliateHref: String?
+    /// Comment reply — never group with ordinary comments.
+    var isReply: Bool
+    /// @mention — never group; always deep-link individually.
+    var isMention: Bool
     var createdAt: Date
     var isRead: Bool
 }

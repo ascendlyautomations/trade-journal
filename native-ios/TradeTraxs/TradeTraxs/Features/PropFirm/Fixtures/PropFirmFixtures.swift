@@ -6,6 +6,7 @@ enum PropFirmFixtures {
 
     static func accounts(owner profileID: ProfileID) -> [TradingAccount] {
         let names = ProfileTradeFixtures.accountNames()
+        let numbers = ProfileTradeFixtures.accountNumbers()
         let modes = ProfileTradeFixtures.accountModes()
         let sizes = ProfileTradeFixtures.accountSizes()
         return names.map { id, name in
@@ -19,6 +20,7 @@ enum PropFirmFixtures {
                 size: sizes[id].map { Money(amount: $0) } ?? Money(amount: 50_000),
                 isActive: true,
                 canAddTrades: true,
+                accountNumber: numbers[id],
                 propFirmRules: isProp
                     ? PropFirmAccountRules(
                         consistencyPercent: 40,

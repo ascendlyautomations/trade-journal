@@ -11,6 +11,7 @@ enum AppIcon: String, CaseIterable, Sendable {
     case settings = "gearshape.fill"
     case search = "magnifyingglass"
     case trades = "list.bullet.rectangle"
+    case reports = "doc.text.fill"
     case calendar = "calendar"
     case rooms = "person.3.fill"
     case explore = "safari.fill"

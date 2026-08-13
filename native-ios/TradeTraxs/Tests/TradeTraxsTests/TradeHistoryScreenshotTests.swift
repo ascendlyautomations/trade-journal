@@ -10,9 +10,8 @@ final class TradeHistoryScreenshotTests: XCTestCase {
         let env = theme.themeEnvironment
         let size = CGSize(width: 390, height: 844)
         let pipeline = TradeHistoryStubImagePipeline()
-        let engagement = EngagementStore(repository: TradeHistoryNullInteractionRepository())
 
-        // 1) Dashboard with Calendar (nav) + Trades (content shortcut)
+        // 1) Dashboard with Calendar (nav) + Trades filter-bar shortcut
         let dashStore = NavigationStore()
         let dashCoordinator = NavigationCoordinator(store: dashStore)
         let dashVM = DashboardViewModel(
@@ -28,8 +27,6 @@ final class TradeHistoryScreenshotTests: XCTestCase {
         try snapshot(
             DashboardHomeView(
                 viewModel: dashVM,
-                imagePipeline: pipeline,
-                engagementStore: engagement,
                 navigationCoordinator: dashCoordinator
             )
             .applyThemeEnvironment(env),
@@ -264,29 +261,6 @@ private final class TradeHistoryScreenshotTradeRepository: TradeRepository, @unc
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
         PropFirmFixtures.accounts(owner: profileID)
     }
-}
-
-private struct TradeHistoryNullInteractionRepository: InteractionRepository {
-    func engagement(for targets: [InteractionTarget]) async throws -> [InteractionTarget: EngagementSnapshot] {
-        Dictionary(uniqueKeysWithValues: targets.map { ($0, .empty) })
-    }
-
-    func setLiked(_ liked: Bool, on target: InteractionTarget) async throws {}
-
-    func comments(
-        for target: InteractionTarget,
-        order: CommentSortOrder
-    ) async throws -> [InteractionComment] { [] }
-
-    func addComment(
-        body: String,
-        parentID: CommentID?,
-        on target: InteractionTarget
-    ) async throws -> InteractionComment {
-        throw AppError.unknown(message: "stub")
-    }
-
-    func deleteComment(id: CommentID, on target: InteractionTarget) async throws {}
 }
 
 private struct TradeHistoryStubImagePipeline: ImagePipeline {

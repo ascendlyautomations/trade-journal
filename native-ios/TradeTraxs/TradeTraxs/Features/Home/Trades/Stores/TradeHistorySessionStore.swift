@@ -59,17 +59,41 @@ final class TradeHistorySessionStore {
         return snap
     }
 
-    /// Local mutation — prepend into newest default pages only.
+    /// Local mutation — upsert into matching pages (create + edit).
     func noteCreated(_ trade: Trade) {
+        noteUpserted(trade)
+    }
+
+    func noteUpserted(_ trade: Trade) {
         SessionNetworkProbe.record(.localMutation, resource: "trades.history", detail: trade.id.rawValue)
         for key in snapshots.keys {
             guard var snap = snapshots[key] else { continue }
             guard snap.profileID == trade.ownerProfileID else { continue }
-            guard snap.filters.sort == .newest || snap.filters.sort == .highestPnL else { continue }
             let query = TradeHistoryQuery(filters: snap.filters, searchText: snap.searchText)
-            guard TradeHistoryLocalMatch.matches(trade, query: query) else { continue }
+            let matches = TradeHistoryLocalMatch.matches(trade, query: query)
+            let existed = snap.items.contains(where: { $0.id == trade.id })
             snap.items.removeAll { $0.id == trade.id }
-            snap.items.insert(trade, at: 0)
+            if matches {
+                // Prefer front of list for newest / highest PnL; otherwise keep stable order.
+                if snap.filters.sort == .newest || snap.filters.sort == .highestPnL || !existed {
+                    snap.items.insert(trade, at: 0)
+                } else {
+                    snap.items.append(trade)
+                }
+            }
+            snap.loadedAt = Date()
+            snapshots[key] = snap
+        }
+    }
+
+    func noteDeleted(id: TradeID, owner: ProfileID) {
+        SessionNetworkProbe.record(.localMutation, resource: "trades.history.remove", detail: id.rawValue)
+        for key in snapshots.keys {
+            guard var snap = snapshots[key] else { continue }
+            guard snap.profileID == owner else { continue }
+            let before = snap.items.count
+            snap.items.removeAll { $0.id == id }
+            guard snap.items.count != before else { continue }
             snap.loadedAt = Date()
             snapshots[key] = snap
         }

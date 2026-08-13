@@ -24,6 +24,8 @@ struct ProfileState: Equatable {
     var trades: [Trade] = []
     var tradesNextCursor: String?
     var accountNames: [TradingAccountID: String] = [:]
+    /// Owner-only display — never render on public Profile surfaces.
+    var accountNumbers: [TradingAccountID: String] = [:]
     var accountModes: [TradingAccountID: TradingAccountMode] = [:]
     var accountSizes: [TradingAccountID: Decimal] = [:]
 

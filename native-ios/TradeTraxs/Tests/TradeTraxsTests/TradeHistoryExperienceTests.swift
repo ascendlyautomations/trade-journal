@@ -193,6 +193,51 @@ final class TradeHistoryExperienceTests: XCTestCase {
         XCTAssertFalse(filteredVM.isEmptyJournal)
     }
 
+    func testSnapshotRestoreHydratesAccountsFromSessionStoreWithoutRefetch() async {
+        let profileID = ProfileID("00000000-0000-4000-8000-000000000225")
+        let cache = DetailPresentationCache()
+        let seededAccounts = PropFirmFixtures.accounts(owner: profileID)
+        SessionAccountsStore.shared.seed(seededAccounts, for: profileID, detailCache: cache)
+
+        let trade = makeTrade(id: "snap-1", profileID: profileID, side: .long, pnl: 25)
+        let filters = TradeHistoryFilters()
+        TradeHistorySessionStore.shared.save(
+            TradeHistorySessionStore.Snapshot(
+                queryKey: TradeHistorySessionStore.queryKey(
+                    profileID: profileID,
+                    filters: filters,
+                    searchText: ""
+                ),
+                profileID: profileID,
+                items: [trade],
+                nextCursor: nil,
+                filters: filters,
+                searchText: "",
+                loadedAt: Date()
+            )
+        )
+
+        let repository = TradeHistoryStubTradeRepository()
+        // Fresh ViewModel — mimics Dashboard → Trades push recreating @State.
+        let viewModel = TradeHistoryViewModel(
+            trades: repository,
+            session: TradeHistoryStubSession(userID: profileID.rawValue),
+            detailCache: cache,
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded && !viewModel.accounts.isEmpty }
+
+        XCTAssertEqual(viewModel.accounts.count, seededAccounts.count)
+        XCTAssertEqual(
+            Set(viewModel.accounts.map(\.id)),
+            Set(seededAccounts.map(\.id))
+        )
+        XCTAssertEqual(repository.accountsCallCount, 0, "Must reuse SessionAccountsStore; no accounts refetch")
+        XCTAssertEqual(repository.historyCallCount, 0, "Snapshot path must not refetch trade history")
+        XCTAssertEqual(viewModel.items.count, 1)
+    }
+
     func testMutationStoreTriggersReloadWithoutPolling() async {
         let profileID = ProfileID("00000000-0000-4000-8000-000000000222")
         let repository = TradeHistoryPagingStubRepository()
@@ -336,6 +381,7 @@ private struct TradeHistoryStubAchievementRepository: AchievementRepository {
 
 private final class TradeHistoryStubTradeRepository: TradeRepository, @unchecked Sendable {
     var historyCallCount = 0
+    var accountsCallCount = 0
     let empty: Bool
 
     init(empty: Bool = false) {
@@ -389,7 +435,8 @@ private final class TradeHistoryStubTradeRepository: TradeRepository, @unchecked
     }
 
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
-        empty ? [] : PropFirmFixtures.accounts(owner: profileID)
+        accountsCallCount += 1
+        return empty ? [] : PropFirmFixtures.accounts(owner: profileID)
     }
 }
 

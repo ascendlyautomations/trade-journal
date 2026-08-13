@@ -5,13 +5,13 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 /**
- * Production HTTPS → custom-scheme bridge for Capacitor iOS OAuth (PKCE).
+ * Production HTTPS → custom-scheme bridge for native iOS OAuth (PKCE).
  *
  * Supabase redirects here after Google:
  *   https://www.tradetraxs.com/api/auth/native-callback?code=…&state=…
  *
  * This route immediately hands off to:
- *   com.tradetraxs.ios://auth/callback?code=…&state=…
+ *   tradetraxs://auth/callback?code=…&state=…
  *
  * Query params (code, state, error, …) are preserved verbatim.
  * Uses HTML + JS navigation — NextResponse.redirect rejects custom schemes,

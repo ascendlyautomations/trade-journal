@@ -90,6 +90,8 @@ final class SessionOwnerTradesStore {
         guard var list = tradesByOwner[owner] else { return }
         list.removeAll { $0.id == id }
         tradesByOwner[owner] = list
+        loadedAt[owner] = Date()
+        SessionDiskCache.saveOwnerTrades(list, for: owner)
         SessionNetworkProbe.record(.localMutation, resource: "ownerTrades.remove", detail: id.rawValue)
     }
 

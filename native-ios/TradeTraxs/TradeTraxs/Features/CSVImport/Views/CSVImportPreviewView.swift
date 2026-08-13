@@ -22,7 +22,8 @@ struct CSVImportPreviewView: View {
                     } else {
                         Picker("Account", selection: accountBinding) {
                             ForEach(viewModel.eligibleAccounts) { account in
-                                Text(account.name).tag(Optional(account.id))
+                                Text(TradingAccountDisplay.title(for: account, audience: .owner))
+                                    .tag(Optional(account.id))
                             }
                         }
                     }

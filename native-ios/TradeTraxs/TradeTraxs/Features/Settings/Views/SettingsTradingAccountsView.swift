@@ -60,7 +60,7 @@ struct SettingsTradingAccountsView: View {
                         } label: {
                             HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(account.name)
+                                    Text(TradingAccountDisplay.title(for: account, audience: .owner))
                                         .experienceStyle(.body, color: colors.primaryText)
                                     Text(viewModel.subtitle(for: account))
                                         .experienceStyle(.footnote, color: colors.secondaryText)

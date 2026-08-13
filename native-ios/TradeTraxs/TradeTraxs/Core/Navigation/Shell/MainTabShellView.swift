@@ -107,7 +107,11 @@ struct HomeNavigationStack: View {
     private func homeDestination(_ route: HomeRoute) -> some View {
         switch route {
         case .tradeDetail(let tradeID):
-            TradeDetailView(tradeID: tradeID, data: appEnvironment.data)
+            TradeDetailView(
+                tradeID: tradeID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .trades:
             TradeHistoryView(
                 data: appEnvironment.data,
@@ -128,6 +132,17 @@ struct HomeNavigationStack: View {
             PropFirmDetailView(
                 accountID: accountID,
                 data: appEnvironment.data
+            )
+        case .reports:
+            ReportsScreenView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .report(let reportID):
+            ReportDetailView(
+                reportID: reportID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
             )
         default:
             NavigationInfrastructurePlaceholder(
@@ -152,6 +167,7 @@ struct HomeNavigationStack: View {
         case .achievements: return "Achievements"
         case .achievementDetail: return "Achievement"
         case .streaks: return "Streaks"
+        case .reports: return "Reports"
         case .report: return "Report"
         }
     }
@@ -198,7 +214,11 @@ struct FeedNavigationStack: View {
     private func feedDestination(_ route: FeedRoute) -> some View {
         switch route {
         case .trade(let tradeID):
-            TradeDetailView(tradeID: tradeID, data: appEnvironment.data)
+            TradeDetailView(
+                tradeID: tradeID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .post(let postID):
             PostDetailView(postID: postID, data: appEnvironment.data)
         case .reel(let reelID):
@@ -250,6 +270,11 @@ struct FeedNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .leaderboard:
+            LeaderboardScreenView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         default:
             NavigationInfrastructurePlaceholder(
                 title: feedTitle(route),
@@ -269,7 +294,7 @@ struct FeedNavigationStack: View {
         case .achievement: return "Achievement"
         case .profile: return "Profile"
         case .explore: return "Explore"
-        case .leaderboard: return "Leaderboard"
+        case .leaderboard: return "Leaderboards"
         case .rooms: return "Trade Rooms"
         case .room: return "Trade Room"
         case .roomMembers: return "Members"
@@ -392,7 +417,11 @@ struct ProfileNavigationStack: View {
     private func profileDestination(_ route: ProfileRoute) -> some View {
         switch route {
         case .trade(let tradeID):
-            TradeDetailView(tradeID: tradeID, data: appEnvironment.data)
+            TradeDetailView(
+                tradeID: tradeID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .post(let postID):
             PostDetailView(postID: postID, data: appEnvironment.data)
         case .reel(let reelID):

@@ -11,7 +11,7 @@ protocol SceneRestoring: Sendable {
 }
 
 struct SceneRestorationBridge: SceneRestoring {
-    static let activityType = "com.tradetraxs.ios.navigation"
+    static let activityType = "com.tradetraxs.TradeTraxs.navigation"
 
     func encodeNavigationState(_ state: NavigationState) -> Data? {
         try? JSONEncoder().encode(state)

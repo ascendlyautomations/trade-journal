@@ -25,6 +25,8 @@ struct ActivityRowModel: Identifiable, Hashable {
     var relativeTimestamp: String
     var isUnread: Bool
     var showsSystemIcon: Bool
+    /// All Activity rows represented by this card (like/comment groups).
+    var groupedNotificationIDs: [NotificationID]
 
     var accessibilityLabel: String {
         var parts: [String] = []
@@ -62,26 +64,29 @@ enum ActivityPresentation {
             .earlier: [],
         ]
 
-        for notification in notifications {
-            let actor = notification.actorProfileID.flatMap { actors[$0] }
-            let actorName = ActivityNotificationFormatting.actorDisplayName(profile: actor)
+        let grouped = ActivityNotificationGrouping.group(notifications, actors: actors)
+        for item in grouped {
+            let notification = item.notification
+            let actor = item.actorIDs.first.flatMap { actors[$0] }
+            let secondary = ActivityNotificationFormatting.secondaryText(for: notification)
+
             let row = ActivityRowModel(
                 id: notification.id,
                 notification: notification,
                 actor: actor,
-                primaryText: ActivityNotificationFormatting.primaryText(
-                    for: notification,
-                    actorName: actorName
-                ),
-                secondaryText: ActivityNotificationFormatting.secondaryText(for: notification),
+                primaryText: item.primaryText,
+                secondaryText: secondary,
                 relativeTimestamp: ActivityNotificationFormatting.relativeTimestamp(
                     notification.createdAt,
                     now: now
                 ),
-                isUnread: !notification.isRead,
+                isUnread: item.notificationIDs.contains { id in
+                    notifications.first(where: { $0.id == id })?.isRead == false
+                },
                 showsSystemIcon: notification.kind == .tradingReport
                     || notification.kind == .affiliateReferral
-                    || notification.kind == .affiliateCommissionEarned
+                    || notification.kind == .affiliateCommissionEarned,
+                groupedNotificationIDs: item.notificationIDs
             )
 
             let section: ActivityTimeSection

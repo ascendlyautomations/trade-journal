@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SettingsNotificationsView: View {
     @State private var viewModel: SettingsNotificationsViewModel
@@ -9,13 +10,15 @@ struct SettingsNotificationsView: View {
     init(
         data: DataEnvironment,
         navigationCoordinator: NavigationCoordinator,
-        category: NotificationPreferenceCategory? = nil
+        category: NotificationPreferenceCategory? = nil,
+        pushNotifications: PushNotificationCenter? = nil
     ) {
         _viewModel = State(
             initialValue: SettingsNotificationsViewModel(
                 repository: data.notificationPreferences,
                 session: data.session,
-                navigationCoordinator: navigationCoordinator
+                navigationCoordinator: navigationCoordinator,
+                pushNotifications: pushNotifications
             )
         )
         self.category = category
@@ -52,6 +55,9 @@ struct SettingsNotificationsView: View {
             }
         }
         .onAppear { viewModel.loadIfNeeded() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            Task { await viewModel.refreshSystemAuthorization() }
+        }
         .accessibilityIdentifier(
             category.map { "settings.notifications.\($0.rawValue)" } ?? "settings.notifications"
         )
@@ -60,14 +66,35 @@ struct SettingsNotificationsView: View {
     @ViewBuilder
     private var rootContent: some View {
         Section {
+            SettingsInfoRow(title: "Push Notifications", value: viewModel.systemPushStatusLabel)
+            if viewModel.showsOpenSystemSettings {
+                Button {
+                    viewModel.openSystemSettings()
+                } label: {
+                    SettingsNavigationRow(
+                        title: "Open Settings",
+                        subtitle: "Enable notifications for TradeTraxs in iOS Settings",
+                        systemImage: "gear"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        } footer: {
+            Text("This is the iOS system permission. It is separate from the in-app notification toggles below.")
+                .experienceStyle(.footnote, color: colors.secondaryText)
+        }
+
+        Section {
             SettingsToggleRow(
                 title: NotificationPreferenceKey.notificationsEnabled.title,
-                subtitle: "Master switch for TradeTraxs notifications",
+                subtitle: "Master switch for TradeTraxs in-app notification preferences",
                 isOn: Binding(
                     get: { viewModel.binding(for: .notificationsEnabled) },
                     set: { viewModel.set(.notificationsEnabled, enabled: $0) }
                 )
             )
+        } header: {
+            Text("In-App Preferences")
         }
 
         Section("Categories") {

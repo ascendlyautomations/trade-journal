@@ -55,7 +55,7 @@ nonisolated final class ReachabilityMonitor: ReachabilityMonitoring, @unchecked 
 
     init(
         monitor: NWPathMonitor = NWPathMonitor(),
-        queue: DispatchQueue = DispatchQueue(label: "com.tradetraxs.ios.reachability")
+        queue: DispatchQueue = DispatchQueue(label: "com.tradetraxs.TradeTraxs.reachability")
     ) {
         self.monitor = monitor
         self.queue = queue

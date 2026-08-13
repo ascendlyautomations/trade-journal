@@ -185,6 +185,13 @@ struct AppRootView: View {
                 case .addTrade:
                     AddTradeView(
                         data: appEnvironment.data,
+                        mode: .create,
+                        onDismiss: { navigation.coordinator.dismissFullScreen() }
+                    )
+                case .editTrade(let tradeID):
+                    AddTradeView(
+                        data: appEnvironment.data,
+                        mode: .edit(tradeID),
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
                 case .newPost:
@@ -251,6 +258,7 @@ struct AppRootView: View {
     private func fullScreenTitle(_ destination: FullScreenDestination) -> String {
         switch destination {
         case .addTrade: return "Add Trade"
+        case .editTrade: return "Edit Trade"
         case .importCSV: return "Import"
         case .importReview: return "Review Import"
         case .newPost: return "New Post"

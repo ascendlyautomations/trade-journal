@@ -49,7 +49,13 @@ nonisolated struct SupabaseTransport: Sendable {
             headers: headers,
             requiresAuthentication: requiresAuthentication
         )
-        let request = try requestBuilder.makeRequest(endpoint: endpoint, body: body)
+        let request: HTTPRequest
+        do {
+            request = try requestBuilder.makeRequest(endpoint: endpoint, body: body)
+        } catch {
+            // Surface missing BFF/base URL as AppError.transport (user-facing), not raw NetworkError.
+            throw SupabaseErrorMapping.mapNetwork(error)
+        }
         do {
             let response = try await client.send(request)
             #if DEBUG

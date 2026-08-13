@@ -132,7 +132,7 @@ export async function startNativeIosGoogleOAuth(nextPath: string): Promise<void>
 }
 
 /**
- * Handle `com.tradetraxs.ios://…` deep link after Google → Supabase → HTTPS bridge.
+ * Handle `tradetraxs://…` deep link after Google → Supabase → HTTPS bridge.
  * Returns the in-app path to navigate to, or null if the URL is not an OAuth callback.
  */
 export async function completeNativeIosOAuthFromUrl(

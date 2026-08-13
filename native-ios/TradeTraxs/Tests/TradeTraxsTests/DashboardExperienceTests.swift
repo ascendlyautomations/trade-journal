@@ -116,7 +116,7 @@ final class DashboardExperienceTests: XCTestCase {
 
         XCTAssertNotNil(viewModel.summary)
         XCTAssertFalse(viewModel.metricChips.isEmpty)
-        XCTAssertFalse(viewModel.recentTrades.isEmpty)
+        XCTAssertGreaterThan(viewModel.summary?.tradeCount ?? 0, 0)
 
         let before = viewModel.summary?.tradeCount
         viewModel.setDateRange(.sevenDays)
@@ -125,10 +125,11 @@ final class DashboardExperienceTests: XCTestCase {
         XCTAssertLessThanOrEqual(viewModel.summary?.tradeCount ?? 0, before ?? 0)
 
         navigationStore.sessionPhase = .authenticated
-        if let trade = viewModel.recentTrades.first {
-            viewModel.openTrade(trade)
-            XCTAssertFalse(navigationStore.paths.home.isEmpty)
-        }
+        viewModel.openTradesList()
+        XCTAssertEqual(navigationStore.paths.home.last, .trades)
+
+        viewModel.openReports()
+        XCTAssertEqual(navigationStore.paths.home.last, .reports)
     }
 
     func testNetworkBootstrapSkipsHomeDashboardAndDefersAchievements() async {

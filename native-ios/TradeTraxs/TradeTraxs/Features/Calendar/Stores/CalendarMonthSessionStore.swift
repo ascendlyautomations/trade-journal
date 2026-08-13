@@ -43,6 +43,10 @@ final class CalendarMonthSessionStore {
     }
 
     func noteCreated(_ trade: Trade) {
+        noteUpserted(trade)
+    }
+
+    func noteUpserted(_ trade: Trade) {
         SessionNetworkProbe.record(.localMutation, resource: "calendar.month", detail: trade.id.rawValue)
         let calendar = Calendar.current
         let comps = calendar.dateComponents([.year, .month], from: trade.entryAt)
@@ -53,6 +57,18 @@ final class CalendarMonthSessionStore {
         existing.append(trade)
         monthTrades[key] = existing
         loadedAt[key] = Date()
+    }
+
+    func noteDeleted(id: TradeID) {
+        SessionNetworkProbe.record(.localMutation, resource: "calendar.month.remove", detail: id.rawValue)
+        for key in monthTrades.keys {
+            guard var existing = monthTrades[key] else { continue }
+            let before = existing.count
+            existing.removeAll { $0.id == id }
+            guard existing.count != before else { continue }
+            monthTrades[key] = existing
+            loadedAt[key] = Date()
+        }
     }
 
     func invalidate(year: Int? = nil, month: Int? = nil) {

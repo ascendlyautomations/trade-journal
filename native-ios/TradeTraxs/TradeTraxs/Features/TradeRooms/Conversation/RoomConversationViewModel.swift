@@ -29,12 +29,18 @@ final class RoomConversationViewModel {
     private(set) var viewerID: ProfileID?
     /// Restored scroll anchor when switching back to a previously loaded channel.
     private(set) var pendingScrollMessageID: MessageID?
+    /// Deep-link highlight (Trade Room push / Activity mention).
+    private(set) var highlightedMessageID: MessageID?
     var draft = ""
     var isSending = false
     var showsTradePicker = false
     private(set) var tradePickerTrades: [Trade] = []
     private(set) var isLoadingTradePicker = false
     private(set) var sharedTrades: [TradeID: Trade] = [:]
+
+    /// Prefer resolved UUID after slug deep-link lookup.
+    private var resolvedRoomID: RoomID { room?.id ?? roomID }
+    private var pendingDeepLinkFocus: RoomNavigationFocusStore.Focus?
 
     private let rooms: any RoomRepository
     private let profiles: any ProfileRepository
@@ -86,6 +92,11 @@ final class RoomConversationViewModel {
         self.navigationHost = navigationHost
         self.realtimeHub = realtimeHub
         self.inboxStore = inboxStore ?? .shared
+        self.pendingDeepLinkFocus = RoomNavigationFocusStore.shared.consume(for: roomID)
+    }
+
+    func clearHighlightedMessage() {
+        highlightedMessageID = nil
     }
 
     var selectedChannel: RoomChannel? {
@@ -544,7 +555,10 @@ final class RoomConversationViewModel {
 
         channels = TradeRoomsFixtures.channels(roomID: roomID)
         channelMetadataCached = true
-        selectedChannelID = channels.first?.id
+        applyPendingDeepLinkFocusSelectingChannel()
+        if selectedChannelID == nil {
+            selectedChannelID = channels.first?.id
+        }
 
         for channel in channels {
             let roomMessages = TradeRoomsFixtures.messages(
@@ -566,6 +580,7 @@ final class RoomConversationViewModel {
             apply(cache: cache)
             await hydrateSenders(for: cache.messages)
         }
+        applyPendingDeepLinkFocusHighlight()
         for trade in TradeShareFixtures.sampleTrades(ownerID: viewerID) {
             sharedTrades[trade.id] = trade
         }
@@ -583,8 +598,9 @@ final class RoomConversationViewModel {
         if !channelMetadataCached || room == nil {
             let loaded = try await rooms.room(id: roomID)
             room = loaded
+            let activeRoomID = loaded.id
             if let viewerID {
-                membership = try? await rooms.membership(roomID: roomID, profileID: viewerID)
+                membership = try? await rooms.membership(roomID: activeRoomID, profileID: viewerID)
             }
             if let cached = detailCache.profile(id: loaded.ownerProfileID) {
                 ownerProfile = cached
@@ -597,8 +613,9 @@ final class RoomConversationViewModel {
                 ownerProfile = owner
                 senderProfiles[owner.id] = owner
             }
-            channels = try await rooms.channels(roomID: roomID)
+            channels = try await rooms.channels(roomID: activeRoomID)
             channelMetadataCached = true
+            applyPendingDeepLinkFocusSelectingChannel()
             if selectedChannelID == nil || !channels.contains(where: { $0.id == selectedChannelID }) {
                 selectedChannelID = channels.first?.id
             }
@@ -610,6 +627,42 @@ final class RoomConversationViewModel {
             return
         }
         try await fetchChannelMessages(channelID)
+        applyPendingDeepLinkFocusHighlight()
+    }
+
+    /// Selects the deep-linked channel before the first message fetch.
+    private func applyPendingDeepLinkFocusSelectingChannel() {
+        guard let focus = pendingDeepLinkFocus else { return }
+        if let channelID = focus.channelID {
+            if channels.contains(where: { $0.id == channelID }) {
+                selectedChannelID = channelID
+                return
+            }
+            let needle = channelID.rawValue.lowercased()
+            if let match = channels.first(where: {
+                $0.id.rawValue.lowercased() == needle
+                    || $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == needle
+                    || $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "#\(needle)"
+            }) {
+                selectedChannelID = match.id
+            }
+        }
+    }
+
+    /// Scrolls / highlights the deep-linked message after the channel thread loads.
+    private func applyPendingDeepLinkFocusHighlight() {
+        guard let focus = pendingDeepLinkFocus else { return }
+        pendingDeepLinkFocus = nil
+        if let messageID = focus.messageID {
+            pendingScrollMessageID = messageID
+            highlightedMessageID = messageID
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_400_000_000)
+                if highlightedMessageID == messageID {
+                    highlightedMessageID = nil
+                }
+            }
+        }
     }
 
     private func loadChannelMessagesIfNeeded(_ channelID: RoomChannelID) {

@@ -127,6 +127,14 @@ struct UserFacingError: Sendable, Equatable {
                 action: .retry
             )
         case .validation(let message):
+            let lowered = message.lowercased()
+            if lowered.contains("base url") || lowered.contains("not configured") {
+                return UserFacingError(
+                    title: "Unavailable",
+                    message: "Trade AI isn’t available in this build. Please try again later.",
+                    action: .dismiss
+                )
+            }
             return UserFacingError(
                 title: "Invalid request",
                 message: message,

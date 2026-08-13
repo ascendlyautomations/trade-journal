@@ -14,7 +14,10 @@ enum SessionScopedCaches {
         MessagesInboxStore.shared.invalidate()
         MessagingDomain.shared.invalidate()
         ActivityInboxStore.shared.invalidate()
+        RoomNavigationFocusStore.shared.clear()
         ExploreSessionStore.shared.invalidate()
+        LeaderboardSessionStore.shared.invalidate()
+        Task { await LeaderboardTradeRowsCache.shared.invalidate() }
         TradeHistorySessionStore.shared.invalidate()
         CalendarMonthSessionStore.shared.invalidate()
         SessionAccountsStore.shared.invalidate()

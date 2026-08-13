@@ -46,7 +46,6 @@
 				Features/TradeRooms/.gitkeep,
 				Features/Trades/.gitkeep,
 				Platform/Images/.gitkeep,
-				Platform/Notifications/.gitkeep,
 				Platform/Storage/.gitkeep,
 			);
 			target = C73441903025511800D1FF5B /* TradeTraxs */;

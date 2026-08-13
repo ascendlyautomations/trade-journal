@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Account + date range menus and Trades entry — compact header controls.
+/// Account + date range menus with Trades and Reports tools — compact header controls.
 struct DashboardFilterBar: View {
     @Bindable var viewModel: DashboardViewModel
 
@@ -11,20 +11,42 @@ struct DashboardFilterBar: View {
             accountMenu
             dateMenu
             Spacer(minLength: 0)
-            Button {
+            toolButton(
+                icon: .trades,
+                accessibilityLabel: "Trades",
+                accessibilityIdentifier: "dashboard.trades"
+            ) {
                 ExperienceHaptics.play(.selection)
                 viewModel.openTradesList()
-            } label: {
-                ExperienceIcon(icon: .trades, size: .md, color: colors.primaryText)
-                    .frame(width: ExperienceAccessibility.minTouchTarget,
-                           height: ExperienceAccessibility.minTouchTarget)
-                    .background(colors.fillSecondary, in: Circle())
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Trades")
-            .accessibilityIdentifier("dashboard.trades")
+            toolButton(
+                icon: .reports,
+                accessibilityLabel: "Reports",
+                accessibilityIdentifier: "dashboard.reports"
+            ) {
+                viewModel.openReports()
+            }
         }
         .accessibilityIdentifier("dashboard.filters")
+    }
+
+    private func toolButton(
+        icon: AppIcon,
+        accessibilityLabel: String,
+        accessibilityIdentifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            ExperienceIcon(icon: icon, size: .md, color: colors.primaryText)
+                .frame(
+                    width: ExperienceAccessibility.minTouchTarget,
+                    height: ExperienceAccessibility.minTouchTarget
+                )
+                .background(colors.fillSecondary, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 
     private var accountMenu: some View {

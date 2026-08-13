@@ -24,6 +24,7 @@ struct AddTradeView: View {
 
     init(
         data: DataEnvironment,
+        mode: AddTradeViewModel.Mode = .create,
         onDismiss: @escaping () -> Void
     ) {
         _viewModel = State(
@@ -34,6 +35,8 @@ struct AddTradeView: View {
                 detailCache: data.detailCache,
                 uploadService: data.uploadService,
                 objectStorage: data.objectStorage,
+                imagePipeline: data.imagePipeline,
+                mode: mode,
                 onDismiss: onDismiss
             )
         )
@@ -51,7 +54,7 @@ struct AddTradeView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(let message):
                 ExperienceErrorState(
-                    title: "Couldn't open Add Trade",
+                    title: viewModel.loadFailureTitle,
                     message: message,
                     onRetry: { viewModel.retryLoad() }
                 )
@@ -60,7 +63,7 @@ struct AddTradeView: View {
             }
         }
         .experienceScreenBackground()
-        .experienceNavigationTitle("Add Trade")
+        .experienceNavigationTitle(viewModel.navigationTitle)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { requestDismiss() }
@@ -579,7 +582,7 @@ struct AddTradeView: View {
             get: { viewModel.selectedAccountID?.rawValue ?? "" },
             set: { viewModel.selectAccount(TradingAccountID($0)) }
         )) {
-            ForEach(viewModel.eligibleAccounts) { account in
+            ForEach(viewModel.accountsForPicker) { account in
                 Text(accountLabel(account)).tag(account.id.rawValue)
             }
         }
@@ -587,11 +590,7 @@ struct AddTradeView: View {
     }
 
     private func accountLabel(_ account: TradingAccount) -> String {
-        var parts = [account.name]
-        if account.isPropFirmAccount {
-            parts.append(account.mode.rawValue.capitalized)
-        }
-        return parts.joined(separator: " · ")
+        TradingAccountDisplay.title(for: account, audience: .owner)
     }
 
     private func compactNumericField(
@@ -710,7 +709,7 @@ struct AddTradeView: View {
             ExperienceButton(
                 title: viewModel.phase == .saving
                     ? (viewModel.isUploadingMedia ? "Uploading…" : "Saving…")
-                    : "Save Trade",
+                    : viewModel.primarySaveTitle,
                 kind: .primary,
                 isEnabled: viewModel.canSave && viewModel.phase != .saving,
                 isLoading: viewModel.phase == .saving,

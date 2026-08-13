@@ -48,10 +48,11 @@ struct TradeHistoryFilterBar: View {
                 Button {
                     viewModel.setAccountFilter(.account(account.id))
                 } label: {
+                    let title = TradingAccountDisplay.title(for: account, audience: .owner)
                     if case .account(let id) = viewModel.filters.account, id == account.id {
-                        Label(account.name, systemImage: "checkmark")
+                        Label(title, systemImage: "checkmark")
                     } else {
-                        Text(account.name)
+                        Text(title)
                     }
                 }
             }

@@ -8,6 +8,7 @@ final class TradesContainerViewModel {
     private(set) var items: [Trade] = []
     private(set) var nextCursor: String?
     private(set) var accountNames: [TradingAccountID: String] = [:]
+    private(set) var accountNumbers: [TradingAccountID: String] = [:]
     private(set) var accountModes: [TradingAccountID: TradingAccountMode] = [:]
     private(set) var accountSizes: [TradingAccountID: Decimal] = [:]
     private(set) var isRefreshing = false
@@ -94,12 +95,16 @@ final class TradesContainerViewModel {
         items = snapshot.trades
         nextCursor = snapshot.tradesNextCursor
         accountNames = snapshot.accountNames
+        accountNumbers = isOwner ? snapshot.accountNumbers : [:]
         accountModes = snapshot.accountModes
         accountSizes = snapshot.accountSizes
         detailCache.seed(publicTrades: items, for: profileID)
         detailCache.seed(accountNames: accountNames)
         detailCache.seed(accountModes: accountModes)
         detailCache.seed(accountSizes: accountSizes)
+        if isOwner {
+            detailCache.seed(accountNumbers: accountNumbers)
+        }
         paginationErrorMessage = nil
         updateStateForVisibleItems()
         prefetchEngagement(for: visibleItems.map(\.id))
@@ -176,7 +181,9 @@ final class TradesContainerViewModel {
 
     func editTrade(_ trade: Trade) {
         guard isOwner else { return }
-        openTrade(trade)
+        ExperienceHaptics.play(.selection)
+        detailCache.seed(trade)
+        navigationCoordinator.editTrade(trade.id)
     }
 
     func shareTrade(_ trade: Trade) {
@@ -200,6 +207,8 @@ final class TradesContainerViewModel {
         do {
             try await trades.delete(id: trade.id)
             items.removeAll { $0.id == trade.id }
+            detailCache.removeTrade(id: trade.id)
+            TradeJournalMutationStore.shared.noteDeleted(id: trade.id, owner: trade.ownerProfileID)
             ExperienceHaptics.play(.success)
             updateStateForVisibleItems()
         } catch {
@@ -208,9 +217,45 @@ final class TradesContainerViewModel {
         }
     }
 
+    func handleJournalMutation() {
+        switch TradeJournalMutationStore.shared.latest {
+        case .created(let trade) where trade.visibility == .public && trade.ownerProfileID == profileID:
+            items.removeAll { $0.id == trade.id }
+            items.insert(trade, at: 0)
+            detailCache.seed(trade)
+            updateStateForVisibleItems()
+        case .updated(let trade) where trade.ownerProfileID == profileID:
+            if trade.visibility == .public {
+                if let index = items.firstIndex(where: { $0.id == trade.id }) {
+                    items[index] = trade
+                } else {
+                    items.insert(trade, at: 0)
+                }
+                detailCache.seed(trade)
+            } else {
+                items.removeAll { $0.id == trade.id }
+                detailCache.removeTrade(id: trade.id)
+            }
+            updateStateForVisibleItems()
+        case .deleted(let id, let owner) where owner == profileID:
+            items.removeAll { $0.id == id }
+            detailCache.removeTrade(id: id)
+            updateStateForVisibleItems()
+        case .bulkImport:
+            Task { await refresh() }
+        default:
+            break
+        }
+    }
+
     func accountName(for trade: Trade) -> String? {
         guard let accountID = trade.accountID else { return nil }
-        return accountNames[accountID]
+        let audience: TradingAccountDisplay.Audience = isOwner ? .owner : .public
+        return TradingAccountDisplay.optionalTitle(
+            name: accountNames[accountID],
+            accountNumber: isOwner ? accountNumbers[accountID] : nil,
+            audience: audience
+        )
     }
 
     // MARK: - Private
@@ -229,12 +274,16 @@ final class TradesContainerViewModel {
             hasLoaded = true
             items = ProfileTradeFixtures.samples(owner: profileID)
             accountNames = ProfileTradeFixtures.accountNames()
+            accountNumbers = isOwner ? ProfileTradeFixtures.accountNumbers() : [:]
             accountModes = ProfileTradeFixtures.accountModes()
             accountSizes = ProfileTradeFixtures.accountSizes()
             detailCache.seed(publicTrades: items, for: profileID)
             detailCache.seed(accountNames: accountNames)
             detailCache.seed(accountModes: accountModes)
             detailCache.seed(accountSizes: accountSizes)
+            if isOwner {
+                detailCache.seed(accountNumbers: accountNumbers)
+            }
             nextCursor = nil
             updateStateForVisibleItems()
             prefetchEngagement(for: visibleItems.map(\.id))
@@ -287,6 +336,14 @@ final class TradesContainerViewModel {
 
     private func applyAccounts(_ accounts: [TradingAccount]) {
         accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+        accountNumbers = Dictionary(
+            uniqueKeysWithValues: accounts.compactMap { account in
+                guard let number = TradingAccountDisplay.normalizedAccountNumber(account.accountNumber) else {
+                    return nil
+                }
+                return (account.id, number)
+            }
+        )
         accountModes = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
         accountSizes = Dictionary(
             uniqueKeysWithValues: accounts.compactMap { account in
@@ -513,42 +570,22 @@ enum TradeDisplay {
         return intValue.stringValue
     }
 
-    /// Web `formatAccountNameWithSizeDisplay` + compact mode — `Alpha Futures 50K Eval`.
+    /// Account identity line — owner: `Name • Number`; public: name only.
+    ///
+    /// `size` / `mode` retained for call-site compatibility; titles follow ``TradingAccountDisplay``.
     static func accountIdentityLine(
         name: String?,
-        size: Decimal?,
-        mode: TradingAccountMode?
+        size: Decimal? = nil,
+        mode: TradingAccountMode? = nil,
+        accountNumber: String? = nil,
+        audience: TradingAccountDisplay.Audience = .public
     ) -> String? {
-        let trimmedName = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let sizePart = accountSizeText(size)
-        let nameSize: String
-        if !trimmedName.isEmpty, !sizePart.isEmpty {
-            // Avoid "Apex 50K 50K" when size is already embedded in the name.
-            if trimmedName.localizedCaseInsensitiveContains(sizePart)
-                || trimmedName.range(of: #"\b\d+(\.\d+)?[kK]\b"#, options: .regularExpression) != nil
-            {
-                nameSize = trimmedName
-            } else {
-                nameSize = "\(trimmedName) \(sizePart)"
-            }
-        } else if !trimmedName.isEmpty {
-            nameSize = trimmedName
-        } else if !sizePart.isEmpty {
-            nameSize = sizePart
-        } else {
-            nameSize = ""
-        }
-
-        let status = mode.map(accountModeCompactTitle)
-        switch (nameSize.isEmpty, status) {
-        case (true, .none):
-            return nil
-        case (true, .some(let status)):
-            return status
-        case (false, .none):
-            return nameSize
-        case (false, .some(let status)):
-            return "\(nameSize) \(status)"
-        }
+        _ = size
+        _ = mode
+        return TradingAccountDisplay.optionalTitle(
+            name: name,
+            accountNumber: accountNumber,
+            audience: audience
+        )
     }
 }

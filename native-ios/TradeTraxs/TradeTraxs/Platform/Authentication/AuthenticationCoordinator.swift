@@ -14,6 +14,8 @@ final class AuthenticationCoordinator {
 
     /// Bound by ``CompositionRoot`` after session stores exist (MainActor).
     var invalidateSessionCaches: (@MainActor () -> Void)?
+    /// Bound by ``CompositionRoot`` — APNs registration after a user session binds.
+    var onAuthenticatedSessionBound: (@MainActor () -> Void)?
 
     /// Last authenticated user — detects account switches without an intervening logout.
     private var boundUserID: UserID?
@@ -108,15 +110,21 @@ final class AuthenticationCoordinator {
 
     private func bindAuthenticatedUser() async {
         let newID = authenticationManager.state.session?.userID
-        if let previous = boundUserID, let newID, previous != newID {
+        let switchedAccounts = boundUserID != nil && newID != nil && boundUserID != newID
+        if switchedAccounts {
             await invalidateCachesForSessionChange()
         }
         let isNewBind = boundUserID == nil && newID != nil
         boundUserID = newID
-        if isNewBind {
+        if isNewBind || switchedAccounts {
             #if DEBUG
-            SupabaseSessionUsage.beginSession()
+            if isNewBind {
+                SupabaseSessionUsage.beginSession()
+            }
             #endif
+            await MainActor.run {
+                onAuthenticatedSessionBound?()
+            }
         }
     }
 

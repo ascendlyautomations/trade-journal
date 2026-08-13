@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// Shared three-dot overflow — actions are placeholders until later phases.
+/// Shared three-dot overflow — owner journal actions when callbacks are provided.
 struct DetailOverflowMenu: View {
     let isOwner: Bool
+    var onEdit: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
     var accessibilityIdentifier: String = "detail.overflow"
 
     var body: some View {
@@ -15,10 +17,14 @@ struct DetailOverflowMenu: View {
                 .disabled(true)
             if isOwner {
                 Divider()
-                Button("Edit", systemImage: "pencil") {}
-                    .disabled(true)
-                Button("Delete", systemImage: "trash", role: .destructive) {}
-                    .disabled(true)
+                Button("Edit Trade", systemImage: "pencil") {
+                    onEdit?()
+                }
+                .disabled(onEdit == nil)
+                Button("Delete Trade", systemImage: "trash", role: .destructive) {
+                    onDelete?()
+                }
+                .disabled(onDelete == nil)
             }
         } label: {
             Image(systemName: "ellipsis")

@@ -71,31 +71,27 @@ struct TradesContainerView: View {
             }
         }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
-            // Profile public trades — only revalidate when the new trade is public.
-            guard TradeJournalMutationStore.shared.latestCreatedTrade?.visibility == .public else { return }
-            Task { await viewModel.refresh() }
+            viewModel.handleJournalMutation()
         }
         .sheet(item: $viewModel.sharePayload) { payload in
             TradeShareSheet(items: [payload.text])
         }
         .confirmationDialog(
-            "Delete this trade?",
+            "Delete Trade?",
             isPresented: Binding(
                 get: { viewModel.pendingDelete != nil },
                 set: { if !$0 { viewModel.pendingDelete = nil } }
             ),
             titleVisibility: .visible
         ) {
-            Button("Delete", role: .destructive) {
+            Button("Delete Trade", role: .destructive) {
                 Task { await viewModel.confirmDelete() }
             }
             Button("Cancel", role: .cancel) {
                 viewModel.pendingDelete = nil
             }
         } message: {
-            if let trade = viewModel.pendingDelete {
-                Text("\(trade.symbol.ticker) will be permanently removed.")
-            }
+            Text("This action cannot be undone.")
         }
     }
 }

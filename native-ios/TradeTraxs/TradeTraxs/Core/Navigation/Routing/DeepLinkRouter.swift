@@ -18,6 +18,8 @@ struct DeepLinkRouter: Sendable {
             return false
         }
 
+        seedRoomFocus(from: url, destination: destination)
+
         AppLog.navigation.info("Deep link resolved: \(String(describing: destination), privacy: .public)")
 
         if store.sessionPhase != .authenticated {
@@ -32,5 +34,31 @@ struct DeepLinkRouter: Sendable {
 
         coordinator.open(destination)
         return true
+    }
+
+    @MainActor
+    private func seedRoomFocus(from url: URL, destination: AppDestination) {
+        let query = url.queryItemsDictionary
+        let section = query["section"]
+        let message = query["message"]
+        guard section != nil || message != nil else { return }
+
+        let roomID: RoomID?
+        switch destination {
+        case .feed(.room(let id)), .messages(.room(let id)), .profile(.room(let id)):
+            roomID = id
+        default:
+            if let room = query["room"], !room.isEmpty {
+                roomID = RoomID(room)
+            } else {
+                roomID = nil
+            }
+        }
+        guard let roomID else { return }
+        RoomNavigationFocusStore.shared.seed(
+            roomID: roomID,
+            sectionID: section,
+            messageID: message
+        )
     }
 }

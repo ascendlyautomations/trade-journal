@@ -207,11 +207,7 @@ struct CreateAchievementView: View {
     }
 
     private func accountLabel(_ account: TradingAccount) -> String {
-        var parts = [account.name]
-        if account.isPropFirmAccount {
-            parts.append(account.mode.rawValue.capitalized)
-        }
-        return parts.joined(separator: " · ")
+        TradingAccountDisplay.title(for: account, audience: .owner)
     }
 
     private var imagePickerTitle: String {

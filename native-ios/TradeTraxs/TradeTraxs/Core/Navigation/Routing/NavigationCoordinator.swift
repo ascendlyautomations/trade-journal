@@ -114,6 +114,11 @@ final class NavigationCoordinator {
         }
     }
 
+    /// Full-screen native trade editor (web `InputTradeForm` edit mode).
+    func editTrade(_ tradeID: TradeID) {
+        present(fullScreen: .editTrade(tradeID))
+    }
+
     func stashForAuthentication(_ destination: AppDestination) {
         store.pendingAfterAuth = PendingDestination(destination: destination)
         if store.sessionPhase != .unauthenticated {

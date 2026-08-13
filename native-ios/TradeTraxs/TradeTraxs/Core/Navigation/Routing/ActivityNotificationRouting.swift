@@ -25,7 +25,7 @@ enum ActivityNotificationRouting {
 
         case .roomJoin, .roomMention:
             return NotificationDestination(
-                category: .roomMention,
+                category: notification.kind == .roomMention ? .roomMention : .roomMessage,
                 threadID: notification.roomMessageID?.rawValue,
                 tradeID: nil,
                 postID: nil,
@@ -34,9 +34,15 @@ enum ActivityNotificationRouting {
                 conversationID: nil,
                 roomID: notification.roomID,
                 reportID: nil,
+                sectionID: notification.sectionID,
+                messageID: notification.roomMessageID?.rawValue,
                 rawUserInfo: [
                     "type": notification.kind.rawValue,
                     "room_slug": notification.roomSlug ?? "",
+                    "section_id": notification.sectionID ?? "",
+                    "message_id": notification.roomMessageID?.rawValue ?? "",
+                    "room_name": notification.roomName ?? "",
+                    "section_name": notification.sectionName ?? "",
                 ]
             )
 

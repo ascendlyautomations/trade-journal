@@ -4,8 +4,6 @@ import SwiftUI
 struct DashboardHomeView: View {
     @State private var viewModel: DashboardViewModel
     @State private var activityStore = ActivityInboxStore.shared
-    private let imagePipeline: any ImagePipeline
-    private let engagementStore: EngagementStore
     private let navigationCoordinator: NavigationCoordinator
     private let data: DataEnvironment?
 
@@ -27,8 +25,6 @@ struct DashboardHomeView: View {
                 realtimeHub: data.realtimeHub
             )
         )
-        self.imagePipeline = data.imagePipeline
-        self.engagementStore = data.engagementStore
         self.navigationCoordinator = navigationCoordinator
         self.data = data
     }
@@ -36,13 +32,9 @@ struct DashboardHomeView: View {
     /// Tests / previews.
     init(
         viewModel: DashboardViewModel,
-        imagePipeline: any ImagePipeline,
-        engagementStore: EngagementStore,
         navigationCoordinator: NavigationCoordinator
     ) {
         _viewModel = State(initialValue: viewModel)
-        self.imagePipeline = imagePipeline
-        self.engagementStore = engagementStore
         self.navigationCoordinator = navigationCoordinator
         self.data = nil
     }
@@ -169,15 +161,6 @@ struct DashboardHomeView: View {
 
                     sectionHeader("Charts")
                     DashboardChartsSection(summary: summary)
-
-                    DashboardRecentTradesSection(
-                        trades: viewModel.recentTrades,
-                        accountNames: viewModel.accountNames,
-                        imagePipeline: imagePipeline,
-                        engagementStore: engagementStore,
-                        onOpen: { viewModel.openTrade($0) },
-                        onSeeAll: { viewModel.openTradesList() }
-                    )
 
                     DashboardInsightsSection(insights: summary.insights)
                         .padding(.bottom, ExperienceSpacing.xl)

@@ -211,6 +211,19 @@ struct RoomConversationView: View {
                                     Task { await viewModel.retry(bubble) }
                                 }
                             )
+                            .padding(.vertical, 2)
+                            .background {
+                                if viewModel.highlightedMessageID == bubble.id {
+                                    RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                                        .fill(colors.accent.opacity(0.16))
+                                        .padding(.horizontal, ExperienceSpacing.xs)
+                                        .transition(.opacity)
+                                }
+                            }
+                            .animation(
+                                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+                                value: viewModel.highlightedMessageID
+                            )
                             .id(bubble.id.rawValue)
                         }
                     }

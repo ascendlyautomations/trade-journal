@@ -12,7 +12,7 @@ nonisolated struct AuthenticationConfiguration: Sendable, Equatable {
 
     static func make(for build: BuildConfiguration) -> AuthenticationConfiguration {
         AuthenticationConfiguration(
-            keychainService: Bundle.main.bundleIdentifier ?? "com.tradetraxs.ios",
+            keychainService: Bundle.main.bundleIdentifier ?? "com.tradetraxs.TradeTraxs",
             accessTokenAccount: "auth.accessToken",
             refreshTokenAccount: "auth.refreshToken",
             sessionAccount: "auth.session",

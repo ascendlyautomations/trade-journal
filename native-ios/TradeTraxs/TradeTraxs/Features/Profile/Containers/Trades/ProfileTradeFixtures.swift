@@ -146,6 +146,14 @@ enum ProfileTradeFixtures {
         ]
     }
 
+    /// Web `accounts.account_number` — owner-only display.
+    static func accountNumbers() -> [TradingAccountID: String] {
+        [
+            TradingAccountID("dev-account"): "500123",
+            TradingAccountID("dev-account-2"): "10482",
+        ]
+    }
+
     static func accountModes() -> [TradingAccountID: TradingAccountMode] {
         [
             TradingAccountID("dev-account"): .evaluation,

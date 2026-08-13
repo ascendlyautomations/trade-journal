@@ -15,6 +15,8 @@ struct NotificationRouterFacade: Sendable {
         using coordinator: NavigationCoordinator,
         store: NavigationStore
     ) -> Bool {
+        seedRoomFocusIfNeeded(notification)
+
         guard let destination = router.destination(for: notification) else {
             AppLog.navigation.error("Notification route failed for \(notification.category.rawValue, privacy: .public)")
             return false
@@ -29,5 +31,20 @@ struct NotificationRouterFacade: Sendable {
 
         coordinator.open(destination)
         return true
+    }
+
+    @MainActor
+    private func seedRoomFocusIfNeeded(_ notification: NotificationDestination) {
+        guard let roomID = notification.roomID else { return }
+        switch notification.category {
+        case .roomMessage, .roomMention:
+            RoomNavigationFocusStore.shared.seed(
+                roomID: roomID,
+                sectionID: notification.sectionID,
+                messageID: notification.messageID ?? notification.threadID
+            )
+        default:
+            break
+        }
     }
 }

@@ -8,6 +8,8 @@ protocol NotificationRouting: Sendable {
 /// Production notification → destination mapper.
 ///
 /// Badge ownership stays outside this type (Activity vs Messages).
+/// Room channel / message highlight is seeded by ``NotificationRouterFacade`` via
+/// ``RoomNavigationFocusStore`` before ``open``.
 struct NotificationRouter: NotificationRouting {
     func destination(for notification: NotificationDestination) -> AppDestination? {
         switch notification.category {
@@ -19,9 +21,10 @@ struct NotificationRouter: NotificationRouting {
 
         case .roomMessage, .roomMention:
             if let roomID = notification.roomID {
-                return .feed(.room(roomID))
+                // Messages tab owns Trade Room threads opened from push.
+                return .messages(.room(roomID))
             }
-            return .feed(.rooms)
+            return .tab(.messages)
 
         case .followRequest:
             return .profile(.followRequests)
@@ -33,6 +36,13 @@ struct NotificationRouter: NotificationRouting {
             return .tab(.home)
 
         case .activity:
+            let type = (notification.rawUserInfo["type"] ?? "").lowercased()
+            if type == "follow" || type == "follow_request_accepted" {
+                if let profileID = notification.profileID {
+                    return .feed(.profile(profileID))
+                }
+                return .profile(.activity)
+            }
             if let tradeID = notification.tradeID {
                 return .home(.tradeDetail(tradeID))
             }
@@ -42,12 +52,24 @@ struct NotificationRouter: NotificationRouting {
             if let reelID = notification.reelID {
                 return .feed(.reel(reelID))
             }
+            if let href = notification.rawUserInfo["href"],
+               let url = URL(string: href.hasPrefix("/") ? "https://www.tradetraxs.com\(href)" : href),
+               let deep = DeepLinkParser().parse(url: url)
+            {
+                return deep
+            }
             if let profileID = notification.profileID {
                 return .feed(.profile(profileID))
             }
             return .profile(.activity)
 
         case .unknown:
+            if let href = notification.rawUserInfo["href"],
+               let url = URL(string: href.hasPrefix("/") ? "https://www.tradetraxs.com\(href)" : href),
+               let deep = DeepLinkParser().parse(url: url)
+            {
+                return deep
+            }
             return .profile(.activity)
         }
     }

@@ -53,7 +53,7 @@ final class TradeHistoryViewModel {
     }
 
     var activeChips: [TradeHistoryFilterChip] {
-        filters.activeChips { accountNames[$0] }
+        filters.activeChips { displayAccountTitle(for: $0) ?? accountNames[$0] }
     }
 
     var accountMenuTitle: String {
@@ -61,8 +61,24 @@ final class TradeHistoryViewModel {
         case .all:
             return "All Accounts"
         case .account(let id):
-            return accountNames[id] ?? "Account"
+            return displayAccountTitle(for: id) ?? "Account"
         }
+    }
+
+    /// Owner journal / filter labels — `Name • Number`.
+    func displayAccountTitle(for accountID: TradingAccountID?) -> String? {
+        guard let accountID else { return nil }
+        if let account = accounts.first(where: { $0.id == accountID }) {
+            return TradingAccountDisplay.optionalTitle(
+                name: account.name,
+                accountNumber: account.accountNumber,
+                audience: .owner
+            )
+        }
+        return TradingAccountDisplay.optionalTitle(
+            name: accountNames[accountID],
+            audience: .owner
+        )
     }
 
     var isEmptyJournal: Bool {
@@ -192,16 +208,20 @@ final class TradeHistoryViewModel {
 
     func handleJournalMutation() {
         // Prefer session-store patch (already applied in TradeJournalMutationStore).
-        if TradeJournalMutationStore.shared.latestCreatedTrade != nil,
-           let profileID,
-           let snap = TradeHistorySessionStore.shared.restore(
-               profileID: profileID,
-               filters: filters,
-               searchText: searchText
-           )
-        {
-            applySnapshot(snap)
-            return
+        switch TradeJournalMutationStore.shared.latest {
+        case .created, .updated, .deleted:
+            if let profileID,
+               let snap = TradeHistorySessionStore.shared.restore(
+                   profileID: profileID,
+                   filters: filters,
+                   searchText: searchText
+               )
+            {
+                applySnapshot(snap)
+                return
+            }
+        case .bulkImport, .none:
+            break
         }
         guard hasLoaded else { return }
         // Bulk import / unknown mutation — revalidate once.
@@ -246,6 +266,7 @@ final class TradeHistoryViewModel {
         self.profileID = profileID
 
         // Session store survives ViewModel recreation on push/pop (profile-scoped key).
+        // Snapshot only holds trades/filters — accounts live in SessionAccountsStore (Dashboard).
         if reason == "open",
            let snap = TradeHistorySessionStore.shared.restore(
                profileID: profileID,
@@ -254,6 +275,7 @@ final class TradeHistoryViewModel {
            )
         {
             applySnapshot(snap)
+            await hydrateAccountsFromSession(for: profileID)
             return
         }
 
@@ -267,6 +289,7 @@ final class TradeHistoryViewModel {
             TradeHistoryLoadProbe.markCacheHit()
             TradeHistoryLoadProbe.markFirstUsefulRender()
             #endif
+            await hydrateAccountsFromSession(for: profileID)
             return
         }
 
@@ -342,12 +365,12 @@ final class TradeHistoryViewModel {
                 repository: trades,
                 forceNetwork: false
             )
-            accounts = loaded.filter(\.isActive).sorted {
-                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
-            accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+            applyAccountList(loaded)
         } catch {
-            accounts = []
+            // Prefer any session/detail seed over wiping the menu empty.
+            if accounts.isEmpty {
+                applyAccountsFromLocalSession(profileID: profileID)
+            }
         }
     }
 
@@ -360,13 +383,43 @@ final class TradeHistoryViewModel {
                 repository: trades,
                 forceNetwork: true
             )
-            accounts = loaded.filter(\.isActive).sorted {
-                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
-            accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+            applyAccountList(loaded)
         } catch {
             // keep existing
         }
+    }
+
+    /// Cache-only hydrate for snapshot / early-open paths — never forces network.
+    /// Dashboard already primed ``SessionAccountsStore``; Trades must reuse it.
+    private func hydrateAccountsFromSession(for profileID: ProfileID) async {
+        if applyAccountsFromLocalSession(profileID: profileID) {
+            return
+        }
+        // Miss in memory/detail — SessionAccountsStore may still serve disk without a new fetch.
+        await loadAccounts(for: profileID)
+    }
+
+    @discardableResult
+    private func applyAccountsFromLocalSession(profileID: ProfileID) -> Bool {
+        let loaded = SessionAccountsStore.shared.cached(for: profileID)
+            ?? detailCache.accounts(for: profileID)
+            ?? []
+        guard !loaded.isEmpty else { return false }
+        applyAccountList(loaded)
+        SessionNetworkProbe.record(
+            .cacheHit,
+            resource: "trades.history.accounts",
+            detail: "count=\(loaded.count)"
+        )
+        return true
+    }
+
+    private func applyAccountList(_ loaded: [TradingAccount]) {
+        // Match Dashboard account menu — show the full session list (no isActive filter).
+        accounts = loaded.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
     }
 
     private func applySnapshot(_ snap: TradeHistorySessionStore.Snapshot) {

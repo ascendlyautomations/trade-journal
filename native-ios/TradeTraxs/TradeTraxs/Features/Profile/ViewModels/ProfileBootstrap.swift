@@ -190,6 +190,15 @@ enum ProfileBootstrap: ScreenBootstrap {
 
     private static func applyAccounts(_ accounts: [TradingAccount], into state: inout ProfileState) {
         state.accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+        // Keep numbers in state for owner formatting only — public UI must not render them.
+        state.accountNumbers = Dictionary(
+            uniqueKeysWithValues: accounts.compactMap { account in
+                guard let number = TradingAccountDisplay.normalizedAccountNumber(account.accountNumber) else {
+                    return nil
+                }
+                return (account.id, number)
+            }
+        )
         state.accountModes = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
         state.accountSizes = Dictionary(
             uniqueKeysWithValues: accounts.compactMap { account in
@@ -248,6 +257,7 @@ enum ProfileBootstrap: ScreenBootstrap {
         state.isOwner = isOwner
         state.trades = ProfileTradeFixtures.samples(owner: profileID)
         state.accountNames = ProfileTradeFixtures.accountNames()
+        state.accountNumbers = isOwner ? ProfileTradeFixtures.accountNumbers() : [:]
         state.accountModes = ProfileTradeFixtures.accountModes()
         state.accountSizes = ProfileTradeFixtures.accountSizes()
         state.posts = ProfilePostFixtures.samples(owner: profileID)

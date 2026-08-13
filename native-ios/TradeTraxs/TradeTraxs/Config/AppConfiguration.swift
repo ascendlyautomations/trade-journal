@@ -24,13 +24,17 @@ struct AppConfiguration: Sendable, Equatable {
         supabaseURL != nil && supabaseAnonKey?.isEmpty == false
     }
 
+    /// Production Next.js BFF origin used when ``API_BASE_URL`` is unset.
+    /// Local Next.js: set Secrets.plist / env `API_BASE_URL` to `http://localhost:3000`.
+    static let defaultBFFBaseURL = URL(string: "https://www.tradetraxs.com")!
+
     static func make(
         for buildConfiguration: BuildConfiguration = .current,
         secrets: SecretsLoader.Values = SecretsLoader.load()
     ) -> AppConfiguration {
         AppConfiguration(
             buildConfiguration: buildConfiguration,
-            apiBaseURL: secrets.apiBaseURL,
+            apiBaseURL: secrets.apiBaseURL ?? Self.defaultBFFBaseURL,
             supabaseURL: secrets.supabaseURL,
             supabaseAnonKey: secrets.supabaseAnonKey,
             appDisplayName: "TradeTraxs"

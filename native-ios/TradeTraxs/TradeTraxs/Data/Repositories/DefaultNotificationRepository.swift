@@ -168,6 +168,8 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
             messagePreview: parsed.messagePreview,
             reportID: resolvedReportID,
             affiliateHref: parsed.href,
+            isReply: parsed.isReply,
+            isMention: parsed.isMention || kind == .roomMention,
             createdAt: ISO8601.date(from: dto.created_at) ?? Date(),
             isRead: dto.is_read ?? dto.read ?? false
         )
@@ -194,6 +196,8 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
         var messageID: String?
         var messagePreview: String?
         var periodKey: String?
+        var isReply: Bool = false
+        var isMention: Bool = false
 
         static func parse(_ content: String) -> ContentPayload {
             let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -213,6 +217,20 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
                 return nil
             }
 
+            func bool(_ key: String) -> Bool {
+                guard let value = object[key] else { return false }
+                if let flag = value as? Bool { return flag }
+                if let number = value as? NSNumber { return number.boolValue }
+                if let text = value as? String {
+                    return text.lowercased() == "true" || text == "1"
+                }
+                return false
+            }
+
+            let commentKind = (string("comment_kind") ?? string("commentKind") ?? "").lowercased()
+            let isReply = bool("is_reply") || commentKind == "reply" || string("parent_comment_id") != nil
+            let isMention = bool("is_mention") || commentKind == "mention"
+
             return ContentPayload(
                 title: string("title"),
                 body: string("body"),
@@ -225,7 +243,9 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
                 sectionName: string("section_name"),
                 messageID: string("message_id"),
                 messagePreview: string("message_preview"),
-                periodKey: string("periodKey") ?? string("period_key") ?? string("periodId")
+                periodKey: string("periodKey") ?? string("period_key") ?? string("periodId"),
+                isReply: isReply,
+                isMention: isMention
             )
         }
     }

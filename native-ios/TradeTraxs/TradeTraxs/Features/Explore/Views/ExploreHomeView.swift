@@ -101,6 +101,8 @@ struct ExploreHomeView: View {
     private var discoveryScroll: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+                leaderboardsSection
+
                 if let message = viewModel.tradersFailedMessage, viewModel.suggestedTraders.isEmpty {
                     inlineSectionError(message)
                 } else if !viewModel.suggestedTraders.isEmpty {
@@ -123,6 +125,21 @@ struct ExploreHomeView: View {
             .padding(.bottom, ExperienceSpacing.xl)
         }
         .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var leaderboardsSection: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            ExploreSectionHeader(
+                title: "Leaderboards",
+                subtitle: "Rankings across the community"
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
+
+            LeaderboardExploreCard {
+                viewModel.openLeaderboards()
+            }
+        }
+        .accessibilityIdentifier("explore.leaderboards.section")
     }
 
     private var tradersSection: some View {

@@ -197,6 +197,11 @@ final class ExploreViewModel {
         navigationCoordinator.open(.feed(.room(room.id)))
     }
 
+    func openLeaderboards() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.open(.feed(.leaderboard))
+    }
+
     // MARK: - Private
 
     private func bootstrap() async {

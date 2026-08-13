@@ -9,13 +9,17 @@ protocol DeepLinkParsing: Sendable {
 ///
 /// Supports:
 /// - `https://www.tradetraxs.com/...` / `https://tradetraxs.com/...`
-/// - `tradetraxs://...` / `com.tradetraxs.ios://...`
+/// - `tradetraxs://...` / `com.tradetraxs.TradeTraxs://...`
+/// - legacy `com.tradetraxs.ios://...` (retired Capacitor identity)
 ///
 /// Features never parse URLs themselves — they only consume destinations.
 struct DeepLinkParser: DeepLinkParsing {
     func parse(url: URL) -> AppDestination? {
         let scheme = (url.scheme ?? "").lowercased()
-        if scheme == "tradetraxs" || scheme == "com.tradetraxs.ios" {
+        if scheme == "tradetraxs"
+            || scheme == "com.tradetraxs.tradetraxs"
+            || scheme == "com.tradetraxs.ios"
+        {
             return parseCustomScheme(url)
         }
         if scheme == "https" || scheme == "http" {
@@ -151,13 +155,14 @@ struct DeepLinkParser: DeepLinkParsing {
     }
 
     private func parseRooms(_ parts: [String], query: [String: String]) -> AppDestination {
+        // Trade Room deep links open through Messages (DM-style shell + channel switcher).
         if let roomQuery = query["room"] {
-            return .feed(.room(RoomID(roomQuery)))
+            return .messages(.room(RoomID(roomQuery)))
         }
         if let id = parts.first {
-            return .feed(.room(RoomID(id)))
+            return .messages(.room(RoomID(id)))
         }
-        return .feed(.rooms)
+        return .tab(.messages)
     }
 
     /// Builds Settings stack: home → section → optional leaf (e.g. notifications/messages).
@@ -180,7 +185,7 @@ struct DeepLinkParser: DeepLinkParsing {
     }
 }
 
-private extension URL {
+extension URL {
     var pathComponentsFiltered: [String] {
         pathComponents.filter { $0 != "/" && !$0.isEmpty }
     }

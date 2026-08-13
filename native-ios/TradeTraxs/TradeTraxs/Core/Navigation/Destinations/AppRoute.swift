@@ -17,6 +17,9 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case achievements
     case achievementDetail(AchievementID)
     case streaks
+    /// AI reports catalog (weekly / monthly / yearly / custom).
+    case reports
+    /// Single report detail (generated or notification deep-link).
     case report(ReportID)
 }
 

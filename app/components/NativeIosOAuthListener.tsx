@@ -10,9 +10,9 @@ import {
 } from "@/lib/nativeIosOAuth"
 
 /**
- * Capacitor iOS only: listen for OAuth deep-link return
- * (`com.tradetraxs.ios://auth/callback`) and finish the Supabase session.
- * No-ops on web / Android.
+ * Legacy Capacitor WebView helper: listen for OAuth deep-link return
+ * (`tradetraxs://auth/callback`) and finish the Supabase session.
+ * No-ops on web / Android. Native Swift handles OAuth in-app.
  */
 export default function NativeIosOAuthListener() {
   const enabled = useIsNativeIos()

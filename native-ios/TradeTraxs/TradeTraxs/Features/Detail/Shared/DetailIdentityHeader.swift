@@ -10,6 +10,8 @@ struct DetailIdentityHeader: View {
     var subtitle: String? = nil
     let dateText: String
     let isOwner: Bool
+    var onEdit: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
     var accessibilityIdentifier: String = "detail.identity"
 
     @Environment(\.themeColors) private var colors
@@ -54,7 +56,11 @@ struct DetailIdentityHeader: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .overlay(alignment: .topTrailing) {
-                DetailOverflowMenu(isOwner: isOwner)
+                DetailOverflowMenu(
+                    isOwner: isOwner,
+                    onEdit: onEdit,
+                    onDelete: onDelete
+                )
             }
         }
         .accessibilityElement(children: .combine)

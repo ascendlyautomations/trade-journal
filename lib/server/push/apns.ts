@@ -132,8 +132,8 @@ export async function sendApnsAlert(
     ? "https://api.push.apple.com"
     : "https://api.sandbox.push.apple.com"
 
-  // Custom keys outside `aps` are mapped into Capacitor `notification.data`
-  // (used for tap routing via `data.href` and notification actions).
+  // Custom keys outside `aps` are consumed by the native Swift push parser
+  // (tap routing via `href` / `type` and notification actions).
   const body = JSON.stringify({
     aps: {
       alert: {

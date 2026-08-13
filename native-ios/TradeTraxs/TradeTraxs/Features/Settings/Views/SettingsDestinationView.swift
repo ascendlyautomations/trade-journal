@@ -8,6 +8,8 @@ struct SettingsDestinationView: View {
     let authenticationCoordinator: AuthenticationCoordinator
     let currentUserProfile: CurrentUserProfileStore?
 
+    @Environment(\.appEnvironment) private var appEnvironment
+
     var body: some View {
         Group {
             switch route {
@@ -33,37 +35,43 @@ struct SettingsDestinationView: View {
             case .notifications:
                 SettingsNotificationsView(
                     data: data,
-                    navigationCoordinator: navigationCoordinator
+                    navigationCoordinator: navigationCoordinator,
+                    pushNotifications: appEnvironment.pushNotifications
                 )
             case .notificationsMessages:
                 SettingsNotificationsView(
                     data: data,
                     navigationCoordinator: navigationCoordinator,
-                    category: .messages
+                    category: .messages,
+                    pushNotifications: appEnvironment.pushNotifications
                 )
             case .notificationsSocial:
                 SettingsNotificationsView(
                     data: data,
                     navigationCoordinator: navigationCoordinator,
-                    category: .social
+                    category: .social,
+                    pushNotifications: appEnvironment.pushNotifications
                 )
             case .notificationsRooms:
                 SettingsNotificationsView(
                     data: data,
                     navigationCoordinator: navigationCoordinator,
-                    category: .rooms
+                    category: .rooms,
+                    pushNotifications: appEnvironment.pushNotifications
                 )
             case .notificationsAchievements:
                 SettingsNotificationsView(
                     data: data,
                     navigationCoordinator: navigationCoordinator,
-                    category: .achievements
+                    category: .achievements,
+                    pushNotifications: appEnvironment.pushNotifications
                 )
             case .notificationsProduct:
                 SettingsNotificationsView(
                     data: data,
                     navigationCoordinator: navigationCoordinator,
-                    category: .product
+                    category: .product,
+                    pushNotifications: appEnvironment.pushNotifications
                 )
             case .subscription:
                 SettingsSubscriptionView(
