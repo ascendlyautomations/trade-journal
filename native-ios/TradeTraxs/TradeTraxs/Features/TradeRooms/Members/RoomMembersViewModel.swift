@@ -110,9 +110,29 @@ final class RoomMembersViewModel {
             let loaded = try await rooms.room(id: roomID)
             room = loaded
 
+            let viewerMembership: RoomMembership? = if let viewer {
+                try? await rooms.membership(roomID: roomID, profileID: viewer)
+            } else {
+                nil
+            }
+
+            // Active participants from recent room messages (no members list API on RoomRepository).
+            let page = try await rooms.messages(roomID: roomID, page: PageRequest(limit: 80))
+            var neededIDs: [ProfileID] = [loaded.ownerProfileID]
+            if let viewer, viewer != loaded.ownerProfileID {
+                neededIDs.append(viewer)
+            }
+            for message in page.items {
+                neededIDs.append(message.senderProfileID)
+            }
+            _ = try? await SessionProfileStore.shared.profiles(
+                ids: neededIDs,
+                detailCache: detailCache,
+                repository: profiles
+            )
+
             var assembled: [RoomMemberItem] = []
-            let ownerProfile = try await resolveProfile(loaded.ownerProfileID)
-            if let ownerProfile {
+            if let ownerProfile = resolveProfile(loaded.ownerProfileID) {
                 assembled.append(
                     RoomMemberItem(
                         profile: ownerProfile,
@@ -124,28 +144,26 @@ final class RoomMembersViewModel {
             }
 
             if let viewer,
-               let membership = try? await rooms.membership(roomID: roomID, profileID: viewer),
+               let viewerMembership,
                viewer != loaded.ownerProfileID,
-               let viewerProfile = try await resolveProfile(viewer)
+               let viewerProfile = resolveProfile(viewer)
             {
                 assembled.append(
                     RoomMemberItem(
                         profile: viewerProfile,
-                        role: membership.role,
-                        joinedAt: membership.joinedAt,
+                        role: viewerMembership.role,
+                        joinedAt: viewerMembership.joinedAt,
                         isOnline: true
                     )
                 )
             }
 
-            // Active participants from recent room messages (no members list API on RoomRepository).
-            let page = try await rooms.messages(roomID: roomID, page: PageRequest(limit: 80))
             var seen = Set(assembled.map(\.id))
             for message in page.items {
                 let senderID = message.senderProfileID
                 guard !seen.contains(senderID) else { continue }
                 seen.insert(senderID)
-                guard let profile = try await resolveProfile(senderID) else { continue }
+                guard let profile = resolveProfile(senderID) else { continue }
                 let role: RoomMemberRole = senderID == loaded.ownerProfileID ? .owner : .member
                 assembled.append(
                     RoomMemberItem(
@@ -170,15 +188,13 @@ final class RoomMembersViewModel {
         loadTask = nil
     }
 
-    private func resolveProfile(_ id: ProfileID) async throws -> Profile? {
+    private func resolveProfile(_ id: ProfileID) -> Profile? {
         if let cached = detailCache.profile(id: id) { return cached }
         if id.rawValue.hasPrefix("dev."), let fixture = FollowListFixtures.profile(id: id) {
             detailCache.seed(fixture)
             return fixture
         }
-        let profile = try await profiles.profile(id: id)
-        detailCache.seed(profile)
-        return profile
+        return nil
     }
 
     private func roleRank(_ role: RoomMemberRole) -> Int {

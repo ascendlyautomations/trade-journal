@@ -45,16 +45,15 @@ final class PropFirmDetailViewModel {
 
         do {
             let accounts: [TradingAccount]
-            if let cached = detailCache.accounts(for: profileID),
-               cached.contains(where: { $0.id == accountID })
-            {
-                accounts = cached
-            } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
                 accounts = PropFirmFixtures.accounts(owner: profileID)
-                detailCache.seed(accounts: accounts, for: profileID)
+                SessionAccountsStore.shared.seed(accounts, for: profileID, detailCache: detailCache)
             } else {
-                accounts = try await trades.accounts(for: profileID)
-                detailCache.seed(accounts: accounts, for: profileID)
+                accounts = try await SessionAccountsStore.shared.accounts(
+                    for: profileID,
+                    detailCache: detailCache,
+                    repository: trades
+                )
             }
 
             guard let account = accounts.first(where: { $0.id == accountID }),

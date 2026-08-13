@@ -17,9 +17,9 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     private static let reelTradeJoinSelect =
         "id,public_description,is_public,ticker,direction,pnl,rr"
 
-    /// Web `FEED_POSTS_SELECT` profile join — enough for FeedItem + TradeRepository hydrate.
+    /// Feed trade cards — profiles + compact trade embed so list hydrate needs no per-row trade SELECT.
     private static let tradeFeedSelect =
-        "id,user_id,trade_id,created_at,image_url,profiles(username,avatar_url,name)"
+        "id,user_id,trade_id,created_at,image_url,profiles(username,avatar_url,name),trades(id,user_id,ticker,direction,pnl,rr,contracts,session,public_description,is_public,image_url,created_at,entry_time,exit_time,entry_price,exit_price,account_type,mode)"
 
     /// Web `FEED_PROFILE_POSTS_SELECT` (core columns + profiles embed).
     private static let profileFeedSelect =
@@ -44,12 +44,12 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     }
 
     /// Web `topUpMergedFeedBuffer` first page — trades + profile_posts + reels + achievement_posts.
-    func feed(scope: FeedScope, page: PageRequest) async throws -> CursorPage<FeedItem> {
+    func feed(scope: FeedScope, page: PageRequest) async throws -> FeedPageResult {
         let viewerID = await session.currentUserID?.rawValue
         let followingIDs = try await fetchFollowingIDs(viewerID: viewerID)
 
         if scope == .following, followingIDs.isEmpty {
-            return CursorPage(items: [], nextCursor: nil)
+            return FeedPageResult(items: [], nextCursor: nil, embeddedTrades: [])
         }
 
         async let tradeBatch = fetchTradeFeedBatch(
@@ -77,7 +77,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             page: page
         )
 
-        let (trades, posts, reels, achievements) = try await (
+        let (tradePage, posts, reels, achievements) = try await (
             tradeBatch, profileBatch, reelBatch, achievementBatch
         )
 
@@ -88,32 +88,47 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             return tradeID.isEmpty
         }
 
-        var merged = trades + posts + standaloneReels + achievements
+        var merged = tradePage.items + posts + standaloneReels + achievements
         merged.sort { $0.createdAt > $1.createdAt }
 
         let limited = Array(merged.prefix(page.limit))
         let next = limited.count >= page.limit
             ? ISO8601.string(from: limited.last?.createdAt ?? Date())
             : nil
-        return CursorPage(items: limited, nextCursor: next)
+        let limitedTradeIDs = Set(limited.compactMap(\.tradeID))
+        let embeds = tradePage.embeddedTrades.filter { limitedTradeIDs.contains($0.id) }
+        return FeedPageResult(items: limited, nextCursor: next, embeddedTrades: embeds)
     }
 
     // MARK: - Web feed batches (`lib/feedContent.ts`)
 
     private func fetchFollowingIDs(viewerID: String?) async throws -> [String] {
         guard let viewerID, !viewerID.isEmpty else { return [] }
-        struct Row: Codable { var following_id: String? }
-        let rows: [Row] = try await supabase.database.select(
-            Row.self,
-            from: "followers",
-            query: [
-                SupabaseQuery.select("following_id"),
-                SupabaseQuery.eq("follower_id", viewerID),
-            ]
-        )
-        return rows.compactMap { row in
-            let id = row.following_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return id.isEmpty ? nil : id
+        // Memory → disk → one edge SELECT. Stories/Feed/Explore share SessionFollowingStore.
+        if let cached = await SessionFollowingStore.shared.cached(viewerID: viewerID) {
+            return Array(cached).sorted()
+        }
+        if let disk = SessionDiskCache.loadFollowing(for: ProfileID(viewerID)) {
+            await SessionFollowingStore.shared.seed(viewerID: viewerID, ids: Set(disk))
+            return disk.sorted()
+        }
+        let database = supabase.database
+        return try await SessionFollowingStore.shared.followingIDs(viewerID: viewerID) {
+            struct Row: Codable { var following_id: String? }
+            let rows: [Row] = try await database.select(
+                Row.self,
+                from: "followers",
+                query: [
+                    SupabaseQuery.select("following_id"),
+                    SupabaseQuery.eq("follower_id", viewerID),
+                ]
+            )
+            let ids = rows.compactMap { row -> String? in
+                let id = row.following_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return id.isEmpty ? nil : id
+            }
+            SessionDiskCache.saveFollowing(ids: ids, for: ProfileID(viewerID))
+            return ids
         }
     }
 
@@ -158,26 +173,37 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             + extra
     }
 
+    private struct TradeFeedBatch: Sendable {
+        var items: [FeedItem]
+        var embeddedTrades: [Trade]
+    }
+
     private func fetchTradeFeedBatch(
         scope: FeedScope,
         viewerID: String?,
         followingIDs: [String],
         page: PageRequest
-    ) async throws -> [FeedItem] {
+    ) async throws -> TradeFeedBatch {
         guard let query = feedPageQuery(
             select: Self.tradeFeedSelect,
             scope: scope,
             viewerID: viewerID,
             followingIDs: followingIDs,
             page: page
-        ) else { return [] }
+        ) else {
+            return TradeFeedBatch(items: [], embeddedTrades: [])
+        }
         let rows: [FeedDTO.TradeFeedRow] = try await supabase.database.select(
             FeedDTO.TradeFeedRow.self,
             from: "posts",
             query: query
         )
-        return rows.compactMap { row -> FeedItem? in
+        var embeds: [Trade] = []
+        let items: [FeedItem] = rows.compactMap { row in
             guard let id = row.id, let author = row.user_id else { return nil }
+            if let dto = row.trades?.trade, let trade = try? TradeMapper.mapToDomain(dto) {
+                embeds.append(trade)
+            }
             // Web `normalizeTradeFeedItem` — posts table rows are trade feed cards.
             return makeFeedItem(
                 id: id,
@@ -193,6 +219,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                 profiles: row.profiles?.profile
             )
         }
+        return TradeFeedBatch(items: items, embeddedTrades: embeds)
     }
 
     private func fetchProfileFeedBatch(
@@ -465,36 +492,93 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         }
     }
 
+    /// Web `fetchActiveStoriesForUserIds` — following + self, `image_url`, client 24h window.
     func stories(for viewer: ProfileID) async throws -> [Story] {
-        _ = viewer
         struct Row: Codable {
             var id: String?
             var user_id: String?
-            var media_url: String?
+            var image_url: String?
             var created_at: String?
-            var expires_at: String?
         }
+
+        let followingIDs = try await fetchFollowingIDs(viewerID: viewer.rawValue)
+        var candidateIDs = followingIDs
+        if !candidateIDs.contains(viewer.rawValue) {
+            candidateIDs.append(viewer.rawValue)
+        }
+        #if DEBUG
+        StoriesLoadProbe.reset()
+        StoriesLoadProbe.record(
+            stage: "candidates",
+            detail: "following=\(followingIDs.count) candidates=\(candidateIDs.count)"
+        )
+        #endif
+        guard !candidateIDs.isEmpty else {
+            #if DEBUG
+            StoriesLoadProbe.record(stage: "supabase", detail: "skipped — no candidate user ids")
+            #endif
+            return []
+        }
+
+        // Same select as web `ACTIVE_STORIES_SELECT`. No `expires_at` / `media_url` columns.
         let rows: [Row] = try await supabase.database.select(
             Row.self,
             from: "stories",
             query: [
-                SupabaseQuery.select("id,user_id,media_url,created_at,expires_at"),
-                URLQueryItem(name: "expires_at", value: "gt.\(ISO8601.string(from: Date()))"),
+                SupabaseQuery.select("id,user_id,image_url,created_at"),
+                SupabaseQuery.isIn("user_id", candidateIDs),
                 URLQueryItem(name: "order", value: "created_at.desc"),
-                URLQueryItem(name: "limit", value: "50"),
             ]
         )
-        return rows.compactMap { row in
-            guard let id = row.id, let author = row.user_id, let media = row.media_url else { return nil }
+        #if DEBUG
+        StoriesLoadProbe.record(stage: "supabase", detail: "rows=\(rows.count)")
+        #endif
+
+        var parseFailures = 0
+        let mapped: [Story] = rows.compactMap { row in
+            guard let id = row.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
+                  let author = row.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !author.isEmpty,
+                  let media = row.image_url?.trimmingCharacters(in: .whitespacesAndNewlines), !media.isEmpty
+            else { return nil }
+            // Web `isStoryActive`: invalid `created_at` → inactive (never invent distantPast).
+            guard let created = ISO8601.date(from: row.created_at) else {
+                parseFailures += 1
+                return nil
+            }
             return Story(
                 id: StoryID(id),
                 authorProfileID: ProfileID(author),
                 media: MediaReference(id: media, kind: .image, altText: nil),
-                expiresAt: ISO8601.date(from: row.expires_at) ?? Date().addingTimeInterval(86_400),
-                createdAt: ISO8601.date(from: row.created_at) ?? Date(),
+                expiresAt: created.addingTimeInterval(ActiveStorySemantics.window),
+                createdAt: created,
                 viewerHasSeen: false
             )
         }
+        #if DEBUG
+        StoriesLoadProbe.record(
+            stage: "decoded",
+            detail: "mapped=\(mapped.count) parseFailures=\(parseFailures)"
+        )
+        #endif
+
+        let now = Date()
+        let active = ActiveStorySemantics.filterActive(mapped, now: now)
+        let strip = ActiveStorySemantics.stripStories(from: active, viewerID: viewer)
+        #if DEBUG
+        if mapped.count > 0, active.isEmpty {
+            let ages = mapped.map { Int(now.timeIntervalSince($0.createdAt)) }
+            StoriesLoadProbe.record(
+                stage: "filtered",
+                detail: "active=0 strip=0 agesSec=\(ages) window=\(Int(ActiveStorySemantics.window))"
+            )
+        } else {
+            StoriesLoadProbe.record(
+                stage: "filtered",
+                detail: "active=\(active.count) strip=\(strip.count)"
+            )
+        }
+        #endif
+        return strip
     }
 
     func reel(id: ReelID) async throws -> Reel {
@@ -530,6 +614,15 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
 
     func profileReels(for profileID: ProfileID) async throws -> [Reel] {
         // Mirror web `fetchUserProfileReels`: embed query → filter; fallback hydrate.
+        try await RepositoryRequestFlight.shared.coalesce(
+            key: "feed.profileReels:\(profileID.rawValue)",
+            resource: "feed.profileReels"
+        ) { [self] in
+            try await self.fetchProfileReelsUncoalesced(for: profileID)
+        }
+    }
+
+    private func fetchProfileReelsUncoalesced(for profileID: ProfileID) async throws -> [Reel] {
         let rows: [ProfileReelRow]
         do {
             rows = try await supabase.database.select(
@@ -574,16 +667,24 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         struct Body: Encodable {
             var user_id: String
             var video_url: String
-            var thumbnail_url: String?
+            var thumbnail_url: String
             var caption: String?
             var trade_id: String?
+            var duration_seconds: Int?
+            var visibility: String
+            var kind: String?
         }
+        // thumbnail_url is NOT NULL — fall back to video URL (web publishReel).
+        let thumb = reel.thumbnail?.id ?? reel.video.id
         let body = Body(
             user_id: reel.authorProfileID.rawValue,
             video_url: reel.video.id,
-            thumbnail_url: reel.thumbnail?.id,
-            caption: reel.caption,
-            trade_id: reel.linkedTradeID?.rawValue
+            thumbnail_url: thumb,
+            caption: reel.linkedTradeID == nil ? reel.caption : nil,
+            trade_id: reel.linkedTradeID?.rawValue,
+            duration_seconds: reel.durationSeconds,
+            visibility: reel.visibility == .private ? "private" : "public",
+            kind: nil
         )
         let row: ProfileReelRow = try await supabase.database.insert(
             body,
@@ -591,6 +692,53 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             returning: ProfileReelRow.self
         )
         return mapReel(row) ?? reel
+    }
+
+    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] {
+        let bounded = min(max(limit, 1), 40)
+        let rows: [ProfileReelRow] = try await supabase.database.select(
+            ProfileReelRow.self,
+            from: "reels",
+            query: [
+                SupabaseQuery.select(Self.reelRowSelect),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                URLQueryItem(name: "trade_id", value: "is.null"),
+                URLQueryItem(name: "order", value: "created_at.desc"),
+                URLQueryItem(name: "limit", value: String(bounded)),
+            ]
+        )
+        return rows.compactMap(mapReel)
+    }
+
+    func attachReel(id: ReelID, to tradeID: TradeID) async throws {
+        if try await tradeHasAttachedReel(tradeID) {
+            throw AppError.domain(.conflict(message: "This trade already has a clip attached."))
+        }
+        // DB check: trade_id IS NULL OR caption IS NULL — clear caption when linking.
+        struct Body: Encodable {
+            var trade_id: String
+            var caption: String?
+        }
+        let _: ProfileReelRow = try await supabase.database.update(
+            Body(trade_id: tradeID.rawValue, caption: nil),
+            table: "reels",
+            query: [SupabaseQuery.eq("id", id.rawValue)],
+            returning: ProfileReelRow.self
+        )
+    }
+
+    func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool {
+        struct Row: Codable { var id: String? }
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "reels",
+            query: [
+                SupabaseQuery.select("id"),
+                SupabaseQuery.eq("trade_id", tradeID.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
+        return !rows.isEmpty
     }
 
     // MARK: - Profile reel DTOs (web `ReelRow` + trade embed)

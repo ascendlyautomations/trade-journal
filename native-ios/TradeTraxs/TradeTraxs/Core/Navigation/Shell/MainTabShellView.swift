@@ -11,12 +11,18 @@ struct MainTabShellView: View {
     @Bindable var currentUserProfile: CurrentUserProfileStore
 
     var body: some View {
+        // Edge-anchored tab bar (not floating capsule). Background reaches the
+        // physical bottom; interactive items remain in the bottom safe area.
         // `tabBarMinimizeBehavior` is iOS 26+; on iOS 18 the tab bar never minimizes.
-        if #available(iOS 26.0, *) {
-            tabView.tabBarMinimizeBehavior(.never)
-        } else {
-            tabView
+        Group {
+            if #available(iOS 26.0, *) {
+                tabView.tabBarMinimizeBehavior(.never)
+            } else {
+                tabView
+            }
         }
+        .tabViewStyle(.tabBarOnly)
+        .experienceAppChrome()
     }
 
     private var tabView: some View {
@@ -103,28 +109,21 @@ struct HomeNavigationStack: View {
         case .tradeDetail(let tradeID):
             TradeDetailView(tradeID: tradeID, data: appEnvironment.data)
         case .trades:
-            // Reuse Profile trades list chrome via owner profile push later —
-            // keep a focused placeholder that still opens trade detail from Dashboard.
-            NavigationInfrastructurePlaceholder(
-                title: "Trades",
-                subtitle: "Full trades list — open from Profile for now.",
-                systemImage: "list.bullet.rectangle"
+            TradeHistoryView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
             )
-            .navigationTitle("Trades")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Profile Trades") {
-                        coordinator.open(.tab(.profile))
-                    }
-                }
-            }
         case .calendar:
-            NavigationInfrastructurePlaceholder(
-                title: "Calendar",
-                subtitle: "Trading calendar arrives in a later pass.",
-                systemImage: "calendar"
+            CalendarHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
             )
-            .navigationTitle("Calendar")
+        case .tradingDay(let dayKey):
+            TradingDayDetailView(
+                dayKey: dayKey,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .propFirm(let accountID):
             PropFirmDetailView(
                 accountID: accountID,
@@ -136,7 +135,7 @@ struct HomeNavigationStack: View {
                 subtitle: String(describing: route),
                 systemImage: "chart.line.uptrend.xyaxis"
             )
-            .navigationTitle(homeTitle(route))
+            .experienceNavigationTitle(homeTitle(route))
         }
     }
 
@@ -145,6 +144,7 @@ struct HomeNavigationStack: View {
         case .trades: return "Trades"
         case .tradeDetail: return "Trade"
         case .calendar: return "Calendar"
+        case .tradingDay: return "Trading Day"
         case .tools: return "Tools"
         case .propFirm: return "Prop Firm"
         case .analyst: return "Analyst"
@@ -170,12 +170,15 @@ struct FeedNavigationStack: View {
             )
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Search", systemImage: "magnifyingglass") {
+                    Button("Explore", systemImage: "magnifyingglass") {
                         coordinator.open(.feed(.explore))
                     }
-                    Button("Community", systemImage: "person.3") {
+                    .accessibilityIdentifier("feed.explore")
+
+                    Button("Trade Rooms", systemImage: "person.3") {
                         coordinator.open(.feed(.rooms))
                     }
+                    .accessibilityIdentifier("feed.rooms")
                 }
             }
             .navigationDestination(for: FeedRoute.self) { route in
@@ -242,13 +245,18 @@ struct FeedNavigationStack: View {
                 data: appEnvironment.data,
                 onClose: { coordinator.pop() }
             )
+        case .explore:
+            ExploreHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         default:
             NavigationInfrastructurePlaceholder(
                 title: feedTitle(route),
                 subtitle: String(describing: route),
                 systemImage: "rectangle.stack"
             )
-            .navigationTitle(feedTitle(route))
+            .experienceNavigationTitle(feedTitle(route))
         }
     }
 
@@ -334,7 +342,7 @@ struct MessagesNavigationStack: View {
                 subtitle: String(describing: route),
                 systemImage: "bubble.left"
             )
-            .navigationTitle(messagesTitle(route))
+            .experienceNavigationTitle(messagesTitle(route))
         }
     }
 
@@ -449,19 +457,25 @@ struct ProfileNavigationStack: View {
             )
         case .help:
             SettingsSupportView()
-                .navigationTitle("Help")
-        case .affiliate:
+        case .affiliate, .referrals:
             SettingsAffiliateView(data: appEnvironment.data)
-        case .referrals:
-            SettingsAffiliateView(data: appEnvironment.data)
-                .navigationTitle("Referrals")
+        case .activity:
+            ActivityHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .followRequests:
+            FollowRequestsView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         default:
             NavigationInfrastructurePlaceholder(
                 title: profileTitle(route),
                 subtitle: String(describing: route),
                 systemImage: "person"
             )
-            .navigationTitle(profileTitle(route))
+            .experienceNavigationTitle(profileTitle(route))
         }
     }
 

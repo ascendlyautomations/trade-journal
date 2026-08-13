@@ -11,22 +11,45 @@ final class ClipsContainerViewModel {
     private let feed: any FeedRepository
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
+    private let engagementStore: EngagementStore?
     private var loadTask: Task<Void, Never>?
     private var hasLoaded = false
+    private var isScreenOwned = false
 
     init(
         profileID: ProfileID,
         feed: any FeedRepository,
         navigationCoordinator: NavigationCoordinator,
-        detailCache: DetailPresentationCache
+        detailCache: DetailPresentationCache,
+        engagementStore: EngagementStore? = nil
     ) {
         self.profileID = profileID
         self.feed = feed
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
+        self.engagementStore = engagementStore
+    }
+
+    func prefetchEngagement(for reelIDs: [ReelID]) {
+        guard !reelIDs.isEmpty else { return }
+        engagementStore?.prefetch(reelIDs.map { .reel($0) })
+    }
+
+    func applyBootstrap(_ snapshot: ProfileState) {
+        guard snapshot.didBootstrap || snapshot.phase == .loaded || !snapshot.clips.isEmpty else {
+            if snapshot.phase == .loading, items.isEmpty { state = .loading }
+            return
+        }
+        isScreenOwned = true
+        hasLoaded = true
+        items = snapshot.clips
+        detailCache.seed(reels: items)
+        state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+        prefetchEngagement(for: items.map(\.id))
     }
 
     func loadIfNeeded() {
+        if isScreenOwned { return }
         guard !hasLoaded, loadTask == nil else { return }
         loadTask = Task { await performLoad() }
     }
@@ -52,6 +75,7 @@ final class ClipsContainerViewModel {
             items = ProfileClipFixtures.samples(owner: profileID)
             detailCache.seed(reels: items)
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            prefetchEngagement(for: items.map(\.id))
             loadTask = nil
             return
         }
@@ -65,6 +89,7 @@ final class ClipsContainerViewModel {
             detailCache.seed(reels: items)
             hasLoaded = true
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            prefetchEngagement(for: items.map(\.id))
         } catch {
             guard !Task.isCancelled else { return }
             if items.isEmpty {

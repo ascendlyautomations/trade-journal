@@ -13,44 +13,47 @@ struct ProfileClipCard: View {
     var body: some View {
         ExperienceCard {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Button(action: onOpen) {
-                    HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                        ZStack(alignment: .bottomTrailing) {
-                            TradeImageView(
-                                reference: reel.thumbnail,
-                                imagePipeline: imagePipeline,
-                                purpose: .reelThumbnail,
-                                contentMode: .fill
-                            )
-                            Image(systemName: "play.circle.fill")
-                                .font(.system(size: 22))
-                                .symbolRenderingMode(.hierarchical)
-                                .foregroundStyle(colors.primaryText)
-                                .padding(6)
-                        }
-                        .accessibilityHidden(true)
+                HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                    ZStack(alignment: .bottomTrailing) {
+                        TradeImageView(
+                            reference: reel.thumbnail,
+                            imagePipeline: imagePipeline,
+                            purpose: .reelThumbnail,
+                            contentMode: .fill
+                        )
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 22))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(colors.primaryText)
+                            .padding(6)
+                    }
+                    .accessibilityHidden(true)
 
-                        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                            Text(reel.caption?.isEmpty == false ? reel.caption! : "Clip")
-                                .experienceStyle(.headline, color: colors.primaryText)
-                                .lineLimit(3)
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                        Text(reel.caption?.isEmpty == false ? reel.caption! : "Clip")
+                            .experienceStyle(.headline, color: colors.primaryText)
+                            .lineLimit(3)
 
-                            HStack(spacing: ExperienceSpacing.xs) {
-                                Text(TradeDisplay.dateText(reel.createdAt))
-                                    .experienceStyle(.caption, color: colors.secondaryText)
-                                if let seconds = reel.durationSeconds, seconds > 0 {
-                                    Text(Self.formatDuration(seconds))
-                                        .experienceStyle(.caption, color: colors.tertiaryText)
-                                }
-                                if reel.linkedTradeID != nil {
-                                    ExperienceTag(title: "Trade", tone: .info)
-                                }
-                                Spacer(minLength: 0)
+                        HStack(spacing: ExperienceSpacing.xs) {
+                            Text(TradeDisplay.dateText(reel.createdAt))
+                                .experienceStyle(.caption, color: colors.secondaryText)
+                            if let seconds = reel.durationSeconds, seconds > 0 {
+                                Text(Self.formatDuration(seconds))
+                                    .experienceStyle(.caption, color: colors.tertiaryText)
                             }
+                            if reel.linkedTradeID != nil {
+                                ExperienceTag(title: "Trade", tone: .info)
+                            }
+                            Spacer(minLength: 0)
                         }
                     }
                 }
-                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .experienceDoubleTapLike(
+                    target: target,
+                    store: engagementStore,
+                    onSingleTap: onOpen
+                )
 
                 EngagementBar(
                     target: target,

@@ -40,8 +40,7 @@ struct PostDetailView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle("Post")
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle("Post")
         .toolbar(.hidden, for: .tabBar)
         .task {
             viewModel.loadIfNeeded()
@@ -118,7 +117,10 @@ struct PostDetailView: View {
                 imagePipeline: imagePipeline,
                 accessibilityIdentifier: "detail.post.media",
                 emptyIcon: .photo,
-                allowsFullResolutionViewer: true
+                allowsFullResolutionViewer: true,
+                onDoubleTapLike: {
+                    Task { await data.engagementStore.ensureLiked(on: .profilePost(post.id)) }
+                }
             )
         } else {
             TabView {
@@ -129,7 +131,10 @@ struct PostDetailView: View {
                         imagePipeline: imagePipeline,
                         accessibilityIdentifier: "detail.post.media.\(index)",
                         emptyIcon: .photo,
-                        allowsFullResolutionViewer: true
+                        allowsFullResolutionViewer: true,
+                        onDoubleTapLike: {
+                            Task { await data.engagementStore.ensureLiked(on: .profilePost(post.id)) }
+                        }
                     )
                 }
             }

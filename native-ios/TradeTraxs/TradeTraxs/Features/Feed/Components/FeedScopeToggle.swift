@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Compact Following / Global menu — same presentation pattern as profile trades sort.
+/// Compact Following / Global menu for the Feed navigation bar (leading).
 struct FeedScopeToggle: View {
     @Binding var scope: FeedScope
-    let onChange: (FeedScope) -> Void
+    var onChange: (FeedScope) -> Void = { _ in }
 
     @Environment(\.themeColors) private var colors
 
@@ -31,15 +31,16 @@ struct FeedScopeToggle: View {
             }
             .accessibilityIdentifier("feed.scope.global")
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 3) {
                 Text(title)
-                    .experienceStyle(.subheadline, color: colors.primaryText)
-                ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.secondaryText)
+                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                    .foregroundStyle(colors.primaryText)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(colors.secondaryText)
             }
-            .padding(.horizontal, ExperienceSpacing.sm)
-            .frame(minHeight: 28)
-            .background(colors.fillSecondary)
-            .clipShape(Capsule())
+            .contentShape(Rectangle())
         }
         .accessibilityLabel("Feed scope")
         .accessibilityValue(title)

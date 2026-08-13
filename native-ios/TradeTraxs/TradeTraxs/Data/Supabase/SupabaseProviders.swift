@@ -331,6 +331,24 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         await stopWatch(routeKey: "feed-posts")
     }
 
+    /// Activity inbox — idle until `notifications` postgres_changes for the viewer.
+    func watchNotifications(userID: String, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        watch(
+            WatchSpec(
+                topic: "realtime:notifications-\(userID)",
+                table: "notifications",
+                filter: "user_id=eq.\(userID)",
+                routeKey: "notifications:\(userID)",
+                routeColumn: "user_id"
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingNotifications(userID: String) async {
+        await stopWatch(routeKey: "notifications:\(userID)")
+    }
+
     private func watch(
         _ spec: WatchSpec,
         accessToken: String?
@@ -521,6 +539,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             let scopedMatch: Bool
             if spec.routeKey.hasPrefix("dm-read:")
                 || spec.routeKey.hasPrefix("room-read:")
+                || spec.routeKey.hasPrefix("notifications:")
                 || spec.routeKey == "member-rooms"
                 || spec.routeKey == "feed-posts"
             {

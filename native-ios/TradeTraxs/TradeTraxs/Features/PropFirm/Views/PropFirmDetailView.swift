@@ -53,10 +53,15 @@ struct PropFirmDetailView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle(viewModel.snapshot?.accountName ?? "Prop Firm")
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle(viewModel.snapshot?.accountName ?? "Prop Firm")
         .task { await viewModel.loadIfNeeded() }
         .refreshable { await viewModel.refresh() }
+        .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
+            Task { await viewModel.refresh() }
+        }
+        .onChange(of: AccountMutationStore.shared.revision) { _, _ in
+            Task { await viewModel.refresh() }
+        }
         .onDisappear { viewModel.onDisappear() }
         .accessibilityIdentifier("propFirm.detail")
     }

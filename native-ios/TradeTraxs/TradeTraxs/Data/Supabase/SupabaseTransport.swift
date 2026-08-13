@@ -51,7 +51,17 @@ nonisolated struct SupabaseTransport: Sendable {
         )
         let request = try requestBuilder.makeRequest(endpoint: endpoint, body: body)
         do {
-            return try await client.send(request)
+            let response = try await client.send(request)
+            #if DEBUG
+            if host == .supabase {
+                SupabaseSessionUsage.recordREST(
+                    path: path,
+                    method: method.rawValue,
+                    bytes: response.data.count
+                )
+            }
+            #endif
+            return response
         } catch {
             throw SupabaseErrorMapping.mapNetwork(error)
         }

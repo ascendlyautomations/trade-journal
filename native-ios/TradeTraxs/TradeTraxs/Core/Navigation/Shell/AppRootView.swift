@@ -44,6 +44,8 @@ struct AppRootView: View {
             }
         }
         .applyThemeEnvironment(themeManager.themeEnvironment)
+        // Root fill only — do not also apply bar chrome here (owned by MainTabShellView)
+        // so safe-area insets are not compensated twice.
         .experienceScreenBackground()
         .animation(
             ThemeAnimation.preferred(reduceMotion: reduceMotion),
@@ -67,6 +69,9 @@ struct AppRootView: View {
         }
         .onAppear {
             themeManager.updateInterfaceStyle(colorScheme)
+            NavigationCoordinatorProxy.openManageAccounts = {
+                navigation.coordinator.openSettings([.tradingAccounts])
+            }
             Task {
                 await authenticationLifecycle.applicationDidLaunch()
                 ExperienceMotion.withAnimation(
@@ -120,23 +125,44 @@ struct AppRootView: View {
     @ViewBuilder
     private func sheetContent(_ destination: SheetDestination) -> some View {
         NavigationStack {
-            NavigationInfrastructurePlaceholder(
-                title: sheetTitle(destination),
-                subtitle: "Sheet infrastructure — \(destination.rawValue)",
-                systemImage: "rectangle.bottomhalf.inset.filled"
-            )
-            .navigationTitle(sheetTitle(destination))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
-                        navigation.coordinator.dismissSheet()
-                    }
-                }
-                if destination == .composeChooser {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button("Add Trade") {
+            Group {
+                switch destination {
+                case .composeChooser:
+                    ComposeChooserView(
+                        onAddTrade: {
                             navigation.coordinator.dismissSheet()
                             navigation.coordinator.openCompose(.trade)
+                        },
+                        onCreatePost: {
+                            navigation.coordinator.dismissSheet()
+                            navigation.coordinator.openCompose(.post)
+                        },
+                        onCreateReel: {
+                            navigation.coordinator.dismissSheet()
+                            navigation.coordinator.openCompose(.reel)
+                        },
+                        onCreateAchievement: {
+                            navigation.coordinator.dismissSheet()
+                            navigation.coordinator.openCompose(.achievement)
+                        },
+                        onImportCSV: {
+                            navigation.coordinator.dismissSheet()
+                            navigation.coordinator.openCompose(.importCSV)
+                        },
+                        onClose: { navigation.coordinator.dismissSheet() }
+                    )
+                default:
+                    NavigationInfrastructurePlaceholder(
+                        title: sheetTitle(destination),
+                        subtitle: "Sheet infrastructure — \(destination.rawValue)",
+                        systemImage: "rectangle.bottomhalf.inset.filled"
+                    )
+                    .experienceNavigationTitle(sheetTitle(destination))
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") {
+                                navigation.coordinator.dismissSheet()
+                            }
                         }
                     }
                 }
@@ -156,19 +182,44 @@ struct AppRootView: View {
                         data: appEnvironment.data,
                         onClose: { navigation.coordinator.dismissFullScreen() }
                     )
+                case .addTrade:
+                    AddTradeView(
+                        data: appEnvironment.data,
+                        onDismiss: { navigation.coordinator.dismissFullScreen() }
+                    )
+                case .newPost:
+                    CreatePostView(
+                        data: appEnvironment.data,
+                        onDismiss: { navigation.coordinator.dismissFullScreen() }
+                    )
+                case .newAchievement:
+                    CreateAchievementView(
+                        data: appEnvironment.data,
+                        onDismiss: { navigation.coordinator.dismissFullScreen() }
+                    )
+                case .newReel:
+                    CreateReelView(
+                        data: appEnvironment.data,
+                        onDismiss: { navigation.coordinator.dismissFullScreen() }
+                    )
+                case .importCSV:
+                    CSVImportView(
+                        data: appEnvironment.data,
+                        onDismiss: { navigation.coordinator.dismissFullScreen() }
+                    )
                 default:
                     NavigationInfrastructurePlaceholder(
                         title: fullScreenTitle(destination),
                         subtitle: "Full-screen cover infrastructure",
                         systemImage: "arrow.up.left.and.arrow.down.right"
                     )
-                }
-            }
-            .navigationTitle(fullScreenTitle(destination))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
-                        navigation.coordinator.dismissFullScreen()
+                    .experienceNavigationTitle(fullScreenTitle(destination))
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") {
+                                navigation.coordinator.dismissFullScreen()
+                            }
+                        }
                     }
                 }
             }
@@ -203,7 +254,8 @@ struct AppRootView: View {
         case .importCSV: return "Import"
         case .importReview: return "Review Import"
         case .newPost: return "New Post"
-        case .newReel: return "New Reel"
+        case .newAchievement: return "New Achievement"
+        case .newReel: return "New Clip"
         case .newStory: return "New Story"
         case .upgrade: return "Upgrade"
         case .mediaViewer: return "Media"

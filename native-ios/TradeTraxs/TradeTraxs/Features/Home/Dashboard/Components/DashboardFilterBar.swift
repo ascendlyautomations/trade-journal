@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Account + date range menus and calendar entry — compact header controls.
+/// Account + date range menus and Trades entry — compact header controls.
 struct DashboardFilterBar: View {
     @Bindable var viewModel: DashboardViewModel
 
@@ -13,16 +13,16 @@ struct DashboardFilterBar: View {
             Spacer(minLength: 0)
             Button {
                 ExperienceHaptics.play(.selection)
-                viewModel.openCalendar()
+                viewModel.openTradesList()
             } label: {
-                ExperienceIcon(icon: .calendar, size: .md, color: colors.primaryText)
+                ExperienceIcon(icon: .trades, size: .md, color: colors.primaryText)
                     .frame(width: ExperienceAccessibility.minTouchTarget,
                            height: ExperienceAccessibility.minTouchTarget)
                     .background(colors.fillSecondary, in: Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Calendar")
-            .accessibilityIdentifier("dashboard.calendar")
+            .accessibilityLabel("Trades")
+            .accessibilityIdentifier("dashboard.trades")
         }
         .accessibilityIdentifier("dashboard.filters")
     }
@@ -49,6 +49,12 @@ struct DashboardFilterBar: View {
                         Text(title)
                     }
                 }
+            }
+            Divider()
+            Button {
+                viewModel.openManageAccounts()
+            } label: {
+                Label("Manage Accounts", systemImage: "slider.horizontal.3")
             }
         } label: {
             menuLabel(selectedAccountTitle)

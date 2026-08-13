@@ -23,12 +23,16 @@ struct AspectFitMediaView: View {
     var allowsFullResolutionViewer: Bool = true
     /// When `false`, omit empty / failed placeholders (Feed text-first layout).
     var showsPlaceholderWhenUnavailable: Bool = true
+    /// Double-tap Like callback (like-only). When set, single-tap still opens the viewer if allowed.
+    var onDoubleTapLike: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var displayImage: UIImage?
     @State private var didFail = false
     @State private var showsFullViewer = false
+    @State private var showLikeHeart = false
 
     /// Soft cap for very tall portrait uploads (web `min(58dvh, …)` style).
     private var maxDisplayHeight: CGFloat {
@@ -53,11 +57,25 @@ struct AspectFitMediaView: View {
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
-        .onTapGesture {
-            guard allowsFullResolutionViewer, reference != nil, displayImage != nil else { return }
-            ExperienceHaptics.play(.selection)
-            showsFullViewer = true
+        .overlay {
+            LikeFeedbackOverlay(isVisible: showLikeHeart, reduceMotion: reduceMotion)
         }
+        .modifier(
+            AspectFitMediaTapModifier(
+                allowsFullResolutionViewer: allowsFullResolutionViewer,
+                canOpenViewer: reference != nil && displayImage != nil,
+                onDoubleTapLike: onDoubleTapLike.map { action in
+                    {
+                        presentLikeFeedback()
+                        action()
+                    }
+                },
+                onOpenViewer: {
+                    ExperienceHaptics.play(.selection)
+                    showsFullViewer = true
+                }
+            )
+        )
         .task(id: "\(reference?.id ?? "")|\(purpose.rawValue)|\(displayScale)") {
             await loadDisplayImage()
         }
@@ -141,6 +159,30 @@ struct AspectFitMediaView: View {
         .frame(height: 200)
     }
 
+    private func presentLikeFeedback() {
+        ExperienceHaptics.play(.impactLight)
+        if reduceMotion {
+            showLikeHeart = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 280_000_000)
+                showLikeHeart = false
+            }
+            return
+        }
+        ExperienceMotion.withAnimation(MotionSpring.bouncy.animation, reduceMotion: false) {
+            showLikeHeart = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 520_000_000)
+            ExperienceMotion.withAnimation(
+                MotionCurve.easeOut.animation(duration: .fast),
+                reduceMotion: false
+            ) {
+                showLikeHeart = false
+            }
+        }
+    }
+
     private func loadDisplayImage() async {
         guard let reference else {
             displayImage = nil
@@ -204,6 +246,7 @@ private struct AspectFitFullImageViewer: View {
     let imagePipeline: any ImagePipeline
 
     @Environment(\.dismiss) private var dismiss
+    @State private var zoomScale: CGFloat = 1
 
     var body: some View {
         NavigationStack {
@@ -211,16 +254,47 @@ private struct AspectFitFullImageViewer: View {
                 reference: reference,
                 purpose: purpose,
                 imagePipeline: imagePipeline,
-                maxPixelSize: nil
+                maxPixelSize: nil,
+                zoomScale: $zoomScale
             )
             .background(Color.black.ignoresSafeArea())
-            .navigationBarTitleDisplayMode(.inline)
+            .experienceSwipeToDismiss(isEnabled: zoomScale <= 1.02) {
+                dismiss()
+            }
+            .experienceNavigationTitle("Photo")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                         .accessibilityIdentifier("detail.media.done")
                 }
             }
+            .interactiveDismissDisabled(zoomScale > 1.02)
+        }
+    }
+}
+
+/// Tap precedence for detail media — double-tap Like vs single-tap open viewer.
+private struct AspectFitMediaTapModifier: ViewModifier {
+    var allowsFullResolutionViewer: Bool
+    var canOpenViewer: Bool
+    var onDoubleTapLike: (() -> Void)?
+    var onOpenViewer: () -> Void
+
+    func body(content: Content) -> some View {
+        if let onDoubleTapLike {
+            content
+                .onTapGesture(count: 2, perform: onDoubleTapLike)
+                .onTapGesture(count: 1) {
+                    guard allowsFullResolutionViewer, canOpenViewer else { return }
+                    onOpenViewer()
+                }
+        } else if allowsFullResolutionViewer {
+            content.onTapGesture {
+                guard canOpenViewer else { return }
+                onOpenViewer()
+            }
+        } else {
+            content
         }
     }
 }

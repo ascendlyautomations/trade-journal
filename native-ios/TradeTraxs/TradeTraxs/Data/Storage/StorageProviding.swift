@@ -16,6 +16,8 @@ nonisolated enum StorageBucket: String, Sendable {
     case reels
     case rooms = "room-images"
     case posts = "post-media"
+    /// Profile wall images (`profile_posts` table / web create-post flow).
+    case profilePosts = "profile_posts"
 }
 
 nonisolated struct SupabaseObjectStorageProvider: ObjectStorageProviding {

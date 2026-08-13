@@ -259,7 +259,10 @@ final class ProfileExperienceTests: XCTestCase {
             XCTAssertFalse(viewModel.isFollowing(target))
         } else {
             viewModel.toggleFollow(for: target)
-            try? await Task.sleep(nanoseconds: 20_000_000)
+            let followDeadline = Date().addingTimeInterval(1)
+            while !viewModel.isFollowing(target), Date() < followDeadline {
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
             XCTAssertTrue(viewModel.isFollowing(target))
         }
     }

@@ -15,6 +15,7 @@ struct TradeRoomsHomeView: View {
     ) {
         _viewModel = State(
             initialValue: TradeRoomsHomeViewModel(
+                messages: data.messages,
                 rooms: data.rooms,
                 profiles: data.profiles,
                 session: data.session,
@@ -63,8 +64,7 @@ struct TradeRoomsHomeView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle("Trade Rooms")
-        .navigationBarTitleDisplayMode(.large)
+        .experienceNavigationTitle("Trade Rooms")
         .searchable(
             text: $viewModel.searchText,
             placement: .navigationBarDrawer(displayMode: .always),

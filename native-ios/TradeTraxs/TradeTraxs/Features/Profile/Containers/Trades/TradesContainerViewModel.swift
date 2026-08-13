@@ -22,11 +22,14 @@ final class TradesContainerViewModel {
     private let trades: any TradeRepository
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
+    private let engagementStore: EngagementStore?
     private let isOwner: Bool
 
     private var loadTask: Task<Void, Never>?
     private var hasLoaded = false
     private var isLoadingMore = false
+    /// When true, initial data comes from ``ProfileScreenViewModel`` bootstrap.
+    private var isScreenOwned = false
 
     struct SharePayload: Identifiable, Equatable {
         let id = UUID()
@@ -38,13 +41,21 @@ final class TradesContainerViewModel {
         trades: any TradeRepository,
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
+        engagementStore: EngagementStore? = nil,
         isOwner: Bool = true
     ) {
         self.profileID = profileID
         self.trades = trades
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
+        self.engagementStore = engagementStore
         self.isOwner = isOwner
+    }
+
+    /// Screen-owned engagement prefetch — views must not call the repository path.
+    func prefetchEngagement(for tradeIDs: [TradeID]) {
+        guard !tradeIDs.isEmpty else { return }
+        engagementStore?.prefetch(tradeIDs.map { .trade($0) })
     }
 
     var visibleItems: [Trade] {
@@ -70,7 +81,33 @@ final class TradesContainerViewModel {
         }
     }
 
+    /// Applies screen bootstrap — no repository call.
+    func applyBootstrap(_ snapshot: ProfileState) {
+        guard snapshot.didBootstrap || snapshot.phase == .loaded || !snapshot.trades.isEmpty else {
+            if snapshot.phase == .loading, items.isEmpty {
+                state = .loading
+            }
+            return
+        }
+        isScreenOwned = true
+        hasLoaded = true
+        items = snapshot.trades
+        nextCursor = snapshot.tradesNextCursor
+        accountNames = snapshot.accountNames
+        accountModes = snapshot.accountModes
+        accountSizes = snapshot.accountSizes
+        detailCache.seed(publicTrades: items, for: profileID)
+        detailCache.seed(accountNames: accountNames)
+        detailCache.seed(accountModes: accountModes)
+        detailCache.seed(accountSizes: accountSizes)
+        paginationErrorMessage = nil
+        updateStateForVisibleItems()
+        prefetchEngagement(for: visibleItems.map(\.id))
+    }
+
     func loadIfNeeded() {
+        // Screen-owned sections must not bootstrap independently.
+        if isScreenOwned { return }
         guard !hasLoaded, loadTask == nil else { return }
         loadTask = Task { await performLoad(reset: true) }
     }
@@ -200,6 +237,7 @@ final class TradesContainerViewModel {
             detailCache.seed(accountSizes: accountSizes)
             nextCursor = nil
             updateStateForVisibleItems()
+            prefetchEngagement(for: visibleItems.map(\.id))
             loadTask = nil
             return
         }
@@ -228,12 +266,14 @@ final class TradesContainerViewModel {
 
             // Account metadata is secondary — never fail the trades list on account mapping.
             // Session cache: skip network when Profile already resolved accounts once.
-            if let cached = detailCache.accounts(for: profileID) {
-                applyAccounts(cached)
-            } else if let accounts = try? await trades.accounts(for: profileID) {
+            if let accounts = try? await SessionAccountsStore.shared.accounts(
+                for: profileID,
+                detailCache: detailCache,
+                repository: trades
+            ) {
                 applyAccounts(accounts)
-                detailCache.seed(accounts: accounts, for: profileID)
             }
+            prefetchEngagement(for: visibleItems.map(\.id))
         } catch {
             guard !Task.isCancelled else { return }
             if items.isEmpty {
@@ -340,6 +380,62 @@ enum TradeDisplay {
         let number = NSDecimalNumber(decimal: value)
         return String(format: "RR %.1f", number.doubleValue)
     }
+
+    /// Journal-style R:R — `1:2.9` when value is the reward multiple.
+    static func journalRRText(_ value: Decimal?) -> String? {
+        guard let value else { return nil }
+        let number = NSDecimalNumber(decimal: value)
+        return String(format: "1:%.1f", number.doubleValue)
+    }
+
+    static func pointsText(_ value: Decimal?) -> String? {
+        guard let value else { return nil }
+        let number = NSDecimalNumber(decimal: value)
+        let formatted = String(format: "%g", abs(number.doubleValue))
+        if value > 0 { return "+\(formatted)" }
+        if value < 0 { return "-\(formatted)" }
+        return formatted
+    }
+
+    static func contractsText(_ value: Decimal) -> String {
+        let number = NSDecimalNumber(decimal: value)
+        if number == number.rounding(accordingToBehavior: nil) {
+            return "\(number.intValue)"
+        }
+        return number.stringValue
+    }
+
+    static func durationText(entryAt: Date, exitAt: Date?) -> String? {
+        guard let exitAt, exitAt >= entryAt else { return nil }
+        let seconds = Int(exitAt.timeIntervalSince(entryAt))
+        guard seconds >= 0 else { return nil }
+        let hours = seconds / 3_600
+        let minutes = (seconds % 3_600) / 60
+        let secs = seconds % 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        if minutes > 0 {
+            return "\(minutes)m \(secs)s"
+        }
+        return "\(secs)s"
+    }
+
+    /// Account · date · time line for journal cards.
+    static func journalContextLine(accountName: String?, at date: Date) -> String {
+        let stamp = journalDateTimeFormatter.string(from: date)
+        if let accountName, !accountName.isEmpty {
+            return "\(accountName) · \(stamp)"
+        }
+        return stamp
+    }
+
+    private static let journalDateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d · h:mm a"
+        return formatter
+    }()
 
     static func quantityBadgeText(_ value: Decimal) -> String {
         let number = NSDecimalNumber(decimal: value)

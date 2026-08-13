@@ -13,6 +13,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // Prefer the edge-anchored tab bar presentation over the floating capsule
+        // when the OS still exposes that preference (iPad historically; harmless on iPhone).
+        UserDefaults.standard.register(defaults: ["UseFloatingTabBar": false])
         AppLog.application.info("AppDelegate.didFinishLaunching")
         return true
     }

@@ -160,7 +160,15 @@ final class TradeDetailViewModel {
                         ?? cache.accountSize(for: accountID)
                 }
             }
-            author = try? await profiles.profile(id: trade.ownerProfileID)
+            if let cached = cache.profile(id: trade.ownerProfileID) {
+                author = cached
+            } else {
+                author = try? await SessionProfileStore.shared.profiles(
+                    ids: [trade.ownerProfileID],
+                    detailCache: cache,
+                    repository: profiles
+                ).first
+            }
             await loadAuthorAvatar()
             return
         }
@@ -177,7 +185,11 @@ final class TradeDetailViewModel {
             return (try? await trades.notes(for: trade.id)) ?? []
         }()
         async let authorTask: Profile? = {
-            try? await profiles.profile(id: trade.ownerProfileID)
+            try? await SessionProfileStore.shared.profiles(
+                ids: [trade.ownerProfileID],
+                detailCache: cache,
+                repository: profiles
+            ).first
         }()
 
         let fetchedImages = await imagesTask
@@ -190,7 +202,7 @@ final class TradeDetailViewModel {
         if !fetchedNotes.isEmpty {
             notes = fetchedNotes
         }
-        author = fetchedAuthor
+        author = cache.profile(id: trade.ownerProfileID) ?? fetchedAuthor
         await loadAuthorAvatar()
         await resolveAccountMetadata(for: trade)
     }
@@ -221,11 +233,14 @@ final class TradeDetailViewModel {
         }
         guard !didResolveAccountMetadata else { return }
 
-        guard let accounts = try? await trades.accounts(for: trade.ownerProfileID) else {
+        guard let accounts = try? await SessionAccountsStore.shared.accounts(
+            for: trade.ownerProfileID,
+            detailCache: cache,
+            repository: trades
+        ) else {
             didResolveAccountMetadata = true
             return
         }
-        cache.seed(accounts: accounts, for: trade.ownerProfileID)
         didResolveAccountMetadata = true
         if accountName == nil {
             accountName = cache.accountName(for: accountID)

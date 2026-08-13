@@ -27,6 +27,7 @@ nonisolated enum TradeMapper: DTOMapper {
 
         let note = dto.notes?.trimmingCharacters(in: .whitespacesAndNewlines)
         let imageURL = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let strategy = dto.strategy?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return Trade(
             id: TradeID(id),
@@ -47,7 +48,9 @@ nonisolated enum TradeMapper: DTOMapper {
             visibility: visibility,
             publicCaption: dto.public_description,
             thumbnail: imageURL.flatMap { $0.isEmpty ? nil : MediaReference(id: $0, kind: .image, altText: nil) },
-            notePreview: note.flatMap { $0.isEmpty ? nil : String($0.prefix(140)) },
+            // Longer preview for journal cards (Profile still line-limits).
+            notePreview: note.flatMap { $0.isEmpty ? nil : String($0.prefix(360)) },
+            strategy: strategy.flatMap { $0.isEmpty ? nil : $0 },
             createdAt: createdAt,
             updatedAt: createdAt
         )
@@ -78,30 +81,53 @@ nonisolated enum TradeMapper: DTOMapper {
             notes: domain.notePreview,
             created_at: ISO8601.string(from: domain.createdAt),
             date: ISO8601.string(from: domain.createdAt),
-            trade_date: nil
+            trade_date: nil,
+            account_name: nil,
+            strategy: domain.strategy
         )
     }
 
     static func insertBody(from draft: TradeDraft, userID: UserID) -> TradeDTO.InsertBody {
         let now = ISO8601.string(from: Date())
+        let tradeDate = TradingSessionLabel.easternTradeDateString(from: draft.entryAt)
+        let session = draft.sessionLabel
+            ?? TradingSessionLabel.session(from: draft.entryAt)
+            ?? "NY"
+        let modeLabel = draft.accountModeLabel ?? draft.mode.rawValue
         return TradeDTO.InsertBody(
             user_id: userID.rawValue,
             account_id: draft.accountID?.rawValue,
-            ticker: draft.symbol.ticker,
+            account_name: draft.accountName,
+            account_size: draft.accountSizeLabel,
+            account_type: modeLabel,
+            account_category: draft.accountCategoryLabel,
+            ticker: draft.symbol.ticker.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
             direction: draft.side == .long ? "Long" : "Short",
-            mode: draft.mode.rawValue,
+            mode: modeLabel,
             contracts: NSDecimalNumber(decimal: draft.quantity).doubleValue,
             entry_price: draft.entryPrice.map { NSDecimalNumber(decimal: $0).doubleValue },
             exit_price: draft.exitPrice.map { NSDecimalNumber(decimal: $0).doubleValue },
             entry_time: ISO8601.string(from: draft.entryAt),
             exit_time: draft.exitAt.map(ISO8601.string(from:)),
-            pnl: draft.realizedPnL.map { NSDecimalNumber(decimal: $0.amount).doubleValue },
-            rr: nil,
+            trade_date: tradeDate,
+            pnl: draft.realizedPnL.map { NSDecimalNumber(decimal: $0.amount).doubleValue } ?? 0,
+            rr: draft.riskReward.map { NSDecimalNumber(decimal: $0).doubleValue },
+            points: draft.points.map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0,
+            session: session,
+            strategy: Self.nilIfEmpty(draft.strategy),
+            notes: Self.nilIfEmpty(draft.noteBody),
+            image_url: Self.nilIfEmpty(draft.imageURL),
             is_public: draft.visibility == .public,
-            public_description: draft.publicCaption,
+            public_description: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             created_at: now,
             date: now
         )
+    }
+
+    private static func nilIfEmpty(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func mapSide(_ direction: String?) -> TradeSide {
@@ -364,6 +390,8 @@ nonisolated enum TradingAccountMapper {
                 payoutDrawdownBehavior: dto.payout_drawdown_behavior
             )
         }()
+        let number = dto.account_number?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = dto.note?.trimmingCharacters(in: .whitespacesAndNewlines)
         return TradingAccount(
             id: TradingAccountID(id),
             ownerProfileID: ProfileID(owner),
@@ -373,7 +401,65 @@ nonisolated enum TradingAccountMapper {
             size: sizeValue.map { Money(amount: $0) },
             isActive: dto.is_active ?? true,
             canAddTrades: dto.can_add_trades ?? true,
+            accountNumber: (number?.isEmpty == false) ? number : nil,
+            note: (note?.isEmpty == false) ? note : nil,
             propFirmRules: rules
+        )
+    }
+
+    /// Web insert/update wire strings for `accounts.category` / `accounts.mode`.
+    static func webCategory(_ category: TradingAccountCategory) -> String {
+        switch category {
+        case .personal: return "Personal"
+        case .broker: return "Broker"
+        case .propFirm: return "Prop Firm"
+        case .backtest: return "Backtest"
+        }
+    }
+
+    static func webMode(_ mode: TradingAccountMode, category: TradingAccountCategory) -> String {
+        switch category {
+        case .backtest:
+            return "backtest"
+        case .propFirm:
+            switch mode {
+            case .funded: return "Funded"
+            default: return "Eval"
+            }
+        case .personal, .broker:
+            switch mode {
+            case .sim: return "Sim"
+            default: return "Live"
+            }
+        }
+    }
+
+    static func writeBody(
+        ownerID: ProfileID?,
+        draft: TradingAccountDraft,
+        isActive: Bool? = nil,
+        canAddTrades: Bool? = nil
+    ) -> TradeDTO.AccountWriteBody {
+        let rules = draft.category == .propFirm ? draft.propFirmRules : nil
+        let size = draft.sizeDigits.trimmingCharacters(in: .whitespacesAndNewlines)
+        let number = draft.accountNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        return TradeDTO.AccountWriteBody(
+            user_id: ownerID?.rawValue,
+            name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+            account_size: size.isEmpty ? nil : size,
+            account_number: number.isEmpty ? nil : number,
+            category: webCategory(draft.category),
+            mode: webMode(draft.mode, category: draft.category),
+            is_active: isActive,
+            can_add_trades: canAddTrades,
+            note: note.isEmpty ? nil : note,
+            consistency: rules?.consistencyPercent.map { NSDecimalNumber(decimal: $0).doubleValue },
+            max_drawdown: rules?.maxDrawdown.map { NSDecimalNumber(decimal: $0).doubleValue },
+            daily_drawdown: rules?.dailyDrawdown.map { NSDecimalNumber(decimal: $0).doubleValue },
+            profit_target: rules?.profitTarget.map { NSDecimalNumber(decimal: $0).doubleValue },
+            winning_days: rules?.winningDaysRequired.map { Double($0) },
+            winning_day_threshold: rules?.winningDayThreshold.map { NSDecimalNumber(decimal: $0).doubleValue }
         )
     }
 

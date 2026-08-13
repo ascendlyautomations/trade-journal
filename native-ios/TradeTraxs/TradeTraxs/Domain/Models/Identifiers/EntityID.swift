@@ -113,6 +113,12 @@ nonisolated struct NotificationID: Hashable, Codable, Sendable, RawRepresentable
     init(_ rawValue: String) { self.rawValue = rawValue }
 }
 
+nonisolated struct FollowRequestID: Hashable, Codable, Sendable, RawRepresentable {
+    let rawValue: String
+    init(rawValue: String) { self.rawValue = rawValue }
+    init(_ rawValue: String) { self.rawValue = rawValue }
+}
+
 nonisolated struct AchievementID: Hashable, Codable, Sendable, RawRepresentable {
     let rawValue: String
     init(rawValue: String) { self.rawValue = rawValue }

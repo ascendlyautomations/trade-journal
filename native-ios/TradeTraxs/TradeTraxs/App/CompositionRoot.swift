@@ -75,7 +75,8 @@ enum CompositionRoot {
         let currentUserProfile = CurrentUserProfileStore(
             profiles: data.profiles,
             session: data.session,
-            imagePipeline: data.imagePipeline
+            imagePipeline: data.imagePipeline,
+            detailCache: data.detailCache
         )
 
         // Session caches belong to the authenticated user — invalidate on logout / switch.

@@ -1,15 +1,13 @@
 import Foundation
 import Observation
 
+/// Messages inbox screen owner — presentation + navigation over ``MessagingDomain``.
+///
+/// Initial network / realtime ownership lives in ``MessagingDomain`` (shared with Trade Rooms).
 @Observable
 @MainActor
 final class MessagesHomeViewModel {
-    enum Phase: Equatable {
-        case idle
-        case loading
-        case loaded
-        case failed(String)
-    }
+    typealias Phase = MessagingState.Phase
 
     private(set) var phase: Phase = .idle
     private(set) var isRefreshing = false
@@ -29,12 +27,9 @@ final class MessagesHomeViewModel {
     private let inboxStore: MessagesInboxStore
     private let navigationCoordinator: NavigationCoordinator
     private let realtimeHub: RealtimeHub?
+    private let domain: MessagingDomain
 
     private var loadTask: Task<Void, Never>?
-    private var readCursorTask: Task<Void, Never>?
-    private var roomUnreadTask: Task<Void, Never>?
-    private var roomReadCursorTask: Task<Void, Never>?
-    private var peerProfiles: [ProfileID: Profile] = [:]
 
     init(
         messages: any MessageRepository,
@@ -44,7 +39,8 @@ final class MessagesHomeViewModel {
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
         inboxStore: MessagesInboxStore? = nil,
-        realtimeHub: RealtimeHub? = nil
+        realtimeHub: RealtimeHub? = nil,
+        domain: MessagingDomain? = nil
     ) {
         self.messages = messages
         self.rooms = rooms
@@ -54,6 +50,15 @@ final class MessagesHomeViewModel {
         self.navigationCoordinator = navigationCoordinator
         self.inboxStore = inboxStore ?? MessagesInboxStore.shared
         self.realtimeHub = realtimeHub
+        self.domain = domain ?? .shared
+        self.domain.configure(
+            messages: messages,
+            rooms: rooms,
+            profiles: profiles,
+            session: session,
+            detailCache: detailCache,
+            realtimeHub: realtimeHub
+        )
     }
 
     var showsEmpty: Bool {
@@ -106,21 +111,6 @@ final class MessagesHomeViewModel {
 
     func loadIfNeeded() {
         guard loadTask == nil else { return }
-        if inboxStore.hasLoaded {
-            loadTask = Task {
-                if viewerID == nil {
-                    let current = await session.currentUserID
-                    viewerID = current.map { ProfileID($0.rawValue) }
-                }
-                hydratePeersFromCache()
-                // Resolve any peers still missing from the session profile cache.
-                await resolvePeers(for: inboxStore.conversations, viewerID: viewerID)
-                phase = .loaded
-                await registerRealtime()
-                loadTask = nil
-            }
-            return
-        }
         loadTask = Task { await performLoad(forceNetwork: false) }
     }
 
@@ -274,217 +264,24 @@ final class MessagesHomeViewModel {
     // MARK: - Private
 
     private func performLoad(forceNetwork: Bool) async {
-        if !forceNetwork, inboxStore.hasLoaded {
-            phase = .loaded
-            hydratePeersFromCache()
-            await registerRealtime()
-            loadTask = nil
-            return
-        }
-
         if phase != .loaded {
             phase = .loading
         }
-
-        do {
-            let current = await session.currentUserID
-            let viewer = current.map { ProfileID($0.rawValue) }
-            viewerID = viewer
-
-            if let viewer, MessagesInboxSupport.isLocalDevelopmentProfile(viewer) {
-                MessagesInboxFixtures.seedStore(inboxStore, viewerID: viewer)
-                await cachePeers(
-                    MessagesInboxFixtures.profiles(
-                        for: inboxStore.conversations,
-                        viewerID: viewer
-                    )
-                )
-                phase = .loaded
-                await registerRealtime()
-                loadTask = nil
-                return
-            }
-
-            async let conversationsPage = messages.conversations(page: PageRequest(limit: 100))
-            let memberRooms: [TradeRoom]
-            var roomUnread: [RoomID: Int] = [:]
-            if let viewer {
-                memberRooms = try await rooms.memberRooms(
-                    for: viewer,
-                    page: PageRequest(limit: 50)
-                ).items
-                roomUnread = (try? await rooms.unreadCounts(for: memberRooms.map(\.id))) ?? [:]
-            } else {
-                memberRooms = []
-            }
-            let conversations = try await conversationsPage.items
-
-            inboxStore.replaceConversations(conversations)
-            inboxStore.replaceRooms(memberRooms, unread: roomUnread)
-
-            // Seed peer profiles from repository-embedded participant IDs when available.
-            await resolvePeers(for: conversations, viewerID: viewer)
-            phase = .loaded
-            await registerRealtime()
-        } catch {
-            if inboxStore.hasLoaded {
-                phase = .loaded
-            } else {
-                phase = .failed(MessagesInboxSupport.message(for: error))
-            }
+        if forceNetwork {
+            await domain.refreshHome()
+        } else {
+            await domain.bootstrapHomeIfNeeded(forceNetwork: false)
         }
+        viewerID = domain.state.viewerID
+        phase = domain.state.phase
+        isRefreshing = domain.state.isRefreshing
+        await domain.retainRealtime()
         loadTask = nil
-    }
-
-    private func resolvePeers(for conversations: [Conversation], viewerID: ProfileID?) async {
-        let peerIDs = Set(conversations.compactMap { MessagesInboxSupport.peerID(in: $0, viewerID: viewerID) })
-        var resolved: [Profile] = []
-        for id in peerIDs {
-            if let cached = detailCache.profile(id: id) {
-                peerProfiles[id] = cached
-                continue
-            }
-            do {
-                let profile = try await profiles.profile(id: id)
-                detailCache.seed(profile)
-                peerProfiles[id] = profile
-                resolved.append(profile)
-            } catch {
-                continue
-            }
-        }
-        _ = resolved
-    }
-
-    private func cachePeers(_ profiles: [Profile]) async {
-        for profile in profiles {
-            detailCache.seed(profile)
-            peerProfiles[profile.id] = profile
-        }
-    }
-
-    private func hydratePeersFromCache() {
-        for conversation in inboxStore.conversations {
-            if let peerID = MessagesInboxSupport.peerID(in: conversation, viewerID: viewerID),
-               let cached = detailCache.profile(id: peerID)
-            {
-                peerProfiles[peerID] = cached
-            }
-        }
-    }
-
-    private func registerRealtime() async {
-        guard let realtimeHub else { return }
-        let channel = RealtimeChannelID(kind: .conversation, topic: "inbox")
-        try? await realtimeHub.subscriptions.subscribe(channel)
-        await startReadCursorRealtimeIfNeeded()
-        await startRoomUnreadRealtimeIfNeeded()
-        await startRoomReadCursorRealtimeIfNeeded()
-    }
-
-    /// Another device / tab advances `conversation_member_preferences` — patch that row only.
-    private func startReadCursorRealtimeIfNeeded() async {
-        guard let realtimeHub,
-              let viewerID,
-              !MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
-        else { return }
-        guard readCursorTask == nil else { return }
-
-        readCursorTask = Task { [weak self] in
-            guard let self else { return }
-            let token = await session.accessToken
-            for await signal in realtimeHub.watchConversationReadCursors(
-                userID: viewerID.rawValue,
-                accessToken: token
-            ) {
-                guard !Task.isCancelled else { break }
-                guard let rawID = signal.conversationID ?? signal.messageID else { continue }
-                let conversationID = ConversationID(rawID)
-                guard let existing = inboxStore.conversations.first(where: { $0.id == conversationID })
-                else { continue }
-                let locallyCleared = inboxStore.unreadCount(for: existing) == 0
-                // Single-conversation refresh — never reload the full inbox.
-                if var updated = try? await messages.conversation(id: conversationID) {
-                    // Keep optimistic local clear if the unread RPC is briefly lagging.
-                    if locallyCleared {
-                        updated.unreadCount = 0
-                    }
-                    inboxStore.applyConversationUpdate(updated)
-                    if locallyCleared {
-                        inboxStore.markRead(conversationID: conversationID)
-                    }
-                } else if locallyCleared {
-                    inboxStore.markRead(conversationID: conversationID)
-                }
-            }
-            readCursorTask = nil
-        }
-    }
-
-    /// Inbound room messages while on Messages home — bump unread unless that room is open.
-    private func startRoomUnreadRealtimeIfNeeded() async {
-        guard let realtimeHub,
-              let viewerID,
-              !MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
-        else { return }
-        guard roomUnreadTask == nil else { return }
-        let roomIDs = inboxStore.rooms.map(\.id.rawValue)
-        guard !roomIDs.isEmpty else { return }
-
-        roomUnreadTask = Task { [weak self] in
-            guard let self else { return }
-            let token = await session.accessToken
-            for await signal in realtimeHub.watchMemberRoomMessages(
-                roomIDs: roomIDs,
-                accessToken: token
-            ) {
-                guard !Task.isCancelled else { break }
-                guard signal.kind == .insert else { continue }
-                guard let rawID = signal.conversationID ?? signal.messageID else { continue }
-                let roomID = RoomID(rawID)
-                guard inboxStore.rooms.contains(where: { $0.id == roomID }) else { continue }
-                guard inboxStore.activeRoomID != roomID else { continue }
-                inboxStore.markRoomUnread(roomID: roomID)
-            }
-            roomUnreadTask = nil
-        }
-    }
-
-    /// Another device advances `room_members.last_read_*` — patch that room only.
-    private func startRoomReadCursorRealtimeIfNeeded() async {
-        guard let realtimeHub,
-              let viewerID,
-              !MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
-        else { return }
-        guard roomReadCursorTask == nil else { return }
-
-        roomReadCursorTask = Task { [weak self] in
-            guard let self else { return }
-            let token = await session.accessToken
-            for await signal in realtimeHub.watchRoomReadCursors(
-                userID: viewerID.rawValue,
-                accessToken: token
-            ) {
-                guard !Task.isCancelled else { break }
-                guard let rawID = signal.conversationID ?? signal.messageID else { continue }
-                let roomID = RoomID(rawID)
-                guard inboxStore.rooms.contains(where: { $0.id == roomID }) else { continue }
-                let locallyCleared = (inboxStore.roomUnread[roomID] ?? 0) == 0
-                if let counts = try? await rooms.unreadCounts(for: [roomID]),
-                   let count = counts[roomID]
-                {
-                    inboxStore.setRoomUnread(roomID: roomID, count: locallyCleared ? 0 : count)
-                } else if locallyCleared {
-                    inboxStore.markRoomRead(roomID: roomID)
-                }
-            }
-            roomReadCursorTask = nil
-        }
     }
 
     private func makeDMItem(_ conversation: Conversation) -> DirectMessageInboxItem {
         let peerID = MessagesInboxSupport.peerID(in: conversation, viewerID: viewerID)
-        let peer = peerID.flatMap { peerProfiles[$0] ?? detailCache.profile(id: $0) }
+        let peer = peerID.flatMap { domain.profile(id: $0) }
         let unread = inboxStore.unreadCount(for: conversation)
         let preview = conversation.lastMessagePreview?.trimmingCharacters(in: .whitespacesAndNewlines)
         let username: String? = {
@@ -517,7 +314,7 @@ final class MessagesHomeViewModel {
         let preview = inboxStore.roomPreviews[room.id]
             ?? room.description
             ?? "No messages yet"
-        let owner = peerProfiles[room.ownerProfileID] ?? detailCache.profile(id: room.ownerProfileID)
+        let owner = domain.profile(id: room.ownerProfileID)
         return TradeRoomInboxItem(
             room: room,
             ownerName: owner?.displayName,
@@ -529,3 +326,10 @@ final class MessagesHomeViewModel {
         )
     }
 }
+
+/// Canonical screen name for the Messages inbox (Profile/Feed architecture parity).
+typealias MessagesScreenViewModel = MessagesHomeViewModel
+
+/// Conversation thread screen owner — pagination / composer remain thread-scoped.
+typealias ConversationScreenViewModel = ConversationViewModel
+

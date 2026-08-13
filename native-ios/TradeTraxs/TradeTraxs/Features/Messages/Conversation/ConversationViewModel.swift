@@ -366,8 +366,11 @@ final class ConversationViewModel {
             if let peerID {
                 if let cached = detailCache.profile(id: peerID) {
                     peerProfile = cached
-                } else if let fetched = try? await profiles.profile(id: peerID) {
-                    detailCache.seed(fetched)
+                } else if let fetched = try? await SessionProfileStore.shared.profiles(
+                    ids: [peerID],
+                    detailCache: detailCache,
+                    repository: profiles
+                ).first {
                     peerProfile = fetched
                 }
             }
@@ -439,11 +442,22 @@ final class ConversationViewModel {
 
     private func hydrateSharedTrades(from messages: [Message]) async {
         guard let tradesRepo else { return }
-        let ids = Set(messages.compactMap { $0.attachments.first?.tradeID })
-        for id in ids where sharedTrades[id] == nil {
-            if let trade = try? await tradesRepo.trade(id: id) {
-                sharedTrades[id] = trade
-            }
+        let ids = Array(
+            Set(
+                messages.compactMap { message -> TradeID? in
+                    guard let id = message.attachments.first?.tradeID else { return nil }
+                    return sharedTrades[id] == nil ? id : nil
+                }
+            )
+        )
+        guard !ids.isEmpty else { return }
+        let fetched = (try? await SessionTradeEntityStore.shared.trades(
+            ids: ids,
+            detailCache: detailCache,
+            repository: tradesRepo
+        )) ?? []
+        for trade in fetched {
+            sharedTrades[trade.id] = trade
         }
     }
 

@@ -74,10 +74,26 @@ nonisolated struct TradingAccount: Hashable, Codable, Sendable, Identifiable {
     var size: Money?
     var isActive: Bool
     var canAddTrades: Bool
+    /// Web `accounts.account_number` (optional broker/firm ID).
+    var accountNumber: String? = nil
+    /// Web `accounts.note`.
+    var note: String? = nil
     /// Present when category is prop firm and rule columns are loaded.
     var propFirmRules: PropFirmAccountRules? = nil
 
     var isPropFirmAccount: Bool { category == .propFirm }
+}
+
+/// Create / edit payload mirroring web `CreateTradingAccountPayload`.
+nonisolated struct TradingAccountDraft: Hashable, Codable, Sendable {
+    var name: String
+    /// Digits-only account value string (web `account_size`). Required on create.
+    var sizeDigits: String
+    var accountNumber: String
+    var category: TradingAccountCategory
+    var mode: TradingAccountMode
+    var note: String
+    var propFirmRules: PropFirmAccountRules?
 }
 
 /// Core journal trade aggregate root.
@@ -101,8 +117,10 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var publicCaption: String?
     /// Primary screenshot from the trade row (`image_url`) when present.
     var thumbnail: MediaReference?
-    /// Short note preview from the trade row (`notes`) when present.
+    /// Note preview from the trade row (`notes`) when present.
     var notePreview: String?
+    /// Optional setup/strategy label from `trades.strategy` when present.
+    var strategy: String? = nil
     var createdAt: Date
     var updatedAt: Date
 }
@@ -149,8 +167,16 @@ nonisolated struct TradeStatistics: Hashable, Codable, Sendable {
 }
 
 /// Draft used by compose / import before persistence.
+///
+/// Mirrors web `saveManualTrade` / Quick Trade fields. Optional review fields
+/// stay nil unless the user fills Trade Review.
 nonisolated struct TradeDraft: Hashable, Codable, Sendable {
     var accountID: TradingAccountID?
+    /// Denormalized account columns written on insert (web parity).
+    var accountName: String? = nil
+    var accountSizeLabel: String? = nil
+    var accountModeLabel: String? = nil
+    var accountCategoryLabel: String? = nil
     var symbol: Symbol
     var side: TradeSide
     var mode: TradeMode
@@ -160,7 +186,13 @@ nonisolated struct TradeDraft: Hashable, Codable, Sendable {
     var entryAt: Date
     var exitAt: Date?
     var realizedPnL: Money?
+    var riskReward: Decimal? = nil
+    var points: Decimal? = nil
+    var sessionLabel: String? = nil
+    var strategy: String? = nil
     var visibility: ContentVisibility
     var publicCaption: String?
     var noteBody: String?
+    /// Public screenshot URL after upload (storage path or absolute URL).
+    var imageURL: String? = nil
 }

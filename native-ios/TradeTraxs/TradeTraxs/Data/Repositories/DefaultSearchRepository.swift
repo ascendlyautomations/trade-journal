@@ -3,10 +3,16 @@ import Foundation
 nonisolated struct DefaultSearchRepository: SearchRepository {
     private let supabase: SupabaseInfrastructure
     private let cache: CacheStack
+    private let explore: any ExploreRepository
 
-    init(supabase: SupabaseInfrastructure, cache: CacheStack = .placeholder()) {
+    init(
+        supabase: SupabaseInfrastructure,
+        cache: CacheStack = .placeholder(),
+        explore: (any ExploreRepository)? = nil
+    ) {
         self.supabase = supabase
         self.cache = cache
+        self.explore = explore ?? DefaultExploreRepository(supabase: supabase)
     }
 
     func search(
@@ -25,8 +31,10 @@ nonisolated struct DefaultSearchRepository: SearchRepository {
                 ProfileDTO.Profile.self,
                 from: "profiles",
                 query: [
-                    SupabaseQuery.select("id,username,name"),
+                    SupabaseQuery.select("id,username,name,avatar_url,is_private"),
                     URLQueryItem(name: "or", value: "(username.ilike.*\(trimmed)*,name.ilike.*\(trimmed)*)"),
+                    URLQueryItem(name: "username", value: "not.is.null"),
+                    URLQueryItem(name: "is_private", value: "neq.true"),
                     URLQueryItem(name: "limit", value: String(page.limit)),
                 ]
             )
@@ -41,6 +49,22 @@ nonisolated struct DefaultSearchRepository: SearchRepository {
                     profileID: ProfileID(id),
                     tradeID: nil,
                     roomID: nil,
+                    postID: nil
+                )
+            }
+        }
+
+        if kinds.contains(.room) {
+            let rooms = try await explore.searchRooms(query: trimmed, limit: page.limit)
+            results += rooms.map { room in
+                SearchResult(
+                    id: room.id.rawValue,
+                    kind: .room,
+                    title: room.name,
+                    subtitle: "\(room.memberCount) members",
+                    profileID: nil,
+                    tradeID: nil,
+                    roomID: room.id,
                     postID: nil
                 )
             }
@@ -72,6 +96,6 @@ nonisolated struct DefaultSearchRepository: SearchRepository {
             }
         }
 
-        return CursorPage(items: Array(results.prefix(page.limit)), nextCursor: nil)
+        return CursorPage(items: Array(results.prefix(page.limit * max(1, kinds.count))), nextCursor: nil)
     }
 }

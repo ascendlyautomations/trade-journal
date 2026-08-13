@@ -1,0 +1,87 @@
+import Foundation
+import Observation
+
+/// Session memory for Trades history so push → Detail → Back does not cold-reload.
+@Observable
+@MainActor
+final class TradeHistorySessionStore {
+    static let shared = TradeHistorySessionStore()
+
+    struct Snapshot: Sendable {
+        var queryKey: String
+        var profileID: ProfileID
+        var items: [Trade]
+        var nextCursor: String?
+        var filters: TradeHistoryFilters
+        var searchText: String
+        var loadedAt: Date
+    }
+
+    private var snapshots: [String: Snapshot] = [:]
+    private var lastActiveKey: String?
+
+    private init() {}
+
+    static func queryKey(
+        profileID: ProfileID,
+        filters: TradeHistoryFilters,
+        searchText: String
+    ) -> String {
+        "\(profileID.rawValue)|\(filters.account)|\(filters.dateRange.rawValue)|\(filters.customStart?.timeIntervalSince1970 ?? 0)|\(filters.customEnd?.timeIntervalSince1970 ?? 0)|\(filters.result.rawValue)|\(filters.pnlMin.map(String.init(describing:)) ?? "")|\(filters.pnlMax.map(String.init(describing:)) ?? "")|\(filters.direction.rawValue)|\(filters.visibility.rawValue)|\(filters.sort.rawValue)|\(searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+    }
+
+    func snapshot(forKey key: String) -> Snapshot? {
+        snapshots[key]
+    }
+
+    func save(_ snapshot: Snapshot) {
+        snapshots[snapshot.queryKey] = snapshot
+        lastActiveKey = snapshot.queryKey
+    }
+
+    /// Restore matching snapshot if present (navigation return).
+    func restore(
+        profileID: ProfileID,
+        filters: TradeHistoryFilters,
+        searchText: String
+    ) -> Snapshot? {
+        let key = Self.queryKey(profileID: profileID, filters: filters, searchText: searchText)
+        guard let snap = snapshots[key] else {
+            SessionNetworkProbe.record(.cacheMiss, resource: "trades.history", detail: key)
+            return nil
+        }
+        lastActiveKey = key
+        SessionNetworkProbe.record(
+            .cacheHit,
+            resource: "trades.history",
+            detail: "count=\(snap.items.count)"
+        )
+        return snap
+    }
+
+    /// Local mutation — prepend into newest default pages only.
+    func noteCreated(_ trade: Trade) {
+        SessionNetworkProbe.record(.localMutation, resource: "trades.history", detail: trade.id.rawValue)
+        for key in snapshots.keys {
+            guard var snap = snapshots[key] else { continue }
+            guard snap.profileID == trade.ownerProfileID else { continue }
+            guard snap.filters.sort == .newest || snap.filters.sort == .highestPnL else { continue }
+            let query = TradeHistoryQuery(filters: snap.filters, searchText: snap.searchText)
+            guard TradeHistoryLocalMatch.matches(trade, query: query) else { continue }
+            snap.items.removeAll { $0.id == trade.id }
+            snap.items.insert(trade, at: 0)
+            snap.loadedAt = Date()
+            snapshots[key] = snap
+        }
+    }
+
+    func invalidateLists() {
+        snapshots = [:]
+        lastActiveKey = nil
+        SessionNetworkProbe.record(.cacheInvalidated, resource: "trades.history", detail: "lists")
+    }
+
+    func invalidate() {
+        invalidateLists()
+    }
+}

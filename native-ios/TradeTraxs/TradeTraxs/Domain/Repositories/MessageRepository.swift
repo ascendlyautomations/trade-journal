@@ -1,8 +1,20 @@
 import Foundation
 
+/// Inbox bootstrap — conversations plus profiles already embedded in the PostgREST join.
+nonisolated struct ConversationListResult: Sendable {
+    var items: [Conversation]
+    var nextCursor: String?
+    /// Participant profiles from `conversation_participants.profiles(...)` — seed session cache.
+    var embeddedProfiles: [Profile]
+
+    var page: CursorPage<Conversation> {
+        CursorPage(items: items, nextCursor: nextCursor)
+    }
+}
+
 nonisolated protocol MessageRepository: Sendable {
     /// Inbox list — web `fetchUserDmConversations` + unread/mute pipeline.
-    func conversations(page: PageRequest) async throws -> CursorPage<Conversation>
+    func conversations(page: PageRequest) async throws -> ConversationListResult
     func conversation(id: ConversationID) async throws -> Conversation
     func messages(
         in conversationID: ConversationID,

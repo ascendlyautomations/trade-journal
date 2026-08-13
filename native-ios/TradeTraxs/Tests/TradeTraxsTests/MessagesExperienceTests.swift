@@ -5,6 +5,7 @@ import XCTest
 final class MessagesExperienceTests: XCTestCase {
     override func setUp() async throws {
         MessagesInboxStore.shared.resetForTesting()
+        MessagingDomain.shared.invalidate()
     }
 
     func testRelativeTimestampBuckets() {
@@ -300,6 +301,54 @@ final class MessagesExperienceTests: XCTestCase {
             ["c", "b", "a"]
         )
     }
+
+    // MARK: - Messaging domain architecture
+
+    func testMessagingDomainBootstrapSharedByMessagesAndTradeRooms() async {
+        let cache = DetailPresentationCache()
+        let navigation = NavigationCoordinator(store: NavigationStore())
+        let messagesVM = MessagesHomeViewModel(
+            messages: MessagesStubMessageRepository(),
+            rooms: MessagesStubRoomRepository(),
+            profiles: MessagesStubProfileRepository(),
+            session: MessagesStubSession(userID: MessagesInboxFixtures.viewerID.rawValue),
+            detailCache: cache,
+            navigationCoordinator: navigation,
+            inboxStore: MessagesInboxStore.shared
+        )
+        messagesVM.loadIfNeeded()
+        let deadline = Date().addingTimeInterval(2)
+        while messagesVM.phase != .loaded, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(messagesVM.phase, .loaded)
+        XCTAssertTrue(MessagingDomain.shared.state.didBootstrap)
+        XCTAssertTrue(MessagesInboxStore.shared.hasLoadedRooms)
+
+        let roomsVM = TradeRoomsHomeViewModel(
+            messages: MessagesStubMessageRepository(),
+            rooms: MessagesStubRoomRepository(),
+            profiles: MessagesStubProfileRepository(),
+            session: MessagesStubSession(userID: MessagesInboxFixtures.viewerID.rawValue),
+            detailCache: cache,
+            navigationCoordinator: navigation,
+            inboxStore: MessagesInboxStore.shared
+        )
+        roomsVM.loadIfNeeded()
+        let roomsDeadline = Date().addingTimeInterval(2)
+        while roomsVM.phase != .loaded, Date() < roomsDeadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(roomsVM.phase, .loaded)
+        XCTAssertFalse(roomsVM.items.isEmpty)
+    }
+
+    func testScreenTypealiasesMatchCanonicalOwners() {
+        XCTAssertTrue(MessagesScreenViewModel.self == MessagesHomeViewModel.self)
+        XCTAssertTrue(TradeRoomsScreenViewModel.self == TradeRoomsHomeViewModel.self)
+        XCTAssertTrue(ConversationScreenViewModel.self == ConversationViewModel.self)
+        XCTAssertTrue(RoomConversationScreenViewModel.self == RoomConversationViewModel.self)
+    }
 }
 
 // MARK: - Stubs
@@ -319,9 +368,13 @@ private struct MessagesStubSession: SessionProviding {
 }
 
 private struct MessagesStubMessageRepository: MessageRepository {
-    func conversations(page: PageRequest) async throws -> CursorPage<Conversation> {
+    func conversations(page: PageRequest) async throws -> ConversationListResult {
         await MainActor.run {
-            CursorPage(items: MessagesInboxStore.shared.conversations, nextCursor: nil)
+            ConversationListResult(
+                items: MessagesInboxStore.shared.conversations,
+                nextCursor: nil,
+                embeddedProfiles: []
+            )
         }
     }
 

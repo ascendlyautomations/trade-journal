@@ -48,8 +48,7 @@ struct FollowListView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle(viewModel.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle(viewModel.title)
         .toolbar(.hidden, for: .tabBar)
         .searchable(
             text: $viewModel.searchText,

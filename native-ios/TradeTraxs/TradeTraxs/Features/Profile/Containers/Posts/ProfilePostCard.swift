@@ -19,28 +19,30 @@ struct ProfilePostCard: View {
     var body: some View {
         ExperienceCard {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Button(action: onOpen) {
-                    HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                        TradeImageView(
-                            reference: post.media.first,
-                            imagePipeline: imagePipeline,
-                            purpose: .postImage,
-                            contentMode: .fill,
-                            side: thumbnailSide
-                        )
-                        .accessibilityHidden(true)
+                HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                    TradeImageView(
+                        reference: post.media.first,
+                        imagePipeline: imagePipeline,
+                        purpose: .postImage,
+                        contentMode: .fill,
+                        side: thumbnailSide
+                    )
+                    .accessibilityHidden(true)
 
-                        PostCardTextPreview(
-                            text: caption,
-                            maxHeight: thumbnailSide,
-                            isPinned: post.isPinned,
-                            dateText: TradeDisplay.dateText(post.createdAt)
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: thumbnailSide, alignment: .topLeading)
-                    }
-                    .contentShape(Rectangle())
+                    PostCardTextPreview(
+                        text: caption,
+                        maxHeight: thumbnailSide,
+                        isPinned: post.isPinned,
+                        dateText: TradeDisplay.dateText(post.createdAt)
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: thumbnailSide, alignment: .topLeading)
                 }
-                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .experienceDoubleTapLike(
+                    target: target,
+                    store: engagementStore,
+                    onSingleTap: onOpen
+                )
                 .accessibilityLabel(accessibilityLabel)
 
                 EngagementBar(

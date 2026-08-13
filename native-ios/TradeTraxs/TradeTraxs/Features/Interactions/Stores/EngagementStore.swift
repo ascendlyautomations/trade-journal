@@ -70,6 +70,39 @@ final class EngagementStore {
         }
     }
 
+    /// Double-tap Like — sets liked, never unlikes. No-op when already liked / in-flight.
+    /// Haptics are owned by the gesture layer so feedback still plays when already liked.
+    func ensureLiked(on target: InteractionTarget) async {
+        guard !inFlightLikes.contains(target) else { return }
+        let previous = snapshot(for: target)
+        guard !previous.viewerHasLiked else { return }
+
+        inFlightLikes.insert(target)
+        defer { inFlightLikes.remove(target) }
+
+        let optimistic = EngagementSnapshot(
+            likeCount: previous.likeCount + 1,
+            commentCount: previous.commentCount,
+            viewerHasLiked: true
+        )
+        snapshots[target] = optimistic
+
+        if target.id.hasPrefix("dev-") {
+            loadedTargets.insert(target)
+            requestedTargets.insert(target)
+            return
+        }
+
+        do {
+            try await repository.setLiked(true, on: target)
+            loadedTargets.insert(target)
+            requestedTargets.insert(target)
+        } catch {
+            snapshots[target] = previous
+            ExperienceHaptics.play(.warning)
+        }
+    }
+
     func applyCommentCountDelta(_ delta: Int, on target: InteractionTarget) {
         var snap = snapshot(for: target)
         snap.commentCount = max(0, snap.commentCount + delta)

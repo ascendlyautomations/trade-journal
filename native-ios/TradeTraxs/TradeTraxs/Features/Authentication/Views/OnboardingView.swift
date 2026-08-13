@@ -82,8 +82,6 @@ struct AuthPlanPlaceholderView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-            Text(title)
-                .experienceStyle(.largeTitle, color: colors.primaryText)
             Text(message)
                 .experienceStyle(.body, color: colors.secondaryText)
             Spacer()
@@ -93,7 +91,6 @@ struct AuthPlanPlaceholderView: View {
         }
         .experiencePadding(.xl)
         .experienceScreenBackground()
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle(title)
     }
 }

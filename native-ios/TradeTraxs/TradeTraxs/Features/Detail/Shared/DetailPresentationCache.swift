@@ -236,12 +236,20 @@ final class DetailPresentationCache {
         accountSizes[accountID]
     }
 
+    /// Clear trade list seeds after CSV import so Dashboard / Profile refetch.
+    func invalidateJournalLists() {
+        trades = [:]
+        publicTradesByProfile = [:]
+        statsByProfile = [:]
+    }
+
     /// Drop all session seeds when the authenticated user changes.
     func removeAll() {
         trades = [:]
         posts = [:]
         reels = [:]
         achievements = [:]
+        storiesByID = [:]
         profilesByID = [:]
         statsByProfile = [:]
         ownedTradeRooms = [:]

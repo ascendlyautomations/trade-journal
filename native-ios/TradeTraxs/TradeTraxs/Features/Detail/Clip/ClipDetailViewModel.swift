@@ -109,7 +109,15 @@ final class ClipDetailViewModel {
         phase = .loaded
         let userID = await session.currentUserID
         isOwner = userID?.rawValue == loaded.authorProfileID.rawValue
-        author = try? await profiles.profile(id: loaded.authorProfileID)
+        if let cached = cache.profile(id: loaded.authorProfileID) {
+            author = cached
+        } else {
+            author = try? await SessionProfileStore.shared.profiles(
+                ids: [loaded.authorProfileID],
+                detailCache: cache,
+                repository: profiles
+            ).first
+        }
         authorAvatar = await DetailAuthorPresentation.loadAvatar(
             for: author,
             imagePipeline: imagePipeline

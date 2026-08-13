@@ -1,22 +1,37 @@
 import SwiftUI
 
+/// Single Manage Accounts experience — Settings, Dashboard, and Calendar all land here.
 struct SettingsTradingAccountsView: View {
-    @State private var viewModel: SettingsTradingAccountsViewModel
+    @State private var viewModel: ManageAccountsViewModel
     var propFirmOnly: Bool = false
 
+    @State private var editorPresentation: EditorPresentation?
     @Environment(\.themeColors) private var colors
+
+    private enum EditorPresentation: Identifiable {
+        case create
+        case edit(TradingAccount)
+
+        var id: String {
+            switch self {
+            case .create: return "create"
+            case .edit(let account): return account.id.rawValue
+            }
+        }
+    }
 
     init(data: DataEnvironment, propFirmOnly: Bool = false) {
         _viewModel = State(
-            initialValue: SettingsTradingAccountsViewModel(
+            initialValue: ManageAccountsViewModel(
                 trades: data.trades,
-                session: data.session
+                session: data.session,
+                detailCache: data.detailCache
             )
         )
         self.propFirmOnly = propFirmOnly
     }
 
-    init(viewModel: SettingsTradingAccountsViewModel, propFirmOnly: Bool = false) {
+    init(viewModel: ManageAccountsViewModel, propFirmOnly: Bool = false) {
         _viewModel = State(initialValue: viewModel)
         self.propFirmOnly = propFirmOnly
     }
@@ -38,52 +53,88 @@ struct SettingsTradingAccountsView: View {
                         .experienceStyle(.body, color: colors.secondaryText)
                 }
             } else {
-                Section(propFirmOnly ? "Prop Firm Accounts" : "Accounts") {
+                Section {
                     ForEach(rows) { account in
-                        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                            Text(account.name)
-                                .experienceStyle(.body, color: colors.primaryText)
-                            Text(subtitle(for: account))
-                                .experienceStyle(.footnote, color: colors.secondaryText)
+                        Button {
+                            editorPresentation = .edit(account)
+                        } label: {
+                            HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(account.name)
+                                        .experienceStyle(.body, color: colors.primaryText)
+                                    Text(viewModel.subtitle(for: account))
+                                        .experienceStyle(.footnote, color: colors.secondaryText)
+                                    if let note = account.note, !note.isEmpty {
+                                        Text(note)
+                                            .experienceStyle(.caption, color: colors.tertiaryText)
+                                            .lineLimit(2)
+                                    }
+                                }
+                                Spacer(minLength: 0)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(colors.tertiaryText)
+                            }
+                            .padding(.vertical, 2)
                         }
-                        .padding(.vertical, ExperienceSpacing.xxs)
+                        .buttonStyle(.plain)
                         .accessibilityIdentifier("settings.account.\(account.id.rawValue)")
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button {
+                                Task {
+                                    await viewModel.setActive(id: account.id, isActive: !account.isActive)
+                                }
+                            } label: {
+                                Text(account.isActive ? "Deactivate" : "Activate")
+                            }
+                            .tint(account.isActive ? colors.secondaryText : colors.accent)
+                        }
                     }
+                } footer: {
+                    Text("Deactivate hides an account from trade pickers but keeps its history. Accounts are never deleted.")
                 }
-            }
-
-            Section {
-                Text(
-                    propFirmOnly
-                        ? "Rule configuration editing arrives with the Prop Firm Settings phase. Analytics remain on Dashboard / Prop Firm Details."
-                        : "Account creation and copy-trading group management remain on the web Trading Accounts settings for now. This screen is for review and configuration entry."
-                )
-                .experienceStyle(.footnote, color: colors.secondaryText)
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle(propFirmOnly ? "Prop Firm" : "Trading Accounts")
+        .experienceNavigationTitle(propFirmOnly ? "Prop Firm" : "Manage Accounts")
+        .toolbar {
+            if !propFirmOnly {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        editorPresentation = .create
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                    .accessibilityIdentifier("manageAccounts.add")
+                }
+            }
+        }
         .overlay {
             if viewModel.isLoading {
                 ProgressView()
             }
         }
+        .sheet(item: $editorPresentation) { presentation in
+            NavigationStack {
+                switch presentation {
+                case .create:
+                    ManageAccountEditorView(
+                        viewModel: viewModel,
+                        mode: .create,
+                        draft: viewModel.emptyDraft()
+                    )
+                case .edit(let account):
+                    ManageAccountEditorView(
+                        viewModel: viewModel,
+                        mode: .edit(account.id),
+                        draft: viewModel.draft(from: account)
+                    )
+                }
+            }
+        }
         .onAppear { viewModel.loadIfNeeded() }
         .accessibilityIdentifier(propFirmOnly ? "settings.propFirm" : "settings.tradingAccounts")
-    }
-
-    private func subtitle(for account: TradingAccount) -> String {
-        var parts: [String] = []
-        parts.append(account.category == .propFirm ? "Prop Firm" : account.category.rawValue.capitalized)
-        parts.append(account.mode.rawValue.capitalized)
-        if let size = account.size {
-            parts.append(size.amount.formatted(.number.precision(.fractionLength(0))))
-        }
-        if !account.isActive {
-            parts.append("Inactive")
-        }
-        return parts.joined(separator: " · ")
     }
 }

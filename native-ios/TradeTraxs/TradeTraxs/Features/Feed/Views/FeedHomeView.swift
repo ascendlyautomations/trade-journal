@@ -1,8 +1,11 @@
 import SwiftUI
 
 /// Permanent Feed tab root — Instagram-style vertical Home Feed.
+///
+/// Data lifecycle is owned exclusively by ``FeedScreenViewModel``.
+/// Child views (stories, cards, filters, empty/error) are render-only.
 struct FeedHomeView: View {
-    @State private var viewModel: FeedViewModel
+    @State private var viewModel: FeedScreenViewModel
     private let imagePipeline: any ImagePipeline
     private let detailCache: DetailPresentationCache
     private let engagementStore: EngagementStore
@@ -15,7 +18,7 @@ struct FeedHomeView: View {
         navigationCoordinator: NavigationCoordinator
     ) {
         _viewModel = State(
-            initialValue: FeedViewModel(
+            initialValue: FeedScreenViewModel(
                 feed: data.feed,
                 trades: data.trades,
                 profiles: data.profiles,
@@ -34,7 +37,7 @@ struct FeedHomeView: View {
 
     /// Tests / previews.
     init(
-        viewModel: FeedViewModel,
+        viewModel: FeedScreenViewModel,
         imagePipeline: any ImagePipeline,
         detailCache: DetailPresentationCache,
         engagementStore: EngagementStore
@@ -66,7 +69,7 @@ struct FeedHomeView: View {
                 }
             case .loaded where viewModel.showsEmpty:
                 VStack(spacing: 0) {
-                    if !viewModel.stories.isEmpty {
+                    if viewModel.scope == .following, !viewModel.stories.isEmpty {
                         storiesSection
                     }
                     ExperienceEmptyState(
@@ -80,27 +83,19 @@ struct FeedHomeView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle("Feed")
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Feed")
-                        .experienceStyle(.headline, color: colors.primaryText)
-                    FeedScopeToggle(
-                        scope: Binding(
-                            get: { viewModel.scope },
-                            set: { viewModel.setScope($0) }
-                        ),
-                        onChange: { _ in }
+            ToolbarItem(placement: .topBarLeading) {
+                FeedScopeToggle(
+                    scope: Binding(
+                        get: { viewModel.scope },
+                        set: { viewModel.setScope($0) }
                     )
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("feed.header.scope")
+                )
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            header
+            contentFilterBar
         }
         .refreshable {
             await viewModel.refresh()
@@ -113,10 +108,18 @@ struct FeedHomeView: View {
             }
             #endif
         }
+        .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
+            // Private journal inserts do not belong in Feed. Public share goes through ContentMutationStore.
+            guard TradeJournalMutationStore.shared.latestCreatedTrade?.visibility == .public else { return }
+            Task { await viewModel.refresh() }
+        }
+        .onChange(of: ContentMutationStore.shared.revision) { _, _ in
+            Task { await viewModel.refresh() }
+        }
         .accessibilityIdentifier("feed.home")
     }
 
-    private var header: some View {
+    private var contentFilterBar: some View {
         FeedContentToggle(
             filter: Binding(
                 get: { viewModel.contentFilter },
@@ -127,13 +130,15 @@ struct FeedHomeView: View {
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.top, 4)
         .padding(.bottom, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(colors.backgroundPrimary.opacity(0.96))
+        .accessibilityIdentifier("feed.header.contentFilter")
     }
 
     private var feedList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                if !viewModel.stories.isEmpty {
+                if viewModel.scope == .following, !viewModel.stories.isEmpty {
                     storiesSection
                     Rectangle()
                         .fill(colors.border.opacity(0.55))

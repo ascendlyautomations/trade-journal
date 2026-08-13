@@ -63,14 +63,17 @@ struct TradesContainerView: View {
                     value: viewModel.visibleItems.map(\.id)
                 )
                 .onChange(of: viewModel.visibleItems.map(\.id)) { _, ids in
-                    engagementStore.prefetch(ids.map { .trade($0) })
+                    viewModel.prefetchEngagement(for: ids)
                 }
                 .onAppear {
-                    engagementStore.prefetch(
-                        viewModel.visibleItems.map { .trade($0.id) }
-                    )
+                    viewModel.prefetchEngagement(for: viewModel.visibleItems.map(\.id))
                 }
             }
+        }
+        .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
+            // Profile public trades — only revalidate when the new trade is public.
+            guard TradeJournalMutationStore.shared.latestCreatedTrade?.visibility == .public else { return }
+            Task { await viewModel.refresh() }
         }
         .sheet(item: $viewModel.sharePayload) { payload in
             TradeShareSheet(items: [payload.text])

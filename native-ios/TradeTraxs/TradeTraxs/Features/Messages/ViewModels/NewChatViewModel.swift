@@ -101,16 +101,27 @@ final class NewChatViewModel {
                     page: PageRequest(limit: 24)
                 )
                 guard !Task.isCancelled else { return }
+                let ids = page.items.compactMap { result -> ProfileID? in
+                    guard result.kind == .profile, let id = result.profileID, id != viewerID else {
+                        return nil
+                    }
+                    return id
+                }
+                var byID: [ProfileID: Profile] = [:]
+                let fetched = (try? await SessionProfileStore.shared.profiles(
+                    ids: ids,
+                    detailCache: detailCache,
+                    repository: self.profiles
+                )) ?? []
+                for profile in fetched {
+                    byID[profile.id] = profile
+                }
+                // Preserve search-result order; synthesize minimal profiles when batch misses.
                 var profiles: [Profile] = []
                 for result in page.items where result.kind == .profile {
                     guard let id = result.profileID, id != viewerID else { continue }
-                    if let cached = detailCache.profile(id: id) {
-                        profiles.append(cached)
-                        continue
-                    }
-                    if let fetched = try? await self.profiles.profile(id: id) {
-                        detailCache.seed(fetched)
-                        profiles.append(fetched)
+                    if let profile = byID[id] {
+                        profiles.append(profile)
                     } else {
                         profiles.append(
                             Profile(

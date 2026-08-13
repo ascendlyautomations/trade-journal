@@ -58,7 +58,6 @@ struct ProfileHeaderView: View {
                 mode: viewModel.actionMode,
                 onEdit: viewModel.openEditProfile,
                 onShare: viewModel.presentShare,
-                onSettings: viewModel.openSettings,
                 onCreateTradeRoom: viewModel.createTradeRoom,
                 onViewTradeRoom: viewModel.openTradeRoom,
                 onFollow: viewModel.followAction,

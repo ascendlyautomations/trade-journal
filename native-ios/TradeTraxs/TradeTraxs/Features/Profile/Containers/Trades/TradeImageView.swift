@@ -12,10 +12,16 @@ struct TradeImageView: View {
     var purpose: ImagePurpose = .tradeScreenshot
     var contentMode: ContentMode = .fit
     var side: CGFloat = 96
+    /// Optional override — journal cards use a wide compact strip.
+    var width: CGFloat? = nil
+    var height: CGFloat? = nil
 
     @Environment(\.themeColors) private var colors
     @State private var image: Image?
     @State private var didFail = false
+
+    private var resolvedWidth: CGFloat { width ?? side }
+    private var resolvedHeight: CGFloat { height ?? side }
 
     var body: some View {
         ZStack {
@@ -33,13 +39,13 @@ struct TradeImageView: View {
                     color: colors.tertiaryText
                 )
             } else {
-                ExperienceSkeleton(height: side, cornerRadius: ExperienceRadius.md)
+                ExperienceSkeleton(height: resolvedHeight, cornerRadius: ExperienceRadius.md)
             }
         }
-        .frame(width: side, height: side)
+        .frame(width: resolvedWidth, height: resolvedHeight)
         // Clip only rounds the container — with `.fit` the bitmap itself is not cropped.
         .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-        .task(id: "\(reference?.id ?? "")|\(purpose.rawValue)|\(Int(side))|\(contentMode == .fill)") {
+        .task(id: "\(reference?.id ?? "")|\(purpose.rawValue)|\(Int(resolvedWidth))x\(Int(resolvedHeight))|\(contentMode == .fill)") {
             await load()
         }
     }
@@ -51,7 +57,7 @@ struct TradeImageView: View {
             return
         }
         didFail = false
-        let pixelBudget = max(128, Int(side * UIScreen.main.scale * 2))
+        let pixelBudget = max(128, Int(max(resolvedWidth, resolvedHeight) * UIScreen.main.scale * 2))
         do {
             let data = try await imagePipeline.data(
                 for: ImageRequest(

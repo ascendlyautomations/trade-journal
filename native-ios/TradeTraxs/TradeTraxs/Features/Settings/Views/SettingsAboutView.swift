@@ -31,7 +31,7 @@ struct SettingsAboutView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle("About TradeTraxs")
+        .experienceNavigationTitle("About TradeTraxs")
         .accessibilityIdentifier("settings.about")
     }
 

@@ -51,8 +51,7 @@ struct TradeDetailView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle(viewModel.trade?.symbol.ticker ?? "Trade")
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle(viewModel.trade?.symbol.ticker ?? "Trade")
         .toolbar(.hidden, for: .tabBar)
         .task {
             viewModel.loadIfNeeded()
@@ -74,7 +73,10 @@ struct TradeDetailView: View {
 
                         TradeDetailMediaView(
                             reference: viewModel.mediaReference,
-                            imagePipeline: imagePipeline
+                            imagePipeline: imagePipeline,
+                            onDoubleTapLike: {
+                                Task { await data.engagementStore.ensureLiked(on: .trade(viewModel.tradeID)) }
+                            }
                         )
 
                         tradeBody(trade, scrollProxy: proxy)

@@ -52,12 +52,15 @@ struct FeedStoryViewerView: View {
                 .foregroundStyle(.white)
             }
         }
+        .experienceSwipeToDismiss(onDismiss: onClose)
+        .experienceNavigationTitle("Story")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close", action: onClose)
                     .foregroundStyle(.white)
             }
         }
+        .interactiveDismissDisabled()
         .accessibilityIdentifier("feed.story.viewer")
     }
 

@@ -6,6 +6,7 @@ final class TradeRoomsExperienceTests: XCTestCase {
     override func setUp() {
         super.setUp()
         MessagesInboxStore.shared.resetForTesting()
+        MessagingDomain.shared.invalidate()
     }
 
     func testHomeLoadsFixtureRoomsForDevelopmentViewer() async {
@@ -14,6 +15,7 @@ final class TradeRoomsExperienceTests: XCTestCase {
         TradeRoomsFixtures.seedInbox(store, viewerID: viewer)
 
         let viewModel = TradeRoomsHomeViewModel(
+            messages: TradeRoomsStubMessageRepository(),
             rooms: TradeRoomsStubRoomRepository(),
             profiles: TradeRoomsStubProfileRepository(),
             session: TradeRoomsStubSession(userID: viewer.rawValue),
@@ -35,6 +37,7 @@ final class TradeRoomsExperienceTests: XCTestCase {
         TradeRoomsFixtures.seedInbox(store)
 
         let viewModel = TradeRoomsHomeViewModel(
+            messages: TradeRoomsStubMessageRepository(),
             rooms: TradeRoomsStubRoomRepository(),
             profiles: TradeRoomsStubProfileRepository(),
             session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
@@ -84,6 +87,7 @@ final class TradeRoomsExperienceTests: XCTestCase {
         XCTAssertEqual(store.roomUnread[desk] ?? 0, 5)
 
         let viewModel = TradeRoomsHomeViewModel(
+            messages: TradeRoomsStubMessageRepository(),
             rooms: TradeRoomsStubRoomRepository(),
             profiles: TradeRoomsStubProfileRepository(),
             session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
@@ -337,6 +341,27 @@ private struct TradeRoomsStubProfileRepository: ProfileRepository {
         CursorPage(items: [], nextCursor: nil)
     }
     func creator(for profileID: ProfileID) async throws -> Creator? { nil }
+}
+
+private struct TradeRoomsStubMessageRepository: MessageRepository {
+    func conversations(page: PageRequest) async throws -> ConversationListResult {
+        ConversationListResult(items: [], nextCursor: nil, embeddedProfiles: [])
+    }
+
+    func conversation(id: ConversationID) async throws -> Conversation {
+        throw AppError.domain(.notFound(entity: "conversation", id: id.rawValue))
+    }
+
+    func messages(in conversationID: ConversationID, page: PageRequest) async throws -> CursorPage<Message> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func send(_ message: Message) async throws -> Message { message }
+    func markRead(conversationID: ConversationID) async throws {}
+    func createConversation(participantIDs: [ProfileID]) async throws -> Conversation {
+        throw AppError.notImplemented(feature: "createConversation")
+    }
+    func deleteConversation(id: ConversationID) async throws {}
 }
 
 private struct TradeRoomsStubRoomRepository: RoomRepository {

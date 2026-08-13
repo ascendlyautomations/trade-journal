@@ -131,6 +131,44 @@ final class DashboardExperienceTests: XCTestCase {
         }
     }
 
+    func testNetworkBootstrapSkipsHomeDashboardAndDefersAchievements() async {
+        DashboardLoadProbe.resetForTesting()
+        let tradesRepo = DashboardCountingTradeRepository()
+        let achievementsRepo = DashboardCountingAchievementRepository()
+        let homeRepo = DashboardCountingHomeRepository()
+        let cache = DetailPresentationCache()
+        let viewModel = DashboardViewModel(
+            home: homeRepo,
+            trades: tradesRepo,
+            achievements: achievementsRepo,
+            session: DashboardStubSession(userID: "00000000-0000-4000-8000-000000000099"),
+            detailCache: cache,
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded && homeRepo.dashboardCallCount == 0 }
+
+        // Allow deferred payouts hydrate to finish.
+        await waitFor { achievementsRepo.achievementsCallCount == 1 }
+
+        XCTAssertEqual(homeRepo.dashboardCallCount, 0, "home.dashboard must not run on Dashboard")
+        XCTAssertEqual(tradesRepo.tradesCallCount, 1)
+        XCTAssertEqual(tradesRepo.accountsCallCount, 1)
+        XCTAssertEqual(achievementsRepo.achievementsCallCount, 1)
+        XCTAssertNotNil(viewModel.summary)
+
+        // Second visit — session cache, no refetch.
+        viewModel.loadIfNeeded()
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        XCTAssertEqual(tradesRepo.tradesCallCount, 1)
+        XCTAssertEqual(achievementsRepo.achievementsCallCount, 1)
+
+        let snap = DashboardLoadProbe.snapshot()
+        XCTAssertFalse(snap.operations.contains { $0.name.contains("home.dashboard") })
+        XCTAssertNotNil(snap.firstUsefulRenderMs)
+    }
+
     private func waitFor(
         timeout: TimeInterval = 2,
         _ condition: @escaping () -> Bool
@@ -242,6 +280,94 @@ private struct DashboardStubAchievementRepository: AchievementRepository {
         publicOnly: Bool
     ) async throws -> CursorPage<Achievement> {
         CursorPage(items: [], nextCursor: nil)
+    }
+
+    func save(_ achievement: Achievement) async throws -> Achievement { achievement }
+}
+
+private final class DashboardCountingHomeRepository: HomeRepository, @unchecked Sendable {
+    private(set) var dashboardCallCount = 0
+
+    func dashboard(for profileID: ProfileID) async throws -> HomeDashboard {
+        dashboardCallCount += 1
+        return try await DashboardStubHomeRepository().dashboard(for: profileID)
+    }
+
+    func performance(
+        for profileID: ProfileID,
+        interval: DateIntervalValue
+    ) async throws -> PerformanceSummary {
+        try await dashboard(for: profileID).summary
+    }
+}
+
+private final class DashboardCountingTradeRepository: TradeRepository, @unchecked Sendable {
+    private(set) var tradesCallCount = 0
+    private(set) var accountsCallCount = 0
+
+    func trade(id: TradeID) async throws -> Trade {
+        throw AppError.unknown(message: "not found")
+    }
+
+    func trades(
+        ownedBy profileID: ProfileID,
+        accountID: TradingAccountID?,
+        page: PageRequest,
+        publicOnly: Bool
+    ) async throws -> CursorPage<Trade> {
+        tradesCallCount += 1
+        let owner = profileID
+        let samples = ProfileTradeFixtures.samples(owner: owner)
+        return CursorPage(items: samples, nextCursor: nil)
+    }
+
+    func save(_ draft: TradeDraft) async throws -> Trade {
+        throw AppError.unknown(message: "stub")
+    }
+
+    func update(_ trade: Trade) async throws -> Trade { trade }
+    func delete(id: TradeID) async throws {}
+    func images(for tradeID: TradeID) async throws -> [TradeImage] { [] }
+    func notes(for tradeID: TradeID) async throws -> [TradeNote] { [] }
+
+    func statistics(
+        for profileID: ProfileID,
+        interval: DateIntervalValue
+    ) async throws -> TradeStatistics {
+        TradeStatistics(
+            tradeCount: 0,
+            winCount: 0,
+            lossCount: 0,
+            totalPnL: Money(amount: 0),
+            averagePnL: Money(amount: 0),
+            averageRiskReward: nil,
+            winRate: 0
+        )
+    }
+
+    func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
+        accountsCallCount += 1
+        return PropFirmFixtures.accounts(owner: profileID)
+    }
+}
+
+private final class DashboardCountingAchievementRepository: AchievementRepository, @unchecked Sendable {
+    private(set) var achievementsCallCount = 0
+
+    func achievement(id: AchievementID) async throws -> Achievement {
+        throw AppError.unknown(message: "not found")
+    }
+
+    func achievements(
+        for profileID: ProfileID,
+        page: PageRequest,
+        publicOnly: Bool
+    ) async throws -> CursorPage<Achievement> {
+        achievementsCallCount += 1
+        return CursorPage(
+            items: ProfileAchievementFixtures.samples(owner: profileID),
+            nextCursor: nil
+        )
     }
 
     func save(_ achievement: Achievement) async throws -> Achievement { achievement }

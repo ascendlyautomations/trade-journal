@@ -16,13 +16,9 @@ struct ResetPasswordView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.xl) {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    Text("Reset password")
-                        .experienceStyle(.largeTitle, color: colors.primaryText)
-                    Text("We’ll email you a secure link to choose a new password.")
-                        .experienceStyle(.body, color: colors.secondaryText)
-                }
-                .padding(.top, ExperienceSpacing.lg)
+                Text("We’ll email you a secure link to choose a new password.")
+                    .experienceStyle(.body, color: colors.secondaryText)
+                    .padding(.top, ExperienceSpacing.sm)
 
                 if viewModel.didSucceed {
                     successCard
@@ -60,8 +56,7 @@ struct ResetPasswordView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .experienceScreenBackground()
-        .navigationTitle("Reset Password")
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle("Reset Password")
     }
 
     private var successCard: some View {

@@ -111,7 +111,13 @@ final class AuthenticationCoordinator {
         if let previous = boundUserID, let newID, previous != newID {
             await invalidateCachesForSessionChange()
         }
+        let isNewBind = boundUserID == nil && newID != nil
         boundUserID = newID
+        if isNewBind {
+            #if DEBUG
+            SupabaseSessionUsage.beginSession()
+            #endif
+        }
     }
 
     private func invalidateCachesForSessionChange() async {

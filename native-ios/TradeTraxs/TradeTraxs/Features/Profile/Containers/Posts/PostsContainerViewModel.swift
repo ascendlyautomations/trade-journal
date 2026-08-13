@@ -11,22 +11,45 @@ final class PostsContainerViewModel {
     private let profiles: any ProfileRepository
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
+    private let engagementStore: EngagementStore?
     private var loadTask: Task<Void, Never>?
     private var hasLoaded = false
+    private var isScreenOwned = false
 
     init(
         profileID: ProfileID,
         profiles: any ProfileRepository,
         navigationCoordinator: NavigationCoordinator,
-        detailCache: DetailPresentationCache
+        detailCache: DetailPresentationCache,
+        engagementStore: EngagementStore? = nil
     ) {
         self.profileID = profileID
         self.profiles = profiles
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
+        self.engagementStore = engagementStore
+    }
+
+    func prefetchEngagement(for postIDs: [PostID]) {
+        guard !postIDs.isEmpty else { return }
+        engagementStore?.prefetch(postIDs.map { .profilePost($0) })
+    }
+
+    func applyBootstrap(_ snapshot: ProfileState) {
+        guard snapshot.didBootstrap || snapshot.phase == .loaded || !snapshot.posts.isEmpty else {
+            if snapshot.phase == .loading, items.isEmpty { state = .loading }
+            return
+        }
+        isScreenOwned = true
+        hasLoaded = true
+        items = snapshot.posts
+        detailCache.seed(posts: items)
+        state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+        prefetchEngagement(for: items.map(\.id))
     }
 
     func loadIfNeeded() {
+        if isScreenOwned { return }
         guard !hasLoaded, loadTask == nil else { return }
         loadTask = Task { await performLoad() }
     }
@@ -52,6 +75,7 @@ final class PostsContainerViewModel {
             items = ProfilePostFixtures.samples(owner: profileID)
             detailCache.seed(posts: items)
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            prefetchEngagement(for: items.map(\.id))
             loadTask = nil
             return
         }
@@ -68,6 +92,7 @@ final class PostsContainerViewModel {
             detailCache.seed(posts: items)
             hasLoaded = true
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            prefetchEngagement(for: items.map(\.id))
         } catch {
             guard !Task.isCancelled else { return }
             if items.isEmpty {

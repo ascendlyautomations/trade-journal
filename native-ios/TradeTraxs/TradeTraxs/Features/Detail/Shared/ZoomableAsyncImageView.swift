@@ -7,6 +7,8 @@ struct ZoomableAsyncImageView: View {
     let purpose: ImagePurpose
     let imagePipeline: any ImagePipeline
     var maxPixelSize: Int? = 2_048
+    /// Live zoom scale (1 = fit). Used to gate swipe-to-dismiss.
+    var zoomScale: Binding<CGFloat>? = nil
 
     @Environment(\.themeColors) private var colors
     @Environment(\.displayScale) private var displayScale
@@ -18,7 +20,7 @@ struct ZoomableAsyncImageView: View {
             colors.fillPrimary
 
             if let uiImage {
-                ZoomableUIImageView(image: uiImage)
+                ZoomableUIImageView(image: uiImage, zoomScale: zoomScale)
             } else if didFail || reference == nil {
                 ExperienceIcon(icon: .chart, size: .xl, color: colors.tertiaryText)
             } else {
@@ -66,6 +68,7 @@ struct ZoomableAsyncImageView: View {
 /// Native pinch-to-zoom host.
 private struct ZoomableUIImageView: UIViewRepresentable {
     let image: UIImage
+    var zoomScale: Binding<CGFloat>?
 
     func makeUIView(context: Context) -> UIScrollView {
         let scrollView = UIScrollView()
@@ -92,13 +95,20 @@ private struct ZoomableUIImageView: UIViewRepresentable {
 
         context.coordinator.scrollView = scrollView
         context.coordinator.imageView = imageView
+        context.coordinator.zoomScale = zoomScale
         return scrollView
     }
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
         guard let imageView = context.coordinator.imageView else { return }
+        context.coordinator.zoomScale = zoomScale
+        let imageChanged = imageView.image !== image
+        let boundsChanged = context.coordinator.lastBounds != scrollView.bounds.size
         imageView.image = image
-        context.coordinator.layoutImage()
+        // Avoid resetting user zoom when parent re-renders from zoomScale binding updates.
+        if imageChanged || boundsChanged || !context.coordinator.hasLaidOut {
+            context.coordinator.layoutImage()
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -108,6 +118,9 @@ private struct ZoomableUIImageView: UIViewRepresentable {
     final class Coordinator: NSObject, UIScrollViewDelegate {
         weak var scrollView: UIScrollView?
         weak var imageView: UIImageView?
+        var zoomScale: Binding<CGFloat>?
+        var hasLaidOut = false
+        var lastBounds: CGSize = .zero
 
         func viewForZooming(in scrollView: UIScrollView) -> UIView? {
             imageView
@@ -115,11 +128,21 @@ private struct ZoomableUIImageView: UIViewRepresentable {
 
         func scrollViewDidZoom(_ scrollView: UIScrollView) {
             centerImage()
+            zoomScale?.wrappedValue = scrollView.zoomScale
+        }
+
+        func scrollViewDidEndZooming(
+            _ scrollView: UIScrollView,
+            with view: UIView?,
+            atScale scale: CGFloat
+        ) {
+            zoomScale?.wrappedValue = scale
         }
 
         func layoutImage() {
             guard let scrollView, let imageView, let image = imageView.image else { return }
             scrollView.zoomScale = 1
+            zoomScale?.wrappedValue = 1
             let size = scrollView.bounds.size
             guard size.width > 0, size.height > 0 else { return }
 
@@ -133,6 +156,8 @@ private struct ZoomableUIImageView: UIViewRepresentable {
             )
             imageView.frame = CGRect(origin: .zero, size: fitted)
             scrollView.contentSize = fitted
+            lastBounds = size
+            hasLaidOut = true
             centerImage()
         }
 

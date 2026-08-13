@@ -144,6 +144,92 @@ final class FeedExperienceTests: XCTestCase {
         XCTAssertTrue(stories.contains { $0.viewerHasSeen })
     }
 
+    func testActiveStorySemanticsMatchesWeb24HourWindow() {
+        let now = Date()
+        let fresh = Story(
+            id: StoryID("s1"),
+            authorProfileID: ProfileID("a"),
+            media: MediaReference(id: "https://example.com/a.jpg", kind: .image, altText: nil),
+            expiresAt: now.addingTimeInterval(3_600),
+            createdAt: now.addingTimeInterval(-3_600),
+            viewerHasSeen: false
+        )
+        let expired = Story(
+            id: StoryID("s2"),
+            authorProfileID: ProfileID("b"),
+            media: MediaReference(id: "https://example.com/b.jpg", kind: .image, altText: nil),
+            expiresAt: now,
+            createdAt: now.addingTimeInterval(-86_400),
+            viewerHasSeen: false
+        )
+        XCTAssertTrue(ActiveStorySemantics.isActive(createdAt: fresh.createdAt, now: now))
+        XCTAssertFalse(ActiveStorySemantics.isActive(createdAt: expired.createdAt, now: now))
+        let active = ActiveStorySemantics.filterActive([fresh, expired], now: now)
+        XCTAssertEqual(active.map(\.id), [fresh.id])
+    }
+
+    func testActiveStoryStripGroupsByAuthorNewestFirst() {
+        let now = Date()
+        let viewer = ProfileID("viewer")
+        let olderMine = Story(
+            id: StoryID("mine-old"),
+            authorProfileID: viewer,
+            media: MediaReference(id: "m1", kind: .image, altText: nil),
+            expiresAt: now.addingTimeInterval(86_400),
+            createdAt: now.addingTimeInterval(-2_000),
+            viewerHasSeen: false
+        )
+        let newerMine = Story(
+            id: StoryID("mine-new"),
+            authorProfileID: viewer,
+            media: MediaReference(id: "m2", kind: .image, altText: nil),
+            expiresAt: now.addingTimeInterval(86_400),
+            createdAt: now.addingTimeInterval(-100),
+            viewerHasSeen: false
+        )
+        let other = Story(
+            id: StoryID("other"),
+            authorProfileID: ProfileID("other"),
+            media: MediaReference(id: "o1", kind: .image, altText: nil),
+            expiresAt: now.addingTimeInterval(86_400),
+            createdAt: now.addingTimeInterval(-500),
+            viewerHasSeen: false
+        )
+        let strip = ActiveStorySemantics.stripStories(
+            from: [olderMine, other, newerMine],
+            viewerID: viewer
+        )
+        XCTAssertEqual(strip.map(\.id.rawValue), ["mine-new", "other"])
+    }
+
+    func testScopeAndContentFilterRemainIndependent() async {
+        let cache = DetailPresentationCache()
+        let engagement = EngagementStore(repository: FeedStubInteractionRepository())
+        let navigationStore = NavigationStore()
+        let coordinator = NavigationCoordinator(store: navigationStore)
+        let viewModel = FeedViewModel(
+            feed: FeedStubFeedRepository(),
+            trades: FeedStubTradeRepository(),
+            profiles: FeedStubProfileRepository(),
+            achievements: FeedStubAchievementRepository(),
+            session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
+            detailCache: cache,
+            engagementStore: engagement,
+            navigationCoordinator: coordinator
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+        XCTAssertEqual(viewModel.scope, .following)
+        viewModel.setScope(.global)
+        XCTAssertEqual(viewModel.scope, .global)
+        viewModel.setContentFilter(.posts)
+        XCTAssertEqual(viewModel.contentFilter, .posts)
+        XCTAssertTrue(viewModel.visibleEntries.allSatisfy {
+            if case .post = $0 { return true }
+            return false
+        })
+    }
+
     /// Production path (non-`dev.` session) — hydrate from web-shaped FeedItems with profiles embed.
     func testProductionFeedHydratesAuthorsAndAllContentKindsWithoutProfileNPlusOne() async throws {
         let cache = DetailPresentationCache()
@@ -187,6 +273,92 @@ final class FeedExperienceTests: XCTestCase {
         }
     }
 
+    // MARK: - Feed Bootstrap V1 (screen ownership)
+
+    func testBootstrapLoadsTimelineAndStoriesIntoFeedState() async throws {
+        let cache = DetailPresentationCache()
+        let page = try await FeedBootstrap.loadInitial(
+            .init(
+                feed: FeedStubFeedRepository(),
+                trades: FeedStubTradeRepository(),
+                profiles: FeedStubProfileRepository(),
+                achievements: FeedStubAchievementRepository(),
+                session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
+                detailCache: cache,
+                scope: .following
+            )
+        )
+
+        XCTAssertTrue(page.usedDevelopmentFixtures)
+        XCTAssertFalse(page.entries.isEmpty)
+        XCTAssertFalse(page.stories.isEmpty)
+        XCTAssertNil(page.nextCursor)
+    }
+
+    func testScreenViewModelBootstrapPublishesFeedStateOnce() async {
+        let viewModel = FeedScreenViewModel(
+            feed: FeedStubFeedRepository(),
+            trades: FeedStubTradeRepository(),
+            profiles: FeedStubProfileRepository(),
+            achievements: FeedStubAchievementRepository(),
+            session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
+            detailCache: DetailPresentationCache(),
+            engagementStore: EngagementStore(repository: FeedStubInteractionRepository()),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.state.didBootstrap && viewModel.phase == .loaded }
+
+        XCTAssertTrue(viewModel.state.didBootstrap)
+        XCTAssertEqual(viewModel.entries.count, viewModel.state.entries.count)
+        XCTAssertFalse(viewModel.stories.isEmpty)
+
+        let entryCount = viewModel.entries.count
+        viewModel.loadIfNeeded()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(viewModel.entries.count, entryCount)
+    }
+
+    func testGlobalScopeBootstrapClearsStories() async {
+        let viewModel = FeedScreenViewModel(
+            feed: FeedStubFeedRepository(),
+            trades: FeedStubTradeRepository(),
+            profiles: FeedStubProfileRepository(),
+            achievements: FeedStubAchievementRepository(),
+            session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
+            detailCache: DetailPresentationCache(),
+            engagementStore: EngagementStore(repository: FeedStubInteractionRepository()),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.state.didBootstrap && !viewModel.stories.isEmpty }
+
+        viewModel.setScope(.global)
+        await waitFor {
+            viewModel.scope == .global
+                && viewModel.phase == .loaded
+                && !viewModel.isRefreshing
+                && viewModel.stories.isEmpty
+        }
+        XCTAssertTrue(viewModel.stories.isEmpty)
+    }
+
+    func testFeedViewModelAliasIsFeedScreenViewModel() {
+        let screen: FeedScreenViewModel = FeedViewModel(
+            feed: FeedStubFeedRepository(),
+            trades: FeedStubTradeRepository(),
+            profiles: FeedStubProfileRepository(),
+            achievements: FeedStubAchievementRepository(),
+            session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
+            detailCache: DetailPresentationCache(),
+            engagementStore: EngagementStore(repository: FeedStubInteractionRepository()),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        XCTAssertTrue(type(of: screen) == FeedScreenViewModel.self)
+    }
+
     private func waitFor(
         timeout: TimeInterval = 1.0,
         _ condition: @escaping () -> Bool
@@ -218,7 +390,7 @@ private struct FeedStubSession: SessionProviding {
 
 /// Returns web-parity mixed kinds with `profiles(...)` author fields already on each item.
 private struct FeedWebShapedStubFeedRepository: FeedRepository {
-    func feed(scope: FeedScope, page: PageRequest) async throws -> CursorPage<FeedItem> {
+    func feed(scope: FeedScope, page: PageRequest) async throws -> FeedPageResult {
         _ = scope
         _ = page
         let peer = ProfileID("dev.follower.ada")
@@ -264,7 +436,7 @@ private struct FeedWebShapedStubFeedRepository: FeedRepository {
                 mediaURL: achievement.image?.id
             ),
         ]
-        return CursorPage(items: items, nextCursor: nil)
+        return FeedPageResult(items: items, nextCursor: nil, embeddedTrades: [])
     }
 
     func post(id: PostID) async throws -> Post {
@@ -297,8 +469,8 @@ private struct FeedWebShapedStubFeedRepository: FeedRepository {
 }
 
 private struct FeedStubFeedRepository: FeedRepository {
-    func feed(scope: FeedScope, page: PageRequest) async throws -> CursorPage<FeedItem> {
-        CursorPage(items: [], nextCursor: nil)
+    func feed(scope: FeedScope, page: PageRequest) async throws -> FeedPageResult {
+        FeedPageResult(items: [], nextCursor: nil, embeddedTrades: [])
     }
 
     func post(id: PostID) async throws -> Post {

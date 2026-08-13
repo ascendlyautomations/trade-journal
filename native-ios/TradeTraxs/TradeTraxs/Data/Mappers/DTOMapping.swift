@@ -68,35 +68,24 @@ nonisolated enum ISO8601 {
             return nil
         }
 
-        if let date = fractional.date(from: raw) ?? standard.date(from: raw) {
-            return date
-        }
-
-        // PostgREST sometimes returns a space instead of `T`.
-        if raw.contains(" "), let idx = raw.firstIndex(of: " ") {
-            var normalized = raw
-            normalized.replaceSubrange(idx...idx, with: "T")
-            if let date = fractional.date(from: normalized) ?? standard.date(from: normalized) {
+        // Postgres often emits 1–9 fractional digits; ISO8601DateFormatter is picky.
+        // Normalize early so Stories/feed timestamps match web `new Date(...)`.
+        let candidates = timestampCandidates(from: raw)
+        for candidate in candidates {
+            if let date = fractional.date(from: candidate) ?? standard.date(from: candidate) {
                 return date
             }
-            // Expand +00 → +00:00 for ISO8601DateFormatter.
-            let withColonTZ = expandTimezoneColon(normalized)
-            if withColonTZ != normalized,
-               let date = fractional.date(from: withColonTZ) ?? standard.date(from: withColonTZ) {
+            if let date = try? Date(candidate, strategy: .iso8601) {
                 return date
             }
         }
 
-        let withColonTZ = expandTimezoneColon(raw)
-        if withColonTZ != raw,
-           let date = fractional.date(from: withColonTZ) ?? standard.date(from: withColonTZ) {
-            return date
-        }
-
-        for pattern in postgresPatterns {
-            posix.dateFormat = pattern
-            if let date = posix.date(from: raw) {
-                return date
+        for candidate in candidates {
+            for pattern in postgresPatterns {
+                posix.dateFormat = pattern
+                if let date = posix.date(from: candidate) {
+                    return date
+                }
             }
         }
 
@@ -109,6 +98,53 @@ nonisolated enum ISO8601 {
         }
 
         return nil
+    }
+
+    /// Variants that cover space/`T`, timezone colon expansion, and fractional-second width.
+    private static func timestampCandidates(from raw: String) -> [String] {
+        var values: [String] = []
+        func append(_ value: String) {
+            if !values.contains(value) { values.append(value) }
+        }
+
+        append(raw)
+        if raw.contains(" "), let idx = raw.firstIndex(of: " ") {
+            var withT = raw
+            withT.replaceSubrange(idx...idx, with: "T")
+            append(withT)
+        }
+
+        for base in Array(values) {
+            append(expandTimezoneColon(base))
+            append(normalizeFractionalSeconds(base, digits: 6))
+            append(normalizeFractionalSeconds(base, digits: 3))
+            append(expandTimezoneColon(normalizeFractionalSeconds(base, digits: 6)))
+            append(expandTimezoneColon(normalizeFractionalSeconds(base, digits: 3)))
+        }
+        return values
+    }
+
+    /// Pads/truncates `.S+` fractional seconds to a fixed width before the timezone/Z/end.
+    private static func normalizeFractionalSeconds(_ value: String, digits: Int) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"(\.\d+)(?=(?:Z|[+-]\d{2}(?::?\d{2})?)$|$)"#,
+            options: []
+        ) else {
+            return value
+        }
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        guard let match = regex.firstMatch(in: value, options: [], range: range),
+              let fracRange = Range(match.range(at: 1), in: value) else {
+            return value
+        }
+        var fraction = String(value[fracRange].dropFirst()) // drop '.'
+        if fraction.count == digits { return value }
+        if fraction.count > digits {
+            fraction = String(fraction.prefix(digits))
+        } else {
+            fraction = fraction.padding(toLength: digits, withPad: "0", startingAt: 0)
+        }
+        return value.replacingCharacters(in: fracRange, with: ".\(fraction)")
     }
 
     static func string(from date: Date) -> String {

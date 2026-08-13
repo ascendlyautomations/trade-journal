@@ -5,6 +5,13 @@ import Observation
 ///
 /// Load path: Initial Load → Session Cache → Repository → Realtime subscribe → Idle.
 /// Filter changes recompute locally; pull-to-refresh is the only forced refetch.
+///
+/// Bootstrap is progressive:
+/// 1. Trades + accounts (blocking for first useful render)
+/// 2. Achievements / payouts (deferred — updates Payouts chip when ready)
+///
+/// `home.dashboard` is intentionally not called — it duplicated a 500-trade fetch
+/// and never drove UI math.
 @Observable
 @MainActor
 final class DashboardViewModel {
@@ -18,7 +25,6 @@ final class DashboardViewModel {
     var accountFilter: DashboardAccountFilter = .all
     var dateRange: DashboardDateRange = .thirtyDays
 
-    private let home: any HomeRepository
     private let trades: any TradeRepository
     private let achievements: any AchievementRepository
     private let session: any SessionProviding
@@ -30,10 +36,12 @@ final class DashboardViewModel {
     private var tradeInputs: [DashboardChartMetrics.Input] = []
     private var payoutTotal: Decimal?
     private var loadTask: Task<Void, Never>?
+    private var secondaryTask: Task<Void, Never>?
     private var realtimeTask: Task<Void, Never>?
     private var hasLoaded = false
     private var watchedChannel: RealtimeChannelID?
 
+    /// Test / composition seam — `home` retained for call-site compatibility but unused.
     init(
         home: any HomeRepository,
         trades: any TradeRepository,
@@ -43,7 +51,7 @@ final class DashboardViewModel {
         navigationCoordinator: NavigationCoordinator,
         realtimeHub: RealtimeHub? = nil
     ) {
-        self.home = home
+        _ = home
         self.trades = trades
         self.achievements = achievements
         self.session = session
@@ -178,15 +186,37 @@ final class DashboardViewModel {
     }
 
     func loadIfNeeded() {
-        guard !hasLoaded, loadTask == nil else { return }
+        if hasLoaded {
+            SessionNetworkProbe.record(.cacheHit, resource: "dashboard.navigationReturn")
+            if let profileID {
+                Task { await startRealtime(profileID: profileID) }
+            }
+            return
+        }
+        guard loadTask == nil else { return }
         loadTask = Task { await performLoad() }
     }
 
     func refresh() async {
         loadTask?.cancel()
+        secondaryTask?.cancel()
         isRefreshing = true
         await performLoad(forceNetwork: true)
         isRefreshing = false
+    }
+
+    /// Mutation observer — patch when possible; never full refetch for a single insert.
+    func handleJournalMutation() {
+        if let trade = TradeJournalMutationStore.shared.latestCreatedTrade {
+            upsertTrade(trade)
+            return
+        }
+        // Bulk import — revalidate once.
+        Task { await refresh() }
+    }
+
+    func handleAccountMutation() {
+        Task { await reloadAccountsOnly() }
     }
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
@@ -204,7 +234,14 @@ final class DashboardViewModel {
     }
 
     func openCalendar() {
+        ExperienceHaptics.play(.selection)
         navigationCoordinator.open(.home(.calendar))
+    }
+
+    func openManageAccounts() {
+        ExperienceHaptics.play(.selection)
+        // Preserve Dashboard filter — only switches to Settings stack on Profile tab.
+        navigationCoordinator.openSettings([.tradingAccounts])
     }
 
     func openTrade(_ trade: Trade) {
@@ -223,14 +260,24 @@ final class DashboardViewModel {
     // MARK: - Load
 
     private func performLoad(forceNetwork: Bool = false) async {
+        DashboardLoadProbe.beginSession()
+
         let userID = await session.currentUserID
         let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
         self.profileID = profileID
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
-            applyFixtures(profileID: profileID)
+            await DashboardLoadProbe.measure(
+                "dashboard.fixtures",
+                kind: .local,
+                blocksFirstUsefulRender: true
+            ) {
+                applyFixtures(profileID: profileID)
+            }
             hasLoaded = true
             phase = .loaded
+            DashboardLoadProbe.markFirstUsefulRender()
+            DashboardLoadProbe.markFullHydration()
             await startRealtime(profileID: profileID)
             loadTask = nil
             return
@@ -239,54 +286,55 @@ final class DashboardViewModel {
         if summary == nil { phase = .loading }
 
         do {
-            // Session cache — recompute only; never refetch analytics on filter changes.
+            // Session cache — recompute only; never refetch analytics on filter changes
+            // or navigation return while this ViewModel is alive.
             if !forceNetwork, hasLoaded, !tradeInputs.isEmpty {
-                recompute()
+                SessionNetworkProbe.record(.cacheHit, resource: "dashboard.session")
+                await DashboardLoadProbe.measure(
+                    "dashboard.sessionCache.recompute",
+                    kind: .cache,
+                    blocksFirstUsefulRender: true
+                ) {
+                    recompute()
+                }
                 phase = .loaded
+                DashboardLoadProbe.markFirstUsefulRender()
+                DashboardLoadProbe.markFullHydration()
                 loadTask = nil
                 return
             }
 
-            async let tradesTask = trades.trades(
-                ownedBy: profileID,
-                accountID: nil,
-                page: PageRequest(limit: 500),
-                publicOnly: false
+            // Accounts + trades in parallel — both needed for first useful render,
+            // but serializing them doubles wall-clock latency on cold load.
+            async let accountsTask = bootstrapAccounts(
+                profileID: profileID,
+                forceNetwork: forceNetwork
             )
-            async let accountsTask = trades.accounts(for: profileID)
-            async let achievementsTask = achievements.achievements(
-                for: profileID,
-                page: PageRequest(limit: 500),
-                publicOnly: true
-            )
-            // Warm HomeRepository summary (streak / interval) without driving UI math.
-            async let homeTask = home.dashboard(for: profileID)
-
+            async let tradesTask = bootstrapTrades(profileID: profileID, forceNetwork: forceNetwork)
+            let fetchedAccounts = try await accountsTask
             let page = try await tradesTask
-            let fetchedAccounts: [TradingAccount]
-            if let cachedAccounts = detailCache.accounts(for: profileID), !forceNetwork {
-                fetchedAccounts = cachedAccounts
-            } else {
-                fetchedAccounts = (try? await accountsTask) ?? []
-                detailCache.seed(accounts: fetchedAccounts, for: profileID)
-            }
             detailCache.seed(trades: page.items)
 
-            if let achievementPage = try? await achievementsTask {
-                detailCache.seed(achievements: achievementPage.items)
-                payoutTotal = ProfilePayoutTotals.sum(from: achievementPage.items)
-            } else if let stats = detailCache.stats(for: profileID) {
+            // Seed payouts from cache immediately when available so first paint is complete.
+            if payoutTotal == nil, let stats = detailCache.stats(for: profileID) {
                 payoutTotal = stats.payoutTotal
             }
-            _ = try? await homeTask
 
             apply(trades: page.items, accounts: fetchedAccounts, profileID: profileID)
-
             guard !Task.isCancelled else { return }
             hasLoaded = true
             recompute()
             phase = .loaded
+            DashboardLoadProbe.markFirstUsefulRender()
+
             await startRealtime(profileID: profileID)
+
+            // Deferred: achievements only feed the Payouts chip — never block first useful render.
+            secondaryTask?.cancel()
+            secondaryTask = Task { [weak self] in
+                await self?.hydratePayouts(profileID: profileID, forceNetwork: forceNetwork)
+                DashboardLoadProbe.markFullHydration()
+            }
         } catch {
             guard !Task.isCancelled else { return }
             if summary == nil {
@@ -294,6 +342,99 @@ final class DashboardViewModel {
             }
         }
         loadTask = nil
+    }
+
+    private func bootstrapAccounts(
+        profileID: ProfileID,
+        forceNetwork: Bool
+    ) async throws -> [TradingAccount] {
+        if !forceNetwork,
+           let cachedAccounts = SessionAccountsStore.shared.cached(for: profileID)
+            ?? detailCache.accounts(for: profileID),
+           !cachedAccounts.isEmpty
+        {
+            SessionAccountsStore.shared.seed(
+                cachedAccounts,
+                for: profileID,
+                detailCache: detailCache
+            )
+            SessionNetworkProbe.record(.cacheHit, resource: "dashboard.accounts")
+            return await DashboardLoadProbe.measure(
+                "dashboard.accounts.cacheHit",
+                kind: .cache,
+                blocksFirstUsefulRender: true,
+                rowCount: cachedAccounts.count
+            ) { cachedAccounts }
+        }
+        let fetched = try await SessionAccountsStore.shared.accounts(
+            for: profileID,
+            detailCache: detailCache,
+            repository: trades,
+            forceNetwork: forceNetwork
+        )
+        return await DashboardLoadProbe.measure(
+            "dashboard.accounts",
+            kind: .network,
+            blocksFirstUsefulRender: true,
+            rowCount: fetched.count,
+            note: "accounts for profile"
+        ) { fetched }
+    }
+
+    private func bootstrapTrades(
+        profileID: ProfileID,
+        forceNetwork: Bool
+    ) async throws -> CursorPage<Trade> {
+        // Disk → session owner-trades cache → one bounded SELECT.
+        if !forceNetwork,
+           let disk = SessionDiskCache.loadOwnerTrades(for: profileID),
+           SessionOwnerTradesStore.shared.cached(for: profileID) == nil
+        {
+            SessionOwnerTradesStore.shared.seed(disk, for: profileID, detailCache: detailCache)
+        }
+        let items = try await DashboardLoadProbe.measure(
+            "dashboard.trades",
+            kind: (!forceNetwork && SessionOwnerTradesStore.shared.isFresh(for: profileID))
+                ? .cache : .network,
+            blocksFirstUsefulRender: true,
+            note: "session owner trades ≤500"
+        ) {
+            try await SessionOwnerTradesStore.shared.trades(
+                for: profileID,
+                detailCache: detailCache,
+                repository: trades,
+                limit: 500,
+                forceNetwork: forceNetwork
+            )
+        }
+        return CursorPage(items: items, nextCursor: nil)
+    }
+
+    private func hydratePayouts(profileID: ProfileID, forceNetwork: Bool) async {
+        if !forceNetwork, payoutTotal != nil { return }
+        do {
+            let achievementPage = try await DashboardLoadProbe.measure(
+                "dashboard.achievements",
+                kind: .network,
+                blocksFirstUsefulRender: false,
+                note: "public achievements for payouts chip"
+            ) {
+                try await achievements.achievements(
+                    for: profileID,
+                    page: PageRequest(limit: 500),
+                    publicOnly: true
+                )
+            }
+            guard !Task.isCancelled else { return }
+            detailCache.seed(achievements: achievementPage.items)
+            payoutTotal = ProfilePayoutTotals.sum(from: achievementPage.items)
+            recompute()
+        } catch {
+            if payoutTotal == nil, let stats = detailCache.stats(for: profileID) {
+                payoutTotal = stats.payoutTotal
+                recompute()
+            }
+        }
     }
 
     private func applyFixtures(profileID: ProfileID) {
@@ -344,6 +485,55 @@ final class DashboardViewModel {
         }
     }
 
+    private func upsertTrade(_ trade: Trade) {
+        guard hasLoaded else { return }
+        SessionNetworkProbe.record(.localMutation, resource: "dashboard.trades", detail: trade.id.rawValue)
+        SessionOwnerTradesStore.shared.upsert(trade, detailCache: detailCache)
+        let accountType = trade.accountID.flatMap { id in
+            accounts.first(where: { $0.id == id }).map {
+                ProfileStatisticsMetrics.accountTypeString(for: $0.mode)
+            }
+        }
+        tradeInputs.removeAll { $0.trade.id == trade.id }
+        tradeInputs.insert(
+            DashboardChartMetrics.Input(trade: trade, accountType: accountType),
+            at: 0
+        )
+        recompute()
+    }
+
+    private func reloadAccountsOnly() async {
+        guard let profileID else { return }
+        do {
+            SessionAccountsStore.shared.invalidate(profileID: profileID)
+            let loaded = try await SessionAccountsStore.shared.accounts(
+                for: profileID,
+                detailCache: detailCache,
+                repository: trades,
+                forceNetwork: true
+            )
+            accounts = loaded.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+            // Rebind account types on existing trades without refetching trades.
+            let accountTypes = Dictionary(
+                uniqueKeysWithValues: accounts.map {
+                    ($0.id, ProfileStatisticsMetrics.accountTypeString(for: $0.mode))
+                }
+            )
+            tradeInputs = tradeInputs.map { input in
+                DashboardChartMetrics.Input(
+                    trade: input.trade,
+                    accountType: input.trade.accountID.flatMap { accountTypes[$0] } ?? input.accountType
+                )
+            }
+            recompute()
+        } catch {
+            // keep existing accounts
+        }
+    }
+
     private func recompute() {
         let result = DashboardChartMetrics.compute(
             from: tradeInputs,
@@ -370,14 +560,21 @@ final class DashboardViewModel {
 
     private func startRealtime(profileID: ProfileID) async {
         guard let realtimeHub else { return }
-        await stopRealtime()
         let channel = RealtimeChannelID(kind: .profile, topic: "dashboard:\(profileID.rawValue)")
+        // Deduplicate — navigation return must not open a second retain on the same channel.
+        if watchedChannel == channel, realtimeTask != nil { return }
+        await stopRealtime()
         watchedChannel = channel
         try? await realtimeHub.subscriptions.subscribe(channel)
+        _ = await DashboardLoadProbe.measure(
+            "dashboard.realtime.subscribe",
+            kind: .realtime,
+            blocksFirstUsefulRender: false,
+            note: "registry-only until trade postgres_changes attach"
+        ) { () }
         // Product trade postgres_changes are not joined yet — subscription marks the
         // dashboard channel as active so incremental hydrate can attach later without polling.
         realtimeTask = Task { [weak self] in
-            // Idle hold — cancelled on disappear / stopRealtime.
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
             }

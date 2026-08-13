@@ -60,8 +60,7 @@ struct MessagesHomeView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle("Messages")
-        .navigationBarTitleDisplayMode(.large)
+        .experienceNavigationTitle("Messages")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {

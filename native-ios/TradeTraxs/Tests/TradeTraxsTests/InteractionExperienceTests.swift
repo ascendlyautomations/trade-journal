@@ -86,6 +86,49 @@ final class InteractionExperienceTests: XCTestCase {
         XCTAssertTrue(repository.setLikedCalls.isEmpty)
     }
 
+    func testEnsureLikedDoesNotUnlikeAndDedupes() async {
+        let repository = InMemoryInteractionRepository()
+        repository.likeDelayNanoseconds = 80_000_000
+        let store = EngagementStore(repository: repository)
+        let target = InteractionTarget.trade(TradeID("live-trade-ensure"))
+        store.seed(
+            EngagementSnapshot(likeCount: 4, commentCount: 1, viewerHasLiked: false),
+            for: target
+        )
+
+        let first = Task { await store.ensureLiked(on: target) }
+        try? await Task.sleep(nanoseconds: 15_000_000)
+        let second = Task { await store.ensureLiked(on: target) }
+        await first.value
+        await second.value
+
+        XCTAssertTrue(store.snapshot(for: target).viewerHasLiked)
+        XCTAssertEqual(store.snapshot(for: target).likeCount, 5)
+        XCTAssertEqual(repository.setLikedCalls.count, 1)
+        XCTAssertEqual(repository.setLikedCalls.first?.0, true)
+
+        await store.ensureLiked(on: target)
+        XCTAssertEqual(store.snapshot(for: target).likeCount, 5)
+        XCTAssertEqual(repository.setLikedCalls.count, 1)
+        XCTAssertTrue(store.snapshot(for: target).viewerHasLiked)
+    }
+
+    func testEnsureLikedNoopsWhenAlreadyLiked() async {
+        let repository = InMemoryInteractionRepository()
+        let store = EngagementStore(repository: repository)
+        let target = InteractionTarget.profilePost(PostID("live-post-liked"))
+        store.seed(
+            EngagementSnapshot(likeCount: 9, commentCount: 0, viewerHasLiked: true),
+            for: target
+        )
+
+        await store.ensureLiked(on: target)
+
+        XCTAssertTrue(store.snapshot(for: target).viewerHasLiked)
+        XCTAssertEqual(store.snapshot(for: target).likeCount, 9)
+        XCTAssertTrue(repository.setLikedCalls.isEmpty)
+    }
+
     func testCommentsLoadPostDeleteAndSort() async {
         let repository = InMemoryInteractionRepository()
         let session = InteractionStubSession(userID: UserID("user-1"))

@@ -55,6 +55,8 @@ nonisolated protocol ChannelRegistry: Sendable {
 nonisolated final class InMemoryChannelRegistry: ChannelRegistry, @unchecked Sendable {
     private let lock = NSLock()
     private var channels: Set<RealtimeChannelID> = []
+    /// Refcounts so ephemeral view appear/disappear cycles do not drop session channels.
+    private var retainCounts: [RealtimeChannelID: Int] = [:]
 
     func registeredChannels() -> [RealtimeChannelID] {
         lock.lock(); defer { lock.unlock() }
@@ -62,11 +64,28 @@ nonisolated final class InMemoryChannelRegistry: ChannelRegistry, @unchecked Sen
     }
 
     func register(_ channel: RealtimeChannelID) {
-        lock.lock(); channels.insert(channel); lock.unlock()
+        lock.lock()
+        retainCounts[channel, default: 0] += 1
+        channels.insert(channel)
+        lock.unlock()
     }
 
     func unregister(_ channel: RealtimeChannelID) {
-        lock.lock(); channels.remove(channel); lock.unlock()
+        lock.lock()
+        let next = max(0, (retainCounts[channel] ?? 1) - 1)
+        if next == 0 {
+            retainCounts[channel] = nil
+            channels.remove(channel)
+        } else {
+            retainCounts[channel] = next
+        }
+        lock.unlock()
+    }
+
+    /// Testing / DEBUG — current retain count for a channel.
+    func retainCount(for channel: RealtimeChannelID) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        return retainCounts[channel] ?? 0
     }
 }
 
@@ -243,5 +262,18 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
     func stopWatchingFeedPosts() async {
         guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
         await live.stopWatchingFeedPosts()
+    }
+
+    /// Activity — idle until `notifications` postgres_changes for the viewer.
+    func watchNotifications(userID: String, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchNotifications(userID: userID, accessToken: accessToken)
+    }
+
+    func stopWatchingNotifications(userID: String) async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingNotifications(userID: userID)
     }
 }

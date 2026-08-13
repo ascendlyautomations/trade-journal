@@ -2,6 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!--
+	  Opt out of iOS 26 floating Liquid Glass chrome so tab/navigation bar
+	  backgrounds remain edge-anchored (extend through status bar + home indicator)
+	  while interactive controls stay inside the system safe areas.
+
+	  This is OS-design compatibility — not a device-specific hack. Without it,
+	  TabView/NavigationStack float above the home indicator and leave an uncovered
+	  strip at the physical bottom (and similarly under-extend at the top).
+	-->
+	<key>UIDesignRequiresCompatibility</key>
+	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -15,5 +26,9 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>TradeTraxs needs the camera to record trading clips.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TradeTraxs needs the microphone when recording trading clips.</string>
 </dict>
 </plist>

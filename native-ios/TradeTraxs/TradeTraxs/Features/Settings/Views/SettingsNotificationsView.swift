@@ -45,7 +45,7 @@ struct SettingsNotificationsView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle(category?.title ?? "Notifications")
+        .experienceNavigationTitle(category?.title ?? "Notifications")
         .overlay {
             if viewModel.phase == .loading && viewModel.preferences == nil {
                 ProgressView()

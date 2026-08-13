@@ -21,38 +21,45 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
     ) async throws -> CursorPage<Achievement> {
         // Web Profile loads the full list (no range). Use a high ceiling for parity.
         let limit = max(page.limit, 500)
-        var query: [URLQueryItem] = [
-            SupabaseQuery.select(publicOnly ? AchievementDTO.publicSelect : AchievementDTO.ownerSelect),
-            SupabaseQuery.eq("user_id", profileID.rawValue),
-            URLQueryItem(name: "order", value: Self.profileOrder),
-            URLQueryItem(name: "limit", value: String(limit)),
-        ]
-        if publicOnly {
-            query.append(SupabaseQuery.eq("is_public", "true"))
-        }
-        if let cursor = page.cursor, !cursor.isEmpty {
-            query.append(URLQueryItem(name: "achieved_at", value: "lt.\(cursor)"))
-        }
-
-        let rows: [AchievementDTO.Achievement] = try await supabase.database.select(
-            AchievementDTO.Achievement.self,
-            from: "achievements",
-            query: query
-        )
-        let items = rows.compactMap { dto -> Achievement? in
-            do {
-                return try Self.mapAchievement(dto)
-            } catch {
-                AppLog.networking.error(
-                    "Skipping achievement \(dto.id ?? "unknown", privacy: .public) — \(String(describing: error), privacy: .public)"
-                )
-                return nil
+        let cursor = page.cursor ?? "-"
+        let key = "achievements.list:\(profileID.rawValue):pub=\(publicOnly):limit=\(limit):cursor=\(cursor)"
+        return try await RepositoryRequestFlight.shared.coalesce(
+            key: key,
+            resource: "achievements.list"
+        ) { [supabase] in
+            var query: [URLQueryItem] = [
+                SupabaseQuery.select(publicOnly ? AchievementDTO.publicSelect : AchievementDTO.ownerSelect),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                URLQueryItem(name: "order", value: Self.profileOrder),
+                URLQueryItem(name: "limit", value: String(limit)),
+            ]
+            if publicOnly {
+                query.append(SupabaseQuery.eq("is_public", "true"))
             }
+            if let pageCursor = page.cursor, !pageCursor.isEmpty {
+                query.append(URLQueryItem(name: "achieved_at", value: "lt.\(pageCursor)"))
+            }
+
+            let rows: [AchievementDTO.Achievement] = try await supabase.database.select(
+                AchievementDTO.Achievement.self,
+                from: "achievements",
+                query: query
+            )
+            let items = rows.compactMap { dto -> Achievement? in
+                do {
+                    return try Self.mapAchievement(dto)
+                } catch {
+                    AppLog.networking.error(
+                        "Skipping achievement \(dto.id ?? "unknown", privacy: .public) — \(String(describing: error), privacy: .public)"
+                    )
+                    return nil
+                }
+            }
+            return CursorPage(
+                items: items,
+                nextCursor: SupabaseQuery.nextCursor(items: rows, limit: limit) { $0.achieved_at }
+            )
         }
-        return CursorPage(
-            items: items,
-            nextCursor: SupabaseQuery.nextCursor(items: rows, limit: limit) { $0.achieved_at }
-        )
     }
 
     func achievement(id: AchievementID) async throws -> Achievement {
@@ -68,25 +75,44 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
     }
 
     func save(_ achievement: Achievement) async throws -> Achievement {
+        // Web `AchievementUploadModal` insert — omit client id; trigger creates `achievement_posts`.
         struct Body: Encodable {
-            var id: String
             var user_id: String
             var achievement_type: String
             var title: String
-            var tier: String
+            var description: String?
+            var badge_key: String
+            var category: String
+            var value_numeric: Double?
+            var value_text: String?
+            var currency: String?
+            var account_id: String?
+            var firm: String?
+            var image_url: String?
+            var achieved_at: String
             var is_public: Bool
             var is_featured: Bool
-            var achieved_at: String
         }
+        let kind = achievement.kind.rawValue
         let body = Body(
-            id: achievement.id.rawValue,
             user_id: achievement.ownerProfileID.rawValue,
-            achievement_type: achievement.kind.rawValue,
-            title: achievement.title,
-            tier: achievement.tier.rawValue,
+            achievement_type: kind,
+            title: achievement.title.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: {
+                let t = achievement.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return (t?.isEmpty == false) ? t : nil
+            }(),
+            badge_key: kind,
+            category: Self.category(for: achievement.kind),
+            value_numeric: achievement.value.map { NSDecimalNumber(decimal: $0.amount).doubleValue },
+            value_text: achievement.valueText,
+            currency: achievement.value?.currencyCode ?? (achievement.value == nil ? nil : "USD"),
+            account_id: achievement.accountID?.rawValue,
+            firm: achievement.firm,
+            image_url: achievement.image?.id,
+            achieved_at: ISO8601.string(from: achievement.achievedAt),
             is_public: achievement.isPublic,
-            is_featured: achievement.isFeatured,
-            achieved_at: ISO8601.string(from: achievement.achievedAt)
+            is_featured: achievement.isFeatured
         )
         let dto: AchievementDTO.Achievement = try await supabase.database.insert(
             body,
@@ -159,6 +185,16 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
         case .liveTradingPayout: return "Live Trading Payout"
         case .passedEvaluation: return "Passed Eval"
         case .milestone: return "Milestone"
+        }
+    }
+
+    /// Web `categoryFromType`.
+    private static func category(for kind: AchievementKind) -> String {
+        switch kind {
+        case .propFirmPayout: return "prop_firm_payouts"
+        case .liveTradingPayout: return "live_trading_payouts"
+        case .passedEvaluation: return "passed_evals"
+        case .milestone: return "milestones"
         }
     }
 }

@@ -18,6 +18,8 @@ final class MessagesInboxStore {
     /// Room currently open in the conversation shell — suppresses inbox unread bumps.
     private(set) var activeRoomID: RoomID?
     private(set) var hasLoaded = false
+    /// True after the first member-rooms hydration (Messages or Trade Rooms home).
+    private(set) var hasLoadedRooms = false
     private(set) var lastLoadedAt: Date?
 
     /// Local-only overrides (backend mute/pin APIs are not fully exposed on MessageRepository).
@@ -50,6 +52,7 @@ final class MessagesInboxStore {
         rooms = items.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         if !previews.isEmpty { roomPreviews.merge(previews) { _, new in new } }
         if !unread.isEmpty { roomUnread.merge(unread) { _, new in new } }
+        hasLoadedRooms = true
     }
 
     func applyConversationUpdate(_ conversation: Conversation) {
@@ -221,6 +224,7 @@ final class MessagesInboxStore {
         roomUnread = [:]
         activeRoomID = nil
         hasLoaded = false
+        hasLoadedRooms = false
         lastLoadedAt = nil
         mutedConversationIDs = []
         pinnedConversationIDs = []

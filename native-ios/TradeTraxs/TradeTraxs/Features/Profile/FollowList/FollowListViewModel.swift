@@ -189,10 +189,22 @@ final class FollowListViewModel {
             viewerFollowingIDs = cached
             return
         }
+        if !forceNetwork,
+           let shared = await SessionFollowingStore.shared.cached(viewerID: viewerID.rawValue)
+        {
+            let ids = Set(shared.map { ProfileID($0) })
+            viewerFollowingIDs = ids
+            detailCache.seedViewerFollowingIDs(ids)
+            return
+        }
         if !forceNetwork, let cachedFollowing = detailCache.following(for: viewerID) {
             let ids = Set(cachedFollowing.map(\.id))
             viewerFollowingIDs = ids
             detailCache.seedViewerFollowingIDs(ids)
+            await SessionFollowingStore.shared.seed(
+                viewerID: viewerID.rawValue,
+                ids: Set(ids.map(\.rawValue))
+            )
             return
         }
         if ProfileSectionSupport.isLocalDevelopmentProfile(viewerID)
@@ -209,6 +221,11 @@ final class FollowListViewModel {
             viewerFollowingIDs = ids
             detailCache.seedViewerFollowingIDs(ids)
             detailCache.seed(following: page.items, for: viewerID)
+            await SessionFollowingStore.shared.seed(
+                viewerID: viewerID.rawValue,
+                ids: Set(ids.map(\.rawValue))
+            )
+            SessionDiskCache.saveFollowing(ids: ids.map(\.rawValue), for: viewerID)
         } catch {
             // Soft-fail — buttons default to Follow.
         }
@@ -222,6 +239,11 @@ final class FollowListViewModel {
         let previous = viewerFollowingIDs
         viewerFollowingIDs.insert(profile.id)
         detailCache.setViewerFollows(profile.id, isFollowing: true)
+        await SessionFollowingStore.shared.setFollowing(
+            viewerID: viewerID.rawValue,
+            targetID: profile.id.rawValue,
+            isFollowing: true
+        )
         ExperienceHaptics.play(.selection)
 
         if profile.id.rawValue.hasPrefix("dev.") {
@@ -233,6 +255,10 @@ final class FollowListViewModel {
         } catch {
             viewerFollowingIDs = previous
             detailCache.seedViewerFollowingIDs(previous)
+            await SessionFollowingStore.shared.seed(
+                viewerID: viewerID.rawValue,
+                ids: Set(previous.map(\.rawValue))
+            )
             ExperienceHaptics.play(.warning)
         }
     }
@@ -245,6 +271,11 @@ final class FollowListViewModel {
         let previous = viewerFollowingIDs
         viewerFollowingIDs.remove(profile.id)
         detailCache.setViewerFollows(profile.id, isFollowing: false)
+        await SessionFollowingStore.shared.setFollowing(
+            viewerID: viewerID.rawValue,
+            targetID: profile.id.rawValue,
+            isFollowing: false
+        )
 
         // Keep Following list in sync when unfollowing from that screen.
         if kind == .following, listOwnerID == viewerID {
@@ -262,6 +293,10 @@ final class FollowListViewModel {
         } catch {
             viewerFollowingIDs = previous
             detailCache.seedViewerFollowingIDs(previous)
+            await SessionFollowingStore.shared.seed(
+                viewerID: viewerID.rawValue,
+                ids: Set(previous.map(\.rawValue))
+            )
             if kind == .following, listOwnerID == viewerID, !items.contains(where: { $0.id == profile.id }) {
                 items.insert(profile, at: 0)
                 seedListCache(items)
@@ -293,6 +328,11 @@ final class FollowListViewModel {
     }
 
     private func applyFixtures() {
+        // Fixture owners are local-only — treat the list owner as the viewer when
+        // the session has no authenticated user (unit tests / offline screenshots).
+        if viewerID == nil {
+            viewerID = listOwnerID
+        }
         switch kind {
         case .followers:
             items = FollowListFixtures.followers(owner: listOwnerID)

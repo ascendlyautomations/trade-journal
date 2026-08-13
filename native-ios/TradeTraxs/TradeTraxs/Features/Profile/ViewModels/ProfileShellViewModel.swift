@@ -1,10 +1,10 @@
 import Foundation
 import Observation
 
-/// Owns Profile section selection and lazily created section ViewModels.
+/// Owns Profile section selection and render-oriented section ViewModels.
 ///
-/// Sections load once on first visit and retain cached results while the Profile
-/// root stays alive — no duplicate fetches when switching tabs.
+/// Section ViewModels receive ``ProfileState`` from the screen bootstrap — they do not
+/// perform the initial repository load. They may paginate / refresh after mutations.
 @Observable
 @MainActor
 final class ProfileShellViewModel {
@@ -21,6 +21,8 @@ final class ProfileShellViewModel {
     private let data: DataEnvironment
     private let navigationCoordinator: NavigationCoordinator
 
+    private var latestState = ProfileState()
+
     init(
         profileID: ProfileID,
         data: DataEnvironment,
@@ -33,6 +35,20 @@ final class ProfileShellViewModel {
         self.isOwner = isOwner
     }
 
+    /// Applies the screen bootstrap snapshot to every created section VM.
+    func apply(state: ProfileState) {
+        latestState = state
+        isOwner = state.isOwner
+        if let profileID = state.profileID {
+            self.profileID = profileID
+        }
+        trades?.applyBootstrap(state)
+        posts?.applyBootstrap(state)
+        clips?.applyBootstrap(state)
+        stats?.applyBootstrap(state)
+        achievements?.applyBootstrap(state)
+    }
+
     func select(_ section: ProfileSection) {
         guard selectedSection != section else {
             activate(section)
@@ -43,12 +59,14 @@ final class ProfileShellViewModel {
         activate(section)
     }
 
-    /// Ensures the visible section has started loading.
+    /// Ensures the visible section VM exists and has bootstrap data (no network).
     func activateSelected() {
         activate(selectedSection)
     }
 
     func refreshSelected() async {
+        // Screen owns full refresh via ``ProfileScreenViewModel/refresh()``.
+        // Section refresh remains for mutation-driven revalidation only.
         switch selectedSection {
         case .trades: await trades?.refresh()
         case .posts: await posts?.refresh()
@@ -67,30 +85,33 @@ final class ProfileShellViewModel {
                     trades: data.trades,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
+                    engagementStore: data.engagementStore,
                     isOwner: isOwner
                 )
             }
-            trades?.loadIfNeeded()
+            trades?.applyBootstrap(latestState)
         case .posts:
             if posts == nil {
                 posts = PostsContainerViewModel(
                     profileID: profileID,
                     profiles: data.profiles,
                     navigationCoordinator: navigationCoordinator,
-                    detailCache: data.detailCache
+                    detailCache: data.detailCache,
+                    engagementStore: data.engagementStore
                 )
             }
-            posts?.loadIfNeeded()
+            posts?.applyBootstrap(latestState)
         case .clips:
             if clips == nil {
                 clips = ClipsContainerViewModel(
                     profileID: profileID,
                     feed: data.feed,
                     navigationCoordinator: navigationCoordinator,
-                    detailCache: data.detailCache
+                    detailCache: data.detailCache,
+                    engagementStore: data.engagementStore
                 )
             }
-            clips?.loadIfNeeded()
+            clips?.applyBootstrap(latestState)
         case .stats:
             if stats == nil {
                 stats = StatsContainerViewModel(
@@ -100,17 +121,19 @@ final class ProfileShellViewModel {
                     detailCache: data.detailCache
                 )
             }
-            stats?.loadIfNeeded()
+            stats?.applyBootstrap(latestState)
         case .achievements:
             if achievements == nil {
                 achievements = AchievementsContainerViewModel(
                     profileID: profileID,
                     achievements: data.achievements,
                     navigationCoordinator: navigationCoordinator,
-                    detailCache: data.detailCache
+                    detailCache: data.detailCache,
+                    engagementStore: data.engagementStore,
+                    viewerIsOwner: isOwner
                 )
             }
-            achievements?.loadIfNeeded()
+            achievements?.applyBootstrap(latestState)
         }
     }
 }

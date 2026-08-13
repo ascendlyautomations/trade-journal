@@ -83,7 +83,35 @@ final class ProfileContentStore {
         return !room.id.rawValue.isEmpty
     }
 
+    /// When true, ``ProfileScreenViewModel`` owns network — ``loadIfNeeded`` is a no-op.
+    private(set) var isScreenOwned = false
+
+    /// Applies header fields from the screen bootstrap. Does not hit the network.
+    func applyBootstrap(_ state: ProfileState) {
+        isScreenOwned = true
+        resolvedProfileID = state.profileID
+        isOwner = state.isOwner
+        isFollowing = state.isFollowing
+        profile = state.profile
+        stats = state.stats
+        ownedTradeRoom = state.ownedTradeRoom
+        didResolveTradeRoom = state.didResolveTradeRoom
+        errorMessage = state.errorMessage
+        switch state.phase {
+        case .idle: phase = .idle
+        case .loading: phase = profile == nil ? .loading : phase
+        case .loaded: phase = .loaded
+        case .failed: phase = .failed
+        }
+        if let profile {
+            Task { await loadAvatarIfNeeded(for: profile, force: false) }
+        }
+    }
+
     func loadIfNeeded(force: Bool = false) {
+        // Screen-owned Profile uses ``ProfileBootstrap`` — keep this path for unit tests
+        // and any non-screen callers.
+        if isScreenOwned, !force { return }
         if let loadTask, !force { return }
         if !force, phase == .loaded, profile != nil {
             if !didResolveTradeRoom, let profileID = resolvedProfileID {

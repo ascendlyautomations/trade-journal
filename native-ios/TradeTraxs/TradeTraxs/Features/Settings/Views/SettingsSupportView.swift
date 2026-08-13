@@ -55,7 +55,7 @@ struct SettingsSupportView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle("Help & Support")
+        .experienceNavigationTitle("Help & Support")
         .accessibilityIdentifier("settings.support")
     }
 }

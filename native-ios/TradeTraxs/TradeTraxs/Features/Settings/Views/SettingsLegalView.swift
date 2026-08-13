@@ -32,7 +32,7 @@ struct SettingsLegalView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle(route.title)
+        .experienceNavigationTitle(route.title)
         .accessibilityIdentifier("settings.legal.\(route.rawValue)")
     }
 

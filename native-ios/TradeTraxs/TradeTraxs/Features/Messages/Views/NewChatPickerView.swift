@@ -69,8 +69,7 @@ struct NewChatPickerView: View {
                 }
             }
             .experienceScreenBackground()
-            .navigationTitle("New Chat")
-            .navigationBarTitleDisplayMode(.inline)
+            .experienceNavigationTitle("New Chat")
             .searchable(
                 text: $viewModel.searchText,
                 placement: .navigationBarDrawer(displayMode: .always),

@@ -23,7 +23,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         self.session = session
     }
 
-    func conversations(page: PageRequest) async throws -> CursorPage<Conversation> {
+    func conversations(page: PageRequest) async throws -> ConversationListResult {
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
@@ -50,7 +50,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         )
 
         guard !conversationIDs.isEmpty else {
-            return CursorPage(items: [], nextCursor: nil)
+            return ConversationListResult(items: [], nextCursor: nil, embeddedProfiles: [])
         }
 
         // PostgREST `in.()` batches — keep under URL limits for large inboxes.
@@ -73,10 +73,14 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         let unreadByID = await unreadTask
         let mutedIDs = await mutedTask
 
+        var embedded: [ProfileID: Profile] = [:]
         let mapped = rows.compactMap { dto -> Conversation? in
             guard let id = dto.id else { return nil }
             let muted = mutedIDs.contains(id)
             let unread = muted ? 0 : (unreadByID[id] ?? 0)
+            for profile in extractEmbeddedProfiles(from: dto) {
+                embedded[profile.id] = profile
+            }
             return mapConversation(dto, viewerID: viewer, unreadCount: unread, isMuted: muted)
         }
 
@@ -85,7 +89,11 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         let next = sorted.count > page.limit
             ? limited.last?.lastMessageAt.map { ISO8601.string(from: $0) }
             : nil
-        return CursorPage(items: limited, nextCursor: next)
+        return ConversationListResult(
+            items: limited,
+            nextCursor: next,
+            embeddedProfiles: Array(embedded.values)
+        )
     }
 
     func conversation(id: ConversationID) async throws -> Conversation {
@@ -439,6 +447,37 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         )
     }
 
+    private func extractEmbeddedProfiles(from dto: MessageDTO.Conversation) -> [Profile] {
+        (dto.participants ?? []).compactMap { participant -> Profile? in
+            guard let uid = participant.user_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !uid.isEmpty
+            else { return nil }
+            let embed = participant.profiles
+            let username = embed?.username?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let display = embed?.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let avatar = embed?.avatar_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let id = ProfileID(embed?.id?.nilIfEmpty ?? uid)
+            return Profile(
+                id: id,
+                userID: UserID(id.rawValue),
+                username: (username?.isEmpty == false) ? username! : "user",
+                displayName: (display?.isEmpty == false) ? display! : (username ?? "user"),
+                bio: nil,
+                avatar: {
+                    guard let avatar, !avatar.isEmpty else { return nil }
+                    return MediaReference(id: avatar, kind: .image, altText: nil)
+                }(),
+                traderType: nil,
+                tradingStyle: nil,
+                primaryMarket: nil,
+                startedTradingAt: nil,
+                isPrivate: false,
+                isCreator: false,
+                createdAt: Date()
+            )
+        }
+    }
+
     /// Web `sortConversationsDesc` — pinned first, then `last_message_at` desc.
     private func sortConversations(_ items: [Conversation]) -> [Conversation] {
         items.sorted { lhs, rhs in
@@ -557,16 +596,3 @@ private extension String {
     }
 }
 
-private extension Array {
-    func chunked(into size: Int) -> [[Element]] {
-        guard size > 0, !isEmpty else { return isEmpty ? [] : [self] }
-        var result: [[Element]] = []
-        var index = startIndex
-        while index < endIndex {
-            let end = self.index(index, offsetBy: size, limitedBy: endIndex) ?? endIndex
-            result.append(Array(self[index..<end]))
-            index = end
-        }
-        return result
-    }
-}

@@ -19,49 +19,57 @@ struct ProfileTradeCard: View {
     var body: some View {
         ExperienceCard {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Button(action: onOpen) {
-                    HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                        TradeImageView(
-                            reference: trade.thumbnail,
-                            imagePipeline: imagePipeline
-                        )
-                        .accessibilityHidden(true)
+                HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                    TradeImageView(
+                        reference: trade.thumbnail,
+                        imagePipeline: imagePipeline
+                    )
+                    .accessibilityHidden(true)
 
-                        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text(trade.symbol.ticker)
-                                    .experienceStyle(.headline, color: colors.primaryText)
-                                Spacer(minLength: ExperienceSpacing.xs)
-                                Text(TradeDisplay.pnlText(trade.realizedPnL))
-                                    .experienceStyle(
-                                        .metric,
-                                        color: theme.metricColor(
-                                            for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
-                                        )
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(trade.symbol.ticker)
+                                .experienceStyle(.headline, color: colors.primaryText)
+                            Spacer(minLength: ExperienceSpacing.xs)
+                            Text(TradeDisplay.pnlText(trade.realizedPnL))
+                                .experienceStyle(
+                                    .metric,
+                                    color: theme.metricColor(
+                                        for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
                                     )
-                            }
-
-                            HStack(spacing: ExperienceSpacing.xs) {
-                                ExperienceTag(
-                                    title: TradeDisplay.sideTitle(trade.side),
-                                    tone: trade.side == .long ? .success : .error
                                 )
-                                Text(TradeDisplay.dateText(trade.createdAt))
-                                    .experienceStyle(.caption, color: colors.secondaryText)
-                                visibilityIcon
-                            }
-
-                            metaRow
                         }
+
+                        HStack(spacing: ExperienceSpacing.xs) {
+                            ExperienceTag(
+                                title: TradeDisplay.sideTitle(trade.side),
+                                tone: trade.side == .long ? .success : .error
+                            )
+                            Text(TradeDisplay.dateText(trade.createdAt))
+                                .experienceStyle(.caption, color: colors.secondaryText)
+                            visibilityIcon
+                        }
+
+                        metaRow
                     }
                 }
-                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .experienceDoubleTapLike(
+                    target: target,
+                    store: engagementStore,
+                    onSingleTap: onOpen
+                )
 
                 if let note = trade.notePreview, !note.isEmpty {
                     Text(note)
                         .experienceStyle(.footnote, color: colors.secondaryText)
                         .lineLimit(2)
-                        .onTapGesture(perform: onOpen)
+                        .contentShape(Rectangle())
+                        .experienceDoubleTapLike(
+                            target: target,
+                            store: engagementStore,
+                            onSingleTap: onOpen
+                        )
                 }
 
                 EngagementBar(

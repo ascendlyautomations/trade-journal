@@ -35,17 +35,57 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             return cached
         }
 
-        let dto: ProfileDTO.Profile = try await supabase.database.selectOne(
-            ProfileDTO.Profile.self,
-            from: "profiles",
-            query: [
-                SupabaseQuery.select(Self.publicProfileSelect),
-                SupabaseQuery.eq("id", id.rawValue),
-            ]
-        )
-        let profile = try ProfileMapper.mapToDomain(dto)
-        cache.memory.set(profile, forKey: cacheKey)
-        return profile
+        return try await ProfileRequestFlight.shared.profile(id: id) { [supabase, cache] in
+            if let cached = cache.memory.value(forKey: cacheKey, as: Profile.self) {
+                return cached
+            }
+            let dto: ProfileDTO.Profile = try await supabase.database.selectOne(
+                ProfileDTO.Profile.self,
+                from: "profiles",
+                query: [
+                    SupabaseQuery.select(Self.publicProfileSelect),
+                    SupabaseQuery.eq("id", id.rawValue),
+                ]
+            )
+            let profile = try ProfileMapper.mapToDomain(dto)
+            cache.memory.set(profile, forKey: cacheKey)
+            return profile
+        }
+    }
+
+    func profiles(ids: [ProfileID]) async throws -> [Profile] {
+        let unique = Array(Set(ids.map(\.rawValue))).filter { !$0.isEmpty }
+        guard !unique.isEmpty else { return [] }
+
+        var cached: [Profile] = []
+        var missing: [String] = []
+        for id in unique {
+            let key = "profile:\(id)"
+            if let hit = cache.memory.value(forKey: key, as: Profile.self) {
+                cached.append(hit)
+            } else {
+                missing.append(id)
+            }
+        }
+        guard !missing.isEmpty else { return cached }
+
+        var fetched: [Profile] = []
+        for chunk in missing.chunked(into: 80) {
+            let rows: [ProfileDTO.Profile] = try await supabase.database.select(
+                ProfileDTO.Profile.self,
+                from: "profiles",
+                query: [
+                    SupabaseQuery.select(Self.publicProfileSelect),
+                    SupabaseQuery.isIn("id", chunk),
+                ]
+            )
+            for dto in rows {
+                guard let profile = try? ProfileMapper.mapToDomain(dto) else { continue }
+                cache.memory.set(profile, forKey: "profile:\(profile.id.rawValue)")
+                fetched.append(profile)
+            }
+        }
+        return cached + fetched
     }
 
     func profile(username: String) async throws -> Profile {
@@ -91,78 +131,91 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             return cached
         }
 
-        // Mirror web Profile: followers + posts + summary trades + payout achievement total.
-        // Payouts = web `sumPayoutAchievementTotals` over visible public achievements.
-        async let followersTask = followerCount(of: profileID)
-        async let followingTask = followingCount(of: profileID)
-        async let postsTask = profilePostCount(of: profileID)
-        async let summaryTask = fetchSummaryTrades(for: profileID)
-        async let payoutTask = fetchPayoutTotal(for: profileID)
-
-        let (followers, following, posts, summary, payoutTotal) = try await (
-            followersTask,
-            followingTask,
-            postsTask,
-            summaryTask,
-            payoutTask
-        )
-
-        let overview = ProfileOverviewMetrics.compute(
-            from: summary.map {
-                ProfileOverviewMetrics.TradeInput(
-                    pnl: DecimalParser.parseFlexible($0.pnl),
-                    rr: DecimalParser.parseFlexible($0.rr),
-                    mode: $0.mode,
-                    accountType: $0.account_type
-                )
+        return try await ProfileRequestFlight.shared.stats(for: profileID) { [self] in
+            if let cached = cache.memory.value(forKey: cacheKey, as: ProfileStats.self) {
+                return cached
             }
-        )
 
-        let stats = ProfileStats(
-            profileID: profileID,
-            followerCount: followers,
-            followingCount: following,
-            postCount: posts,
-            tradeCount: overview.publicTradeCount,
-            publicTradeCount: overview.publicTradeCount,
-            winRate: overview.winRate,
-            profitFactor: overview.profitFactor,
-            netPnL: overview.netPnL,
-            averageRR: overview.averageRR,
-            payoutTotal: payoutTotal,
-            expectancy: overview.expectancy
-        )
-        cache.memory.set(stats, forKey: cacheKey)
-        return stats
+            // Mirror web Profile: followers + posts + summary trades + payout achievement total.
+            // Payouts = web `sumPayoutAchievementTotals` over visible public achievements.
+            async let followersTask = followerCount(of: profileID)
+            async let followingTask = followingCount(of: profileID)
+            async let postsTask = profilePostCount(of: profileID)
+            async let summaryTask = fetchSummaryTrades(for: profileID)
+            async let payoutTask = fetchPayoutTotal(for: profileID)
+
+            let (followers, following, posts, summary, payoutTotal) = try await (
+                followersTask,
+                followingTask,
+                postsTask,
+                summaryTask,
+                payoutTask
+            )
+
+            let overview = ProfileOverviewMetrics.compute(
+                from: summary.map {
+                    ProfileOverviewMetrics.TradeInput(
+                        pnl: DecimalParser.parseFlexible($0.pnl),
+                        rr: DecimalParser.parseFlexible($0.rr),
+                        mode: $0.mode,
+                        accountType: $0.account_type
+                    )
+                }
+            )
+
+            let stats = ProfileStats(
+                profileID: profileID,
+                followerCount: followers,
+                followingCount: following,
+                postCount: posts,
+                tradeCount: overview.publicTradeCount,
+                publicTradeCount: overview.publicTradeCount,
+                winRate: overview.winRate,
+                profitFactor: overview.profitFactor,
+                netPnL: overview.netPnL,
+                averageRR: overview.averageRR,
+                payoutTotal: payoutTotal,
+                expectancy: overview.expectancy
+            )
+            cache.memory.set(stats, forKey: cacheKey)
+            return stats
+        }
     }
 
     func wallPosts(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post> {
         // Web Profile: select * / user_id / created_at desc — full list (no range).
         let limit = max(page.limit, 500)
-        var query: [URLQueryItem] = [
-            SupabaseQuery.select("*"),
-            SupabaseQuery.eq("user_id", profileID.rawValue),
-            URLQueryItem(name: "order", value: "created_at.desc"),
-            URLQueryItem(name: "limit", value: String(limit)),
-        ]
-        if let cursor = page.cursor, !cursor.isEmpty {
-            query.append(URLQueryItem(name: "created_at", value: "lt.\(cursor)"))
+        let cursor = page.cursor ?? "-"
+        let key = "profiles.wallPosts:\(profileID.rawValue):limit=\(limit):cursor=\(cursor)"
+        return try await RepositoryRequestFlight.shared.coalesce(
+            key: key,
+            resource: "profiles.wallPosts"
+        ) { [supabase] in
+            var query: [URLQueryItem] = [
+                SupabaseQuery.select("*"),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                URLQueryItem(name: "order", value: "created_at.desc"),
+                URLQueryItem(name: "limit", value: String(limit)),
+            ]
+            if let pageCursor = page.cursor, !pageCursor.isEmpty {
+                query.append(URLQueryItem(name: "created_at", value: "lt.\(pageCursor)"))
+            }
+            let rows: [FeedDTO.ProfileWallPost] = try await supabase.database.select(
+                FeedDTO.ProfileWallPost.self,
+                from: "profile_posts",
+                query: query
+            )
+            let items = rows.compactMap(Self.mapWallPost)
+            // Web client re-sort: pinned first, then created_at desc.
+            let sorted = items.sorted { lhs, rhs in
+                if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
+                return lhs.createdAt > rhs.createdAt
+            }
+            return CursorPage(
+                items: sorted,
+                nextCursor: SupabaseQuery.nextCursor(items: rows, limit: limit) { $0.created_at }
+            )
         }
-        let rows: [FeedDTO.ProfileWallPost] = try await supabase.database.select(
-            FeedDTO.ProfileWallPost.self,
-            from: "profile_posts",
-            query: query
-        )
-        let items = rows.compactMap(Self.mapWallPost)
-        // Web client re-sort: pinned first, then created_at desc.
-        let sorted = items.sorted { lhs, rhs in
-            if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
-            return lhs.createdAt > rhs.createdAt
-        }
-        return CursorPage(
-            items: sorted,
-            nextCursor: SupabaseQuery.nextCursor(items: rows, limit: limit) { $0.created_at }
-        )
     }
 
     func wallPost(id: PostID) async throws -> Post {
@@ -180,19 +233,48 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         return mapped
     }
 
-    func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState {
-        struct Row: Codable { var follower_id: String?; var following_id: String? }
-        let rows: [Row] = try await supabase.database.select(
-            Row.self,
-            from: "followers",
-            query: [
-                SupabaseQuery.select("follower_id,following_id"),
-                SupabaseQuery.eq("follower_id", viewer.rawValue),
-                SupabaseQuery.eq("following_id", target.rawValue),
-                URLQueryItem(name: "limit", value: "1"),
-            ]
+    func createWallPost(authorID: ProfileID, content: String, imageURL: String?) async throws -> Post {
+        struct Body: Encodable {
+            var user_id: String
+            var content: String
+            var image_url: String?
+        }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = Body(
+            user_id: authorID.rawValue,
+            content: trimmed,
+            image_url: imageURL?.trimmingCharacters(in: .whitespacesAndNewlines)
         )
-        return rows.isEmpty ? .none : .following
+        let dto: FeedDTO.ProfileWallPost = try await supabase.database.insert(
+            body,
+            into: "profile_posts",
+            returning: FeedDTO.ProfileWallPost.self
+        )
+        guard let mapped = Self.mapWallPost(dto) else {
+            throw AppError.unknown(message: "Created post but response was incomplete.")
+        }
+        return mapped
+    }
+
+    func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState {
+        struct Row: Codable, Sendable { var follower_id: String?; var following_id: String? }
+        let key = "profiles.followState:\(viewer.rawValue)->\(target.rawValue)"
+        return try await RepositoryRequestFlight.shared.coalesce(
+            key: key,
+            resource: "profiles.followState"
+        ) { [supabase] in
+            let rows: [Row] = try await supabase.database.select(
+                Row.self,
+                from: "followers",
+                query: [
+                    SupabaseQuery.select("follower_id,following_id"),
+                    SupabaseQuery.eq("follower_id", viewer.rawValue),
+                    SupabaseQuery.eq("following_id", target.rawValue),
+                    URLQueryItem(name: "limit", value: "1"),
+                ]
+            )
+            return rows.isEmpty ? .none : .following
+        }
     }
 
     func follow(from viewer: ProfileID, to target: ProfileID) async throws {
@@ -207,6 +289,9 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         )
         cache.memory.remove(forKey: "profile-stats:\(viewer.rawValue)")
         cache.memory.remove(forKey: "profile-stats:\(target.rawValue)")
+        RepositoryRequestFlight.shared.invalidate(
+            prefix: "profiles.followState:\(viewer.rawValue)->\(target.rawValue)"
+        )
     }
 
     func unfollow(from viewer: ProfileID, to target: ProfileID) async throws {
@@ -219,6 +304,9 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         )
         cache.memory.remove(forKey: "profile-stats:\(viewer.rawValue)")
         cache.memory.remove(forKey: "profile-stats:\(target.rawValue)")
+        RepositoryRequestFlight.shared.invalidate(
+            prefix: "profiles.followState:\(viewer.rawValue)->\(target.rawValue)"
+        )
     }
 
     func followers(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile> {

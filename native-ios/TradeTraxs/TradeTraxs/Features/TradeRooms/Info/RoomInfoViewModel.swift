@@ -163,8 +163,11 @@ final class RoomInfoViewModel {
             room = loaded
             if let cached = detailCache.profile(id: loaded.ownerProfileID) {
                 ownerProfile = cached
-            } else if let owner = try? await profiles.profile(id: loaded.ownerProfileID) {
-                detailCache.seed(owner)
+            } else if let owner = try? await SessionProfileStore.shared.profiles(
+                ids: [loaded.ownerProfileID],
+                detailCache: detailCache,
+                repository: profiles
+            ).first {
                 ownerProfile = owner
             }
             if let viewer {

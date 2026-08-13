@@ -78,8 +78,7 @@ struct RoomConversationView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle(viewModel.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle(viewModel.title)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 0) {

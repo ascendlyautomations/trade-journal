@@ -6,7 +6,10 @@ import Foundation
 enum HomeRoute: Hashable, Codable, Sendable {
     case trades
     case tradeDetail(TradeID)
+    /// Month calendar root.
     case calendar
+    /// Futures trading day detail (`YYYY-MM-DD` trading-day key).
+    case tradingDay(String)
     case tools
     case propFirm(TradingAccountID)
     case analyst
@@ -109,7 +112,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .notificationsAchievements: return "Achievements"
         case .notificationsProduct: return "Product Updates"
         case .subscription: return "Subscription"
-        case .tradingAccounts: return "Trading Accounts"
+        case .tradingAccounts: return "Manage Accounts"
         case .propFirm: return "Prop Firm"
         case .privacy: return "Privacy"
         case .affiliate: return "Referrals"

@@ -59,13 +59,19 @@ final class ProfileHeaderViewModel {
         return "\(profile.displayName) (@\(profile.username)) on TradeTraxs"
     }
 
-    func onAppear() {
-        store.loadIfNeeded()
-    }
+    /// Screen owns bootstrap — kept for API compatibility; no independent load.
+    func onAppear() {}
+
+    /// Header retry is wired by ``ProfileScreenViewModel/retryBootstrap`` via the view.
+    var onRetryBootstrap: (() -> Void)?
 
     func retry() {
         ExperienceHaptics.play(.selection)
-        store.refresh()
+        if let onRetryBootstrap {
+            onRetryBootstrap()
+        } else {
+            store.refresh()
+        }
     }
 
     func openSettings() {
@@ -144,9 +150,9 @@ final class ProfileHeaderViewModel {
         }
 
         do {
-            let page = try await messages.conversations(page: PageRequest(limit: 100))
+            let result = try await messages.conversations(page: PageRequest(limit: 100))
             let participants = Set([viewerID, targetID])
-            if let existing = page.items.first(where: {
+            if let existing = result.items.first(where: {
                 Set($0.participantProfileIDs) == participants
             }) {
                 navigationCoordinator.open(.messages(.thread(existing.id)))

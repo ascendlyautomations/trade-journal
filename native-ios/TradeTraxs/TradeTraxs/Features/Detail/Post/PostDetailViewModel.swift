@@ -85,7 +85,15 @@ final class PostDetailViewModel {
     private func loadAuthor(for profileID: ProfileID) async {
         let userID = await session.currentUserID
         isOwner = userID?.rawValue == profileID.rawValue
-        author = try? await profiles.profile(id: profileID)
+        if let cached = cache.profile(id: profileID) {
+            author = cached
+        } else {
+            author = try? await SessionProfileStore.shared.profiles(
+                ids: [profileID],
+                detailCache: cache,
+                repository: profiles
+            ).first
+        }
         authorAvatar = await DetailAuthorPresentation.loadAvatar(
             for: author,
             imagePipeline: imagePipeline

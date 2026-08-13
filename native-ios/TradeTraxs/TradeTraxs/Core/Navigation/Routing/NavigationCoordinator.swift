@@ -105,6 +105,8 @@ final class NavigationCoordinator {
             present(fullScreen: .importCSV)
         case .post:
             present(fullScreen: .newPost)
+        case .achievement:
+            present(fullScreen: .newAchievement)
         case .reel:
             present(fullScreen: .newReel)
         case .story:

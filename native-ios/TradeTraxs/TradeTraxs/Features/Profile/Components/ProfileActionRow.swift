@@ -11,7 +11,6 @@ struct ProfileActionRow: View {
     let mode: Mode
     var onEdit: () -> Void = {}
     var onShare: () -> Void = {}
-    var onSettings: () -> Void = {}
     var onCreateTradeRoom: () -> Void = {}
     var onViewTradeRoom: () -> Void = {}
     var onFollow: () -> Void = {}
@@ -55,12 +54,6 @@ struct ProfileActionRow: View {
                 style: .outline,
                 accessibilityIdentifier: "profile.share",
                 action: onShare
-            )
-            iconChip(
-                icon: .settings,
-                accessibilityLabel: "Settings",
-                accessibilityIdentifier: "profile.settings",
-                action: onSettings
             )
             Spacer(minLength: 0)
         }
@@ -151,33 +144,6 @@ struct ProfileActionRow: View {
         .opacity(isEnabled ? ExperienceOpacity.opaque : ExperienceOpacity.disabled)
         .fixedSize(horizontal: !expands, vertical: false)
         .accessibilityLabel(title)
-        .accessibilityIdentifier(accessibilityIdentifier)
-    }
-
-    private func iconChip(
-        icon: AppIcon,
-        accessibilityLabel: String,
-        accessibilityIdentifier: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            ExperienceHaptics.play(.selection)
-            action()
-        } label: {
-            ExperienceIcon(icon: icon, size: .sm, color: colors.primaryText)
-                .frame(width: 32, height: 32)
-                .background(
-                    RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
-                        .stroke(colors.border, lineWidth: ExperienceBorder.thin)
-                )
-                .frame(
-                    width: ExperienceAccessibility.minTouchTarget,
-                    height: ExperienceAccessibility.minTouchTarget
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier)
     }
 

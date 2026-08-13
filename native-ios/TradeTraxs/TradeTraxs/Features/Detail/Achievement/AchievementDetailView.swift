@@ -42,8 +42,7 @@ struct AchievementDetailView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle(viewModel.achievement?.title ?? "Achievement")
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle(viewModel.achievement?.title ?? "Achievement")
         .toolbar(.hidden, for: .tabBar)
         .task {
             viewModel.loadIfNeeded()
@@ -77,7 +76,12 @@ struct AchievementDetailView: View {
                             imagePipeline: imagePipeline,
                             accessibilityIdentifier: "detail.achievement.media",
                             emptyIcon: .leaderboard,
-                            allowsFullResolutionViewer: true
+                            allowsFullResolutionViewer: true,
+                            onDoubleTapLike: {
+                                Task {
+                                    await data.engagementStore.ensureLiked(on: .achievement(achievement.id))
+                                }
+                            }
                         )
 
                         achievementBody(achievement, scrollProxy: proxy)

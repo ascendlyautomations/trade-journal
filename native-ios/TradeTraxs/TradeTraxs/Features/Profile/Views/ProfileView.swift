@@ -3,12 +3,10 @@ import SwiftUI
 /// Unified Profile root — same UI for the authenticated user and every other profile.
 ///
 /// Ownership only swaps the action row (Edit/Share/Settings vs Follow/Following).
+/// Data lifecycle is owned exclusively by ``ProfileScreenViewModel``.
 struct ProfileView: View {
-    @State private var contentStore: ProfileContentStore
-    @State private var headerViewModel: ProfileHeaderViewModel
-    @State private var shellViewModel: ProfileShellViewModel?
+    @State private var screen: ProfileScreenViewModel
 
-    private let authenticationCoordinator: AuthenticationCoordinator?
     private let showsOwnerChrome: Bool
 
     /// Observed so the tab Profile can seed session cache from the already-loaded owner store.
@@ -25,23 +23,15 @@ struct ProfileView: View {
         data: DataEnvironment
     ) {
         self.currentUserProfile = store
-        self.authenticationCoordinator = authenticationCoordinator
         self.showsOwnerChrome = true
-        let content = ProfileContentStore(
-            target: .currentUser,
-            profiles: data.profiles,
-            rooms: data.rooms,
-            session: data.session,
-            imagePipeline: data.imagePipeline,
-            detailCache: data.detailCache
-        )
-        _contentStore = State(initialValue: content)
-        _headerViewModel = State(
-            initialValue: ProfileHeaderViewModel(
-                store: content,
-                messages: data.messages,
-                session: data.session,
-                navigationCoordinator: navigationCoordinator
+        _screen = State(
+            initialValue: ProfileScreenViewModel(
+                target: .currentUser,
+                currentUserProfile: store,
+                navigationCoordinator: navigationCoordinator,
+                authenticationCoordinator: authenticationCoordinator,
+                data: data,
+                showsOwnerChrome: true
             )
         )
     }
@@ -54,35 +44,30 @@ struct ProfileView: View {
         data: DataEnvironment
     ) {
         self.currentUserProfile = currentUserProfile
-        self.authenticationCoordinator = nil
         self.showsOwnerChrome = false
-        let content = ProfileContentStore(
-            target: .profile(profileID),
-            profiles: data.profiles,
-            rooms: data.rooms,
-            session: data.session,
-            imagePipeline: data.imagePipeline,
-            detailCache: data.detailCache
-        )
-        _contentStore = State(initialValue: content)
-        _headerViewModel = State(
-            initialValue: ProfileHeaderViewModel(
-                store: content,
-                messages: data.messages,
-                session: data.session,
-                navigationCoordinator: navigationCoordinator
+        _screen = State(
+            initialValue: ProfileScreenViewModel(
+                target: .profile(profileID),
+                currentUserProfile: currentUserProfile,
+                navigationCoordinator: navigationCoordinator,
+                authenticationCoordinator: nil,
+                data: data,
+                showsOwnerChrome: false
             )
         )
     }
 
     var body: some View {
+        let contentStore = screen.contentStore
+        let headerViewModel = screen.headerViewModel
+
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
                 ProfileHeaderView(store: contentStore, viewModel: headerViewModel)
                     .experiencePadding(.horizontal, .lg)
                     .padding(.top, ExperienceSpacing.sm)
 
-                if let shellViewModel {
+                if let shellViewModel = screen.shellViewModel {
                     ProfileSectionPicker(
                         selection: Binding(
                             get: { shellViewModel.selectedSection },
@@ -95,7 +80,7 @@ struct ProfileView: View {
 
                     sectionBody(shellViewModel)
                         .environment(\.appEnvironment, appEnvironment)
-                } else if contentStore.phase == .loading && contentStore.profile == nil {
+                } else if screen.state.phase == .loading && screen.state.profile == nil {
                     ProfileSectionPicker(selection: .constant(.trades))
                         .disabled(true)
                         .opacity(ExperienceOpacity.disabled)
@@ -111,70 +96,42 @@ struct ProfileView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .experienceScreenBackground()
-        .navigationTitle(navigationTitle)
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle(navigationTitle)
         .toolbar(.visible, for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
         .toolbar {
-            if showsOwnerChrome, contentStore.isOwner {
+            if screen.showsSettingsToolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Settings", systemImage: AppIcon.settings.systemName) {
-                        headerViewModel.openSettings()
+                        screen.openSettings()
                     }
                     .accessibilityIdentifier("profile.toolbar.settings")
-                }
-                if let authenticationCoordinator {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Sign Out", role: .destructive) {
-                            Task {
-                                await authenticationCoordinator.logout()
-                                ExperienceHaptics.play(.warning)
-                            }
-                        }
-                        .accessibilityIdentifier("profile.signOut")
-                    }
                 }
             }
         }
         .refreshable {
-            headerViewModel.retry()
-            await shellViewModel?.refreshSelected()
+            await screen.refresh()
         }
         .onAppear {
-            seedOwnerCacheIfNeeded()
-            headerViewModel.onAppear()
-            syncShellIfNeeded()
-            activateShellForLaunch()
+            headerViewModel.onRetryBootstrap = { screen.retryBootstrap() }
+            screen.onAppear(currentUserProfile: currentUserProfile)
         }
-        .onChange(of: contentStore.resolvedProfileID) { _, _ in
-            syncShellIfNeeded()
-            activateShellForLaunch()
+        .onChange(of: screen.state.profileID) { _, _ in
+            screen.syncShellIfNeeded()
+            screen.activateShellForLaunch()
         }
         .onChange(of: contentStore.isOwner) { _, _ in
-            // Rebuild trades VM if ownership flips after session resolution.
-            if let id = contentStore.resolvedProfileID,
-               shellViewModel?.profileID == id,
-               shellViewModel?.isOwner != contentStore.isOwner
-            {
-                shellViewModel = ProfileShellViewModel(
-                    profileID: id,
-                    data: appEnvironment.data,
-                    navigationCoordinator: appEnvironment.navigation.coordinator,
-                    isOwner: contentStore.isOwner
-                )
-                activateShellForLaunch()
-            }
+            screen.reconcileOwnershipIfNeeded()
         }
         .animation(
             ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-            value: shellViewModel?.selectedSection
+            value: screen.shellViewModel?.selectedSection
         )
         .accessibilityIdentifier(contentStore.isOwner ? "profile.root.owner" : "profile.root.other")
     }
 
     private var navigationTitle: String {
-        if contentStore.isOwner { return "Profile" }
-        if let username = contentStore.profile?.username, !username.isEmpty {
+        if screen.contentStore.isOwner { return "Profile" }
+        if let username = screen.contentStore.profile?.username, !username.isEmpty {
             return "@\(username)"
         }
         return "Profile"
@@ -220,45 +177,5 @@ struct ProfileView: View {
                 )
             }
         }
-    }
-
-    private func seedOwnerCacheIfNeeded() {
-        guard case .currentUser = contentStore.target else { return }
-        if let profile = currentUserProfile.profile {
-            appEnvironment.data.detailCache.seed(profile)
-        }
-        if let stats = currentUserProfile.stats {
-            appEnvironment.data.detailCache.seed(stats: stats)
-        }
-    }
-
-    private func syncShellIfNeeded() {
-        guard let profileID = contentStore.resolvedProfileID ?? contentStore.profile?.id else {
-            shellViewModel = nil
-            return
-        }
-        if shellViewModel?.profileID != profileID {
-            shellViewModel = ProfileShellViewModel(
-                profileID: profileID,
-                data: appEnvironment.data,
-                navigationCoordinator: appEnvironment.navigation.coordinator,
-                isOwner: contentStore.isOwner
-            )
-        }
-    }
-
-    private func activateShellForLaunch() {
-        #if DEBUG
-        let args = ProcessInfo.processInfo.arguments
-        if args.contains("-uitesting-profile-stats") {
-            shellViewModel?.select(.stats)
-            return
-        }
-        if args.contains("-uitesting-profile-posts") {
-            shellViewModel?.select(.posts)
-            return
-        }
-        #endif
-        shellViewModel?.activateSelected()
     }
 }

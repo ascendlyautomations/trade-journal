@@ -10,6 +10,7 @@ enum ProfileTradeFixtures {
         let now = Date()
         let screenshot = MediaReference(id: sampleScreenshotURL, kind: .image, altText: "Trade screenshot")
         return [
+            // Image + notes
             Trade(
                 id: TradeID("dev-trade-1"),
                 ownerProfileID: profileID,
@@ -30,9 +31,11 @@ enum ProfileTradeFixtures {
                 publicCaption: "Break and retest",
                 thumbnail: screenshot,
                 notePreview: "Held through the open drive. Clean level respect.",
+                strategy: "Opening Range Breakout",
                 createdAt: now.addingTimeInterval(-86_400),
                 updatedAt: now.addingTimeInterval(-85_000)
             ),
+            // Image + notes (loss / private)
             Trade(
                 id: TradeID("dev-trade-2"),
                 ownerProfileID: profileID,
@@ -53,9 +56,11 @@ enum ProfileTradeFixtures {
                 publicCaption: nil,
                 thumbnail: screenshot,
                 notePreview: "Stopped out — late entry.",
+                strategy: "Failed breakdown",
                 createdAt: now.addingTimeInterval(-172_800),
                 updatedAt: now.addingTimeInterval(-170_000)
             ),
+            // No image + no notes — dense execution card
             Trade(
                 id: TradeID("dev-trade-3"),
                 ownerProfileID: profileID,
@@ -70,15 +75,17 @@ enum ProfileTradeFixtures {
                 exitAt: now.addingTimeInterval(-255_000),
                 realizedPnL: Money(amount: 640),
                 riskReward: Decimal(string: "3.0"),
-                points: nil,
+                points: Decimal(string: "0.70"),
                 sessionLabel: "Asia",
                 visibility: .public,
                 publicCaption: nil,
                 thumbnail: nil,
                 notePreview: nil,
+                strategy: "Asia continuation",
                 createdAt: now.addingTimeInterval(-260_000),
                 updatedAt: now.addingTimeInterval(-255_000)
             ),
+            // Image + no notes
             Trade(
                 id: TradeID("dev-trade-4"),
                 ownerProfileID: profileID,
@@ -99,9 +106,11 @@ enum ProfileTradeFixtures {
                 publicCaption: nil,
                 thumbnail: screenshot,
                 notePreview: nil,
+                strategy: nil,
                 createdAt: now.addingTimeInterval(-350_000),
                 updatedAt: now.addingTimeInterval(-348_000)
             ),
+            // No image + notes
             Trade(
                 id: TradeID("dev-trade-5"),
                 ownerProfileID: profileID,
@@ -118,10 +127,11 @@ enum ProfileTradeFixtures {
                 riskReward: Decimal(string: "2.0"),
                 points: 120,
                 sessionLabel: "NY",
-                visibility: .public,
+                visibility: .private,
                 publicCaption: nil,
-                thumbnail: screenshot,
-                notePreview: nil,
+                thumbnail: nil,
+                notePreview: "Waited for liquidity sweep and confirmation before entering. Held through the open drive.",
+                strategy: "Liquidity Sweep",
                 createdAt: now.addingTimeInterval(-430_000),
                 updatedAt: now.addingTimeInterval(-428_000)
             ),

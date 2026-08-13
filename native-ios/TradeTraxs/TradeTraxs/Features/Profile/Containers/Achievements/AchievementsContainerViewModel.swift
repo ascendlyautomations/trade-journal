@@ -11,25 +11,48 @@ final class AchievementsContainerViewModel {
     private let achievements: any AchievementRepository
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
+    private let engagementStore: EngagementStore?
     private let viewerIsOwner: Bool
     private var loadTask: Task<Void, Never>?
     private var hasLoaded = false
+    private var isScreenOwned = false
 
     init(
         profileID: ProfileID,
         achievements: any AchievementRepository,
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
+        engagementStore: EngagementStore? = nil,
         viewerIsOwner: Bool = true
     ) {
         self.profileID = profileID
         self.achievements = achievements
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
+        self.engagementStore = engagementStore
         self.viewerIsOwner = viewerIsOwner
     }
 
+    func prefetchEngagement(for achievementIDs: [AchievementID]) {
+        guard !achievementIDs.isEmpty else { return }
+        engagementStore?.prefetch(achievementIDs.map { .achievement($0) })
+    }
+
+    func applyBootstrap(_ snapshot: ProfileState) {
+        guard snapshot.didBootstrap || snapshot.phase == .loaded || !snapshot.achievements.isEmpty else {
+            if snapshot.phase == .loading, items.isEmpty { state = .loading }
+            return
+        }
+        isScreenOwned = true
+        hasLoaded = true
+        items = snapshot.achievements
+        detailCache.seed(achievements: items)
+        state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+        prefetchEngagement(for: items.map(\.id))
+    }
+
     func loadIfNeeded() {
+        if isScreenOwned { return }
         guard !hasLoaded, loadTask == nil else { return }
         loadTask = Task { await performLoad() }
     }
@@ -55,6 +78,7 @@ final class AchievementsContainerViewModel {
             items = ProfileAchievementFixtures.samples(owner: profileID)
             detailCache.seed(achievements: items)
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            prefetchEngagement(for: items.map(\.id))
             loadTask = nil
             return
         }
@@ -71,6 +95,7 @@ final class AchievementsContainerViewModel {
             detailCache.seed(achievements: items)
             hasLoaded = true
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            prefetchEngagement(for: items.map(\.id))
         } catch {
             guard !Task.isCancelled else { return }
             if items.isEmpty {

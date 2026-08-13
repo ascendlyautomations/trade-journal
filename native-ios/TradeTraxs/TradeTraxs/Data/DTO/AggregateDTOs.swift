@@ -7,6 +7,10 @@ nonisolated enum TradeDTO {
     static let profileListSelect =
         "id,user_id,account_id,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode"
 
+    /// Owner Trade History — includes denormalized account_name for search.
+    static let historyListSelect =
+        "id,user_id,account_id,account_name,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy"
+
     /// Mirrors web `PROFILE_SUMMARY_TRADE_SELECT`.
     static let profileSummarySelect = "id,created_at,pnl,rr,mode,account_type"
 
@@ -35,6 +39,8 @@ nonisolated enum TradeDTO {
         var created_at: String?
         var date: String?
         var trade_date: String?
+        var account_name: String?
+        var strategy: String?
     }
 
     /// Lightweight overview row — web `fetchSummaryTrades`.
@@ -76,6 +82,8 @@ nonisolated enum TradeDTO {
         var account_size: FlexibleNumber?
         /// Legacy alias — prefer `account_size`.
         var size: FlexibleNumber?
+        var account_number: String?
+        var note: String?
         var is_active: Bool?
         var can_add_trades: Bool?
         /// Prop Firm Mode rule columns (web propfirm page select).
@@ -88,9 +96,31 @@ nonisolated enum TradeDTO {
         var payout_drawdown_behavior: String?
     }
 
+    struct AccountWriteBody: Encodable, Sendable {
+        var user_id: String?
+        var name: String
+        var account_size: String?
+        var account_number: String?
+        var category: String
+        var mode: String
+        var is_active: Bool?
+        var can_add_trades: Bool?
+        var note: String?
+        var consistency: Double?
+        var max_drawdown: Double?
+        var daily_drawdown: Double?
+        var profit_target: Double?
+        var winning_days: Double?
+        var winning_day_threshold: Double?
+    }
+
     struct InsertBody: Encodable, Sendable {
         var user_id: String
         var account_id: String?
+        var account_name: String?
+        var account_size: String?
+        var account_type: String?
+        var account_category: String?
         var ticker: String
         var direction: String
         var mode: String?
@@ -99,12 +129,30 @@ nonisolated enum TradeDTO {
         var exit_price: Double?
         var entry_time: String?
         var exit_time: String?
+        var trade_date: String?
         var pnl: Double?
         var rr: Double?
+        var points: Double?
+        var session: String?
+        var strategy: String?
+        var notes: String?
+        var image_url: String?
         var is_public: Bool
         var public_description: String?
         var created_at: String
         var date: String
+        /// Web CSV imports set `is_initial_import` on bulk rows.
+        var is_initial_import: Bool? = nil
+    }
+
+    /// Feed post created when a trade is shared publicly (web `posts` insert).
+    struct TradePostInsertBody: Encodable, Sendable {
+        var user_id: String
+        var trade_id: String
+        var image_url: String?
+        var pnl: Double?
+        var rr: Double?
+        var caption: String
     }
 }
 
@@ -211,7 +259,7 @@ nonisolated enum FeedDTO {
         }
     }
 
-    /// Web trade feed row — `posts` + `profiles(username, avatar_url)`.
+    /// Web trade feed row — `posts` + `profiles` + optional `trades` embed (avoids N+1 trade SELECTs).
     struct TradeFeedRow: Codable, Sendable {
         var id: String?
         var user_id: String?
@@ -219,6 +267,25 @@ nonisolated enum FeedDTO {
         var created_at: String?
         var image_url: String?
         var profiles: ProfilesBox?
+        var trades: TradeEmbedBox?
+    }
+
+    /// PostgREST may return object or single-element array for many-to-one trade embeds.
+    struct TradeEmbedBox: Codable, Sendable {
+        var trade: TradeDTO.Trade?
+
+        init(from decoder: Decoder) throws {
+            if let single = try? TradeDTO.Trade(from: decoder) {
+                trade = single
+                return
+            }
+            trade = (try? [TradeDTO.Trade](from: decoder))?.first
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encodeNil()
+        }
     }
 
     /// Web profile feed row — `profile_posts` + profiles embed.
@@ -500,6 +567,10 @@ nonisolated enum RoomDTO {
 }
 
 nonisolated enum NotificationDTO {
+    /// Columns used by web Activity (`app/notifications/page.tsx`) plus room FKs.
+    static let selectColumns =
+        "id,user_id,sender_id,type,post_id,trade_id,profile_post_id,achievement_post_id,reel_id,comment_id,room_id,room_message_id,content,read,created_at"
+
     struct Item: Codable, Sendable {
         var id: String?
         var type: String?
@@ -515,6 +586,12 @@ nonisolated enum NotificationDTO {
         var is_read: Bool?
         var trade_id: String?
         var post_id: String?
+        var profile_post_id: String?
+        var achievement_post_id: String?
+        var reel_id: String?
+        var comment_id: String?
+        var room_id: String?
+        var room_message_id: String?
     }
 }
 

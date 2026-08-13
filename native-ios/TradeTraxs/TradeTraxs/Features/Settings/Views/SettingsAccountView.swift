@@ -77,7 +77,7 @@ struct SettingsAccountView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle("Account")
+        .experienceNavigationTitle("Account")
         .overlay {
             if viewModel.isLoading {
                 ProgressView()
@@ -139,7 +139,7 @@ struct SettingsSecurityView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle("Security")
+        .experienceNavigationTitle("Security")
         .onAppear { viewModel.loadIfNeeded() }
         .accessibilityIdentifier("settings.security")
     }

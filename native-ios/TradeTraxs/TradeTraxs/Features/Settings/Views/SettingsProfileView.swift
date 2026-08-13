@@ -75,7 +75,7 @@ struct SettingsProfileView: View {
         }
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle("Profile")
+        .experienceNavigationTitle("Profile")
         .overlay {
             if viewModel.isLoading {
                 ProgressView()

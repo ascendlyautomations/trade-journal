@@ -51,7 +51,7 @@ struct SettingsPrivacyView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle("Privacy")
+        .experienceNavigationTitle("Privacy")
         .overlay {
             if viewModel.isLoading {
                 ProgressView()

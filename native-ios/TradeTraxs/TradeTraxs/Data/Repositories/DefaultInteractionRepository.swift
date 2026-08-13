@@ -23,62 +23,93 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
         let viewerID = await session.currentUserID?.rawValue
         let grouped = Dictionary(grouping: targets, by: \.kind)
 
-        for (kind, group) in grouped {
-            let ids = group.map(\.id)
-            guard !ids.isEmpty else { continue }
-            let tables = Self.tables(for: kind)
-            let fk = tables.foreignKey
-
-            async let likeRows: [InteractionDTO.LikeRow] = {
-                (try? await supabase.database.select(
-                    InteractionDTO.LikeRow.self,
-                    from: tables.likes,
-                    query: [
-                        SupabaseQuery.select("\(fk),user_id"),
-                        SupabaseQuery.isIn(fk, ids),
-                    ]
-                )) ?? []
-            }()
-            async let commentRows: [InteractionDTO.CommentCountRow] = {
-                (try? await supabase.database.select(
-                    InteractionDTO.CommentCountRow.self,
-                    from: tables.comments,
-                    query: [
-                        SupabaseQuery.select(fk),
-                        SupabaseQuery.isIn(fk, ids),
-                    ]
-                )) ?? []
-            }()
-
-            let likes = await likeRows
-            let comments = await commentRows
-
-            var likeCounts: [String: Int] = [:]
-            var likedByMe: Set<String> = []
-            for row in likes {
-                guard let contentID = Self.contentID(from: row, kind: kind) else { continue }
-                likeCounts[contentID, default: 0] += 1
-                if let viewerID, row.user_id == viewerID {
-                    likedByMe.insert(contentID)
+        // Parallelize per content-kind — same request count, lower wall-clock; each kind
+        // still uses compact `fk` (+ user_id for likes) rather than full comment bodies.
+        await withTaskGroup(of: (InteractionContentKind, [InteractionTarget: EngagementSnapshot]).self) {
+            group in
+            for (kind, groupTargets) in grouped {
+                let ids = groupTargets.map(\.id)
+                guard !ids.isEmpty else { continue }
+                group.addTask {
+                    let snap = await Self.engagementForKind(
+                        kind: kind,
+                        targets: groupTargets,
+                        ids: ids,
+                        viewerID: viewerID,
+                        database: self.supabase.database
+                    )
+                    return (kind, snap)
                 }
             }
-
-            var commentCounts: [String: Int] = [:]
-            for row in comments {
-                guard let contentID = Self.contentID(from: row, kind: kind) else { continue }
-                commentCounts[contentID, default: 0] += 1
-            }
-
-            for target in group {
-                result[target] = EngagementSnapshot(
-                    likeCount: likeCounts[target.id] ?? 0,
-                    commentCount: commentCounts[target.id] ?? 0,
-                    viewerHasLiked: likedByMe.contains(target.id)
-                )
+            for await (_, snap) in group {
+                for (target, value) in snap {
+                    result[target] = value
+                }
             }
         }
 
         return result
+    }
+
+    private static func engagementForKind(
+        kind: InteractionContentKind,
+        targets: [InteractionTarget],
+        ids: [String],
+        viewerID: String?,
+        database: any SupabaseDatabaseExecuting
+    ) async -> [InteractionTarget: EngagementSnapshot] {
+        let tables = tables(for: kind)
+        let fk = tables.foreignKey
+
+        async let likeRows: [InteractionDTO.LikeRow] = {
+            (try? await database.select(
+                InteractionDTO.LikeRow.self,
+                from: tables.likes,
+                query: [
+                    SupabaseQuery.select("\(fk),user_id"),
+                    SupabaseQuery.isIn(fk, ids),
+                ]
+            )) ?? []
+        }()
+        async let commentRows: [InteractionDTO.CommentCountRow] = {
+            (try? await database.select(
+                InteractionDTO.CommentCountRow.self,
+                from: tables.comments,
+                query: [
+                    SupabaseQuery.select(fk),
+                    SupabaseQuery.isIn(fk, ids),
+                ]
+            )) ?? []
+        }()
+
+        let likes = await likeRows
+        let comments = await commentRows
+
+        var likeCounts: [String: Int] = [:]
+        var likedByMe: Set<String> = []
+        for row in likes {
+            guard let contentID = contentID(from: row, kind: kind) else { continue }
+            likeCounts[contentID, default: 0] += 1
+            if let viewerID, row.user_id == viewerID {
+                likedByMe.insert(contentID)
+            }
+        }
+
+        var commentCounts: [String: Int] = [:]
+        for row in comments {
+            guard let contentID = contentID(from: row, kind: kind) else { continue }
+            commentCounts[contentID, default: 0] += 1
+        }
+
+        var map: [InteractionTarget: EngagementSnapshot] = [:]
+        for target in targets {
+            map[target] = EngagementSnapshot(
+                likeCount: likeCounts[target.id] ?? 0,
+                commentCount: commentCounts[target.id] ?? 0,
+                viewerHasLiked: likedByMe.contains(target.id)
+            )
+        }
+        return map
     }
 
     func setLiked(_ liked: Bool, on target: InteractionTarget) async throws {

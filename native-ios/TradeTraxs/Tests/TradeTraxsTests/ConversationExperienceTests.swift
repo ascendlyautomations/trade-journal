@@ -152,9 +152,13 @@ private struct ConversationStubSession: SessionProviding {
 }
 
 private struct ConversationStubMessageRepository: MessageRepository {
-    func conversations(page: PageRequest) async throws -> CursorPage<Conversation> {
+    func conversations(page: PageRequest) async throws -> ConversationListResult {
         await MainActor.run {
-            CursorPage(items: MessagesInboxStore.shared.conversations, nextCursor: nil)
+            ConversationListResult(
+                items: MessagesInboxStore.shared.conversations,
+                nextCursor: nil,
+                embeddedProfiles: []
+            )
         }
     }
 

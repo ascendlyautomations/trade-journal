@@ -20,6 +20,7 @@ enum FullScreenDestination: Hashable, Identifiable, Codable, Sendable {
     case importCSV
     case importReview
     case newPost
+    case newAchievement
     case newReel
     case newStory
     case upgrade
@@ -32,6 +33,7 @@ enum FullScreenDestination: Hashable, Identifiable, Codable, Sendable {
         case .importCSV: return "importCSV"
         case .importReview: return "importReview"
         case .newPost: return "newPost"
+        case .newAchievement: return "newAchievement"
         case .newReel: return "newReel"
         case .newStory: return "newStory"
         case .upgrade: return "upgrade"
@@ -62,6 +64,7 @@ enum ComposeKind: String, Hashable, Codable, Sendable {
     case quickTrade
     case importCSV
     case post
+    case achievement
     case reel
     case story
 }

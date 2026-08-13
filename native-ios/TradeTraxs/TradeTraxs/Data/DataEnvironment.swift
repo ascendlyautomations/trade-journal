@@ -26,8 +26,10 @@ final class DataEnvironment {
     let messages: any MessageRepository
     let rooms: any RoomRepository
     let notifications: any NotificationRepository
+    let followRequests: any FollowRequestRepository
     let calendar: any CalendarRepository
     let leaderboard: any LeaderboardRepository
+    let explore: any ExploreRepository
     let search: any SearchRepository
     let billing: any BillingRepository
     let analytics: any AnalyticsRepository
@@ -61,8 +63,10 @@ final class DataEnvironment {
         messages: any MessageRepository,
         rooms: any RoomRepository,
         notifications: any NotificationRepository,
+        followRequests: any FollowRequestRepository,
         calendar: any CalendarRepository,
         leaderboard: any LeaderboardRepository,
+        explore: any ExploreRepository,
         search: any SearchRepository,
         billing: any BillingRepository,
         analytics: any AnalyticsRepository,
@@ -93,8 +97,10 @@ final class DataEnvironment {
         self.messages = messages
         self.rooms = rooms
         self.notifications = notifications
+        self.followRequests = followRequests
         self.calendar = calendar
         self.leaderboard = leaderboard
+        self.explore = explore
         self.search = search
         self.billing = billing
         self.analytics = analytics
@@ -187,8 +193,13 @@ final class DataEnvironment {
                 cache: cache,
                 session: session
             ),
+            followRequests: DefaultFollowRequestRepository(
+                supabase: supabase,
+                session: session
+            ),
             calendar: DefaultCalendarRepository(supabase: supabase, cache: cache),
             leaderboard: DefaultLeaderboardRepository(supabase: supabase, cache: cache),
+            explore: DefaultExploreRepository(supabase: supabase),
             search: DefaultSearchRepository(supabase: supabase, cache: cache),
             billing: DefaultBillingRepository(supabase: supabase, cache: cache),
             analytics: DefaultAnalyticsRepository(supabase: supabase),

@@ -40,19 +40,26 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
     func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
         // Exact web Profile ownership query (`app/profile/[id]/page.tsx`):
         // rooms where owner_user_id = profile.id (not owner_id).
-        let rows: [RoomDTO.Room] = try await supabase.database.select(
-            RoomDTO.Room.self,
-            from: "rooms",
-            query: SupabaseQuery.page(page) + [
-                SupabaseQuery.select("*"),
-                SupabaseQuery.eq("owner_user_id", profileID.rawValue),
-            ]
-        )
-        let items = try rows.map(mapRoom)
-        return CursorPage(
-            items: items,
-            nextCursor: SupabaseQuery.nextCursor(items: rows, limit: page.limit) { $0.created_at }
-        )
+        let cursor = page.cursor ?? "-"
+        let key = "rooms.owned:\(profileID.rawValue):limit=\(page.limit):cursor=\(cursor)"
+        return try await RepositoryRequestFlight.shared.coalesce(
+            key: key,
+            resource: "rooms.owned"
+        ) { [self] in
+            let rows: [RoomDTO.Room] = try await supabase.database.select(
+                RoomDTO.Room.self,
+                from: "rooms",
+                query: SupabaseQuery.page(page) + [
+                    SupabaseQuery.select("*"),
+                    SupabaseQuery.eq("owner_user_id", profileID.rawValue),
+                ]
+            )
+            let items = try rows.map(mapRoom)
+            return CursorPage(
+                items: items,
+                nextCursor: SupabaseQuery.nextCursor(items: rows, limit: page.limit) { $0.created_at }
+            )
+        }
     }
 
     func memberRooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {

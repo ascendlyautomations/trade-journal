@@ -50,8 +50,7 @@ struct RoomInfoView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle("Room Info")
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle("Room Info")
         .task {
             viewModel.loadIfNeeded()
         }

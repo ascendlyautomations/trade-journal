@@ -63,8 +63,7 @@ struct RoomMembersView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle("Members")
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle("Members")
         .searchable(
             text: $viewModel.searchText,
             placement: .navigationBarDrawer(displayMode: .always),

@@ -4,6 +4,7 @@ import SwiftUI
 struct TradeDetailMediaView: View {
     let reference: MediaReference?
     let imagePipeline: any ImagePipeline
+    var onDoubleTapLike: (() -> Void)? = nil
 
     var body: some View {
         AspectFitMediaView(
@@ -12,7 +13,8 @@ struct TradeDetailMediaView: View {
             imagePipeline: imagePipeline,
             accessibilityIdentifier: "detail.trade.media",
             emptyIcon: .chart,
-            allowsFullResolutionViewer: true
+            allowsFullResolutionViewer: true,
+            onDoubleTapLike: onDoubleTapLike
         )
     }
 }

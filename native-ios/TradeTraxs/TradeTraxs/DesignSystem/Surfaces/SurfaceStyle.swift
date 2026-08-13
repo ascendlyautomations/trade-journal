@@ -86,7 +86,4 @@ extension View {
         )
     }
 
-    func experienceScreenBackground() -> some View {
-        experienceSurface(.primaryBackground)
-    }
 }

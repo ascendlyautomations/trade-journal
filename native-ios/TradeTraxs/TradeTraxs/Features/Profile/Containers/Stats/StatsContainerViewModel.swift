@@ -26,6 +26,7 @@ final class StatsContainerViewModel {
     private var tradeInputs: [ProfileStatisticsMetrics.TradeInput] = []
     private var loadTask: Task<Void, Never>?
     private var hasLoaded = false
+    private var isScreenOwned = false
 
     init(
         profileID: ProfileID,
@@ -44,12 +45,50 @@ final class StatsContainerViewModel {
         return "No trades for this filter selection"
     }
 
+    /// Applies shared trades + achievements from screen bootstrap — no repository calls.
+    /// Prefers ``DetailPresentationCache`` when section data was mutated after bootstrap.
+    func applyBootstrap(_ snapshot: ProfileState) {
+        guard snapshot.didBootstrap || snapshot.phase == .loaded else {
+            if snapshot.phase == .loading, metrics == nil { state = .loading }
+            return
+        }
+        isScreenOwned = true
+        hasLoaded = true
+        let sourceTrades = detailCache.publicTrades(for: profileID) ?? snapshot.trades
+        let accountTypes = Dictionary(
+            uniqueKeysWithValues: snapshot.accountModes.map {
+                ($0.key, ProfileStatisticsMetrics.accountTypeString(for: $0.value))
+            }
+        )
+        tradeInputs = sourceTrades.map { trade in
+            ProfileStatisticsMetrics.TradeInput(
+                pnl: trade.realizedPnL?.amount,
+                createdAt: trade.createdAt,
+                isLong: trade.side == .long,
+                session: trade.sessionLabel,
+                mode: trade.mode.rawValue,
+                accountType: trade.accountID.flatMap { accountTypes[$0] }
+            )
+        }
+        if let payout = snapshot.payoutTotal ?? detailCache.stats(for: profileID)?.payoutTotal {
+            applyPayoutTotal(payout)
+        } else {
+            applyPayoutTotal(ProfilePayoutTotals.sum(from: snapshot.achievements))
+        }
+        recompute()
+    }
+
     func loadIfNeeded() {
+        if isScreenOwned { return }
         guard !hasLoaded, loadTask == nil else { return }
         loadTask = Task { await performLoad() }
     }
 
     func refresh() async {
+        if isScreenOwned {
+            // Screen pull-to-refresh re-bootstraps; local mode filter stays client-side.
+            return
+        }
         loadTask?.cancel()
         isRefreshing = true
         await performLoad(forceNetwork: true)
@@ -102,13 +141,15 @@ final class StatsContainerViewModel {
                 payoutTotal = cached
             }
 
-            // Accounts are session-scoped — reuse Trades/Detail cache when present.
+            // Accounts are session-scoped — reuse SessionAccountsStore / Detail cache.
             let accounts: [TradingAccount]
-            if !forceNetwork, let cachedAccounts = detailCache.accounts(for: profileID) {
-                accounts = cachedAccounts
-            } else if let fetched = try? await trades.accounts(for: profileID) {
+            if let fetched = try? await SessionAccountsStore.shared.accounts(
+                for: profileID,
+                detailCache: detailCache,
+                repository: trades,
+                forceNetwork: forceNetwork
+            ) {
                 accounts = fetched
-                detailCache.seed(accounts: fetched, for: profileID)
             } else {
                 accounts = []
             }

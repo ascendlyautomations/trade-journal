@@ -5,6 +5,9 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
     private let cache: CacheStack
     private let session: any SessionProviding
 
+    private static let profileSelect =
+        "id,username,name,bio,avatar_url,trading_style,trader_type,primary_market,started_trading,is_private,created_at"
+
     init(
         supabase: SupabaseInfrastructure,
         cache: CacheStack = .placeholder(),
@@ -23,30 +26,42 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
             NotificationDTO.Item.self,
             from: "notifications",
             query: SupabaseQuery.page(page) + [
-                SupabaseQuery.select("*"),
+                SupabaseQuery.select(NotificationDTO.selectColumns),
                 SupabaseQuery.eq("user_id", userID.rawValue),
+                SupabaseQuery.isIn("type", NotificationInboxType.all),
             ]
         )
-        let items = rows.compactMap(mapNotification)
+        let items = rows.compactMap(Self.mapNotification)
         return CursorPage(
             items: items,
             nextCursor: SupabaseQuery.nextCursor(items: rows, limit: page.limit) { $0.created_at }
         )
     }
 
-    func unreadCount() async throws -> Int {
-        guard let userID = await session.currentUserID else { return 0 }
+    func notification(id: NotificationID) async throws -> ActivityNotification? {
         let rows: [NotificationDTO.Item] = try await supabase.database.select(
             NotificationDTO.Item.self,
             from: "notifications",
             query: [
-                SupabaseQuery.select("id"),
-                SupabaseQuery.eq("user_id", userID.rawValue),
-                URLQueryItem(name: "read", value: "eq.false"),
-                URLQueryItem(name: "limit", value: "1000"),
+                SupabaseQuery.select(NotificationDTO.selectColumns),
+                SupabaseQuery.eq("id", id.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
             ]
         )
-        return rows.count
+        return rows.first.flatMap(Self.mapNotification)
+    }
+
+    func unreadCount() async throws -> Int {
+        guard let userID = await session.currentUserID else { return 0 }
+        // PostgREST Prefer: count=exact — no notification row payloads transferred.
+        return try await supabase.database.count(
+            from: "notifications",
+            query: [
+                SupabaseQuery.eq("user_id", userID.rawValue),
+                URLQueryItem(name: "read", value: "eq.false"),
+                SupabaseQuery.isIn("type", NotificationInboxType.all),
+            ]
+        )
     }
 
     func markRead(id: NotificationID) async throws {
@@ -70,27 +85,148 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
             query: [
                 SupabaseQuery.eq("user_id", userID.rawValue),
                 URLQueryItem(name: "read", value: "eq.false"),
+                SupabaseQuery.isIn("type", NotificationInboxType.all),
             ],
             returning: NotificationDTO.Item.self
         )
     }
 
-    private func mapNotification(_ dto: NotificationDTO.Item) -> ActivityNotification? {
+    func profiles(ids: [ProfileID]) async throws -> [Profile] {
+        let unique = Array(Set(ids.map(\.rawValue))).filter { !$0.isEmpty }
+        guard !unique.isEmpty else { return [] }
+        let rows: [ProfileDTO.Profile] = try await supabase.database.select(
+            ProfileDTO.Profile.self,
+            from: "profiles",
+            query: [
+                SupabaseQuery.select(Self.profileSelect),
+                SupabaseQuery.isIn("id", unique),
+            ]
+        )
+        return rows.compactMap { try? ProfileMapper.mapToDomain($0) }
+    }
+
+    // MARK: - Mapping
+
+    static func mapNotification(_ dto: NotificationDTO.Item) -> ActivityNotification? {
         guard let id = dto.id else { return nil }
-        let kindRaw = dto.kind ?? dto.type ?? "system"
-        let kind = ActivityNotificationKind(rawValue: kindRaw) ?? .system
+        let kindRaw = dto.type ?? dto.kind ?? "system"
+        let kind = ActivityNotificationKind.parse(kindRaw)
+        guard kind.isInboxType || kind == .system || kind == .message else { return nil }
+
+        let content = dto.content ?? dto.body ?? ""
+        let parsed = ContentPayload.parse(content)
+
+        let title: String
+        if let parsedTitle = parsed.title, !parsedTitle.isEmpty {
+            title = parsedTitle
+        } else {
+            title = kind.rawValue
+        }
+
+        let body: String
+        if kind == .comment {
+            body = content
+        } else if let parsedBody = parsed.body, !parsedBody.isEmpty {
+            body = parsedBody
+        } else if kind != .comment {
+            body = ""
+        } else {
+            body = content
+        }
+
+        let roomID = (dto.room_id ?? parsed.roomID).map { RoomID($0) }
+        let resolvedReportID: ReportID? = {
+            if let period = parsed.periodKey, !period.isEmpty {
+                return ReportID(period)
+            }
+            if let href = parsed.href {
+                return reportIdentifier(fromHref: href)
+            }
+            return nil
+        }()
+
         return ActivityNotification(
             id: NotificationID(id),
             kind: kind,
             actorProfileID: (dto.actor_profile_id ?? dto.sender_id).map { ProfileID($0) },
-            title: dto.title ?? kindRaw,
-            body: dto.body ?? dto.content ?? "",
+            title: title,
+            body: body,
             tradeID: dto.trade_id.map { TradeID($0) },
             postID: dto.post_id.map { PostID($0) },
+            profilePostID: dto.profile_post_id.map { PostID($0) },
+            achievementPostID: dto.achievement_post_id.map { PostID($0) },
+            reelID: dto.reel_id.map { ReelID($0) },
+            commentID: dto.comment_id.map { CommentID($0) },
             conversationID: nil,
-            roomID: nil,
+            roomID: roomID,
+            roomMessageID: (dto.room_message_id ?? parsed.messageID).map { RoomMessageID($0) },
+            followRequestID: parsed.followRequestID,
+            roomSlug: parsed.roomSlug,
+            roomName: parsed.roomName,
+            sectionID: parsed.sectionID,
+            sectionName: parsed.sectionName,
+            messagePreview: parsed.messagePreview,
+            reportID: resolvedReportID,
+            affiliateHref: parsed.href,
             createdAt: ISO8601.date(from: dto.created_at) ?? Date(),
             isRead: dto.is_read ?? dto.read ?? false
         )
+    }
+
+    private static func reportIdentifier(fromHref href: String) -> ReportID? {
+        guard let components = URLComponents(string: href),
+              let report = components.queryItems?.first(where: { $0.name == "report" })?.value,
+              !report.isEmpty
+        else { return nil }
+        return ReportID(report)
+    }
+
+    private struct ContentPayload {
+        var title: String?
+        var body: String?
+        var href: String?
+        var followRequestID: String?
+        var roomID: String?
+        var roomSlug: String?
+        var roomName: String?
+        var sectionID: String?
+        var sectionName: String?
+        var messageID: String?
+        var messagePreview: String?
+        var periodKey: String?
+
+        static func parse(_ content: String) -> ContentPayload {
+            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("{"),
+                  let data = trimmed.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else {
+                return ContentPayload()
+            }
+
+            func string(_ key: String) -> String? {
+                guard let value = object[key] else { return nil }
+                if let s = value as? String {
+                    let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return t.isEmpty ? nil : t
+                }
+                return nil
+            }
+
+            return ContentPayload(
+                title: string("title"),
+                body: string("body"),
+                href: string("href"),
+                followRequestID: string("follow_request_id"),
+                roomID: string("room_id"),
+                roomSlug: string("room_slug"),
+                roomName: string("room_name"),
+                sectionID: string("section_id"),
+                sectionName: string("section_name"),
+                messageID: string("message_id"),
+                messagePreview: string("message_preview"),
+                periodKey: string("periodKey") ?? string("period_key") ?? string("periodId")
+            )
+        }
     }
 }

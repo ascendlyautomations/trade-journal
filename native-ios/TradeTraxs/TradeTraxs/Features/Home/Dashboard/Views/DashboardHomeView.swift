@@ -3,9 +3,11 @@ import SwiftUI
 /// Permanent Home tab root — Apple Fitness / Stocks style analytics cockpit.
 struct DashboardHomeView: View {
     @State private var viewModel: DashboardViewModel
+    @State private var activityStore = ActivityInboxStore.shared
     private let imagePipeline: any ImagePipeline
     private let engagementStore: EngagementStore
     private let navigationCoordinator: NavigationCoordinator
+    private let data: DataEnvironment?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -28,6 +30,7 @@ struct DashboardHomeView: View {
         self.imagePipeline = data.imagePipeline
         self.engagementStore = data.engagementStore
         self.navigationCoordinator = navigationCoordinator
+        self.data = data
     }
 
     /// Tests / previews.
@@ -41,6 +44,7 @@ struct DashboardHomeView: View {
         self.imagePipeline = imagePipeline
         self.engagementStore = engagementStore
         self.navigationCoordinator = navigationCoordinator
+        self.data = nil
     }
 
     var body: some View {
@@ -75,13 +79,35 @@ struct DashboardHomeView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle("Dashboard")
-        .navigationBarTitleDisplayMode(.large)
+        .experienceNavigationTitle("Dashboard")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Activity", systemImage: "bell") {
-                    navigationCoordinator.open(.profile(.activity))
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    viewModel.openCalendar()
+                } label: {
+                    ExperienceIcon(icon: .calendar, size: .md, color: colors.primaryText)
                 }
+                .accessibilityLabel("Calendar")
+                .accessibilityIdentifier("dashboard.calendar")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    navigationCoordinator.open(.profile(.activity))
+                } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "bell")
+                        if activityStore.unreadCount > 0 {
+                            ExperienceBadge(value: activityStore.unreadCount)
+                                .offset(x: 10, y: -8)
+                        }
+                    }
+                    .accessibilityLabel(
+                        activityStore.unreadCount > 0
+                            ? "Activity, \(activityStore.unreadCount) unread"
+                            : "Activity"
+                    )
+                }
+                .accessibilityIdentifier("dashboard.activity")
             }
         }
         .refreshable {
@@ -89,6 +115,14 @@ struct DashboardHomeView: View {
         }
         .task {
             viewModel.loadIfNeeded()
+            if let data {
+                // Bell only needs unread count + Realtime — not the Activity feed page.
+                activityStore.ensureUnreadBootstrap(
+                    notifications: data.notifications,
+                    session: data.session,
+                    realtimeHub: data.realtimeHub
+                )
+            }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-uitesting-dashboard-propfirm") {
                 // Wait for fixtures, then select the prop account.
@@ -96,6 +130,12 @@ struct DashboardHomeView: View {
                 viewModel.setAccountFilter(.account(PropFirmFixtures.accountID))
             }
             #endif
+        }
+        .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
+            viewModel.handleJournalMutation()
+        }
+        .onChange(of: AccountMutationStore.shared.revision) { _, _ in
+            viewModel.handleAccountMutation()
         }
         .onDisappear {
             viewModel.onDisappear()

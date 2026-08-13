@@ -16,6 +16,15 @@ struct FeedItemRow: View {
         GridItem(.adaptive(minimum: 52), spacing: ExperienceSpacing.xs, alignment: .leading),
     ]
 
+    private var interactionTarget: InteractionTarget {
+        switch entry {
+        case .trade(_, let trade): return .trade(trade.id)
+        case .post(_, let post): return .profilePost(post.id)
+        case .clip(_, let reel): return .reel(reel.id)
+        case .achievement(_, let achievement): return .achievement(achievement.id)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             FeedAuthorHeader(
@@ -46,10 +55,17 @@ struct FeedItemRow: View {
 
     private var mediaLayout: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button(action: onOpen) {
-                mediaContent
-            }
-            .buttonStyle(.plain)
+            mediaContent
+                .allowsHitTesting(false)
+                .overlay {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .experienceDoubleTapLike(
+                            target: interactionTarget,
+                            store: engagementStore,
+                            onSingleTap: onOpen
+                        )
+                }
 
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 engagement
@@ -62,21 +78,26 @@ struct FeedItemRow: View {
         }
     }
 
-    // MARK: - Layout B (text-only — no media container)
+    // MARK: - Layout B (text-only — engagement outside open target)
 
     private var textLayout: some View {
-        Button(action: onOpen) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 summary
                 caption(lineLimit: 8)
-                engagement
             }
-            .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.bottom, ExperienceSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
+            .experienceDoubleTapLike(
+                target: interactionTarget,
+                store: engagementStore,
+                onSingleTap: onOpen
+            )
+
+            engagement
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.bottom, ExperienceSpacing.md)
     }
 
     // MARK: - Media (full bleed — only when hasDisplayMedia)
@@ -94,7 +115,6 @@ struct FeedItemRow: View {
                 allowsFullResolutionViewer: false,
                 showsPlaceholderWhenUnavailable: false
             )
-            .allowsHitTesting(false)
 
         case .post(_, let post):
             if let first = post.media.first(where: {
@@ -109,7 +129,6 @@ struct FeedItemRow: View {
                     allowsFullResolutionViewer: false,
                     showsPlaceholderWhenUnavailable: false
                 )
-                .allowsHitTesting(false)
             }
 
         case .clip(_, let reel):
@@ -123,7 +142,6 @@ struct FeedItemRow: View {
                     allowsFullResolutionViewer: false,
                     showsPlaceholderWhenUnavailable: false
                 )
-                .allowsHitTesting(false)
 
                 ExperienceIcon(icon: .play, size: .lg, color: .white)
                     .padding(ExperienceSpacing.md)
@@ -140,7 +158,6 @@ struct FeedItemRow: View {
                 allowsFullResolutionViewer: false,
                 showsPlaceholderWhenUnavailable: false
             )
-            .allowsHitTesting(false)
         }
     }
 

@@ -30,6 +30,7 @@ final class CurrentUserProfileStore {
     private let profiles: any ProfileRepository
     private let session: any SessionProviding
     private let imagePipeline: any ImagePipeline
+    private let detailCache: DetailPresentationCache?
 
     private var loadTask: Task<Void, Never>?
     private var loadedProfileID: ProfileID?
@@ -38,11 +39,13 @@ final class CurrentUserProfileStore {
     init(
         profiles: any ProfileRepository,
         session: any SessionProviding,
-        imagePipeline: any ImagePipeline
+        imagePipeline: any ImagePipeline,
+        detailCache: DetailPresentationCache? = nil
     ) {
         self.profiles = profiles
         self.session = session
         self.imagePipeline = imagePipeline
+        self.detailCache = detailCache
     }
 
     var initials: String {
@@ -111,6 +114,9 @@ final class CurrentUserProfileStore {
             stats = loadedStats
             loadedProfileID = profileID
             phase = .loaded
+            // Seed shared detail cache so Profile screen can skip a second profile/stats fan-out.
+            detailCache?.seed(loadedProfile)
+            detailCache?.seed(stats: loadedStats)
 
             await loadAvatarIfNeeded(for: loadedProfile, force: force)
         } catch is CancellationError {

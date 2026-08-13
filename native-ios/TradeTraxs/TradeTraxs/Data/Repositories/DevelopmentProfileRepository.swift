@@ -20,6 +20,22 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
         return try await base.profile(id: id)
     }
 
+    func profiles(ids: [ProfileID]) async throws -> [Profile] {
+        var result: [Profile] = []
+        var remote: [ProfileID] = []
+        for id in Set(ids) {
+            if Self.isDevelopmentID(id) {
+                result.append(Self.fixtureProfile(id: id))
+            } else {
+                remote.append(id)
+            }
+        }
+        if !remote.isEmpty {
+            result.append(contentsOf: try await base.profiles(ids: remote))
+        }
+        return result
+    }
+
     func profile(username: String) async throws -> Profile {
         try await base.profile(username: username)
     }
@@ -67,6 +83,10 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
             return fixture
         }
         return try await base.wallPost(id: id)
+    }
+
+    func createWallPost(authorID: ProfileID, content: String, imageURL: String?) async throws -> Post {
+        try await base.createWallPost(authorID: authorID, content: content, imageURL: imageURL)
     }
 
     func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState {

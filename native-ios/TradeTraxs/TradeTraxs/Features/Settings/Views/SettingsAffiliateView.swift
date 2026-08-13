@@ -47,7 +47,7 @@ struct SettingsAffiliateView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle("Referrals")
+        .experienceNavigationTitle("Referrals")
         .overlay {
             if viewModel.isLoading {
                 ProgressView()

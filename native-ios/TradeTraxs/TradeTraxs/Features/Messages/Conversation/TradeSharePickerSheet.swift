@@ -51,8 +51,7 @@ struct TradeSharePickerSheet: View {
                 }
             }
             .experienceScreenBackground()
-            .navigationTitle("Send Trade")
-            .navigationBarTitleDisplayMode(.inline)
+            .experienceNavigationTitle("Send Trade")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close", action: onClose)

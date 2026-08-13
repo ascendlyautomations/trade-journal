@@ -12,7 +12,28 @@ enum SessionScopedCaches {
     ) {
         currentUserProfile.clear()
         MessagesInboxStore.shared.invalidate()
+        MessagingDomain.shared.invalidate()
+        ActivityInboxStore.shared.invalidate()
+        ExploreSessionStore.shared.invalidate()
+        TradeHistorySessionStore.shared.invalidate()
+        CalendarMonthSessionStore.shared.invalidate()
+        SessionAccountsStore.shared.invalidate()
+        SessionProfileStore.shared.invalidate()
+        SessionTradeEntityStore.shared.invalidate()
+        SessionOwnerTradesStore.shared.invalidate()
+        SessionMemberRoomsStore.shared.invalidate()
+        ProfileRequestFlight.shared.invalidate()
+        RepositoryRequestFlight.shared.invalidate()
+        Task { await SessionFollowingStore.shared.invalidate() }
+        SessionDiskCache.clearAll()
+        TradeJournalMutationStore.shared.invalidate()
+        AccountMutationStore.shared.invalidate()
+        ContentMutationStore.shared.invalidate()
         data.detailCache.removeAll()
         data.engagementStore.removeAll()
+        #if DEBUG
+        SessionNetworkProbe.resetForTesting()
+        SupabaseSessionUsage.resetForTesting()
+        #endif
     }
 }

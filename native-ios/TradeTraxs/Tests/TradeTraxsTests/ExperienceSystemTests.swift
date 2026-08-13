@@ -35,4 +35,18 @@ final class ExperienceSystemTests: XCTestCase {
             XCTFail("Expected failure state")
         }
     }
+
+    /// Documents the product convention: screen names live in the compact nav bar.
+    func testPrimaryTabDisplayNamesMatchNavigationTitles() {
+        XCTAssertEqual(TabIdentifier.home.displayName, "Home")
+        XCTAssertEqual(TabIdentifier.feed.displayName, "Feed")
+        XCTAssertEqual(TabIdentifier.messages.displayName, "Messages")
+        XCTAssertEqual(TabIdentifier.profile.displayName, "Profile")
+        // Root screen titles (nav bar) are owned by each feature view via
+        // `experienceNavigationTitle` — Dashboard/Feed/Messages/Profile/etc.
+        XCTAssertEqual(SettingsRoute.home.title, "Settings")
+        XCTAssertEqual(SettingsRoute.notifications.title, "Notifications")
+        XCTAssertEqual(SettingsRoute.notificationsMessages.title, "Messages")
+        XCTAssertEqual(SettingsRoute.tradingAccounts.title, "Manage Accounts")
+    }
 }

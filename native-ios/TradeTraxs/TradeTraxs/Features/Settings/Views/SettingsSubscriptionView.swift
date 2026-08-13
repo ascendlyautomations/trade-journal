@@ -79,7 +79,7 @@ struct SettingsSubscriptionView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle("Subscription")
+        .experienceNavigationTitle("Subscription")
         .overlay {
             if viewModel.isLoading {
                 ProgressView()

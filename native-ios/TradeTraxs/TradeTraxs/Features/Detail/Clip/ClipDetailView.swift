@@ -7,6 +7,7 @@ struct ClipDetailView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showLikeHeart = false
 
     init(reelID: ReelID, data: DataEnvironment) {
         _viewModel = State(
@@ -40,8 +41,7 @@ struct ClipDetailView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle("Clip")
-        .navigationBarTitleDisplayMode(.inline)
+        .experienceNavigationTitle("Clip")
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             if viewModel.didReachEnd {
@@ -87,6 +87,9 @@ struct ClipDetailView: View {
                             .frame(height: min(UIScreen.main.bounds.height * 0.58, 720))
                             .background(Color.black)
                             .clipped()
+                            .overlay {
+                                LikeFeedbackOverlay(isVisible: showLikeHeart, reduceMotion: reduceMotion)
+                            }
 
                         clipBody(reel, scrollProxy: proxy)
                             .padding(.horizontal, ExperienceSpacing.lg)
@@ -136,12 +139,42 @@ struct ClipDetailView: View {
     @ViewBuilder
     private var playerSection: some View {
         if let player = viewModel.player {
-            ClipPlayerView(player: player)
-                .accessibilityIdentifier("detail.clip.player")
+            ClipPlayerView(
+                player: player,
+                onDoubleTapLike: {
+                    presentLikeFeedback()
+                    Task { await data.engagementStore.ensureLiked(on: .reel(viewModel.reelID)) }
+                }
+            )
+            .accessibilityIdentifier("detail.clip.player")
         } else {
             ZStack {
                 Color.black
                 ExperienceLoadingSpinner(label: "Preparing video")
+            }
+        }
+    }
+
+    private func presentLikeFeedback() {
+        ExperienceHaptics.play(.impactLight)
+        if reduceMotion {
+            showLikeHeart = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 280_000_000)
+                showLikeHeart = false
+            }
+            return
+        }
+        ExperienceMotion.withAnimation(MotionSpring.bouncy.animation, reduceMotion: false) {
+            showLikeHeart = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 520_000_000)
+            ExperienceMotion.withAnimation(
+                MotionCurve.easeOut.animation(duration: .fast),
+                reduceMotion: false
+            ) {
+                showLikeHeart = false
             }
         }
     }

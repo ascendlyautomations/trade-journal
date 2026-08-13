@@ -46,8 +46,7 @@ struct SettingsHomeView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.large)
+        .experienceNavigationTitle("Settings")
         .confirmationDialog(
             "Log out of TradeTraxs?",
             isPresented: $confirmsLogout,
