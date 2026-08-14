@@ -321,27 +321,14 @@ export async function POST(req: Request) {
   }
 
   for (const recipientId of messagingRecipients) {
-    if (messageRow.parent_message_id) {
-      // Direct replies always bypass room digest batching.
-      scheduleMessagingPush({
-        recipientUserId: recipientId,
-        kind: "room_message",
-        sender_id: user.id,
-        content,
-        preferenceKey: "room_messages_enabled",
-        prefsAlreadyChecked: true,
-      })
-    } else {
-      const { scheduleSmartRoomMessagePush } = await import(
-        "@/lib/server/push/smartRoomPush"
-      )
-      void scheduleSmartRoomMessagePush({
-        recipientUserId: recipientId,
-        senderId: user.id,
-        roomId: messageRow.room_id,
-        content,
-      })
-    }
+    scheduleMessagingPush({
+      recipientUserId: recipientId,
+      kind: "room_message",
+      sender_id: user.id,
+      content,
+      preferenceKey: "room_messages_enabled",
+      prefsAlreadyChecked: true,
+    })
   }
 
   return Response.json({

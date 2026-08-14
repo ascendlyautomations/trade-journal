@@ -208,19 +208,16 @@ export async function POST(req: Request) {
     return Response.json({ error: error.message }, { status: 500 })
   }
   if (!error) {
-    const { enqueueLikePushBatch } = await import(
-      "@/lib/server/push/pushBatching"
+    const { scheduleIosPushDelivery } = await import(
+      "@/lib/server/push/deliverPushNotification"
     )
-    // Await so batch persistence + after() flush registration survive the response.
-    try {
-      await enqueueLikePushBatch({
-        recipientUserId: resolved.recipientUserId,
-        senderId: user.id,
-        notificationTarget: resolved.notificationTarget,
-      })
-    } catch (err) {
-      console.error("[api/notifications/like] enqueueLikePushBatch failed", err)
-    }
+    scheduleIosPushDelivery({
+      recipientUserId: resolved.recipientUserId,
+      type: "like",
+      sender_id: user.id,
+      prefsAlreadyChecked: true,
+      ...resolved.notificationTarget,
+    })
 
     // Milestone pushes for public content likes only (never comments).
     if (target.kind !== "comment") {

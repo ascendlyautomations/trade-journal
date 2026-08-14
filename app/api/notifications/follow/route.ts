@@ -58,19 +58,15 @@ export async function POST(req: Request) {
     senderId: user.id,
   })
 
-  const { enqueueFollowPushBatch } = await import(
-    "@/lib/server/push/pushBatching"
+  const { scheduleIosPushDelivery } = await import(
+    "@/lib/server/push/deliverPushNotification"
   )
-  // Must await so the batch row is persisted and `after()` flush is registered
-  // before the serverless response completes.
-  try {
-    await enqueueFollowPushBatch({
-      recipientUserId: followingId,
-      senderId: user.id,
-    })
-  } catch (err) {
-    console.error("[follow-push] enqueueFollowPushBatch failed", err)
-  }
+  scheduleIosPushDelivery({
+    recipientUserId: followingId,
+    type: "follow",
+    sender_id: user.id,
+    prefsAlreadyChecked: true,
+  })
 
   return Response.json({ ok: true })
 }
