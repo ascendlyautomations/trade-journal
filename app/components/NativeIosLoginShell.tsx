@@ -24,12 +24,6 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
 async function dismissKeyboard() {
   const active = document.activeElement
   if (active instanceof HTMLElement) active.blur()
-  try {
-    const { Keyboard } = await import("@capacitor/keyboard")
-    await Keyboard.hide()
-  } catch {
-    // Plugin unavailable — blur alone is enough on web.
-  }
 }
 
 function scrollFocusedFieldIntoView() {
@@ -52,12 +46,11 @@ type NativeIosLoginShellProps = {
 }
 
 /**
- * Login-only iOS Capacitor chrome:
- * - Viewport-locked scroll region (no min-h-screen jump)
- * - Keyboard resize None while mounted (avoids body-height thrash)
- * - Bottom inset tracks keyboard height
+ * Login-only native iOS shell chrome (cookie/UA markers):
+ * - Viewport-locked scroll region
+ * - Keyboard height via visualViewport
  * - Tap outside fields dismisses the keyboard
- * No layout changes on web / Android (nativeIos === false).
+ * No layout changes on web (nativeIos === false).
  */
 export default function NativeIosLoginShell({
   initialNativeIos = false,
@@ -84,65 +77,24 @@ export default function NativeIosLoginShell({
     const removals: Array<() => void> = []
 
     void (async () => {
-      try {
-        const { Keyboard, KeyboardResize } = await import("@capacitor/keyboard")
-        if (cancelled) return
+      if (cancelled) return
+      const vv = window.visualViewport
+      if (!vv) return
 
-        // Body resize shrinks <body> and fights centered min-h-screen layouts.
-        await Keyboard.setResizeMode({ mode: KeyboardResize.None })
-        await Keyboard.setScroll({ isDisabled: false })
-        await Keyboard.setAccessoryBarVisible({ isVisible: true })
-
-        const showSub = await Keyboard.addListener(
-          "keyboardWillShow",
-          (info) => {
-            root.style.setProperty(
-              KEYBOARD_HEIGHT_VAR,
-              `${Math.max(0, info.keyboardHeight)}px`
-            )
-            scrollFocusedFieldIntoView()
-          }
+      const sync = () => {
+        const covered = Math.max(
+          0,
+          window.innerHeight - vv.height - vv.offsetTop
         )
-        const didShowSub = await Keyboard.addListener(
-          "keyboardDidShow",
-          () => {
-            scrollFocusedFieldIntoView()
-          }
-        )
-        const hideSub = await Keyboard.addListener("keyboardWillHide", () => {
-          root.style.setProperty(KEYBOARD_HEIGHT_VAR, "0px")
-        })
-
-        removals.push(() => {
-          void showSub.remove()
-          void didShowSub.remove()
-          void hideSub.remove()
-        })
-
-        removals.push(() => {
-          void Keyboard.setResizeMode({ mode: KeyboardResize.Body }).catch(
-            () => {}
-          )
-        })
-      } catch {
-        const vv = window.visualViewport
-        if (!vv) return
-
-        const sync = () => {
-          const covered = Math.max(
-            0,
-            window.innerHeight - vv.height - vv.offsetTop
-          )
-          root.style.setProperty(KEYBOARD_HEIGHT_VAR, `${covered}px`)
-          if (covered > 0) scrollFocusedFieldIntoView()
-        }
-        vv.addEventListener("resize", sync)
-        vv.addEventListener("scroll", sync)
-        removals.push(() => {
-          vv.removeEventListener("resize", sync)
-          vv.removeEventListener("scroll", sync)
-        })
+        root.style.setProperty(KEYBOARD_HEIGHT_VAR, `${covered}px`)
+        if (covered > 0) scrollFocusedFieldIntoView()
       }
+      vv.addEventListener("resize", sync)
+      vv.addEventListener("scroll", sync)
+      removals.push(() => {
+        vv.removeEventListener("resize", sync)
+        vv.removeEventListener("scroll", sync)
+      })
     })()
 
     function onFocusIn(e: FocusEvent) {

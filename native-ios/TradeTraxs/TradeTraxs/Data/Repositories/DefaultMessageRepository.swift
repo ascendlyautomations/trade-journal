@@ -185,6 +185,9 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             AppLog.networking.info(
                 "messages.send ok id=\(id, privacy: .public) created_at=\(inserted.created_at ?? "nil", privacy: .public)"
             )
+            // Web: `void createDirectMessagePush(supabase, insertedMessage.id)` — push must not
+            // gate message persistence. Failures are logged inside the client.
+            scheduleDirectMessagePush(messageID: id)
             let createdAt = ISO8601.date(from: inserted.created_at) ?? message.createdAt
             return Message(
                 id: MessageID(id),
@@ -533,6 +536,8 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         guard let id = inserted.id, !id.isEmpty else {
             throw AppError.unknown(message: "Trade share insert returned no id")
         }
+        // Web trade share also calls `createDirectMessagePush` after insert.
+        scheduleDirectMessagePush(messageID: id)
         return Message(
             id: MessageID(id),
             conversationID: message.conversationID,
@@ -550,6 +555,15 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             createdAt: ISO8601.date(from: inserted.created_at) ?? message.createdAt,
             isReadByViewer: true
         )
+    }
+
+    /// Web `void createDirectMessagePush(...)` — start the BFF pipeline without blocking send.
+    private func scheduleDirectMessagePush(messageID: String) {
+        let transport = supabase.transport
+        Task {
+            await DirectMessagePushClient(transport: transport)
+                .notifyAfterSuccessfulInsert(messageID: messageID)
+        }
     }
 }
 

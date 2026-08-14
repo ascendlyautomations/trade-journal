@@ -14,7 +14,7 @@ function loadSentry() {
   return sentryPromise
 }
 
-/** Capacitor shell markers — avoid importing @capacitor/core here. */
+/** Native shell markers (cookie / UA) — do not import Capacitor. */
 function isNativeShellClient(): boolean {
   try {
     if (/(?:^|;\s*)tt_native=1(?:;|$)/.test(document.cookie)) return true

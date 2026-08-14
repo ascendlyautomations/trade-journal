@@ -169,6 +169,7 @@ final class TradeAIExperienceTests: XCTestCase {
 
     func testAppConfigurationResolvesBFFBaseURLForAnalyzeTrade() throws {
         let withSecret = AppConfiguration.make(
+            for: .debug,
             secrets: SecretsLoader.Values(
                 supabaseURL: URL(string: "https://example.supabase.co"),
                 supabaseAnonKey: "anon",
@@ -177,24 +178,67 @@ final class TradeAIExperienceTests: XCTestCase {
         )
         XCTAssertEqual(withSecret.apiBaseURL?.absoluteString, "https://www.tradetraxs.com")
 
-        let fallback = AppConfiguration.make(
+        let debugFallback = AppConfiguration.make(
+            for: .debug,
             secrets: SecretsLoader.Values(
                 supabaseURL: URL(string: "https://example.supabase.co"),
                 supabaseAnonKey: "anon",
                 apiBaseURL: nil
             )
         )
-        XCTAssertEqual(fallback.apiBaseURL, AppConfiguration.defaultBFFBaseURL)
+        XCTAssertEqual(debugFallback.apiBaseURL, AppConfiguration.debugBFFBaseURL)
 
-        let env = EnvironmentConfiguration.make(for: .debug, appConfiguration: withSecret)
-        XCTAssertEqual(env.bffBaseURL?.absoluteString, "https://www.tradetraxs.com")
+        let productionFallback = AppConfiguration.make(
+            for: .production,
+            secrets: SecretsLoader.Values(
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabaseAnonKey: "anon",
+                apiBaseURL: nil
+            )
+        )
+        XCTAssertEqual(productionFallback.apiBaseURL, AppConfiguration.productionBFFBaseURL)
+        XCTAssertEqual(productionFallback.apiBaseURL, AppConfiguration.defaultBFFBaseURL)
+
+        let env = EnvironmentConfiguration.make(for: .debug, appConfiguration: debugFallback)
+        XCTAssertEqual(
+            env.bffBaseURL?.absoluteString,
+            "https://trade-journal-git-ios-app-ascendlyautomations-projects.vercel.app"
+        )
         let builder = RequestBuilder(configuration: NetworkConfiguration.make(environment: env))
-        let request = try builder.makeRequest(
+        let analyze = try builder.makeRequest(
             endpoint: Endpoint(host: .bff, path: "/api/analyze-trade", method: .post),
             body: Data("{}".utf8)
         )
-        XCTAssertEqual(request.url.absoluteString, "https://www.tradetraxs.com/api/analyze-trade")
-        XCTAssertEqual(request.headers["Content-Type"], "application/json")
+        XCTAssertEqual(
+            analyze.url.absoluteString,
+            "https://trade-journal-git-ios-app-ascendlyautomations-projects.vercel.app/api/analyze-trade"
+        )
+        XCTAssertEqual(analyze.headers["Content-Type"], "application/json")
+
+        let pushRegister = try builder.makeRequest(
+            endpoint: Endpoint(host: .bff, path: "/api/push/register", method: .post),
+            body: Data("{}".utf8)
+        )
+        XCTAssertEqual(
+            pushRegister.url.absoluteString,
+            "https://trade-journal-git-ios-app-ascendlyautomations-projects.vercel.app/api/push/register"
+        )
+
+        let productionEnv = EnvironmentConfiguration.make(
+            for: .production,
+            appConfiguration: productionFallback
+        )
+        let productionBuilder = RequestBuilder(
+            configuration: NetworkConfiguration.make(environment: productionEnv)
+        )
+        let productionPush = try productionBuilder.makeRequest(
+            endpoint: Endpoint(host: .bff, path: "/api/push/register", method: .post),
+            body: Data("{}".utf8)
+        )
+        XCTAssertEqual(
+            productionPush.url.absoluteString,
+            "https://www.tradetraxs.com/api/push/register"
+        )
     }
 
     func testMissingBFFConfigurationShowsFriendlyCopy() {

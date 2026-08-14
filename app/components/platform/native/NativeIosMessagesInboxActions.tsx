@@ -12,30 +12,15 @@ type NativeIosMessagesInboxActionsProps = {
 /**
  * Native Messages inbox top row — New Chat · Trade Rooms on the left,
  * Settings (gear) utility on the far right → `/settings#notifications`.
- * New Chat opens a Capacitor action sheet (Personal / Group / Cancel).
  */
 export default function NativeIosMessagesInboxActions({
   onPersonalChat,
-  onGroupChat,
+  onGroupChat: _onGroupChat,
 }: NativeIosMessagesInboxActionsProps) {
-  async function handleNewChat() {
+  function handleNewChat() {
     hapticLight("new-chat")
-    try {
-      const { ActionSheet, ActionSheetButtonStyle } = await import(
-        "@capacitor/action-sheet"
-      )
-      const result = await ActionSheet.showActions({
-        options: [
-          { title: "Personal Chat" },
-          { title: "Group Chat" },
-          { title: "Cancel", style: ActionSheetButtonStyle.Cancel },
-        ],
-      })
-      if (result.index === 0) onPersonalChat()
-      else if (result.index === 1) onGroupChat()
-    } catch {
-      // Dismissed / unavailable — no-op.
-    }
+    // Capacitor ActionSheet removed — personal chat is the primary compose action.
+    onPersonalChat()
   }
 
   return (

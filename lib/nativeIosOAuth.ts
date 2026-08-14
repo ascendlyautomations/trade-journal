@@ -13,8 +13,7 @@ export {
 
 /**
  * Always returns the production HTTPS bridge.
- * Capacitor iOS may run against a LAN `server.url` for local UI, but OAuth
- * redirectTo must never be localhost / 127.0.0.1 / 192.168.x.x.
+ * OAuth redirectTo must never be localhost / 127.0.0.1 / 192.168.x.x.
  */
 export function buildNativeIosOAuthRedirectTo(): string {
   return NATIVE_IOS_OAUTH_HTTPS_BRIDGE
@@ -84,23 +83,17 @@ function isNativeOAuthCallbackUrl(url: string): boolean {
 }
 
 async function closeAuthBrowser() {
-  try {
-    const { Browser } = await import("@capacitor/browser")
-    await new Promise((r) => window.setTimeout(r, 50))
-    await Browser.close()
-  } catch {
-    /* ignore — sheet may already be dismissed */
-  }
+  // Capacitor Browser plugin removed — nothing to close.
 }
 
 /**
- * Capacitor iOS only: start Google OAuth in the system in-app browser
- * (SFSafariViewController via @capacitor/browser) and return via custom scheme.
- * Web callers must not use this — keep signInWithOAuth + location.origin.
+ * Start Google OAuth for legacy native-shell markers (cookie/UA).
+ * Capacitor Browser removed — navigates the current window to the OAuth URL.
+ * The Swift app owns production OAuth via ASWebAuthenticationSession.
  */
 export async function startNativeIosGoogleOAuth(nextPath: string): Promise<void> {
   if (!isNativeIos()) {
-    throw new Error("startNativeIosGoogleOAuth is iOS Capacitor only")
+    throw new Error("startNativeIosGoogleOAuth is native iOS shell only")
   }
 
   stashNativeIosOAuthNextPath(nextPath)
@@ -124,11 +117,7 @@ export async function startNativeIosGoogleOAuth(nextPath: string): Promise<void>
     throw new Error("No OAuth URL returned")
   }
 
-  const { Browser } = await import("@capacitor/browser")
-  await Browser.open({
-    url: data.url,
-    presentationStyle: "fullscreen",
-  })
+  window.location.assign(data.url)
 }
 
 /**

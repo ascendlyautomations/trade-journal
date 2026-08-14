@@ -66,4 +66,15 @@ final class MessageSendPayloadTests: XCTestCase {
         XCTAssertEqual(imageJSON["parent_message_id"] as? String, "p1")
         XCTAssertTrue(imageJSON["channel"] is NSNull)
     }
+
+    func testNotifyDMBodyMatchesWebMessageIdField() throws {
+        // Web `createDirectMessagePush`: JSON.stringify({ messageId })
+        struct Body: Encodable {
+            var messageId: String
+        }
+        let data = try JSONEncoder().encode(Body(messageId: "msg-123"))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["messageId"] as? String, "msg-123")
+        XCTAssertEqual(json.keys.count, 1)
+    }
 }

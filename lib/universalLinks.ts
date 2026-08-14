@@ -130,7 +130,7 @@ export function resolveUniversalLinkPath(
   const trimmed = rawUrl.trim()
   if (!trimmed) return null
 
-  // OAuth custom scheme is owned by NativeIosOAuthListener.
+  // OAuth custom scheme is handled by the native Swift app / OAuth helpers.
   if (trimmed.startsWith(`${NATIVE_IOS_URL_SCHEME}://`)) return null
 
   let url: URL

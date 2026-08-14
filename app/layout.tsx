@@ -18,9 +18,6 @@ import FreePlanAccountSlotShell from "./components/FreePlanAccountSlotShell"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
 import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProvider"
 import NativeAppShell from "./components/NativeAppShell"
-import NativeIosOAuthListener from "./components/NativeIosOAuthListener"
-import NativeIosPushRegistration from "./components/NativeIosPushRegistration"
-import NativeUniversalLinksListener from "./components/NativeUniversalLinksListener"
 import NativeHomeRedirect from "./components/NativeHomeRedirect"
 import NativeSessionPersistence from "./components/NativeSessionPersistence"
 import NativeSilentCacheBootstrap from "./components/NativeSilentCacheBootstrap"
@@ -151,9 +148,6 @@ export default async function RootLayout({
           <UserProfileProvider>
             <GettingStartedProgressProvider>
             <NativeAppShell />
-            <NativeIosOAuthListener />
-            <NativeUniversalLinksListener />
-            <NativeIosPushRegistration />
             <NativeSilentCacheBootstrap />
             <MessagingInAppBanner />
             <NativeHomeRedirect />

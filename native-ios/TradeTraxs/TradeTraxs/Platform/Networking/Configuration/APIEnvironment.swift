@@ -19,7 +19,7 @@ nonisolated enum APIEnvironment: String, Sendable, CaseIterable, Codable {
 nonisolated struct EnvironmentConfiguration: Sendable, Equatable {
     let apiEnvironment: APIEnvironment
 
-    /// Next.js BFF origin (e.g. https://www.tradetraxs.com).
+    /// Next.js BFF origin (Debug → ios-app preview; Release → www.tradetraxs.com).
     let bffBaseURL: URL?
 
     /// Supabase project URL (Auth / REST / Storage / Functions host).

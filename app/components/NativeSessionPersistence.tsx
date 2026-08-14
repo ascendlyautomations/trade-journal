@@ -93,30 +93,12 @@ export default function NativeSessionPersistence() {
     document.addEventListener("visibilitychange", onVisibility)
     window.addEventListener("pagehide", onPageHide)
 
-    let removeAppListener: (() => void) | undefined
-    void import("@capacitor/app")
-      .then(({ App }) =>
-        App.addListener("appStateChange", ({ isActive }) => {
-          if (!isActive) persistScroll()
-          // Intentionally no reload / router.refresh when becoming active.
-        })
-      )
-      .then((handle) => {
-        removeAppListener = () => {
-          void handle.remove()
-        }
-      })
-      .catch(() => {
-        // Plugin unavailable — web/visibility listeners still persist scroll.
-      })
-
     return () => {
       if (throttleTimer != null) window.clearTimeout(throttleTimer)
       persistScroll()
       window.removeEventListener("scroll", onScroll)
       document.removeEventListener("visibilitychange", onVisibility)
       window.removeEventListener("pagehide", onPageHide)
-      removeAppListener?.()
     }
   }, [key])
 

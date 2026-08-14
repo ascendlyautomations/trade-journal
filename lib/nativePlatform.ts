@@ -1,32 +1,24 @@
-import { Capacitor } from "@capacitor/core"
-
 /**
- * Single entry point for native-shell detection.
- * Prefer this over scattering Capacitor.isNativePlatform() calls.
+ * Native-shell detection without Capacitor.
+ *
+ * Markers (legacy WKWebView / cookie from `/native`, custom UA):
+ * - cookie `tt_native=1`
+ * - User-Agent containing `TradeTraxsNative`
+ *
+ * The supported iOS app is Swift under `native-ios/` and does not embed Cap.
  */
 export function isNativePlatform(): boolean {
   if (typeof window === "undefined") return false
-  try {
-    if (Capacitor.isNativePlatform()) return true
-  } catch {
-    // Capacitor bridge may be unavailable during SSR/prerender.
-  }
-  // Hosted WebView markers: cookie set by /native, custom UA token from
-  // capacitor.config appendUserAgent. Do NOT test for window.Capacitor —
-  // the bundled @capacitor/core defines that global on the web too.
   if (/(?:^|;\s*)tt_native=1(?:;|$)/.test(document.cookie)) return true
   return /TradeTraxsNative/i.test(navigator.userAgent)
 }
 
+/** Historical Cap API — TradeTraxs native shell is iOS-only when present. */
 export function getNativePlatform(): string {
-  try {
-    return Capacitor.getPlatform()
-  } catch {
-    return "web"
-  }
+  return isNativePlatform() ? "ios" : "web"
 }
 
-/** Capacitor iOS shell only — false on web, Android, and desktop. */
+/** True when the page is running inside the native iOS shell markers. */
 export function isNativeIos(): boolean {
-  return isNativePlatform() && getNativePlatform() === "ios"
+  return isNativePlatform()
 }
