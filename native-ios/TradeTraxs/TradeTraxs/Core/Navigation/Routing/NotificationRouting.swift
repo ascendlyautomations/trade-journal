@@ -43,10 +43,24 @@ struct NotificationRouter: NotificationRouting {
                 }
                 return .profile(.activity)
             }
+            if type == "affiliate_referral" || type == "affiliate_commission_earned" {
+                return .profile(.affiliate)
+            }
+            if type == "like" || type == "like_milestone" || type == "like_batch" || type == "comment",
+               let achievementID = notification.rawUserInfo["achievement_post_id"]
+                ?? notification.rawUserInfo["achievementPostId"]
+                ?? Self.achievementID(from: notification.rawUserInfo["href"])
+            {
+                return .feed(.achievement(AchievementID(achievementID)))
+            }
             if let tradeID = notification.tradeID {
                 return .home(.tradeDetail(tradeID))
             }
             if let postID = notification.postID {
+                // Achievement query may have been folded into postID — prefer achievement route when href says so.
+                if let achievementID = Self.achievementID(from: notification.rawUserInfo["href"]) {
+                    return .feed(.achievement(AchievementID(achievementID)))
+                }
                 return .feed(.post(postID))
             }
             if let reelID = notification.reelID {
@@ -72,5 +86,31 @@ struct NotificationRouter: NotificationRouting {
             }
             return .profile(.activity)
         }
+    }
+
+    private static func achievementID(from href: String?) -> String? {
+        guard let href, !href.isEmpty else { return nil }
+        let url: URL?
+        if href.hasPrefix("http") {
+            url = URL(string: href)
+        } else if href.hasPrefix("/") {
+            url = URL(string: "https://www.tradetraxs.com\(href)")
+        } else {
+            url = URL(string: href)
+        }
+        guard let url else { return nil }
+        return URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == "achievement" })?
+            .value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

@@ -225,6 +225,17 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         )
     }
 
+    func markUnread(conversationID: ConversationID) async throws {
+        struct Params: Encodable {
+            var p_conversation_id: String
+        }
+        let data = try JSONEncoder().encode(Params(p_conversation_id: conversationID.rawValue))
+        _ = try await supabase.database.rpcData(
+            functionName: "mark_conversation_unread",
+            parametersJSON: data
+        )
+    }
+
     func createConversation(participantIDs: [ProfileID]) async throws -> Conversation {
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))

@@ -114,6 +114,7 @@ final class ActivityHomeViewModel {
         Task {
             do {
                 try await notifications.markRead(id: id)
+                AppIconBadgeSync.refresh(animated: true)
             } catch {
                 // Soft-fail — next refresh reconciles.
             }
@@ -130,6 +131,7 @@ final class ActivityHomeViewModel {
             defer { isMarkingAllRead = false }
             do {
                 try await notifications.markAllRead()
+                AppIconBadgeSync.refresh(animated: true)
             } catch {
                 inboxStore.replace(
                     items: previousItems,
@@ -137,7 +139,6 @@ final class ActivityHomeViewModel {
                     nextCursor: inboxStore.nextCursor,
                     pendingFollowRequestCount: inboxStore.pendingFollowRequestCount
                 )
-                phase = .failed(MessagesInboxSupport.message(for: error))
             }
         }
     }

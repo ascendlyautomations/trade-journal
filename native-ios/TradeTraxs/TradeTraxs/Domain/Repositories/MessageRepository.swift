@@ -23,6 +23,8 @@ nonisolated protocol MessageRepository: Sendable {
     func send(_ message: Message) async throws -> Message
     /// Web `mark_conversation_read(p_conversation_id)` — no extra parameters.
     func markRead(conversationID: ConversationID) async throws
+    /// Web `mark_conversation_unread(p_conversation_id)`.
+    func markUnread(conversationID: ConversationID) async throws
     /// Web `ensureDmConversation` — find existing 1:1 or create shell + participants.
     func createConversation(participantIDs: [ProfileID]) async throws -> Conversation
     /// Web messages `handleDeleteConversation` — delete own `conversation_participants` row.

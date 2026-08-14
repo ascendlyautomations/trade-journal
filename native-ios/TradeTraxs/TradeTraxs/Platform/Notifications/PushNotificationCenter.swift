@@ -11,7 +11,7 @@ import UserNotifications
 /// - Token → existing BFF `/api/push/register`
 /// - Foreground presentation policy
 /// - Tap → ``NotificationRouterFacade``
-/// - Badge sync with Activity unread
+/// - Badge mirror from backend BadgeService (`GET /api/push/badge`)
 @Observable
 @MainActor
 final class PushNotificationCenter: NSObject {
@@ -38,8 +38,20 @@ final class PushNotificationCenter: NSObject {
     }
 
     private var lastRegisteredToken: String?
+    private let installationIDDefaultsKey = "tt.ios.push.installation_id"
     private var installationID: String {
-        UIDevice.current.identifierForVendor?.uuidString ?? "unknown"
+        if let existing = UserDefaults.standard.string(forKey: installationIDDefaultsKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !existing.isEmpty,
+           existing != "unknown"
+        {
+            return existing
+        }
+        let generated =
+            UIDevice.current.identifierForVendor?.uuidString
+            ?? UUID().uuidString
+        UserDefaults.standard.set(generated, forKey: installationIDDefaultsKey)
+        return generated
     }
 
     private var appVersion: String? {
@@ -98,11 +110,17 @@ final class PushNotificationCenter: NSObject {
     }
 
     /// Call on logout — removes this install's token from the shared backend.
-    func unregisterForLogout() {
+    /// Must be awaited **before** clearing the auth session when possible.
+    func unregisterForLogout() async {
         let token = deviceTokenHex
         lastRegisteredToken = nil
-        Task {
-            try? await tokenClient.unregister(deviceToken: token, allDevices: false)
+        do {
+            try await tokenClient.unregister(deviceToken: token, allDevices: false)
+            AppLog.notifications.info("APNs device token unregistered on logout")
+        } catch {
+            AppLog.notifications.error(
+                "APNs unregister on logout failed: \(error.localizedDescription, privacy: .public)"
+            )
         }
         badgeController.clear()
     }
@@ -130,8 +148,7 @@ final class PushNotificationCenter: NSObject {
     func handleNotificationResponse(_ response: UNNotificationResponse) {
         let userInfo = response.notification.request.content.userInfo
         route(userInfo: userInfo)
-        // Prefer local Activity + DM unread over the APNs payload badge so optimistic
-        // mark-read on deep link is not overwritten by a stale server count.
+        // Mirror backend BadgeService — do not trust a stale APNs payload integer alone.
         AppIconBadgeSync.refresh(animated: false)
         Task { await softRefreshActivityUnread() }
     }

@@ -187,6 +187,7 @@ private struct ConversationStubMessageRepository: MessageRepository {
     }
 
     func markRead(conversationID: ConversationID) async throws {}
+    func markUnread(conversationID: ConversationID) async throws {}
 
     func createConversation(participantIDs: [ProfileID]) async throws -> Conversation {
         Conversation(

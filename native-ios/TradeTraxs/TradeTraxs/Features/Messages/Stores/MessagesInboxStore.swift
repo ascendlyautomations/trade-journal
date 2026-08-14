@@ -40,7 +40,7 @@ final class MessagesInboxStore {
         conversations.filter { !hiddenConversationIDs.contains($0.id) }
     }
 
-    /// Sum of effective DM unread counts — used by ``AppIconBadgeSync``.
+    /// Sum of effective DM unread counts — used by Messages inbox UI (not app-icon badge).
     var totalDirectMessageUnread: Int {
         visibleConversations.reduce(0) { partial, conversation in
             partial + unreadCount(for: conversation)
@@ -194,7 +194,6 @@ final class MessagesInboxStore {
     func markRead(conversationID: ConversationID) {
         unreadOverrides[conversationID] = 0
         guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else {
-            AppIconBadgeSync.refresh(animated: false)
             return
         }
         // Reassign the array — in-place `conversations[i].unreadCount = 0` does not
@@ -202,19 +201,21 @@ final class MessagesInboxStore {
         var updated = conversations
         updated[index].unreadCount = 0
         conversations = updated
-        AppIconBadgeSync.refresh(animated: false)
+    }
+
+    /// Drop a failed optimistic unread override so the next server payload wins.
+    func dropUnreadOverride(conversationID: ConversationID) {
+        unreadOverrides.removeValue(forKey: conversationID)
     }
 
     func markUnread(conversationID: ConversationID) {
         unreadOverrides[conversationID] = 1
         guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else {
-            AppIconBadgeSync.refresh(animated: false)
             return
         }
         var updated = conversations
         updated[index].unreadCount = max(1, updated[index].unreadCount)
         conversations = updated
-        AppIconBadgeSync.refresh(animated: false)
     }
 
     func markRoomRead(roomID: RoomID) {
@@ -223,7 +224,6 @@ final class MessagesInboxStore {
         var updated = roomUnread
         updated[roomID] = 0
         roomUnread = updated
-        AppIconBadgeSync.refresh(animated: false)
     }
 
     func markRoomUnread(roomID: RoomID) {

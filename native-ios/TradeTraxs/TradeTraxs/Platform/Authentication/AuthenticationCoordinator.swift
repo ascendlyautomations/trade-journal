@@ -14,6 +14,8 @@ final class AuthenticationCoordinator {
 
     /// Bound by ``CompositionRoot`` after session stores exist (MainActor).
     var invalidateSessionCaches: (@MainActor () -> Void)?
+    /// Bound by ``CompositionRoot`` — await push unregister **before** clearing auth.
+    var prepareSessionTeardown: (@MainActor () async -> Void)?
     /// Bound by ``CompositionRoot`` — APNs registration after a user session binds.
     var onAuthenticatedSessionBound: (@MainActor () -> Void)?
 
@@ -70,6 +72,10 @@ final class AuthenticationCoordinator {
     }
 
     func logout() async {
+        // Unregister while the session is still valid (BFF requires auth, with token fallback).
+        if let prepareSessionTeardown {
+            await prepareSessionTeardown()
+        }
         await authenticationManager.logout()
         await invalidateCachesForSessionChange()
         boundUserID = nil
@@ -101,7 +107,12 @@ final class AuthenticationCoordinator {
             }
             if boundUserID != nil {
                 boundUserID = nil
-                Task { await invalidateCachesForSessionChange() }
+                Task {
+                    if let prepareSessionTeardown {
+                        await prepareSessionTeardown()
+                    }
+                    await invalidateCachesForSessionChange()
+                }
             }
         }
     }

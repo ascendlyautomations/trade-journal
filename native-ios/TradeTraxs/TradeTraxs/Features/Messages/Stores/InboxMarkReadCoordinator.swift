@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Used by inbox taps, Trade Rooms home, and push / deep-link navigation through
 /// ``NavigationCoordinator/pushMessages`` so every entry path shares one flow:
-/// optimistic clear → fire-and-forget RPC → confirm local clear → refresh app icon badge.
+/// optimistic inbox clear → RPC → mirror backend BadgeService onto the app icon.
 @MainActor
 final class InboxMarkReadCoordinator {
     static let shared = InboxMarkReadCoordinator()
@@ -25,17 +25,27 @@ final class InboxMarkReadCoordinator {
         self.session = session
     }
 
-    /// Optimistic clear + RPC — identical for inbox tap and push deep link.
+    /// Optimistic inbox clear + RPC — badge mirrors server after the cursor advances.
     func prepareOpenConversation(_ conversationID: ConversationID) {
         MessagesInboxStore.shared.markRead(conversationID: conversationID)
-        AppIconBadgeSync.refresh(animated: false)
         Task { await confirmConversationRead(conversationID) }
     }
 
     func prepareOpenRoom(_ roomID: RoomID) {
         MessagesInboxStore.shared.markRoomRead(roomID: roomID)
-        AppIconBadgeSync.refresh(animated: false)
         Task { await confirmRoomRead(roomID) }
+    }
+
+    /// Inbox swipe / menu — mark read with server + badge sync.
+    func markConversationReadFromInbox(_ conversationID: ConversationID) {
+        MessagesInboxStore.shared.markRead(conversationID: conversationID)
+        Task { await confirmConversationRead(conversationID) }
+    }
+
+    /// Inbox swipe / menu — mark unread with server + badge sync.
+    func markConversationUnreadFromInbox(_ conversationID: ConversationID) {
+        MessagesInboxStore.shared.markUnread(conversationID: conversationID)
+        Task { await confirmConversationUnread(conversationID) }
     }
 
     private func confirmConversationRead(_ conversationID: ConversationID) async {
@@ -43,9 +53,34 @@ final class InboxMarkReadCoordinator {
         guard let userID = await session.currentUserID else { return }
         let viewer = ProfileID(userID.rawValue)
         guard !MessagesInboxSupport.isLocalDevelopmentProfile(viewer) else { return }
-        try? await messages.markRead(conversationID: conversationID)
-        MessagesInboxStore.shared.markRead(conversationID: conversationID)
-        AppIconBadgeSync.refresh(animated: false)
+        do {
+            try await messages.markRead(conversationID: conversationID)
+            MessagesInboxStore.shared.markRead(conversationID: conversationID)
+            AppIconBadgeSync.refresh(animated: false)
+        } catch {
+            // Drop optimistic override so the next inbox refresh shows server unread.
+            MessagesInboxStore.shared.dropUnreadOverride(conversationID: conversationID)
+            AppLog.notifications.error(
+                "mark_conversation_read failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
+    private func confirmConversationUnread(_ conversationID: ConversationID) async {
+        guard let messages, let session else { return }
+        guard let userID = await session.currentUserID else { return }
+        let viewer = ProfileID(userID.rawValue)
+        guard !MessagesInboxSupport.isLocalDevelopmentProfile(viewer) else { return }
+        do {
+            try await messages.markUnread(conversationID: conversationID)
+            MessagesInboxStore.shared.markUnread(conversationID: conversationID)
+            AppIconBadgeSync.refresh(animated: false)
+        } catch {
+            MessagesInboxStore.shared.dropUnreadOverride(conversationID: conversationID)
+            AppLog.notifications.error(
+                "mark_conversation_unread failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     private func confirmRoomRead(_ roomID: RoomID) async {
@@ -55,6 +90,6 @@ final class InboxMarkReadCoordinator {
         guard !MessagesInboxSupport.isLocalDevelopmentProfile(viewer) else { return }
         try? await rooms.markRead(roomID: roomID)
         MessagesInboxStore.shared.markRoomRead(roomID: roomID)
-        AppIconBadgeSync.refresh(animated: false)
+        // Room unread is not part of the app-icon formula — no badge fetch required.
     }
 }

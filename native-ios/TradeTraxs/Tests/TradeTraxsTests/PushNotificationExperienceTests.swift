@@ -3,6 +3,48 @@ import XCTest
 
 @MainActor
 final class PushNotificationExperienceTests: XCTestCase {
+    func testPayloadParserMapsAchievementFromFeedHref() {
+        let destination = PushNotificationPayloadParser.parse(userInfo: [
+            "type": "like",
+            "href": "/feed?achievement=ach-99",
+        ])
+        XCTAssertEqual(destination.category, .activity)
+        XCTAssertEqual(destination.postID, PostID("ach-99"))
+        let routed = NotificationRouter().destination(for: destination)
+        XCTAssertEqual(routed, .feed(.achievement(AchievementID("ach-99"))))
+    }
+
+    func testNotificationRouterMapsAffiliateHref() {
+        let destination = NotificationDestination(
+            category: .activity,
+            threadID: nil,
+            tradeID: nil,
+            postID: nil,
+            reelID: nil,
+            profileID: nil,
+            conversationID: nil,
+            roomID: nil,
+            reportID: nil,
+            rawUserInfo: [
+                "type": "affiliate_referral",
+                "href": "/affiliate/dashboard",
+            ]
+        )
+        let routed = NotificationRouter().destination(for: destination)
+        XCTAssertEqual(routed, .profile(.affiliate))
+    }
+
+    func testDeepLinkParserMapsAffiliateAndAchievement() {
+        let affiliate = DeepLinkParser().parse(
+            url: URL(string: "https://www.tradetraxs.com/affiliate/dashboard")!
+        )
+        XCTAssertEqual(affiliate, .profile(.affiliate))
+        let achievement = DeepLinkParser().parse(
+            url: URL(string: "https://www.tradetraxs.com/feed?achievement=ach-1")!
+        )
+        XCTAssertEqual(achievement, .feed(.achievement(AchievementID("ach-1"))))
+    }
+
     func testPayloadParserMapsDM() {
         let destination = PushNotificationPayloadParser.parse(userInfo: [
             "type": "message",

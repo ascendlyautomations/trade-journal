@@ -71,7 +71,8 @@ struct DevicePushTokenClient: DevicePushTokenClienting {
             path: "/api/push/unregister",
             method: .post,
             body: data,
-            requiresAuthentication: true
+            // Allow token-only unregister after session teardown races.
+            requiresAuthentication: false
         )
         guard (200 ... 299).contains(response.statusCode) else {
             throw AppError.unknown(message: "Push unregister failed (\(response.statusCode))")

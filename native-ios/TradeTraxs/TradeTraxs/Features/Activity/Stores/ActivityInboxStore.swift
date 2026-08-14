@@ -109,7 +109,6 @@ final class ActivityInboxStore {
         // Reassign for Observation.
         items = items
         unreadCount = max(0, unreadCount - 1)
-        AppIconBadgeSync.refresh(animated: true)
     }
 
     func markAllReadLocally() {
@@ -119,7 +118,6 @@ final class ActivityInboxStore {
             return copy
         }
         unreadCount = 0
-        AppIconBadgeSync.refresh(animated: true)
     }
 
     func setUnreadCount(_ count: Int) {

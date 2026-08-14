@@ -56,6 +56,9 @@ enum CompositionRoot {
             rooms: data.rooms,
             session: data.session
         )
+        AppIconBadgeSync.configure(
+            client: AppIconBadgeClient(transport: transport)
+        )
         let dependencies = DependencyContainer.make(
             configuration: configuration,
             navigation: navigation,
@@ -91,8 +94,10 @@ enum CompositionRoot {
         pushNotifications.attachNotificationsRepository(data.notifications)
 
         // Session caches belong to the authenticated user — invalidate on logout / switch.
+        authentication.coordinator.prepareSessionTeardown = {
+            await pushNotifications.unregisterForLogout()
+        }
         authentication.coordinator.invalidateSessionCaches = {
-            pushNotifications.unregisterForLogout()
             SessionScopedCaches.invalidate(
                 currentUserProfile: currentUserProfile,
                 data: data

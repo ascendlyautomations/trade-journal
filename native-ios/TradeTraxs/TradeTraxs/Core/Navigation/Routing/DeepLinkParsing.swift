@@ -86,7 +86,7 @@ struct DeepLinkParser: DeepLinkParsing {
         case "analyst", "ai":
             return .home(.analyst)
         case "feed":
-            return parseFeed(Array(parts.dropFirst()))
+            return parseFeed(Array(parts.dropFirst()), query: query)
         case "explore":
             return .feed(.explore)
         case "leaderboard":
@@ -125,6 +125,8 @@ struct DeepLinkParser: DeepLinkParsing {
                 return .feed(.profile(ProfileID(id)))
             }
             return .tab(.profile)
+        case "affiliate", "referrals":
+            return .profile(.affiliate)
         case "settings":
             return parseSettings(Array(parts.dropFirst()))
         case "app", "input-trade", "input":
@@ -146,7 +148,19 @@ struct DeepLinkParser: DeepLinkParsing {
         }
     }
 
-    private func parseFeed(_ parts: [String]) -> AppDestination {
+    private func parseFeed(_ parts: [String], query: [String: String]) -> AppDestination {
+        if let achievement = query["achievement"], !achievement.isEmpty {
+            return .feed(.achievement(AchievementID(achievement)))
+        }
+        if let trade = query["trade"], !trade.isEmpty {
+            return .feed(.trade(TradeID(trade)))
+        }
+        if let reel = query["reel"], !reel.isEmpty {
+            return .feed(.reel(ReelID(reel)))
+        }
+        if let post = query["post"], !post.isEmpty {
+            return .feed(.post(PostID(post)))
+        }
         guard let second = parts.first else { return .tab(.feed) }
         switch second {
         case "explore": return .feed(.explore)

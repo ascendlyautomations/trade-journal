@@ -51,7 +51,7 @@ enum PushNotificationPresentationPolicy {
         for destination: NotificationDestination,
         bannersEnabled: Bool
     ) -> UNNotificationPresentationOptions {
-        var options: UNNotificationPresentationOptions = [.badge, .list]
+        var options: UNNotificationPresentationOptions = [.list]
         guard bannersEnabled else { return options }
 
         switch priority(for: destination) {

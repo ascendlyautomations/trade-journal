@@ -2,7 +2,7 @@ import Foundation
 
 /// Client-side grouping / collapse copy for push + Activity presentation.
 ///
-/// Server already coalesces DMs via APNs `thread-id` / `collapse-id` and batches likes.
+/// Server groups DMs via APS `thread-id` (alerts stack; Notification Center threads them).
 /// Native mirrors iMessage / Instagram rules for inbox + foreground presentation:
 /// - DMs collapse to “{Name} sent N messages” after 3+
 /// - Likes / comments group per target

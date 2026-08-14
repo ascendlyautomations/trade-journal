@@ -44,10 +44,19 @@ enum PushNotificationPayloadParser {
             strings["postId"],
             strings["post_id"],
             strings["profile_post_id"],
-            strings["achievement_post_id"],
             pathID(from: href, prefix: "post"),
             hrefQuery["post"]
         ).map { PostID($0) }
+        let achievementPostID = firstNonEmpty(
+            strings["achievementPostId"],
+            strings["achievement_post_id"],
+            hrefQuery["achievement"]
+        ).map { PostID($0) }
+        // Achievement posts share PostID routing via FeedRoute.achievement when type is known;
+        // fall back to postID so NotificationRouter can open the achievement.
+        if postID == nil, let achievementPostID {
+            postID = achievementPostID
+        }
         let reelID = firstNonEmpty(
             strings["reelId"],
             strings["reel_id"],
@@ -78,6 +87,9 @@ enum PushNotificationPayloadParser {
         if let messageID { raw["message_id"] = messageID }
         if let commentID { raw["comment_id"] = commentID }
         if let href { raw["href"] = href }
+        if let achievementPostID {
+            raw["achievement_post_id"] = achievementPostID.rawValue
+        }
         if let roomSlug = firstNonEmpty(strings["roomSlug"], strings["room_slug"]) {
             raw["room_slug"] = roomSlug
         }

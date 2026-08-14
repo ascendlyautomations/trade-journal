@@ -462,6 +462,7 @@ private struct MessagesStubMessageRepository: MessageRepository {
     func send(_ message: Message) async throws -> Message { message }
 
     func markRead(conversationID: ConversationID) async throws {}
+    func markUnread(conversationID: ConversationID) async throws {}
 
     func createConversation(participantIDs: [ProfileID]) async throws -> Conversation {
         Conversation(

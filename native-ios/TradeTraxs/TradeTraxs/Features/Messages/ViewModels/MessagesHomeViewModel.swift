@@ -169,9 +169,9 @@ final class MessagesHomeViewModel {
                 )
         )
         if unread > 0 {
-            inboxStore.markRead(conversationID: conversationID)
+            InboxMarkReadCoordinator.shared.markConversationReadFromInbox(conversationID)
         } else {
-            inboxStore.markUnread(conversationID: conversationID)
+            InboxMarkReadCoordinator.shared.markConversationUnreadFromInbox(conversationID)
         }
     }
 
