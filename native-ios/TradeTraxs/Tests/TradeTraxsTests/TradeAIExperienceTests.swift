@@ -186,7 +186,7 @@ final class TradeAIExperienceTests: XCTestCase {
                 apiBaseURL: nil
             )
         )
-        XCTAssertEqual(debugFallback.apiBaseURL, AppConfiguration.debugBFFBaseURL)
+        XCTAssertEqual(debugFallback.apiBaseURL, AppConfiguration.productionBFFBaseURL)
 
         let productionFallback = AppConfiguration.make(
             for: .production,
@@ -202,7 +202,7 @@ final class TradeAIExperienceTests: XCTestCase {
         let env = EnvironmentConfiguration.make(for: .debug, appConfiguration: debugFallback)
         XCTAssertEqual(
             env.bffBaseURL?.absoluteString,
-            "https://trade-journal-git-ios-app-ascendlyautomations-projects.vercel.app"
+            "https://www.tradetraxs.com"
         )
         let builder = RequestBuilder(configuration: NetworkConfiguration.make(environment: env))
         let analyze = try builder.makeRequest(
@@ -211,7 +211,7 @@ final class TradeAIExperienceTests: XCTestCase {
         )
         XCTAssertEqual(
             analyze.url.absoluteString,
-            "https://trade-journal-git-ios-app-ascendlyautomations-projects.vercel.app/api/analyze-trade"
+            "https://www.tradetraxs.com/api/analyze-trade"
         )
         XCTAssertEqual(analyze.headers["Content-Type"], "application/json")
 
@@ -221,7 +221,7 @@ final class TradeAIExperienceTests: XCTestCase {
         )
         XCTAssertEqual(
             pushRegister.url.absoluteString,
-            "https://trade-journal-git-ios-app-ascendlyautomations-projects.vercel.app/api/push/register"
+            "https://www.tradetraxs.com/api/push/register"
         )
 
         let productionEnv = EnvironmentConfiguration.make(

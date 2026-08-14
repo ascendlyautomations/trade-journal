@@ -123,28 +123,13 @@ final class MessagesHomeViewModel {
 
     func openConversation(_ item: DirectMessageInboxItem) {
         ExperienceHaptics.play(.selection)
-        // Web inbox open: optimistic unread clear, then `mark_conversation_read` RPC.
-        inboxStore.markRead(conversationID: item.id)
-        if let viewerID, !MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) {
-            Task {
-                try? await messages.markRead(conversationID: item.id)
-                // Confirm local badge stays cleared after RPC (no full inbox reload).
-                inboxStore.markRead(conversationID: item.id)
-            }
-        }
+        // Mark-read runs inside ``NavigationCoordinator/pushMessages`` so push
+        // deep links and inbox taps share one pipeline.
         navigationCoordinator.open(.messages(.thread(item.id)))
     }
 
     func openRoom(_ item: TradeRoomInboxItem) {
         ExperienceHaptics.play(.selection)
-        // Web room open: optimistic unread clear, then `mark_room_read` RPC.
-        inboxStore.markRoomRead(roomID: item.id)
-        if let viewerID, !MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) {
-            Task {
-                try? await rooms.markRead(roomID: item.id)
-                inboxStore.markRoomRead(roomID: item.id)
-            }
-        }
         navigationCoordinator.open(.messages(.room(item.id)))
     }
 

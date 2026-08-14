@@ -24,26 +24,19 @@ struct AppConfiguration: Sendable, Equatable {
         supabaseURL != nil && supabaseAnonKey?.isEmpty == false
     }
 
-    /// Production Next.js BFF (Release / Production lane when ``API_BASE_URL`` is unset).
+    /// Default Next.js BFF when ``API_BASE_URL`` is unset (Debug, Staging, and Production).
     static let productionBFFBaseURL = URL(string: "https://www.tradetraxs.com")!
-
-    /// ios-app Vercel preview BFF (Debug lane when ``API_BASE_URL`` is unset).
-    static let debugBFFBaseURL = URL(
-        string: "https://trade-journal-git-ios-app-ascendlyautomations-projects.vercel.app"
-    )!
 
     /// Build-lane default BFF origin when ``API_BASE_URL`` is unset.
     /// Override anytime via Secrets.plist / env `API_BASE_URL` (e.g. `http://localhost:3000`).
     static func defaultBFFBaseURL(for buildConfiguration: BuildConfiguration) -> URL {
         switch buildConfiguration {
-        case .debug:
-            return debugBFFBaseURL
-        case .staging, .production:
+        case .debug, .staging, .production:
             return productionBFFBaseURL
         }
     }
 
-    /// Backward-compatible alias for the production BFF default.
+    /// Backward-compatible alias for the default BFF origin.
     static var defaultBFFBaseURL: URL { productionBFFBaseURL }
 
     static func make(

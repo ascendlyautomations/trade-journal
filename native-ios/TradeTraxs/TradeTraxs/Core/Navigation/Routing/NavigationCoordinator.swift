@@ -141,6 +141,9 @@ final class NavigationCoordinator {
     func pushFeed(_ route: FeedRoute) {
         ensureAuthenticatedOrStash(.feed(route))
         guard store.sessionPhase == .authenticated else { return }
+        if case .room(let roomID) = route {
+            InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
+        }
         selectTab(.feed)
         store.paths.feed.append(route)
         emit(.pushed(tab: .feed, description: String(describing: route)))
@@ -149,6 +152,14 @@ final class NavigationCoordinator {
     func pushMessages(_ route: MessagesRoute) {
         ensureAuthenticatedOrStash(.messages(route))
         guard store.sessionPhase == .authenticated else { return }
+        switch route {
+        case .thread(let conversationID):
+            InboxMarkReadCoordinator.shared.prepareOpenConversation(conversationID)
+        case .room(let roomID):
+            InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
+        case .roomMembers, .roomInfo, .sharedTrade, .sharedPost, .sharedReel, .profile:
+            break
+        }
         selectTab(.messages)
         store.paths.messages.append(route)
         emit(.pushed(tab: .messages, description: String(describing: route)))
@@ -157,6 +168,9 @@ final class NavigationCoordinator {
     func pushProfile(_ route: ProfileRoute) {
         ensureAuthenticatedOrStash(.profile(route))
         guard store.sessionPhase == .authenticated else { return }
+        if case .room(let roomID) = route {
+            InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
+        }
         selectTab(.profile)
         store.paths.profile.append(route)
         emit(.pushed(tab: .profile, description: String(describing: route)))

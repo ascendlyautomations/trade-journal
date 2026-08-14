@@ -94,13 +94,7 @@ final class TradeRoomsHomeViewModel {
 
     func openRoom(_ item: TradeRoomInboxItem) {
         ExperienceHaptics.play(.selection)
-        inboxStore.markRoomRead(roomID: item.id)
-        if let viewerID, !MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) {
-            Task {
-                try? await rooms.markRead(roomID: item.id)
-                inboxStore.markRoomRead(roomID: item.id)
-            }
-        }
+        // Mark-read runs inside ``NavigationCoordinator`` for `.messages(.room)`.
         navigationCoordinator.open(navigationHost.room(item.id))
     }
 

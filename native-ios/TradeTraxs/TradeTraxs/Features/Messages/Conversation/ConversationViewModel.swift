@@ -110,11 +110,7 @@ final class ConversationViewModel {
             var page = PageRequest(limit: 40)
             page.cursor = nextOlderCursor
             let result = try await messagesRepo.messages(in: conversationID, page: page)
-            // Repo returns newest-first; older page is older than current oldest.
-            let chronological = result.items.sorted { $0.createdAt < $1.createdAt }
-            let existing = Set(messages.map(\.id))
-            let fresh = chronological.filter { !existing.contains($0.id) }
-            messages = (fresh + messages).sorted { $0.createdAt < $1.createdAt }
+            commitMessages(result.items)
             nextOlderCursor = result.nextCursor
             hasMoreOlder = result.nextCursor != nil
         } catch {
@@ -223,7 +219,7 @@ final class ConversationViewModel {
             createdAt: .now,
             isReadByViewer: true
         )
-        messages.append(optimistic)
+        commitMessages([optimistic])
         sendStates[tempID] = .sending
 
         if ConversationThreadSupport.isLocalDevelopment(viewerID)
@@ -236,12 +232,8 @@ final class ConversationViewModel {
 
         do {
             let saved = try await messagesRepo.send(optimistic)
-            messages.removeAll { $0.id == tempID }
+            commitMessages([saved])
             sendStates.removeValue(forKey: tempID)
-            if !messages.contains(where: { $0.id == saved.id }) {
-                messages.append(saved)
-                messages.sort { $0.createdAt < $1.createdAt }
-            }
             sendStates[saved.id] = .sent
             sharedTrades[trade.id] = trade
             patchInbox(with: saved)
@@ -259,7 +251,7 @@ final class ConversationViewModel {
 
     func retry(_ item: ConversationBubbleItem) async {
         guard sendStates[item.id] == .failed else { return }
-        messages.removeAll { $0.id == item.id }
+        removeMessage(id: item.id)
         sendStates.removeValue(forKey: item.id)
         let imageURL = item.imageReference?.id
         await send(body: item.text ?? "", imageURL: imageURL, localImageData: nil)
@@ -350,10 +342,12 @@ final class ConversationViewModel {
             detailCache.seed(profile)
         }
         applyHeader(from: conversation)
-        messages = ConversationThreadFixtures.messages(
-            conversationID: conversationID,
-            viewerID: viewerID,
-            peerID: peerID
+        replaceMessages(
+            ConversationThreadFixtures.messages(
+                conversationID: conversationID,
+                viewerID: viewerID,
+                peerID: peerID
+            )
         )
         hasMoreOlder = false
     }
@@ -380,7 +374,7 @@ final class ConversationViewModel {
             in: conversationID,
             page: PageRequest(limit: 50)
         )
-        messages = page.items.sorted { $0.createdAt < $1.createdAt }
+        replaceMessages(page.items)
         nextOlderCursor = page.nextCursor
         hasMoreOlder = page.nextCursor != nil
         await hydrateSharedTrades(from: messages)
@@ -400,8 +394,7 @@ final class ConversationViewModel {
         else { return }
 
         if signal.kind == .delete, let rawID = signal.messageID {
-            let id = MessageID(rawID)
-            messages.removeAll { $0.id == id }
+            removeMessage(id: MessageID(rawID))
             return
         }
 
@@ -412,32 +405,50 @@ final class ConversationViewModel {
                 in: conversationID,
                 page: PageRequest(limit: 30)
             )
-            let existing = Set(messages.map(\.id))
-            let incoming = page.items
-                .filter { !existing.contains($0.id) }
-                .sorted { $0.createdAt < $1.createdAt }
-
-            if signal.kind == .update, let rawID = signal.messageID {
-                let id = MessageID(rawID)
-                if let updated = page.items.first(where: { $0.id == id }),
-                   let index = messages.firstIndex(where: { $0.id == id })
-                {
-                    messages[index] = updated
-                    await hydrateSharedTrades(from: [updated])
-                    return
-                }
-            }
-
-            guard !incoming.isEmpty else { return }
-            messages.append(contentsOf: incoming)
-            messages.sort { $0.createdAt < $1.createdAt }
-            await hydrateSharedTrades(from: incoming)
+            // Commit merge immediately — hydrate afterward (no await before write).
+            commitMessages(page.items)
+            await hydrateSharedTrades(from: page.items)
             if let last = messages.last {
                 patchInbox(with: last)
             }
         } catch {
             // Soft-fail event-driven hydrate.
         }
+    }
+
+    /// Sole write path for thread rows — web `mergeMessages` semantics.
+    private func commitMessages(_ incoming: [Message]) {
+        let previousTempIDs = Set(
+            messages
+                .map(\.id)
+                .filter(ConversationMessageMerge.isOptimisticMessageID)
+        )
+        messages = ConversationMessageMerge.mergeMessages(
+            existing: messages,
+            incoming: incoming,
+            viewerID: viewerID
+        )
+        let remainingIDs = Set(messages.map(\.id))
+        for tempID in previousTempIDs where !remainingIDs.contains(tempID) {
+            sendStates.removeValue(forKey: tempID)
+        }
+    }
+
+    private func replaceMessages(_ incoming: [Message]) {
+        messages = ConversationMessageMerge.mergeMessages(
+            existing: [],
+            incoming: incoming,
+            viewerID: viewerID
+        )
+    }
+
+    private func removeMessage(id: MessageID) {
+        messages = ConversationMessageMerge.mergeMessages(
+            existing: messages.filter { $0.id != id },
+            incoming: [],
+            viewerID: viewerID
+        )
+        sendStates.removeValue(forKey: id)
     }
 
     private func hydrateSharedTrades(from messages: [Message]) async {
@@ -489,7 +500,7 @@ final class ConversationViewModel {
             createdAt: .now,
             isReadByViewer: true
         )
-        messages.append(optimistic)
+        commitMessages([optimistic])
         sendStates[tempID] = .sending
 
         if ConversationThreadSupport.isLocalDevelopment(viewerID)
@@ -521,17 +532,17 @@ final class ConversationViewModel {
                 } else {
                     resolvedImageURL = reference.id
                 }
-                if let index = messages.firstIndex(where: { $0.id == tempID }),
-                   let url = resolvedImageURL
-                {
-                    messages[index].attachments = [
+                if let url = resolvedImageURL {
+                    var updated = optimistic
+                    updated.attachments = [
                         MessageAttachment(
                             id: url,
                             media: MediaReference(id: url, kind: .image, altText: nil),
                             tradeID: nil
                         ),
                     ]
-                    messages[index].kind = .media
+                    updated.kind = .media
+                    commitMessages([updated])
                 }
             }
 
@@ -564,12 +575,8 @@ final class ConversationViewModel {
                 """
             )
             let saved = try await messagesRepo.send(payload)
-            messages.removeAll { $0.id == tempID }
+            commitMessages([saved])
             sendStates.removeValue(forKey: tempID)
-            if !messages.contains(where: { $0.id == saved.id }) {
-                messages.append(saved)
-                messages.sort { $0.createdAt < $1.createdAt }
-            }
             sendStates[saved.id] = .sent
             patchInbox(with: saved)
             ExperienceHaptics.play(.selection)

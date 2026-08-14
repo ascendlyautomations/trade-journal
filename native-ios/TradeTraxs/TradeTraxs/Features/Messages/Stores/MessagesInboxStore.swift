@@ -29,6 +29,8 @@ final class MessagesInboxStore {
     private var typingConversationIDs: Set<ConversationID> = []
     private var onlineProfileIDs: Set<ProfileID> = []
     private var unreadOverrides: [ConversationID: Int] = [:]
+    /// Optimistic room unread clears that must survive bootstrap until the server agrees.
+    private var roomUnreadOverrides: [RoomID: Int] = [:]
     private var hiddenConversationIDs: Set<ConversationID> = []
 
     private init() {}
@@ -38,12 +40,39 @@ final class MessagesInboxStore {
         conversations.filter { !hiddenConversationIDs.contains($0.id) }
     }
 
+    /// Sum of effective DM unread counts — used by ``AppIconBadgeSync``.
+    var totalDirectMessageUnread: Int {
+        visibleConversations.reduce(0) { partial, conversation in
+            partial + unreadCount(for: conversation)
+        }
+    }
+
     func replaceConversations(_ items: [Conversation]) {
         // Seed pin/mute from repository (web prefs / is_pinned) — local toggles may still override.
         pinnedConversationIDs = Set(items.filter(\.isPinned).map(\.id))
         mutedConversationIDs = Set(items.filter(\.isMuted).map(\.id))
-        unreadOverrides = [:]
-        conversations = Self.sortConversationsDesc(items, pinned: pinnedConversationIDs)
+        let previousOverrides = unreadOverrides
+        var nextOverrides: [ConversationID: Int] = [:]
+        let merged = items.map { item -> Conversation in
+            var copy = item
+            if let override = previousOverrides[item.id] {
+                if item.unreadCount == override {
+                    // Backend confirmed the local value — drop the override.
+                } else {
+                    // Keep optimistic / local unread (e.g. cleared to 0 before RPC finished).
+                    copy.unreadCount = override
+                    nextOverrides[item.id] = override
+                }
+            }
+            return copy
+        }
+        // Preserve overrides for conversations not yet in the bootstrap payload
+        // (cold-start push open before inbox rows arrive).
+        for (id, override) in previousOverrides where items.contains(where: { $0.id == id }) == false {
+            nextOverrides[id] = override
+        }
+        unreadOverrides = nextOverrides
+        conversations = Self.sortConversationsDesc(merged, pinned: pinnedConversationIDs)
         hasLoaded = true
         lastLoadedAt = .now
     }
@@ -51,13 +80,33 @@ final class MessagesInboxStore {
     func replaceRooms(_ items: [TradeRoom], previews: [RoomID: String] = [:], unread: [RoomID: Int] = [:]) {
         rooms = items.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         if !previews.isEmpty { roomPreviews.merge(previews) { _, new in new } }
-        if !unread.isEmpty { roomUnread.merge(unread) { _, new in new } }
+        if !unread.isEmpty {
+            var merged = roomUnread
+            var nextOverrides = roomUnreadOverrides
+            for (id, serverCount) in unread {
+                if let override = roomUnreadOverrides[id], serverCount != override {
+                    merged[id] = override
+                    nextOverrides[id] = override
+                } else {
+                    merged[id] = serverCount
+                    nextOverrides.removeValue(forKey: id)
+                }
+            }
+            roomUnreadOverrides = nextOverrides
+            roomUnread = merged
+        }
         hasLoadedRooms = true
     }
 
     func applyConversationUpdate(_ conversation: Conversation) {
-        // Applied row is authoritative for unread (clears stale local overrides).
-        unreadOverrides.removeValue(forKey: conversation.id)
+        var conversation = conversation
+        if let override = unreadOverrides[conversation.id] {
+            if conversation.unreadCount == override {
+                unreadOverrides.removeValue(forKey: conversation.id)
+            } else {
+                conversation.unreadCount = override
+            }
+        }
         if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
             conversations[index] = conversation
         } else {
@@ -144,38 +193,60 @@ final class MessagesInboxStore {
 
     func markRead(conversationID: ConversationID) {
         unreadOverrides[conversationID] = 0
-        guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else { return }
+        guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else {
+            AppIconBadgeSync.refresh(animated: false)
+            return
+        }
         // Reassign the array — in-place `conversations[i].unreadCount = 0` does not
         // reliably invalidate SwiftUI Observation subscribers on the inbox list.
         var updated = conversations
         updated[index].unreadCount = 0
         conversations = updated
+        AppIconBadgeSync.refresh(animated: false)
     }
 
     func markUnread(conversationID: ConversationID) {
         unreadOverrides[conversationID] = 1
-        guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else { return }
+        guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else {
+            AppIconBadgeSync.refresh(animated: false)
+            return
+        }
         var updated = conversations
         updated[index].unreadCount = max(1, updated[index].unreadCount)
         conversations = updated
+        AppIconBadgeSync.refresh(animated: false)
     }
 
     func markRoomRead(roomID: RoomID) {
         // Reassign the dictionary so Observation invalidates Trade Room / Messages rows.
+        roomUnreadOverrides[roomID] = 0
         var updated = roomUnread
         updated[roomID] = 0
         roomUnread = updated
+        AppIconBadgeSync.refresh(animated: false)
     }
 
     func markRoomUnread(roomID: RoomID) {
+        roomUnreadOverrides.removeValue(forKey: roomID)
         var updated = roomUnread
         updated[roomID] = max(1, (updated[roomID] ?? 0) + 1)
         roomUnread = updated
     }
 
     func setRoomUnread(roomID: RoomID, count: Int) {
+        let next = max(0, count)
+        if let override = roomUnreadOverrides[roomID], next != override {
+            // Keep optimistic clear until the server agrees.
+            var updated = roomUnread
+            updated[roomID] = override
+            roomUnread = updated
+            return
+        }
+        if roomUnreadOverrides[roomID] == next {
+            roomUnreadOverrides.removeValue(forKey: roomID)
+        }
         var updated = roomUnread
-        updated[roomID] = max(0, count)
+        updated[roomID] = next
         roomUnread = updated
     }
 
@@ -232,6 +303,7 @@ final class MessagesInboxStore {
         typingConversationIDs = []
         onlineProfileIDs = []
         unreadOverrides = [:]
+        roomUnreadOverrides = [:]
         hiddenConversationIDs = []
     }
 

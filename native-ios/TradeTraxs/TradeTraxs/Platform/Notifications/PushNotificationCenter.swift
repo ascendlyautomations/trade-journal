@@ -130,23 +130,19 @@ final class PushNotificationCenter: NSObject {
     func handleNotificationResponse(_ response: UNNotificationResponse) {
         let userInfo = response.notification.request.content.userInfo
         route(userInfo: userInfo)
-        if let badge = PushNotificationPayloadParser.badgeValue(from: userInfo) {
-            badgeController.setBadge(badge, animated: true)
-        }
+        // Prefer local Activity + DM unread over the APNs payload badge so optimistic
+        // mark-read on deep link is not overwritten by a stale server count.
+        AppIconBadgeSync.refresh(animated: false)
         Task { await softRefreshActivityUnread() }
     }
 
     func handleForegroundRemoteNotification(userInfo: [AnyHashable: Any]) {
-        if let badge = PushNotificationPayloadParser.badgeValue(from: userInfo) {
-            badgeController.setBadge(badge, animated: true)
-        } else {
-            syncBadgeFromActivity()
-        }
+        AppIconBadgeSync.refresh(animated: true)
         Task { await softRefreshActivityUnread() }
     }
 
     func syncBadgeFromActivity() {
-        badgeController.setBadge(activityInbox.unreadCount, animated: true)
+        AppIconBadgeSync.refresh(animated: true)
     }
 
     // MARK: - Private
@@ -178,7 +174,6 @@ final class PushNotificationCenter: NSObject {
         guard let notificationsRepository else { return }
         if let count = try? await notificationsRepository.unreadCount() {
             activityInbox.setUnreadCount(count)
-            badgeController.setBadge(count, animated: true)
         }
     }
 

@@ -51,6 +51,11 @@ enum CompositionRoot {
             session: authentication.sessionBridge,
             authenticationManager: authentication.manager
         )
+        InboxMarkReadCoordinator.shared.configure(
+            messages: data.messages,
+            rooms: data.rooms,
+            session: data.session
+        )
         let dependencies = DependencyContainer.make(
             configuration: configuration,
             navigation: navigation,

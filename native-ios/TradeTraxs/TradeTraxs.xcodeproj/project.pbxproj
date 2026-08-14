@@ -35,6 +35,8 @@
 			membershipExceptions = (
 				App/Info.plist,
 				Config/Secrets.example.plist,
+				Core/ScreenArchitecture/ScreenArchitecture.md,
+				Data/Session/RepositoryArchitecture.md,
 				Features/Compose/.gitkeep,
 				Features/Explore/.gitkeep,
 				Features/Feed/.gitkeep,

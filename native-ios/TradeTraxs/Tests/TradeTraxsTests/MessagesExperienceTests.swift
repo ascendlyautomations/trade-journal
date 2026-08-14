@@ -104,13 +104,15 @@ final class MessagesExperienceTests: XCTestCase {
     func testOpenConversationClearsUnreadBadgeImmediately() async {
         MessagesInboxFixtures.seedStore(MessagesInboxStore.shared)
         let cache = DetailPresentationCache()
+        let navStore = NavigationStore()
+        navStore.sessionPhase = .authenticated
         let viewModel = MessagesHomeViewModel(
             messages: MessagesStubMessageRepository(),
             rooms: MessagesStubRoomRepository(),
             profiles: MessagesStubProfileRepository(),
             session: MessagesStubSession(userID: MessagesInboxFixtures.viewerID.rawValue),
             detailCache: cache,
-            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            navigationCoordinator: NavigationCoordinator(store: navStore),
             inboxStore: .shared
         )
         viewModel.loadIfNeeded()
@@ -126,6 +128,75 @@ final class MessagesExperienceTests: XCTestCase {
         XCTAssertEqual(MessagesInboxStore.shared.unreadCount(for: cleared), 0)
         let row = (viewModel.pinnedItems + viewModel.directMessageItems).first { $0.id == id }
         XCTAssertEqual(row?.unreadCount, 0)
+    }
+
+    func testReplaceConversationsPreservesOptimisticUnreadClear() {
+        let id = ConversationID("race-dm")
+        let unread = Conversation(
+            id: id,
+            participantProfileIDs: [],
+            title: "Race",
+            peerUsername: "race",
+            avatar: nil,
+            isGroup: false,
+            isPinned: false,
+            lastMessagePreview: "hi",
+            lastMessageAt: Date(timeIntervalSince1970: 100),
+            unreadCount: 5,
+            isMuted: false,
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        MessagesInboxStore.shared.replaceConversations([unread])
+        XCTAssertEqual(MessagesInboxStore.shared.totalDirectMessageUnread, 5)
+
+        MessagesInboxStore.shared.markRead(conversationID: id)
+        XCTAssertEqual(MessagesInboxStore.shared.totalDirectMessageUnread, 0)
+
+        // Bootstrap arrives with stale unread before mark_conversation_read finishes.
+        var stale = unread
+        stale.unreadCount = 5
+        MessagesInboxStore.shared.replaceConversations([stale])
+
+        let row = MessagesInboxStore.shared.conversations.first { $0.id == id }!
+        XCTAssertEqual(MessagesInboxStore.shared.unreadCount(for: row), 0)
+        XCTAssertEqual(MessagesInboxStore.shared.totalDirectMessageUnread, 0)
+
+        // Backend confirms zero — override drops, count stays cleared.
+        var confirmed = unread
+        confirmed.unreadCount = 0
+        MessagesInboxStore.shared.replaceConversations([confirmed])
+        XCTAssertEqual(
+            MessagesInboxStore.shared.unreadCount(for: MessagesInboxStore.shared.conversations.first { $0.id == id }!),
+            0
+        )
+    }
+
+    func testPushMessagesThreadClearsUnreadLikeInboxTap() {
+        let id = ConversationID("push-dm")
+        let unread = Conversation(
+            id: id,
+            participantProfileIDs: [],
+            title: "Push",
+            peerUsername: "push",
+            avatar: nil,
+            isGroup: false,
+            isPinned: false,
+            lastMessagePreview: "ping",
+            lastMessageAt: Date(timeIntervalSince1970: 100),
+            unreadCount: 3,
+            isMuted: false,
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        MessagesInboxStore.shared.replaceConversations([unread])
+
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        let navigation = NavigationCoordinator(store: store)
+        navigation.open(.messages(.thread(id)))
+
+        let row = MessagesInboxStore.shared.conversations.first { $0.id == id }!
+        XCTAssertEqual(MessagesInboxStore.shared.unreadCount(for: row), 0)
+        XCTAssertEqual(store.paths.messages.last, .thread(id))
     }
 
     func testNewChatReusesExistingConversation() async {

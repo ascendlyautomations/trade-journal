@@ -177,7 +177,7 @@ final class RoomConversationViewModel {
             apply(cache: cached)
             pendingScrollMessageID = cached.scrollAnchorMessageID
         } else {
-            messages = []
+            replaceMessages([])
             nextOlderCursor = nil
             hasMoreOlder = true
             pendingScrollMessageID = nil
@@ -201,17 +201,13 @@ final class RoomConversationViewModel {
             var page = PageRequest(limit: 40)
             page.cursor = nextOlderCursor
             let result = try await rooms.messages(roomID: roomID, channel: channel, page: page)
-            let chronological = result.items
-                .map(RoomMessageMapping.displayMessage)
-                .sorted { $0.createdAt < $1.createdAt }
-            let existing = Set(messages.map(\.id))
-            let fresh = chronological.filter { !existing.contains($0.id) }
-            await hydrateSenders(for: fresh)
-            messages = (fresh + messages).sorted { $0.createdAt < $1.createdAt }
+            let mapped = result.items.map(RoomMessageMapping.displayMessage)
+            commitMessages(mapped)
+            await hydrateSenders(for: mapped)
             nextOlderCursor = result.nextCursor
             hasMoreOlder = result.nextCursor != nil
             persistActiveChannelCache(scrollAnchor: nil)
-            await hydrateSharedTrades(from: fresh)
+            await hydrateSharedTrades(from: mapped)
         } catch {
             // Soft-fail older page.
         }
@@ -319,7 +315,7 @@ final class RoomConversationViewModel {
             createdAt: .now,
             isReadByViewer: true
         )
-        messages.append(optimistic)
+        commitMessages([optimistic])
         sendStates[tempID] = .sending
 
         if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
@@ -344,12 +340,8 @@ final class RoomConversationViewModel {
             )
             let savedRoom = try await rooms.send(payload)
             let saved = RoomMessageMapping.displayMessage(from: savedRoom)
-            messages.removeAll { $0.id == tempID }
+            commitMessages([saved])
             sendStates.removeValue(forKey: tempID)
-            if !messages.contains(where: { $0.id == saved.id }) {
-                messages.append(saved)
-                messages.sort { $0.createdAt < $1.createdAt }
-            }
             sendStates[saved.id] = .sent
             sharedTrades[trade.id] = trade
             persistActiveChannelCache(scrollAnchor: saved.id)
@@ -368,7 +360,7 @@ final class RoomConversationViewModel {
 
     func retry(_ item: ConversationBubbleItem) async {
         guard sendStates[item.id] == .failed else { return }
-        messages.removeAll { $0.id == item.id }
+        removeMessage(id: item.id)
         sendStates.removeValue(forKey: item.id)
         let imageURL = item.imageReference?.id
         await send(body: item.text ?? "", imageURL: imageURL, localImageData: nil)
@@ -622,7 +614,7 @@ final class RoomConversationViewModel {
         }
 
         guard let channelID = selectedChannelID else {
-            messages = []
+            replaceMessages([])
             hasMoreOlder = false
             return
         }
@@ -681,18 +673,23 @@ final class RoomConversationViewModel {
                     channelID: channelID
                 )
                 let mapped = roomMessages.map(RoomMessageMapping.displayMessage)
-                await hydrateSenders(for: mapped)
+                let sorted = ConversationMessageMerge.mergeMessages(
+                    existing: [],
+                    incoming: mapped,
+                    viewerID: viewerID
+                )
                 let cache = ChannelThreadCache(
-                    messages: mapped.sorted { $0.createdAt < $1.createdAt },
+                    messages: sorted,
                     nextOlderCursor: nil,
                     hasMoreOlder: false,
-                    scrollAnchorMessageID: mapped.last?.id,
+                    scrollAnchorMessageID: sorted.last?.id,
                     isLoaded: true
                 )
                 channelCaches[channelID] = cache
                 if selectedChannelID == channelID {
                     apply(cache: cache)
                 }
+                await hydrateSenders(for: sorted)
                 return
             }
             do {
@@ -711,8 +708,11 @@ final class RoomConversationViewModel {
             page: PageRequest(limit: 50)
         )
         let mapped = page.items.map(RoomMessageMapping.displayMessage)
-        await hydrateSenders(for: mapped)
-        let sorted = mapped.sorted { $0.createdAt < $1.createdAt }
+        let sorted = ConversationMessageMerge.mergeMessages(
+            existing: [],
+            incoming: mapped,
+            viewerID: viewerID
+        )
         let cache = ChannelThreadCache(
             messages: sorted,
             nextOlderCursor: page.nextCursor,
@@ -724,6 +724,7 @@ final class RoomConversationViewModel {
         if selectedChannelID == channelID {
             apply(cache: cache)
         }
+        await hydrateSenders(for: sorted)
         await hydrateSharedTrades(from: sorted)
         if let last = sorted.last, channelID == selectedChannelID {
             patchInboxPreview(with: last)
@@ -731,7 +732,7 @@ final class RoomConversationViewModel {
     }
 
     private func apply(cache: ChannelThreadCache) {
-        messages = cache.messages
+        replaceMessages(cache.messages)
         nextOlderCursor = cache.nextOlderCursor
         hasMoreOlder = cache.hasMoreOlder
     }
@@ -786,8 +787,7 @@ final class RoomConversationViewModel {
         else { return }
 
         if signal.kind == .delete, let rawID = signal.messageID {
-            let id = MessageID(rawID)
-            messages.removeAll { $0.id == id }
+            removeMessage(id: MessageID(rawID))
             persistActiveChannelCache(scrollAnchor: messages.last?.id)
             return
         }
@@ -800,40 +800,61 @@ final class RoomConversationViewModel {
                 channel: channel,
                 page: PageRequest(limit: 30)
             )
-            let existing = Set(messages.map(\.id))
-            let incoming = page.items
-                .map(RoomMessageMapping.displayMessage)
-                .filter { !existing.contains($0.id) }
-                .sorted { $0.createdAt < $1.createdAt }
-
-            if signal.kind == .update, let rawID = signal.messageID {
-                let id = MessageID(rawID)
-                if let updated = page.items.map(RoomMessageMapping.displayMessage).first(where: { $0.id == id }),
-                   let index = messages.firstIndex(where: { $0.id == id })
-                {
-                    messages[index] = updated
-                    persistActiveChannelCache(scrollAnchor: nil)
-                    await hydrateSharedTrades(from: [updated])
-                    return
-                }
+            let mapped = page.items.map(RoomMessageMapping.displayMessage)
+            let beforeIDs = Set(messages.map(\.id))
+            // Commit merge immediately — hydrate senders afterward (no await before write).
+            commitMessages(mapped)
+            let addedPeerMessages = mapped.contains {
+                $0.senderProfileID != viewerID && !beforeIDs.contains($0.id)
             }
-
-            guard !incoming.isEmpty else { return }
-            await hydrateSenders(for: incoming)
-            messages.append(contentsOf: incoming)
-            messages.sort { $0.createdAt < $1.createdAt }
+            await hydrateSenders(for: mapped)
             persistActiveChannelCache(scrollAnchor: messages.last?.id)
-            await hydrateSharedTrades(from: incoming)
+            await hydrateSharedTrades(from: mapped)
             if let last = messages.last {
                 patchInboxPreview(with: last)
             }
             // Web: while the room is open, inbound inserts re-run `mark_room_read`.
-            if incoming.contains(where: { $0.senderProfileID != viewerID }) {
+            if addedPeerMessages {
                 await markRoomSeenIfNeeded(force: true)
             }
         } catch {
             // Soft-fail event-driven hydrate.
         }
+    }
+
+    /// Sole write path for thread rows — web `mergeMessages` semantics.
+    private func commitMessages(_ incoming: [Message]) {
+        let previousTempIDs = Set(
+            messages
+                .map(\.id)
+                .filter(ConversationMessageMerge.isOptimisticMessageID)
+        )
+        messages = ConversationMessageMerge.mergeMessages(
+            existing: messages,
+            incoming: incoming,
+            viewerID: viewerID
+        )
+        let remainingIDs = Set(messages.map(\.id))
+        for tempID in previousTempIDs where !remainingIDs.contains(tempID) {
+            sendStates.removeValue(forKey: tempID)
+        }
+    }
+
+    private func replaceMessages(_ incoming: [Message]) {
+        messages = ConversationMessageMerge.mergeMessages(
+            existing: [],
+            incoming: incoming,
+            viewerID: viewerID
+        )
+    }
+
+    private func removeMessage(id: MessageID) {
+        messages = ConversationMessageMerge.mergeMessages(
+            existing: messages.filter { $0.id != id },
+            incoming: [],
+            viewerID: viewerID
+        )
+        sendStates.removeValue(forKey: id)
     }
 
     private func send(body: String, imageURL: String?, localImageData: Data?) async {
@@ -864,7 +885,7 @@ final class RoomConversationViewModel {
             createdAt: .now,
             isReadByViewer: true
         )
-        messages.append(optimistic)
+        commitMessages([optimistic])
         sendStates[tempID] = .sending
 
         if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
@@ -895,17 +916,17 @@ final class RoomConversationViewModel {
                 } else {
                     resolvedImageURL = reference.id
                 }
-                if let index = messages.firstIndex(where: { $0.id == tempID }),
-                   let url = resolvedImageURL
-                {
-                    messages[index].attachments = [
+                if let url = resolvedImageURL {
+                    var updated = optimistic
+                    updated.attachments = [
                         MessageAttachment(
                             id: url,
                             media: MediaReference(id: url, kind: .image, altText: nil),
                             tradeID: nil
                         ),
                     ]
-                    messages[index].kind = .media
+                    updated.kind = .media
+                    commitMessages([updated])
                 }
             }
 
@@ -930,12 +951,8 @@ final class RoomConversationViewModel {
             )
             let savedRoom = try await rooms.send(payload)
             let saved = RoomMessageMapping.displayMessage(from: savedRoom)
-            messages.removeAll { $0.id == tempID }
+            commitMessages([saved])
             sendStates.removeValue(forKey: tempID)
-            if !messages.contains(where: { $0.id == saved.id }) {
-                messages.append(saved)
-                messages.sort { $0.createdAt < $1.createdAt }
-            }
             sendStates[saved.id] = .sent
             persistActiveChannelCache(scrollAnchor: saved.id)
             patchInboxPreview(with: saved)
