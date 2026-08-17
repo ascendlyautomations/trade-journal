@@ -271,7 +271,7 @@ final class CreateAchievementViewModel {
             }
 
             ContentMutationStore.shared.noteAchievementCreated(saved.id)
-            ExperienceHaptics.play(.success)
+            ExperienceHaptics.play(.achievement)
             phase = .ready
             onDismiss()
         } catch {

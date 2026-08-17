@@ -76,7 +76,10 @@ final class TradesContainerViewModel {
 
     var emptyMessage: String {
         switch filter {
-        case .all: return ProfileSection.trades.emptyMessage
+        case .all:
+            return isOwner
+                ? "Log a trade to start building your journal."
+                : "Trades will show up here when they’re shared."
         case .wins: return "Winning trades will show up here."
         case .losses: return "Losing trades will show up here."
         }

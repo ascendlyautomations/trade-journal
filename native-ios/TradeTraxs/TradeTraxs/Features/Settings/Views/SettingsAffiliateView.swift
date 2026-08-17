@@ -1,7 +1,9 @@
 import SwiftUI
+import UIKit
 
 struct SettingsAffiliateView: View {
     @State private var viewModel: SettingsAffiliateViewModel
+    @State private var didCopyCode = false
 
     @Environment(\.themeColors) private var colors
 
@@ -28,20 +30,48 @@ struct SettingsAffiliateView: View {
                 }
             }
 
-            Section("Referral") {
-                SettingsInfoRow(title: "Code", value: viewModel.referral?.code ?? "—")
-                if let link = viewModel.referralLink {
-                    ShareLink(item: link) {
-                        SettingsNavigationRow(title: "Share referral link", systemImage: "square.and.arrow.up")
-                    }
-                }
+            Section {
+                SettingsIntroBlock(
+                    title: "Earn rewards by referring traders",
+                    message: "Share your referral link below. Friends who join with your code help you earn rewards."
+                )
             }
 
             Section {
-                Text("Affiliate application status, earnings ledger, and Stripe Connect payouts remain on the web Affiliate dashboard.")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
+                SettingsInfoRow(title: "Code", value: viewModel.referral?.code ?? "—")
+                if let code = viewModel.referral?.code, !code.isEmpty {
+                    Button {
+                        UIPasteboard.general.string = code
+                        didCopyCode = true
+                        ExperienceHaptics.play(.success)
+                    } label: {
+                        SettingsPrimaryActionLabel(
+                            title: didCopyCode ? "Copied" : "Copy Referral Code",
+                            systemImage: didCopyCode ? "checkmark" : "doc.on.doc"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.affiliate.copy")
+                }
+                if let link = viewModel.referralLink {
+                    ShareLink(item: link) {
+                        SettingsPrimaryActionLabel(
+                            title: "Share Referral Link",
+                            systemImage: "square.and.arrow.up"
+                        )
+                    }
+                }
             } header: {
-                Text("Affiliate")
+                Text("Your Referral")
+            } footer: {
+                Text("Share your link or code with other traders.")
+            }
+
+            Section {
+                SettingsIntroBlock(
+                    title: "More on the website",
+                    message: "See your application status, earnings, and payouts on TradeTraxs.com."
+                )
             }
         }
         .listStyle(.insetGrouped)

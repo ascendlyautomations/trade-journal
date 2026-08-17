@@ -50,7 +50,7 @@ struct MessagesHomeView: View {
             case .loaded where viewModel.showsEmpty:
                 ExperienceEmptyState(
                     icon: .messages,
-                    title: "No conversations yet.",
+                    title: "No conversations yet",
                     message: "Start a conversation with another trader.",
                     actionTitle: "Start a Conversation",
                     action: { viewModel.presentNewChat() }
@@ -123,6 +123,25 @@ struct MessagesHomeView: View {
         } message: {
             Text("Are you sure you want to permanently delete this conversation? This action cannot be undone.")
         }
+        .confirmationDialog(
+            "Leave this Trade Room?",
+            isPresented: Binding(
+                get: { viewModel.showsLeaveRoomConfirmation },
+                set: { presented in
+                    if !presented { viewModel.cancelLeaveRoom() }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Leave Room", role: .destructive) {
+                Task { await viewModel.confirmLeaveRoom() }
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelLeaveRoom()
+            }
+        } message: {
+            Text("You can rejoin later if the room is still available.")
+        }
     }
 
     private var inboxList: some View {
@@ -154,6 +173,9 @@ struct MessagesHomeView: View {
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                                 dmLeadingActions(item)
                             }
+                            .contextMenu { dmContextMenu(item) } preview: {
+                                conversationPreview(item)
+                            }
                     }
                 }
             }
@@ -168,6 +190,9 @@ struct MessagesHomeView: View {
                             }
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                                 dmLeadingActions(item)
+                            }
+                            .contextMenu { dmContextMenu(item) } preview: {
+                                conversationPreview(item)
                             }
                     }
                 }
@@ -184,20 +209,10 @@ struct MessagesHomeView: View {
                         .buttonStyle(.plain)
                         .listRowBackground(colors.backgroundSecondary)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                Task { await viewModel.leaveRoom(id: item.id) }
-                            } label: {
-                                Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
-                            }
-                            Button {
-                                viewModel.toggleMute(roomID: item.id)
-                            } label: {
-                                Label(
-                                    item.isMuted ? "Unmute" : "Mute",
-                                    systemImage: item.isMuted ? "bell.fill" : "bell.slash.fill"
-                                )
-                            }
-                            .tint(colors.warning)
+                            roomTrailingActions(item)
+                        }
+                        .contextMenu { roomContextMenu(item) } preview: {
+                            roomPreview(item)
                         }
                     }
                 } header: {
@@ -255,5 +270,108 @@ struct MessagesHomeView: View {
             )
         }
         .tint(colors.warning)
+        Button {
+            viewModel.togglePin(conversationID: item.id)
+        } label: {
+            Label(
+                item.isPinned ? "Unpin" : "Pin",
+                systemImage: item.isPinned ? "pin.slash.fill" : "pin.fill"
+            )
+        }
+        .tint(colors.accent)
+    }
+
+    @ViewBuilder
+    private func dmContextMenu(_ item: DirectMessageInboxItem) -> some View {
+        Button {
+            viewModel.openConversation(item)
+        } label: {
+            Label("Open", systemImage: "bubble.left.and.bubble.right")
+        }
+        Button {
+            viewModel.toggleRead(conversationID: item.id)
+        } label: {
+            Label(
+                item.unreadCount > 0 ? "Mark as Read" : "Mark as Unread",
+                systemImage: item.unreadCount > 0 ? "envelope.open" : "envelope.badge"
+            )
+        }
+        Button {
+            viewModel.togglePin(conversationID: item.id)
+        } label: {
+            Label(
+                item.isPinned ? "Unpin" : "Pin",
+                systemImage: item.isPinned ? "pin.slash" : "pin"
+            )
+        }
+        Button {
+            viewModel.toggleMute(conversationID: item.id)
+        } label: {
+            Label(
+                item.isMuted ? "Unmute" : "Mute",
+                systemImage: item.isMuted ? "bell" : "bell.slash"
+            )
+        }
+        Divider()
+        Button(role: .destructive) {
+            viewModel.requestDeleteConversation(id: item.id)
+        } label: {
+            Label("Delete Chat", systemImage: "trash")
+        }
+    }
+
+    @ViewBuilder
+    private func roomTrailingActions(_ item: TradeRoomInboxItem) -> some View {
+        Button(role: .destructive) {
+            viewModel.requestLeaveRoom(id: item.id)
+        } label: {
+            Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
+        }
+        Button {
+            viewModel.toggleMute(roomID: item.id)
+        } label: {
+            Label(
+                item.isMuted ? "Unmute" : "Mute",
+                systemImage: item.isMuted ? "bell.fill" : "bell.slash.fill"
+            )
+        }
+        .tint(colors.warning)
+    }
+
+    @ViewBuilder
+    private func roomContextMenu(_ item: TradeRoomInboxItem) -> some View {
+        Button {
+            viewModel.openRoom(item)
+        } label: {
+            Label("Open", systemImage: "person.3")
+        }
+        Button {
+            viewModel.toggleMute(roomID: item.id)
+        } label: {
+            Label(
+                item.isMuted ? "Unmute" : "Mute",
+                systemImage: item.isMuted ? "bell" : "bell.slash"
+            )
+        }
+        Divider()
+        Button(role: .destructive) {
+            viewModel.requestLeaveRoom(id: item.id)
+        } label: {
+            Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
+        }
+    }
+
+    private func conversationPreview(_ item: DirectMessageInboxItem) -> some View {
+        ConversationRowView(item: item, imagePipeline: imagePipeline)
+            .padding()
+            .frame(width: 320)
+            .background(colors.backgroundPrimary)
+    }
+
+    private func roomPreview(_ item: TradeRoomInboxItem) -> some View {
+        TradeRoomInboxRowView(item: item, imagePipeline: imagePipeline)
+            .padding()
+            .frame(width: 320)
+            .background(colors.backgroundSecondary)
     }
 }

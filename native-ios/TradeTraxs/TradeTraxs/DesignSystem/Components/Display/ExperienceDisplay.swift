@@ -17,20 +17,26 @@ struct ExperienceAvatar: View {
     var size: CGFloat = 40
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             Circle()
                 .fill(colors.fillPrimary)
+            Text(initials)
+                .experienceStyle(.caption, color: colors.secondaryText)
+                .opacity(image == nil ? 1 : 0)
             if let image {
                 image
                     .resizable()
                     .scaledToFill()
-            } else {
-                Text(initials)
-                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .transition(reduceMotion ? .identity : .opacity)
             }
         }
+        .animation(
+            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+            value: image == nil
+        )
         .frame(width: size, height: size)
         .clipShape(Circle())
         .overlay {

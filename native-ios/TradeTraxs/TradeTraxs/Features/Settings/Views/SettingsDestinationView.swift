@@ -38,6 +38,8 @@ struct SettingsDestinationView: View {
                     navigationCoordinator: navigationCoordinator,
                     pushNotifications: appEnvironment.pushNotifications
                 )
+            case .appearance:
+                SettingsAppearanceView(themeManager: appEnvironment.themeManager)
             case .notificationsMessages:
                 SettingsNotificationsView(
                     data: data,

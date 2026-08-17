@@ -18,8 +18,21 @@ enum AppError: Error, Sendable, Equatable {
 
     /// Catch-all until richer typed errors exist.
     case unknown(message: String)
+}
 
-    // MARK: - Future extension points
-    // case validation(ValidationError)
-    // case persistence(PersistenceError)
+extension AppError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .notImplemented(let feature):
+            return "Not implemented: \(feature)"
+        case .cancelled:
+            return "Cancelled"
+        case .transport(let networkError):
+            return "Transport: \(String(describing: networkError))"
+        case .authentication(let authError):
+            return "Authentication: \(String(describing: authError))"
+        case .unknown(let message):
+            return message
+        }
+    }
 }

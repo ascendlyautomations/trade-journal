@@ -110,14 +110,24 @@ final class ActivityHomeViewModel {
     }
 
     func markRead(id: NotificationID) {
+        ExperienceHaptics.play(.selection)
+        guard let existing = inboxStore.items.first(where: { $0.id == id }), !existing.isRead else {
+            return
+        }
         inboxStore.markReadLocally(id: id)
         Task {
             do {
                 try await notifications.markRead(id: id)
                 AppIconBadgeSync.refresh(animated: true)
             } catch {
-                // Soft-fail — next refresh reconciles.
+                inboxStore.markUnreadLocally(id: id)
             }
+        }
+    }
+
+    func markRead(row: ActivityRowModel) {
+        for id in row.groupedNotificationIDs {
+            markRead(id: id)
         }
     }
 

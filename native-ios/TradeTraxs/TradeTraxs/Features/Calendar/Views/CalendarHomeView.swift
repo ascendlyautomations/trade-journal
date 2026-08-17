@@ -27,8 +27,7 @@ struct CalendarHomeView: View {
             switch viewModel.phase {
             case .idle, .loading:
                 if viewModel.month == nil {
-                    ProgressView("Loading calendar…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ExperienceListSkeleton(style: .calendarGrid)
                 } else {
                     content
                 }
@@ -90,6 +89,7 @@ struct CalendarHomeView: View {
                     .background(colors.fillSecondary, in: Circle())
             }
             .buttonStyle(.plain)
+            .experienceTouchTarget()
             .accessibilityLabel("Previous month")
 
             Spacer()
@@ -115,6 +115,7 @@ struct CalendarHomeView: View {
                     .background(colors.fillSecondary, in: Circle())
             }
             .buttonStyle(.plain)
+            .experienceTouchTarget()
             .accessibilityLabel("Next month")
         }
         .accessibilityIdentifier("calendar.header")

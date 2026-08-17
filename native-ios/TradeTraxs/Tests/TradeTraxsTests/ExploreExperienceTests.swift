@@ -201,7 +201,9 @@ final class ExploreExperienceTests: XCTestCase {
         XCTAssertTrue(viewModel.isFollowing(trader), "Optimistic follow should update immediately")
         await waitFor { profiles.followCalls == 1 }
         viewModel.toggleFollow(trader)
-        XCTAssertFalse(viewModel.isFollowing(trader), "Optimistic unfollow should update immediately")
+        XCTAssertNotNil(viewModel.pendingUnfollow, "Unfollow should ask for confirmation")
+        viewModel.confirmUnfollow()
+        XCTAssertFalse(viewModel.isFollowing(trader), "Confirmed unfollow should update immediately")
         await waitFor { profiles.unfollowCalls == 1 }
     }
 

@@ -93,6 +93,7 @@ struct AppRootView: View {
             if phase == .active {
                 Task {
                     await authenticationLifecycle.applicationWillEnterForeground()
+                    appEnvironment.data.realtimeHub.resumeIfNeeded()
                 }
             }
         }

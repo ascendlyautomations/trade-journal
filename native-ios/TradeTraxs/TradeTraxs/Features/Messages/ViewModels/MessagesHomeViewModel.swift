@@ -18,6 +18,9 @@ final class MessagesHomeViewModel {
     /// Web `useDeleteChatConfirmation` pending id.
     var pendingDeleteConversationID: ConversationID?
     var showsDeleteConfirmation = false
+    /// Pending Trade Room leave confirmation.
+    var pendingLeaveRoomID: RoomID?
+    var showsLeaveRoomConfirmation = false
 
     private let messages: any MessageRepository
     private let rooms: any RoomRepository
@@ -149,6 +152,11 @@ final class MessagesHomeViewModel {
         inboxStore.toggleMute(conversationID: conversationID)
     }
 
+    func togglePin(conversationID: ConversationID) {
+        ExperienceHaptics.play(.selection)
+        inboxStore.togglePin(conversationID: conversationID)
+    }
+
     func toggleRead(conversationID: ConversationID) {
         ExperienceHaptics.play(.selection)
         let unread = inboxStore.unreadCount(
@@ -210,15 +218,33 @@ final class MessagesHomeViewModel {
         do {
             try await messages.deleteConversation(id: id)
             inboxStore.removeConversation(id: id)
-            ExperienceHaptics.play(.selection)
+            ExperienceHaptics.play(.success)
         } catch {
-            ExperienceHaptics.play(.warning)
+            ExperienceHaptics.play(.error)
         }
     }
 
     func toggleMute(roomID: RoomID) {
         ExperienceHaptics.play(.selection)
         inboxStore.toggleMute(roomID: roomID)
+    }
+
+    func requestLeaveRoom(id: RoomID) {
+        ExperienceHaptics.play(.warning)
+        pendingLeaveRoomID = id
+        showsLeaveRoomConfirmation = true
+    }
+
+    func cancelLeaveRoom() {
+        pendingLeaveRoomID = nil
+        showsLeaveRoomConfirmation = false
+    }
+
+    func confirmLeaveRoom() async {
+        guard let id = pendingLeaveRoomID else { return }
+        pendingLeaveRoomID = nil
+        showsLeaveRoomConfirmation = false
+        await leaveRoom(id: id)
     }
 
     func leaveRoom(id: RoomID) async {
@@ -236,6 +262,7 @@ final class MessagesHomeViewModel {
         do {
             try await rooms.leave(roomID: id, profileID: viewerID)
             inboxStore.removeRoom(id: id)
+            ExperienceHaptics.play(.success)
         } catch {
             ExperienceHaptics.play(.warning)
         }

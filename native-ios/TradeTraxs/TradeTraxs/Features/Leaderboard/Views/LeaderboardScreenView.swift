@@ -144,16 +144,8 @@ struct LeaderboardScreenView: View {
     }
 
     private var loadingContent: some View {
-        VStack(spacing: ExperienceSpacing.lg) {
-            Spacer(minLength: ExperienceSpacing.xl)
-            ProgressView()
-                .controlSize(.regular)
-            Text("Loading rankings…")
-                .experienceStyle(.caption, color: colors.secondaryText)
-            Spacer(minLength: ExperienceSpacing.xl)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityIdentifier("leaderboard.loading")
+        ExperienceListSkeleton(style: .leaderboard)
+            .accessibilityIdentifier("leaderboard.loading")
     }
 
     private var emptyContent: some View {
@@ -191,7 +183,7 @@ struct LeaderboardScreenView: View {
         case .following:
             return "No one you follow ranked"
         case .all:
-            return "No traders found"
+            return "No rankings yet"
         }
     }
 
@@ -202,7 +194,7 @@ struct LeaderboardScreenView: View {
         case .following:
             return "Nobody you follow ranks for this timeframe. Try All or a wider window."
         case .all:
-            return "No traders found for this timeframe. Try another filter."
+            return "Try another timeframe or category to see traders."
         }
     }
 }

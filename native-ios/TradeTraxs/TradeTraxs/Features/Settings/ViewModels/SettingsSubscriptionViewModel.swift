@@ -1,12 +1,12 @@
 import Foundation
 import Observation
+import UIKit
 
 @Observable
 @MainActor
 final class SettingsSubscriptionViewModel {
     private let billing: any BillingRepository
     private let session: any SessionProviding
-    private let navigationCoordinator: NavigationCoordinator
 
     private(set) var status: BillingStatus?
     private(set) var isLoading = false
@@ -16,11 +16,10 @@ final class SettingsSubscriptionViewModel {
     init(
         billing: any BillingRepository,
         session: any SessionProviding,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator _: NavigationCoordinator
     ) {
         self.billing = billing
         self.session = session
-        self.navigationCoordinator = navigationCoordinator
     }
 
     var planTitle: String {
@@ -56,7 +55,7 @@ final class SettingsSubscriptionViewModel {
     func refresh() async {
         isLoading = status == nil
         guard let userID = await session.currentUserID else {
-            errorMessage = "Not signed in"
+            errorMessage = "Sign in to view your subscription."
             isLoading = false
             return
         }
@@ -78,7 +77,7 @@ final class SettingsSubscriptionViewModel {
                 )
                 errorMessage = nil
             } else {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
             }
         }
         isLoading = false
@@ -86,6 +85,9 @@ final class SettingsSubscriptionViewModel {
 
     func openUpgrade() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.fullScreen(.upgrade))
+        // Native StoreKit upgrade is not shipped yet — open web pricing (same as web upsell).
+        if let url = URL(string: "https://www.tradetraxs.com/pricing") {
+            UIApplication.shared.open(url)
+        }
     }
 }

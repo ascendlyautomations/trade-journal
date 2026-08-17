@@ -85,6 +85,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case security
     case profile
     case notifications
+    case appearance
     case notificationsMessages = "notifications-messages"
     case notificationsSocial = "notifications-social"
     case notificationsRooms = "notifications-rooms"
@@ -109,6 +110,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .security: return "Security"
         case .profile: return "Profile"
         case .notifications: return "Notifications"
+        case .appearance: return "Appearance"
         case .notificationsMessages: return "Messages"
         case .notificationsSocial: return "Social Activity"
         case .notificationsRooms: return "Trade Rooms"

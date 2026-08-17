@@ -21,7 +21,7 @@ enum FollowListKind: String, Hashable, Sendable {
     var emptyMessage: String {
         switch self {
         case .followers: return "When people follow this account, they’ll show up here."
-        case .following: return "Accounts you follow will show up here."
+        case .following: return "Find traders on Explore and tap Follow to start building your list."
         }
     }
 

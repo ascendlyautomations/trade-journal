@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct CommentRowView: View {
     let comment: InteractionComment
@@ -21,10 +22,6 @@ struct CommentRowView: View {
                     Text(TradeDisplay.dateText(comment.createdAt))
                         .experienceStyle(.caption, color: colors.tertiaryText)
                     Spacer(minLength: 0)
-                    if isOwn, let onDelete {
-                        Button("Delete", role: .destructive, action: onDelete)
-                            .font(.caption)
-                    }
                 }
                 Text(comment.body)
                     .experienceStyle(.body, color: colors.primaryText)
@@ -32,6 +29,21 @@ struct CommentRowView: View {
             }
         }
         .padding(.vertical, ExperienceSpacing.xs)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                UIPasteboard.general.string = comment.body
+                ExperienceHaptics.play(.success)
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+            if isOwn, let onDelete {
+                Divider()
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
         .accessibilityIdentifier("interaction.comment.row.\(comment.id.rawValue)")
     }
 

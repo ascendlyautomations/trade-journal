@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ProfileHeaderView: View {
     /// Bound directly so avatar / name / username refresh when the content store updates.
@@ -121,6 +122,19 @@ struct ProfileHeaderView: View {
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .contextMenu {
+            Button {
+                UIPasteboard.general.string = "@\(profile.username)"
+                ExperienceHaptics.play(.success)
+            } label: {
+                Label("Copy Username", systemImage: "doc.on.doc")
+            }
+            Button {
+                viewModel.presentShare()
+            } label: {
+                Label("Share Profile", systemImage: "square.and.arrow.up")
+            }
         }
     }
 

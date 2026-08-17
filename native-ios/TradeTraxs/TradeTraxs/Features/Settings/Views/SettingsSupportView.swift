@@ -11,7 +11,7 @@ struct SettingsSupportView: View {
 
     var body: some View {
         List {
-            Section("Help") {
+            Section {
                 if let helpURL {
                     Button {
                         openURL(helpURL)
@@ -36,20 +36,27 @@ struct SettingsSupportView: View {
                     }
                     .buttonStyle(.plain)
                 }
+            } header: {
+                Text("Help")
+            } footer: {
+                Text("Get answers or reach the TradeTraxs team.")
             }
 
-            Section("Email") {
+            Section {
                 if let supportEmail {
                     Button {
                         openURL(supportEmail)
                     } label: {
                         SettingsNavigationRow(
-                            title: "support@tradetraxs.com",
+                            title: "Email Support",
+                            subtitle: "support@tradetraxs.com",
                             systemImage: "envelope.open"
                         )
                     }
                     .buttonStyle(.plain)
                 }
+            } header: {
+                Text("Email")
             }
         }
         .listStyle(.insetGrouped)

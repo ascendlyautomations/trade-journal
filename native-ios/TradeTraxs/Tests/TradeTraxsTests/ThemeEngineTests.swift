@@ -75,6 +75,36 @@ final class ThemeEngineTests: XCTestCase {
         XCTAssertTrue(model.options.contains(where: \.isSelected))
     }
 
+    func testUserFacingAppearanceExposesOnlySystemAndTradeTraxs() {
+        let registry = ThemeRegistry()
+        let model = AppearanceSettingsModel.makeUserFacing(
+            selected: .dark,
+            registry: registry
+        )
+        XCTAssertEqual(model.options.map(\.id), [.system, .tradeTraxs])
+        XCTAssertEqual(model.selectedTheme, .system)
+        XCTAssertTrue(model.options.first { $0.id == .system }?.isSelected == true)
+
+        let branded = AppearanceSettingsModel.makeUserFacing(
+            selected: .tradeTraxs,
+            registry: registry
+        )
+        XCTAssertEqual(branded.selectedTheme, .tradeTraxs)
+    }
+
+    func testAppearanceControllerRejectsHiddenThemes() {
+        let defaults = UserDefaults(suiteName: "theme.engine.tests.\(UUID().uuidString)")!
+        let manager = ThemeManager(
+            persistence: UserDefaultsThemePersistence(defaults: defaults)
+        )
+        manager.select(.system)
+        let controller = AppearanceSettingsController(themeManager: manager)
+        controller.selectTheme(.dark, reduceMotion: true)
+        XCTAssertEqual(manager.selectedIdentifier, .system)
+        controller.selectTheme(.tradeTraxs, reduceMotion: true)
+        XCTAssertEqual(manager.selectedIdentifier, .tradeTraxs)
+    }
+
     func testRegisterFutureThemeWithoutEngineChanges() {
         struct MidnightTheme: AppThemeProtocol {
             var metadata: ThemeMetadata {

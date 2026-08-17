@@ -158,7 +158,8 @@ enum ActivityNotificationRouting {
                 return .profile(.reel(reelID))
             }
             if let achievementPostID = notification.achievementPostID {
-                return .profile(.post(achievementPostID))
+                // `achievement_post_id` resolves inside AchievementDetail (posts → achievements).
+                return .profile(.achievement(AchievementID(achievementPostID.rawValue)))
             }
             if let postID = notification.postID ?? notification.profilePostID {
                 return .profile(.post(postID))

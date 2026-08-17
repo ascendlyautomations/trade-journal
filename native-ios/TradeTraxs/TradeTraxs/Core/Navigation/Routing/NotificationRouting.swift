@@ -46,12 +46,17 @@ struct NotificationRouter: NotificationRouting {
             if type == "affiliate_referral" || type == "affiliate_commission_earned" {
                 return .profile(.affiliate)
             }
-            if type == "like" || type == "like_milestone" || type == "like_batch" || type == "comment",
-               let achievementID = notification.rawUserInfo["achievement_post_id"]
-                ?? notification.rawUserInfo["achievementPostId"]
-                ?? Self.achievementID(from: notification.rawUserInfo["href"])
-            {
-                return .feed(.achievement(AchievementID(achievementID)))
+            if type == "like" || type == "like_milestone" || type == "like_batch" || type == "comment" {
+                if let achievementID = notification.rawUserInfo["achievement_post_id"]
+                    ?? notification.rawUserInfo["achievementPostId"]
+                    ?? Self.achievementID(from: notification.rawUserInfo["href"])
+                {
+                    return .feed(.achievement(AchievementID(achievementID)))
+                }
+                // Social engagement on a trade → SocialTradeDetail (not journal AI).
+                if let tradeID = notification.tradeID {
+                    return .profile(.trade(tradeID))
+                }
             }
             if let tradeID = notification.tradeID {
                 return .home(.tradeDetail(tradeID))

@@ -41,6 +41,13 @@ struct ExploreRoomCard: View {
             )
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button(action: onOpen) {
+                Label("Open", systemImage: "person.3")
+            }
+        } preview: {
+            ExploreRoomCard(room: room, onOpen: {})
+        }
         .accessibilityIdentifier("explore.room.\(room.id.rawValue)")
     }
 }

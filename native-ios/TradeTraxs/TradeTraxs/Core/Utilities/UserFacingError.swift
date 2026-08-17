@@ -35,10 +35,50 @@ struct UserFacingError: Sendable, Equatable {
         case .unknown(let message):
             return UserFacingError(
                 title: "Something went wrong",
-                message: message,
+                message: sanitizeTechnicalMessage(message),
                 action: .retry
             )
         }
+    }
+
+    /// Maps any thrown error into presentation copy (Settings / forms / soft failures).
+    static func message(for error: Error) -> String {
+        if let app = error as? AppError {
+            return map(app).message
+        }
+        if let network = error as? NetworkError {
+            return map(network).message
+        }
+        if let auth = error as? AuthenticationError {
+            return map(auth).message
+        }
+        return map(AppError.unknown(message: error.localizedDescription)).message
+    }
+
+    /// Strips Swift dumps, PostgREST bodies, and transport prefixes from unknown paths.
+    private static func sanitizeTechnicalMessage(_ message: String) -> String {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "Please try again."
+        }
+        let lowered = trimmed.lowercased()
+        if trimmed.hasPrefix("Transport:")
+            || trimmed.hasPrefix("Authentication:")
+            || trimmed.hasPrefix("Not implemented:")
+            || trimmed.hasPrefix("{")
+            || trimmed.hasPrefix("[")
+            || lowered.contains("pgrst")
+            || lowered.hasPrefix("permission(")
+            || lowered.hasPrefix("notfound(")
+            || lowered.hasPrefix("businessrule(")
+            || lowered.hasPrefix("subscription(")
+            || lowered.hasPrefix("tradevalidation(")
+            || lowered.hasPrefix("importfailure(")
+            || lowered.hasPrefix("conflict(")
+        {
+            return "Please try again."
+        }
+        return trimmed
     }
 
     static func map(_ error: AuthenticationError) -> UserFacingError {
@@ -117,7 +157,7 @@ struct UserFacingError: Sendable, Equatable {
         case .server(_, let message):
             return UserFacingError(
                 title: "Server error",
-                message: message ?? "Something went wrong on our end.",
+                message: sanitizeTechnicalMessage(message ?? "Something went wrong on our end."),
                 action: .retry
             )
         case .decoding:
@@ -137,13 +177,13 @@ struct UserFacingError: Sendable, Equatable {
             }
             return UserFacingError(
                 title: "Invalid request",
-                message: message,
+                message: sanitizeTechnicalMessage(message),
                 action: .dismiss
             )
         case .unknown(let message):
             return UserFacingError(
                 title: "Something went wrong",
-                message: message,
+                message: sanitizeTechnicalMessage(message),
                 action: .retry
             )
         }

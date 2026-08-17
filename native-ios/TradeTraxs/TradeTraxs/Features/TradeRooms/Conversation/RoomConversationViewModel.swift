@@ -120,6 +120,11 @@ final class RoomConversationViewModel {
             }).isEmpty
     }
 
+    /// Keep header / composer when the thread already has content (offline refresh failures).
+    var showsRoomChrome: Bool {
+        phase == .loaded || (room != nil && !messages.isEmpty)
+    }
+
     var title: String {
         room?.name ?? "Trade Room"
     }
@@ -346,10 +351,10 @@ final class RoomConversationViewModel {
             sharedTrades[trade.id] = trade
             persistActiveChannelCache(scrollAnchor: saved.id)
             patchInboxPreview(with: saved)
-            ExperienceHaptics.play(.selection)
+            ExperienceHaptics.play(.messageSent)
         } catch {
             sendStates[tempID] = .failed
-            ExperienceHaptics.play(.warning)
+            ExperienceHaptics.play(.error)
         }
     }
 
@@ -388,6 +393,7 @@ final class RoomConversationViewModel {
             } else {
                 membership = nil
             }
+            ExperienceHaptics.play(.success)
             return
         }
         do {
@@ -405,8 +411,9 @@ final class RoomConversationViewModel {
                     self.room = room
                 }
             }
+            ExperienceHaptics.play(.success)
         } catch {
-            ExperienceHaptics.play(.warning)
+            ExperienceHaptics.play(.error)
         }
     }
 
@@ -956,10 +963,10 @@ final class RoomConversationViewModel {
             sendStates[saved.id] = .sent
             persistActiveChannelCache(scrollAnchor: saved.id)
             patchInboxPreview(with: saved)
-            ExperienceHaptics.play(.selection)
+            ExperienceHaptics.play(.messageSent)
         } catch {
             sendStates[tempID] = .failed
-            ExperienceHaptics.play(.warning)
+            ExperienceHaptics.play(.error)
         }
     }
 

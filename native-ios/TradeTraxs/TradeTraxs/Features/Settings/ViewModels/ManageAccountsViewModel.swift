@@ -45,7 +45,7 @@ final class ManageAccountsViewModel {
         isLoading = accounts.isEmpty
         do {
             guard let userID = await session.currentUserID else {
-                errorMessage = "Not signed in"
+                errorMessage = "Sign in to continue."
                 isLoading = false
                 return
             }
@@ -59,7 +59,7 @@ final class ManageAccountsViewModel {
             accounts = Self.sorted(loaded)
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
         isLoading = false
     }
@@ -183,7 +183,7 @@ final class ManageAccountsViewModel {
             if let app = error as? AppError, case .unknown(let message) = app {
                 formError = message
             } else {
-                formError = error.localizedDescription
+                formError = UserFacingError.message(for: error)
             }
             return false
         }

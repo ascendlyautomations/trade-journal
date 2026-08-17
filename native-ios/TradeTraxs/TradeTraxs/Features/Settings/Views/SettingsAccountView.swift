@@ -34,7 +34,7 @@ struct SettingsAccountView: View {
                 }
             }
 
-            Section("Account Information") {
+            Section {
                 SettingsInfoRow(title: "Email", value: viewModel.email ?? "—")
                 SettingsInfoRow(title: "Username", value: viewModel.username.map { "@\($0)" } ?? "—")
                 if let createdAt = viewModel.createdAt {
@@ -43,6 +43,10 @@ struct SettingsAccountView: View {
                         value: createdAt.formatted(date: .abbreviated, time: .omitted)
                     )
                 }
+            } header: {
+                Text("Account Information")
+            } footer: {
+                Text("Your sign-in email and public username.")
             }
 
             Section("Security") {
@@ -55,8 +59,10 @@ struct SettingsAccountView: View {
             }
 
             Section {
-                Text("Account deletion is available on the web Settings page until a native secure deletion flow is wired to the backend.")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
+                SettingsIntroBlock(
+                    title: "Need to delete your account?",
+                    message: "Account deletion is available in Settings on the TradeTraxs website. Contact support if you need help."
+                )
             } header: {
                 Text("Delete Account")
             }
@@ -127,12 +133,22 @@ struct SettingsSecurityView: View {
         List {
             Section {
                 SettingsInfoRow(title: "Email", value: viewModel.email ?? "—")
-                Button("Send Password Reset Email") {
+            } header: {
+                Text("Sign-In")
+            } footer: {
+                Text("We’ll send a reset link to this email address.")
+            }
+
+            Section {
+                Button {
                     viewModel.requestPasswordReset()
+                } label: {
+                    SettingsPrimaryActionLabel(title: "Send Password Reset Email", systemImage: "envelope")
                 }
+                .buttonStyle(.plain)
                 .disabled(viewModel.email?.isEmpty != false)
             } footer: {
-                Text(viewModel.passwordResetMessage ?? "Uses the same password-reset flow as the web app.")
+                Text(viewModel.passwordResetMessage ?? "You’ll get an email with steps to choose a new password.")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
         }

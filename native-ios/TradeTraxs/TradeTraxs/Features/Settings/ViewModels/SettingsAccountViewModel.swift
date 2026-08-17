@@ -41,7 +41,7 @@ final class SettingsAccountViewModel {
         email = authenticationCoordinator.sessionEmail
         do {
             guard let userID = await session.currentUserID else {
-                errorMessage = "Not signed in"
+                errorMessage = "Sign in to view your account."
                 isLoading = false
                 return
             }
@@ -54,7 +54,7 @@ final class SettingsAccountViewModel {
             }
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
         isLoading = false
     }
@@ -75,7 +75,7 @@ final class SettingsAccountViewModel {
                 passwordResetMessage = "Password reset email sent to \(email)."
                 ExperienceHaptics.play(.success)
             } catch {
-                passwordResetMessage = error.localizedDescription
+                passwordResetMessage = UserFacingError.message(for: error)
                 ExperienceHaptics.play(.warning)
             }
         }

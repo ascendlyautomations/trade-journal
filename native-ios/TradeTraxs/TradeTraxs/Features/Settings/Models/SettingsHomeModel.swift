@@ -15,7 +15,7 @@ struct SettingsHomeSection: Identifiable, Hashable, Sendable {
 }
 
 enum SettingsHomeModel {
-    /// Implemented / wired destinations only — future placeholders live in Remaining Work.
+    /// Destinations shown on Settings home.
     static let sections: [SettingsHomeSection] = [
         SettingsHomeSection(
             id: "account",
@@ -31,6 +31,7 @@ enum SettingsHomeModel {
             title: "Preferences",
             items: [
                 SettingsHomeItem(route: .notifications, systemImage: "bell"),
+                SettingsHomeItem(route: .appearance, systemImage: "circle.lefthalf.filled"),
             ]
         ),
         SettingsHomeSection(
@@ -42,7 +43,7 @@ enum SettingsHomeModel {
                 SettingsHomeItem(
                     route: .propFirm,
                     systemImage: "building.columns",
-                    subtitle: "Configuration"
+                    subtitle: "Rules & limits"
                 ),
                 SettingsHomeItem(route: .affiliate, systemImage: "gift"),
             ]

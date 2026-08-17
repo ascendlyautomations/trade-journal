@@ -121,8 +121,16 @@ struct TradingDayDetailView: View {
                 .experienceStyle(.headline, color: colors.primaryText)
 
             if viewModel.dayTrades.isEmpty, !viewModel.isLoading {
-                Text("No trades on this day.")
-                    .experienceStyle(.body, color: colors.secondaryText)
+                if let error = viewModel.errorMessage {
+                    ExperienceErrorState(
+                        title: "Couldn't load trades",
+                        message: error,
+                        onRetry: { viewModel.loadIfNeeded(force: true) }
+                    )
+                } else {
+                    Text("No trades on this day.")
+                        .experienceStyle(.body, color: colors.secondaryText)
+                }
             } else {
                 ForEach(viewModel.dayTrades) { trade in
                     ProfileTradeCard(
@@ -194,6 +202,14 @@ final class CalendarDayDetailLoader {
         Task { await refresh() }
     }
 
+    func loadIfNeeded(force: Bool) {
+        if force {
+            hasLoaded = false
+            errorMessage = nil
+        }
+        loadIfNeeded()
+    }
+
     func refresh() async {
         isLoading = true
         defer { isLoading = false }
@@ -261,7 +277,7 @@ final class CalendarDayDetailLoader {
             apply(fetched)
         } catch {
             // Fall back to any seeded trades in detail cache window.
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
     }
 

@@ -113,7 +113,7 @@ final class CSVImportViewModel {
                 #endif
                 await parseCurrentText(mappings: nil)
             } catch {
-                phase = .failed(error.localizedDescription)
+                phase = .failed(UserFacingError.message(for: error))
             }
         }
     }
@@ -191,7 +191,7 @@ final class CSVImportViewModel {
                 phase = .result(result)
             } catch {
                 ExperienceHaptics.play(.warning)
-                phase = .failed(error.localizedDescription)
+                phase = .failed(UserFacingError.message(for: error))
             }
             isImporting = false
         }
@@ -269,7 +269,7 @@ final class CSVImportViewModel {
 
         switch built {
         case .failure(let error):
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         case .success(let summary):
             self.summary = summary
             #if DEBUG

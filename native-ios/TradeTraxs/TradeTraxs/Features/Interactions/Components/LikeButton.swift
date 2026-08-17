@@ -16,11 +16,7 @@ struct LikeButton: View {
             pulse = true
             Task {
                 await store.toggleLike(on: target)
-                if !reduceMotion {
-                    withAnimation(ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: false)) {
-                        pulse = false
-                    }
-                } else {
+                ExperienceMotion.withAnimation(ExperienceMotion.selection, reduceMotion: reduceMotion) {
                     pulse = false
                 }
             }

@@ -26,6 +26,7 @@ struct MessageComposerBar: View {
                         .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
+                .experienceTouchTarget()
                 .disabled(isSending)
                 .accessibilityLabel("Send trade")
                 .accessibilityIdentifier("conversation.composer.trade")
@@ -36,6 +37,7 @@ struct MessageComposerBar: View {
                     .frame(width: 36, height: 36)
                     .contentShape(Rectangle())
             }
+            .experienceTouchTarget()
             .accessibilityLabel("Send photo")
             .accessibilityIdentifier("conversation.composer.photo")
             .disabled(isSending)
@@ -43,6 +45,8 @@ struct MessageComposerBar: View {
             TextField(placeholder, text: $draft, axis: .vertical)
                 .lineLimit(1...5)
                 .textFieldStyle(.plain)
+                .textInputAutocapitalization(.sentences)
+                .autocorrectionDisabled(false)
                 .padding(.horizontal, ExperienceSpacing.sm)
                 .padding(.vertical, ExperienceSpacing.xs + 2)
                 .background(
@@ -50,6 +54,11 @@ struct MessageComposerBar: View {
                     in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
                 )
                 .focused($focused)
+                .submitLabel(.send)
+                .onSubmit {
+                    guard canSend else { return }
+                    onSend()
+                }
                 .accessibilityIdentifier("conversation.composer.field")
 
             Button(action: onSend) {
@@ -62,6 +71,7 @@ struct MessageComposerBar: View {
                         .foregroundStyle(canSend ? colors.accent : colors.tertiaryText)
                 }
             }
+            .experienceTouchTarget()
             .disabled(!canSend)
             .accessibilityLabel("Send")
             .accessibilityIdentifier("conversation.composer.send")

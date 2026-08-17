@@ -226,6 +226,11 @@ final class MessagesInboxStore {
         roomUnread = updated
     }
 
+    /// Drop a failed optimistic room-unread override so the restored count can win.
+    func dropRoomUnreadOverride(roomID: RoomID) {
+        roomUnreadOverrides.removeValue(forKey: roomID)
+    }
+
     func markRoomUnread(roomID: RoomID) {
         roomUnreadOverrides.removeValue(forKey: roomID)
         var updated = roomUnread

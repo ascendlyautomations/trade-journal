@@ -5,6 +5,7 @@ struct TradeAIMessageCard: View {
     let message: TradeAIMessage
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isExpanded = true
 
     private var coachSections: TradeAICoachSections? {
@@ -24,7 +25,7 @@ struct TradeAIMessageCard: View {
                 if shouldOfferCollapse {
                     Button {
                         ExperienceHaptics.play(.selection)
-                        withAnimation(ExperienceMotion.selection) {
+                        ExperienceMotion.withAnimation(ExperienceMotion.selection, reduceMotion: reduceMotion) {
                             isExpanded.toggle()
                         }
                     } label: {

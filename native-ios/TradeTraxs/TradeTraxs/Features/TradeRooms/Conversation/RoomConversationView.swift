@@ -49,7 +49,7 @@ struct RoomConversationView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if viewModel.phase == .loaded, let room = viewModel.room {
+            if let room = viewModel.room, viewModel.showsRoomChrome {
                 header(for: room)
                 if !viewModel.channels.isEmpty {
                     RoomChannelSwitcherView(
@@ -60,7 +60,7 @@ struct RoomConversationView: View {
                 }
             }
             content
-            if viewModel.phase == .loaded, viewModel.canCompose {
+            if viewModel.showsRoomChrome, viewModel.canCompose {
                 MessageComposerBar(
                     draft: $viewModel.draft,
                     isSending: viewModel.isSending,
@@ -137,14 +137,22 @@ struct RoomConversationView: View {
     private var content: some View {
         switch viewModel.phase {
         case .idle, .loading:
-            ExperienceLoadingSpinner(label: "Loading room")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if viewModel.messages.isEmpty {
+                ExperienceLoadingSpinner(label: "Loading room")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                messageList
+            }
         case .failed(let message):
-            ExperienceErrorState(
-                title: "Couldn't load room",
-                message: message,
-                onRetry: { viewModel.retryLoad() }
-            )
+            if viewModel.messages.isEmpty {
+                ExperienceErrorState(
+                    title: "Couldn't load room",
+                    message: message,
+                    onRetry: { viewModel.retryLoad() }
+                )
+            } else {
+                messageList
+            }
         case .loaded:
             if viewModel.channels.isEmpty {
                 ExperienceEmptyState(
@@ -266,7 +274,11 @@ struct RoomConversationView: View {
             proxy.scrollTo(RoomConversationScrollAnchor.bottom, anchor: .bottom)
         }
         if animated {
-            withAnimation(.easeOut(duration: 0.22), action)
+            ExperienceMotion.withAnimation(
+                MotionCurve.easeOut.animation(duration: .fast),
+                reduceMotion: reduceMotion,
+                action
+            )
         } else {
             action()
         }

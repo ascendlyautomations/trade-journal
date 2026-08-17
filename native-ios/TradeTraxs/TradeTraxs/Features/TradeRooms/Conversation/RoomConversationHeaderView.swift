@@ -101,6 +101,7 @@ struct RoomConversationHeaderView: View {
                 .background(colors.fillSecondary, in: Circle())
         }
         .buttonStyle(.plain)
+        .experienceTouchTarget()
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier)
     }

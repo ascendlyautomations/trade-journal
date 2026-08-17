@@ -9,6 +9,9 @@ struct TradeJournalCard: View {
     let accountName: String?
     let imagePipeline: any ImagePipeline
     let onOpen: () -> Void
+    var onShare: (() -> Void)? = nil
+    var onEdit: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
@@ -65,6 +68,39 @@ struct TradeJournalCard: View {
             }
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                onOpen()
+            } label: {
+                Label("Open", systemImage: "chart.xyaxis.line")
+            }
+            if let onShare {
+                Button {
+                    onShare()
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+            if let onEdit {
+                Button {
+                    onEdit()
+                } label: {
+                    Label("Edit", systemImage: "square.and.pencil")
+                }
+            }
+            if let onDelete {
+                Divider()
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        } preview: {
+            TradeJournalCardPreview(trade: trade, accountName: accountName)
+                .frame(width: 320)
+                .padding()
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilitySummary)
         .accessibilityHint("Opens trade detail")
@@ -284,5 +320,50 @@ struct TradeJournalCard: View {
         }
         parts.append(visibilityTitle)
         return parts.joined(separator: ", ")
+    }
+}
+
+/// Lightweight context-menu preview — no network, no engagement chrome.
+private struct TradeJournalCardPreview: View {
+    let trade: Trade
+    let accountName: String?
+
+    @Environment(\.themeColors) private var colors
+    @Environment(\.experienceTheme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            HStack {
+                Text(trade.symbol.ticker)
+                    .experienceStyle(.headline, color: colors.primaryText)
+                Spacer()
+                Text(TradeDisplay.pnlText(trade.realizedPnL))
+                    .experienceStyle(
+                        .metric,
+                        color: theme.metricColor(
+                            for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
+                        )
+                    )
+            }
+            HStack(spacing: ExperienceSpacing.xs) {
+                ExperienceTag(
+                    title: TradeDisplay.sideTitle(trade.side),
+                    tone: trade.side == .long ? .success : .error
+                )
+                Text(TradeDisplay.dateText(trade.createdAt))
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            }
+            if let accountName, !accountName.isEmpty {
+                Text(accountName)
+                    .experienceStyle(.caption, color: colors.tertiaryText)
+            }
+            if let note = trade.notePreview, !note.isEmpty {
+                Text(note)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .lineLimit(3)
+            }
+        }
+        .padding()
+        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
     }
 }

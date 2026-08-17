@@ -157,12 +157,29 @@ final class ExploreViewModel {
         viewerFollowingIDs.contains(trader.id)
     }
 
+    var pendingUnfollow: ExploreTraderSuggestion?
+
     func toggleFollow(_ trader: ExploreTraderSuggestion) {
         guard let viewerID, viewerID != trader.id else { return }
         guard !inFlightFollow.contains(trader.id) else { return }
+        if isFollowing(trader) {
+            ExperienceHaptics.play(.warning)
+            pendingUnfollow = trader
+            return
+        }
+        performFollowChange(trader, currentlyFollowing: false)
+    }
+
+    func confirmUnfollow() {
+        guard let trader = pendingUnfollow else { return }
+        pendingUnfollow = nil
+        performFollowChange(trader, currentlyFollowing: true)
+    }
+
+    private func performFollowChange(_ trader: ExploreTraderSuggestion, currentlyFollowing: Bool) {
+        guard let viewerID else { return }
         ExperienceHaptics.play(.selection)
         inFlightFollow.insert(trader.id)
-        let currentlyFollowing = isFollowing(trader)
         store.setFollowing(trader.id, isFollowing: !currentlyFollowing)
         detailCache.setViewerFollows(trader.id, isFollowing: !currentlyFollowing)
 
@@ -404,7 +421,7 @@ final class ExploreViewModel {
             searchPhase = .idle
         } catch {
             guard !Task.isCancelled else { return }
-            searchPhase = .failed(error.localizedDescription)
+            searchPhase = .failed(UserFacingError.message(for: error))
         }
     }
 

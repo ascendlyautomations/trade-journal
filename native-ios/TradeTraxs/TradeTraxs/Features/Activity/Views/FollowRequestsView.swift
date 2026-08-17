@@ -31,8 +31,7 @@ struct FollowRequestsView: View {
             switch viewModel.phase {
             case .idle, .loading:
                 if viewModel.rows.isEmpty {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ExperienceListSkeleton(style: .personRow, rowCount: 6)
                 } else {
                     listContent
                 }

@@ -4,6 +4,7 @@ import SwiftUI
 struct CommentListView: View {
     @Bindable var viewModel: CommentsViewModel
     let currentUserID: ProfileID?
+    @State private var pendingDelete: InteractionComment?
 
     @Environment(\.themeColors) private var colors
 
@@ -35,9 +36,12 @@ struct CommentListView: View {
                     onRetry: { Task { await viewModel.refresh() } }
                 )
             } else if viewModel.topLevelComments.isEmpty {
-                Text("No comments yet")
-                    .experienceStyle(.body, color: colors.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                ExperienceEmptyState(
+                    icon: .messages,
+                    title: "No comments yet",
+                    message: "Start the discussion — ask a question or share what you noticed."
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 LazyVStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                     ForEach(viewModel.topLevelComments) { comment in
@@ -45,7 +49,10 @@ struct CommentListView: View {
                             comment: comment,
                             isOwn: currentUserID == comment.authorProfileID,
                             onDelete: currentUserID == comment.authorProfileID
-                                ? { Task { await viewModel.delete(comment) } }
+                                ? {
+                                    ExperienceHaptics.play(.warning)
+                                    pendingDelete = comment
+                                }
                                 : nil
                         )
                         ForEach(viewModel.replies(to: comment.id)) { reply in
@@ -53,7 +60,10 @@ struct CommentListView: View {
                                 comment: reply,
                                 isOwn: currentUserID == reply.authorProfileID,
                                 onDelete: currentUserID == reply.authorProfileID
-                                    ? { Task { await viewModel.delete(reply) } }
+                                    ? {
+                                        ExperienceHaptics.play(.warning)
+                                        pendingDelete = reply
+                                    }
                                     : nil
                             )
                             .padding(.leading, ExperienceSpacing.xl)
@@ -63,6 +73,25 @@ struct CommentListView: View {
             }
 
             CommentComposerView(viewModel: viewModel)
+        }
+        .confirmationDialog(
+            "Delete comment?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                guard let comment = pendingDelete else { return }
+                pendingDelete = nil
+                Task { await viewModel.delete(comment) }
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDelete = nil
+            }
+        } message: {
+            Text("This comment will be removed.")
         }
         .accessibilityIdentifier("interaction.comment.list")
     }

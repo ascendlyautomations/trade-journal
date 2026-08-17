@@ -29,21 +29,40 @@ struct SettingsProfileView: View {
                 }
             }
 
-            Section("Public Identity") {
+            Section {
                 if let username = viewModel.profile?.username {
                     SettingsInfoRow(title: "Username", value: "@\(username)")
                 }
-                TextField("Display name", text: $viewModel.draftDisplayName)
-                TextField("Bio", text: $viewModel.draftBio, axis: .vertical)
-                    .lineLimit(3...6)
+                SettingsLabeledField(title: "Display Name") {
+                    TextField("Your name", text: $viewModel.draftDisplayName)
+                        .textInputAutocapitalization(.words)
+                }
+                SettingsLabeledField(title: "Bio") {
+                    TextField("Tell traders about yourself", text: $viewModel.draftBio, axis: .vertical)
+                        .lineLimit(3...6)
+                }
+            } header: {
+                Text("Public Identity")
+            } footer: {
+                Text("This is how other traders see you on TradeTraxs.")
             }
 
-            Section("Trading") {
-                TextField("Trading style", text: $viewModel.draftTradingStyle)
-                TextField("Primary market", text: $viewModel.draftPrimaryMarket)
-                if let traderType = viewModel.profile?.traderType {
-                    SettingsInfoRow(title: "Trader type", value: traderType.rawValue)
+            Section {
+                SettingsLabeledField(title: "Trading Style") {
+                    TextField("e.g. Scalper, Swing", text: $viewModel.draftTradingStyle)
+                        .textInputAutocapitalization(.words)
                 }
+                SettingsLabeledField(title: "Primary Market") {
+                    TextField("e.g. Futures, Options", text: $viewModel.draftPrimaryMarket)
+                        .textInputAutocapitalization(.words)
+                }
+                if let traderType = viewModel.profile?.traderType {
+                    SettingsInfoRow(title: "Trader Type", value: traderType.rawValue)
+                }
+            } header: {
+                Text("Trading")
+            } footer: {
+                Text("Optional details shown on your public profile.")
             }
 
             Section {
@@ -57,6 +76,8 @@ struct SettingsProfileView: View {
                 )
             } header: {
                 Text("Privacy")
+            } footer: {
+                Text("Control what other traders can see.")
             }
 
             if let saveMessage = viewModel.saveMessage {
@@ -65,17 +86,21 @@ struct SettingsProfileView: View {
                         .experienceStyle(.footnote, color: colors.success)
                 }
             }
-
-            Section {
-                Button("Save Changes") {
-                    viewModel.save()
-                }
-                .disabled(viewModel.profile == nil)
-            }
         }
         .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Profile")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    viewModel.save()
+                }
+                .fontWeight(.semibold)
+                .disabled(viewModel.profile == nil)
+                .accessibilityIdentifier("settings.profile.save")
+            }
+        }
         .overlay {
             if viewModel.isLoading {
                 ProgressView()

@@ -90,30 +90,72 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
             bucket: Self.storageBucket(for: purpose),
             storage: storage
         ) {
-            let (data, response) = try await urlSession.data(from: url)
-            let status = (response as? HTTPURLResponse)?.statusCode
-            if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-                throw AppError.network(.server(statusCode: http.statusCode, message: nil))
-            }
-            if ImageFidelityTrace.isEnabled {
-                ImageFidelityTrace.log(
-                    ImageFidelityTrace.StageReport(
-                        stage: "pipeline/http-response",
-                        url: url.absoluteString,
-                        httpStatus: status,
-                        byteCount: data.count,
-                        pixelSize: ImageFidelityTrace.pixelSize(of: data),
-                        resizingNote: "raw bytes before downsampleIfNeeded"
-                    )
-                )
-            }
-            return data
+            return try await fetchURLWithTransientRetry(url)
         }
 
         // Last resort — authenticated download (private buckets / unconfigured public URL).
         return try await downloadService.download(
             DownloadRequest(bucket: Self.storageBucket(for: purpose).rawValue, path: identifier)
         )
+    }
+
+    /// Short bounded retry for flaky cellular / brief outages (idempotent GET).
+    private func fetchURLWithTransientRetry(_ url: URL) async throws -> Data {
+        let maximumAttempts = 3
+        var lastError: Error?
+        for attempt in 1...maximumAttempts {
+            do {
+                let (data, response) = try await urlSession.data(from: url)
+                let status = (response as? HTTPURLResponse)?.statusCode
+                if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                    let serverError = AppError.network(.server(statusCode: http.statusCode, message: nil))
+                    if (500..<600).contains(http.statusCode), attempt < maximumAttempts {
+                        lastError = serverError
+                        let delay = pow(2.0, Double(attempt - 1)) * 0.25
+                        try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                        continue
+                    }
+                    throw serverError
+                }
+                if ImageFidelityTrace.isEnabled {
+                    ImageFidelityTrace.log(
+                        ImageFidelityTrace.StageReport(
+                            stage: "pipeline/http-response",
+                            url: url.absoluteString,
+                            httpStatus: status,
+                            byteCount: data.count,
+                            pixelSize: ImageFidelityTrace.pixelSize(of: data),
+                            resizingNote: "raw bytes before downsampleIfNeeded"
+                        )
+                    )
+                }
+                return data
+            } catch let error as URLError where Self.isTransientURLError(error) {
+                lastError = error
+                guard attempt < maximumAttempts else { break }
+                let delay = pow(2.0, Double(attempt - 1)) * 0.25
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+        }
+        if let lastError {
+            throw lastError
+        }
+        throw AppError.network(.connectivity)
+    }
+
+    private static func isTransientURLError(_ error: URLError) -> Bool {
+        switch error.code {
+        case .timedOut,
+             .networkConnectionLost,
+             .notConnectedToInternet,
+             .cannotConnectToHost,
+             .dnsLookupFailed,
+             .internationalRoamingOff,
+             .dataNotAllowed:
+            return true
+        default:
+            return false
+        }
     }
 
     private static func storageBucket(for purpose: ImagePurpose) -> StorageBucket {

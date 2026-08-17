@@ -28,7 +28,7 @@ struct ManageAccountEditorView: View {
 
     var body: some View {
         Form {
-            Section("Account") {
+            Section {
                 Picker("Type", selection: $draft.category) {
                     Text("Personal").tag(TradingAccountCategory.personal)
                     Text("Broker").tag(TradingAccountCategory.broker)
@@ -44,17 +44,23 @@ struct ManageAccountEditorView: View {
                     }
                 }
 
-                TextField("Account name", text: $draft.name)
-                    .textInputAutocapitalization(.words)
-                    .accessibilityIdentifier("manageAccounts.name")
+                SettingsLabeledField(title: "Account Name") {
+                    TextField("Name", text: $draft.name)
+                        .textInputAutocapitalization(.words)
+                        .accessibilityIdentifier("manageAccounts.name")
+                }
 
-                TextField("Account value", text: $draft.sizeDigits)
-                    .keyboardType(.numberPad)
-                    .accessibilityIdentifier("manageAccounts.size")
+                SettingsLabeledField(title: "Account Value", helper: "Starting or current account size") {
+                    TextField("0", text: $draft.sizeDigits)
+                        .keyboardType(.numberPad)
+                        .accessibilityIdentifier("manageAccounts.size")
+                }
 
-                TextField("Account ID (optional)", text: $draft.accountNumber)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
+                SettingsLabeledField(title: "Account ID", helper: "Optional broker or firm account number") {
+                    TextField("Optional", text: $draft.accountNumber)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
 
                 if draft.category != .backtest {
                     Picker("Mode", selection: $draft.mode) {
@@ -65,42 +71,46 @@ struct ManageAccountEditorView: View {
                     }
                 }
 
-                TextField("Note (optional)", text: $draft.note, axis: .vertical)
-                    .lineLimit(2...4)
+                SettingsLabeledField(title: "Note", helper: "Optional reminder for yourself") {
+                    TextField("Optional", text: $draft.note, axis: .vertical)
+                        .lineLimit(2...4)
+                }
+            } header: {
+                Text("Account")
+            } footer: {
+                Text("These details help you organize trades across accounts.")
             }
 
             if draft.category == .propFirm {
-                Section("Prop Firm Rules") {
-                    TextField(
-                        "Max drawdown ($)",
-                        text: bindingDecimal(\.maxDrawdown)
-                    )
-                    .keyboardType(.decimalPad)
-                    TextField(
-                        "Daily drawdown ($)",
-                        text: bindingDecimal(\.dailyDrawdown)
-                    )
-                    .keyboardType(.decimalPad)
-                    TextField(
-                        "Profit target ($)",
-                        text: bindingDecimal(\.profitTarget)
-                    )
-                    .keyboardType(.decimalPad)
-                    TextField(
-                        "Consistency (%)",
-                        text: bindingDecimal(\.consistencyPercent)
-                    )
-                    .keyboardType(.decimalPad)
-                    TextField(
-                        "Winning days required",
-                        text: bindingInt(\.winningDaysRequired)
-                    )
-                    .keyboardType(.numberPad)
-                    TextField(
-                        "Winning day threshold ($)",
-                        text: bindingDecimal(\.winningDayThreshold)
-                    )
-                    .keyboardType(.decimalPad)
+                Section {
+                    SettingsLabeledField(title: "Max Drawdown", helper: "Dollars") {
+                        TextField("0", text: bindingDecimal(\.maxDrawdown))
+                            .keyboardType(.decimalPad)
+                    }
+                    SettingsLabeledField(title: "Daily Drawdown", helper: "Dollars") {
+                        TextField("0", text: bindingDecimal(\.dailyDrawdown))
+                            .keyboardType(.decimalPad)
+                    }
+                    SettingsLabeledField(title: "Profit Target", helper: "Dollars") {
+                        TextField("0", text: bindingDecimal(\.profitTarget))
+                            .keyboardType(.decimalPad)
+                    }
+                    SettingsLabeledField(title: "Consistency", helper: "Percent") {
+                        TextField("0", text: bindingDecimal(\.consistencyPercent))
+                            .keyboardType(.decimalPad)
+                    }
+                    SettingsLabeledField(title: "Winning Days Required") {
+                        TextField("0", text: bindingInt(\.winningDaysRequired))
+                            .keyboardType(.numberPad)
+                    }
+                    SettingsLabeledField(title: "Winning Day Threshold", helper: "Dollars") {
+                        TextField("0", text: bindingDecimal(\.winningDayThreshold))
+                            .keyboardType(.decimalPad)
+                    }
+                } header: {
+                    Text("Prop Firm Rules")
+                } footer: {
+                    Text("Optional limits from your prop firm challenge or funded account.")
                 }
             }
 
@@ -114,6 +124,7 @@ struct ManageAccountEditorView: View {
             }
         }
         .experienceNavigationTitle(title)
+        .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
@@ -122,6 +133,7 @@ struct ManageAccountEditorView: View {
                 Button(mode.isCreate ? "Add" : "Save") {
                     Task { await save() }
                 }
+                .fontWeight(.semibold)
                 .disabled(viewModel.isSaving || draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityIdentifier("manageAccounts.save")
             }

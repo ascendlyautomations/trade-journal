@@ -13,6 +13,8 @@ final class TradeRoomsHomeViewModel {
     private(set) var phase: Phase = .idle
     private(set) var viewerID: ProfileID?
     var searchText = ""
+    var pendingLeaveRoomID: RoomID?
+    var showsLeaveRoomConfirmation = false
 
     private let messages: any MessageRepository
     private let rooms: any RoomRepository
@@ -103,6 +105,24 @@ final class TradeRoomsHomeViewModel {
         inboxStore.toggleMute(roomID: roomID)
     }
 
+    func requestLeaveRoom(id: RoomID) {
+        ExperienceHaptics.play(.warning)
+        pendingLeaveRoomID = id
+        showsLeaveRoomConfirmation = true
+    }
+
+    func cancelLeaveRoom() {
+        pendingLeaveRoomID = nil
+        showsLeaveRoomConfirmation = false
+    }
+
+    func confirmLeaveRoom() async {
+        guard let id = pendingLeaveRoomID else { return }
+        pendingLeaveRoomID = nil
+        showsLeaveRoomConfirmation = false
+        await leaveRoom(id: id)
+    }
+
     func leaveRoom(id: RoomID) async {
         ExperienceHaptics.play(.warning)
         guard let viewerID else {
@@ -116,6 +136,7 @@ final class TradeRoomsHomeViewModel {
         do {
             try await rooms.leave(roomID: id, profileID: viewerID)
             inboxStore.removeRoom(id: id)
+            ExperienceHaptics.play(.success)
         } catch {
             ExperienceHaptics.play(.warning)
         }

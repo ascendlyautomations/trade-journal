@@ -9,6 +9,7 @@ struct LeaderboardPodiumView: View {
     let onEntranceFinished: () -> Void
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
 
     var body: some View {
@@ -19,14 +20,14 @@ struct LeaderboardPodiumView: View {
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.vertical, ExperienceSpacing.md)
-        .opacity(appeared ? 1 : 0.01)
-        .offset(y: appeared ? 0 : 16)
+        .opacity(appeared ? 1 : (animateEntrance && !reduceMotion ? 0.01 : 1))
+        .offset(y: appeared || reduceMotion || !animateEntrance ? 0 : 16)
         .onAppear {
             guard animateEntrance else {
                 appeared = true
                 return
             }
-            withAnimation(.spring(response: 0.55, dampingFraction: 0.86)) {
+            ExperienceMotion.withAnimation(MotionSpring.gentle.animation, reduceMotion: reduceMotion) {
                 appeared = true
             }
             onEntranceFinished()

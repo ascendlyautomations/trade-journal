@@ -12,8 +12,22 @@ final class SettingsExperienceTests: XCTestCase {
         let allRoutes = sections.flatMap(\.items).map(\.route)
         XCTAssertTrue(allRoutes.contains(.account))
         XCTAssertTrue(allRoutes.contains(.notifications))
+        XCTAssertTrue(allRoutes.contains(.appearance))
         XCTAssertTrue(allRoutes.contains(.subscription))
         XCTAssertFalse(allRoutes.contains(.home))
+    }
+
+    func testAppearanceSelectionOnlyRecolorsViaThemeManager() {
+        let defaults = UserDefaults(suiteName: "settings.appearance.tests.\(UUID().uuidString)")!
+        let manager = ThemeManager(
+            persistence: UserDefaultsThemePersistence(defaults: defaults)
+        )
+        manager.select(.system)
+        let viewModel = SettingsAppearanceViewModel(themeManager: manager)
+        XCTAssertEqual(viewModel.model.options.map(\.id), [.system, .tradeTraxs])
+        viewModel.select(.tradeTraxs, reduceMotion: true)
+        XCTAssertEqual(manager.selectedIdentifier, .tradeTraxs)
+        XCTAssertEqual(viewModel.model.selectedTheme, .tradeTraxs)
     }
 
     func testOpenSettingsBuildsHierarchicalBackStack() {

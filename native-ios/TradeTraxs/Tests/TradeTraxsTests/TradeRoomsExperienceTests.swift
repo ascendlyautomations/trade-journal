@@ -86,13 +86,15 @@ final class TradeRoomsExperienceTests: XCTestCase {
         let desk = TradeRoomsFixtures.deskRoomID
         XCTAssertEqual(store.roomUnread[desk] ?? 0, 5)
 
+        let navStore = NavigationStore()
+        navStore.sessionPhase = .authenticated
         let viewModel = TradeRoomsHomeViewModel(
             messages: TradeRoomsStubMessageRepository(),
             rooms: TradeRoomsStubRoomRepository(),
             profiles: TradeRoomsStubProfileRepository(),
             session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
             detailCache: DetailPresentationCache(),
-            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            navigationCoordinator: NavigationCoordinator(store: navStore),
             inboxStore: store
         )
         viewModel.loadIfNeeded()

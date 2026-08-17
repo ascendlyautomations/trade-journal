@@ -34,8 +34,7 @@ struct ActivityHomeView: View {
             switch viewModel.phase {
             case .idle, .loading:
                 if viewModel.sections.isEmpty {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ExperienceListSkeleton(style: .inboxRow, rowCount: 8)
                 } else {
                     listContent
                 }
@@ -91,27 +90,21 @@ struct ActivityHomeView: View {
     }
 
     private var listContent: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                if viewModel.pendingFollowRequestCount > 0 {
+        List {
+            if viewModel.pendingFollowRequestCount > 0 {
+                Section {
                     ActivityFollowRequestsBanner(
                         count: viewModel.pendingFollowRequestCount,
                         action: { viewModel.openFollowRequests() }
                     )
-                    ExperienceDivider()
-                        .padding(.leading, ExperienceSpacing.md)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
+            }
 
-                ForEach(viewModel.sections) { section in
-                    Text(section.section.rawValue)
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .fontWeight(.semibold)
-                        .textCase(.uppercase)
-                        .padding(.horizontal, ExperienceSpacing.md)
-                        .padding(.top, ExperienceSpacing.md)
-                        .padding(.bottom, ExperienceSpacing.xs)
-                        .accessibilityAddTraits(.isHeader)
-
+            ForEach(viewModel.sections) { section in
+                Section {
                     ForEach(section.rows) { row in
                         ActivityRowView(
                             row: row,
@@ -121,20 +114,68 @@ struct ActivityHomeView: View {
                                 { viewModel.openActor(id) }
                             }
                         )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(colors.backgroundPrimary)
+                        .listRowSeparator(.hidden)
                         .onAppear {
                             viewModel.loadMoreIfNeeded(currentID: row.id)
                         }
-                        ExperienceDivider()
-                            .padding(.leading, 68)
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            if row.isUnread {
+                                Button {
+                                    viewModel.markRead(row: row)
+                                } label: {
+                                    Label("Read", systemImage: "envelope.open")
+                                }
+                                .tint(colors.info)
+                            }
+                        }
+                        .contextMenu {
+                            Button {
+                                viewModel.open(row)
+                            } label: {
+                                Label("Open", systemImage: "arrow.up.right.square")
+                            }
+                            if row.isUnread {
+                                Button {
+                                    viewModel.markRead(row: row)
+                                } label: {
+                                    Label("Mark as Read", systemImage: "envelope.open")
+                                }
+                            }
+                            if let actorID = row.notification.actorProfileID {
+                                Button {
+                                    viewModel.openActor(actorID)
+                                } label: {
+                                    Label("View Profile", systemImage: "person.crop.circle")
+                                }
+                            }
+                        } preview: {
+                            ActivityRowView(
+                                row: row,
+                                imagePipeline: imagePipeline,
+                                onSelect: {},
+                                onSelectActor: nil
+                            )
+                            .frame(width: 320)
+                            .padding(.vertical, ExperienceSpacing.xs)
+                        }
                     }
+                } header: {
+                    Text(section.section.rawValue)
                 }
+            }
 
-                if viewModel.isLoadingMore {
+            if viewModel.isLoadingMore {
+                Section {
                     ProgressView()
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, ExperienceSpacing.md)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
             }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 }

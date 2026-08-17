@@ -149,6 +149,19 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         }
     }
 
+    /// App foreground — reconnect socket and rejoin active watches if the WS died.
+    func resumeIfNeeded() {
+        guard isActive else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            if let live = self.realtime as? LiveSupabaseRealtimeProvider {
+                await live.resumeAfterForeground()
+            } else if !self.realtime.isConnected {
+                await self.establishConnectionWithRetry()
+            }
+        }
+    }
+
     private func establishConnectionWithRetry() async {
         var attempt = 1
         while isActive, attempt <= reconnectPolicy.maximumAttempts {

@@ -39,7 +39,7 @@ final class SettingsProfileViewModel {
         isLoading = profile == nil
         do {
             guard let userID = await session.currentUserID else {
-                errorMessage = "Not signed in"
+                errorMessage = "Sign in to continue."
                 isLoading = false
                 return
             }
@@ -47,7 +47,7 @@ final class SettingsProfileViewModel {
             apply(loaded)
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
         isLoading = false
     }
@@ -68,7 +68,7 @@ final class SettingsProfileViewModel {
                 saveMessage = "Profile saved"
                 ExperienceHaptics.play(.success)
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
                 ExperienceHaptics.play(.warning)
             }
         }

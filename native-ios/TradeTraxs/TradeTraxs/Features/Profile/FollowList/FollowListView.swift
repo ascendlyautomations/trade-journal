@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Production Followers / Following list — Instagram-style, TradeTraxs Experience chrome.
 struct FollowListView: View {
@@ -99,34 +100,98 @@ struct FollowListView: View {
     }
 
     private var listContent: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                if viewModel.showsFilteredEmpty {
-                    Text("No results for “\(viewModel.searchText)”")
-                        .experienceStyle(.subheadline, color: colors.secondaryText)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, ExperienceSpacing.xl)
-                } else {
-                    ForEach(viewModel.visibleItems) { profile in
+        List {
+            if viewModel.showsFilteredEmpty {
+                Text("No results for “\(viewModel.searchText)”")
+                    .experienceStyle(.subheadline, color: colors.secondaryText)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, ExperienceSpacing.xl)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            } else {
+                ForEach(viewModel.visibleItems) { profile in
+                    FollowListRowView(
+                        profile: profile,
+                        imagePipeline: imagePipeline,
+                        isFollowing: viewModel.isFollowing(profile),
+                        showsRemove: viewModel.kind == .followers && viewModel.isOwnList,
+                        onOpen: { viewModel.openProfile(profile) },
+                        onToggleFollow: { viewModel.toggleFollow(for: profile) },
+                        onRemove: { viewModel.requestRemove(profile) }
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(colors.backgroundPrimary)
+                    .listRowSeparator(.hidden)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if viewModel.kind == .followers && viewModel.isOwnList {
+                            Button(role: .destructive) {
+                                viewModel.requestRemove(profile)
+                            } label: {
+                                Label("Remove", systemImage: "person.badge.minus")
+                            }
+                        }
+                        if viewModel.kind == .following && viewModel.isFollowing(profile) {
+                            Button(role: .destructive) {
+                                viewModel.toggleFollow(for: profile)
+                            } label: {
+                                Label("Unfollow", systemImage: "person.badge.minus")
+                            }
+                        }
+                    }
+                    .contextMenu {
+                        Button {
+                            viewModel.openProfile(profile)
+                        } label: {
+                            Label("View Profile", systemImage: "person.crop.circle")
+                        }
+                        Button {
+                            UIPasteboard.general.string = "@\(profile.username)"
+                            ExperienceHaptics.play(.success)
+                        } label: {
+                            Label("Copy Username", systemImage: "doc.on.doc")
+                        }
+                        if viewModel.isFollowing(profile) {
+                            Button(role: .destructive) {
+                                viewModel.toggleFollow(for: profile)
+                            } label: {
+                                Label("Unfollow", systemImage: "person.badge.minus")
+                            }
+                        } else {
+                            Button {
+                                viewModel.toggleFollow(for: profile)
+                            } label: {
+                                Label("Follow", systemImage: "person.badge.plus")
+                            }
+                        }
+                        if viewModel.kind == .followers && viewModel.isOwnList {
+                            Divider()
+                            Button(role: .destructive) {
+                                viewModel.requestRemove(profile)
+                            } label: {
+                                Label("Remove Follower", systemImage: "person.badge.minus")
+                            }
+                        }
+                    } preview: {
                         FollowListRowView(
                             profile: profile,
                             imagePipeline: imagePipeline,
                             isFollowing: viewModel.isFollowing(profile),
-                            showsRemove: viewModel.kind == .followers && viewModel.isOwnList,
-                            onOpen: { viewModel.openProfile(profile) },
-                            onToggleFollow: { viewModel.toggleFollow(for: profile) },
-                            onRemove: { viewModel.requestRemove(profile) }
+                            showsRemove: false,
+                            onOpen: {},
+                            onToggleFollow: {},
+                            onRemove: {}
                         )
-                        ExperienceDivider()
-                            .padding(.leading, ExperienceSpacing.lg + 48 + ExperienceSpacing.md)
+                        .frame(width: 320)
                     }
                 }
             }
-            .animation(
-                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                value: viewModel.visibleItems.map(\.id)
-            )
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .animation(
+            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+            value: viewModel.visibleItems.map(\.id)
+        )
     }
 
     private var skeleton: some View {

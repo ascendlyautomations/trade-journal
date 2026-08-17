@@ -66,38 +66,41 @@ struct SettingsNotificationsView: View {
     @ViewBuilder
     private var rootContent: some View {
         Section {
-            SettingsInfoRow(title: "Push Notifications", value: viewModel.systemPushStatusLabel)
+            SettingsInfoRow(title: "iOS Permission", value: viewModel.systemPushStatusLabel)
             if viewModel.showsOpenSystemSettings {
                 Button {
                     viewModel.openSystemSettings()
                 } label: {
                     SettingsNavigationRow(
-                        title: "Open Settings",
-                        subtitle: "Enable notifications for TradeTraxs in iOS Settings",
+                        title: "Open iOS Settings",
+                        subtitle: "Enable notifications for TradeTraxs",
                         systemImage: "gear"
                     )
                 }
                 .buttonStyle(.plain)
             }
+        } header: {
+            Text("Device")
         } footer: {
-            Text("This is the iOS system permission. It is separate from the in-app notification toggles below.")
-                .experienceStyle(.footnote, color: colors.secondaryText)
+            Text("This is your phone’s permission. It’s separate from the preferences below.")
         }
 
         Section {
             SettingsToggleRow(
                 title: NotificationPreferenceKey.notificationsEnabled.title,
-                subtitle: "Master switch for TradeTraxs in-app notification preferences",
+                subtitle: NotificationPreferenceKey.notificationsEnabled.subtitle,
                 isOn: Binding(
                     get: { viewModel.binding(for: .notificationsEnabled) },
                     set: { viewModel.set(.notificationsEnabled, enabled: $0) }
                 )
             )
         } header: {
-            Text("In-App Preferences")
+            Text("Notifications")
+        } footer: {
+            Text("Choose which notifications you’d like to receive.")
         }
 
-        Section("Categories") {
+        Section {
             ForEach(
                 [
                     NotificationPreferenceCategory.messages,
@@ -116,6 +119,10 @@ struct SettingsNotificationsView: View {
                 .buttonStyle(.plain)
                 .disabled(!viewModel.masterEnabled)
             }
+        } header: {
+            Text("Categories")
+        } footer: {
+            Text("Turn a category off to pause that type of alert.")
         }
 
         if case .failed(let message) = viewModel.phase {
@@ -133,6 +140,7 @@ struct SettingsNotificationsView: View {
             ForEach(category.keys, id: \.self) { key in
                 SettingsToggleRow(
                     title: key.title,
+                    subtitle: key.subtitle,
                     isOn: Binding(
                         get: { viewModel.binding(for: key) },
                         set: { viewModel.set(key, enabled: $0) }
@@ -143,6 +151,8 @@ struct SettingsNotificationsView: View {
         } footer: {
             if !viewModel.masterEnabled {
                 Text("Turn on Allow Notifications to deliver these categories.")
+            } else {
+                Text(category.sectionFooter)
             }
         }
     }

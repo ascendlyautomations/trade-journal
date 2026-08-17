@@ -139,4 +139,71 @@ extension NotificationPreferenceKey {
         case .announcementsEnabled: return "Announcements"
         }
     }
+
+    /// Short helper shown under the toggle title.
+    var subtitle: String? {
+        switch self {
+        case .notificationsEnabled:
+            return "Turns all TradeTraxs notifications on or off"
+        case .likesEnabled:
+            return "When someone likes your posts or trades"
+        case .commentsEnabled:
+            return "When someone comments on your content"
+        case .repliesEnabled:
+            return "When someone replies to your comments"
+        case .mentionsEnabled:
+            return "When someone mentions you"
+        case .reactionsEnabled:
+            return "When someone reacts to your messages"
+        case .followersEnabled:
+            return "When someone starts following you"
+        case .followRequestsEnabled:
+            return "When someone requests to follow your private profile"
+        case .followRequestAcceptsEnabled:
+            return "When your follow request is accepted"
+        case .directMessagesEnabled:
+            return "New direct messages"
+        case .storyRepliesEnabled:
+            return "Replies to your stories"
+        case .sharesEnabled:
+            return "When someone shares content with you"
+        case .roomMessagesEnabled:
+            return "New messages in trade rooms you belong to"
+        case .roomMentionsEnabled:
+            return "When you’re mentioned in a trade room"
+        case .roomJoinsEnabled:
+            return "When someone joins a room you own"
+        case .achievementLikesEnabled:
+            return "Likes on your achievements"
+        case .achievementCommentsEnabled:
+            return "Comments on your achievements"
+        case .achievementUnlocksEnabled:
+            return "When you unlock a new achievement"
+        case .productUpdatesEnabled:
+            return "New features and product news"
+        case .maintenanceEnabled:
+            return "Planned downtime and service notices"
+        case .announcementsEnabled:
+            return "Important TradeTraxs announcements"
+        }
+    }
+}
+
+extension NotificationPreferenceCategory {
+    var sectionFooter: String {
+        switch self {
+        case .master:
+            return "Choose which notifications you’d like to receive."
+        case .messages:
+            return "Alerts for direct messages, story replies, and shares."
+        case .social:
+            return "Activity on your posts, profile, and follows."
+        case .rooms:
+            return "Updates from trade rooms you’re in."
+        case .achievements:
+            return "Activity related to achievements."
+        case .product:
+            return "News and notices from TradeTraxs."
+        }
+    }
 }

@@ -49,8 +49,18 @@ struct SettingsTradingAccountsView: View {
             let rows = propFirmOnly ? viewModel.propAccounts : viewModel.accounts
             if rows.isEmpty, !viewModel.isLoading {
                 Section {
-                    Text(propFirmOnly ? "No prop firm accounts yet." : "No trading accounts yet.")
-                        .experienceStyle(.body, color: colors.secondaryText)
+                    SettingsIntroBlock(
+                        title: propFirmOnly ? "No prop firm accounts yet" : "No trading accounts yet",
+                        message: propFirmOnly
+                            ? "Add a prop firm account from Manage Accounts to track challenge rules and limits here."
+                            : "Add an account to organize your trades by broker, prop firm, or backtest."
+                    )
+                } footer: {
+                    Text(
+                        propFirmOnly
+                            ? "Prop firm accounts appear here once you’ve added one."
+                            : "Tap + to create your first account."
+                    )
                 }
             } else {
                 Section {
@@ -59,7 +69,7 @@ struct SettingsTradingAccountsView: View {
                             editorPresentation = .edit(account)
                         } label: {
                             HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                                     Text(TradingAccountDisplay.title(for: account, audience: .owner))
                                         .experienceStyle(.body, color: colors.primaryText)
                                     Text(viewModel.subtitle(for: account))
@@ -72,15 +82,16 @@ struct SettingsTradingAccountsView: View {
                                 }
                                 Spacer(minLength: 0)
                                 Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
+                                    .font(.footnote.weight(.semibold))
                                     .foregroundStyle(colors.tertiaryText)
                             }
-                            .padding(.vertical, 2)
+                            .padding(.vertical, ExperienceSpacing.xs)
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("settings.account.\(account.id.rawValue)")
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button {
+                                ExperienceHaptics.play(.selection)
                                 Task {
                                     await viewModel.setActive(id: account.id, isActive: !account.isActive)
                                 }
@@ -89,9 +100,29 @@ struct SettingsTradingAccountsView: View {
                             }
                             .tint(account.isActive ? colors.secondaryText : colors.accent)
                         }
+                        .contextMenu {
+                            Button {
+                                editorPresentation = .edit(account)
+                            } label: {
+                                Label("Edit", systemImage: "square.and.pencil")
+                            }
+                            Button {
+                                ExperienceHaptics.play(.selection)
+                                Task {
+                                    await viewModel.setActive(id: account.id, isActive: !account.isActive)
+                                }
+                            } label: {
+                                Label(
+                                    account.isActive ? "Deactivate" : "Activate",
+                                    systemImage: account.isActive ? "pause.circle" : "checkmark.circle"
+                                )
+                            }
+                        }
                     }
+                } header: {
+                    Text(propFirmOnly ? "Prop Firm Accounts" : "Your Accounts")
                 } footer: {
-                    Text("Deactivate hides an account from trade pickers but keeps its history. Accounts are never deleted.")
+                    Text("Swipe to activate or deactivate. Deactivated accounts stay in history but hide from trade pickers.")
                 }
             }
         }

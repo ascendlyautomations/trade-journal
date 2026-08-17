@@ -62,6 +62,8 @@ struct LeaderboardRowView: View {
                             .background(
                                 Capsule().fill(row.isFollowing ? colors.fillSecondary : colors.accent)
                             )
+                            .frame(minHeight: ExperienceAccessibility.minTouchTarget)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }

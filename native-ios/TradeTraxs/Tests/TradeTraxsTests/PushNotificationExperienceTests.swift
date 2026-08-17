@@ -81,7 +81,7 @@ final class PushNotificationExperienceTests: XCTestCase {
         XCTAssertEqual(destination.category, .activity)
         XCTAssertEqual(destination.tradeID, TradeID("trade-22"))
         let routed = NotificationRouter().destination(for: destination)
-        XCTAssertEqual(routed, .home(.tradeDetail(TradeID("trade-22"))))
+        XCTAssertEqual(routed, .profile(.trade(TradeID("trade-22"))))
     }
 
     func testNotificationRouterMapsRoomToMessagesTab() {

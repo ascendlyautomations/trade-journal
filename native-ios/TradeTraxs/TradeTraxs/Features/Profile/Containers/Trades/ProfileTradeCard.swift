@@ -86,6 +86,23 @@ struct ProfileTradeCard: View {
                 Button("Edit", systemImage: "square.and.pencil", action: onEdit)
                 Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
             }
+        } preview: {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                Text(trade.symbol.ticker)
+                    .experienceStyle(.headline, color: colors.primaryText)
+                Text(TradeDisplay.pnlText(trade.realizedPnL))
+                    .experienceStyle(.metric, color: colors.primaryText)
+                Text(TradeDisplay.sideTitle(trade.side))
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                if let note = trade.notePreview, !note.isEmpty {
+                    Text(note)
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                        .lineLimit(3)
+                }
+            }
+            .padding()
+            .frame(width: 280, alignment: .leading)
+            .background(colors.surfacePrimary)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilitySummary)

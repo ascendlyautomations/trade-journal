@@ -62,7 +62,7 @@ final class SettingsNotificationsViewModel {
         systemAuthorization = await SystemNotificationAuthorization.currentStatus()
         do {
             guard let userID = await session.currentUserID else {
-                phase = .failed("Not signed in")
+                phase = .failed("Sign in to continue.")
                 return
             }
             preferences = try await repository.preferences(for: ProfileID(userID.rawValue))
@@ -70,9 +70,9 @@ final class SettingsNotificationsViewModel {
             saveError = nil
         } catch {
             if preferences == nil {
-                phase = .failed(error.localizedDescription)
+                phase = .failed(UserFacingError.message(for: error))
             } else {
-                saveError = error.localizedDescription
+                saveError = UserFacingError.message(for: error)
             }
         }
     }
@@ -120,10 +120,11 @@ final class SettingsNotificationsViewModel {
                     for: ProfileID(userID.rawValue)
                 )
                 saveError = nil
+                ExperienceHaptics.play(.success)
             } catch {
                 preferences = previous
                 saveError = "Couldn't save. Changes were reverted."
-                ExperienceHaptics.play(.warning)
+                ExperienceHaptics.play(.error)
             }
         }
     }

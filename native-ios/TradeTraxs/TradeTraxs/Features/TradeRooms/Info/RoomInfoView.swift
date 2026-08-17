@@ -72,7 +72,7 @@ struct RoomInfoView: View {
             isPresented: $viewModel.showsReportConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Report Room", role: .destructive) {
+            Button("Report Room") {
                 viewModel.reportRoom()
             }
             Button("Cancel", role: .cancel) {}
@@ -163,7 +163,7 @@ struct RoomInfoView: View {
                 Button("Leave Room", role: .destructive) {
                     viewModel.showsLeaveConfirmation = true
                 }
-                Button("Report Room", role: .destructive) {
+                Button("Report Room") {
                     viewModel.showsReportConfirmation = true
                 }
             }

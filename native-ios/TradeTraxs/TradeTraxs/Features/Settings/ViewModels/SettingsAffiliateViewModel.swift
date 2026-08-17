@@ -32,14 +32,14 @@ final class SettingsAffiliateViewModel {
         isLoading = referral == nil
         do {
             guard let userID = await session.currentUserID else {
-                errorMessage = "Not signed in"
+                errorMessage = "Sign in to view your referrals."
                 isLoading = false
                 return
             }
             referral = try await referrals.referral(for: ProfileID(userID.rawValue))
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
         isLoading = false
     }

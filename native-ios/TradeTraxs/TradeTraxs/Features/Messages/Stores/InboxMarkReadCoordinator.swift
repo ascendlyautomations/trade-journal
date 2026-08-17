@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Shared inbox open → mark-read pipeline for DMs and Trade Rooms.
 ///
@@ -32,8 +33,9 @@ final class InboxMarkReadCoordinator {
     }
 
     func prepareOpenRoom(_ roomID: RoomID) {
+        let previousUnread = MessagesInboxStore.shared.roomUnread[roomID] ?? 0
         MessagesInboxStore.shared.markRoomRead(roomID: roomID)
-        Task { await confirmRoomRead(roomID) }
+        Task { await confirmRoomRead(roomID, previousUnread: previousUnread) }
     }
 
     /// Inbox swipe / menu — mark read with server + badge sync.
@@ -83,13 +85,23 @@ final class InboxMarkReadCoordinator {
         }
     }
 
-    private func confirmRoomRead(_ roomID: RoomID) async {
+    private func confirmRoomRead(_ roomID: RoomID, previousUnread: Int) async {
         guard let rooms, let session else { return }
         guard let userID = await session.currentUserID else { return }
         let viewer = ProfileID(userID.rawValue)
         guard !MessagesInboxSupport.isLocalDevelopmentProfile(viewer) else { return }
-        try? await rooms.markRead(roomID: roomID)
-        MessagesInboxStore.shared.markRoomRead(roomID: roomID)
-        // Room unread is not part of the app-icon formula — no badge fetch required.
+        do {
+            try await rooms.markRead(roomID: roomID)
+            MessagesInboxStore.shared.markRoomRead(roomID: roomID)
+            // Room unread is not part of the app-icon formula — no badge fetch required.
+        } catch {
+            MessagesInboxStore.shared.dropRoomUnreadOverride(roomID: roomID)
+            if previousUnread > 0 {
+                MessagesInboxStore.shared.setRoomUnread(roomID: roomID, count: previousUnread)
+            }
+            AppLog.notifications.error(
+                "mark_room_read failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 }

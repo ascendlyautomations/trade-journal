@@ -1,16 +1,19 @@
 import SwiftUI
 
-/// Permanent Trade detail destination — analysis-focused journal experience.
+/// Shared trade detail shell — presentation differs by ``TradeDetailExperience``.
 ///
-/// Likes / comments stay on public Profile (and Feed) cards — not on this screen.
+/// Prefer ``JournalTradeDetailView`` / ``SocialTradeDetailView`` at call sites.
 struct TradeDetailView: View {
     @State private var viewModel: TradeDetailViewModel
-    @State private var tradeAI: TradeAISectionViewModel
+    @State private var tradeAI: TradeAISectionViewModel?
     @State private var showsDeleteConfirm = false
     private let imagePipeline: any ImagePipeline
+    private let data: DataEnvironment
+    private let experience: TradeDetailExperience
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let entryExitColumns = [
         GridItem(.flexible(), spacing: ExperienceSpacing.md),
@@ -21,7 +24,14 @@ struct TradeDetailView: View {
         GridItem(.adaptive(minimum: 52), spacing: ExperienceSpacing.xs, alignment: .leading),
     ]
 
-    init(tradeID: TradeID, data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
+    private static let commentsAnchorID = "trade.detail.comments"
+
+    init(
+        tradeID: TradeID,
+        data: DataEnvironment,
+        navigationCoordinator: NavigationCoordinator,
+        experience: TradeDetailExperience
+    ) {
         _viewModel = State(
             initialValue: TradeDetailViewModel(
                 tradeID: tradeID,
@@ -33,10 +43,16 @@ struct TradeDetailView: View {
                 navigationCoordinator: navigationCoordinator
             )
         )
-        _tradeAI = State(
-            initialValue: TradeAISectionViewModel(tradeID: tradeID, ai: data.ai)
-        )
+        if experience == .journal {
+            _tradeAI = State(
+                initialValue: TradeAISectionViewModel(tradeID: tradeID, ai: data.ai)
+            )
+        } else {
+            _tradeAI = State(initialValue: nil)
+        }
         self.imagePipeline = data.imagePipeline
+        self.data = data
+        self.experience = experience
     }
 
     var body: some View {
@@ -60,21 +76,26 @@ struct TradeDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .task {
             viewModel.loadIfNeeded()
-            tradeAI.updateContext(trade: viewModel.trade, notes: viewModel.notes)
-            await tradeAI.loadHistoryIfNeeded()
+            if experience == .social {
+                data.engagementStore.prefetch([.trade(viewModel.tradeID)])
+            }
+            if let tradeAI {
+                tradeAI.updateContext(trade: viewModel.trade, notes: viewModel.notes)
+                await tradeAI.loadHistoryIfNeeded()
+            }
         }
         .onChange(of: viewModel.trade?.id) { _, _ in
-            tradeAI.updateContext(trade: viewModel.trade, notes: viewModel.notes)
+            tradeAI?.updateContext(trade: viewModel.trade, notes: viewModel.notes)
         }
         .onChange(of: viewModel.notes.count) { _, _ in
-            tradeAI.updateContext(trade: viewModel.trade, notes: viewModel.notes)
+            tradeAI?.updateContext(trade: viewModel.trade, notes: viewModel.notes)
         }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
             viewModel.handleJournalMutation()
-            tradeAI.updateContext(trade: viewModel.trade, notes: viewModel.notes)
+            tradeAI?.updateContext(trade: viewModel.trade, notes: viewModel.notes)
         }
         .onAppear {
-            tradeAI.updateContext(trade: viewModel.trade, notes: viewModel.notes)
+            tradeAI?.updateContext(trade: viewModel.trade, notes: viewModel.notes)
         }
         .confirmationDialog(
             "Delete Trade?",
@@ -99,31 +120,34 @@ struct TradeDetailView: View {
         } message: {
             Text(viewModel.deleteErrorMessage ?? "")
         }
-        .accessibilityIdentifier("detail.trade.root")
+        .accessibilityIdentifier(
+            experience == .journal ? "detail.trade.journal" : "detail.trade.social"
+        )
     }
 
     @ViewBuilder
     private var content: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if let trade = viewModel.trade {
-                    identityHeader(trade)
-                        .padding(.horizontal, ExperienceSpacing.lg)
-                        .padding(.top, ExperienceSpacing.sm)
-                        .padding(.bottom, ExperienceSpacing.md)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    if let trade = viewModel.trade {
+                        identityHeader(trade)
+                            .padding(.horizontal, ExperienceSpacing.lg)
+                            .padding(.top, ExperienceSpacing.sm)
+                            .padding(.bottom, ExperienceSpacing.md)
 
-                    // Omit media entirely when there is no screenshot — no empty placeholder.
-                    if let media = viewModel.mediaReference {
-                        TradeDetailMediaView(
-                            reference: media,
-                            imagePipeline: imagePipeline
-                        )
+                        if let media = viewModel.mediaReference {
+                            TradeDetailMediaView(
+                                reference: media,
+                                imagePipeline: imagePipeline
+                            )
+                        }
+
+                        tradeBody(trade, scrollProxy: proxy)
+                            .padding(.horizontal, ExperienceSpacing.lg)
+                            .padding(.top, ExperienceSpacing.md)
+                            .padding(.bottom, ExperienceSpacing.xl)
                     }
-
-                    tradeBody(trade)
-                        .padding(.horizontal, ExperienceSpacing.lg)
-                        .padding(.top, ExperienceSpacing.md)
-                        .padding(.bottom, ExperienceSpacing.xl)
                 }
             }
         }
@@ -139,16 +163,17 @@ struct TradeDetailView: View {
     // MARK: - Header
 
     private func identityHeader(_ trade: Trade) -> some View {
-        DetailIdentityHeader(
+        let showsOwnerActions = experience == .journal && viewModel.isOwner
+        return DetailIdentityHeader(
             initials: viewModel.authorInitials,
             avatar: viewModel.authorAvatar,
             displayName: viewModel.authorDisplayName,
             username: viewModel.authorUsername,
             subtitle: viewModel.accountIdentityLine,
             dateText: TradeDisplay.dateText(trade.entryAt),
-            isOwner: viewModel.isOwner,
-            onEdit: viewModel.isOwner ? { viewModel.editTrade() } : nil,
-            onDelete: viewModel.isOwner ? {
+            isOwner: showsOwnerActions,
+            onEdit: showsOwnerActions ? { viewModel.editTrade() } : nil,
+            onDelete: showsOwnerActions ? {
                 ExperienceHaptics.play(.warning)
                 showsDeleteConfirm = true
             } : nil,
@@ -158,7 +183,7 @@ struct TradeDetailView: View {
 
     // MARK: - Body
 
-    private func tradeBody(_ trade: Trade) -> some View {
+    private func tradeBody(_ trade: Trade, scrollProxy: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
             HStack(alignment: .firstTextBaseline) {
                 Text(trade.symbol.ticker)
@@ -180,12 +205,59 @@ struct TradeDetailView: View {
 
             entryExitInformation(trade)
 
-            TradeAISectionView(viewModel: tradeAI)
+            switch experience {
+            case .journal:
+                journalNotesSection
+                if let tradeAI {
+                    TradeAISectionView(viewModel: tradeAI)
+                }
+            case .social:
+                EngagementBar(
+                    target: .trade(trade.id),
+                    store: data.engagementStore,
+                    onCommentTap: {
+                        withAnimation(
+                            ExperienceMotion.preferred(
+                                ExperienceMotion.selection,
+                                reduceMotion: reduceMotion
+                            )
+                        ) {
+                            scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
+                        }
+                    }
+                )
+                CommentsSectionView(target: .trade(trade.id), data: data)
+                    .id(Self.commentsAnchorID)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var journalNotesSection: some View {
+        let bodies = viewModel.notes
+            .map { $0.body.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if !bodies.isEmpty {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                Text("Journal Notes")
+                    .experienceStyle(.headline, color: colors.primaryText)
+                ForEach(Array(bodies.enumerated()), id: \.offset) { _, body in
+                    Text(body)
+                        .experienceStyle(.body, color: colors.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(ExperienceSpacing.md)
+                        .background(
+                            colors.fillPrimary,
+                            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                        )
+                }
+            }
+            .accessibilityIdentifier("detail.trade.journalNotes")
         }
     }
 
     private func badgeRow(_ trade: Trade) -> some View {
-        // Account identity lives only in the header — do not repeat Funded/Eval/Live here.
         LazyVGrid(columns: badgeColumns, alignment: .leading, spacing: ExperienceSpacing.xs) {
             ExperienceTag(
                 title: TradeDisplay.sideTitle(trade.side),
@@ -207,7 +279,6 @@ struct TradeDetailView: View {
 
     @ViewBuilder
     private func descriptionSection(_ trade: Trade) -> some View {
-        // Web `public_description` — unlabeled body; hidden when empty.
         if let description = trade.publicCaption?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !description.isEmpty

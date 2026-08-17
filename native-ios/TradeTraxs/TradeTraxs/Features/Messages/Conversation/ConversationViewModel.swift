@@ -237,10 +237,10 @@ final class ConversationViewModel {
             sendStates[saved.id] = .sent
             sharedTrades[trade.id] = trade
             patchInbox(with: saved)
-            ExperienceHaptics.play(.selection)
+            ExperienceHaptics.play(.messageSent)
         } catch {
             sendStates[tempID] = .failed
-            ExperienceHaptics.play(.warning)
+            ExperienceHaptics.play(.error)
         }
     }
 
@@ -579,7 +579,7 @@ final class ConversationViewModel {
             sendStates.removeValue(forKey: tempID)
             sendStates[saved.id] = .sent
             patchInbox(with: saved)
-            ExperienceHaptics.play(.selection)
+            ExperienceHaptics.play(.messageSent)
         } catch {
             AppLog.networking.error(
                 """
@@ -590,7 +590,7 @@ final class ConversationViewModel {
                 """
             )
             sendStates[tempID] = .failed
-            ExperienceHaptics.play(.warning)
+            ExperienceHaptics.play(.error)
         }
     }
 

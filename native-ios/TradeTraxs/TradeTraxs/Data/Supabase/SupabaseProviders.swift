@@ -133,10 +133,14 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
     private let session: URLSession
     private var receiveLoopRunning = false
     private var heartbeatTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+    /// When true, receive-loop death must not auto-reconnect (explicit ``disconnect``).
+    private var intentionalDisconnect = false
     private var refCounter = 0
     private var continuations: [String: [AsyncStream<MessageRealtimeSignal>.Continuation]] = [:]
     private var joinedTopics: Set<String> = []
     private var specsByRouteKey: [String: WatchSpec] = [:]
+    private var accessTokensByRouteKey: [String: String?] = [:]
 
     init(configuration: AppConfiguration, urlSession: URLSession = .shared) {
         self.configuration = configuration
@@ -177,6 +181,8 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         let task = session.webSocketTask(with: url)
         task.resume()
         lock.lock()
+        intentionalDisconnect = false
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = task
         _isConnected = true
         lock.unlock()
@@ -185,9 +191,12 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
     }
 
     func disconnect() async {
+        reconnectTask?.cancel()
+        reconnectTask = nil
         heartbeatTask?.cancel()
         heartbeatTask = nil
         lock.lock()
+        intentionalDisconnect = true
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         _isConnected = false
@@ -200,7 +209,23 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         continuations.removeAll()
         joinedTopics.removeAll()
         specsByRouteKey.removeAll()
+        accessTokensByRouteKey.removeAll()
         lock.unlock()
+    }
+
+    /// Foreground / network recovery — reconnect and rejoin active watches without
+    /// finishing product streams (avoids duplicate subscriptions at the domain layer).
+    func resumeAfterForeground() async {
+        lock.lock()
+        let connected = _isConnected
+        let hasSpecs = !specsByRouteKey.isEmpty
+        lock.unlock()
+        if connected { return }
+        if hasSpecs {
+            await reconnectAndRejoin()
+        } else {
+            try? await connect()
+        }
     }
 
     /// Web Community `room-${id}` + `room_messages` filter.
@@ -359,6 +384,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                 self.lock.lock()
                 self.continuations[spec.routeKey, default: []].append(continuation)
                 self.specsByRouteKey[spec.routeKey] = spec
+                self.accessTokensByRouteKey[spec.routeKey] = accessToken
                 let needsJoin = !self.joinedTopics.contains(spec.topic)
                 if needsJoin {
                     self.joinedTopics.insert(spec.topic)
@@ -376,6 +402,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         lock.lock()
         let continuations = continuations.removeValue(forKey: routeKey) ?? []
         let spec = specsByRouteKey.removeValue(forKey: routeKey)
+        accessTokensByRouteKey.removeValue(forKey: routeKey)
         if let topic = spec?.topic {
             joinedTopics.remove(topic)
         }
@@ -491,10 +518,61 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                 break
             }
         }
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
         lock.lock()
         receiveLoopRunning = false
         _isConnected = false
+        // Allow rejoin after reconnect — stale topic set would skip `phx_join`.
+        joinedTopics.removeAll()
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        let shouldReconnect = !intentionalDisconnect && !specsByRouteKey.isEmpty
         lock.unlock()
+        if shouldReconnect {
+            scheduleReconnectAndRejoin()
+        }
+    }
+
+    private func scheduleReconnectAndRejoin() {
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            await self?.reconnectAndRejoin()
+        }
+    }
+
+    private func reconnectAndRejoin() async {
+        let policy = ReconnectPolicy.default
+        var attempt = 1
+        while !Task.isCancelled, attempt <= policy.maximumAttempts {
+            lock.lock()
+            let intentional = intentionalDisconnect
+            let specs = Array(specsByRouteKey.values)
+            let tokens = accessTokensByRouteKey
+            lock.unlock()
+            guard !intentional, !specs.isEmpty else { return }
+
+            do {
+                try await connect()
+                for spec in specs {
+                    if Task.isCancelled { return }
+                    lock.lock()
+                    let needsJoin = !joinedTopics.contains(spec.topic)
+                    if needsJoin {
+                        joinedTopics.insert(spec.topic)
+                    }
+                    lock.unlock()
+                    if needsJoin {
+                        await joinChannel(spec, accessToken: tokens[spec.routeKey] ?? nil)
+                    }
+                }
+                return
+            } catch {
+                let delay = policy.delay(forAttempt: attempt)
+                attempt += 1
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+        }
     }
 
     private func handleIncoming(_ text: String) {

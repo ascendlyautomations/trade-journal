@@ -6,6 +6,7 @@ struct SettingsNavigationRow: View {
     var subtitle: String? = nil
     var systemImage: String? = nil
     var isDestructive: Bool = false
+    var showsChevron: Bool = true
 
     @Environment(\.themeColors) private var colors
 
@@ -27,9 +28,11 @@ struct SettingsNavigationRow: View {
                 }
             }
             Spacer(minLength: ExperienceSpacing.xs)
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(colors.tertiaryText)
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(colors.tertiaryText)
+            }
         }
         .padding(.vertical, ExperienceSpacing.xs)
         .contentShape(Rectangle())
@@ -39,7 +42,7 @@ struct SettingsNavigationRow: View {
     }
 }
 
-/// Preference toggle row with optional footer.
+/// Preference toggle row with optional subtitle.
 struct SettingsToggleRow: View {
     let title: String
     var subtitle: String? = nil
@@ -84,6 +87,71 @@ struct SettingsInfoRow: View {
         .padding(.vertical, ExperienceSpacing.xs)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("settings.info.\(title)")
+    }
+}
+
+/// Persistent label above an editable field — label stays visible after text is entered.
+struct SettingsLabeledField<Content: View>: View {
+    let title: String
+    var helper: String? = nil
+    @ViewBuilder var content: () -> Content
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            Text(title)
+                .experienceStyle(.footnote, color: colors.secondaryText)
+            content()
+            if let helper {
+                Text(helper)
+                    .experienceStyle(.caption, color: colors.tertiaryText)
+            }
+        }
+        .padding(.vertical, ExperienceSpacing.xxs)
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// Centered, friendly empty / intro copy for sparse Settings pages.
+struct SettingsIntroBlock: View {
+    let title: String
+    let message: String
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text(title)
+                .experienceStyle(.body, color: colors.primaryText)
+            Text(message)
+                .experienceStyle(.footnote, color: colors.secondaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, ExperienceSpacing.xs)
+    }
+}
+
+/// Primary text action for Settings lists (Save, Upgrade, Share).
+struct SettingsPrimaryActionLabel: View {
+    let title: String
+    var systemImage: String? = nil
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.body.weight(.semibold))
+            }
+            Text(title)
+                .experienceStyle(.body, color: colors.accent)
+                .fontWeight(.semibold)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, ExperienceSpacing.xs)
+        .contentShape(Rectangle())
     }
 }
 

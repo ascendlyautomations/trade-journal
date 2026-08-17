@@ -40,7 +40,7 @@ enum PushNotificationPayloadParser {
             pathID(from: href, prefix: "trade"),
             hrefQuery["trade"]
         ).map { TradeID($0) }
-        let postID = firstNonEmpty(
+        var postID = firstNonEmpty(
             strings["postId"],
             strings["post_id"],
             strings["profile_post_id"],

@@ -38,14 +38,20 @@ struct SettingsPrivacyView: View {
                         set: { viewModel.setPrivate($0) }
                     )
                 )
+            } header: {
+                Text("Profile Visibility")
             } footer: {
-                Text("When private, others must request to follow you before seeing your content.")
+                Text("Control what other traders can see. When private, others must request to follow you.")
             }
 
-            Section("Coming Later") {
-                SettingsInfoRow(title: "Blocked accounts", value: "Prepared")
-                SettingsInfoRow(title: "Muted accounts", value: "Prepared")
-                SettingsInfoRow(title: "Who can message me", value: "Prepared")
+            Section {
+                SettingsInfoRow(title: "Blocked accounts", value: "Coming soon")
+                SettingsInfoRow(title: "Muted accounts", value: "Coming soon")
+                SettingsInfoRow(title: "Who can message me", value: "Coming soon")
+            } header: {
+                Text("Safety")
+            } footer: {
+                Text("More privacy controls are on the way.")
             }
         }
         .listStyle(.insetGrouped)

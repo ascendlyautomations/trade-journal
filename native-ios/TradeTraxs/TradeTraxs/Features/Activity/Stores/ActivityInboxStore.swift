@@ -111,6 +111,15 @@ final class ActivityInboxStore {
         unreadCount = max(0, unreadCount - 1)
     }
 
+    /// Rolls back a failed optimistic ``markReadLocally``.
+    func markUnreadLocally(id: NotificationID) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        guard items[index].isRead else { return }
+        items[index].isRead = false
+        items = items
+        unreadCount += 1
+    }
+
     func markAllReadLocally() {
         items = items.map { item in
             var copy = item

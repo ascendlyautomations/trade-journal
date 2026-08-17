@@ -115,6 +115,21 @@ struct ConversationBubbleView: View {
             }
         }
         .opacity(item.sendState == .sending ? 0.72 : 1)
+        .contextMenu {
+            if let text = item.text, !text.isEmpty, item.message.kind != .tradeShare {
+                Button {
+                    UIPasteboard.general.string = text
+                    ExperienceHaptics.play(.success)
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+            }
+            if item.sendState == .failed, let onRetry {
+                Button(action: onRetry) {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                }
+            }
+        }
     }
 }
 

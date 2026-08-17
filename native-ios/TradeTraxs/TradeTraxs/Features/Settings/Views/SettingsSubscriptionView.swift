@@ -31,7 +31,7 @@ struct SettingsSubscriptionView: View {
                 }
             }
 
-            Section("Current Plan") {
+            Section {
                 SettingsInfoRow(title: "Plan", value: viewModel.planTitle)
                 SettingsInfoRow(title: "Status", value: viewModel.statusTitle)
                 if let interval = viewModel.status?.billingInterval {
@@ -46,21 +46,27 @@ struct SettingsSubscriptionView: View {
                         value: renews.formatted(Self.dateStyle)
                     )
                 }
+            } header: {
+                Text("Current Plan")
+            } footer: {
+                Text("Manage your current membership.")
             }
 
             if let status = viewModel.status, !status.isProEntitled || status.lifecycle == .trialing {
                 Section {
-                    Button("Upgrade to TraxPro") {
+                    Button {
                         viewModel.openUpgrade()
+                    } label: {
+                        SettingsPrimaryActionLabel(title: "Upgrade to TraxPro", systemImage: "sparkles")
                     }
+                    .buttonStyle(.plain)
                 } footer: {
-                    Text("Opens the native upgrade flow. Stripe Customer Portal management remains on the web for now.")
-                        .experienceStyle(.footnote, color: colors.secondaryText)
+                    Text("Unlock higher limits and TraxPro features.")
                 }
             }
 
             if let status = viewModel.status, !status.isProEntitled {
-                Section("Free Limits") {
+                Section {
                     if let trades = status.dailyTradeLimit {
                         SettingsInfoRow(title: "Daily trades", value: "\(trades)")
                     }
@@ -73,6 +79,10 @@ struct SettingsSubscriptionView: View {
                     if let accounts = status.maxTradeEntryAccounts {
                         SettingsInfoRow(title: "Active accounts", value: "\(accounts)")
                     }
+                } header: {
+                    Text("Free Plan Limits")
+                } footer: {
+                    Text("These are your daily limits on the free plan.")
                 }
             }
         }

@@ -11,10 +11,15 @@ struct CommentComposerView: View {
             TextField("Add a comment…", text: $viewModel.draft, axis: .vertical)
                 .lineLimit(1...4)
                 .textFieldStyle(.plain)
+                .textInputAutocapitalization(.sentences)
                 .padding(.horizontal, ExperienceSpacing.sm)
                 .padding(.vertical, ExperienceSpacing.xs)
                 .background(colors.fillPrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
                 .focused($focused)
+                .submitLabel(.send)
+                .onSubmit {
+                    Task { await viewModel.submit() }
+                }
                 .accessibilityIdentifier("interaction.comment.composer")
 
             Button {
@@ -32,10 +37,12 @@ struct CommentComposerView: View {
                         )
                 }
             }
+            .experienceTouchTarget()
             .disabled(
                 viewModel.isPosting
                     || viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             )
+            .accessibilityLabel("Post comment")
             .accessibilityIdentifier("interaction.comment.send")
         }
     }

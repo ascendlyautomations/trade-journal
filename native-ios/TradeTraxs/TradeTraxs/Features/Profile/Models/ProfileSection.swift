@@ -43,7 +43,7 @@ enum ProfileSection: String, CaseIterable, Identifiable, Sendable {
 
     var emptyMessage: String {
         switch self {
-        case .trades: return "Your journaled trades will show up here."
+        case .trades: return "Trades will show up here when they’re shared."
         case .posts: return "Share a post to see it on your profile."
         case .clips: return "Clips you publish will appear in this tab."
         case .stats: return "Trade enough to unlock your performance summary."

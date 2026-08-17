@@ -373,7 +373,7 @@ final class ActivityExperienceTests: XCTestCase {
         let router = NotificationRouter()
         XCTAssertEqual(
             router.destination(for: destination),
-            .home(.tradeDetail(TradeID("trade-1")))
+            .profile(.trade(TradeID("trade-1")))
         )
     }
 }

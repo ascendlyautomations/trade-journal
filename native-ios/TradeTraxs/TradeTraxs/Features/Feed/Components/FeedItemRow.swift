@@ -48,6 +48,31 @@ struct FeedItemRow: View {
                 .frame(height: ExperienceBorder.hairline)
                 .accessibilityHidden(true)
         }
+        .contextMenu {
+            Button {
+                onOpen()
+            } label: {
+                Label("Open", systemImage: "arrow.up.right.square")
+            }
+            Button {
+                onOpenAuthor()
+            } label: {
+                Label("View Profile", systemImage: "person.crop.circle")
+            }
+            Button {
+                Task { await engagementStore.toggleLike(on: interactionTarget) }
+            } label: {
+                Label("Like", systemImage: "heart")
+            }
+            Button {
+                onOpen()
+            } label: {
+                Label("Comment", systemImage: "bubble.right")
+            }
+        } preview: {
+            FeedItemRowPreview(entry: entry, author: author)
+                .frame(width: 320)
+        }
         .accessibilityIdentifier("feed.row.\(entry.id)")
     }
 
@@ -255,6 +280,45 @@ struct FeedItemRow: View {
             return reel.caption?.trimmingCharacters(in: .whitespacesAndNewlines)
         case .achievement(_, let achievement):
             return achievement.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+}
+
+/// Lightweight feed context-menu preview — cached entry data only.
+private struct FeedItemRowPreview: View {
+    let entry: FeedTimelineEntry
+    let author: Profile?
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            if let author {
+                Text(author.displayName)
+                    .experienceStyle(.subheadline, color: colors.primaryText)
+                    .fontWeight(.semibold)
+                Text("@\(author.username)")
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            }
+            Text(summaryTitle)
+                .experienceStyle(.body, color: colors.primaryText)
+                .lineLimit(4)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.surfacePrimary)
+    }
+
+    private var summaryTitle: String {
+        switch entry {
+        case .trade(_, let trade):
+            return "\(trade.symbol.ticker) · \(TradeDisplay.pnlText(trade.realizedPnL))"
+        case .post(_, let post):
+            return post.body
+        case .clip(_, let reel):
+            return reel.caption ?? "Clip"
+        case .achievement(_, let achievement):
+            return achievement.title
         }
     }
 }

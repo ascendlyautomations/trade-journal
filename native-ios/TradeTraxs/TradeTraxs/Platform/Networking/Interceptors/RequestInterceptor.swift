@@ -32,7 +32,9 @@ nonisolated struct AuthenticationRequestInterceptor: RequestInterceptor {
     func intercept(_ request: HTTPRequest) async throws -> HTTPRequest {
         guard request.endpoint.requiresAuthentication else { return request }
         guard let token = await accessTokenProvider(), !token.isEmpty else {
-            return request
+            // Do not send an unauthenticated BFF/Supabase call and then surface a
+            // cryptic 401 → AppError.authentication (NSError "error 3").
+            throw AppError.authentication(.sessionMissing)
         }
         var copy = request
         copy.headers["Authorization"] = "Bearer \(token)"

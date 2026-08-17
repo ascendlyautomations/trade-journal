@@ -1,15 +1,12 @@
 import Foundation
 
-/// Future Settings → Appearance screen contract.
-///
-/// UI is intentionally not built in this phase. ViewModels will call
-/// ``ThemeManager/select(_:reduceMotion:)`` using ``AppearanceSettingsModel``.
+/// Settings → Appearance bridge onto ``ThemeManager``.
 protocol AppearanceSettingsPreparing: AnyObject {
     func makeAppearanceModel() -> AppearanceSettingsModel
-    func selectTheme(_ identifier: ThemeIdentifier)
+    func selectTheme(_ identifier: ThemeIdentifier, reduceMotion: Bool)
 }
 
-/// Production bridge from Settings (future) → Theme Engine.
+/// Production bridge from Settings → Theme Engine.
 final class AppearanceSettingsController: AppearanceSettingsPreparing {
     private let themeManager: ThemeManager
 
@@ -18,10 +15,16 @@ final class AppearanceSettingsController: AppearanceSettingsPreparing {
     }
 
     func makeAppearanceModel() -> AppearanceSettingsModel {
-        themeManager.appearanceSettings
+        AppearanceSettingsModel.makeUserFacing(
+            selected: themeManager.selectedIdentifier,
+            registry: themeManager.registry
+        )
     }
 
-    func selectTheme(_ identifier: ThemeIdentifier) {
-        themeManager.select(identifier)
+    func selectTheme(_ identifier: ThemeIdentifier, reduceMotion: Bool) {
+        // Launch picker only exposes System + TradeTraxs.
+        let allowed: Set<ThemeIdentifier> = [.system, .tradeTraxs]
+        guard allowed.contains(identifier) else { return }
+        themeManager.select(identifier, reduceMotion: reduceMotion)
     }
 }

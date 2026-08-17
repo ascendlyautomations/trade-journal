@@ -14,19 +14,20 @@ struct SettingsLegalView: View {
                     Button {
                         openURL(url)
                     } label: {
-                        SettingsNavigationRow(
-                            title: "Open \(route.title)",
-                            subtitle: url.host.map { "\($0)\(url.path)" },
+                        SettingsPrimaryActionLabel(
+                            title: "View \(route.title)",
                             systemImage: "safari"
                         )
                     }
                     .buttonStyle(.plain)
                 } else {
-                    Text("Legal content for this page is not available yet.")
-                        .experienceStyle(.body, color: colors.secondaryText)
+                    SettingsIntroBlock(
+                        title: "Not available",
+                        message: "This document isn’t available in the app yet."
+                    )
                 }
             } footer: {
-                Text("Documents are loaded from the live TradeTraxs site so native Settings never ships stale legal copy.")
+                Text("Opens the latest version on the TradeTraxs website.")
             }
         }
         .listStyle(.insetGrouped)

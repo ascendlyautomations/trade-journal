@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Discovery surface pushed from Feed — not a Global Feed clone.
 struct ExploreHomeView: View {
@@ -59,6 +60,21 @@ struct ExploreHomeView: View {
             }
             #endif
         }
+        .confirmationDialog(
+            "Unfollow @\(viewModel.pendingUnfollow?.profile.username ?? "")?",
+            isPresented: Binding(
+                get: { viewModel.pendingUnfollow != nil },
+                set: { if !$0 { viewModel.pendingUnfollow = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Unfollow", role: .destructive) {
+                viewModel.confirmUnfollow()
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.pendingUnfollow = nil
+            }
+        }
         .accessibilityIdentifier("explore.home")
     }
 
@@ -69,8 +85,7 @@ struct ExploreHomeView: View {
         switch viewModel.phase {
         case .idle, .loading:
             if viewModel.suggestedTraders.isEmpty && viewModel.popularRooms.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceListSkeleton(style: .explore)
                     .accessibilityIdentifier("explore.loading")
             } else {
                 discoveryScroll
@@ -231,6 +246,45 @@ struct ExploreHomeView: View {
                             }
                             .buttonStyle(.plain)
                             .listRowBackground(colors.backgroundPrimary)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                if viewModel.isFollowing(trader) {
+                                    Button(role: .destructive) {
+                                        viewModel.toggleFollow(trader)
+                                    } label: {
+                                        Label("Unfollow", systemImage: "person.badge.minus")
+                                    }
+                                } else {
+                                    Button {
+                                        viewModel.toggleFollow(trader)
+                                    } label: {
+                                        Label("Follow", systemImage: "person.badge.plus")
+                                    }
+                                    .tint(colors.accent)
+                                }
+                            }
+                            .contextMenu {
+                                Button {
+                                    viewModel.openTrader(trader)
+                                } label: {
+                                    Label("View Profile", systemImage: "person.crop.circle")
+                                }
+                                Button {
+                                    UIPasteboard.general.string = "@\(trader.profile.username)"
+                                    ExperienceHaptics.play(.success)
+                                } label: {
+                                    Label("Copy Username", systemImage: "doc.on.doc")
+                                }
+                                Button {
+                                    viewModel.toggleFollow(trader)
+                                } label: {
+                                    Label(
+                                        viewModel.isFollowing(trader) ? "Unfollow" : "Follow",
+                                        systemImage: viewModel.isFollowing(trader)
+                                            ? "person.badge.minus"
+                                            : "person.badge.plus"
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -251,6 +305,13 @@ struct ExploreHomeView: View {
                             }
                             .buttonStyle(.plain)
                             .listRowBackground(colors.backgroundPrimary)
+                            .contextMenu {
+                                Button {
+                                    viewModel.openRoom(room)
+                                } label: {
+                                    Label("Open", systemImage: "person.3")
+                                }
+                            }
                             .accessibilityIdentifier("explore.search.room.\(room.id.rawValue)")
                         }
                     }

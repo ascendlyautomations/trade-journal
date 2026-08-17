@@ -83,6 +83,10 @@ final class TradeDetailExperienceTests: XCTestCase {
         XCTAssertEqual(TradeDisplay.sideTitle(.short), "Short")
     }
 
+    func testTradeDetailExperiencesAreDistinct() {
+        XCTAssertNotEqual(TradeDetailExperience.journal, TradeDetailExperience.social)
+    }
+
     func testAccountIdentityLineUsesOwnerVersusPublicRules() {
         XCTAssertEqual(
             TradeDisplay.accountIdentityLine(

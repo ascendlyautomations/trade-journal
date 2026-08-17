@@ -36,7 +36,7 @@ struct ThemeMetadata: Hashable, Sendable, Identifiable {
     static let tradeTraxs = ThemeMetadata(
         identifier: .tradeTraxs,
         displayName: "TradeTraxs",
-        detail: "Signature premium look with teal accents",
+        detail: "Brand navy surfaces with cyan accents",
         isPremiumSignature: true,
         supportsSystemAppearanceFollow: false
     )

@@ -107,7 +107,7 @@ struct HomeNavigationStack: View {
     private func homeDestination(_ route: HomeRoute) -> some View {
         switch route {
         case .tradeDetail(let tradeID):
-            TradeDetailView(
+            JournalTradeDetailView(
                 tradeID: tradeID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
@@ -214,7 +214,7 @@ struct FeedNavigationStack: View {
     private func feedDestination(_ route: FeedRoute) -> some View {
         switch route {
         case .trade(let tradeID):
-            TradeDetailView(
+            SocialTradeDetailView(
                 tradeID: tradeID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
@@ -361,6 +361,12 @@ struct MessagesNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .sharedTrade(let tradeID):
+            SocialTradeDetailView(
+                tradeID: tradeID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         default:
             NavigationInfrastructurePlaceholder(
                 title: messagesTitle(route),
@@ -417,7 +423,7 @@ struct ProfileNavigationStack: View {
     private func profileDestination(_ route: ProfileRoute) -> some View {
         switch route {
         case .trade(let tradeID):
-            TradeDetailView(
+            SocialTradeDetailView(
                 tradeID: tradeID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator

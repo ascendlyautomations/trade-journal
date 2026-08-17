@@ -29,6 +29,13 @@ final class TradeHistoryViewModel {
     var filters = TradeHistoryFilters()
     var draftFilters = TradeHistoryFilters()
     var showsFilterSheet = false
+    var pendingDelete: Trade?
+    var sharePayload: SharePayload?
+
+    struct SharePayload: Identifiable, Equatable {
+        let id = UUID()
+        let text: String
+    }
 
     private var profileID: ProfileID?
     private var loadTask: Task<Void, Never>?
@@ -188,7 +195,7 @@ final class TradeHistoryViewModel {
             TradeHistoryLoadProbe.markPageSize(page.items.count)
             #endif
         } catch {
-            paginationErrorMessage = error.localizedDescription
+            paginationErrorMessage = ProfileSectionSupport.message(for: error)
         }
     }
 
@@ -199,6 +206,39 @@ final class TradeHistoryViewModel {
             detailCache.seedAccountName(name, for: accountID)
         }
         navigationCoordinator.open(.home(.tradeDetail(trade.id)))
+    }
+
+    func editTrade(_ trade: Trade) {
+        ExperienceHaptics.play(.selection)
+        detailCache.seed(trade)
+        navigationCoordinator.editTrade(trade.id)
+    }
+
+    func shareTrade(_ trade: Trade) {
+        ExperienceHaptics.play(.selection)
+        let pnl = TradeDisplay.pnlText(trade.realizedPnL)
+        let side = trade.side == .long ? "Long" : "Short"
+        sharePayload = SharePayload(text: "\(trade.symbol.ticker) \(side) \(pnl) on TradeTraxs")
+    }
+
+    func requestDelete(_ trade: Trade) {
+        ExperienceHaptics.play(.warning)
+        pendingDelete = trade
+    }
+
+    func confirmDelete() async {
+        guard let trade = pendingDelete else { return }
+        pendingDelete = nil
+        do {
+            try await trades.delete(id: trade.id)
+            items.removeAll { $0.id == trade.id }
+            detailCache.removeTrade(id: trade.id)
+            TradeJournalMutationStore.shared.noteDeleted(id: trade.id, owner: trade.ownerProfileID)
+            ExperienceHaptics.play(.success)
+        } catch {
+            paginationErrorMessage = ProfileSectionSupport.message(for: error)
+            ExperienceHaptics.play(.warning)
+        }
     }
 
     func addTrade() {
@@ -349,10 +389,11 @@ final class TradeHistoryViewModel {
             TradeHistoryLoadProbe.markCancelled()
             #endif
         } catch {
+            let friendly = ProfileSectionSupport.message(for: error)
             if items.isEmpty {
-                phase = .failed(error.localizedDescription)
+                phase = .failed(friendly)
             }
-            paginationErrorMessage = error.localizedDescription
+            paginationErrorMessage = friendly
         }
         isRefreshing = false
     }

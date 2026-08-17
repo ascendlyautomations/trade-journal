@@ -76,6 +76,25 @@ struct TradeRoomsHomeView: View {
         .task {
             viewModel.loadIfNeeded()
         }
+        .confirmationDialog(
+            "Leave this Trade Room?",
+            isPresented: Binding(
+                get: { viewModel.showsLeaveRoomConfirmation },
+                set: { presented in
+                    if !presented { viewModel.cancelLeaveRoom() }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Leave Room", role: .destructive) {
+                Task { await viewModel.confirmLeaveRoom() }
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelLeaveRoom()
+            }
+        } message: {
+            Text("You can rejoin later if the room is still available.")
+        }
     }
 
     /// Force Observation of shared room unread so badges clear without leave/refresh.
@@ -105,6 +124,11 @@ struct TradeRoomsHomeView: View {
                     .buttonStyle(.plain)
                     .contextMenu {
                         Button {
+                            viewModel.openRoom(item)
+                        } label: {
+                            Label("Open", systemImage: "person.3")
+                        }
+                        Button {
                             viewModel.toggleMute(roomID: item.id)
                         } label: {
                             Label(
@@ -112,11 +136,16 @@ struct TradeRoomsHomeView: View {
                                 systemImage: item.isMuted ? "bell.fill" : "bell.slash.fill"
                             )
                         }
+                        Divider()
                         Button(role: .destructive) {
-                            Task { await viewModel.leaveRoom(id: item.id) }
+                            viewModel.requestLeaveRoom(id: item.id)
                         } label: {
                             Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
                         }
+                    } preview: {
+                        TradeRoomCardView(item: item, imagePipeline: imagePipeline)
+                            .frame(width: 320)
+                            .padding()
                     }
                 }
             }

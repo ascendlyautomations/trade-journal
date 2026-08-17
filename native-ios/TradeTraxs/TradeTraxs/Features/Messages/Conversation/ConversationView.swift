@@ -42,7 +42,7 @@ struct ConversationView: View {
     var body: some View {
         VStack(spacing: 0) {
             content
-            if viewModel.phase == .loaded || viewModel.showsEmpty {
+            if viewModel.phase == .loaded || viewModel.showsEmpty || !viewModel.messages.isEmpty {
                 ConversationComposerView(viewModel: viewModel)
             }
         }
@@ -93,14 +93,23 @@ struct ConversationView: View {
     private var content: some View {
         switch viewModel.phase {
         case .idle, .loading:
-            ExperienceLoadingSpinner(label: "Loading conversation")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if viewModel.messages.isEmpty {
+                ExperienceLoadingSpinner(label: "Loading conversation")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                messageList
+            }
         case .failed(let message):
-            ExperienceErrorState(
-                title: "Couldn't load conversation",
-                message: message,
-                onRetry: { viewModel.retryLoad() }
-            )
+            if viewModel.messages.isEmpty {
+                ExperienceErrorState(
+                    title: "Couldn't load conversation",
+                    message: message,
+                    onRetry: { viewModel.retryLoad() }
+                )
+            } else {
+                // Keep cached thread visible while offline / after a soft refresh failure.
+                messageList
+            }
         case .loaded where viewModel.showsEmpty:
             ExperienceEmptyState(
                 icon: .messages,
@@ -168,7 +177,11 @@ struct ConversationView: View {
             proxy.scrollTo(ConversationScrollAnchor.bottom, anchor: .bottom)
         }
         if animated {
-            withAnimation(.easeOut(duration: 0.22), action)
+            ExperienceMotion.withAnimation(
+                MotionCurve.easeOut.animation(duration: .fast),
+                reduceMotion: reduceMotion,
+                action
+            )
         } else {
             action()
         }

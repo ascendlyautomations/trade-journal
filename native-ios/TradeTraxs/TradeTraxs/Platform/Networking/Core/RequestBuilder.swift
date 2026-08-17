@@ -56,7 +56,7 @@ nonisolated struct RequestBuilder: Sendable {
         let url: URL?
         switch host {
         case .bff:
-            url = environment.bffBaseURL
+            url = Self.canonicalBFFURL(environment.bffBaseURL)
         case .supabase, .supabaseStorage, .supabaseFunctions:
             url = environment.supabaseURL
         case .external:
@@ -67,6 +67,20 @@ nonisolated struct RequestBuilder: Sendable {
             throw NetworkError.validation(
                 message: "Base URL for \(host.rawValue) is not configured"
             )
+        }
+        return url
+    }
+
+    /// Apex `tradetraxs.com` → `www` so URLSession does not 308-redirect and strip `Authorization`.
+    private static func canonicalBFFURL(_ url: URL?) -> URL? {
+        guard var url else { return nil }
+        guard let host = url.host?.lowercased() else { return url }
+        if host == "tradetraxs.com" {
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            components?.host = "www.tradetraxs.com"
+            if let canonical = components?.url {
+                url = canonical
+            }
         }
         return url
     }

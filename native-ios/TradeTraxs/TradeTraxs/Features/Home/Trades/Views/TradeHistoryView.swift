@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Dashboard → Trades — owner journal / trade history browser.
 struct TradeHistoryView: View {
@@ -35,8 +36,7 @@ struct TradeHistoryView: View {
             switch viewModel.phase {
             case .idle, .loading:
                 if viewModel.items.isEmpty {
-                    ProgressView("Loading trades…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ExperienceListSkeleton(style: .tradeCard, rowCount: 4)
                 } else {
                     listContent
                 }
@@ -119,6 +119,28 @@ struct TradeHistoryView: View {
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
             viewModel.handleAccountMutation()
         }
+        .confirmationDialog(
+            "Delete this trade?",
+            isPresented: Binding(
+                get: { viewModel.pendingDelete != nil },
+                set: { if !$0 { viewModel.pendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Trade", role: .destructive) {
+                Task { await viewModel.confirmDelete() }
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.pendingDelete = nil
+            }
+        } message: {
+            if let trade = viewModel.pendingDelete {
+                Text("\(trade.symbol.ticker) will be removed from your journal.")
+            }
+        }
+        .sheet(item: $viewModel.sharePayload) { payload in
+            TradeHistoryShareSheet(items: [payload.text])
+        }
         .accessibilityIdentifier("trades.home")
     }
 
@@ -166,7 +188,10 @@ struct TradeHistoryView: View {
                         trade: trade,
                         accountName: viewModel.displayAccountTitle(for: trade.accountID),
                         imagePipeline: imagePipeline,
-                        onOpen: { viewModel.openTrade(trade) }
+                        onOpen: { viewModel.openTrade(trade) },
+                        onShare: { viewModel.shareTrade(trade) },
+                        onEdit: { viewModel.editTrade(trade) },
+                        onDelete: { viewModel.requestDelete(trade) }
                     )
                     .listRowInsets(EdgeInsets(
                         top: ExperienceSpacing.xs,
@@ -176,6 +201,19 @@ struct TradeHistoryView: View {
                     ))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            viewModel.requestDelete(trade)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        Button {
+                            viewModel.editTrade(trade)
+                        } label: {
+                            Label("Edit", systemImage: "square.and.pencil")
+                        }
+                        .tint(colors.accent)
+                    }
                     .onAppear {
                         Task { await viewModel.loadMoreIfNeeded(currentTradeID: trade.id) }
                     }
@@ -254,4 +292,14 @@ struct TradeHistoryView: View {
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("trades.summary")
     }
+}
+
+private struct TradeHistoryShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

@@ -94,6 +94,7 @@ final class RoomInfoViewModel {
         if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
             inboxStore.removeRoom(id: roomID)
             didLeave = true
+            ExperienceHaptics.play(.success)
             navigationCoordinator?.pop()
             navigationCoordinator?.pop()
             return
@@ -102,11 +103,12 @@ final class RoomInfoViewModel {
             try await rooms.leave(roomID: roomID, profileID: viewerID)
             inboxStore.removeRoom(id: roomID)
             didLeave = true
+            ExperienceHaptics.play(.success)
             navigationCoordinator?.pop()
             navigationCoordinator?.pop()
         } catch {
             statusMessage = ConversationThreadSupport.message(for: error)
-            ExperienceHaptics.play(.warning)
+            ExperienceHaptics.play(.error)
         }
     }
 

@@ -80,6 +80,12 @@ struct TradeHistoryFilterSheet: View {
             .experienceNavigationTitle("Filters")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("trades.filters.cancel")
+                }
+                ToolbarItem(placement: .topBarLeading) {
                     Button("Reset") {
                         viewModel.resetDraftFilters()
                     }

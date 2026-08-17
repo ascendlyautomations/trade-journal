@@ -63,6 +63,18 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
     }
 
     func achievement(id: AchievementID) async throws -> Achievement {
+        do {
+            return try await fetchAchievementRow(id: id)
+        } catch {
+            // Push / deep links often pass `achievement_posts.id` (web feed parity).
+            if let resolved = try? await resolveAchievement(fromPostID: id.rawValue) {
+                return resolved
+            }
+            throw error
+        }
+    }
+
+    private func fetchAchievementRow(id: AchievementID) async throws -> Achievement {
         let dto: AchievementDTO.Achievement = try await supabase.database.selectOne(
             AchievementDTO.Achievement.self,
             from: "achievements",
@@ -72,6 +84,27 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
             ]
         )
         return try Self.mapAchievement(dto)
+    }
+
+    private func resolveAchievement(fromPostID postID: String) async throws -> Achievement? {
+        struct PostRow: Codable, Sendable {
+            var achievement_id: String?
+        }
+        let row: PostRow = try await supabase.database.selectOne(
+            PostRow.self,
+            from: "achievement_posts",
+            query: [
+                SupabaseQuery.select("achievement_id"),
+                SupabaseQuery.eq("id", postID),
+            ]
+        )
+        guard let achievementID = row.achievement_id?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !achievementID.isEmpty
+        else {
+            return nil
+        }
+        return try await fetchAchievementRow(id: AchievementID(achievementID))
     }
 
     func save(_ achievement: Achievement) async throws -> Achievement {

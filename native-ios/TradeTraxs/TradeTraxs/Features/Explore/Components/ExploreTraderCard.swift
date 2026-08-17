@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Compact suggested-trader card for the horizontal discovery rail.
 struct ExploreTraderCard: View {
@@ -54,6 +55,8 @@ struct ExploreTraderCard: View {
                                 .stroke(colors.border, lineWidth: ExperienceBorder.thin)
                         }
                     }
+                    .frame(minHeight: ExperienceAccessibility.minTouchTarget)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(
@@ -68,6 +71,31 @@ struct ExploreTraderCard: View {
             RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
                 .fill(colors.surfacePrimary)
         )
+        .contextMenu {
+            Button(action: onOpen) {
+                Label("View Profile", systemImage: "person.crop.circle")
+            }
+            Button {
+                UIPasteboard.general.string = "@\(trader.profile.username)"
+                ExperienceHaptics.play(.success)
+            } label: {
+                Label("Copy Username", systemImage: "doc.on.doc")
+            }
+            Button(action: onToggleFollow) {
+                Label(
+                    isFollowing ? "Unfollow" : "Follow",
+                    systemImage: isFollowing ? "person.badge.minus" : "person.badge.plus"
+                )
+            }
+        } preview: {
+            ExploreTraderCard(
+                trader: trader,
+                imagePipeline: imagePipeline,
+                isFollowing: isFollowing,
+                onOpen: {},
+                onToggleFollow: {}
+            )
+        }
         .accessibilityIdentifier("explore.trader.\(trader.id.rawValue)")
     }
 }

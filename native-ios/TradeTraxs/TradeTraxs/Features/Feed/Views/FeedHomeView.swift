@@ -197,7 +197,7 @@ struct FeedHomeView: View {
 
     private var emptyTitle: String {
         switch viewModel.contentFilter {
-        case .all: return "Nothing here yet"
+        case .all: return "Your feed is quiet"
         case .trades: return "No trades yet"
         case .posts: return "No posts yet"
         case .clips: return "No clips yet"
@@ -208,7 +208,7 @@ struct FeedHomeView: View {
     private var emptyMessage: String {
         switch viewModel.scope {
         case .following:
-            return "Follow traders to fill your Home Feed."
+            return "Follow traders to see their activity here."
         case .global:
             return "New public activity will show up here."
         }

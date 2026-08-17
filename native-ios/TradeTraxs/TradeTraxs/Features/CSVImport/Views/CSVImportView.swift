@@ -66,7 +66,7 @@ struct CSVImportView: View {
                     viewModel.ingestPickedFile(url: url)
                 }
             case .failure(let error):
-                viewModel.fail(error.localizedDescription)
+                viewModel.fail(UserFacingError.message(for: error))
             }
         }
         .task { viewModel.loadAccountsIfNeeded() }
