@@ -38,9 +38,6 @@ struct AchievementsContainerView: View {
             .onAppear {
                 viewModel.prefetchEngagement(for: viewModel.items.map(\.id))
             }
-            .onChange(of: ContentMutationStore.shared.revision) { _, _ in
-                Task { await viewModel.refresh() }
-            }
             .accessibilityIdentifier("profile.achievements.list")
         }
     }

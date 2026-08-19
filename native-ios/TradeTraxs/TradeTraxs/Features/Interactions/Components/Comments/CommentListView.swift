@@ -4,6 +4,7 @@ import SwiftUI
 struct CommentListView: View {
     @Bindable var viewModel: CommentsViewModel
     let currentUserID: ProfileID?
+    let imagePipeline: any ImagePipeline
     @State private var pendingDelete: InteractionComment?
 
     @Environment(\.themeColors) private var colors
@@ -48,6 +49,7 @@ struct CommentListView: View {
                         CommentRowView(
                             comment: comment,
                             isOwn: currentUserID == comment.authorProfileID,
+                            imagePipeline: imagePipeline,
                             onDelete: currentUserID == comment.authorProfileID
                                 ? {
                                     ExperienceHaptics.play(.warning)
@@ -59,6 +61,7 @@ struct CommentListView: View {
                             CommentRowView(
                                 comment: reply,
                                 isOwn: currentUserID == reply.authorProfileID,
+                                imagePipeline: imagePipeline,
                                 onDelete: currentUserID == reply.authorProfileID
                                     ? {
                                         ExperienceHaptics.play(.warning)

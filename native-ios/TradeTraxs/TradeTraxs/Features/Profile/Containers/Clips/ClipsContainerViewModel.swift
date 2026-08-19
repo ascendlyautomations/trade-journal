@@ -36,11 +36,15 @@ final class ClipsContainerViewModel {
     }
 
     func applyBootstrap(_ snapshot: ProfileState) {
-        guard snapshot.didBootstrap || snapshot.phase == .loaded || !snapshot.clips.isEmpty else {
-            if snapshot.phase == .loading, items.isEmpty { state = .loading }
+        if snapshot.didBootstrap || snapshot.phase == .loaded {
+            isScreenOwned = true
+        }
+        guard snapshot.didLoadClips || !snapshot.clips.isEmpty else {
+            if (snapshot.phase == .loading || snapshot.didBootstrap), items.isEmpty {
+                state = .loading
+            }
             return
         }
-        isScreenOwned = true
         hasLoaded = true
         items = snapshot.clips
         detailCache.seed(reels: items)
@@ -49,7 +53,6 @@ final class ClipsContainerViewModel {
     }
 
     func loadIfNeeded() {
-        if isScreenOwned { return }
         guard !hasLoaded, loadTask == nil else { return }
         loadTask = Task { await performLoad() }
     }

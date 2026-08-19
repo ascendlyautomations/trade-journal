@@ -4,6 +4,7 @@ struct CalendarHomeView: View {
     @State private var viewModel: CalendarViewModel
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
         _viewModel = State(
@@ -45,7 +46,7 @@ struct CalendarHomeView: View {
                 content
             }
         }
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceScreenBackground()
         .experienceNavigationTitle("Calendar")
         .toolbar { toolbar }
         .refreshable { await viewModel.refresh() }
@@ -68,7 +69,15 @@ struct CalendarHomeView: View {
                     CalendarMonthGrid(month: month, selectedDayKey: nil) { dayKey in
                         viewModel.selectDay(dayKey)
                     }
-                    .opacity(viewModel.isMonthTransitioning ? 0.7 : 1)
+                    .opacity(viewModel.isMonthTransitioning && !reduceMotion ? 0.55 : 1)
+                    .animation(
+                        ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
+                        value: viewModel.isMonthTransitioning
+                    )
+                    .animation(
+                        ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
+                        value: month.title
+                    )
 
                     CalendarMonthSummaryBar(summary: month.monthSummary)
                 }

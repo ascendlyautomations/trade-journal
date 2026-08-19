@@ -96,6 +96,7 @@ struct MessagesHomeView: View {
             NewChatPickerView(data: data) { conversation in
                 viewModel.handleCreatedConversation(conversation)
             }
+            .experienceSheetChrome()
         }
         .alert(
             "Delete Chat",

@@ -142,7 +142,7 @@ final class CreatePostViewModel {
                 )
             }
 
-            ContentMutationStore.shared.notePostCreated(post.id)
+            OwnerProfileOptimisticStore.shared.notePostCreated(post)
             ExperienceHaptics.play(.success)
             phase = .ready
             onDismiss()

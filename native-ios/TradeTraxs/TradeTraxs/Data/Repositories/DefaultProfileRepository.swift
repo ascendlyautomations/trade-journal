@@ -256,6 +256,13 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         return mapped
     }
 
+    func deleteWallPost(id: PostID) async throws {
+        try await supabase.database.delete(
+            from: "profile_posts",
+            query: [SupabaseQuery.eq("id", id.rawValue)]
+        )
+    }
+
     func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState {
         struct Row: Codable, Sendable { var follower_id: String?; var following_id: String? }
         let key = "profiles.followState:\(viewer.rawValue)->\(target.rawValue)"

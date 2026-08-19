@@ -31,6 +31,50 @@ final class InteractionExperienceTests: XCTestCase {
         XCTAssertNotEqual(achievement, feed)
     }
 
+    func testCommentMappingPreservesAuthorAvatarURLFromProfilesJoin() {
+        var row = InteractionDTO.CommentRow()
+        row.id = "c-avatar-1"
+        row.user_id = "author-1"
+        row.trade_id = "t-1"
+        row.content = "Nice trade"
+        row.created_at = "2026-01-01T00:00:00Z"
+        row.profiles = .init(
+            username: "scalper",
+            name: "Alex",
+            avatar_url: "https://cdn.example.com/avatars/alex.png"
+        )
+
+        let mapped = DefaultInteractionRepository.mapComment(
+            row,
+            target: .trade(TradeID("t-1"))
+        )
+
+        XCTAssertEqual(mapped?.authorUsername, "scalper")
+        XCTAssertEqual(mapped?.authorDisplayName, "Alex")
+        XCTAssertEqual(mapped?.authorAvatarURL, "https://cdn.example.com/avatars/alex.png")
+        XCTAssertEqual(
+            mapped?.authorAvatarReference?.id,
+            "https://cdn.example.com/avatars/alex.png"
+        )
+    }
+
+    func testCommentMappingDropsBlankAvatarURL() {
+        var row = InteractionDTO.CommentRow()
+        row.id = "c-blank"
+        row.user_id = "author-2"
+        row.content = "Hi"
+        row.profiles = .init(username: "no-pic", name: nil, avatar_url: "   ")
+
+        let mapped = DefaultInteractionRepository.mapComment(
+            row,
+            target: .profilePost(PostID("p-1"))
+        )
+
+        XCTAssertNil(mapped?.authorAvatarURL)
+        XCTAssertNil(mapped?.authorAvatarReference)
+        XCTAssertEqual(mapped?.authorUsername, "no-pic")
+    }
+
     func testOptimisticLikeUpdatesAndDedupesInFlight() async {
         let repository = InMemoryInteractionRepository()
         repository.likeDelayNanoseconds = 150_000_000

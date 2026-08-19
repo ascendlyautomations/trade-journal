@@ -89,6 +89,10 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
         try await base.createWallPost(authorID: authorID, content: content, imageURL: imageURL)
     }
 
+    func deleteWallPost(id: PostID) async throws {
+        try await base.deleteWallPost(id: id)
+    }
+
     func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState {
         try await base.followState(from: viewer, to: target)
     }

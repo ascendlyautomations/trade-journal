@@ -43,9 +43,13 @@ struct ProfileEquityCurveView: View {
                     )
                 )
 
+                // Fill only within the visible Y domain (line → plot bottom).
+                // A single-y AreaMark baselines at 0, which sits far below padded
+                // equity domains and can bleed past the chart into layout below.
                 AreaMark(
                     x: .value("Trade", point.index),
-                    y: .value("Equity", point.equityValue)
+                    yStart: .value("Baseline", yDomain.lowerBound),
+                    yEnd: .value("Equity", point.equityValue)
                 )
                 .interpolationMethod(.catmullRom)
                 .foregroundStyle(
@@ -106,6 +110,10 @@ struct ProfileEquityCurveView: View {
             }
         }
         .chartXSelection(value: $selectedIndex)
+        .chartPlotStyle { plotArea in
+            // Clip Catmull–Rom overshoot so fill/line never leave the plot.
+            plotArea.clipped()
+        }
         .chartOverlay { proxy in
             GeometryReader { geo in
                 if let selected, let selectedIndex,

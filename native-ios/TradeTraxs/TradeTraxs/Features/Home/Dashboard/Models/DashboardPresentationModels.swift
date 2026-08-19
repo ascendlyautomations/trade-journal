@@ -95,7 +95,28 @@ nonisolated struct DashboardHoldTimeRow: Identifiable, Hashable, Sendable {
     var value: String
 }
 
+nonisolated struct DashboardHistogramBucket: Identifiable, Hashable, Sendable {
+    var id: String { label }
+    var label: String
+    var count: Int
+}
+
+nonisolated struct DashboardDrawdownPoint: Identifiable, Hashable, Sendable {
+    var index: Int
+    /// Negative depth below peak (0 at equity highs).
+    var depth: Double
+    var id: Int { index }
+}
+
+nonisolated enum DashboardInsightKind: String, Hashable, Sendable {
+    case session
+    case symbol
+    case direction
+}
+
 nonisolated struct DashboardInsightItem: Identifiable, Hashable, Sendable {
     var id: String
+    var title: String
     var body: String
+    var kind: DashboardInsightKind
 }

@@ -58,7 +58,7 @@ struct TradeSharePickerSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .experienceSheetChrome()
         .accessibilityIdentifier("conversation.tradePicker")
     }
 }

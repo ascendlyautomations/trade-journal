@@ -79,7 +79,7 @@ struct CreateReelView: View {
                     onClose: { showsTradePicker = false }
                 )
             }
-            .presentationDetents([.medium, .large])
+            .experienceSheetChrome()
             .onAppear { viewModel.loadTradesIfNeeded() }
         }
         .fullScreenCover(isPresented: $showsCamera) {

@@ -4,14 +4,16 @@ import UIKit
 struct CommentRowView: View {
     let comment: InteractionComment
     let isOwn: Bool
+    let imagePipeline: any ImagePipeline
     var onDelete: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
         HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-            ExperienceAvatar(
-                initials: Self.initials(for: comment),
+            CommentAuthorAvatarView(
+                comment: comment,
+                imagePipeline: imagePipeline,
                 size: 32
             )
 
@@ -44,12 +46,67 @@ struct CommentRowView: View {
                 }
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilitySummary)
         .accessibilityIdentifier("interaction.comment.row.\(comment.id.rawValue)")
+    }
+
+    private var accessibilitySummary: String {
+        let author = comment.authorDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let named: String = {
+            if let author, !author.isEmpty { return author }
+            if let username = comment.authorUsername, !username.isEmpty { return "@\(username)" }
+            return "Trader"
+        }()
+        return "\(named). \(comment.body)"
+    }
+}
+
+/// Loads the comment author's avatar via the shared ``ImagePipeline`` cache.
+/// Uses the avatar URL already joined on the comment — never fetches profiles per row.
+private struct CommentAuthorAvatarView: View {
+    let comment: InteractionComment
+    let imagePipeline: any ImagePipeline
+    var size: CGFloat = 32
+
+    @State private var image: Image?
+
+    var body: some View {
+        ExperienceAvatar(
+            initials: Self.initials(for: comment),
+            image: image,
+            size: size
+        )
+        .task(id: comment.authorAvatarURL ?? comment.authorProfileID.rawValue) {
+            await load()
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func load() async {
+        guard let reference = comment.authorAvatarReference else {
+            image = nil
+            return
+        }
+        do {
+            let data = try await imagePipeline.data(
+                for: ImageRequest(
+                    reference: reference,
+                    purpose: .profileAvatar,
+                    maxPixelSize: 96
+                )
+            )
+            if let ui = UIImage(data: data) {
+                image = Image(uiImage: ui)
+            }
+        } catch {
+            image = nil
+        }
     }
 
     private static func initials(for comment: InteractionComment) -> String {
         ProfileDisplay.initials(
-            displayName: comment.authorUsername ?? "",
+            displayName: comment.authorDisplayName ?? "",
             username: comment.authorUsername ?? "tr"
         )
     }

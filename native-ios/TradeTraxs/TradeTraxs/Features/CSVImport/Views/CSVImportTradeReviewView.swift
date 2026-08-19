@@ -51,6 +51,8 @@ struct CSVImportTradeReviewView: View {
             }
         }
         .experienceNavigationTitle("Review Trade")
+        .scrollDismissesKeyboard(.interactively)
+        .experienceKeyboardDoneToolbar()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel", action: onCancel)

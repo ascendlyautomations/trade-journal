@@ -220,9 +220,17 @@ struct FeedNavigationStack: View {
                 navigationCoordinator: coordinator
             )
         case .post(let postID):
-            PostDetailView(postID: postID, data: appEnvironment.data)
+            PostDetailView(
+                postID: postID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .reel(let reelID):
-            ClipDetailView(reelID: reelID, data: appEnvironment.data)
+            ClipDetailView(
+                reelID: reelID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .achievement(let achievementID):
             AchievementDetailView(achievementID: achievementID, data: appEnvironment.data)
         case .profile(let profileID):
@@ -429,9 +437,17 @@ struct ProfileNavigationStack: View {
                 navigationCoordinator: coordinator
             )
         case .post(let postID):
-            PostDetailView(postID: postID, data: appEnvironment.data)
+            PostDetailView(
+                postID: postID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .reel(let reelID):
-            ClipDetailView(reelID: reelID, data: appEnvironment.data)
+            ClipDetailView(
+                reelID: reelID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .achievement(let achievementID):
             AchievementDetailView(achievementID: achievementID, data: appEnvironment.data)
         case .followers(let profileID):

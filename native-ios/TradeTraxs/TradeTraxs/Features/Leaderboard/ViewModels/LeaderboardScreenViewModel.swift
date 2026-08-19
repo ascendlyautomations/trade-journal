@@ -165,8 +165,11 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         ExperienceHaptics.play(.selection)
         inFlightFollow.insert(row.profileID)
         let currentlyFollowing = isFollowing(row)
-        store.setFollowing(row.profileID, isFollowing: !currentlyFollowing)
-        detailCache.setViewerFollows(row.profileID, isFollowing: !currentlyFollowing)
+        FollowMutationCoordinator.shared.applyEdgeChange(
+            viewer: viewerID,
+            target: row.profileID,
+            isFollowing: !currentlyFollowing
+        )
         applyStoreToState(didPlayPodiumEntrance: true)
 
         Task {
@@ -178,8 +181,11 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
                     try await profiles.follow(from: viewerID, to: row.profileID)
                 }
             } catch {
-                store.setFollowing(row.profileID, isFollowing: currentlyFollowing)
-                detailCache.setViewerFollows(row.profileID, isFollowing: currentlyFollowing)
+                FollowMutationCoordinator.shared.applyEdgeChange(
+                    viewer: viewerID,
+                    target: row.profileID,
+                    isFollowing: currentlyFollowing
+                )
                 applyStoreToState(didPlayPodiumEntrance: true)
             }
         }

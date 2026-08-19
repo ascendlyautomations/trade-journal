@@ -10,7 +10,6 @@ struct CreateAchievementView: View {
     @State private var didApplyScreenshotPrefill = false
 
     @Environment(\.themeColors) private var colors
-    @FocusState private var isPayoutFocused: Bool
 
     init(
         data: DataEnvironment,
@@ -114,7 +113,6 @@ struct CreateAchievementView: View {
                 Section("Payout") {
                     TextField("Payout Amount ($)", text: $viewModel.payoutAmountText)
                         .keyboardType(.decimalPad)
-                        .focused($isPayoutFocused)
                         .accessibilityIdentifier("createAchievement.payout")
                 }
             }
@@ -159,12 +157,7 @@ struct CreateAchievementView: View {
         .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
         .disabled(viewModel.phase == .publishing)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { isPayoutFocused = false }
-            }
-        }
+        .experienceKeyboardDoneToolbar()
     }
 
     private var kindPicker: some View {

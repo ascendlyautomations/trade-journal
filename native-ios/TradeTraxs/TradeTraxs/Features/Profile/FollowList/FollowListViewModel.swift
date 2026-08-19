@@ -95,7 +95,15 @@ final class FollowListViewModel {
     }
 
     func isFollowing(_ profile: Profile) -> Bool {
-        viewerFollowingIDs.contains(profile.id)
+        // Shared source of truth — DetailPresentationCache edge, then local set.
+        if let edge = detailCache.viewerFollowEdge(for: profile.id) {
+            return edge
+        }
+        if viewerFollowingIDs.contains(profile.id) {
+            return true
+        }
+        guard let viewerID else { return false }
+        return FollowMutationCoordinator.shared.isFollowing(viewer: viewerID, target: profile.id)
     }
 
     func toggleFollow(for profile: Profile) {
@@ -238,10 +246,9 @@ final class FollowListViewModel {
 
         let previous = viewerFollowingIDs
         viewerFollowingIDs.insert(profile.id)
-        detailCache.setViewerFollows(profile.id, isFollowing: true)
-        await SessionFollowingStore.shared.setFollowing(
-            viewerID: viewerID.rawValue,
-            targetID: profile.id.rawValue,
+        FollowMutationCoordinator.shared.applyEdgeChange(
+            viewer: viewerID,
+            target: profile.id,
             isFollowing: true
         )
         ExperienceHaptics.play(.selection)
@@ -254,10 +261,10 @@ final class FollowListViewModel {
             try await profiles.follow(from: viewerID, to: profile.id)
         } catch {
             viewerFollowingIDs = previous
-            detailCache.seedViewerFollowingIDs(previous)
-            await SessionFollowingStore.shared.seed(
-                viewerID: viewerID.rawValue,
-                ids: Set(previous.map(\.rawValue))
+            FollowMutationCoordinator.shared.applyEdgeChange(
+                viewer: viewerID,
+                target: profile.id,
+                isFollowing: false
             )
             ExperienceHaptics.play(.warning)
         }
@@ -270,10 +277,9 @@ final class FollowListViewModel {
 
         let previous = viewerFollowingIDs
         viewerFollowingIDs.remove(profile.id)
-        detailCache.setViewerFollows(profile.id, isFollowing: false)
-        await SessionFollowingStore.shared.setFollowing(
-            viewerID: viewerID.rawValue,
-            targetID: profile.id.rawValue,
+        FollowMutationCoordinator.shared.applyEdgeChange(
+            viewer: viewerID,
+            target: profile.id,
             isFollowing: false
         )
 
@@ -292,10 +298,10 @@ final class FollowListViewModel {
             try await profiles.unfollow(from: viewerID, to: profile.id)
         } catch {
             viewerFollowingIDs = previous
-            detailCache.seedViewerFollowingIDs(previous)
-            await SessionFollowingStore.shared.seed(
-                viewerID: viewerID.rawValue,
-                ids: Set(previous.map(\.rawValue))
+            FollowMutationCoordinator.shared.applyEdgeChange(
+                viewer: viewerID,
+                target: profile.id,
+                isFollowing: true
             )
             if kind == .following, listOwnerID == viewerID, !items.contains(where: { $0.id == profile.id }) {
                 items.insert(profile, at: 0)
@@ -312,6 +318,7 @@ final class FollowListViewModel {
         let previous = items
         items.removeAll { $0.id == profile.id }
         seedListCache(items)
+        FollowMutationCoordinator.shared.applyFollowerRemoved(owner: viewerID, follower: profile.id)
         ExperienceHaptics.play(.warning)
 
         if profile.id.rawValue.hasPrefix("dev.") {
@@ -323,6 +330,11 @@ final class FollowListViewModel {
         } catch {
             items = previous
             seedListCache(previous)
+            // Undo the optimistic follower-count decrement.
+            FollowMutationCoordinator.shared.applyIncomingFollowAccepted(
+                owner: viewerID,
+                requester: profile.id
+            )
             ExperienceHaptics.play(.warning)
         }
     }

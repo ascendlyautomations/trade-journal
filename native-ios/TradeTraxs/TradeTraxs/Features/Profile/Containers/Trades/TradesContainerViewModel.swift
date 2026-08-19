@@ -85,15 +85,17 @@ final class TradesContainerViewModel {
         }
     }
 
-    /// Applies screen bootstrap — no repository call.
+    /// Applies screen bootstrap — uses section data when Stage 2 already filled it.
     func applyBootstrap(_ snapshot: ProfileState) {
-        guard snapshot.didBootstrap || snapshot.phase == .loaded || !snapshot.trades.isEmpty else {
-            if snapshot.phase == .loading, items.isEmpty {
+        if snapshot.didBootstrap || snapshot.phase == .loaded {
+            isScreenOwned = true
+        }
+        guard snapshot.didLoadTrades || !snapshot.trades.isEmpty else {
+            if (snapshot.phase == .loading || snapshot.didBootstrap), items.isEmpty {
                 state = .loading
             }
             return
         }
-        isScreenOwned = true
         hasLoaded = true
         items = snapshot.trades
         nextCursor = snapshot.tradesNextCursor
@@ -114,8 +116,6 @@ final class TradesContainerViewModel {
     }
 
     func loadIfNeeded() {
-        // Screen-owned sections must not bootstrap independently.
-        if isScreenOwned { return }
         guard !hasLoaded, loadTask == nil else { return }
         loadTask = Task { await performLoad(reset: true) }
     }

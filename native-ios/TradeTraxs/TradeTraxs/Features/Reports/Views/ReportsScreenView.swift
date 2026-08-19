@@ -37,8 +37,7 @@ struct ReportsScreenView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle("Reports")
-        .navigationBarTitleDisplayMode(.large)
+        .experienceNavigationTitle("Reports")
         .toolbar(.hidden, for: .tabBar)
         .refreshable {
             await viewModel.refresh()

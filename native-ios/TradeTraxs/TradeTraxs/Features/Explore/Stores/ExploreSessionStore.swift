@@ -58,10 +58,25 @@ final class ExploreSessionStore {
     }
 
     func setFollowing(_ id: ProfileID, isFollowing: Bool) {
+        applyFollowEdge(id, isFollowing: isFollowing, adjustFollowerCount: false)
+    }
+
+    /// Shared Follow mutation patch — edge + optional follower-count on cards.
+    func applyFollowEdge(
+        _ id: ProfileID,
+        isFollowing: Bool,
+        adjustFollowerCount: Bool
+    ) {
         if isFollowing {
             viewerFollowingIDs.insert(id)
         } else {
             viewerFollowingIDs.remove(id)
+        }
+        guard adjustFollowerCount else { return }
+        if let index = suggestedTraders.firstIndex(where: { $0.id == id }) {
+            var trader = suggestedTraders[index]
+            trader.followerCount = max(0, trader.followerCount + (isFollowing ? 1 : -1))
+            suggestedTraders[index] = trader
         }
     }
 

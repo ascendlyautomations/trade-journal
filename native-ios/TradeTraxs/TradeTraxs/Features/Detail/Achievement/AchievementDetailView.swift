@@ -3,6 +3,7 @@ import SwiftUI
 /// Permanent Achievement detail destination — same hierarchy as Trade Detail.
 struct AchievementDetailView: View {
     @State private var viewModel: AchievementDetailViewModel
+    @State private var contentRevealed = false
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment
 
@@ -48,6 +49,16 @@ struct AchievementDetailView: View {
             viewModel.loadIfNeeded()
             data.engagementStore.prefetch([.achievement(viewModel.achievementID)])
         }
+        .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
+        .onAppear {
+            guard !contentRevealed else { return }
+            ExperienceMotion.withAnimation(
+                ExperienceMotion.navigation,
+                reduceMotion: reduceMotion
+            ) {
+                contentRevealed = true
+            }
+        }
         .accessibilityIdentifier("detail.achievement.root")
     }
 
@@ -64,6 +75,8 @@ struct AchievementDetailView: View {
                             username: viewModel.authorUsername,
                             dateText: TradeDisplay.dateText(achievement.achievedAt),
                             isOwner: viewModel.isOwner,
+                            contentLink: .achievement(achievement.id),
+                            shareText: "\(achievement.title) on TradeTraxs",
                             accessibilityIdentifier: "detail.achievement.identity"
                         )
                         .padding(.horizontal, ExperienceSpacing.lg)

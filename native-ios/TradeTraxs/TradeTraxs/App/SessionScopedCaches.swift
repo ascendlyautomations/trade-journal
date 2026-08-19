@@ -32,6 +32,8 @@ enum SessionScopedCaches {
         TradeJournalMutationStore.shared.invalidate()
         AccountMutationStore.shared.invalidate()
         ContentMutationStore.shared.invalidate()
+        OwnerProfileOptimisticStore.shared.invalidate()
+        FollowMutationCoordinator.shared.invalidate()
         data.detailCache.removeAll()
         data.engagementStore.removeAll()
         #if DEBUG

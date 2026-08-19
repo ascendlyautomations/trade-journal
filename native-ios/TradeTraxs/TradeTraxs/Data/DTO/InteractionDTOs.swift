@@ -35,6 +35,7 @@ nonisolated enum InteractionDTO {
 
         struct ProfileEmbed: Codable, Sendable {
             var username: String?
+            var name: String?
             var avatar_url: String?
         }
     }

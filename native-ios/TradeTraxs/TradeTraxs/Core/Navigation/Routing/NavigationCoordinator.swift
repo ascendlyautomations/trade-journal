@@ -82,6 +82,9 @@ final class NavigationCoordinator {
             invokeCreateAction()
             return
         }
+        if store.selectedTab != tab {
+            ExperienceHaptics.play(.selection)
+        }
         store.rememberContentTabIfNeeded(tab)
         store.selectedTab = tab
         emit(.tabSelected(tab))
@@ -220,11 +223,17 @@ final class NavigationCoordinator {
     }
 
     func present(sheet: SheetDestination) {
+        if store.presentedSheet != sheet {
+            ExperienceHaptics.play(.selection)
+        }
         store.presentedSheet = sheet
         emit(.sheetPresented(sheet))
     }
 
     func present(fullScreen: FullScreenDestination) {
+        if store.presentedFullScreen != fullScreen {
+            ExperienceHaptics.play(.selection)
+        }
         store.presentedFullScreen = fullScreen
         emit(.fullScreenPresented(fullScreen))
     }

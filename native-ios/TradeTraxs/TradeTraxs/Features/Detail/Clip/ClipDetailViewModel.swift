@@ -17,6 +17,8 @@ final class ClipDetailViewModel {
     private(set) var author: Profile?
     private(set) var authorAvatar: Image?
     private(set) var isOwner = false
+    private(set) var isDeleting = false
+    private(set) var deleteErrorMessage: String?
     private(set) var player: AVPlayer?
     private(set) var didReachEnd = false
 
@@ -28,6 +30,7 @@ final class ClipDetailViewModel {
     private let storage: any ObjectStorageProviding
     private let imagePipeline: any ImagePipeline
     private let cache: DetailPresentationCache
+    private let navigationCoordinator: NavigationCoordinator
     private var loadTask: Task<Void, Never>?
     private var endObserver: NSObjectProtocol?
 
@@ -38,7 +41,8 @@ final class ClipDetailViewModel {
         session: any SessionProviding,
         storage: any ObjectStorageProviding,
         imagePipeline: any ImagePipeline,
-        cache: DetailPresentationCache
+        cache: DetailPresentationCache,
+        navigationCoordinator: NavigationCoordinator
     ) {
         self.reelID = reelID
         self.feed = feed
@@ -47,6 +51,7 @@ final class ClipDetailViewModel {
         self.storage = storage
         self.imagePipeline = imagePipeline
         self.cache = cache
+        self.navigationCoordinator = navigationCoordinator
     }
 
     var authorDisplayName: String { DetailAuthorPresentation.displayName(for: author) }
@@ -77,6 +82,32 @@ final class ClipDetailViewModel {
         didReachEnd = false
         player.seek(to: .zero)
         player.play()
+    }
+
+    func deleteReel() async -> Bool {
+        guard isOwner, !isDeleting else { return false }
+        isDeleting = true
+        deleteErrorMessage = nil
+        defer { isDeleting = false }
+        do {
+            if let viewer = await session.currentUserID,
+               viewer.rawValue.hasPrefix("dev.")
+            {
+                // Local development — mutate caches only.
+            } else {
+                try await feed.deleteReel(id: reelID)
+            }
+            tearDown()
+            cache.removeReel(id: reelID)
+            OwnerProfileOptimisticStore.shared.noteReelDeleted(id: reelID)
+            ExperienceHaptics.play(.success)
+            navigationCoordinator.pop()
+            return true
+        } catch {
+            deleteErrorMessage = ProfileSectionSupport.message(for: error)
+            ExperienceHaptics.play(.warning)
+            return false
+        }
     }
 
     private func performLoad(forceNetwork: Bool = false) async {

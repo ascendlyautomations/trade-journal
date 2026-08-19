@@ -169,9 +169,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
             InteractionDTO.CommentRow.self,
             from: tables.comments,
             query: [
-                SupabaseQuery.select(
-                    "id,\(fk),user_id,content,parent_comment_id,pinned,created_at,profiles(username,avatar_url)"
-                ),
+                SupabaseQuery.select(Self.commentSelect(foreignKey: fk)),
                 SupabaseQuery.eq(fk, target.id),
                 URLQueryItem(
                     name: "order",
@@ -215,9 +213,11 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
         case .achievement: insert.achievement_post_id = target.id
         }
 
+        // Same profiles embed as list load — no follow-up profile query after create.
         let row: InteractionDTO.CommentRow = try await supabase.database.insert(
             insert,
             into: tables.comments,
+            query: [SupabaseQuery.select(Self.commentSelect(foreignKey: tables.foreignKey))],
             returning: InteractionDTO.CommentRow.self
         )
         guard let mapped = Self.mapComment(row, target: target) else {
@@ -294,17 +294,28 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
         }
     }
 
-    private static func mapComment(
+    private static func commentSelect(foreignKey: String) -> String {
+        "id,\(foreignKey),user_id,content,parent_comment_id,pinned,created_at,profiles(username,name,avatar_url)"
+    }
+
+    /// Maps a comment row including the embedded author avatar URL from the list join.
+    static func mapComment(
         _ row: InteractionDTO.CommentRow,
         target: InteractionTarget
     ) -> InteractionComment? {
         guard let id = row.id, let author = row.user_id else { return nil }
         let text = (row.content ?? row.body ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let avatar = row.profiles?.avatar_url?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = row.profiles?.name?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return InteractionComment(
             id: CommentID(id),
             target: target,
             authorProfileID: ProfileID(author),
             authorUsername: row.profiles?.username,
+            authorDisplayName: (displayName?.isEmpty == false) ? displayName : nil,
+            authorAvatarURL: (avatar?.isEmpty == false) ? avatar : nil,
             body: text,
             parentCommentID: row.parent_comment_id.map { CommentID($0) },
             createdAt: ISO8601.date(from: row.created_at) ?? Date(),

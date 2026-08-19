@@ -29,7 +29,10 @@ final class DetailPresentationCache {
     private var followersByProfile: [ProfileID: [Profile]] = [:]
     private var followingByProfile: [ProfileID: [Profile]] = [:]
     /// Profiles the authenticated viewer currently follows — drives Follow / Following buttons.
+    /// Only set when a **complete** following list is known (Follow list screen).
     private var viewerFollowingIDSet: Set<ProfileID>?
+    /// Per-profile follow edges from pairwise `followState` / toggle — never treated as a full list.
+    private var viewerFollowEdgeByProfile: [ProfileID: Bool] = [:]
 
     func seed(_ profile: Profile) {
         profilesByID[profile.id] = profile
@@ -207,14 +210,24 @@ final class DetailPresentationCache {
 
     func seedViewerFollowingIDs(_ ids: Set<ProfileID>) {
         viewerFollowingIDSet = ids
+        for id in ids {
+            viewerFollowEdgeByProfile[id] = true
+        }
     }
 
     func viewerFollowingIDs() -> Set<ProfileID>? {
         viewerFollowingIDSet
     }
 
+    /// Pairwise follow edge for one profile (safe for Profile header Follow).
+    func viewerFollowEdge(for profileID: ProfileID) -> Bool? {
+        viewerFollowEdgeByProfile[profileID]
+    }
+
     func setViewerFollows(_ profileID: ProfileID, isFollowing: Bool) {
-        var ids = viewerFollowingIDSet ?? []
+        viewerFollowEdgeByProfile[profileID] = isFollowing
+        // Only mutate the complete following set when it already exists.
+        guard var ids = viewerFollowingIDSet else { return }
         if isFollowing {
             ids.insert(profileID)
         } else {
@@ -271,6 +284,14 @@ final class DetailPresentationCache {
         statsByProfile = [:]
     }
 
+    func removePost(id: PostID) {
+        posts[id] = nil
+    }
+
+    func removeReel(id: ReelID) {
+        reels[id] = nil
+    }
+
     /// Drop all session seeds when the authenticated user changes.
     func removeAll() {
         trades = [:]
@@ -291,5 +312,6 @@ final class DetailPresentationCache {
         followersByProfile = [:]
         followingByProfile = [:]
         viewerFollowingIDSet = nil
+        viewerFollowEdgeByProfile = [:]
     }
 }

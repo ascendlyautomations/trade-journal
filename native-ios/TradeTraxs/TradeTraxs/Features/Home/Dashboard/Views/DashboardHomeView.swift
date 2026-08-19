@@ -4,6 +4,7 @@ import SwiftUI
 struct DashboardHomeView: View {
     @State private var viewModel: DashboardViewModel
     @State private var activityStore = ActivityInboxStore.shared
+    @State private var contentRevealed = false
     private let navigationCoordinator: NavigationCoordinator
     private let data: DataEnvironment?
 
@@ -84,6 +85,7 @@ struct DashboardHomeView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    ExperienceHaptics.play(.selection)
                     navigationCoordinator.open(.profile(.activity))
                 } label: {
                     ZStack(alignment: .topTrailing) {
@@ -108,7 +110,6 @@ struct DashboardHomeView: View {
         .task {
             viewModel.loadIfNeeded()
             if let data {
-                // Bell only needs unread count + Realtime — not the Activity feed page.
                 activityStore.ensureUnreadBootstrap(
                     notifications: data.notifications,
                     session: data.session,
@@ -117,7 +118,6 @@ struct DashboardHomeView: View {
             }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-uitesting-dashboard-propfirm") {
-                // Wait for fixtures, then select the prop account.
                 try? await Task.sleep(nanoseconds: 200_000_000)
                 viewModel.setAccountFilter(.account(PropFirmFixtures.accountID))
             }
@@ -129,6 +129,9 @@ struct DashboardHomeView: View {
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
             viewModel.handleAccountMutation()
         }
+        .onChange(of: viewModel.summary?.tradeCount) { _, _ in
+            revealContentIfNeeded()
+        }
         .onDisappear {
             viewModel.onDisappear()
         }
@@ -137,13 +140,23 @@ struct DashboardHomeView: View {
 
     private var scrollContent: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 DashboardFilterBar(viewModel: viewModel)
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.top, ExperienceSpacing.xs)
+                    .padding(.bottom, ExperienceSpacing.sm)
 
                 if let summary = viewModel.summary {
-                    DashboardEquityHero(summary: summary)
+                    DashboardEquityHero(
+                        summary: summary,
+                        periodTitle: viewModel.dateRange.title,
+                        title: viewModel.equityHeroTitle,
+                        displayEquity: viewModel.equityHeroDisplayValue,
+                        chartPoints: viewModel.equityHeroChartPoints
+                    )
+
+                    DashboardMetricStrip(chips: viewModel.metricChips)
+                        .padding(.bottom, ExperienceSpacing.xl)
 
                     if let propStatus = viewModel.propFirmStatus {
                         PropFirmStatusCard(
@@ -151,21 +164,42 @@ struct DashboardHomeView: View {
                             onOpenDetails: { viewModel.openPropFirmDetails() }
                         )
                         .padding(.horizontal, ExperienceSpacing.md)
+                        .padding(.bottom, ExperienceSpacing.xl)
                     }
 
-                    sectionHeader("Performance")
-                    DashboardMetricStrip(chips: viewModel.metricChips)
-
-                    sectionHeader("Key Stats")
+                    sectionHeader(
+                        "Performance",
+                        subtitle: "Outcome quality for this period"
+                    )
                     performanceCardsGrid
+                        .padding(.bottom, ExperienceSpacing.lg)
 
-                    sectionHeader("Charts")
-                    DashboardChartsSection(summary: summary)
+                    DashboardChartsSection(
+                        summary: summary,
+                        onBrowseWins: { viewModel.browseWins() },
+                        onBrowseLosses: { viewModel.browseLosses() },
+                        onBrowseSession: { viewModel.browseSession($0) },
+                        onBrowseWeekday: { viewModel.browseWeekday(label: $0) },
+                        onBrowseHour: { viewModel.browseHour(label: $0) },
+                        onBrowseLong: { viewModel.browseLong() },
+                        onBrowseShort: { viewModel.browseShort() },
+                        onBrowseHoldBucket: { viewModel.browseHoldBucket(label: $0) }
+                    )
+                    .padding(.bottom, ExperienceSpacing.xxl)
 
-                    DashboardInsightsSection(insights: summary.insights)
-                        .padding(.bottom, ExperienceSpacing.xl)
+                    sectionHeader(
+                        "Insights",
+                        subtitle: "Coaching from your recent activity"
+                    )
+                    DashboardInsightsSection(insights: summary.insights, showsTitle: false)
+                        .padding(.bottom, ExperienceSpacing.xxxl)
                 }
             }
+            .opacity(contentRevealed || reduceMotion ? 1 : 0.001)
+            .animation(
+                ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
+                value: contentRevealed
+            )
             .animation(
                 ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
                 value: viewModel.dateRange
@@ -174,6 +208,20 @@ struct DashboardHomeView: View {
                 ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
                 value: viewModel.accountFilter
             )
+            .onAppear {
+                revealContentIfNeeded()
+            }
+        }
+    }
+
+    private func revealContentIfNeeded() {
+        guard viewModel.summary != nil else { return }
+        guard !contentRevealed else { return }
+        ExperienceMotion.withAnimation(
+            ExperienceMotion.navigation,
+            reduceMotion: reduceMotion
+        ) {
+            contentRevealed = true
         }
     }
 
@@ -188,17 +236,19 @@ struct DashboardHomeView: View {
             ForEach(viewModel.performanceCards) { chip in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(chip.label)
-                        .experienceStyle(.caption2, color: colors.secondaryText)
+                        .experienceStyle(.caption2, color: colors.tertiaryText)
                     Text(chip.value)
-                        .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
+                        .font(.system(.callout, design: .rounded).weight(.semibold).monospacedDigit())
                         .foregroundStyle(toneColor(chip.tone))
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
+                        .contentTransition(.numericText())
                 }
-                .padding(ExperienceSpacing.md)
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.vertical, ExperienceSpacing.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(colors.fillSecondary.opacity(0.45), in: RoundedRectangle(
-                    cornerRadius: ExperienceRadius.md,
+                .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
+                    cornerRadius: ExperienceRadius.sm,
                     style: .continuous
                 ))
                 .accessibilityIdentifier("dashboard.card.\(chip.id)")
@@ -207,27 +257,41 @@ struct DashboardHomeView: View {
         .padding(.horizontal, ExperienceSpacing.md)
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .experienceStyle(.footnote, color: colors.tertiaryText)
-            .textCase(.uppercase)
-            .tracking(0.6)
-            .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.top, ExperienceSpacing.xs)
+    private func sectionHeader(_ title: String, subtitle: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .experienceStyle(.headline, color: colors.primaryText)
+            if let subtitle {
+                Text(subtitle)
+                    .experienceStyle(.footnote, color: colors.tertiaryText)
+            }
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.bottom, ExperienceSpacing.md)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel(subtitle.map { "\(title). \($0)" } ?? title)
     }
 
     private var skeleton: some View {
         VStack(spacing: ExperienceSpacing.md) {
             ExperienceSkeleton(height: 36, cornerRadius: ExperienceRadius.sm)
                 .padding(.horizontal, ExperienceSpacing.md)
-            ExperienceSkeleton(height: 260, cornerRadius: ExperienceRadius.md)
+            ExperienceSkeleton(height: 88, cornerRadius: ExperienceRadius.sm)
                 .padding(.horizontal, ExperienceSpacing.md)
-            ExperienceSkeleton(height: 72, cornerRadius: ExperienceRadius.sm)
+            ExperienceSkeleton(height: 280, cornerRadius: ExperienceRadius.md)
                 .padding(.horizontal, ExperienceSpacing.md)
+            ExperienceSkeleton(height: 56, cornerRadius: ExperienceRadius.md)
+                .padding(.horizontal, ExperienceSpacing.md)
+            HStack(spacing: ExperienceSpacing.sm) {
+                ExperienceSkeleton(height: 64, cornerRadius: ExperienceRadius.sm)
+                ExperienceSkeleton(height: 64, cornerRadius: ExperienceRadius.sm)
+            }
+            .padding(.horizontal, ExperienceSpacing.md)
             Spacer()
         }
         .padding(.top, ExperienceSpacing.md)
         .accessibilityIdentifier("dashboard.skeleton")
+        .transition(.opacity)
     }
 
     private func toneColor(_ tone: DashboardMetricTone) -> Color {

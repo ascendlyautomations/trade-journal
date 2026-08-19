@@ -16,6 +16,8 @@ final class PostDetailViewModel {
     private(set) var author: Profile?
     private(set) var authorAvatar: Image?
     private(set) var isOwner = false
+    private(set) var isDeleting = false
+    private(set) var deleteErrorMessage: String?
 
     let postID: PostID
 
@@ -23,6 +25,7 @@ final class PostDetailViewModel {
     private let session: any SessionProviding
     private let imagePipeline: any ImagePipeline
     private let cache: DetailPresentationCache
+    private let navigationCoordinator: NavigationCoordinator
     private var loadTask: Task<Void, Never>?
 
     init(
@@ -30,13 +33,15 @@ final class PostDetailViewModel {
         profiles: any ProfileRepository,
         session: any SessionProviding,
         imagePipeline: any ImagePipeline,
-        cache: DetailPresentationCache
+        cache: DetailPresentationCache,
+        navigationCoordinator: NavigationCoordinator
     ) {
         self.postID = postID
         self.profiles = profiles
         self.session = session
         self.imagePipeline = imagePipeline
         self.cache = cache
+        self.navigationCoordinator = navigationCoordinator
     }
 
     var authorDisplayName: String { DetailAuthorPresentation.displayName(for: author) }
@@ -51,6 +56,31 @@ final class PostDetailViewModel {
     func refresh() async {
         loadTask?.cancel()
         await performLoad(forceNetwork: true)
+    }
+
+    func deletePost() async -> Bool {
+        guard isOwner, !isDeleting else { return false }
+        isDeleting = true
+        deleteErrorMessage = nil
+        defer { isDeleting = false }
+        do {
+            if let viewer = await session.currentUserID,
+               viewer.rawValue.hasPrefix("dev.")
+            {
+                // Local development — mutate caches only.
+            } else {
+                try await profiles.deleteWallPost(id: postID)
+            }
+            cache.removePost(id: postID)
+            OwnerProfileOptimisticStore.shared.notePostDeleted(id: postID)
+            ExperienceHaptics.play(.success)
+            navigationCoordinator.pop()
+            return true
+        } catch {
+            deleteErrorMessage = ProfileSectionSupport.message(for: error)
+            ExperienceHaptics.play(.warning)
+            return false
+        }
     }
 
     private func performLoad(forceNetwork: Bool = false) async {

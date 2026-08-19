@@ -3,6 +3,7 @@ import SwiftUI
 /// Production conversation thread — replaces the Messages `thread` placeholder.
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
+    @State private var contentRevealed = false
     private let imagePipeline: any ImagePipeline
     private let navigationCoordinator: NavigationCoordinator?
 
@@ -61,6 +62,16 @@ struct ConversationView: View {
                     }
                 }
                 .accessibilityIdentifier("conversation.header")
+            }
+        }
+        .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
+        .onAppear {
+            guard !contentRevealed else { return }
+            ExperienceMotion.withAnimation(
+                ExperienceMotion.navigation,
+                reduceMotion: reduceMotion
+            ) {
+                contentRevealed = true
             }
         }
         .task {

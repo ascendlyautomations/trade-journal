@@ -1,8 +1,9 @@
 import Foundation
 
-/// Coordinated Profile first-paint load — one concurrent fan-out owned by the screen.
+/// Coordinated Profile first-paint load — Stage 1 only (header + Follow).
 ///
-/// Does not change query shapes; only consolidates who initiates them.
+/// Section payloads (trades / posts / clips / achievements / accounts) load lazily
+/// when their tab activates via section ViewModels — one request per resource.
 /// Conforms to ``ScreenBootstrap`` (canonical first-paint contract).
 @MainActor
 enum ProfileBootstrap: ScreenBootstrap {
@@ -48,28 +49,9 @@ enum ProfileBootstrap: ScreenBootstrap {
         }
 
         do {
-            // Header identity + metrics (stats fan-out preserved for web-parity formulas).
+            // Stage 1 — critical path for header + Follow (no section fan-out).
             async let profileTask = loadProfile(profileID, context: context)
             async let statsTask = loadStats(profileID, context: context)
-
-            // Section payloads — shared by Trades / Stats / Achievements / Posts / Clips.
-            // Trades uses limit 500 so Stats aggregates and the Trades list share one SELECT.
-            async let tradesTask = context.trades.trades(
-                ownedBy: profileID,
-                accountID: nil,
-                page: PageRequest(limit: 500),
-                publicOnly: true
-            )
-            async let achievementsTask = context.achievements.achievements(
-                for: profileID,
-                page: PageRequest(limit: 500),
-                publicOnly: !state.isOwner
-            )
-            async let postsTask = context.profiles.wallPosts(
-                for: profileID,
-                page: PageRequest(limit: 500)
-            )
-            async let clipsTask = context.feed.profileReels(for: profileID)
             async let roomTask = loadOwnedRoom(profileID, context: context)
             async let followTask = loadFollowState(
                 profileID: profileID,
@@ -77,44 +59,28 @@ enum ProfileBootstrap: ScreenBootstrap {
                 viewerID: viewerID,
                 context: context
             )
-            async let accountsTask = SessionAccountsStore.shared.accounts(
-                for: profileID,
-                detailCache: context.detailCache,
-                repository: context.trades,
-                forceNetwork: context.force
-            )
 
             let loadedProfile = try await profileTask
             let loadedStats = try await statsTask
-            let tradesPage = try await tradesTask
-            let achievementPage = try await achievementsTask
-            let postsPage = try await postsTask
-            let clips = try await clipsTask
             let room = await roomTask
             let isFollowing = await followTask
-            let accounts = (try? await accountsTask) ?? []
 
             guard !Task.isCancelled else { return state }
 
             context.detailCache.seed(loadedProfile)
             context.detailCache.seed(stats: loadedStats)
-            context.detailCache.seed(publicTrades: tradesPage.items, for: profileID)
-            context.detailCache.seed(achievements: achievementPage.items)
-            context.detailCache.seed(posts: postsPage.items)
-            context.detailCache.seed(reels: clips)
             context.detailCache.seedOwnedTradeRoom(room, for: profileID)
 
             state.profile = loadedProfile
             state.stats = loadedStats
-            state.trades = tradesPage.items
-            state.tradesNextCursor = tradesPage.nextCursor
-            state.achievements = achievementPage.items
-            state.posts = postsPage.items
-            state.clips = clips
             state.ownedTradeRoom = room
             state.didResolveTradeRoom = true
             state.isFollowing = isFollowing
-            applyAccounts(accounts, into: &state)
+            // Section lists intentionally deferred — flags stay false until tab load.
+            state.didLoadTrades = false
+            state.didLoadPosts = false
+            state.didLoadClips = false
+            state.didLoadAchievements = false
             state.phase = .loaded
             state.didBootstrap = true
             state.errorMessage = nil
@@ -157,8 +123,7 @@ enum ProfileBootstrap: ScreenBootstrap {
         context: Context
     ) async -> TradeRoom? {
         if !context.force, context.detailCache.hasResolvedOwnedTradeRoom(for: profileID) {
-            let cached = context.detailCache.ownedTradeRoom(for: profileID)
-            if cached != nil { return cached }
+            return context.detailCache.ownedTradeRoom(for: profileID)
         }
         do {
             let page = try await context.rooms.rooms(for: profileID, page: PageRequest(limit: 1))
@@ -175,8 +140,9 @@ enum ProfileBootstrap: ScreenBootstrap {
         context: Context
     ) async -> Bool {
         guard !isOwner, let viewerID else { return false }
-        if let cached = context.detailCache.viewerFollowingIDs() {
-            return cached.contains(profileID)
+        // Prefer per-edge cache — never treat a partial following-ID set as complete.
+        if let edge = context.detailCache.viewerFollowEdge(for: profileID) {
+            return edge
         }
         do {
             let follow = try await context.profiles.followState(from: viewerID, to: profileID)
@@ -185,29 +151,6 @@ enum ProfileBootstrap: ScreenBootstrap {
             return isFollowing
         } catch {
             return false
-        }
-    }
-
-    private static func applyAccounts(_ accounts: [TradingAccount], into state: inout ProfileState) {
-        state.accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
-        // Keep numbers in state for owner formatting only — public UI must not render them.
-        state.accountNumbers = Dictionary(
-            uniqueKeysWithValues: accounts.compactMap { account in
-                guard let number = TradingAccountDisplay.normalizedAccountNumber(account.accountNumber) else {
-                    return nil
-                }
-                return (account.id, number)
-            }
-        )
-        state.accountModes = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
-        state.accountSizes = Dictionary(
-            uniqueKeysWithValues: accounts.compactMap { account in
-                guard let amount = account.size?.amount else { return nil }
-                return (account.id, amount)
-            }
-        )
-        if !state.accountNames.isEmpty {
-            // detailCache seed happens via SessionAccountsStore already.
         }
     }
 
@@ -265,6 +208,10 @@ enum ProfileBootstrap: ScreenBootstrap {
         state.achievements = achievements
         state.ownedTradeRoom = developmentTradeRoom(for: profileID)
         state.didResolveTradeRoom = true
+        state.didLoadTrades = true
+        state.didLoadPosts = true
+        state.didLoadClips = true
+        state.didLoadAchievements = true
         if !isOwner, let viewerID {
             let ids = Set(FollowListFixtures.following(owner: viewerID).map(\.id))
             state.isFollowing = ids.contains(profileID)

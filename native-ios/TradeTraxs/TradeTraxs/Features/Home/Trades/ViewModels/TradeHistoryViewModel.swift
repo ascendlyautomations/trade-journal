@@ -32,6 +32,12 @@ final class TradeHistoryViewModel {
     var pendingDelete: Trade?
     var sharePayload: SharePayload?
 
+    /// Local-only constraints seeded from Dashboard chart taps (not server filter fields).
+    private var localWeekday: Int?
+    private var localHour: Int?
+    private var localSessionLabel: String?
+    private var localHoldRange: TradeHistoryLaunchSeed.HoldSecondsRange?
+
     struct SharePayload: Identifiable, Equatable {
         let id = UUID()
         let text: String
@@ -144,6 +150,7 @@ final class TradeHistoryViewModel {
     }
 
     func openFilters() {
+        ExperienceHaptics.play(.selection)
         draftFilters = filters
         showsFilterSheet = true
     }
@@ -163,6 +170,7 @@ final class TradeHistoryViewModel {
         ExperienceHaptics.play(.selection)
         filters.reset()
         searchText = ""
+        clearLocalBrowseConstraints()
         Task { await reload(reason: "clear") }
     }
 
@@ -170,6 +178,51 @@ final class TradeHistoryViewModel {
         ExperienceHaptics.play(.selection)
         filters.clearChip(id: chip.id)
         Task { await reload(reason: "chip") }
+    }
+
+    private func clearLocalBrowseConstraints() {
+        localWeekday = nil
+        localHour = nil
+        localSessionLabel = nil
+        localHoldRange = nil
+    }
+
+    private func applyLaunchSeedIfNeeded() {
+        guard let seed = TradeHistoryLaunchSeed.consume() else { return }
+        filters = seed.filters
+        searchText = seed.searchText
+        localWeekday = seed.weekday
+        localHour = seed.hour
+        localSessionLabel = {
+            guard let raw = seed.sessionLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty
+            else { return nil }
+            return raw
+        }()
+        localHoldRange = seed.holdSecondsRange
+        hasLoaded = false
+        lastQueryKey = nil
+    }
+
+    private func matchesLocalBrowseConstraints(_ trade: Trade) -> Bool {
+        if let weekday = localWeekday {
+            let value = Calendar.current.component(.weekday, from: trade.entryAt)
+            if value != weekday { return false }
+        }
+        if let hour = localHour {
+            let value = Calendar.current.component(.hour, from: trade.entryAt)
+            if value != hour { return false }
+        }
+        if let session = localSessionLabel {
+            let label = trade.sessionLabel ?? ""
+            if !label.localizedCaseInsensitiveContains(session) { return false }
+        }
+        if let range = localHoldRange {
+            guard let exit = trade.exitAt else { return false }
+            let seconds = exit.timeIntervalSince(trade.entryAt)
+            if !range.contains(seconds) { return false }
+        }
+        return true
     }
 
     func loadMoreIfNeeded(currentTradeID: TradeID?) async {
@@ -188,7 +241,7 @@ final class TradeHistoryViewModel {
                 query: currentQuery,
                 page: PageRequest(cursor: cursor, limit: 40)
             )
-            appendUnique(page.items)
+            appendUnique(page.items.filter(matchesLocalBrowseConstraints))
             nextCursor = page.nextCursor
             paginationErrorMessage = nil
             #if DEBUG
@@ -288,6 +341,11 @@ final class TradeHistoryViewModel {
     }
 
     private func performLoad(reason: String, preserveScroll: Bool) async {
+        // Dashboard chart taps seed filters before the first history load.
+        if reason == "open" {
+            applyLaunchSeedIfNeeded()
+        }
+
         #if DEBUG
         if reason == "open" {
             TradeHistoryLoadProbe.beginSession()
@@ -296,7 +354,7 @@ final class TradeHistoryViewModel {
                     "account", "visibility", "created_at", "direction", "pnl",
                     "ticker/notes/account_name/strategy ilike", "sort keyset", "exclude backtest",
                 ],
-                local: ["dev fixtures only"]
+                local: ["dev fixtures only", "dashboard browse seed"]
             )
         }
         #endif
@@ -307,7 +365,11 @@ final class TradeHistoryViewModel {
 
         // Session store survives ViewModel recreation on push/pop (profile-scoped key).
         // Snapshot only holds trades/filters — accounts live in SessionAccountsStore (Dashboard).
+        // Skip restore when local browse constraints are active (seeded from charts).
+        let hasLocalBrowse = localWeekday != nil || localHour != nil
+            || localSessionLabel != nil || localHoldRange != nil
         if reason == "open",
+           !hasLocalBrowse,
            let snap = TradeHistorySessionStore.shared.restore(
                profileID: profileID,
                filters: filters,
@@ -364,9 +426,9 @@ final class TradeHistoryViewModel {
                 page: PageRequest(limit: 40)
             )
 
-            items = page.items
+            items = page.items.filter(matchesLocalBrowseConstraints)
             nextCursor = page.nextCursor
-            detailCache.seed(trades: page.items)
+            detailCache.seed(trades: items)
             hasLoaded = true
             lastQueryKey = queryKey
             phase = .loaded
@@ -503,6 +565,7 @@ final class TradeHistoryViewModel {
         detailCache.seed(accounts: accounts, for: profileID)
         let query = currentQuery
         var filtered = all.filter { TradeHistoryLocalMatch.matches($0, query: query) }
+        filtered = filtered.filter(matchesLocalBrowseConstraints)
         // Account-name search for fixtures (server uses account_name ilike).
         let search = query.trimmedSearch
         if !search.isEmpty {

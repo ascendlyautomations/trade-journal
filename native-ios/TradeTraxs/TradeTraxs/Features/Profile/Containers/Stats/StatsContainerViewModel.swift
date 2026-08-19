@@ -45,14 +45,21 @@ final class StatsContainerViewModel {
         return "No trades for this filter selection"
     }
 
-    /// Applies shared trades + achievements from screen bootstrap — no repository calls.
+    /// Applies shared trades + achievements when Stage 2 has filled them; otherwise loads on demand.
     /// Prefers ``DetailPresentationCache`` when section data was mutated after bootstrap.
     func applyBootstrap(_ snapshot: ProfileState) {
-        guard snapshot.didBootstrap || snapshot.phase == .loaded else {
-            if snapshot.phase == .loading, metrics == nil { state = .loading }
+        if snapshot.didBootstrap || snapshot.phase == .loaded {
+            isScreenOwned = true
+        }
+        let hasTrades = snapshot.didLoadTrades || !snapshot.trades.isEmpty
+            || detailCache.publicTrades(for: profileID) != nil
+        let hasAchievements = snapshot.didLoadAchievements || !snapshot.achievements.isEmpty
+        guard hasTrades || hasAchievements || snapshot.payoutTotal != nil else {
+            if (snapshot.phase == .loading || snapshot.didBootstrap), metrics == nil {
+                state = .loading
+            }
             return
         }
-        isScreenOwned = true
         hasLoaded = true
         let sourceTrades = detailCache.publicTrades(for: profileID) ?? snapshot.trades
         let accountTypes = Dictionary(
@@ -79,7 +86,6 @@ final class StatsContainerViewModel {
     }
 
     func loadIfNeeded() {
-        if isScreenOwned { return }
         guard !hasLoaded, loadTask == nil else { return }
         loadTask = Task { await performLoad() }
     }

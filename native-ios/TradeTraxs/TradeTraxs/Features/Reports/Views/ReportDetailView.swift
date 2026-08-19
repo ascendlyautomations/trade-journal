@@ -43,8 +43,7 @@ struct ReportDetailView: View {
             }
         }
         .experienceScreenBackground()
-        .navigationTitle(viewModel.title)
-        .navigationBarTitleDisplayMode(.large)
+        .experienceNavigationTitle(viewModel.title)
         .toolbar(.hidden, for: .tabBar)
         .task {
             await viewModel.bootstrapIfNeeded()

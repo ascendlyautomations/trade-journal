@@ -270,7 +270,7 @@ final class CreateAchievementViewModel {
                 saved = try await achievements.save(draft)
             }
 
-            ContentMutationStore.shared.noteAchievementCreated(saved.id)
+            OwnerProfileOptimisticStore.shared.noteAchievementCreated(saved)
             ExperienceHaptics.play(.achievement)
             phase = .ready
             onDismiss()

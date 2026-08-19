@@ -124,6 +124,11 @@ struct FeedHomeView: View {
         .onChange(of: ContentMutationStore.shared.revision) { _, _ in
             Task { await viewModel.refresh() }
         }
+        .onChange(of: FollowMutationCoordinator.shared.revision) { _, _ in
+            // Following scope membership changed — soft refresh timeline without timers.
+            guard viewModel.scope == .following else { return }
+            Task { await viewModel.refresh() }
+        }
         .accessibilityIdentifier("feed.home")
     }
 

@@ -27,6 +27,8 @@ nonisolated protocol FeedRepository: Sendable {
     /// Web `fetchUserProfileReels` — Profile Clips tab (trade-linked visibility filter).
     func profileReels(for profileID: ProfileID) async throws -> [Reel]
     func createReel(_ reel: Reel) async throws -> Reel
+    /// Deletes a reel the viewer owns.
+    func deleteReel(id: ReelID) async throws
     /// Own clips with `trade_id IS NULL` — candidates for linking to a new trade.
     func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel]
     /// Sets `reels.trade_id` (and clears caption per DB check). App enforces one reel per trade.
@@ -36,6 +38,10 @@ nonisolated protocol FeedRepository: Sendable {
 }
 
 extension FeedRepository {
+    func deleteReel(id: ReelID) async throws {
+        throw AppError.notImplemented(feature: "deleteReel")
+    }
+
     func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] {
         let page = try await reels(
             authoredBy: profileID,

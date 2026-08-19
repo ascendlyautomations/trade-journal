@@ -140,6 +140,7 @@ final class CalendarViewModel {
     }
 
     func openTrade(_ trade: Trade) {
+        ExperienceHaptics.play(.selection)
         detailCache.seed(trade)
         navigationCoordinator.open(.home(.tradeDetail(trade.id)))
     }

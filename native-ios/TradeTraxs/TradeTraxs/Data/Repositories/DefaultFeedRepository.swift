@@ -694,6 +694,13 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         return mapReel(row) ?? reel
     }
 
+    func deleteReel(id: ReelID) async throws {
+        try await supabase.database.delete(
+            from: "reels",
+            query: [SupabaseQuery.eq("id", id.rawValue)]
+        )
+    }
+
     func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] {
         let bounded = min(max(limit, 1), 40)
         let rows: [ProfileReelRow] = try await supabase.database.select(

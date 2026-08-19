@@ -7,6 +7,7 @@ struct TradeDetailView: View {
     @State private var viewModel: TradeDetailViewModel
     @State private var tradeAI: TradeAISectionViewModel?
     @State private var showsDeleteConfirm = false
+    @State private var contentRevealed = false
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment
     private let experience: TradeDetailExperience
@@ -123,6 +124,16 @@ struct TradeDetailView: View {
         .accessibilityIdentifier(
             experience == .journal ? "detail.trade.journal" : "detail.trade.social"
         )
+        .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
+        .onAppear {
+            guard !contentRevealed else { return }
+            ExperienceMotion.withAnimation(
+                ExperienceMotion.navigation,
+                reduceMotion: reduceMotion
+            ) {
+                contentRevealed = true
+            }
+        }
     }
 
     @ViewBuilder
@@ -163,7 +174,7 @@ struct TradeDetailView: View {
     // MARK: - Header
 
     private func identityHeader(_ trade: Trade) -> some View {
-        let showsOwnerActions = experience == .journal && viewModel.isOwner
+        let showsOwnerActions = viewModel.isOwner
         return DetailIdentityHeader(
             initials: viewModel.authorInitials,
             avatar: viewModel.authorAvatar,
@@ -171,7 +182,15 @@ struct TradeDetailView: View {
             username: viewModel.authorUsername,
             subtitle: viewModel.accountIdentityLine,
             dateText: TradeDisplay.dateText(trade.entryAt),
-            isOwner: showsOwnerActions,
+            isOwner: viewModel.isOwner,
+            contentLink: .trade(trade.id),
+            shareText: {
+                let pnl = TradeDisplay.pnlText(trade.realizedPnL)
+                let side = trade.side == .long ? "Long" : "Short"
+                return "\(trade.symbol.ticker) \(side) \(pnl) on TradeTraxs"
+            }(),
+            editTitle: "Edit Trade",
+            deleteTitle: "Delete Trade",
             onEdit: showsOwnerActions ? { viewModel.editTrade() } : nil,
             onDelete: showsOwnerActions ? {
                 ExperienceHaptics.play(.warning)

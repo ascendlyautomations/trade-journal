@@ -80,6 +80,10 @@ nonisolated struct InteractionComment: Hashable, Codable, Sendable, Identifiable
     var target: InteractionTarget
     var authorProfileID: ProfileID
     var authorUsername: String?
+    /// Display name from profiles join — used for initials / a11y; list UI keeps @username.
+    var authorDisplayName: String? = nil
+    /// Avatar storage URL / public path from the same comments list join (no N+1 profile fetch).
+    var authorAvatarURL: String? = nil
     var body: String
     var parentCommentID: CommentID?
     var createdAt: Date
@@ -87,4 +91,11 @@ nonisolated struct InteractionComment: Hashable, Codable, Sendable, Identifiable
     var isPinned: Bool
 
     var isReply: Bool { parentCommentID != nil }
+
+    var authorAvatarReference: MediaReference? {
+        guard let raw = authorAvatarURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty
+        else { return nil }
+        return MediaReference(id: raw, kind: .image, altText: nil)
+    }
 }

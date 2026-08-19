@@ -98,6 +98,63 @@ final class DashboardExperienceTests: XCTestCase {
         XCTAssertEqual(summary.currentEquity, 70)
     }
 
+    func testEquityHeroPresentationOffsetsPropAccountOnly() {
+        let points: [ProfileStatisticsMetrics.EquityPoint] = [
+            .init(index: 0, equity: 500, date: nil),
+            .init(index: 1, equity: 800, date: nil),
+            .init(index: 2, equity: 650, date: nil),
+        ]
+        let prop = TradingAccount(
+            id: TradingAccountID("prop-1"),
+            ownerProfileID: ProfileID("dev.dashboard"),
+            name: "Eval 50K",
+            category: .propFirm,
+            mode: .evaluation,
+            size: Money(amount: 50_000),
+            isActive: true,
+            canAddTrades: true,
+            propFirmRules: PropFirmAccountRules(maxDrawdown: 2_000, profitTarget: 3_000)
+        )
+        let live = TradingAccount(
+            id: TradingAccountID("live-1"),
+            ownerProfileID: ProfileID("dev.dashboard"),
+            name: "Live",
+            category: .personal,
+            mode: .live,
+            size: Money(amount: 25_000),
+            isActive: true,
+            canAddTrades: true
+        )
+
+        let propBalance = DashboardEquityHeroPresentation.propStartingBalance(forSelectedAccount: prop)
+        XCTAssertEqual(propBalance, 50_000)
+        XCTAssertEqual(
+            DashboardEquityHeroPresentation.title(propStartingBalance: propBalance),
+            "Account Value"
+        )
+        XCTAssertEqual(
+            DashboardEquityHeroPresentation.displayEquity(currentEquity: 2_435, propStartingBalance: propBalance),
+            52_435
+        )
+        let offset = DashboardEquityHeroPresentation.chartPoints(points, propStartingBalance: propBalance)
+        XCTAssertEqual(offset.map(\.equity), [50_500, 50_800, 50_650])
+        XCTAssertEqual(offset.map(\.index), points.map(\.index), "Shape preserved — indexes unchanged")
+
+        let liveBalance = DashboardEquityHeroPresentation.propStartingBalance(forSelectedAccount: live)
+        XCTAssertNil(liveBalance)
+        XCTAssertEqual(DashboardEquityHeroPresentation.title(propStartingBalance: liveBalance), "Equity")
+        XCTAssertEqual(
+            DashboardEquityHeroPresentation.displayEquity(currentEquity: 2_435, propStartingBalance: liveBalance),
+            2_435
+        )
+        XCTAssertEqual(
+            DashboardEquityHeroPresentation.chartPoints(points, propStartingBalance: liveBalance).map(\.equity),
+            points.map(\.equity)
+        )
+
+        XCTAssertNil(DashboardEquityHeroPresentation.propStartingBalance(forSelectedAccount: nil))
+    }
+
     func testViewModelLoadsFixturesAndFiltersLocally() async {
         let cache = DetailPresentationCache()
         let navigationStore = NavigationStore()

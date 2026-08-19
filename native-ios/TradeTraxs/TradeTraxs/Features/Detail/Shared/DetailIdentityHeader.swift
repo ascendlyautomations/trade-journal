@@ -10,11 +10,16 @@ struct DetailIdentityHeader: View {
     var subtitle: String? = nil
     let dateText: String
     let isOwner: Bool
+    var contentLink: DetailContentLink? = nil
+    var shareText: String = "TradeTraxs"
+    var editTitle: String = "Edit"
+    var deleteTitle: String = "Delete"
     var onEdit: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
     var accessibilityIdentifier: String = "detail.identity"
 
     @Environment(\.themeColors) private var colors
+    @State private var isSharePresented = false
 
     var body: some View {
         // Equal row spacing; menu overlaid so it does not inflate the name-row height.
@@ -58,12 +63,42 @@ struct DetailIdentityHeader: View {
             .overlay(alignment: .topTrailing) {
                 DetailOverflowMenu(
                     isOwner: isOwner,
+                    onShare: contentLink == nil ? nil : { isSharePresented = true },
+                    onCopyLink: contentLink.map { link in
+                        { DetailOverflowActions.copyLink(link) }
+                    },
+                    onReport: (isOwner || contentLink == nil)
+                        ? nil
+                        : {
+                            if let contentLink {
+                                DetailOverflowActions.openReport(contentLink)
+                            }
+                        },
+                    editTitle: editTitle,
+                    deleteTitle: deleteTitle,
                     onEdit: onEdit,
                     onDelete: onDelete
                 )
             }
         }
+        .sheet(isPresented: $isSharePresented) {
+            if let url = contentLink?.url {
+                DetailShareSheet(items: [shareText, url])
+            } else {
+                DetailShareSheet(items: [shareText])
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(accessibilityIdentifier)
     }
+}
+
+private struct DetailShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

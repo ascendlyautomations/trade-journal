@@ -14,6 +14,8 @@ nonisolated protocol ProfileRepository: Sendable {
     func wallPost(id: PostID) async throws -> Post
     /// Web Profile “Create Post” — inserts into `profile_posts` (not feed `posts`).
     func createWallPost(authorID: ProfileID, content: String, imageURL: String?) async throws -> Post
+    /// Deletes a wall post the viewer owns (`profile_posts`).
+    func deleteWallPost(id: PostID) async throws
     func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState
     func follow(from viewer: ProfileID, to target: ProfileID) async throws
     func unfollow(from viewer: ProfileID, to target: ProfileID) async throws
@@ -25,6 +27,10 @@ nonisolated protocol ProfileRepository: Sendable {
 extension ProfileRepository {
     func createWallPost(authorID: ProfileID, content: String, imageURL: String?) async throws -> Post {
         throw AppError.notImplemented(feature: "createWallPost")
+    }
+
+    func deleteWallPost(id: PostID) async throws {
+        throw AppError.notImplemented(feature: "deleteWallPost")
     }
 
     /// Default: sequential singles (tests / incomplete backends). Production overrides with `in.()`.

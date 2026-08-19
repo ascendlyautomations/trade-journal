@@ -3,20 +3,23 @@ import SwiftUI
 /// Permanent Post detail destination — same hierarchy as Trade Detail.
 struct PostDetailView: View {
     @State private var viewModel: PostDetailViewModel
+    @State private var contentRevealed = false
+    @State private var showsDeleteConfirm = false
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(postID: PostID, data: DataEnvironment) {
+    init(postID: PostID, data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
         _viewModel = State(
             initialValue: PostDetailViewModel(
                 postID: postID,
                 profiles: data.profiles,
                 session: data.session,
                 imagePipeline: data.imagePipeline,
-                cache: data.detailCache
+                cache: data.detailCache,
+                navigationCoordinator: navigationCoordinator
             )
         )
         self.imagePipeline = data.imagePipeline
@@ -46,6 +49,30 @@ struct PostDetailView: View {
             viewModel.loadIfNeeded()
             data.engagementStore.prefetch([.profilePost(viewModel.postID)])
         }
+        .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
+        .onAppear {
+            guard !contentRevealed else { return }
+            ExperienceMotion.withAnimation(
+                ExperienceMotion.navigation,
+                reduceMotion: reduceMotion
+            ) {
+                contentRevealed = true
+            }
+        }
+        .confirmationDialog(
+            "Delete Post?",
+            isPresented: $showsDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Post", role: .destructive) {
+                Task {
+                    _ = await viewModel.deletePost()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(viewModel.deleteErrorMessage ?? "This can’t be undone.")
+        }
         .accessibilityIdentifier("detail.post.root")
     }
 
@@ -62,6 +89,17 @@ struct PostDetailView: View {
                             username: viewModel.authorUsername,
                             dateText: TradeDisplay.dateText(post.createdAt),
                             isOwner: viewModel.isOwner,
+                            contentLink: .post(post.id),
+                            shareText: {
+                                let body = post.body.trimmingCharacters(in: .whitespacesAndNewlines)
+                                if body.isEmpty { return "Post on TradeTraxs" }
+                                return String(body.prefix(120))
+                            }(),
+                            deleteTitle: "Delete Post",
+                            onDelete: viewModel.isOwner ? {
+                                ExperienceHaptics.play(.warning)
+                                showsDeleteConfirm = true
+                            } : nil,
                             accessibilityIdentifier: "detail.post.identity"
                         )
                         .padding(.horizontal, ExperienceSpacing.lg)
@@ -76,6 +114,13 @@ struct PostDetailView: View {
                             .padding(.bottom, ExperienceSpacing.xl)
                     }
                 }
+            }
+        }
+        .overlay {
+            if viewModel.isDeleting {
+                ProgressView("Deleting…")
+                    .padding(ExperienceSpacing.lg)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ExperienceRadius.md))
             }
         }
     }

@@ -8,8 +8,10 @@ struct ClipDetailView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showLikeHeart = false
+    @State private var contentRevealed = false
+    @State private var showsDeleteConfirm = false
 
-    init(reelID: ReelID, data: DataEnvironment) {
+    init(reelID: ReelID, data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
         _viewModel = State(
             initialValue: ClipDetailViewModel(
                 reelID: reelID,
@@ -18,7 +20,8 @@ struct ClipDetailView: View {
                 session: data.session,
                 storage: data.objectStorage,
                 imagePipeline: data.imagePipeline,
-                cache: data.detailCache
+                cache: data.detailCache,
+                navigationCoordinator: navigationCoordinator
             )
         )
         self.data = data
@@ -57,8 +60,32 @@ struct ClipDetailView: View {
             viewModel.loadIfNeeded()
             data.engagementStore.prefetch([.reel(viewModel.reelID)])
         }
+        .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
+        .onAppear {
+            guard !contentRevealed else { return }
+            ExperienceMotion.withAnimation(
+                ExperienceMotion.navigation,
+                reduceMotion: reduceMotion
+            ) {
+                contentRevealed = true
+            }
+        }
         .onDisappear {
             viewModel.tearDown()
+        }
+        .confirmationDialog(
+            "Delete Clip?",
+            isPresented: $showsDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Clip", role: .destructive) {
+                Task {
+                    _ = await viewModel.deleteReel()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(viewModel.deleteErrorMessage ?? "This can’t be undone.")
         }
         .accessibilityIdentifier("detail.clip.root")
     }
@@ -76,6 +103,17 @@ struct ClipDetailView: View {
                             username: viewModel.authorUsername,
                             dateText: TradeDisplay.dateText(reel.createdAt),
                             isOwner: viewModel.isOwner,
+                            contentLink: .reel(reel.id),
+                            shareText: {
+                                let caption = reel.caption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                                if caption.isEmpty { return "Clip on TradeTraxs" }
+                                return String(caption.prefix(120))
+                            }(),
+                            deleteTitle: "Delete Clip",
+                            onDelete: viewModel.isOwner ? {
+                                ExperienceHaptics.play(.warning)
+                                showsDeleteConfirm = true
+                            } : nil,
                             accessibilityIdentifier: "detail.clip.identity"
                         )
                         .padding(.horizontal, ExperienceSpacing.lg)
@@ -97,6 +135,13 @@ struct ClipDetailView: View {
                             .padding(.bottom, ExperienceSpacing.xl)
                     }
                 }
+            }
+        }
+        .overlay {
+            if viewModel.isDeleting {
+                ProgressView("Deleting…")
+                    .padding(ExperienceSpacing.lg)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ExperienceRadius.md))
             }
         }
     }

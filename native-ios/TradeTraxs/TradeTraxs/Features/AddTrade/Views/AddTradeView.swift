@@ -94,19 +94,19 @@ struct AddTradeView: View {
                     onClose: { showsInstrumentPicker = false }
                 )
             }
-            .presentationDetents([.medium, .large])
+            .experienceSheetChrome()
         }
         .sheet(isPresented: $showsReview) {
             NavigationStack {
                 AddTradeReviewView(viewModel: viewModel)
             }
-            .presentationDetents([.medium, .large])
+            .experienceSheetChrome()
         }
         .sheet(isPresented: $showsNotes) {
             NavigationStack {
                 AddTradeNotesView(viewModel: viewModel)
             }
-            .presentationDetents([.medium, .large])
+            .experienceSheetChrome()
         }
         .confirmationDialog(
             "Add Clip",
@@ -139,7 +139,7 @@ struct AddTradeView: View {
                     onDone: { showsNewClipComposer = false }
                 )
             }
-            .presentationDetents([.medium, .large])
+            .experienceSheetChrome()
         }
         .sheet(isPresented: $showsReelPicker) {
             NavigationStack {
@@ -153,7 +153,7 @@ struct AddTradeView: View {
                     onClose: { showsReelPicker = false }
                 )
             }
-            .presentationDetents([.medium, .large])
+            .experienceSheetChrome()
             .onAppear { viewModel.loadUnattachedReelsIfNeeded() }
         }
         .fullScreenCover(isPresented: $showsClipCamera) {
@@ -207,12 +207,7 @@ struct AddTradeView: View {
         .onChange(of: clipVideoItem) { _, item in
             Task { await loadClipVideo(item) }
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { focusedField = nil }
-            }
-        }
+        .experienceKeyboardDoneToolbar()
         .accessibilityIdentifier("addTrade.root")
     }
 

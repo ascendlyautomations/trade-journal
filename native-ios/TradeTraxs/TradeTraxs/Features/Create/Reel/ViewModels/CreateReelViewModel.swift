@@ -250,7 +250,7 @@ final class CreateReelViewModel {
             }
 
             detailCache.seed(reel)
-            ContentMutationStore.shared.noteReelCreated(reel.id)
+            OwnerProfileOptimisticStore.shared.noteReelCreated(reel)
             ExperienceHaptics.play(.success)
             phase = .ready
             onDismiss()

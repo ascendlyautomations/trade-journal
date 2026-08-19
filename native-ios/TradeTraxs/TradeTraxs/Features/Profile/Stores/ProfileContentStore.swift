@@ -97,6 +97,14 @@ final class ProfileContentStore {
         ownedTradeRoom = state.ownedTradeRoom
         didResolveTradeRoom = state.didResolveTradeRoom
         errorMessage = state.errorMessage
+        // Follow must work as soon as Stage 1 publishes — capture viewer for toggle.
+        Task { [weak self] in
+            guard let self else { return }
+            if self.viewerID == nil {
+                let userID = await self.session.currentUserID
+                self.viewerID = userID.map { ProfileID($0.rawValue) }
+            }
+        }
         switch state.phase {
         case .idle: phase = .idle
         case .loading: phase = profile == nil ? .loading : phase
@@ -133,13 +141,27 @@ final class ProfileContentStore {
     }
 
     func toggleFollow() async {
-        guard !isOwner, let profileID = resolvedProfileID, let viewerID, !followInFlight else { return }
+        guard !isOwner, let profileID = resolvedProfileID, !followInFlight else { return }
+        // Resolve viewer lazily — Stage-1 bootstrap historically never set viewerID.
+        if viewerID == nil {
+            let userID = await session.currentUserID
+            viewerID = userID.map { ProfileID($0.rawValue) }
+        }
+        guard let viewerID else { return }
         followInFlight = true
         defer { followInFlight = false }
 
         let previous = isFollowing
-        isFollowing.toggle()
-        detailCache.setViewerFollows(profileID, isFollowing: isFollowing)
+        let next = !previous
+        isFollowing = next
+        FollowMutationCoordinator.shared.applyEdgeChange(
+            viewer: viewerID,
+            target: profileID,
+            isFollowing: next
+        )
+        if let patched = detailCache.stats(for: profileID) {
+            stats = patched
+        }
         ExperienceHaptics.play(.selection)
 
         if profileID.rawValue.hasPrefix("dev.") {
@@ -147,15 +169,32 @@ final class ProfileContentStore {
         }
 
         do {
-            if isFollowing {
+            if next {
                 try await profiles.follow(from: viewerID, to: profileID)
             } else {
                 try await profiles.unfollow(from: viewerID, to: profileID)
             }
         } catch {
             isFollowing = previous
-            detailCache.setViewerFollows(profileID, isFollowing: previous)
+            FollowMutationCoordinator.shared.applyEdgeChange(
+                viewer: viewerID,
+                target: profileID,
+                isFollowing: previous
+            )
+            if let patched = detailCache.stats(for: profileID) {
+                stats = patched
+            }
             ExperienceHaptics.play(.warning)
+        }
+    }
+
+    /// External FollowMutationCoordinator patch — keeps header button + counts live.
+    func applyExternalFollowState(isFollowing: Bool, stats: ProfileStats?) {
+        if !isOwner {
+            self.isFollowing = isFollowing
+        }
+        if let stats {
+            self.stats = stats
         }
     }
 
@@ -246,7 +285,12 @@ final class ProfileContentStore {
             isFollowing = false
             return
         }
+        if let cached = detailCache.viewerFollowEdge(for: profileID) {
+            isFollowing = cached
+            return
+        }
         if let cached = detailCache.viewerFollowingIDs() {
+            // Complete following list only (seeded from Follow list) — safe to consult.
             isFollowing = cached.contains(profileID)
             return
         }

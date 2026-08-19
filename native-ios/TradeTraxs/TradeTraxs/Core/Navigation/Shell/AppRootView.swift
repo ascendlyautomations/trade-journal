@@ -131,26 +131,34 @@ struct AppRootView: View {
                 case .composeChooser:
                     ComposeChooserView(
                         onAddTrade: {
+                            ExperienceHaptics.play(.selection)
                             navigation.coordinator.dismissSheet()
                             navigation.coordinator.openCompose(.trade)
                         },
                         onCreatePost: {
+                            ExperienceHaptics.play(.selection)
                             navigation.coordinator.dismissSheet()
                             navigation.coordinator.openCompose(.post)
                         },
                         onCreateReel: {
+                            ExperienceHaptics.play(.selection)
                             navigation.coordinator.dismissSheet()
                             navigation.coordinator.openCompose(.reel)
                         },
                         onCreateAchievement: {
+                            ExperienceHaptics.play(.selection)
                             navigation.coordinator.dismissSheet()
                             navigation.coordinator.openCompose(.achievement)
                         },
                         onImportCSV: {
+                            ExperienceHaptics.play(.selection)
                             navigation.coordinator.dismissSheet()
                             navigation.coordinator.openCompose(.importCSV)
                         },
-                        onClose: { navigation.coordinator.dismissSheet() }
+                        onClose: {
+                            ExperienceHaptics.play(.selection)
+                            navigation.coordinator.dismissSheet()
+                        }
                     )
                 default:
                     NavigationInfrastructurePlaceholder(
@@ -168,7 +176,7 @@ struct AppRootView: View {
                     }
                 }
             }
-            .presentationDetents(detents(for: destination))
+            .experienceSheetChrome(detents: detents(for: destination))
         }
     }
 

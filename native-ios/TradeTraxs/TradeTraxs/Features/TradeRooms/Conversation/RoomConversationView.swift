@@ -3,6 +3,7 @@ import SwiftUI
 /// Trade Room workspace — compact header + channel switcher + DM-style conversation.
 struct RoomConversationView: View {
     @State private var viewModel: RoomConversationViewModel
+    @State private var contentRevealed = false
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
@@ -117,6 +118,16 @@ struct RoomConversationView: View {
                 onClose: { viewModel.showsTradePicker = false }
             )
             .task { await viewModel.loadTradePickerIfNeeded() }
+        }
+        .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
+        .onAppear {
+            guard !contentRevealed else { return }
+            ExperienceMotion.withAnimation(
+                ExperienceMotion.navigation,
+                reduceMotion: reduceMotion
+            ) {
+                contentRevealed = true
+            }
         }
         .task {
             viewModel.loadIfNeeded()

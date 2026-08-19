@@ -106,6 +106,7 @@ struct TradeHistoryView: View {
         }
         .sheet(isPresented: $viewModel.showsFilterSheet) {
             TradeHistoryFilterSheet(viewModel: viewModel)
+                .experienceSheetChrome()
         }
         .refreshable {
             await viewModel.refresh()

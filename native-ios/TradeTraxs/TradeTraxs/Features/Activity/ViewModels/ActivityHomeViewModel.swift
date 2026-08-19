@@ -76,9 +76,10 @@ final class ActivityHomeViewModel {
     }
 
     func open(_ row: ActivityRowModel) {
+        ExperienceHaptics.play(.selection)
         if row.isUnread {
             for id in row.groupedNotificationIDs {
-                markRead(id: id)
+                markRead(id: id, playHaptic: false)
             }
         }
         if let roomID = row.notification.roomID,
@@ -98,19 +99,24 @@ final class ActivityHomeViewModel {
     }
 
     func openActor(_ profileID: ProfileID) {
+        ExperienceHaptics.play(.selection)
         navigationCoordinator.open(.profile(.otherProfile(profileID)))
     }
 
     func openFollowRequests() {
+        ExperienceHaptics.play(.selection)
         navigationCoordinator.open(.profile(.followRequests))
     }
 
     func openNotificationSettings() {
+        ExperienceHaptics.play(.selection)
         navigationCoordinator.openSettings([.home, .notifications])
     }
 
-    func markRead(id: NotificationID) {
-        ExperienceHaptics.play(.selection)
+    func markRead(id: NotificationID, playHaptic: Bool = true) {
+        if playHaptic {
+            ExperienceHaptics.play(.selection)
+        }
         guard let existing = inboxStore.items.first(where: { $0.id == id }), !existing.isRead else {
             return
         }

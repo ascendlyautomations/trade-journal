@@ -94,12 +94,24 @@ final class LeaderboardSessionStore {
     }
 
     func setFollowing(_ id: ProfileID, isFollowing: Bool) {
+        applyFollowEdge(id, isFollowing: isFollowing, adjustFollowerCount: false)
+    }
+
+    /// Shared Follow mutation patch — edge + optional follower-count column.
+    func applyFollowEdge(
+        _ id: ProfileID,
+        isFollowing: Bool,
+        adjustFollowerCount: Bool
+    ) {
         if isFollowing {
             followingIDs.insert(id)
         } else {
             followingIDs.remove(id)
             friendIDs.remove(id)
         }
+        guard adjustFollowerCount else { return }
+        let current = followerCounts[id] ?? 0
+        followerCounts[id] = max(0, current + (isFollowing ? 1 : -1))
     }
 
     func updateFilters(

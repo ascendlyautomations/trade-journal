@@ -180,8 +180,13 @@ final class ExploreViewModel {
         guard let viewerID else { return }
         ExperienceHaptics.play(.selection)
         inFlightFollow.insert(trader.id)
-        store.setFollowing(trader.id, isFollowing: !currentlyFollowing)
-        detailCache.setViewerFollows(trader.id, isFollowing: !currentlyFollowing)
+        let next = !currentlyFollowing
+        FollowMutationCoordinator.shared.applyEdgeChange(
+            viewer: viewerID,
+            target: trader.id,
+            isFollowing: next
+        )
+        patchSearchPersonFollowerCount(trader.id, delta: next ? 1 : -1)
 
         Task {
             defer { inFlightFollow.remove(trader.id) }
@@ -192,10 +197,21 @@ final class ExploreViewModel {
                     try await profiles.follow(from: viewerID, to: trader.id)
                 }
             } catch {
-                store.setFollowing(trader.id, isFollowing: currentlyFollowing)
-                detailCache.setViewerFollows(trader.id, isFollowing: currentlyFollowing)
+                FollowMutationCoordinator.shared.applyEdgeChange(
+                    viewer: viewerID,
+                    target: trader.id,
+                    isFollowing: currentlyFollowing
+                )
+                patchSearchPersonFollowerCount(trader.id, delta: currentlyFollowing ? 1 : -1)
             }
         }
+    }
+
+    private func patchSearchPersonFollowerCount(_ id: ProfileID, delta: Int) {
+        guard let index = searchPeople.firstIndex(where: { $0.id == id }) else { return }
+        var person = searchPeople[index]
+        person.followerCount = max(0, person.followerCount + delta)
+        searchPeople[index] = person
     }
 
     func openTrader(_ trader: ExploreTraderSuggestion) {

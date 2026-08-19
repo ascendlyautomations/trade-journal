@@ -739,7 +739,7 @@ final class AddTradeViewModel {
         if viewerID.rawValue.hasPrefix("dev.") {
             let reel = CreateReelFixtures.sampleReel(author: viewerID, tradeID: tradeID)
             detailCache.seed(reel)
-            ContentMutationStore.shared.noteReelCreated(reel.id)
+            OwnerProfileOptimisticStore.shared.noteReelCreated(reel)
             return
         }
 
@@ -753,7 +753,7 @@ final class AddTradeViewModel {
             objectStorage: objectStorage
         )
         detailCache.seed(reel)
-        ContentMutationStore.shared.noteReelCreated(reel.id)
+        OwnerProfileOptimisticStore.shared.noteReelCreated(reel)
     }
 
     private func linkReelIfNeeded(to tradeID: TradeID) async throws {

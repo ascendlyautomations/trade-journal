@@ -33,8 +33,15 @@ struct ProfileState: Equatable {
     var clips: [Reel] = []
     var achievements: [Achievement] = []
 
-    var errorMessage: String?
+    /// Stage-1 header ready (profile / stats / follow / room). Section lists may still be deferred.
     var didBootstrap = false
+    /// Section payloads actually resolved (empty list ≠ deferred).
+    var didLoadTrades = false
+    var didLoadPosts = false
+    var didLoadClips = false
+    var didLoadAchievements = false
+
+    var errorMessage: String?
     var isRefreshing = false
     var lastUpdated: Date?
 

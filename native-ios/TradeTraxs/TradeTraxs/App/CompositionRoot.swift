@@ -86,6 +86,10 @@ enum CompositionRoot {
             imagePipeline: data.imagePipeline,
             detailCache: data.detailCache
         )
+        FollowMutationCoordinator.shared.configure(
+            detailCache: data.detailCache,
+            currentUserProfile: currentUserProfile
+        )
 
         let pushNotifications = PushNotificationCenter(
             tokenClient: DevicePushTokenClient(transport: transport),

@@ -31,8 +31,18 @@ nonisolated enum DashboardChartMetrics {
         var weekdays: [DashboardBarPoint]
         var hours: [DashboardBarPoint]
         var longShort: [DashboardBarPoint]
+        var longTradeCount: Int
+        var shortTradeCount: Int
         var winLoss: [DashboardWinLossPoint]
         var holdTime: [DashboardHoldTimeRow]
+        /// Presentation buckets for hold-duration histogram (same durations as ``holdTime``).
+        var holdTimeHistogram: [DashboardHistogramBucket]
+        /// Underwater series derived from ``equityData`` (peak − equity as negative depth).
+        var drawdownSeries: [DashboardDrawdownPoint]
+        /// Full Mon–Sun weekday P&L for heatmap (same formula as ``weekdays``).
+        var weekdayHeatmap: [DashboardBarPoint]
+        /// Full 0–23 hour P&L for heatmap (same formula as ``hours``).
+        var hourHeatmap: [DashboardBarPoint]
         var insights: [DashboardInsightItem]
     }
 
@@ -89,6 +99,10 @@ nonisolated enum DashboardChartMetrics {
         }
         let profileStats = ProfileStatisticsMetrics.compute(from: statsInputs, selectedMode: .all)
 
+        let longCount = trades.filter { $0.side == .long }.count
+        let shortCount = tradeCount - longCount
+        let holdDurations = holdDurations(trades)
+
         return Summary(
             netPnL: netPnL,
             winRate: winRate,
@@ -110,11 +124,17 @@ nonisolated enum DashboardChartMetrics {
             weekdays: weekdayBars(trades),
             hours: hourBars(trades),
             longShort: longShortBars(trades),
+            longTradeCount: longCount,
+            shortTradeCount: shortCount,
             winLoss: [
                 DashboardWinLossPoint(label: "Wins", count: winCount),
                 DashboardWinLossPoint(label: "Losses", count: lossCount),
             ],
-            holdTime: holdTimeRows(trades),
+            holdTime: holdTimeRows(from: holdDurations),
+            holdTimeHistogram: holdTimeHistogram(from: holdDurations.all),
+            drawdownSeries: drawdownSeries(from: profileStats.equityData),
+            weekdayHeatmap: weekdayHeatmapBars(trades),
+            hourHeatmap: hourHeatmapBars(trades),
             insights: insightItems(trades: trades, sessions: profileStats.sessionBreakdown)
         )
     }
@@ -242,7 +262,13 @@ nonisolated enum DashboardChartMetrics {
 
     // MARK: - Hold time (web resolveTradeDurationSeconds)
 
-    private static func holdTimeRows(_ trades: [Trade]) -> [DashboardHoldTimeRow] {
+    private struct HoldDurations: Sendable {
+        var all: [TimeInterval]
+        var win: [TimeInterval]
+        var loss: [TimeInterval]
+    }
+
+    private static func holdDurations(_ trades: [Trade]) -> HoldDurations {
         var all: [TimeInterval] = []
         var win: [TimeInterval] = []
         var loss: [TimeInterval] = []
@@ -255,12 +281,33 @@ nonisolated enum DashboardChartMetrics {
             if pnl > 0 { win.append(seconds) }
             else if pnl < 0 { loss.append(seconds) }
         }
-        guard !all.isEmpty else { return [] }
+        return HoldDurations(all: all, win: win, loss: loss)
+    }
+
+    private static func holdTimeRows(from durations: HoldDurations) -> [DashboardHoldTimeRow] {
+        guard !durations.all.isEmpty else { return [] }
         return [
-            DashboardHoldTimeRow(label: "Avg Hold", value: formatDuration(average(all))),
-            DashboardHoldTimeRow(label: "Avg Winner", value: formatDuration(average(win))),
-            DashboardHoldTimeRow(label: "Avg Loser", value: formatDuration(average(loss))),
+            DashboardHoldTimeRow(label: "Avg Hold", value: formatDuration(average(durations.all))),
+            DashboardHoldTimeRow(label: "Avg Winner", value: formatDuration(average(durations.win))),
+            DashboardHoldTimeRow(label: "Avg Loser", value: formatDuration(average(durations.loss))),
         ]
+    }
+
+    private static func holdTimeHistogram(from durations: [TimeInterval]) -> [DashboardHistogramBucket] {
+        guard !durations.isEmpty else { return [] }
+        let defs: [(String, Range<TimeInterval>)] = [
+            ("<5m", 0..<300),
+            ("5–15m", 300..<900),
+            ("15–60m", 900..<3_600),
+            ("1–4h", 3_600..<14_400),
+            ("4h+", 14_400..<TimeInterval.greatestFiniteMagnitude),
+        ]
+        return defs.map { label, range in
+            DashboardHistogramBucket(
+                label: label,
+                count: durations.filter { range.contains($0) }.count
+            )
+        }
     }
 
     private static func average(_ values: [TimeInterval]) -> TimeInterval? {
@@ -278,6 +325,66 @@ nonisolated enum DashboardChartMetrics {
         return "\(total)s"
     }
 
+    // MARK: - Drawdown series (presentation from equity path)
+
+    private static func drawdownSeries(
+        from equity: [ProfileStatisticsMetrics.EquityPoint]
+    ) -> [DashboardDrawdownPoint] {
+        var peak: Decimal = 0
+        return equity.map { point in
+            if point.equity > peak { peak = point.equity }
+            let depth = peak - point.equity
+            return DashboardDrawdownPoint(
+                index: point.index,
+                depth: -NSDecimalNumber(decimal: depth).doubleValue
+            )
+        }
+    }
+
+    // MARK: - Heatmap pads (same P&L formulas, full domain)
+
+    private static func weekdayHeatmapBars(_ trades: [Trade]) -> [DashboardBarPoint] {
+        let labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        var map: [Int: Decimal] = [:]
+        let calendar = Calendar.current
+        for trade in trades {
+            let weekday = calendar.component(.weekday, from: trade.entryAt) // 1=Sun
+            let index: Int
+            switch weekday {
+            case 2: index = 0
+            case 3: index = 1
+            case 4: index = 2
+            case 5: index = 3
+            case 6: index = 4
+            case 7: index = 5
+            case 1: index = 6
+            default: continue
+            }
+            map[index, default: 0] += trade.realizedPnL?.amount ?? 0
+        }
+        return labels.enumerated().map { offset, label in
+            DashboardBarPoint(
+                label: label,
+                value: NSDecimalNumber(decimal: map[offset] ?? 0).doubleValue
+            )
+        }
+    }
+
+    private static func hourHeatmapBars(_ trades: [Trade]) -> [DashboardBarPoint] {
+        var map: [Int: Decimal] = [:]
+        let calendar = Calendar.current
+        for trade in trades {
+            let hour = calendar.component(.hour, from: trade.entryAt)
+            map[hour, default: 0] += trade.realizedPnL?.amount ?? 0
+        }
+        return (0..<24).map { hour in
+            DashboardBarPoint(
+                label: hourLabel(hour),
+                value: NSDecimalNumber(decimal: map[hour] ?? 0).doubleValue
+            )
+        }
+    }
+
     // MARK: - Insights (web generateInsights subset)
 
     private static func insightItems(
@@ -285,11 +392,13 @@ nonisolated enum DashboardChartMetrics {
         sessions: [ProfileStatisticsMetrics.SessionRow]
     ) -> [DashboardInsightItem] {
         var items: [DashboardInsightItem] = []
-        if let bestSession = sessions.max(by: { $0.pct < $1.pct }) {
+        if let bestSession = sessions.max(by: { $0.pct < $1.pct }), bestSession.pct >= 1 {
             items.append(
                 DashboardInsightItem(
                     id: "session",
-                    body: "Most of your tagged volume is in the \(bestSession.label) session (\(Int(bestSession.pct.rounded()))%)."
+                    title: "Protect your best session",
+                    body: "Most of your tagged volume lands in \(bestSession.label) (\(Int(bestSession.pct.rounded()))%). Review those setups first — that’s where your process is already concentrated.",
+                    kind: .session
                 )
             )
         }
@@ -308,7 +417,9 @@ nonisolated enum DashboardChartMetrics {
             items.append(
                 DashboardInsightItem(
                     id: "symbol",
-                    body: "\(best.key) is your strongest market (\(money(avg)) avg over \(best.value.count) trades)."
+                    title: "Lean into your edge market",
+                    body: "\(best.key) is your strongest average outcome (\(money(avg)) over \(best.value.count) trades). Size carefully there and journal what you’re doing differently.",
+                    kind: .symbol
                 )
             )
         }
@@ -316,11 +427,14 @@ nonisolated enum DashboardChartMetrics {
         let longCount = trades.filter { $0.side == .long }.count
         let shortCount = trades.count - longCount
         if trades.count >= 5 {
-            let edge = longCount >= shortCount ? "Long" : "Short"
+            let edge = longCount >= shortCount ? "long" : "short"
+            let majority = max(longCount, shortCount)
             items.append(
                 DashboardInsightItem(
                     id: "direction",
-                    body: "You take more \(edge.lowercased()) trades (\(max(longCount, shortCount)) of \(trades.count))."
+                    title: "Check your directional bias",
+                    body: "You’re taking more \(edge) trades (\(majority) of \(trades.count)). Confirm that matches your plan — bias without intent becomes drift.",
+                    kind: .direction
                 )
             )
         }

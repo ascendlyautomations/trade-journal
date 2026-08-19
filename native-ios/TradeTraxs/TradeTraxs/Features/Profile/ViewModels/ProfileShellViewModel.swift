@@ -3,8 +3,8 @@ import Observation
 
 /// Owns Profile section selection and render-oriented section ViewModels.
 ///
-/// Section ViewModels receive ``ProfileState`` from the screen bootstrap — they do not
-/// perform the initial repository load. They may paginate / refresh after mutations.
+/// Stage 1 (``ProfileBootstrap``) fills header state. Section ViewModels load their
+/// payloads lazily on first ``activate`` — one repository request per resource.
 @Observable
 @MainActor
 final class ProfileShellViewModel {
@@ -59,7 +59,7 @@ final class ProfileShellViewModel {
         activate(section)
     }
 
-    /// Ensures the visible section VM exists and has bootstrap data (no network).
+    /// Ensures the visible section VM exists and loads its payload once if deferred.
     func activateSelected() {
         activate(selectedSection)
     }
@@ -90,6 +90,7 @@ final class ProfileShellViewModel {
                 )
             }
             trades?.applyBootstrap(latestState)
+            trades?.loadIfNeeded()
         case .posts:
             if posts == nil {
                 posts = PostsContainerViewModel(
@@ -101,6 +102,7 @@ final class ProfileShellViewModel {
                 )
             }
             posts?.applyBootstrap(latestState)
+            posts?.loadIfNeeded()
         case .clips:
             if clips == nil {
                 clips = ClipsContainerViewModel(
@@ -112,6 +114,7 @@ final class ProfileShellViewModel {
                 )
             }
             clips?.applyBootstrap(latestState)
+            clips?.loadIfNeeded()
         case .stats:
             if stats == nil {
                 stats = StatsContainerViewModel(
@@ -122,6 +125,7 @@ final class ProfileShellViewModel {
                 )
             }
             stats?.applyBootstrap(latestState)
+            stats?.loadIfNeeded()
         case .achievements:
             if achievements == nil {
                 achievements = AchievementsContainerViewModel(
@@ -134,6 +138,7 @@ final class ProfileShellViewModel {
                 )
             }
             achievements?.applyBootstrap(latestState)
+            achievements?.loadIfNeeded()
         }
     }
 }

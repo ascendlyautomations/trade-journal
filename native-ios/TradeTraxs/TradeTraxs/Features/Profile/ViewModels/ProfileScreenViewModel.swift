@@ -57,11 +57,28 @@ final class ProfileScreenViewModel {
     /// Exactly one bootstrap on first presentation (unless already completed).
     func onAppear(currentUserProfile: CurrentUserProfileStore) {
         seedOwnerCacheIfNeeded(from: currentUserProfile)
+        FollowMutationCoordinator.shared.registerActiveProfile(screen: self)
+        if case .currentUser = target {
+            OwnerProfileOptimisticStore.shared.registerOwnerScreen(self)
+        }
         if state.didBootstrap {
             publish(state)
             return
         }
         bootstrapIfNeeded(force: false)
+    }
+
+    /// FollowMutationCoordinator — keep ProfileState aligned with shared caches.
+    func applyExternalFollowState(isFollowing: Bool, stats: ProfileStats?) {
+        var next = state
+        if !next.isOwner {
+            next.isFollowing = isFollowing
+        }
+        if let stats {
+            next.stats = stats
+        }
+        guard next != state else { return }
+        applyLocalState(next)
     }
 
     /// Standard lifecycle — first coordinated bootstrap (no-op when already done).
@@ -140,8 +157,107 @@ final class ProfileScreenViewModel {
         headerViewModel.openSettings()
     }
 
+    // MARK: - Optimistic owner mutations (no network)
+
+    /// Called by ``OwnerProfileOptimisticStore`` when the owner Profile screen is registered.
+    func absorbOwnerOptimisticOverlays() {
+        guard isOwnerTarget else { return }
+        let merged = OwnerProfileOptimisticStore.shared.merging(into: state)
+        guard merged != state else { return }
+        applyLocalState(merged)
+    }
+
+    func applyOptimisticPost(_ post: Post) {
+        guard isOwnerTarget else { return }
+        guard matchesOwner(post.authorProfileID) else { return }
+        data.detailCache.seed(post)
+        var next = state
+        next.posts = OwnerProfileOptimisticStore.upserting(post, into: next.posts)
+        if next.phase == .idle || next.phase == .loading {
+            // Keep overlays; bootstrap `publish` merges them when load completes.
+            applyLocalState(next)
+            return
+        }
+        next.phase = .loaded
+        next.didBootstrap = true
+        applyLocalState(next)
+    }
+
+    func applyOptimisticReel(_ reel: Reel) {
+        guard isOwnerTarget else { return }
+        guard matchesOwner(reel.authorProfileID) else { return }
+        guard OwnerProfileOptimisticStore.isListedOnOwnerProfile(reel) else { return }
+        data.detailCache.seed(reel)
+        var next = state
+        next.clips = OwnerProfileOptimisticStore.upserting(reel, into: next.clips)
+        if next.phase == .idle || next.phase == .loading {
+            applyLocalState(next)
+            return
+        }
+        next.phase = .loaded
+        next.didBootstrap = true
+        applyLocalState(next)
+    }
+
+    func applyOptimisticAchievement(_ achievement: Achievement) {
+        guard isOwnerTarget else { return }
+        guard matchesOwner(achievement.ownerProfileID) else { return }
+        data.detailCache.seed(achievement)
+        var next = state
+        next.achievements = OwnerProfileOptimisticStore.upserting(achievement, into: next.achievements)
+        if next.phase == .idle || next.phase == .loading {
+            applyLocalState(next)
+            return
+        }
+        next.phase = .loaded
+        next.didBootstrap = true
+        applyLocalState(next)
+    }
+
+    func applyOptimisticPostRemoval(id: PostID) {
+        guard isOwnerTarget else { return }
+        data.detailCache.removePost(id: id)
+        var next = state
+        next.posts.removeAll { $0.id == id }
+        applyLocalState(next)
+    }
+
+    func applyOptimisticReelRemoval(id: ReelID) {
+        guard isOwnerTarget else { return }
+        data.detailCache.removeReel(id: id)
+        var next = state
+        next.clips.removeAll { $0.id == id }
+        applyLocalState(next)
+    }
+
     // MARK: - Bootstrap
 
+    private var isOwnerTarget: Bool {
+        if case .currentUser = target { return true }
+        return state.isOwner
+    }
+
+    private func matchesOwner(_ authorID: ProfileID) -> Bool {
+        if let profileID = state.profileID ?? contentStore.resolvedProfileID {
+            return authorID == profileID
+        }
+        // Pre-bootstrap owner tab — accept creates for the session user once known.
+        return isOwnerTarget
+    }
+
+    private func applyLocalState(_ next: ProfileState) {
+        var next = next
+        next.lastUpdated = Date()
+        next.isRefreshing = state.isRefreshing
+        state = next
+        contentStore.applyBootstrap(next)
+        // Push into shell `latestState` + any mounted section VMs — do not reset selection.
+        if shellViewModel == nil {
+            syncShellIfNeeded()
+        } else {
+            shellViewModel?.apply(state: next)
+        }
+    }
     private func bootstrapIfNeeded(force: Bool) {
         if let bootstrapTask, !force { return }
         bootstrapTask?.cancel()
@@ -172,12 +288,19 @@ final class ProfileScreenViewModel {
             )
         )
         guard !Task.isCancelled else { return }
+        if force {
+            // Recreate section VMs so Stage 2 reloads once per tab after refresh.
+            shellViewModel = nil
+        }
         publish(next)
         bootstrapTask = nil
     }
 
     private func publish(_ next: ProfileState) {
         var next = next
+        if isOwnerTarget {
+            next = OwnerProfileOptimisticStore.shared.merging(into: next)
+        }
         if next.phase == .loaded {
             next.lastUpdated = Date()
         }
@@ -188,8 +311,8 @@ final class ProfileScreenViewModel {
         syncShellIfNeeded()
         activateShellForLaunch()
 
-        // Prefetch engagement for the default trades surface from the screen owner.
-        if let trades = shellViewModel?.trades {
+        // Prefetch engagement only after the default trades section has data.
+        if next.didLoadTrades, let trades = shellViewModel?.trades {
             trades.prefetchEngagement(for: next.trades.map(\.id))
         }
     }

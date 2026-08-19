@@ -16,6 +16,7 @@ final class CommentsViewModel {
     private let repository: any InteractionRepository
     private let engagementStore: EngagementStore
     private let session: any SessionProviding
+    private let detailCache: DetailPresentationCache?
     private var hasLoaded = false
     private var loadTask: Task<Void, Never>?
 
@@ -23,12 +24,14 @@ final class CommentsViewModel {
         target: InteractionTarget,
         repository: any InteractionRepository,
         engagementStore: EngagementStore,
-        session: any SessionProviding
+        session: any SessionProviding,
+        detailCache: DetailPresentationCache? = nil
     ) {
         self.target = target
         self.repository = repository
         self.engagementStore = engagementStore
         self.session = session
+        self.detailCache = detailCache
     }
 
     var topLevelComments: [InteractionComment] {
@@ -81,12 +84,16 @@ final class CommentsViewModel {
 
         let userID = await session.currentUserID.map { ProfileID($0.rawValue) }
             ?? ProfileID("dev.local")
+        // Reuse already-cached viewer profile for optimistic avatar — no network.
+        let cachedViewer = detailCache?.profile(id: userID)
         let optimisticID = CommentID("local-\(UUID().uuidString)")
         let optimistic = InteractionComment(
             id: optimisticID,
             target: target,
             authorProfileID: userID,
-            authorUsername: nil,
+            authorUsername: cachedViewer?.username,
+            authorDisplayName: cachedViewer?.displayName,
+            authorAvatarURL: cachedViewer?.avatar?.id,
             body: text,
             parentCommentID: nil,
             createdAt: Date(),

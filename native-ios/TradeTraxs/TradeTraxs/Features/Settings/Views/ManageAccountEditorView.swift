@@ -125,6 +125,7 @@ struct ManageAccountEditorView: View {
         }
         .experienceNavigationTitle(title)
         .scrollDismissesKeyboard(.interactively)
+        .experienceKeyboardDoneToolbar()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }

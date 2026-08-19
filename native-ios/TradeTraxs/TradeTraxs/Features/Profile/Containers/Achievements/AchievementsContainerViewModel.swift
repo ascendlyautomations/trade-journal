@@ -39,11 +39,15 @@ final class AchievementsContainerViewModel {
     }
 
     func applyBootstrap(_ snapshot: ProfileState) {
-        guard snapshot.didBootstrap || snapshot.phase == .loaded || !snapshot.achievements.isEmpty else {
-            if snapshot.phase == .loading, items.isEmpty { state = .loading }
+        if snapshot.didBootstrap || snapshot.phase == .loaded {
+            isScreenOwned = true
+        }
+        guard snapshot.didLoadAchievements || !snapshot.achievements.isEmpty else {
+            if (snapshot.phase == .loading || snapshot.didBootstrap), items.isEmpty {
+                state = .loading
+            }
             return
         }
-        isScreenOwned = true
         hasLoaded = true
         items = snapshot.achievements
         detailCache.seed(achievements: items)
@@ -52,7 +56,6 @@ final class AchievementsContainerViewModel {
     }
 
     func loadIfNeeded() {
-        if isScreenOwned { return }
         guard !hasLoaded, loadTask == nil else { return }
         loadTask = Task { await performLoad() }
     }

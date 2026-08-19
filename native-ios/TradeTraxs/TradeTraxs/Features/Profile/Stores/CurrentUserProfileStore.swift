@@ -90,6 +90,22 @@ final class CurrentUserProfileStore {
         loadedAvatarKey = nil
     }
 
+    /// Patches owner following count after FollowMutationCoordinator edge changes.
+    func applyFollowingCountDelta(_ delta: Int) {
+        guard var stats else { return }
+        stats.followingCount = max(0, stats.followingCount + delta)
+        self.stats = stats
+        detailCache?.seed(stats: stats)
+    }
+
+    /// Patches owner follower count (incoming follow accepted / follower removed).
+    func applyFollowerCountDelta(_ delta: Int) {
+        guard var stats else { return }
+        stats.followerCount = max(0, stats.followerCount + delta)
+        self.stats = stats
+        detailCache?.seed(stats: stats)
+    }
+
     private func performLoad(force: Bool) async {
         phase = profile == nil ? .loading : phase
         errorMessage = nil

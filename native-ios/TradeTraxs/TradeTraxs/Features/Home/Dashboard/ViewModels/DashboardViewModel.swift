@@ -71,18 +71,13 @@ final class DashboardViewModel {
         }
     }
 
+    /// Compact hero KPI row — glanceable outcomes (Net P&L lives on the equity hero).
     var metricChips: [DashboardMetricChip] {
         guard let summary else { return [] }
         return [
             DashboardMetricChip(
-                id: "net",
-                label: "Net P&L",
-                value: Self.money(summary.netPnL),
-                tone: summary.netPnL >= 0 ? .positive : .negative
-            ),
-            DashboardMetricChip(
                 id: "win",
-                label: "Win %",
+                label: "Win Rate",
                 value: ProfileDisplay.formatWinRate(summary.winRate),
                 tone: .neutral
             ),
@@ -96,10 +91,16 @@ final class DashboardViewModel {
                 }()
             ),
             DashboardMetricChip(
-                id: "payouts",
-                label: "Payouts",
-                value: ProfileDisplay.formatMoney(summary.payouts),
-                tone: (summary.payouts ?? 0) > 0 ? .positive : .neutral
+                id: "rr",
+                label: "Avg RR",
+                value: summary.averageRR.map { String(format: "%.2f", NSDecimalNumber(decimal: $0).doubleValue) } ?? "—",
+                tone: .neutral
+            ),
+            DashboardMetricChip(
+                id: "trades",
+                label: "Trades",
+                value: "\(summary.tradeCount)",
+                tone: .neutral
             ),
             DashboardMetricChip(
                 id: "expectancy",
@@ -110,23 +111,45 @@ final class DashboardViewModel {
                     return e >= 0 ? .positive : .negative
                 }()
             ),
-            DashboardMetricChip(
-                id: "rr",
-                label: "Avg RR",
-                value: summary.averageRR.map { String(format: "%.2f", NSDecimalNumber(decimal: $0).doubleValue) } ?? "—",
-                tone: .neutral
-            ),
         ]
     }
 
     /// Present only when a single prop-firm account is selected.
     var propFirmStatus: PropFirmStatusSnapshot? {
-        guard case .account(let id) = accountFilter,
-              let account = accounts.first(where: { $0.id == id }),
-              account.isPropFirmAccount
-        else { return nil }
+        guard let account = selectedAccount, account.isPropFirmAccount else { return nil }
         let trades = tradeInputs.map(\.trade)
         return PropFirmStatusSnapshot.build(account: account, trades: trades)
+    }
+
+    /// Single-account selection from the account filter (nil for All Accounts).
+    var selectedAccount: TradingAccount? {
+        guard case .account(let id) = accountFilter else { return nil }
+        return accounts.first(where: { $0.id == id })
+    }
+
+    /// Starting balance for a single prop account — presentation offset only.
+    var equityHeroPropStartingBalance: Decimal? {
+        DashboardEquityHeroPresentation.propStartingBalance(forSelectedAccount: selectedAccount)
+    }
+
+    var equityHeroTitle: String {
+        DashboardEquityHeroPresentation.title(propStartingBalance: equityHeroPropStartingBalance)
+    }
+
+    var equityHeroDisplayValue: Decimal {
+        guard let summary else { return 0 }
+        return DashboardEquityHeroPresentation.displayEquity(
+            currentEquity: summary.currentEquity,
+            propStartingBalance: equityHeroPropStartingBalance
+        )
+    }
+
+    var equityHeroChartPoints: [ProfileStatisticsMetrics.EquityPoint] {
+        guard let summary else { return [] }
+        return DashboardEquityHeroPresentation.chartPoints(
+            summary.equityData,
+            propStartingBalance: equityHeroPropStartingBalance
+        )
     }
 
     func accountMenuTitle(for account: TradingAccount) -> String {
@@ -138,15 +161,10 @@ final class DashboardViewModel {
         navigationCoordinator.open(.home(.propFirm(id)))
     }
 
+    /// Performance section detail cards — supporting metrics below the KPI row.
     var performanceCards: [DashboardMetricChip] {
         guard let summary else { return [] }
         return [
-            DashboardMetricChip(
-                id: "trades",
-                label: "Trades",
-                value: "\(summary.tradeCount)",
-                tone: .neutral
-            ),
             DashboardMetricChip(
                 id: "avgWin",
                 label: "Avg Win",
@@ -176,6 +194,12 @@ final class DashboardViewModel {
                 label: "Max Drawdown",
                 value: Self.money(summary.maxDrawdown),
                 tone: summary.maxDrawdown > 0 ? .negative : .neutral
+            ),
+            DashboardMetricChip(
+                id: "payouts",
+                label: "Payouts",
+                value: ProfileDisplay.formatMoney(summary.payouts),
+                tone: (summary.payouts ?? 0) > 0 ? .positive : .neutral
             ),
         ]
     }
@@ -242,12 +266,118 @@ final class DashboardViewModel {
     }
 
     func openTradesList() {
+        ExperienceHaptics.play(.selection)
         navigationCoordinator.open(.home(.trades))
     }
 
     func openReports() {
         ExperienceHaptics.play(.selection)
         navigationCoordinator.open(.home(.reports))
+    }
+
+    // MARK: - Chart browse (presentation handoff → Trade History)
+
+    func browseWins() {
+        seedAndOpenTrades { filters in
+            filters.result = .wins
+        }
+    }
+
+    func browseLosses() {
+        seedAndOpenTrades { filters in
+            filters.result = .losses
+        }
+    }
+
+    func browseSession(_ label: String) {
+        seedAndOpenTrades(sessionLabel: label) { _ in }
+    }
+
+    func browseWeekday(label: String) {
+        guard let weekday = TradeHistoryLaunchSeed.calendarWeekday(forHeatmapLabel: label) else {
+            openTradesList()
+            return
+        }
+        seedAndOpenTrades(weekday: weekday) { _ in }
+    }
+
+    func browseHour(label: String) {
+        guard let hour = Int(label) else {
+            openTradesList()
+            return
+        }
+        seedAndOpenTrades(hour: hour) { _ in }
+    }
+
+    func browseLong() {
+        seedAndOpenTrades { filters in
+            filters.direction = .long
+        }
+    }
+
+    func browseShort() {
+        seedAndOpenTrades { filters in
+            filters.direction = .short
+        }
+    }
+
+    func browseHoldBucket(label: String) {
+        let range = TradeHistoryLaunchSeed.holdRange(forBucketLabel: label)
+        seedAndOpenTrades(holdRange: range) { _ in }
+    }
+
+    private func seedAndOpenTrades(
+        weekday: Int? = nil,
+        hour: Int? = nil,
+        sessionLabel: String? = nil,
+        holdRange: TradeHistoryLaunchSeed.HoldSecondsRange? = nil,
+        mutate: (inout TradeHistoryFilters) -> Void
+    ) {
+        ExperienceHaptics.play(.selection)
+        var filters = tradeHistoryFiltersPreservingDashboardContext()
+        mutate(&filters)
+        TradeHistoryLaunchSeed.set(
+            .init(
+                filters: filters,
+                searchText: "",
+                weekday: weekday,
+                hour: hour,
+                sessionLabel: sessionLabel,
+                holdSecondsRange: holdRange
+            )
+        )
+        navigationCoordinator.open(.home(.trades))
+    }
+
+    /// Maps Dashboard account + date range into existing Trade History filters.
+    private func tradeHistoryFiltersPreservingDashboardContext() -> TradeHistoryFilters {
+        var filters = TradeHistoryFilters()
+        filters.account = accountFilter
+        let calendar = Calendar.current
+        let now = Date()
+        switch dateRange {
+        case .all:
+            filters.dateRange = .allTime
+        case .sevenDays:
+            filters.dateRange = .custom
+            filters.customStart = calendar.date(byAdding: .day, value: -7, to: now)
+            filters.customEnd = now
+        case .thirtyDays:
+            filters.dateRange = .last30Days
+        case .ninetyDays:
+            filters.dateRange = .custom
+            filters.customStart = calendar.date(byAdding: .day, value: -90, to: now)
+            filters.customEnd = now
+        case .ytd:
+            filters.dateRange = .custom
+            var comps = DateComponents()
+            comps.year = calendar.component(.year, from: now)
+            comps.month = 1
+            comps.day = 1
+            filters.customStart = calendar.date(from: comps)
+            filters.customEnd = now
+        }
+        return filters
     }
 
     func onDisappear() {

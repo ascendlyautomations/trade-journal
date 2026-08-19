@@ -54,12 +54,16 @@ final class FollowRequestsViewModel {
     func approve(_ id: FollowRequestID) {
         guard !busyIDs.contains(id) else { return }
         let snapshot = rows
+        let requester = rows.first(where: { $0.id == id })?.request.requesterProfileID
         busyIDs.insert(id)
         rows = rows.filter { $0.id != id }
         inboxStore.setPendingFollowRequestCount(max(0, inboxStore.pendingFollowRequestCount - 1))
         Task {
             do {
                 try await followRequests.approve(id: id)
+                if let requester {
+                    FollowMutationCoordinator.shared.noteIncomingFollowAccepted(requester: requester)
+                }
                 busyIDs.remove(id)
             } catch {
                 busyIDs.remove(id)
