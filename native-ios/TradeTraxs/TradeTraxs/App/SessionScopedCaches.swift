@@ -28,6 +28,7 @@ enum SessionScopedCaches {
         ProfileRequestFlight.shared.invalidate()
         RepositoryRequestFlight.shared.invalidate()
         Task { await SessionFollowingStore.shared.invalidate() }
+        SessionBootstrapStore.shared.clear()
         SessionDiskCache.clearAll()
         TradeJournalMutationStore.shared.invalidate()
         AccountMutationStore.shared.invalidate()

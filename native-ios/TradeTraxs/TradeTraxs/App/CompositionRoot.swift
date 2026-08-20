@@ -84,7 +84,8 @@ enum CompositionRoot {
             profiles: data.profiles,
             session: data.session,
             imagePipeline: data.imagePipeline,
-            detailCache: data.detailCache
+            detailCache: data.detailCache,
+            rpc: data.rpc
         )
         FollowMutationCoordinator.shared.configure(
             detailCache: data.detailCache,

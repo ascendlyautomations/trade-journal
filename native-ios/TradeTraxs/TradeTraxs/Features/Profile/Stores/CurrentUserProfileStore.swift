@@ -31,6 +31,7 @@ final class CurrentUserProfileStore {
     private let session: any SessionProviding
     private let imagePipeline: any ImagePipeline
     private let detailCache: DetailPresentationCache?
+    private let rpc: (any RPCClient)?
 
     private var loadTask: Task<Void, Never>?
     private var loadedProfileID: ProfileID?
@@ -40,12 +41,14 @@ final class CurrentUserProfileStore {
         profiles: any ProfileRepository,
         session: any SessionProviding,
         imagePipeline: any ImagePipeline,
-        detailCache: DetailPresentationCache? = nil
+        detailCache: DetailPresentationCache? = nil,
+        rpc: (any RPCClient)? = nil
     ) {
         self.profiles = profiles
         self.session = session
         self.imagePipeline = imagePipeline
         self.detailCache = detailCache
+        self.rpc = rpc
     }
 
     var initials: String {
@@ -120,6 +123,13 @@ final class CurrentUserProfileStore {
         let profileID = ProfileID(userID.rawValue)
 
         do {
+            // backendV2.session default OFF — existing profile/stats REST unchanged.
+            // When ON: Session RPC seeds following IDs; profile/stats still load via
+            // existing repos until Profile screen migration (session ≠ profile content).
+            if let rpc {
+                _ = try? await SessionBootstrapLoader.loadIfEnabled(rpc: rpc)
+            }
+
             async let profileTask = profiles.profile(id: profileID)
             async let statsTask = profiles.stats(for: profileID)
             let (loadedProfile, loadedStats) = try await (profileTask, statsTask)
