@@ -1,8 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  buildLikeNotificationInsertPayload,
-} = require("./likeNotifications.ts")
+import { describe, it } from "node:test"
+import { buildLikeNotificationInsertPayload, } from "./likeNotifications.ts"
+import assert from "node:assert/strict"
 
 describe("buildLikeNotificationInsertPayload", () => {
   it("builds trade like payload", () => {
@@ -54,3 +52,4 @@ describe("buildLikeNotificationInsertPayload", () => {
     )
   })
 })
+export {}

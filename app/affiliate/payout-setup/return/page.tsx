@@ -2,37 +2,30 @@
 
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
+import { syncAffiliateConnectStatus } from "@/lib/affiliateConnectSyncClient"
+import { useUserProfile } from "@/lib/useUserProfile"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export default function AffiliatePayoutSetupReturnPage() {
   const router = useRouter()
+  const { user } = useUserProfile()
   const [message, setMessage] = useState("Updating your payout status…")
 
   useEffect(() => {
+    if (!user?.id) return
     let cancelled = false
     void (async () => {
       try {
-        const res = await fetch("/api/affiliates/connect/sync", {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            ...(await supabaseBearerHeaders()),
-          },
-        })
-        const data = (await res.json().catch(() => ({}))) as {
-          ok?: boolean
-          error?: string
-        }
+        const sync = await syncAffiliateConnectStatus(user.id, { force: true })
         if (!cancelled) {
-          if (res.ok && data.ok !== false) {
+          if (sync.ok) {
             setMessage("Payout setup updated. Redirecting…")
             router.replace("/payouts?setup=return")
             return
           }
           setMessage(
             toUserFacingErrorMessage(
-              data.error,
+              sync.error,
               "Could not refresh status. Please try again."
             )
           )
@@ -49,7 +42,7 @@ export default function AffiliatePayoutSetupReturnPage() {
     return () => {
       cancelled = true
     }
-  }, [router])
+  }, [router, user?.id])
 
   return (
     <>

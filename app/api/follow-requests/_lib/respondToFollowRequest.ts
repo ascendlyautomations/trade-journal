@@ -41,7 +41,13 @@ async function removeFollowRequestNotification(
 
   if (error) {
     console.error("[follow-requests] notification remove failed", error)
+    return
   }
+
+  const { invalidateAppIconBadgeCache } = await import(
+    "@/lib/server/push/badgeService"
+  )
+  invalidateAppIconBadgeCache(targetId)
 }
 
 export async function approveFollowRequest(
@@ -83,67 +89,26 @@ export async function approveFollowRequest(
 
   await removeFollowRequestNotification(req.target_id, req.requester_id)
 
-  const { error: notifErr } = await supabaseServiceRole.from("notifications").insert({
-    user_id: req.target_id,
-    sender_id: req.requester_id,
+  const { notify } = await import("@/lib/server/notifications/NotificationService")
+
+  const followResult = await notify({
     type: "follow",
+    actorUserId: req.requester_id,
+    followingId: req.target_id,
   })
-
-  if (notifErr) {
-    if (notifErr.code !== "23505") {
-      console.error("[follow-requests] follow notification insert failed", notifErr)
-      return { ok: false, status: 500, error: toUserFacingErrorMessage(notifErr) }
-    }
-  } else {
-    const { scheduleIosPushDelivery } = await import(
-      "@/lib/server/push/deliverPushNotification"
-    )
-    scheduleIosPushDelivery({
-      recipientUserId: req.target_id,
-      type: "follow",
-      sender_id: req.requester_id,
-      prefsAlreadyChecked: true,
-    })
-  }
-
-  // Notify the requester that their follow request was accepted.
-  {
-    const { getServerNotificationPreferences } = await import(
-      "@/lib/serverNotificationPreferences"
-    )
-    const prefs = await getServerNotificationPreferences(req.requester_id, {
-      force: true,
-    })
-    if (
-      prefs.notifications_enabled &&
-      prefs.follow_request_accepts_enabled
-    ) {
-      const { error: acceptNotifErr } = await supabaseServiceRole
-        .from("notifications")
-        .insert({
-          user_id: req.requester_id,
-          sender_id: req.target_id,
-          type: "follow_request_accepted",
-        })
-
-      if (acceptNotifErr && acceptNotifErr.code !== "23505") {
-        console.error(
-          "[follow-requests] accept notification insert failed",
-          acceptNotifErr
-        )
-      } else if (!acceptNotifErr) {
-        const { scheduleIosPushDelivery } = await import(
-          "@/lib/server/push/deliverPushNotification"
-        )
-        scheduleIosPushDelivery({
-          recipientUserId: req.requester_id,
-          type: "follow_request_accepted",
-          sender_id: req.target_id,
-          prefsAlreadyChecked: true,
-        })
-      }
+  if (!followResult.ok && followResult.status === 500) {
+    return {
+      ok: false,
+      status: 500,
+      error: followResult.error ?? "Follow notification failed",
     }
   }
+
+  await notify({
+    type: "follow_request_accepted",
+    actorUserId: req.target_id,
+    requesterId: req.requester_id,
+  })
 
   return { ok: true }
 }

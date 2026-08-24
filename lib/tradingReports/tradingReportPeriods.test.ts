@@ -1,11 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  getTradingReportPeriodBounds,
-  isMonthlyReportReleaseDay,
-  isWeeklyReportReleaseDay,
-  tradingReportPeriodId,
-} = require("./tradingReportPeriods.ts")
+import { describe, it } from "node:test"
+import { getTradingReportPeriodBounds, isMonthlyReportReleaseDay, isWeeklyReportReleaseDay, tradingReportPeriodId, } from "./tradingReportPeriods.ts"
+import assert from "node:assert/strict"
 
 describe("tradingReportPeriods", () => {
   it("weekly_last covers the prior calendar week", () => {
@@ -33,3 +28,4 @@ describe("tradingReportPeriods", () => {
     )
   })
 })
+export {}

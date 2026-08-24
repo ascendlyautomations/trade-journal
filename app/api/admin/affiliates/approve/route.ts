@@ -80,10 +80,18 @@ export async function POST(req: Request) {
       )
     }
 
+    const affiliateUserId = application.user_id
+    if (!affiliateUserId) {
+      return Response.json(
+        { error: "Application is missing an applicant." },
+        { status: 400 }
+      )
+    }
+
     const { data: profile } = await supabaseServiceRole
       .from("profiles")
       .select("username")
-      .eq("id", application.user_id)
+      .eq("id", affiliateUserId)
       .maybeSingle()
 
     const resolvedCode = (
@@ -102,7 +110,7 @@ export async function POST(req: Request) {
         const promo = await createAffiliatePromotionCode({
           stripe,
           code: resolvedCode,
-          affiliateUserId: application.user_id,
+          affiliateUserId,
         })
         stripePromo = promo.id
       } catch (promoErr) {

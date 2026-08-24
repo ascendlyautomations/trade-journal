@@ -1,14 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  getTraxProBillingPlan,
-  getTraxProPlanBilledAmount,
-  getTraxProPlanEffectiveMonthlyAmount,
-  formatTraxProEffectiveMonthly,
-  getTraxProSubscriptionDisplay,
-  getVisibleTraxProBillingPlans,
-  TRAXPRO_BILLING_PLANS,
-} = require("./traxProBillingPlans.ts")
+import { describe, it } from "node:test"
+import { getTraxProBillingPlan, getTraxProPlanBilledAmount, getTraxProPlanEffectiveMonthlyAmount, formatTraxProEffectiveMonthly, getTraxProSubscriptionDisplay, getVisibleTraxProBillingPlans, TRAXPRO_BILLING_PLANS, } from "./traxProBillingPlans.ts"
+import assert from "node:assert/strict"
 
 describe("traxProBillingPlans", () => {
   it("monthly anchor pricing", () => {
@@ -89,3 +81,4 @@ describe("traxProBillingPlans", () => {
     }
   })
 })
+export {}

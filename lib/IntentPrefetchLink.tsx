@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useCallback, type ComponentProps, type FocusEvent, type MouseEvent, type TouchEvent } from "react"
 import { prefetchRouteOnIntent } from "@/lib/routePrefetch"
 
@@ -29,11 +29,12 @@ export default function IntentPrefetchLink({
   ...rest
 }: IntentPrefetchLinkProps) {
   const router = useRouter()
+  const pathname = usePathname() ?? undefined
 
   const prefetchOnIntent = useCallback(() => {
     const path = hrefToPath(href)
-    if (path) prefetchRouteOnIntent(router, path)
-  }, [href, router])
+    if (path) prefetchRouteOnIntent(router, path, pathname)
+  }, [href, router, pathname])
 
   return (
     <Link

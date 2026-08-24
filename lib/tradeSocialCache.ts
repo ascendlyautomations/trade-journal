@@ -7,6 +7,8 @@ export type TradeSocialSnapshot = {
   likes: number
   liked: boolean
   comments: any[]
+  /** When comments are deferred, count may exceed comments.length. */
+  commentCount?: number
   fetchedAt: number
 }
 

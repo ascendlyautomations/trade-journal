@@ -33,7 +33,12 @@ async function fetchBestPnlPostServer() {
     return null
   }
 
-  const row = pickBestPnlPost((data ?? []).filter(isPublicDiscoverableTradeRow))
+  const row = pickBestPnlPost(
+    (data ?? []).filter(isPublicDiscoverableTradeRow) as ReadonlyArray<{
+      pnl?: unknown
+      created_at?: string
+    }>
+  )
   return row ? normalizeTradeFeedItem(row as Record<string, unknown>) : null
 }
 
@@ -54,7 +59,12 @@ async function fetchHighestRrPostServer() {
     return null
   }
 
-  const row = pickHighestRrPost((data ?? []).filter(isPublicDiscoverableTradeRow))
+  const row = pickHighestRrPost(
+    (data ?? []).filter(isPublicDiscoverableTradeRow) as ReadonlyArray<{
+      rr?: unknown
+      created_at?: string
+    }>
+  )
   return row ? normalizeTradeFeedItem(row as Record<string, unknown>) : null
 }
 

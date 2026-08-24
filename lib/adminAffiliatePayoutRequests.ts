@@ -7,6 +7,7 @@ import {
   parseAffiliatePayoutRequestRow,
 } from "@/lib/affiliatePayoutRequests"
 import { formatPostgrestErrorMessage } from "@/lib/postgrestError"
+import { asJsonObject } from "@/lib/supabaseProjectedQuery"
 
 export type AffiliatePayoutStatusFilter = AffiliatePayoutStatus | "all"
 
@@ -46,7 +47,9 @@ export async function fetchAdminPayoutRequests(
     return { rows: [], error: new Error(formatPostgrestErrorMessage(error)) }
   }
 
-  const base = (data || []).map((r) => parseAffiliatePayoutRequestRow(r as Record<string, unknown>))
+  const base = (data || []).map((r) =>
+    parseAffiliatePayoutRequestRow(asJsonObject(r) ?? {})
+  )
   const enriched = await enrichPayoutRows(supabase, base)
   return { rows: enriched, error: null }
 }

@@ -1,11 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  getFeaturedWeekStartIso,
-  isPublicDiscoverableTradeRow,
-  pickBestPnlPost,
-  pickHighestRrPost,
-} = require("./featuredTradesWeekLogic.ts")
+import { describe, it } from "node:test"
+import { getFeaturedWeekStartIso, isPublicDiscoverableTradeRow, pickBestPnlPost, pickHighestRrPost, } from "./featuredTradesWeekLogic.ts"
+import assert from "node:assert/strict"
 
 describe("featuredTradesWeek", () => {
   it("getFeaturedWeekStartIso uses a rolling 7-day window", () => {
@@ -66,3 +61,4 @@ describe("featuredTradesWeek", () => {
     assert.equal(pickHighestRrPost(rows)?.id, "c")
   })
 })
+export {}

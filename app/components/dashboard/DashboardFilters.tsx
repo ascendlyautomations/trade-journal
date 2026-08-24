@@ -55,6 +55,8 @@ export type DashboardFiltersProps = {
   onCancelGear: () => void
   /** PRO copy trading groups for unified account picker */
   copyGroups?: import("@/lib/copyTradingGroups").CopyTradingGroup[]
+  /** Lazy-load copy trading groups when filter UI opens. */
+  onRequestCopyGroups?: () => void
   /** When false, hides Public toggle and Share performance controls (zero-trade dashboard). */
   showShareControls?: boolean
   /** Subtle link when filters indicate prop firm context (account or Eval/Funded mode). */
@@ -94,6 +96,7 @@ export default function DashboardFilters({
   showShareControls = true,
   showPropFirmLink = false,
   copyGroups = [],
+  onRequestCopyGroups,
 }: DashboardFiltersProps) {
   const { isNativeIos } = usePlatformPresentation()
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
@@ -115,7 +118,11 @@ export default function DashboardFilters({
             isPro={isPro}
             copyGroups={copyGroups}
             onOpenQuickInput={onOpenQuickInput}
-            onOpenFilters={() => setFilterSheetOpen(true)}
+            onOpenFilters={() => {
+              onRequestCopyGroups?.()
+              setFilterSheetOpen(true)
+            }}
+            onAccountPickerOpen={onRequestCopyGroups}
           />
         </div>
         <div className={DASHBOARD_MOBILE_FILTER_MARGIN_CLASS}>
@@ -219,6 +226,7 @@ export default function DashboardFilters({
         onAccountChange={onAccountChange}
         isPro={isPro}
         copyGroups={copyGroups}
+        onAccountPickerOpen={onRequestCopyGroups}
         accountTypeFilter={accountTypeFilter}
         onAccountTypeChange={onAccountTypeChange}
         timeframe={timeframe}

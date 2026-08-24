@@ -75,7 +75,7 @@ async function fetchParticipantConversationIds(
 async function fetchCursorUnreadCounts(
   conversationIds: string[],
   client: SupabaseClient
-): Promise<Map<string, number> | null> {
+): Promise<Map<string, number>> {
   if (!conversationIds.length) return new Map()
   const { data, error } = await client.rpc("get_conversation_unread_counts", {
     p_conversation_ids: conversationIds,

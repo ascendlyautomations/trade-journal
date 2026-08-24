@@ -1,4 +1,5 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { notify } from "@/lib/server/notifications/NotificationService"
 
 export async function POST(req: Request) {
   const user = await getRouteUser(req)
@@ -14,59 +15,23 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  if (!targetId || targetId === user.id) {
-    return Response.json({ error: "Invalid targetId" }, { status: 400 })
-  }
+  const result = await notify({
+    type: "follow_request",
+    actorUserId: user.id,
+    targetId: targetId ?? "",
+  })
 
-  const { data: requestRow, error: requestErr } = await supabaseServiceRole
-    .from("follow_requests")
-    .select("id")
-    .eq("requester_id", user.id)
-    .eq("target_id", targetId)
-    .eq("status", "pending")
-    .maybeSingle()
-
-  if (requestErr) {
-    console.error("[api/notifications/follow-request] lookup failed", requestErr)
-    return Response.json({ error: requestErr.message }, { status: 500 })
-  }
-
-  if (!requestRow) {
+  if (!result.ok) {
     return Response.json(
-      { error: "Pending follow request not found" },
-      { status: 404 }
+      { error: result.error ?? "Follow request notify failed" },
+      { status: result.status ?? 500 }
     )
   }
 
-  const { error: insertErr } = await supabaseServiceRole
-    .from("notifications")
-    .insert({
-      user_id: targetId,
-      sender_id: user.id,
-      type: "follow_request",
-      content: JSON.stringify({ follow_request_id: requestRow.id }),
-    })
-
-  if (insertErr) {
-    if (insertErr.code === "23505") {
-      return Response.json({ ok: true, deduplicated: true })
-    }
-    console.error("[api/notifications/follow-request] insert failed", insertErr)
-    return Response.json({ error: insertErr.message }, { status: 500 })
-  }
-
-  const { scheduleIosPushDelivery } = await import(
-    "@/lib/server/push/deliverPushNotification"
-  )
-  scheduleIosPushDelivery({
-    recipientUserId: targetId,
-    type: "follow_request",
-    sender_id: user.id,
-    content: JSON.stringify({ follow_request_id: requestRow.id }),
-    prefsAlreadyChecked: true,
+  return Response.json({
+    ok: true,
+    deduplicated: result.deduplicated,
   })
-
-  return Response.json({ ok: true })
 }
 
 export async function DELETE(req: Request) {
@@ -99,5 +64,9 @@ export async function DELETE(req: Request) {
     return Response.json({ error: deleteErr.message }, { status: 500 })
   }
 
+  const { invalidateAppIconBadgeCache } = await import(
+    "@/lib/server/push/badgeService"
+  )
+  invalidateAppIconBadgeCache(targetId)
   return Response.json({ ok: true })
 }

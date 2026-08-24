@@ -1,11 +1,23 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  buildCommunitySharePreviewPost,
-} = require("./buildCommunitySharePreviewPost.ts")
-const {
-  resolveFeedTradeAccountType,
-} = require("./feedAccountType.ts")
+import { describe, it } from "node:test"
+import { buildCommunitySharePreviewPost, } from "./buildCommunitySharePreviewPost.ts"
+import { resolveFeedTradeAccountType, } from "./feedAccountType.ts"
+import assert from "node:assert/strict"
+
+type CommunitySharePreviewTradeJoin = {
+  account_type?: string
+  entry_time?: string | null
+  exit_time?: string | null
+  entry_price?: number | null
+  exit_price?: number | null
+  trade_date?: string | null
+  reels?: { id?: string }
+}
+
+function previewTrades(post: Record<string, unknown>): CommunitySharePreviewTradeJoin {
+  const trades = post.trades
+  assert.ok(trades && typeof trades === "object" && !Array.isArray(trades))
+  return trades as CommunitySharePreviewTradeJoin
+}
 
 describe("resolveFeedTradeAccountType", () => {
   it("defaults missing mode to live", () => {
@@ -60,7 +72,7 @@ describe("buildCommunitySharePreviewPost", () => {
       imageUrl: null,
     })
 
-    assert.equal(post.trades.account_type, "live")
+    assert.equal(previewTrades(post).account_type, "live")
   })
 
   it("matches eval account type in preview trades join", () => {
@@ -79,7 +91,7 @@ describe("buildCommunitySharePreviewPost", () => {
       imageUrl: null,
     })
 
-    assert.equal(post.trades.account_type, "eval")
+    assert.equal(previewTrades(post).account_type, "eval")
   })
 
   it("includes trade timing metadata for TradeCardTimingBlock", () => {
@@ -105,11 +117,12 @@ describe("buildCommunitySharePreviewPost", () => {
       tradeDate: "2026-06-02",
     })
 
-    assert.equal(post.trades.entry_time, entry)
-    assert.equal(post.trades.exit_time, exit)
-    assert.equal(post.trades.entry_price, 23456)
-    assert.equal(post.trades.exit_price, 23458)
-    assert.equal(post.trades.trade_date, "2026-06-02")
+    const trades = previewTrades(post)
+    assert.equal(trades.entry_time, entry)
+    assert.equal(trades.exit_time, exit)
+    assert.equal(trades.entry_price, 23456)
+    assert.equal(trades.exit_price, 23458)
+    assert.equal(trades.trade_date, "2026-06-02")
   })
 
   it("embeds trades.reels so Feed View Clip badge can render", () => {
@@ -129,7 +142,7 @@ describe("buildCommunitySharePreviewPost", () => {
       attachedReel: true,
     })
 
-    assert.equal(post.trades.reels?.id, "community-preview-reel")
+    assert.equal(previewTrades(post).reels?.id, "community-preview-reel")
   })
 
   it("omits trades.reels when no clip is attached", () => {
@@ -148,6 +161,7 @@ describe("buildCommunitySharePreviewPost", () => {
       imageUrl: null,
     })
 
-    assert.equal(post.trades.reels, undefined)
+    assert.equal(previewTrades(post).reels, undefined)
   })
 })
+export {}

@@ -8,7 +8,9 @@ import ImageCropModal from "@/app/components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { mapProjectedRows } from "@/lib/supabaseProjectedQuery"
 import { useRouter } from "next/navigation"
 import { profilePath } from "@/lib/profileRoutes"
 import { useUserProfile } from "@/lib/useUserProfile"
@@ -57,10 +59,16 @@ export default function ChatPage() {
       `)
       .eq("channel", channel)
       .order("created_at", { ascending: true })
+      .overrideTypes<Record<string, unknown>[], { merge: false }>()
 
-    const sortedMessages = (data || []).sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
+    const sortedMessages = mapProjectedRows(data, (row) => row).sort((a, b) => {
+      const aCreatedAt = a.created_at
+      const bCreatedAt = b.created_at
+      if (typeof aCreatedAt !== "string" || typeof bCreatedAt !== "string") {
+        return 0
+      }
+      return new Date(aCreatedAt).getTime() - new Date(bCreatedAt).getTime()
+    })
 
     setMessages(sortedMessages)
 

@@ -1,4 +1,4 @@
-import type { GettingStartedChecklistSignals } from "@/lib/gettingStartedChecklistSignals"
+import type { GettingStartedChecklistSignals } from "./gettingStartedChecklistSignals.types.ts"
 
 /**
  * Per-user session cache of the last *resolved* getting-started checklist

@@ -18,6 +18,7 @@ import {
 } from "@/lib/insertCsvTradesWithAccount"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { buildCsvSupportNotes } from "@/lib/csvImportSupportNotes"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
@@ -418,18 +419,19 @@ export default function CsvImportPanel({
 
           report({ percent: 12, stage: "Matching columns…" })
 
-          const { data: profile, error: profileErr } = await supabase
+          const { data: importProfile, error: profileErr } = await supabase
             .from("profiles")
             .select("has_used_initial_import")
             .eq("id", user.id)
             .single()
 
-          if (profileErr || !profile) {
+          if (profileErr || !importProfile) {
             console.error("Profile fetch failed:", profileErr)
             throw new Error("Could not verify account. Try again.")
           }
 
-          const hasUsedInitialImport = profile.has_used_initial_import === true
+          const hasUsedInitialImport =
+            importProfile.has_used_initial_import === true
 
           const parseResult = buildTradesFromParsedCsv(parsed, user.id)
           const { parsedTrades, summary, rowResults } = parseResult

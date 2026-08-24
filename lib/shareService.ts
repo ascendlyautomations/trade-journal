@@ -71,11 +71,16 @@ async function normalizeToFile(
     return input
   }
 
-  const blob = input
-  const mime = blob.type || "application/octet-stream"
-  return new File([blob], filename || `share-${Date.now()}.${extensionForMime(mime)}`, {
-    type: mime,
-  })
+  if (typeof Blob !== "undefined" && input instanceof Blob) {
+    const mime = input.type || "application/octet-stream"
+    return new File(
+      [input],
+      filename || `share-${Date.now()}.${extensionForMime(mime)}`,
+      { type: mime }
+    )
+  }
+
+  throw new Error("Unsupported share input.")
 }
 
 function downloadInBrowser(file: File): void {

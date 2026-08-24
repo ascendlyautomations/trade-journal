@@ -1,0 +1,98 @@
+export const conversationThreadContractFixtures = {
+  directOpen: {
+    meta: {
+      contract_version: "v1",
+      server_time: "2026-08-21T12:00:00.000Z",
+      viewer_id: "viewer-1",
+    },
+    data: {
+      conversation: {
+        id: "convo-1",
+        is_group: false,
+        name: null,
+        avatar_url: null,
+        is_pinned: false,
+      },
+      membership: { is_participant: true },
+      participants: [
+        {
+          user_id: "viewer-1",
+          profiles: {
+            id: "viewer-1",
+            username: "me",
+            avatar_url: null,
+          },
+        },
+        {
+          user_id: "peer-1",
+          profiles: {
+            id: "peer-1",
+            username: "peer",
+            avatar_url: "https://example.com/a.png",
+          },
+        },
+      ],
+      notifications_enabled: true,
+      block_status: {
+        other_user_id: "peer-1",
+        blocked_by_me: false,
+        blocked_by_other: false,
+      },
+      messages: [
+        {
+          id: "msg-1",
+          conversation_id: "convo-1",
+          sender_id: "peer-1",
+          sender_anonymized: false,
+          content: "Hello",
+          created_at: "2026-08-21T11:59:00.000Z",
+          seen_by: [],
+          type: "text",
+          trade_id: null,
+          post_id: null,
+          profile_post_id: null,
+          achievement_post_id: null,
+          reel_id: null,
+          parent_message_id: null,
+          deleted_for_everyone: false,
+          image_url: null,
+          is_system: false,
+          profiles: { username: "peer", avatar_url: null },
+        },
+      ],
+      has_more_messages: false,
+      next_message_cursor: null,
+      unread_count: 0,
+      mark_read: { applied: true },
+      notifications_marked_read: 1,
+      page_meta: { limit: 50, returned: 1, has_more: false },
+    },
+  },
+  groupPagination: {
+    meta: {
+      contract_version: "v1",
+      server_time: "2026-08-21T12:00:00.000Z",
+      viewer_id: "viewer-1",
+    },
+    data: {
+      conversation: {
+        id: "group-1",
+        is_group: true,
+        name: "Team",
+        avatar_url: null,
+        is_pinned: true,
+      },
+      membership: { is_participant: true },
+      participants: [],
+      notifications_enabled: false,
+      block_status: null,
+      messages: [],
+      has_more_messages: true,
+      next_message_cursor: "2026-08-20T10:00:00.000Z|msg-old",
+      unread_count: 3,
+      mark_read: { applied: false },
+      notifications_marked_read: 0,
+      page_meta: { limit: 50, returned: 0, has_more: true },
+    },
+  },
+} as const

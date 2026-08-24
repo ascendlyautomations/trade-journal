@@ -208,7 +208,7 @@ export default function CopyTradingGroupsSection({
 
         {!isPro ? (
           <div className="mt-4">
-            <ProGate isPro={false} />
+            <ProGate isPro={false}>{null}</ProGate>
           </div>
         ) : loading ? (
           <p className="mt-4 text-sm text-gray-400">{LOADING_COPY.copyTradingGroups}</p>

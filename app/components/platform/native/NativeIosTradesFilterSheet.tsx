@@ -30,6 +30,7 @@ export type NativeIosTradesFilterSheetProps = {
   onAccountChange: (value: string) => void
   isPro?: boolean
   copyGroups?: CopyTradingGroup[]
+  onAccountPickerOpen?: () => void
   accountTypeFilter: string
   onAccountTypeChange: (value: string) => void
   timeframe: string
@@ -62,6 +63,7 @@ export default function NativeIosTradesFilterSheet({
   onAccountChange,
   isPro = false,
   copyGroups = [],
+  onAccountPickerOpen,
   accountTypeFilter,
   onAccountTypeChange,
   timeframe,
@@ -150,6 +152,7 @@ export default function NativeIosTradesFilterSheet({
               accounts={[]}
               isPro={isPro}
               copyGroups={copyGroups}
+              onPickerOpen={onAccountPickerOpen}
               filterValue={accountFilter}
               filterOptions={accounts}
               onFilterChange={onAccountChange}

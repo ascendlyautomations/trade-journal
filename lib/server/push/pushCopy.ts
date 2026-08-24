@@ -195,27 +195,16 @@ export function buildPushAlertCopy(target: PushNotificationTarget): {
     const preview = stringField(json, "message_preview") || "New message"
     const isGroup = json?.is_group === true
     const groupName = stringField(json, "group_name")
-    const batchCountRaw = json?.batch_count
-    const batchCount =
-      typeof batchCountRaw === "number"
-        ? batchCountRaw
-        : typeof batchCountRaw === "string"
-          ? Number.parseInt(batchCountRaw, 10)
-          : 1
-    const coalesced =
-      Number.isFinite(batchCount) && batchCount > 1
-        ? `${Math.floor(batchCount)} new messages`
-        : null
 
     if (isGroup && groupName) {
       return {
         title: groupName,
-        body: coalesced ?? `${who}: ${preview}`,
+        body: `${who}: ${preview}`,
       }
     }
     return {
       title: who,
-      body: coalesced ?? preview,
+      body: preview,
     }
   }
 
@@ -271,10 +260,8 @@ export function buildPushDeepLinkHref(target: PushNotificationTarget): string {
       if (href.startsWith("/")) return href
     }
     if (target.sender_id) {
-      return profilePath({
-        id: String(target.sender_id),
-        username: target.senderUsername,
-      })
+      // Prefer UUID path so native profile loads by id (username paths break ProfileID lookup).
+      return `/profile/${String(target.sender_id).trim()}`
     }
     if (target.recipientUserId) {
       return `${profilePath({

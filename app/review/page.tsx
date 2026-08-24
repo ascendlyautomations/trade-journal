@@ -7,6 +7,7 @@ import InputTradeForm from "../components/InputTradeForm"
 import { formatEST } from "@/lib/formatEST"
 import { useToast } from "@/app/components/ui"
 import { TRADES_APP_SELECT } from "@/lib/publicAccountPrivacy"
+import { mapProjectedRows } from "@/lib/supabaseProjectedQuery"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 const TRADES_PER_PAGE = 50
@@ -46,8 +47,12 @@ export default function ReviewPage() {
       .eq("is_initial_import", true)
       .eq("reviewed", false)
       .order("created_at", { ascending: true })
+      .overrideTypes<Record<string, unknown>[], { merge: false }>()
 
-    const nextTrades = (data || []) as ReviewTrade[]
+    const nextTrades = mapProjectedRows(
+      data,
+      (row) => row as ReviewTrade
+    )
     const nextPageCount = Math.max(
       1,
       Math.ceil(nextTrades.length / TRADES_PER_PAGE)

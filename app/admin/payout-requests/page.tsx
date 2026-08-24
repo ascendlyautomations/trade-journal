@@ -84,7 +84,7 @@ export default function AdminPayoutRequestsPage() {
     ])
 
     if (listRes.error) {
-      logPostgrestErrorDev("admin payout requests list", listRes.error as unknown as Error)
+      console.error("[admin payout requests list]", listRes.error)
       setListError(toUserFacingErrorMessage(listRes.error))
       setRows([])
       setLoading(false)

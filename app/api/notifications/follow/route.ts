@@ -1,4 +1,5 @@
-import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { getRouteUser } from "@/app/api/_lib/getRouteUser"
+import { notify } from "@/lib/server/notifications/NotificationService"
 
 export async function POST(req: Request) {
   const user = await getRouteUser(req)
@@ -14,61 +15,23 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  if (!followingId || followingId === user.id) {
-    return Response.json({ error: "Invalid followingId" }, { status: 400 })
-  }
+  const result = await notify({
+    type: "follow",
+    actorUserId: user.id,
+    followingId: followingId ?? "",
+  })
 
-  const { data: followRow, error: followErr } = await supabaseServiceRole
-    .from("followers")
-    .select("follower_id")
-    .eq("follower_id", user.id)
-    .eq("following_id", followingId)
-    .maybeSingle()
-
-  if (followErr) {
-    console.error("[api/notifications/follow] follow lookup failed", followErr)
-    return Response.json({ error: followErr.message }, { status: 500 })
-  }
-
-  if (!followRow) {
+  if (!result.ok) {
     return Response.json(
-      { error: "Follow relationship not found" },
-      { status: 404 }
+      { error: result.error ?? "Follow notify failed" },
+      { status: result.status ?? 500 }
     )
   }
 
-  const { error: insertErr } = await supabaseServiceRole
-    .from("notifications")
-    .insert({
-      user_id: followingId,
-      sender_id: user.id,
-      type: "follow",
-    })
-
-  if (insertErr) {
-    if (insertErr.code === "23505") {
-      return Response.json({ ok: true, deduplicated: true })
-    }
-    console.error("[api/notifications/follow] insert failed", insertErr)
-    return Response.json({ error: insertErr.message }, { status: 500 })
-  }
-
-  console.info("[follow-push] Follow activity created", {
-    recipientUserId: followingId,
-    senderId: user.id,
+  return Response.json({
+    ok: true,
+    deduplicated: result.deduplicated,
   })
-
-  const { scheduleIosPushDelivery } = await import(
-    "@/lib/server/push/deliverPushNotification"
-  )
-  scheduleIosPushDelivery({
-    recipientUserId: followingId,
-    type: "follow",
-    sender_id: user.id,
-    prefsAlreadyChecked: true,
-  })
-
-  return Response.json({ ok: true })
 }
 
 export async function DELETE(req: Request) {
@@ -89,6 +52,10 @@ export async function DELETE(req: Request) {
     return Response.json({ error: "Invalid followingId" }, { status: 400 })
   }
 
+  const { supabaseServiceRole } = await import("@/app/api/_lib/getRouteUser")
+  const { invalidateAppIconBadgeCache } = await import(
+    "@/lib/server/push/badgeService"
+  )
   const { error: deleteErr } = await supabaseServiceRole
     .from("notifications")
     .delete()
@@ -101,5 +68,6 @@ export async function DELETE(req: Request) {
     return Response.json({ error: deleteErr.message }, { status: 500 })
   }
 
+  invalidateAppIconBadgeCache(followingId)
   return Response.json({ ok: true })
 }

@@ -237,7 +237,7 @@ export default function AdminAnalyticsPage() {
                             />
                             <Tooltip
                               {...chartTooltipStyles}
-                              formatter={(value: number | string) => [value, "count"]}
+                              formatter={(value) => [value, "count"]}
                               labelFormatter={(label) => `Day ${label}`}
                             />
                             <Line type="monotone" dataKey="count" stroke={c.color} strokeWidth={2} dot={{ r: 3 }} />

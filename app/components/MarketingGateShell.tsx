@@ -39,8 +39,10 @@ export default function MarketingGateShell({ children }: { children: ReactNode }
   useEffect(() => {
     if (!onMarketingRoute || loading || !user) return
     if (gateSuspended) return
+    // Wait for a real profile row — `profile ?? {}` always looks like needs-onboarding.
+    if (!profile) return
 
-    if (profileNeedsOnboarding(profile ?? {})) {
+    if (profileNeedsOnboarding(profile)) {
       router.replace(resolveSignupProfileSetupPath())
       return
     }

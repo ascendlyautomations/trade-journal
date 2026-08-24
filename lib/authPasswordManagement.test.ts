@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest"
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
 import type { User } from "@supabase/supabase-js"
 import {
   isGoogleAuthUser,
   profileHasEmailPasswordFlag,
   resolveGooglePasswordUiMode,
-} from "./authPasswordManagement"
+} from "./authPasswordManagement.ts"
 
 function mockUser(partial: Partial<User>): User {
   return partial as User
@@ -12,18 +13,19 @@ function mockUser(partial: Partial<User>): User {
 
 describe("authPasswordManagement", () => {
   it("detects Google OAuth users", () => {
-    expect(
+    assert.equal(
       isGoogleAuthUser(
         mockUser({ app_metadata: { provider: "google", providers: ["google"] } })
-      )
-    ).toBe(true)
+      ),
+      true
+    )
   })
 
   it("uses profiles.has_email_password as Google password UI source of truth", () => {
-    expect(resolveGooglePasswordUiMode(false)).toBe("create")
-    expect(resolveGooglePasswordUiMode(null)).toBe("create")
-    expect(resolveGooglePasswordUiMode(true)).toBe("update")
-    expect(profileHasEmailPasswordFlag(true)).toBe(true)
-    expect(profileHasEmailPasswordFlag(false)).toBe(false)
+    assert.equal(resolveGooglePasswordUiMode(false), "create")
+    assert.equal(resolveGooglePasswordUiMode(null), "create")
+    assert.equal(resolveGooglePasswordUiMode(true), "update")
+    assert.equal(profileHasEmailPasswordFlag(true), true)
+    assert.equal(profileHasEmailPasswordFlag(false), false)
   })
 })

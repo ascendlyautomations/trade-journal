@@ -1,13 +1,8 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const { CSV_RR_HEADER_ALIASES, parseCsvRrValue } = require("./csvRrAliases.ts")
-const {
-  buildTradesFromParsedCsv,
-  findCsvRrColumnHeader,
-  normalizeHeaderKey,
-  resolveCsvHeaderField,
-} = require("./csvTradeParsers.ts")
-const { buildCsvImportDiagnostics } = require("./csvImportDiagnostics.ts")
+import { describe, it } from "node:test"
+import { CSV_RR_HEADER_ALIASES, parseCsvRrValue } from "./csvRrAliases.ts"
+import { buildTradesFromParsedCsv, findCsvRrColumnHeader, normalizeHeaderKey, resolveCsvHeaderField, } from "./csvTradeParsers.ts"
+import { buildCsvImportDiagnostics } from "./csvImportDiagnostics.ts"
+import assert from "node:assert/strict"
 
 const USER_ID = "test-user-id"
 
@@ -143,3 +138,4 @@ describe("csvRrImport", () => {
     )
   })
 })
+export {}

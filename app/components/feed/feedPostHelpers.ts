@@ -209,7 +209,7 @@ function isMissingCommentSchemaColumn(error: {
 
 /** Select feed comments, falling back when newer columns are absent. */
 export async function queryFeedComments<T extends { data: unknown; error: unknown }>(
-  run: (select: string) => Promise<T>
+  run: (select: string) => PromiseLike<T>
 ): Promise<T> {
   const full = await run(FEED_COMMENTS_SELECT)
   if (

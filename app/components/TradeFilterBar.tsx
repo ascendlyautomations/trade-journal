@@ -64,6 +64,8 @@ export type TradeFilterBarProps = {
   /** PRO copy trading groups for unified account picker */
   isPro?: boolean
   copyGroups?: CopyTradingGroup[]
+  /** Called when the account picker menu opens (lazy-load copy groups). */
+  onAccountPickerOpen?: () => void
   /** Shown beside “All Modes” on small screens only */
   settingsNextToModes?: ReactNode
   /** Optional compact control shown beside “All Modes” on mobile */
@@ -110,6 +112,7 @@ export default function TradeFilterBar({
   fullWidth = false,
   isPro = false,
   copyGroups = [],
+  onAccountPickerOpen,
 }: TradeFilterBarProps) {
   const isTradesVariant = _variant === "trades"
   const [timeframeOpen, setTimeframeOpen] = useState(false)
@@ -139,6 +142,7 @@ export default function TradeFilterBar({
         filterPlaceholder="All Accounts"
         showExternalCreateButton={false}
         hideManageAccounts={false}
+        onPickerOpen={onAccountPickerOpen}
       />
     )
   }

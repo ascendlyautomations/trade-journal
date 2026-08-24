@@ -1,13 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  buildDateTime,
-  dateTimeFieldsFromTrade,
-  getTradeFormDuration,
-  isExitBeforeEntry,
-  toDateInputValue,
-  toTimeInputValue,
-} = require("./inputTradeDateTime.ts")
+import { describe, it } from "node:test"
+import { buildDateTime, dateTimeFieldsFromTrade, getTradeFormDuration, isExitBeforeEntry, toDateInputValue, toTimeInputValue, } from "./inputTradeDateTime.ts"
+import assert from "node:assert/strict"
 
 describe("inputTradeDateTime", () => {
   it("builds same-day entry and exit ISO", () => {
@@ -15,7 +8,9 @@ describe("inputTradeDateTime", () => {
     const exit = buildDateTime("2024-06-08", "15:45")
     assert.ok(entry)
     assert.ok(exit)
-    assert.match(getTradeFormDuration(entry, exit), /\d+h/)
+    const duration = getTradeFormDuration(entry, exit)
+    assert.ok(duration)
+    assert.match(duration, /\d+h/)
   })
 
   it("supports overnight entry (Jun 8 22:00 → Jun 9 02:00)", () => {
@@ -36,6 +31,7 @@ describe("inputTradeDateTime", () => {
       false
     )
     const duration = getTradeFormDuration(entry, exit)
+    assert.ok(duration)
     assert.match(duration, /3d/)
   })
 
@@ -86,3 +82,4 @@ describe("inputTradeDateTime", () => {
     assert.equal(savedExit, exitIso)
   })
 })
+export {}

@@ -1,0 +1,37 @@
+/**
+ * Backend V2 Phase 1 public surface.
+ * Intentionally not imported by app screens yet.
+ */
+
+export * from "./versioning.ts"
+export * from "./flags.ts"
+export * from "./telemetry.ts"
+export * from "./contracts.ts"
+export * from "./rpcClient.ts"
+export * from "./adapters.ts"
+export * from "./fixtures.ts"
+export * from "./sessionBootstrapCache.ts"
+export * from "./sessionBootstrapCompare.ts"
+export * from "./sessionBootstrapRepository.ts"
+export * from "./dashboardBootstrapCache.ts"
+export * from "./dashboardBootstrapCompare.ts"
+export * from "./dashboardBootstrapRepository.ts"
+export * from "./feedBootstrapCache.ts"
+export * from "./feedBootstrapCompare.ts"
+export * from "./feedBootstrapRepository.ts"
+export * from "./messagingBootstrapCache.ts"
+export * from "./messagingBootstrapCompare.ts"
+export * from "./messagingBootstrapRepository.ts"
+export * from "./roomContracts.ts"
+export * from "./roomBootstrapCache.ts"
+export * from "./roomBootstrapRepository.ts"
+export * from "./roomBootstrapCommunityLoad.ts"
+export * from "./conversationThreadContracts.ts"
+export * from "./conversationThreadBootstrapRepository.ts"
+export * from "./conversationThreadBootstrapCache.ts"
+export * from "./conversationThreadInboxSeed.ts"
+export * from "./conversationThreadContracts.ts"
+export * from "./conversationThreadBootstrapRepository.ts"
+export * from "./conversationThreadBootstrapCache.ts"
+export * from "./conversationThreadInboxSeed.ts"
+

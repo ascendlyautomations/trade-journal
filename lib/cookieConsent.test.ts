@@ -1,7 +1,15 @@
-const assert = require("node:assert/strict")
-const { describe, it, beforeEach } = require("node:test")
+import { describe, it, beforeEach } from "node:test"
+import assert from "node:assert/strict"
+import {
+  clearCookieConsent,
+  COOKIE_CONSENT_STORAGE_KEY,
+  hasCookieConsentChoice,
+  isAnalyticsAllowed,
+  readCookieConsent,
+  saveCookieConsent,
+} from "./cookieConsent.ts"
 
-const localStorageMock = new Map()
+const localStorageMock = new Map<string, string>()
 
 describe("cookieConsent", () => {
   beforeEach(() => {
@@ -10,38 +18,25 @@ describe("cookieConsent", () => {
       configurable: true,
       value: {
         localStorage: {
-          getItem: (key) => localStorageMock.get(key) ?? null,
-          setItem: (key, value) => {
+          getItem: (key: string) => localStorageMock.get(key) ?? null,
+          setItem: (key: string, value: string) => {
             localStorageMock.set(key, value)
           },
-          removeItem: (key) => {
+          removeItem: (key: string) => {
             localStorageMock.delete(key)
           },
         },
       },
     })
-    const {
-      clearCookieConsent,
-    } = require("./cookieConsent.ts")
     clearCookieConsent()
   })
 
   it("starts with no stored choice", () => {
-    const {
-      hasCookieConsentChoice,
-      readCookieConsent,
-    } = require("./cookieConsent.ts")
     assert.equal(hasCookieConsentChoice(), false)
     assert.equal(readCookieConsent(), null)
   })
 
   it("stores accept-all with analytics enabled", () => {
-    const {
-      hasCookieConsentChoice,
-      isAnalyticsAllowed,
-      readCookieConsent,
-      saveCookieConsent,
-    } = require("./cookieConsent.ts")
     const record = saveCookieConsent("all")
     assert.equal(record.choice, "all")
     assert.equal(record.analytics, true)
@@ -51,11 +46,6 @@ describe("cookieConsent", () => {
   })
 
   it("stores essential-only with analytics disabled", () => {
-    const {
-      isAnalyticsAllowed,
-      readCookieConsent,
-      saveCookieConsent,
-    } = require("./cookieConsent.ts")
     saveCookieConsent("essential")
     const record = readCookieConsent()
     assert.equal(record?.choice, "essential")
@@ -64,13 +54,9 @@ describe("cookieConsent", () => {
   })
 
   it("clearCookieConsent removes stored record", () => {
-    const {
-      COOKIE_CONSENT_STORAGE_KEY,
-      clearCookieConsent,
-      saveCookieConsent,
-    } = require("./cookieConsent.ts")
     saveCookieConsent("all")
     clearCookieConsent()
     assert.equal(localStorageMock.get(COOKIE_CONSENT_STORAGE_KEY), undefined)
   })
 })
+export {}

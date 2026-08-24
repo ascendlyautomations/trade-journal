@@ -11,8 +11,13 @@ struct LeaderboardState: Equatable {
 
     var phase: Phase = .idle
     var audience: LeaderboardAudience = .all
+    /// Timeframe shown in the selector (effective after fallback).
     var timeframe: LeaderboardTimeframe = .month
+    /// User-selected timeframe before automatic expansion.
+    var requestedTimeframe: LeaderboardTimeframe = .month
     var category: LeaderboardCategory = .pnl
+    /// Set when a larger preset was chosen automatically.
+    var timeframeFallbackMessage: String?
 
     /// Full ranked rows after audience/category presentation transforms.
     var rows: [LeaderboardRow] = []

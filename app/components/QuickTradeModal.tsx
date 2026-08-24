@@ -66,6 +66,8 @@ import { publishTradeReel } from "@/lib/reels"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { buildCommunitySharePreviewPost } from "@/lib/buildCommunitySharePreviewPost"
 import { buildDateTime } from "@/lib/inputTradeDateTime"
+import { useUserProfile } from "@/lib/UserProfileProvider"
+import { ensureAccountsLoaded } from "@/lib/appDataCache"
 import { isProActive } from "@/lib/subscription"
 import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
 import {
@@ -196,6 +198,7 @@ export default function QuickTradeModal({
   onSaved,
   initialCsvPatch = null,
 }: QuickTradeModalProps) {
+  const { profile: contextProfile } = useUserProfile()
   const csvFileInputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const uploadingRef = useRef(false)
@@ -296,37 +299,41 @@ export default function QuickTradeModal({
 
   const loadAccounts = useCallback(async (uid: string) => {
     setAccountLoading(true)
-    const { data, error: fetchErr } = await supabase
-      .from("accounts")
-      .select("*")
-      .eq("user_id", uid)
+    try {
+      const allRows = await ensureAccountsLoaded(supabase, uid)
+      setEntryEnabledAccountCount(countTradeEntryEnabledAccounts(allRows))
 
-    if (fetchErr) {
+      const rows = filterAccountsForTradeEntry(allRows).map((acc) => ({
+        name: String(acc.name ?? ""),
+        size: String(acc.account_size ?? ""),
+        id: String(acc.id),
+        account_number: acc.account_number ?? null,
+        mode: acc.mode ?? "live",
+        category: acc.category ?? null,
+        can_add_trades: acc.can_add_trades !== false,
+      }))
+
+      setAccounts(rows)
+    } catch (fetchErr) {
       console.error("[QuickTradeModal] accounts fetch:", fetchErr)
       setAccounts([])
       setEntryEnabledAccountCount(0)
+    } finally {
       setAccountLoading(false)
-      return
     }
-
-    const allRows = data ?? []
-    setEntryEnabledAccountCount(countTradeEntryEnabledAccounts(allRows))
-
-    const rows = filterAccountsForTradeEntry(allRows).map((acc) => ({
-      name: String(acc.name ?? ""),
-      size: String(acc.account_size ?? ""),
-      id: String(acc.id),
-      account_number: acc.account_number ?? null,
-      mode: acc.mode ?? "live",
-      category: acc.category ?? null,
-      can_add_trades: acc.can_add_trades !== false,
-    }))
-
-    setAccounts(rows)
-    setAccountLoading(false)
   }, [])
 
   const loadPlanProfile = useCallback(async (uid: string) => {
+    // Prefer Session/UserProfile when already hydrated — avoid duplicate profiles GET.
+    if (contextProfile?.id === uid) {
+      setPlanProfile({
+        is_pro: contextProfile.is_pro,
+        subscription_status: contextProfile.subscription_status,
+        username: contextProfile.username,
+        avatar_url: contextProfile.avatar_url,
+      })
+      return
+    }
     const { data } = await supabase
       .from("profiles")
       .select(
@@ -335,7 +342,7 @@ export default function QuickTradeModal({
       .eq("id", uid)
       .maybeSingle()
     setPlanProfile(data ?? null)
-  }, [])
+  }, [contextProfile])
 
   function clearEphemeralTradeFields() {
     setDescription("")
@@ -490,11 +497,12 @@ export default function QuickTradeModal({
       accounts.map((account) => ({
         id: account.id,
         name: account.name,
-        size: account.size,
+        size: account.size ?? "",
         account_number: account.account_number ?? null,
-        mode: String(account.mode ?? "live"),
+        mode: account.mode,
         category: account.category ?? null,
         is_active: true,
+        can_add_trades: true,
         note: "",
         rules: null,
       })),
@@ -720,7 +728,7 @@ export default function QuickTradeModal({
 
       const createdAccount: TradeAccountOption = {
         name: data.name,
-        size: data.account_size,
+        size: data.account_size ?? "",
         id: String(data.id),
         account_number: data.account_number ?? null,
         mode: data.mode,
@@ -885,6 +893,16 @@ export default function QuickTradeModal({
               advanceCsvQueue(queueIndexSnapshot + 1, queuePatchesSnapshot)
             }
             return
+          }
+
+          if (!selectedAccount) {
+            showPopup(
+              persistentError(
+                "Account Required",
+                "Select an account to save this trade."
+              )
+            )
+            throw new Error("No account selected")
           }
 
           const result = await saveManualTrade(

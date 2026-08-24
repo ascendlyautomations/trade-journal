@@ -27,6 +27,7 @@ import Modal from "@/app/components/ui/Modal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { persistentError } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import type { Json, TableInsert, TableUpdate } from "@/lib/supabaseTypes"
 import {
   buildAchievementValidationPopup,
   validateAchievementForm,
@@ -454,7 +455,7 @@ export default function AchievementUploadModal({
 
       const createdAccount: TradeAccountOption = {
         name: data.name,
-        size: data.account_size,
+        size: data.account_size ?? "",
         id: String(data.id),
         account_number: data.account_number ?? null,
         mode: data.mode,
@@ -598,26 +599,30 @@ export default function AchievementUploadModal({
             account_size: accountSnapshot?.account_size ?? (snapshotForm.account_size?.trim() || null),
             mode: accountSnapshot?.mode ?? null,
             firm: accountSnapshot?.firm ?? (snapshotForm.firm?.trim() || null),
-            achieved_at: snapshotForm.achieved_at || null,
+            achieved_at: snapshotForm.achieved_at || new Date().toISOString(),
             image_url: imageUrl,
             is_public: snapshotForm.is_public,
             is_featured: snapshotForm.is_featured,
-            metadata: normalizeAchievementMetadata(snapshotForm.metadata),
+            metadata: normalizeAchievementMetadata(
+              snapshotForm.metadata
+            ) as Json,
           }
 
           report({ percent: 82, stage: "Creating record…" })
 
-          const query = snapshotEditingId
-            ? supabase
+          const { data: savedRow, error: saveErr } = snapshotEditingId
+            ? await supabase
                 .from("achievements")
-                .update(payload)
+                .update(payload satisfies TableUpdate<"achievements">)
                 .eq("id", snapshotEditingId)
                 .eq("user_id", userId)
-            : supabase.from("achievements").insert(payload)
-
-          const { data: savedRow, error: saveErr } = await query
-            .select("id")
-            .single()
+                .select("id")
+                .single()
+            : await supabase
+                .from("achievements")
+                .insert(payload satisfies TableInsert<"achievements">)
+                .select("id")
+                .single()
           if (saveErr) {
             console.error("[achievements] save failed", saveErr)
             throw new Error(

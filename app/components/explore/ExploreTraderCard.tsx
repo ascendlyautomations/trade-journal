@@ -65,7 +65,7 @@ export default function ExploreTraderCard({
 
   return (
     <article className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-md transition hover:border-white/20 hover:bg-white/[0.08]">
-      <Link href={href} className="shrink-0">
+      <Link href={href} prefetch={false} className="shrink-0">
         <ProfileAvatarImg
           src={profile.avatar_url}
           className="h-11 w-11 border border-white/10"
@@ -74,7 +74,7 @@ export default function ExploreTraderCard({
       </Link>
 
       <div className="min-w-0 flex-1">
-        <Link href={href} className="block min-w-0">
+        <Link href={href} prefetch={false} className="block min-w-0">
           <p className="truncate text-sm font-semibold text-white">
             {displayName}
           </p>

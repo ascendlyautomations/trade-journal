@@ -16,6 +16,7 @@ import {
 } from "@/lib/publicAccountPrivacy"
 import { SHARED_TRADE_UNAVAILABLE } from "@/lib/sharedContentNavigation"
 import { supabase } from "@/lib/supabaseClient"
+import { asJsonObject } from "@/lib/supabaseProjectedQuery"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 import ExpandableText from "@/app/components/ui/ExpandableText"
@@ -131,22 +132,25 @@ export default function SharedTradeMessageCard({
         .select(PUBLIC_TRADE_SELECT)
         .eq("id", resolvedTradeId)
         .maybeSingle()
+        .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
       if (cancelled) return
 
+      const tradeRow = asJsonObject(data)
       const isOwner =
         viewerUserId != null &&
-        data?.user_id != null &&
-        data.user_id === viewerUserId
+        tradeRow?.user_id != null &&
+        tradeRow.user_id === viewerUserId
 
-      let resolved = data
+      let resolved = tradeRow
       if (isOwner) {
         const { data: full } = await supabase
           .from("trades")
           .select(TRADES_APP_SELECT)
           .eq("id", resolvedTradeId)
           .maybeSingle()
-        resolved = full ?? data
+          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
+        resolved = asJsonObject(full) ?? tradeRow
       }
 
       const sanitized = resolved

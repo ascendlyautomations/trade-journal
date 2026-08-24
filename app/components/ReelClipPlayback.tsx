@@ -11,7 +11,7 @@ import {
   type Ref,
 } from "react"
 import ReelClipPlayOverlay from "@/app/components/ReelClipPlayOverlay"
-import { getReelPosterImageUrl, firstVisibleReelSeekTime } from "@/lib/reelVideo"
+import { getReelPosterImageUrl } from "@/lib/reelVideo"
 
 export type ReelClipPlaybackHandle = {
   play: () => Promise<void>
@@ -59,22 +59,15 @@ const ReelClipPlayback = forwardRef(function ReelClipPlayback(
     [onPlayingChange]
   )
 
-  useImperativeHandle(ref, () => ({
-    play: async () => {
-      const video = videoRef.current
-      if (!video) return
-      setHasStarted(true)
-      await video.play()
-      syncPlaying(true)
-    },
-    pause: () => {
-      videoRef.current?.pause()
-      syncPlaying(false)
-    },
-    getVideoElement: () => videoRef.current,
-  }))
+  const releaseVideo = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+    video.pause()
+    video.removeAttribute("src")
+    video.load()
+  }, [])
 
-  const handlePlayClick = useCallback(async () => {
+  const beginPlayback = useCallback(async () => {
     const video = videoRef.current
     if (!video) return
     setHasStarted(true)
@@ -86,37 +79,23 @@ const ReelClipPlayback = forwardRef(function ReelClipPlayback(
     }
   }, [syncPlaying])
 
+  useImperativeHandle(ref, () => ({
+    play: beginPlayback,
+    pause: () => {
+      videoRef.current?.pause()
+      syncPlaying(false)
+    },
+    getVideoElement: () => videoRef.current,
+  }))
+
   useEffect(() => {
-    if (hasStarted || imagePosterUrl) return
-
-    const video = videoRef.current
-    if (!video) return
-
-    const primePreviewFrame = () => {
-      if (!Number.isFinite(video.duration) || video.duration <= 0) return
-      const target = firstVisibleReelSeekTime(video.duration)
-      if (Math.abs(video.currentTime - target) > 0.01) {
-        video.currentTime = target
-      }
-    }
-
-    const onLoadedData = () => primePreviewFrame()
-    video.addEventListener("loadeddata", onLoadedData)
-    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-      primePreviewFrame()
-    }
-
     return () => {
-      video.removeEventListener("loadeddata", onLoadedData)
+      releaseVideo()
     }
-  }, [hasStarted, imagePosterUrl, videoUrl])
-
-  useEffect(() => {
-    setHasStarted(false)
-    setPlaying(false)
-  }, [videoUrl])
+  }, [releaseVideo])
 
   const showImagePoster = !hasStarted && !!imagePosterUrl
+  const showStaticPlaceholder = !hasStarted && !imagePosterUrl
   const showPlayOverlay = !playing
 
   return (
@@ -125,13 +104,12 @@ const ReelClipPlayback = forwardRef(function ReelClipPlayback(
         <video
           ref={videoRef}
           src={videoUrl}
-          poster={imagePosterUrl ?? undefined}
           className={`${videoClassName} relative z-0 block transition-opacity duration-200 ${
-            showImagePoster ? "opacity-0" : "opacity-100"
+            showImagePoster || showStaticPlaceholder ? "opacity-0" : "opacity-100"
           }`}
           style={{ aspectRatio: "9/16" }}
           playsInline
-          preload="auto"
+          preload="metadata"
           muted={muted}
           controls={nativeControls && hasStarted && playing}
           onPlay={() => {
@@ -148,13 +126,22 @@ const ReelClipPlayback = forwardRef(function ReelClipPlayback(
             alt=""
             draggable={false}
             className={`absolute inset-0 z-[1] block ${videoClassName}`}
+            style={{ aspectRatio: "9/16" }}
+          />
+        ) : null}
+
+        {showStaticPlaceholder ? (
+          <div
+            aria-hidden
+            className={`absolute inset-0 z-[1] block bg-gradient-to-br from-slate-950 via-slate-900 to-black ${videoClassName}`}
+            style={{ aspectRatio: "9/16" }}
           />
         ) : null}
 
         {showPlayOverlay ? (
           <button
             type="button"
-            onClick={() => void handlePlayClick()}
+            onClick={() => void beginPlayback()}
             className="absolute inset-0 z-[2] flex items-center justify-center"
             aria-label="Play clip"
           >

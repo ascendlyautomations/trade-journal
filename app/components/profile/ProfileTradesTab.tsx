@@ -27,7 +27,7 @@ type ProfileTradesTabProps = {
   hasMore: boolean
   onLoadMore: () => void
   /** Full trade card feed (list mode + desktop). */
-  renderTrade: (trade: ProfileTradeRow) => ReactNode
+  renderTrade: (trade: ProfileTradeRow, index: number) => ReactNode
   /** Opens the existing profile trade detail modal. */
   onOpenTrade: (trade: ProfileTradeRow) => void
 }
@@ -252,9 +252,9 @@ export default function ProfileTradesTab({
               : "grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 md:gap-y-8"
           }
         >
-          {displayedTrades.map((trade) => (
+          {displayedTrades.map((trade, index) => (
             <div key={trade.id} id={`trade-${trade.id}`}>
-              {renderTrade(trade)}
+              {renderTrade(trade, index)}
             </div>
           ))}
           {isMobile && loading

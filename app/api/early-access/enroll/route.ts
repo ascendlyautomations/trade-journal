@@ -1,5 +1,6 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { resolveEarlyAccessEnvironment } from "@/lib/earlyAccessEnvironment.server"
+import type { TableUpdate } from "@/lib/supabaseTypes"
 import {
   EARLY_ACCESS_DURATION_DAYS,
   generateEarlyAccessReferralCode,
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
     return Response.json({ result: "ineligible" }, { status: 403 })
   }
 
-  const prep: Record<string, string> = {}
+  const prep: TableUpdate<"profiles"> = {}
   if (
     profile.signup_flow_source == null ||
     String(profile.signup_flow_source).trim() === ""

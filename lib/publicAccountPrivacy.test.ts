@@ -1,11 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  formatPublicAccountTypeLabel,
-  publicAccountBadgeFromTrade,
-  sanitizeTradeForViewer,
-  PUBLIC_TRADE_SELECT,
-} = require("./publicAccountPrivacy.ts")
+import { describe, it } from "node:test"
+import { formatPublicAccountTypeLabel, publicAccountBadgeFromTrade, sanitizeTradeForViewer, PUBLIC_TRADE_SELECT, } from "./publicAccountPrivacy.ts"
+import assert from "node:assert/strict"
 
 describe("publicAccountPrivacy", () => {
   it("maps account types to public badge labels", () => {
@@ -26,8 +21,8 @@ describe("publicAccountPrivacy", () => {
     )
     assert.equal(
       publicAccountBadgeFromTrade({
-        account_name: "Apex 50K",
         account_type: "funded",
+        mode: "live",
       }),
       "Funded"
     )
@@ -43,6 +38,7 @@ describe("publicAccountPrivacy", () => {
       account_type: "live",
     }
     const sanitized = sanitizeTradeForViewer(trade, { isOwner: false })
+    assert.ok(sanitized)
     assert.equal(sanitized.account_name, undefined)
     assert.equal(sanitized.account_number, undefined)
     assert.equal(sanitized.account_id, undefined)
@@ -53,6 +49,7 @@ describe("publicAccountPrivacy", () => {
   it("does not strip fields for owner", () => {
     const trade = { account_name: "My Account", account_type: "live" }
     const sanitized = sanitizeTradeForViewer(trade, { isOwner: true })
+    assert.ok(sanitized)
     assert.equal(sanitized.account_name, "My Account")
   })
 
@@ -64,3 +61,4 @@ describe("publicAccountPrivacy", () => {
     assert.ok(PUBLIC_TRADE_SELECT.includes("account_type"))
   })
 })
+export {}

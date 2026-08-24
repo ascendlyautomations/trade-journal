@@ -20,6 +20,7 @@ import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
 import { getDemoBacktestTrades } from "@/lib/demo/demoBacktest"
 import { DEMO_PROFILE } from "@/lib/demo/fixtures"
 import { TRADES_APP_SELECT } from "@/lib/publicAccountPrivacy"
+import { mapProjectedRows } from "@/lib/supabaseProjectedQuery"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { SkeletonBacktestPageContent } from "../components/ui/skeletons"
 import ImageLightbox from "../components/ui/ImageLightbox"
@@ -102,8 +103,13 @@ export default function BacktestPage() {
       .eq("user_id", user.id)
       .eq("mode", "backtest")
       .order("created_at", { ascending: false })
+      .overrideTypes<Record<string, unknown>[], { merge: false }>()
 
-    if (!error) setTrades((data as BacktestTrade[]) || [])
+    if (!error) {
+      setTrades(
+        mapProjectedRows(data, (row) => row as BacktestTrade)
+      )
+    }
     setLoading(false)
   }
 

@@ -16,6 +16,12 @@ import { clearAllTradingAccountsSettingsCaches } from "./tradingAccountsSettings
 import { clearAllUserAchievementsCaches } from "./userAchievementsCache"
 import { clearAllUserStreaksCaches } from "./userStreaksCache"
 import { clearAllCachedGettingStartedSignals } from "./gettingStartedSignalsCache"
+import { clearGettingStartedRpcUnavailableCache } from "./gettingStartedRpcAvailability.ts"
+import { clearProfileBootstrapRpcUnavailableCache } from "./profileBootstrap/profileV1Availability.ts"
+import { invalidateAffiliateDataCache } from "./affiliateDataRepository.ts"
+import { invalidateAffiliateConnectSyncCache } from "./affiliateConnectSyncClient.ts"
+import { invalidateInitialImportReviewCount } from "./initialImportReviewCount.ts"
+import { invalidateReelsByTradeIdsCache } from "./reelsByTradeIdsCache.ts"
 
 /** Clear every session-scoped user cache (sign-out / account switch). */
 export function clearAllSessionUserDataCaches() {
@@ -26,6 +32,12 @@ export function clearAllSessionUserDataCaches() {
   clearAllUserAchievementsCaches()
   clearAllUserStreaksCaches()
   clearAllCachedGettingStartedSignals()
+  clearGettingStartedRpcUnavailableCache()
+  clearProfileBootstrapRpcUnavailableCache()
+  invalidateAffiliateDataCache()
+  invalidateAffiliateConnectSyncCache()
+  invalidateInitialImportReviewCount()
+  invalidateReelsByTradeIdsCache()
 }
 
 /** Profile or subscription fields changed — drop extended profile + bootstrap slices. */

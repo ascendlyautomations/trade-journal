@@ -188,7 +188,11 @@ export function formatPostedTimestamp(
   if (!Number.isFinite(t) || !Number.isFinite(nowMs)) return ""
 
   const iso =
-    typeof dateString === "string" ? dateString : dateString.toISOString()
+    typeof dateString === "string"
+      ? dateString
+      : dateString != null
+        ? dateString.toISOString()
+        : ""
   const diffMs = Math.max(0, nowMs - t)
   const diffSec = Math.floor(diffMs / SECOND_MS)
 

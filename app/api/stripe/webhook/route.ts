@@ -23,12 +23,15 @@ import { resolveTraxProBillingIntervalFromStripePriceId } from "@/lib/traxProBil
 import { mirrorBillingAccountsStripeCustomerId } from "@/lib/profileSplitMirrorWrites"
 import { enableAllAccountsForTradeEntry } from "@/lib/enableAllAccountsForTradeEntry"
 import { devLog } from "@/lib/devLog"
+import type { Database } from "@/lib/database.types"
 
 export const runtime = "nodejs"
 
+type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"]
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
 
-const supabase = createClient(
+const supabase = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
@@ -104,7 +107,7 @@ function buildSubscriptionProfileUpdatePayload(
 }
 
 async function syncSubscriptionToProfile(params: {
-  supabase: SupabaseClient
+  supabase: SupabaseClient<Database>
   subscription: Stripe.Subscription
   logContext: string
 }): Promise<boolean> {
@@ -150,7 +153,7 @@ async function syncSubscriptionToProfile(params: {
 
   const { data: updatedRows, error: upErr } = await supabase
     .from("profiles")
-    .update(updatePayload)
+    .update(updatePayload as ProfileUpdate)
     .eq("id", profile.id)
     .select("id")
 
@@ -190,7 +193,7 @@ async function syncSubscriptionToProfile(params: {
  */
 async function trackAffiliateAttributionFromCheckout(params: {
   stripe: Stripe
-  supabase: SupabaseClient
+  supabase: SupabaseClient<Database>
   session: Stripe.Checkout.Session
   buyerProfileId: string
 }): Promise<void> {
@@ -216,7 +219,7 @@ async function trackAffiliateAttributionFromCheckout(params: {
 }
 
 async function applyAffiliateAttributionToBuyer(params: {
-  supabase: SupabaseClient
+  supabase: SupabaseClient<Database>
   buyerProfileId: string
   affiliateCode: string
   source: string
@@ -305,7 +308,7 @@ async function applyAffiliateAttributionToBuyer(params: {
  */
 async function trackAffiliateFromManualCheckoutDiscount(params: {
   stripe: Stripe
-  supabase: SupabaseClient
+  supabase: SupabaseClient<Database>
   sessionId: string
   buyerProfileId: string
 }): Promise<void> {
@@ -559,7 +562,7 @@ export async function POST(req: Request) {
             devLog("🛠 Updating user subscription:", userId, subscriptionPayload)
             const { error: upErr } = await supabase
               .from("profiles")
-              .update(subscriptionPayload)
+              .update(subscriptionPayload as ProfileUpdate)
               .eq("id", userId)
 
             if (upErr) {

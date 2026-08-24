@@ -1,5 +1,6 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { jsonUserFacingError } from "@/lib/userFacingError"
+import { invalidateAppIconBadgeCache } from "@/lib/server/push/badgeService"
 
 export async function DELETE(req: Request) {
   const user = await getRouteUser(req)
@@ -31,5 +32,6 @@ export async function DELETE(req: Request) {
     return jsonUserFacingError(error, 500, "[api/notifications/dismiss]")
   }
 
+  invalidateAppIconBadgeCache(user.id)
   return Response.json({ ok: true })
 }

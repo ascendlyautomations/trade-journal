@@ -1,15 +1,14 @@
-const assert = require("node:assert/strict")
-const { describe, it, beforeEach } = require("node:test")
-const {
-  CONVERSATION_LRU_MAX_SIZE,
-  ConversationLruStore,
-} = require("./conversationLruStore.ts")
+import { describe, it, beforeEach } from "node:test"
+import { CONVERSATION_LRU_MAX_SIZE, ConversationLruStore, } from "./conversationLruStore.ts"
+import assert from "node:assert/strict"
+
+type TestConversationEntry = { conversationId: string }
 
 describe("ConversationLruStore", () => {
-  let lru
+  let lru: ConversationLruStore<TestConversationEntry>
 
   beforeEach(() => {
-    lru = new ConversationLruStore()
+    lru = new ConversationLruStore<TestConversationEntry>()
   })
 
   it("evicts the least recently used entry at capacity", () => {
@@ -61,3 +60,4 @@ describe("ConversationLruStore", () => {
     assert.equal(lru.oldestKey(), "key-c")
   })
 })
+export {}

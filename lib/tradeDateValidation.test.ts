@@ -1,13 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  csvTradeHasFutureDate,
-  csvTradesHaveFutureDate,
-  getLocalTodayDateInputValue,
-  isDateAfterToday,
-  isStartedTradingDateInFuture,
-  tradeFormHasFutureDate,
-} = require("./tradeDateValidation.ts")
+import { describe, it } from "node:test"
+import { csvTradeHasFutureDate, csvTradesHaveFutureDate, getLocalTodayDateInputValue, isDateAfterToday, isStartedTradingDateInFuture, tradeFormHasFutureDate, } from "./tradeDateValidation.ts"
+import assert from "node:assert/strict"
 
 const fixedNow = new Date(2026, 5, 15, 12, 0, 0) // 2026-06-15 local
 
@@ -77,3 +70,4 @@ describe("tradeDateValidation", () => {
     assert.equal(isStartedTradingDateInFuture("2026-06-15", fixedNow), false)
   })
 })
+export {}

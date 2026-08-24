@@ -1,13 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  areConsecutiveWeekdays,
-  computeWeekdayActivityStreak,
-  computeWinningTradeStreak,
-  nextWeekdayDateKey,
-  parseLocalDateKey,
-  resolveNextMilestone,
-} = require("./userStreaksLogic.ts")
+import { describe, it } from "node:test"
+import { areConsecutiveWeekdays, computeWeekdayActivityStreak, computeWinningTradeStreak, nextWeekdayDateKey, parseLocalDateKey, resolveNextMilestone, } from "./userStreaksLogic.ts"
+import assert from "node:assert/strict"
 
 describe("userStreaksLogic", () => {
   it("nextWeekdayDateKey skips weekends", () => {
@@ -55,3 +48,4 @@ describe("userStreaksLogic", () => {
     assert.equal(resolveNextMilestone(25, [3, 5, 10, 20]), null)
   })
 })
+export {}

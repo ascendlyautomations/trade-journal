@@ -77,8 +77,34 @@ function isMobileAnalystViewport() {
   return window.matchMedia(MOBILE_ANALYST_MQ).matches
 }
 
+type AnalystSelectedTrade = {
+  id: string | number
+  ai_feedback?: string | null
+  ticker?: string | null
+  direction?: string | null
+  pnl?: number | null
+  created_at?: string | null
+  session?: string | null
+  entry_price?: unknown
+  exit_price?: unknown
+  contracts?: unknown
+  rr?: unknown
+  notes?: string | null
+  confluences?: unknown
+  top_confluences?: unknown
+  mistakes?: unknown
+  psychology?: unknown
+  psychology_notes?: unknown
+  account_id?: string | null
+  account_name?: string | null
+  account_size?: string | null
+  account_type?: string | null
+  mode?: string | null
+  account_number?: string | null
+}
+
 type AnalystTradeDetailPanelProps = {
-  selectedTrade: any
+  selectedTrade: AnalystSelectedTrade | null
   tradePanelExpanded: boolean
   setTradePanelExpanded: Dispatch<SetStateAction<boolean>>
   messages: any[]
@@ -89,7 +115,7 @@ type AnalystTradeDetailPanelProps = {
   onRunAnalysis: () => void
   onSendMessage: () => void
   formatCurrency: (val: number) => string
-  selectedTradeSummaryLine: (trade: any) => string
+  selectedTradeSummaryLine: (trade: AnalystSelectedTrade) => string
   tradeScreenshotUrl: (trade: any) => string | null
   showTradeDetailsPanel?: boolean
   emptyState?: ReactNode
@@ -205,13 +231,15 @@ function AnalystTradeDetailPanel({
               </p>
               <p
                 className={`mt-1 text-xl font-bold ${
-                  selectedTrade.pnl >= 0 ? "text-green-400" : "text-red-400"
+                  Number(selectedTrade.pnl ?? 0) >= 0
+                    ? "text-green-400"
+                    : "text-red-400"
                 }`}
               >
-                {formatCurrency(selectedTrade.pnl)}
+                {formatCurrency(Number(selectedTrade.pnl ?? 0))}
               </p>
               <p className="mt-1 text-sm text-gray-400">
-                {formatEST(selectedTrade.created_at)}
+                {formatEST(String(selectedTrade.created_at ?? ""))}
                 {selectedTrade.session ? ` • ${selectedTrade.session}` : ""}
               </p>
 
@@ -224,16 +252,16 @@ function AnalystTradeDetailPanel({
                   selectedTrade.exit_price != null) && (
                   <p>
                     <span className="text-gray-400">Entry:</span>{" "}
-                    {selectedTrade.entry_price ?? "—"} →{" "}
+                    {String(selectedTrade.entry_price ?? "—")} →{" "}
                     <span className="text-gray-400">Exit:</span>{" "}
-                    {selectedTrade.exit_price ?? "—"}
+                    {String(selectedTrade.exit_price ?? "—")}
                   </p>
                 )}
 
                 {selectedTrade.contracts != null && (
                   <p>
                     <span className="text-gray-400">Contracts:</span>{" "}
-                    {selectedTrade.contracts}
+                    {String(selectedTrade.contracts)}
                   </p>
                 )}
 
@@ -260,9 +288,9 @@ function AnalystTradeDetailPanel({
                         selectedTrade.top_confluences
                     )
                       ? (
-                          selectedTrade.confluences ??
-                          selectedTrade.top_confluences
-                        ).join(", ")
+                          (selectedTrade.confluences ??
+                            selectedTrade.top_confluences) as unknown[]
+                        ).map(String).join(", ")
                       : String(
                           selectedTrade.confluences ??
                             selectedTrade.top_confluences
@@ -283,7 +311,11 @@ function AnalystTradeDetailPanel({
                   selectedTrade.psychology_notes) ? (
                   <p>
                     <span className="text-gray-400">Psychology:</span>{" "}
-                    {selectedTrade.psychology ?? selectedTrade.psychology_notes}
+                    {String(
+                      selectedTrade.psychology ??
+                        selectedTrade.psychology_notes ??
+                        ""
+                    )}
                   </p>
                 ) : null}
               </div>
@@ -475,7 +507,8 @@ function AnalystPageContent() {
   const pageReady =
     (!profileLoading || profile != null) &&
     !(tradesLoading && trades.length === 0 && getCachedTrades(user?.id) == null)
-  const [selectedTrade, setSelectedTrade] = useState<any>(null)
+  const [selectedTrade, setSelectedTrade] =
+    useState<AnalystSelectedTrade | null>(null)
 
   const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState("")

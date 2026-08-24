@@ -1,8 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  deriveTradeChecklistSignalsFromTrades,
-} = require("./deriveTradeChecklistSignals.ts")
+import { describe, it } from "node:test"
+import { deriveTradeChecklistSignalsFromTrades, } from "./deriveTradeChecklistSignals.ts"
+import assert from "node:assert/strict"
 
 describe("deriveTradeChecklistSignalsFromTrades", () => {
   it("counts all trades and detects public flag", () => {
@@ -31,3 +29,4 @@ describe("deriveTradeChecklistSignalsFromTrades", () => {
     assert.equal(signals.hasPublicTrade, false)
   })
 })
+export {}

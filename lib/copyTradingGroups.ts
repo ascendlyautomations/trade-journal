@@ -29,6 +29,13 @@ type CopyTradingGroupAccountRow = {
   sort_order: number
 }
 
+/** Copy Trading domain cache — not Dashboard. Shared across account selector / Input / QuickTrade. */
+const COPY_TRADING_CACHE_MS = 60_000
+const copyTradingGroupsByUser = new Map<
+  string,
+  { groups: CopyTradingGroup[]; fetchedAt: number; inflight?: Promise<{ groups: CopyTradingGroup[]; error: Error | null }> }
+>()
+
 function mapGroupRows(
   groups: CopyTradingGroupRow[],
   members: CopyTradingGroupAccountRow[]
@@ -58,36 +65,77 @@ export async function fetchCopyTradingGroups(
   client: SupabaseClient,
   userId: string
 ): Promise<{ groups: CopyTradingGroup[]; error: Error | null }> {
-  const { data: groupRows, error: groupError } = await client
-    .from("copy_trading_groups")
-    .select("id, name, created_at, updated_at")
-    .eq("user_id", userId)
-    .order("name", { ascending: true })
-
-  if (groupError) {
-    return { groups: [], error: new Error(groupError.message) }
+  const cacheKey = userId.trim()
+  const hit = copyTradingGroupsByUser.get(cacheKey)
+  if (hit && Date.now() - hit.fetchedAt < COPY_TRADING_CACHE_MS) {
+    return { groups: hit.groups, error: null }
+  }
+  if (hit?.inflight) {
+    return hit.inflight
   }
 
-  const groups = (groupRows ?? []) as CopyTradingGroupRow[]
-  if (groups.length === 0) {
-    return { groups: [], error: null }
-  }
+  const inflight = (async () => {
+    const { data: groupRows, error: groupError } = await client
+      .from("copy_trading_groups")
+      .select(
+        "id, name, created_at, updated_at, copy_trading_group_accounts ( account_id, sort_order )"
+      )
+      .eq("user_id", userId)
+      .order("name", { ascending: true })
 
-  const groupIds = groups.map((group) => group.id)
-  const { data: memberRows, error: memberError } = await client
-    .from("copy_trading_group_accounts")
-    .select("group_id, account_id, sort_order")
-    .eq("user_id", userId)
-    .in("group_id", groupIds)
+    if (groupError) {
+      return { groups: [] as CopyTradingGroup[], error: new Error(groupError.message) }
+    }
 
-  if (memberError) {
-    return { groups: [], error: new Error(memberError.message) }
-  }
+    const groups = (groupRows ?? []) as (CopyTradingGroupRow & {
+      copy_trading_group_accounts?: CopyTradingGroupAccountRow[] | null
+    })[]
 
-  return {
-    groups: mapGroupRows(groups, (memberRows ?? []) as CopyTradingGroupAccountRow[]),
-    error: null,
+    if (groups.length === 0) {
+      return { groups: [] as CopyTradingGroup[], error: null }
+    }
+
+    const members: CopyTradingGroupAccountRow[] = []
+    for (const group of groups) {
+      for (const row of group.copy_trading_group_accounts ?? []) {
+        members.push({
+          group_id: group.id,
+          account_id: row.account_id,
+          sort_order: row.sort_order,
+        })
+      }
+    }
+
+    return {
+      groups: mapGroupRows(
+        groups.map(({ copy_trading_group_accounts: _m, ...rest }) => rest),
+        members
+      ),
+      error: null as Error | null,
+    }
+  })()
+
+  copyTradingGroupsByUser.set(cacheKey, {
+    groups: hit?.groups ?? [],
+    fetchedAt: hit?.fetchedAt ?? 0,
+    inflight,
+  })
+
+  const result = await inflight
+  copyTradingGroupsByUser.set(cacheKey, {
+    groups: result.error ? [] : result.groups,
+    fetchedAt: result.error ? 0 : Date.now(),
+  })
+  return result
+}
+
+/** Call after create/update/delete so account selector / Input / Dashboard stay coherent. */
+export function invalidateCopyTradingGroupsCache(userId?: string | null) {
+  if (!userId) {
+    copyTradingGroupsByUser.clear()
+    return
   }
+  copyTradingGroupsByUser.delete(userId.trim())
 }
 
 export function resolveCopyGroupAccounts(
@@ -155,6 +203,7 @@ export async function createCopyTradingGroup(
     return { group: null, error: new Error(memberError.message) }
   }
 
+  invalidateCopyTradingGroupsCache(userId)
   return {
     group: {
       id: groupRow.id,
@@ -225,6 +274,7 @@ export async function updateCopyTradingGroup(
     return { group: null, error: new Error(memberError.message) }
   }
 
+  invalidateCopyTradingGroupsCache(userId)
   return {
     group: {
       id: groupRow.id,
@@ -283,5 +333,6 @@ export async function deleteCopyTradingGroup(
     return { error: new Error(error.message) }
   }
 
+  invalidateCopyTradingGroupsCache(userId)
   return { error: null }
 }

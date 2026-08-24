@@ -17,6 +17,7 @@ struct TradeTraxsApp: App {
                 authenticationCoordinator: appEnvironment.authentication.coordinator,
                 authenticationLifecycle: appEnvironment.authentication.lifecycle,
                 currentUserProfile: appEnvironment.currentUserProfile,
+                appBootstrapState: appEnvironment.appBootstrapState,
                 allowsDevelopmentBypass: appEnvironment.authentication.configuration.allowsDevelopmentSessionBypass
             )
             .environment(\.appEnvironment, appEnvironment)

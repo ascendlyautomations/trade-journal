@@ -1,6 +1,6 @@
 "use client"
 
-import { LANDING_SUPPORTING_FEATURES } from "@/lib/landingFlagships"
+import { LANDING_FLAGSHIPS } from "@/lib/landingFlagships"
 import {
   LANDING_EYEBROW,
   LANDING_HEADLINE_SM,
@@ -12,6 +12,13 @@ import {
   LANDING_SECTION_SPACING,
   useLandingReveal,
 } from "@/lib/landingPageUi"
+
+const LANDING_SUPPORTING_FEATURES = LANDING_FLAGSHIPS.flatMap((flagship) =>
+  (flagship.bonuses?.split(" · ") ?? []).map((title) => ({
+    title,
+    tagline: flagship.title,
+  }))
+)
 
 export default function LandingSupportingSection() {
   const { ref, visible } = useLandingReveal()

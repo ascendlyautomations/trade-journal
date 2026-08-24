@@ -302,6 +302,7 @@ export default function LandingFeaturedTradesSection({
           post={selectedPost}
           user={user}
           comments={comments}
+          commentCount={comments.length}
           likeMeta={likeMeta}
           commentSubmitting={commentSubmitting}
           draftSyncRef={draftSyncRef}

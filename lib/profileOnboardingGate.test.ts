@@ -1,10 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  profileNeedsOnboarding,
-  profileNeedsUsername,
-  isAllowedPathDuringOnboarding,
-} = require("./profileOnboardingGate.ts")
+import { describe, it } from "node:test"
+import { profileNeedsOnboarding, profileNeedsUsername, isAllowedPathDuringOnboarding, } from "./profileOnboardingGate.ts"
+import assert from "node:assert/strict"
 
 describe("profileNeedsUsername", () => {
   it("treats null, empty, and whitespace as missing", () => {
@@ -79,3 +75,4 @@ describe("isAllowedPathDuringOnboarding", () => {
     assert.equal(isAllowedPathDuringOnboarding("/feed"), false)
   })
 })
+export {}

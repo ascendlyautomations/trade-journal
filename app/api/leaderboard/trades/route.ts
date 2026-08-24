@@ -16,8 +16,8 @@ async function fetchViaKeysetRpc(): Promise<TradeForLeaderboard[] | null> {
     const { data, error } = await supabaseServiceRole.rpc(
       "leaderboard_trade_rows_page",
       {
-        p_after_created_at: afterCreatedAt,
-        p_after_user_id: afterUserId,
+        p_after_created_at: afterCreatedAt ?? undefined,
+        p_after_user_id: afterUserId ?? undefined,
         p_limit: PAGE_SIZE,
       }
     )

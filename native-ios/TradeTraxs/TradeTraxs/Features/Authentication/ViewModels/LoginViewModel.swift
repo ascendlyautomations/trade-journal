@@ -20,6 +20,7 @@ final class LoginViewModel {
 
     private let authenticationCoordinator: AuthenticationCoordinator
     private let allowsDevelopmentBypass: Bool
+    private var activeSignInTask: Task<Void, Never>?
 
     init(
         authenticationCoordinator: AuthenticationCoordinator,
@@ -50,62 +51,65 @@ final class LoginViewModel {
 
     func submit() async {
         guard canSubmit else { return }
-        isSubmitting = true
-        errorMessage = nil
-        informationalMessage = nil
-        defer { isSubmitting = false }
-
-        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        do {
+        await runSignIn(label: "login.tap") { [self] in
+            let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
             switch mode {
             case .signIn:
                 try await authenticationCoordinator.signIn(email: trimmedEmail, password: password)
             case .signUp:
                 try await authenticationCoordinator.signUp(email: trimmedEmail, password: password)
             }
-            ExperienceHaptics.play(.success)
-        } catch {
-            present(error)
         }
     }
 
     func signInWithApple() async {
-        guard !isSubmitting else { return }
-        isSubmitting = true
-        errorMessage = nil
-        defer { isSubmitting = false }
-        do {
+        await runSignIn(label: "login.tap.apple") { [self] in
             try await authenticationCoordinator.signInWithApple()
-            ExperienceHaptics.play(.success)
-        } catch {
-            present(error)
         }
     }
 
     func signInWithGoogle() async {
-        guard !isSubmitting else { return }
-        isSubmitting = true
-        errorMessage = nil
-        defer { isSubmitting = false }
-        do {
+        await runSignIn(label: "login.tap.google") { [self] in
             try await authenticationCoordinator.signInWithGoogle()
-            ExperienceHaptics.play(.success)
-        } catch {
-            present(error)
         }
     }
 
     func continueAsDevelopment() async {
-        guard allowsDevelopmentBypass, !isSubmitting else { return }
+        guard allowsDevelopmentBypass else { return }
+        await runSignIn(label: "login.tap.development") { [self] in
+            try await authenticationCoordinator.continueAsDevelopmentSessionIfAllowed()
+        }
+    }
+
+    private func runSignIn(
+        label: String,
+        operation: @escaping () async throws -> Void
+    ) async {
+        guard !isSubmitting else { return }
+        activeSignInTask?.cancel()
         isSubmitting = true
         errorMessage = nil
-        defer { isSubmitting = false }
-        do {
-            try await authenticationCoordinator.continueAsDevelopmentSessionIfAllowed()
-            ExperienceHaptics.play(.success)
-        } catch {
-            present(error)
+        informationalMessage = nil
+
+        let task = Task {
+            defer {
+                if !Task.isCancelled {
+                    isSubmitting = false
+                }
+            }
+            AuthFlowTracer.trace(label, phase: .authenticating)
+            do {
+                try await operation()
+                ExperienceHaptics.play(.success)
+            } catch is CancellationError {
+                isSubmitting = false
+            } catch {
+                isSubmitting = false
+                present(error)
+            }
         }
+        activeSignInTask = task
+        await task.value
     }
 
     private func present(_ error: Error) {

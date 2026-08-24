@@ -163,7 +163,13 @@ export default function ExplorePage() {
     const enriched = enrichExploreProfilesWithSocialCounts(batch, socialCounts)
     setPostSummaries((prev) => ({
       ...prev,
-      ...buildPostSummaries(postsRes.data || []),
+      ...buildPostSummaries(
+        (postsRes.data ?? []).flatMap((post) =>
+          post.user_id && post.created_at
+            ? [{ user_id: post.user_id, created_at: post.created_at }]
+            : []
+        )
+      ),
     }))
 
     return { added: enriched, hasMore: batch.length >= limit, error: false }

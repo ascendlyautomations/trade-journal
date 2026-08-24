@@ -1,19 +1,8 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  ACHIEVEMENT_TYPE,
-  achievementMatchesCategoryFilter,
-  achievementTypeLabel,
-  canonicalAchievementType,
-  categoryFromType,
-  isPayoutAchievementType,
-  isPropFirmPayoutAchievementType,
-  sumPayoutAchievementTotals,
-} = require("./achievementTypes.ts")
+import { describe, it } from "node:test"
+import { ACHIEVEMENT_TYPE, achievementMatchesCategoryFilter, achievementMatchesPageFilter, achievementMatchesTrackFilter, achievementMatchesTypeFilter, achievementPageMobileFilterActive, achievementTrackFromType, achievementTypeLabel, canonicalAchievementType, categoryFromType, isPayoutAchievementType, isPropFirmPayoutAchievementType, normalizeAchievementMetadata, sumPayoutAchievementTotals, } from "./achievementTypes.ts"
+import assert from "node:assert/strict"
 
 describe("achievement metadata", () => {
-  const { normalizeAchievementMetadata } = require("./achievementTypes.ts")
-
   it("defaults nullish metadata to an empty object for inserts", () => {
     assert.deepEqual(normalizeAchievementMetadata(null), {})
     assert.deepEqual(normalizeAchievementMetadata(undefined), {})
@@ -114,11 +103,6 @@ describe("achievement payout types", () => {
 })
 
 describe("achievement track filters", () => {
-  const {
-    achievementMatchesTrackFilter,
-    achievementTrackFromType,
-  } = require("./achievementTypes.ts")
-
   it("assigns prop firm types to the prop firm track", () => {
     assert.equal(
       achievementTrackFromType(ACHIEVEMENT_TYPE.PROP_FIRM_PAYOUT),
@@ -174,8 +158,6 @@ describe("achievement track filters", () => {
 })
 
 describe("achievement type filters", () => {
-  const { achievementMatchesTypeFilter } = require("./achievementTypes.ts")
-
   it("filters by individual achievement types", () => {
     const propFirmPayout = {
       achievement_type: ACHIEVEMENT_TYPE.PROP_FIRM_PAYOUT,
@@ -213,12 +195,6 @@ describe("achievement type filters", () => {
 })
 
 describe("achievement page filters", () => {
-  const {
-    achievementMatchesPageFilter,
-    achievementPageMobileFilterActive,
-    ACHIEVEMENT_TYPE,
-  } = require("./achievementTypes.ts")
-
   it("combines payout types under the mobile payouts filter", () => {
     const propFirmPayout = {
       achievement_type: ACHIEVEMENT_TYPE.PROP_FIRM_PAYOUT,
@@ -253,3 +229,4 @@ describe("achievement page filters", () => {
     )
   })
 })
+export {}

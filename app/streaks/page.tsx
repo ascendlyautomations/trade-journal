@@ -35,7 +35,7 @@ export default function StreaksPage() {
           ) : (
             <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
               <StreakCard
-                
+                icon="📓"
                 title="Trading Journal Streak"
                 description="Log at least one trade each weekday. Weekends never break your streak."
                 stats={
@@ -50,7 +50,7 @@ export default function StreaksPage() {
                 loading={loading}
               />
               <StreakCard
-               
+                icon="📣"
                 title="Posting Streak"
                 description="Share at least one public trade, post, or clip each weekday. Weekends are free."
                 stats={
@@ -65,7 +65,7 @@ export default function StreaksPage() {
                 loading={loading}
               />
               <StreakCard
-                
+                icon="🏆"
                 title="Winning Streak"
                 description="Consecutive winning trades. Break-even trades do not reset your streak."
                 stats={

@@ -1,51 +1,84 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
+import { describe, it } from "node:test"
+import assert from "node:assert/strict"
+import {
+  createRoomPresenceSession,
+  deleteRoomPresence,
+  fetchActiveRoomPresence,
+  upsertRoomPresenceHeartbeat,
+} from "./roomPresence.ts"
+import type { SupabaseClient } from "@supabase/supabase-js"
+
+type RoomPresenceQueryBuilder = {
+  upsert(): Promise<{ error: null }>
+  delete(): {
+    eq(): {
+      eq(): Promise<{ error: null }>
+    }
+  }
+  select(): {
+    eq(): {
+      gt(): Promise<{ data: never[]; error: null }>
+    }
+  }
+}
+
+function createRoomPresenceSupabaseMock(
+  onUpsert?: () => void,
+  onDelete?: () => void,
+  onSelect?: () => void
+): SupabaseClient {
+  const builder: RoomPresenceQueryBuilder = {
+    upsert() {
+      onUpsert?.()
+      return Promise.resolve({ error: null })
+    },
+    delete() {
+      onDelete?.()
+      return {
+        eq() {
+          return {
+            eq() {
+              return Promise.resolve({ error: null })
+            },
+          }
+        },
+      }
+    },
+    select() {
+      onSelect?.()
+      return {
+        eq() {
+          return {
+            gt() {
+              return Promise.resolve({ data: [], error: null })
+            },
+          }
+        },
+      }
+    },
+  }
+
+  const mock = {
+    from(table: string) {
+      assert.equal(table, "room_presence")
+      return builder
+    },
+  }
+  return mock as unknown as SupabaseClient
+}
 
 describe("roomPresence session lifecycle", () => {
   it("stop clears interval and deletes presence after in-flight heartbeat", async () => {
-    const {
-      createRoomPresenceSession,
-      upsertRoomPresenceHeartbeat,
-      deleteRoomPresence,
-      fetchActiveRoomPresence,
-    } = require("./roomPresence.ts")
-
     let upsertCount = 0
     let deleteCount = 0
-    const supabase = {
-      from(table: string) {
-        assert.equal(table, "room_presence")
-        return {
-          upsert() {
-            upsertCount += 1
-            return Promise.resolve({ error: null })
-          },
-          delete() {
-            deleteCount += 1
-            return {
-              eq() {
-                return {
-                  eq() {
-                    return Promise.resolve({ error: null })
-                  },
-                }
-              },
-            }
-          },
-          select() {
-            return {
-              eq() {
-                return {
-                  gt() {
-                    return Promise.resolve({ data: [], error: null })
-                  },
-                }
-              },
-            }
-          },
-        }
+    const supabase = createRoomPresenceSupabaseMock(
+      () => {
+        upsertCount += 1
       },
-    }
+      () => {
+        deleteCount += 1
+      }
+    )
 
     const session = createRoomPresenceSession(supabase, {
       roomId: "room-1",
@@ -73,20 +106,24 @@ describe("roomPresence session lifecycle", () => {
   })
 
   it("pauses while hidden and refreshes immediately when visible", async () => {
-    const { createRoomPresenceSession } = require("./roomPresence.ts")
     const previousDocument = global.document
-    let visibilityListener: (() => void) | null = null
+    const visibilityCallbacks: Array<() => void> = []
     let upsertCount = 0
     let selectCount = 0
 
     const fakeDocument = {
-      visibilityState: "hidden",
-      addEventListener(event: string, listener: () => void) {
-        if (event === "visibilitychange") visibilityListener = listener
+      visibilityState: "hidden" as DocumentVisibilityState,
+      addEventListener(event: string, listener: EventListener) {
+        if (event === "visibilitychange") {
+          visibilityCallbacks.length = 0
+          visibilityCallbacks.push(() => {
+            listener(new Event("visibilitychange"))
+          })
+        }
       },
-      removeEventListener(event: string, listener: () => void) {
-        if (event === "visibilitychange" && visibilityListener === listener) {
-          visibilityListener = null
+      removeEventListener(event: string, _listener: EventListener) {
+        if (event === "visibilitychange") {
+          visibilityCallbacks.length = 0
         }
       },
     }
@@ -95,39 +132,15 @@ describe("roomPresence session lifecycle", () => {
       value: fakeDocument,
     })
 
-    const supabase = {
-      from() {
-        return {
-          upsert() {
-            upsertCount += 1
-            return Promise.resolve({ error: null })
-          },
-          delete() {
-            return {
-              eq() {
-                return {
-                  eq() {
-                    return Promise.resolve({ error: null })
-                  },
-                }
-              },
-            }
-          },
-          select() {
-            selectCount += 1
-            return {
-              eq() {
-                return {
-                  gt() {
-                    return Promise.resolve({ data: [], error: null })
-                  },
-                }
-              },
-            }
-          },
-        }
+    const supabase = createRoomPresenceSupabaseMock(
+      () => {
+        upsertCount += 1
       },
-    }
+      undefined,
+      () => {
+        selectCount += 1
+      }
+    )
 
     try {
       const session = createRoomPresenceSession(supabase, {
@@ -142,19 +155,19 @@ describe("roomPresence session lifecycle", () => {
       assert.equal(selectCount, 0)
 
       fakeDocument.visibilityState = "visible"
-      visibilityListener?.()
+      for (const callback of visibilityCallbacks) callback()
       await new Promise((resolve) => setTimeout(resolve, 0))
       assert.equal(upsertCount, 1)
       assert.equal(selectCount, 1)
 
       fakeDocument.visibilityState = "hidden"
-      visibilityListener?.()
+      for (const callback of visibilityCallbacks) callback()
       await new Promise((resolve) => setTimeout(resolve, 25))
       assert.equal(upsertCount, 1)
       assert.equal(selectCount, 1)
 
       await session.stop()
-      assert.equal(visibilityListener, null)
+      assert.equal(visibilityCallbacks.length, 0)
     } finally {
       Object.defineProperty(global, "document", {
         configurable: true,
@@ -163,3 +176,4 @@ describe("roomPresence session lifecycle", () => {
     }
   })
 })
+export {}

@@ -1,9 +1,15 @@
 import { supabase } from "./supabaseClient"
 import { isDemoUserId } from "./demo/constants"
+import { isBackendV2Enabled } from "./backendV2/flags.ts"
+import { getSessionIsAdmin } from "./backendV2/sessionBootstrapCache.ts"
 
 export async function isUserAdmin(userId: string | null | undefined): Promise<boolean> {
   if (!userId) return false
   if (isDemoUserId(userId)) return false
+  if (isBackendV2Enabled("session")) {
+    const fromSession = getSessionIsAdmin(userId)
+    if (fromSession !== null) return fromSession
+  }
   const { data, error } = await supabase
     .from("admin_users")
     .select("user_id, role")
@@ -81,6 +87,22 @@ export async function getAdminCheckResultForUser(
       email: email ?? null,
       row: null,
       error: null,
+    }
+  }
+
+  // Session bootstrap owns is_admin — avoid a second admin_users REST hit.
+  if (isBackendV2Enabled("session")) {
+    const fromSession = getSessionIsAdmin(userId)
+    if (fromSession !== null) {
+      return {
+        isAdmin: fromSession,
+        userId,
+        email: email ?? null,
+        row: fromSession
+          ? { user_id: userId, role: "admin" }
+          : null,
+        error: null,
+      }
     }
   }
 

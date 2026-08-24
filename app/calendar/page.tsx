@@ -83,7 +83,7 @@ export default function CalendarPage() {
       .map((trade) => String(trade.id))
       .filter((id) => id.trim() !== "")
 
-    void fetchReelsByTradeIds(supabase, tradeIds).then((map) => {
+    void fetchReelsByTradeIds(supabase, user?.id ?? "", tradeIds).then((map) => {
       if (cancelled) return
       const record: Record<string, ReelRow> = {}
       map.forEach((reel, tradeId) => {
@@ -95,7 +95,7 @@ export default function CalendarPage() {
     return () => {
       cancelled = true
     }
-  }, [selectedTrades])
+  }, [selectedTrades, user?.id])
 
   async function handleTradeFormSaved() {
     if (selectedDate) {

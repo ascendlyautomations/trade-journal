@@ -1,10 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  isCommentNotificationAllowed,
-  isNotificationPreferenceEnabled,
-  mapNotificationPreferencesRow,
-} = require("./notificationPreferences.ts")
+import { describe, it } from "node:test"
+import { isCommentNotificationAllowed, isNotificationPreferenceEnabled, mapNotificationPreferencesRow, } from "./notificationPreferences.ts"
+import assert from "node:assert/strict"
 
 describe("notification preferences", () => {
   const base = mapNotificationPreferencesRow(null, "user-1")
@@ -68,3 +64,4 @@ describe("notification preferences", () => {
     )
   })
 })
+export {}

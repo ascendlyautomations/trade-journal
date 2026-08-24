@@ -1,11 +1,10 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  computeUserReviewStats,
-  selectFeaturedHomepageReviews,
-} = require("./userReviewDisplay.ts")
+import { describe, it } from "node:test"
+import { computeUserReviewStats, selectFeaturedHomepageReviews, type PublicUserReview, } from "./userReviewDisplay.ts"
+import assert from "node:assert/strict"
 
-function row(partial) {
+function row(
+  partial: Partial<PublicUserReview> & Pick<PublicUserReview, "id" | "rating">
+): PublicUserReview {
   return {
     title: "Great",
     review: "Love it",
@@ -41,3 +40,4 @@ describe("legacy beta testimonial selectors", () => {
     assert.deepEqual(selected.map((item) => item.id), ["b"])
   })
 })
+export {}

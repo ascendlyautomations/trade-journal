@@ -1,13 +1,20 @@
-const assert = require("node:assert/strict")
-const { beforeEach, describe, it } = require("node:test")
+import { beforeEach, describe, it } from "node:test"
+import assert from "node:assert/strict"
+import {
+  lockPageScroll,
+  resetPageScrollLock,
+  unlockPageScroll,
+} from "./pageScrollLock.ts"
 
-function createOverflowElement() {
+type OverflowElement = { style: { overflow: string } }
+
+function createOverflowElement(): OverflowElement {
   return { style: { overflow: "" } }
 }
 
 describe("page scroll lock", () => {
-  let html
-  let body
+  let html: OverflowElement
+  let body: OverflowElement
 
   beforeEach(() => {
     html = createOverflowElement()
@@ -20,15 +27,12 @@ describe("page scroll lock", () => {
       },
     })
 
-    const { resetPageScrollLock } = require("./pageScrollLock.ts")
     resetPageScrollLock()
     html.style.overflow = ""
     body.style.overflow = ""
   })
 
   it("locks and unlocks the page once", () => {
-    const { lockPageScroll, unlockPageScroll } = require("./pageScrollLock.ts")
-
     lockPageScroll()
     assert.equal(html.style.overflow, "hidden")
     assert.equal(body.style.overflow, "hidden")
@@ -39,8 +43,6 @@ describe("page scroll lock", () => {
   })
 
   it("keeps the page locked until the final modal closes", () => {
-    const { lockPageScroll, unlockPageScroll } = require("./pageScrollLock.ts")
-
     lockPageScroll()
     lockPageScroll()
 
@@ -52,8 +54,6 @@ describe("page scroll lock", () => {
   })
 
   it("restores the original overflow values", () => {
-    const { lockPageScroll, unlockPageScroll } = require("./pageScrollLock.ts")
-
     html.style.overflow = "scroll"
     body.style.overflow = "auto"
 
@@ -65,12 +65,6 @@ describe("page scroll lock", () => {
   })
 
   it("force-resets stale locks on navigation", () => {
-    const {
-      lockPageScroll,
-      resetPageScrollLock,
-      unlockPageScroll,
-    } = require("./pageScrollLock.ts")
-
     lockPageScroll()
     lockPageScroll()
     resetPageScrollLock()
@@ -83,3 +77,4 @@ describe("page scroll lock", () => {
     assert.equal(body.style.overflow, "")
   })
 })
+export {}

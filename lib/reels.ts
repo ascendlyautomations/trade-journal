@@ -11,9 +11,24 @@ import {
   createMonotonicReporter,
 } from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressReporter } from "@/lib/uploadProgress/types"
-import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
+import {
+  isTransientPostgrestError,
+  withTransientPostgrestRetry,
+} from "@/lib/postgrestTransientRetry"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import { devLog, devWarn } from "@/lib/devLog"
+import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
+import {
+  buildReelsByTradeIdsCacheKey,
+  clearReelsByTradeIdsInflight,
+  getReelsByTradeIdsInflight,
+  invalidateReelsByTradeIdsCache,
+  isReelsByTradeIdsCacheFresh,
+  readReelsByTradeIdsCache,
+  REELS_BY_TRADE_IDS_CACHE_MS,
+  setReelsByTradeIdsInflight,
+  writeReelsByTradeIdsCache,
+} from "./reelsByTradeIdsCache.ts"
 
 export type ReelVisibility = "public" | "private"
 
@@ -719,6 +734,10 @@ export async function publishTradeReel(
   })
   report({ percent: 95, stage: "Publishing…" })
   invalidateUserStreaksCache(input.userId)
+  invalidateReelsByTradeIdsCache({
+    viewerId: input.userId,
+    tradeIds: [input.tradeId],
+  })
   return { reel }
 }
 
@@ -763,48 +782,112 @@ export async function fetchTradeReel(
   return hydrated ?? null
 }
 
+/** @internal */
+export function resetFetchReelsByTradeIdsForTests(): void {
+  invalidateReelsByTradeIdsCache()
+}
+
 export async function fetchReelsByTradeIds(
   supabase: SupabaseClient,
-  tradeIds: string[]
+  viewerId: string,
+  tradeIds: string[],
+  options?: { signal?: AbortSignal; force?: boolean }
 ): Promise<Map<string, ReelRow>> {
-  const ids = tradeIds.filter((id) => id != null && String(id).trim() !== "")
-  if (ids.length === 0) return new Map()
+  const cacheKey = buildReelsByTradeIdsCacheKey(viewerId, tradeIds)
+  if (!cacheKey) return new Map()
 
-  const { data, error } = await supabase
-    .from("reels")
-    .select(PROFILE_REELS_SELECT)
-    .in("trade_id", ids)
-
-  let rows: ReelRow[] = []
-
-  if (!error) {
-    rows = (data ?? []) as ReelRow[]
-  } else {
-    console.error("[fetchReelsByTradeIds] embed query:", error)
-    const { data: fallback, error: fallbackError } = await supabase
-      .from("reels")
-      .select(REEL_ROW_SELECT)
-      .in("trade_id", ids)
-
-    if (fallbackError) {
-      console.error("[fetchReelsByTradeIds] fallback query:", fallbackError)
-      return new Map()
+  if (!options?.force) {
+    const cached = readReelsByTradeIdsCache(cacheKey)
+    if (cached && isReelsByTradeIdsCacheFresh(cached)) {
+      return new Map(cached.map)
     }
-
-    rows = await hydrateReelsWithTrades(
-      supabase,
-      (fallback ?? []) as ReelRow[]
-    )
-  }
-
-  const map = new Map<string, ReelRow>()
-  for (const row of rows) {
-    if (row.trade_id) {
-      map.set(String(row.trade_id), row)
+    if (cached && !isReelsByTradeIdsCacheFresh(cached)) {
+      const stale = new Map(cached.map)
+      if (!getReelsByTradeIdsInflight(cacheKey)) {
+        void loadReelsByTradeIdsOnce(supabase, cacheKey, tradeIds, options?.signal)
+          .then((map) => writeReelsByTradeIdsCache(cacheKey, map))
+          .catch((err) => {
+            devWarn("[fetchReelsByTradeIds] soft-stale revalidation failed", err)
+          })
+      }
+      return stale
     }
   }
+
+  const inflight = getReelsByTradeIdsInflight(cacheKey)
+  if (inflight && !options?.force) return inflight
+
+  const pending = loadReelsByTradeIdsOnce(
+    supabase,
+    cacheKey,
+    tradeIds,
+    options?.signal
+  ).finally(() => {
+    clearReelsByTradeIdsInflight(cacheKey)
+  })
+  setReelsByTradeIdsInflight(cacheKey, pending)
+  return pending
+}
+
+async function loadReelsByTradeIdsOnce(
+  supabase: SupabaseClient,
+  cacheKey: string,
+  tradeIds: string[],
+  signal?: AbortSignal
+): Promise<Map<string, ReelRow>> {
+  const map = await queryReelsByTradeIds(supabase, tradeIds, signal)
+  writeReelsByTradeIdsCache(cacheKey, map)
   return map
 }
+
+async function queryReelsByTradeIds(
+  supabase: SupabaseClient,
+  tradeIds: string[],
+  signal?: AbortSignal
+): Promise<Map<string, ReelRow>> {
+  const ids = [
+    ...new Set(
+      tradeIds
+        .map((id) => (id != null ? String(id).trim() : ""))
+        .filter((id) => id !== "")
+    ),
+  ]
+  if (ids.length === 0) return new Map()
+
+  return withTransientPostgrestRetry(
+    async () => {
+      const { data, error } = await supabase
+        .from("reels")
+        .select(REEL_ROW_SELECT)
+        .in("trade_id", ids)
+
+      if (error) {
+        if (isTransientPostgrestError(error)) {
+          throw error
+        }
+        console.error("[fetchReelsByTradeIds] query:", error)
+        throw error
+      }
+
+      const rows = (data ?? []) as ReelRow[]
+      const map = new Map<string, ReelRow>()
+      for (const row of rows) {
+        if (row.trade_id) {
+          map.set(String(row.trade_id), row)
+        }
+      }
+      return map
+    },
+    {
+      signal,
+      onRetry: (meta) => {
+        devWarn("[fetchReelsByTradeIds] transient retry", meta)
+      },
+    }
+  )
+}
+
+export { REELS_BY_TRADE_IDS_CACHE_MS, invalidateReelsByTradeIdsCache }
 
 function filterProfileListedReels(reels: ReelRow[]): ReelRow[] {
   return reels.filter((row) => isReelListedOnProfile(row))
@@ -992,6 +1075,10 @@ export async function replaceTradeReelVideo(
 
   const tradeId = (existing as ReelRow).trade_id
   if (tradeId) {
+    invalidateReelsByTradeIdsCache({
+      viewerId: input.userId,
+      tradeIds: [String(tradeId)],
+    })
     const hydrated = await fetchTradeReel(supabase, String(tradeId))
     if (hydrated) return { reel: hydrated }
   }
@@ -1068,6 +1155,13 @@ export async function deleteReel(
 
   if (error) {
     return { error: formatReelMutationError(error) }
+  }
+
+  if (existing?.trade_id) {
+    invalidateReelsByTradeIdsCache({
+      viewerId: input.userId,
+      tradeIds: [String(existing.trade_id)],
+    })
   }
 
   return { ok: true }

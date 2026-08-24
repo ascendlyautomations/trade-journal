@@ -10,6 +10,8 @@ type StoryAvatarRingProps = {
   imageClassName?: string
   /** Eager-load for above-the-fold profile header avatars. */
   priority?: boolean
+  /** Fixed transform width to avoid duplicate avatar requests across sizes. */
+  displaySizePx?: number
 }
 
 export default function StoryAvatarRing({
@@ -18,12 +20,14 @@ export default function StoryAvatarRing({
   sizeClassName = "h-16 w-16",
   imageClassName = "h-full w-full",
   priority = false,
+  displaySizePx,
 }: StoryAvatarRingProps) {
   const avatar = (
     <ProfileAvatarImg
       src={profile.avatar_url}
       className={imageClassName}
       priority={priority}
+      displaySizePx={displaySizePx}
     />
   )
 

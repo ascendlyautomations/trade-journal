@@ -7,6 +7,7 @@ import {
 } from "@/lib/postgrestError"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 import { isRateLimitExceededError, formatRateLimitExceededMessage } from "@/lib/rateLimitErrors"
+import { patchAffiliateApplicationCache } from "@/lib/affiliateDataRepository"
 
 const MAX_INT4 = 2_147_483_647
 
@@ -114,27 +115,18 @@ function mapSelectToApplicationRow(
  */
 export async function fetchLatestAffiliateApplication(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  options?: { force?: boolean }
 ): Promise<AffiliateApplicationRow | null> {
   try {
     if (!userId?.trim()) {
       return null
     }
 
-    const { data, error } = await supabase
-      .from("affiliate_applications")
-      .select(AFFILIATE_APPLICATION_SELECT_COLUMNS)
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (error) {
-      console.error("[Affiliate Fetch Error]", error)
-      return null
-    }
-
-    return mapSelectToApplicationRow("fetchLatestAffiliateApplication", data, null)
+    const { ensureAffiliateApplicationLoaded } = await import(
+      "./affiliateDataRepository.ts"
+    )
+    return ensureAffiliateApplicationLoaded(supabase, userId, options)
   } catch (e) {
     console.error("[Affiliate Fetch Error]", e)
     return null
@@ -175,7 +167,9 @@ export async function submitAffiliateApplication(
   userId: string,
   input: SubmitAffiliateApplicationInput
 ): Promise<{ ok: boolean; error: string | null }> {
-  const latest = await fetchLatestAffiliateApplication(supabase, userId)
+  const latest = await fetchLatestAffiliateApplication(supabase, userId, {
+    force: true,
+  })
 
   console.log("EXISTING (latest application row):", latest)
 
@@ -221,6 +215,10 @@ export async function submitAffiliateApplication(
     }
 
     notifyAffiliateApplicationSaved(data)
+    patchAffiliateApplicationCache(
+      userId,
+      mapSelectToApplicationRow("submitAffiliateApplication update", data, null)
+    )
     return { ok: true, error: null }
   }
 
@@ -260,6 +258,11 @@ export async function submitAffiliateApplication(
   }
 
   notifyAffiliateApplicationSaved(data)
+
+  patchAffiliateApplicationCache(
+    userId,
+    mapSelectToApplicationRow("submitAffiliateApplication insert", data, null)
+  )
 
   return { ok: true, error: null }
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   CartesianGrid,
   Line,
@@ -105,6 +105,19 @@ import {
 } from "@/lib/tradingAccounts"
 import { resolveAccountModeForSave } from "@/lib/createAccountForm"
 import { invalidateAccountsCache } from "@/lib/appDataCache"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags"
+import {
+  invalidatePropFirmBootstrap,
+  readPropFirmBootstrapCache,
+} from "@/lib/backendV2/propFirmBootstrapCache"
+import type { PropFirmBootstrapV1 } from "@/lib/backendV2/propFirmBootstrapContracts"
+import {
+  loadPropFirmBootstrapForUser,
+  maybeRevalidatePropFirmBootstrap,
+  PropFirmBootstrapStaleError,
+  snapshotPropFirmBootstrapPageData,
+} from "@/lib/backendV2/propFirmBootstrapRepository"
+import { isPropFirmRpcUnavailable } from "@/lib/backendV2/propFirmRpcCompat"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { isDemoUserId } from "@/lib/demo/constants"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
@@ -373,6 +386,11 @@ export default function PropFirmPage() {
   const [convertRulesEditorOpen, setConvertRulesEditorOpen] = useState(false)
   const [convertRulesSameAsEval, setConvertRulesSameAsEval] = useState(false)
   const [createFundedAccountOpen, setCreateFundedAccountOpen] = useState(false)
+  const propFirmV2Enabled = isBackendV2Enabled("propFirm")
+  const [propFirmUseLegacy, setPropFirmUseLegacy] = useState(false)
+  const propFirmV2Active = propFirmV2Enabled && !propFirmUseLegacy
+  const propFirmBootstrapRef = useRef<PropFirmBootstrapV1 | null>(null)
+  const propFirmLoadGenerationRef = useRef(0)
 
   const isAllAccountsView = accountFilter === PROPFIRM_ALL_ACCOUNTS_VALUE
 
@@ -539,6 +557,21 @@ export default function PropFirmPage() {
   }, [profile, user?.id])
 
   const loadAccounts = useCallback(async () => {
+    if (propFirmV2Active) {
+      const cached = user?.id ? readPropFirmBootstrapCache(user.id) : null
+      if (cached) {
+        propFirmBootstrapRef.current = cached
+        const snapshot = snapshotPropFirmBootstrapPageData(cached)
+        setAccounts(snapshot.accounts as PropfirmAccount[])
+        setPayoutCyclesByAccountId(snapshot.payoutCyclesByAccountId)
+        setAccountAchievements(snapshot.achievements)
+        setTrades(snapshot.trades)
+        setAccountsLoadError(null)
+        setAccountsLoaded(true)
+        return
+      }
+    }
+
     if (isDemoUserId(user?.id)) {
       setAccounts(getDemoPropfirmAccounts() as PropfirmAccount[])
       setAccountsLoadError(null)
@@ -570,14 +603,103 @@ export default function PropFirmPage() {
     setAccounts(data || [])
     setAccountsLoadError(null)
     setAccountsLoaded(true)
-  }, [user?.id])
+  }, [propFirmV2Active, user?.id])
 
   useEffect(() => {
+    if (!propFirmV2Active || !planChecked || !hasProAccess || !user?.id) return
+    if (isDemoUserId(user.id)) return
+
+    const generation = ++propFirmLoadGenerationRef.current
+    let cancelled = false
+
+    async function loadPropFirmV2() {
+      setAccountsLoaded(false)
+      setAccountsLoadError(null)
+      setLoadingPayoutHistory(true)
+      setLoadingAccountAchievements(true)
+      setLoadingTrades(true)
+      try {
+        const result = await loadPropFirmBootstrapForUser(supabase, user.id, {
+          loadGeneration: generation,
+          expectedGeneration: generation,
+          caller: "prop-firm-page",
+        })
+        if (cancelled || generation !== propFirmLoadGenerationRef.current) return
+
+        propFirmBootstrapRef.current = result.bootstrap
+        const snapshot = snapshotPropFirmBootstrapPageData(result.bootstrap)
+        setAccounts(snapshot.accounts as PropfirmAccount[])
+        setPayoutCyclesByAccountId(snapshot.payoutCyclesByAccountId)
+        setAccountAchievements(snapshot.achievements)
+        setTrades(snapshot.trades)
+        setAccountsLoadError(null)
+        void maybeRevalidatePropFirmBootstrap(supabase, user.id)
+      } catch (err) {
+        if (cancelled || generation !== propFirmLoadGenerationRef.current) return
+        if (err instanceof PropFirmBootstrapStaleError) return
+        if (isPropFirmRpcUnavailable(err)) {
+          propFirmBootstrapRef.current = null
+          setPropFirmUseLegacy(true)
+          return
+        }
+        console.error("[prop-firm-v2] bootstrap failed", err)
+        setAccountsLoadError("We couldn't load your prop firm accounts. Please try again.")
+      } finally {
+        if (!cancelled && generation === propFirmLoadGenerationRef.current) {
+          setAccountsLoaded(true)
+          setLoadingPayoutHistory(false)
+          setLoadingAccountAchievements(false)
+          setLoadingTrades(false)
+        }
+      }
+    }
+
+    void loadPropFirmV2()
+    return () => {
+      cancelled = true
+    }
+  }, [propFirmV2Active, planChecked, hasProAccess, user?.id])
+
+  useEffect(() => {
+    if (propFirmV2Active) return
     if (!planChecked || !hasProAccess) return
     void loadAccounts()
-  }, [planChecked, hasProAccess, loadAccounts])
+  }, [planChecked, hasProAccess, loadAccounts, propFirmV2Active])
 
   useEffect(() => {
+    if (!propFirmV2Active) return
+    if (!planChecked || !hasProAccess) return
+    if (!propFirmBootstrapRef.current) return
+
+    const accountIds = isAllAccountsView
+      ? accounts.map((account) => account.id)
+      : selectedAccount
+        ? [selectedAccount.id]
+        : []
+
+    if (accountIds.length === 0) {
+      setAccountAchievements([])
+      setTrades([])
+      return
+    }
+
+    const snapshot = snapshotPropFirmBootstrapPageData(
+      propFirmBootstrapRef.current,
+      accountIds
+    )
+    setAccountAchievements(snapshot.achievements)
+    setTrades(snapshot.trades)
+  }, [
+    propFirmV2Active,
+    planChecked,
+    hasProAccess,
+    isAllAccountsView,
+    selectedAccount,
+    accounts,
+  ])
+
+  useEffect(() => {
+    if (propFirmV2Active) return
     if (!planChecked || !hasProAccess) return
     if (!accountsLoaded || fundedAccounts.length === 0) {
       setPayoutCyclesByAccountId({})
@@ -592,7 +714,9 @@ export default function PropFirmPage() {
         if (isDemoUserId(user?.id)) {
           if (!cancelled) {
             setPayoutCyclesByAccountId(
-              getDemoPayoutCyclesByAccountId(fundedAccounts.map((account) => account.id))
+              getDemoPayoutCyclesByAccountId(
+                fundedAccounts.map((account) => String(account.id))
+              )
             )
           }
           return
@@ -600,7 +724,7 @@ export default function PropFirmPage() {
 
         const cyclesByAccountId = await fetchPayoutCycleHistoryByAccountIds(
           supabase,
-          fundedAccounts.map((account) => account.id)
+          fundedAccounts.map((account) => String(account.id))
         )
         if (!cancelled) setPayoutCyclesByAccountId(cyclesByAccountId)
       } finally {
@@ -612,9 +736,10 @@ export default function PropFirmPage() {
     return () => {
       cancelled = true
     }
-  }, [planChecked, hasProAccess, accountsLoaded, fundedAccounts, user?.id])
+  }, [planChecked, hasProAccess, accountsLoaded, fundedAccounts, user?.id, propFirmV2Active])
 
   useEffect(() => {
+    if (propFirmV2Active) return
     if (!planChecked || !hasProAccess || !user?.id) return
 
     const accountIds = isAllAccountsView
@@ -655,16 +780,20 @@ export default function PropFirmPage() {
     planChecked,
     selectedAccount,
     user?.id,
+    propFirmV2Active,
   ])
 
   useEffect(() => {
+    if (propFirmV2Active) return
     if (!planChecked || !hasProAccess) return
 
-    const accountIds = isAllAccountsView
-      ? accounts.map((account) => account.id)
-      : selectedAccount
-        ? [selectedAccount.id]
-        : []
+    const accountIds = (
+      isAllAccountsView
+        ? accounts.map((account) => String(account.id))
+        : selectedAccount
+          ? [String(selectedAccount.id)]
+          : []
+    )
 
     if (accountIds.length === 0) {
       setTrades([])
@@ -707,6 +836,7 @@ export default function PropFirmPage() {
     planChecked,
     hasProAccess,
     user?.id,
+    propFirmV2Active,
   ])
 
   async function handlePayoutSetupSubmit(values: PayoutSetupValues) {
@@ -918,6 +1048,8 @@ export default function PropFirmPage() {
       )
       setAccountFilter(accountId)
       invalidateAccountsCache(user.id)
+      invalidatePropFirmBootstrap(user.id)
+      propFirmBootstrapRef.current = null
       closeEvalMilestoneFlow()
       showPopup({ type: "success", message: "Account converted to funded" })
     } finally {
@@ -963,6 +1095,8 @@ export default function PropFirmPage() {
       setAccounts((previous) => [...previous, created as PropfirmAccount])
       setAccountFilter(String(created.id))
       invalidateAccountsCache(user.id)
+      invalidatePropFirmBootstrap(user.id)
+      propFirmBootstrapRef.current = null
       closeEvalMilestoneFlow()
       showPopup({ type: "success", message: "Funded account created" })
     } finally {

@@ -20,13 +20,15 @@ import { devLog } from "@/lib/devLog"
 import { buildDmThreadPath, groupThreadPath } from "@/lib/messageRoutes"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
+import { markMessageNotificationsRead } from "@/lib/messageNotificationReadSync"
 import { markConversationMessagesSeen } from "@/lib/conversationReadMarking"
 import {
-  dispatchUnreadMessagesRefresh,
   fetchUnreadCountForConversation as fetchUnreadCountForConversationShared,
   fetchUnreadCountsForConversations,
   markConversationUnread,
+  dispatchUnreadMessagesRefresh,
 } from "../../../lib/messageUnread"
+import { logSupabaseError } from "@/lib/logSupabaseError"
 import { fetchMutedConversationIds } from "@/lib/conversationMemberPreferences"
 import {
   applyInboxPatchesToConversations,
@@ -71,6 +73,16 @@ import {
   type DmConversationRow,
 } from "@/lib/shareToConversations"
 import { traceMessagesInbox } from "@/lib/messagesInboxTrace"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags.ts"
+import {
+  loadMessagingBootstrapForUser,
+  messagingConversationToDmRow,
+} from "@/lib/backendV2/messagingBootstrapRepository.ts"
+import { patchSessionBadges } from "@/lib/backendV2/sessionBootstrapCache.ts"
+import {
+  MESSAGING_INBOX_CONVERSATION_UNREAD_PATCH,
+  type MessagingInboxUnreadPatchDetail,
+} from "@/lib/backendV2/messagingInboxLocalPatch.ts"
 
 function mapDmRowToInboxConversation(
   conv: DmConversationRow,
@@ -159,6 +171,7 @@ export default function MessagesPage() {
   const user = authUser
   const inboxScrollRef = useRef<HTMLDivElement | null>(null)
   const pendingInboxScrollRef = useRef<number | null>(null)
+  const inboxRequestGenerationRef = useRef(0)
 
   useLayoutEffect(() => {
     if (!isNativeIos()) return
@@ -260,44 +273,6 @@ export default function MessagesPage() {
     void fetchAllUsers(user.id)
   }, [showGroupModal, showDMModal, user?.id, fetchAllUsers])
 
-  const markMessageNotificationsRead = useCallback(
-    async (currentUserId: string, reason: "page-open" | "chat-open") => {
-      if (isDemoSupabaseBlocked()) return
-
-      devLog("[messages] mark read start", {
-        reason,
-        userId: currentUserId,
-        type: "message",
-      })
-
-      const { data, error, count } = await supabase
-        .from("notifications")
-        .update({ read: true })
-        .eq("user_id", currentUserId)
-        .eq("type", "message")
-        .eq("read", false)
-        .select("id,type", { count: "exact" })
-
-      if (error) {
-        console.error("[messages] mark read error:", {
-          reason,
-          userId: currentUserId,
-          error,
-        })
-        return
-      }
-
-      devLog("[messages] mark read success", {
-        reason,
-        userId: currentUserId,
-        updated: count ?? data?.length ?? 0,
-      })
-
-      window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
-    },
-    []
-  )
-
   const markConversationRead = useCallback(
     async (currentUserId: string, conversationId: string) => {
       if (isDemoSupabaseBlocked()) return
@@ -308,8 +283,34 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (!user?.id) return
+    if (isBackendV2Enabled("messages") && !isDemoModeActive()) return
     void markMessageNotificationsRead(user.id, "page-open")
-  }, [user?.id, markMessageNotificationsRead])
+  }, [user?.id])
+
+  useEffect(() => {
+    function onInboxUnreadPatch(event: Event) {
+      const detail = (event as CustomEvent<MessagingInboxUnreadPatchDetail>).detail
+      if (!detail?.conversationId) return
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === detail.conversationId
+            ? { ...c, unreadCount: detail.unreadCount }
+            : c
+        )
+      )
+    }
+
+    window.addEventListener(
+      MESSAGING_INBOX_CONVERSATION_UNREAD_PATCH,
+      onInboxUnreadPatch
+    )
+    return () => {
+      window.removeEventListener(
+        MESSAGING_INBOX_CONVERSATION_UNREAD_PATCH,
+        onInboxUnreadPatch
+      )
+    }
+  }, [])
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -363,6 +364,7 @@ export default function MessagesPage() {
   }, [])
 
   const fetchConversations = useCallback(async (userId: string, source = "unknown") => {
+    const requestGeneration = ++inboxRequestGenerationRef.current
     traceMessagesInbox("fetch:start", { userId, source })
 
     if (isDemoUserId(userId)) {
@@ -375,6 +377,76 @@ export default function MessagesPage() {
       setConversations(sorted)
       writeMessagesInboxSession(userId, sorted)
       return sorted
+    }
+
+    // Backend V2: one Messaging RPC owns inbox hydrate. Soft refresh forces network.
+    if (isBackendV2Enabled("messages") && !isDemoModeActive()) {
+      try {
+        const force =
+          source !== "initial-load" && source !== "unknown"
+        const markOnOpen =
+          source === "initial-load" && requestGeneration === inboxRequestGenerationRef.current
+        const result = await loadMessagingBootstrapForUser(supabase, userId, {
+          force,
+          caller: `messages.${source}`,
+          markMessageNotificationsRead: markOnOpen,
+        })
+        if (requestGeneration !== inboxRequestGenerationRef.current) {
+          traceMessagesInbox("fetch:stale", { userId, source, requestGeneration })
+          return null
+        }
+        const { bootstrap } = result
+        patchSessionBadges(userId, {
+          dm_unread: bootstrap.data.dm_unread_total,
+        })
+        const marked = bootstrap.data.message_notifications_marked_read ?? 0
+        if (marked > 0 && typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+        }
+
+        const rows = bootstrap.data.conversations.map(messagingConversationToDmRow)
+        traceMessagesInbox("step:2-conversations", {
+          source,
+          backendV2: true,
+          rpcSource: result.source,
+          error: null,
+          rowCount: rows.length,
+          firstRow: rows[0] ?? null,
+        })
+
+        if (rows.length === 0) {
+          setInboxLoadError(null)
+          setConversations([])
+          writeMessagesInboxSession(userId, [])
+          return []
+        }
+
+        const convoData = bootstrap.data.conversations.map((conv) =>
+          mapDmRowToInboxConversation(
+            messagingConversationToDmRow(conv),
+            userId,
+            conv.unread_count
+          )
+        )
+
+        const sorted = sortConversationsDesc(
+          applyInboxPatchesToConversations(convoData)
+        )
+        setConversations(sorted)
+        setInboxLoadError(null)
+        writeMessagesInboxSession(userId, sorted)
+        return sorted
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "messaging_bootstrap_failed"
+        traceMessagesInbox("step:2-conversations:failed", {
+          source,
+          reason: "backend_v2_rpc",
+          message,
+        })
+        setInboxLoadError("Couldn't load conversations. Please try again.")
+        return null
+      }
     }
 
     const { rows, error } = await fetchUserDmConversations(supabase, userId)
@@ -555,21 +627,18 @@ export default function MessagesPage() {
       if (!user?.id) return
 
       const userId = user.id
+      if (isBackendV2Enabled("messageThreads")) {
+        return
+      }
       void (async () => {
         await markConversationRead(userId, conversationId)
         await markMessageNotificationsRead(userId, "chat-open")
-        const list = await fetchConversations(userId)
-        if (list) {
-          setConversations(list)
-        }
       })()
     },
     [
       user,
       conversations,
       markConversationRead,
-      markMessageNotificationsRead,
-      fetchConversations,
       router,
     ]
   )
@@ -966,6 +1035,7 @@ export default function MessagesPage() {
               </button>
               <Link
                 href="/community"
+                prefetch={false}
                 className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-blue-400/30 bg-blue-500/15 px-3 py-1.5 text-sm font-medium text-blue-200 transition hover:border-blue-400/45 hover:bg-blue-500/25 hover:text-blue-100 md:hidden"
               >
                 <svg
@@ -1029,6 +1099,7 @@ export default function MessagesPage() {
                 action={
                   <Link
                     href="/explore"
+                    prefetch={false}
                     className="text-sm font-medium text-blue-300 hover:text-blue-200"
                   >
                     Explore Traders →

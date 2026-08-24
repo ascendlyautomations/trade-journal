@@ -98,12 +98,15 @@ final class AuthenticationManager {
         }
         if case .refreshing = state {
             emit(.tokenRefreshStarted)
+            AuthFlowTracer.trace("session.validation.started", phase: .restoring)
             await refreshCoordinator.refreshNow()
             if case .authenticated(let session) = state {
                 emit(.restorationSucceeded(userID: session.userID))
+                AuthFlowTracer.trace("session.validation.completed", phase: .authenticated)
             } else if !state.isAuthenticated {
                 state = .unauthenticated
                 emit(.restorationFailed)
+                AuthFlowTracer.trace("session.validation.completed", phase: .unauthenticated)
             }
         }
     }
@@ -197,9 +200,20 @@ final class AuthenticationManager {
     ) async throws {
         state = .authenticating(provider)
         emit(.signInStarted(provider))
+        defer {
+            if case .authenticating = state {
+                state = .unauthenticated
+            }
+        }
         do {
             let session = try await operation()
             try await complete(session: session)
+        } catch is CancellationError {
+            if case .authenticating = state {
+                state = .unauthenticated
+            }
+            emit(.signInFailed(.cancelled))
+            throw CancellationError()
         } catch let error as AuthenticationError {
             state = .failure(error)
             emit(.signInFailed(error))

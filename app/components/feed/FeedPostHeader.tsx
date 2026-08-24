@@ -69,6 +69,7 @@ function FeedPostHeader({
   return (
     <Link
       href={profilePath({ username, id: userId })}
+      prefetch={false}
       onClick={(e) => e.stopPropagation()}
       className={className}
     >

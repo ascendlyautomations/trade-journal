@@ -3,6 +3,7 @@
 import type { ChangeEvent, RefObject } from "react"
 import FollowButton from "@/app/components/FollowButton"
 import StoryAvatarRing from "@/app/components/feed/StoryAvatarRing"
+import { PROFILE_PAGE_AVATAR_PX } from "@/app/components/SafeProfileAvatar"
 import { normalizeTraderType } from "@/lib/traderType"
 import ProfileCreateMenu from "./ProfileCreateMenu"
 import ProfileTradeRoomSection from "./ProfileTradeRoomSection"
@@ -129,6 +130,7 @@ export default function ProfileHeader({
                   profile={profile}
                   hasActiveStory
                   priority
+                  displaySizePx={PROFILE_PAGE_AVATAR_PX}
                   sizeClassName="h-20 w-20 md:h-24 md:w-24"
                 />
               </button>
@@ -137,6 +139,7 @@ export default function ProfileHeader({
                 profile={profile}
                 hasActiveStory={false}
                 priority
+                displaySizePx={PROFILE_PAGE_AVATAR_PX}
                 sizeClassName="h-20 w-20 md:h-24 md:w-24"
               />
             )}

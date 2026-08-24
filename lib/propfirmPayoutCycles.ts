@@ -357,7 +357,7 @@ export type PayoutHistoryEntry = AccountPayoutCycle & {
   accountName: string
 }
 
-/** Load payout cycles for many accounts in parallel (funded accounts only). */
+/** Load payout cycles for many accounts in one set-based query (funded accounts only). */
 export async function fetchPayoutCycleHistoryByAccountIds(
   supabase: SupabaseClient,
   accountIds: Array<string | number>
@@ -367,14 +367,27 @@ export async function fetchPayoutCycleHistoryByAccountIds(
   ]
   if (uniqueIds.length === 0) return {}
 
-  const entries = await Promise.all(
-    uniqueIds.map(async (accountId) => {
-      const cycles = await fetchPayoutCycleHistory(supabase, accountId)
-      return [accountId, cycles] as const
-    })
-  )
+  const { data, error } = await supabase
+    .from("account_payout_cycles")
+    .select(PAYOUT_CYCLE_FIELDS)
+    .in("account_id", uniqueIds)
+    .order("started_at", { ascending: false })
 
-  return Object.fromEntries(entries)
+  if (error) {
+    console.error("fetchPayoutCycleHistoryByAccountIds", error)
+    return Object.fromEntries(uniqueIds.map((id) => [id, [] as AccountPayoutCycle[]]))
+  }
+
+  const grouped: Record<string, AccountPayoutCycle[]> = Object.fromEntries(
+    uniqueIds.map((id) => [id, [] as AccountPayoutCycle[]])
+  )
+  for (const row of data ?? []) {
+    const mapped = mapPayoutCycleRow(row as Record<string, unknown>)
+    const accountId = mapped.account_id
+    if (!grouped[accountId]) grouped[accountId] = []
+    grouped[accountId].push(mapped)
+  }
+  return grouped
 }
 
 /** Merge completed payouts across funded accounts (newest first). */

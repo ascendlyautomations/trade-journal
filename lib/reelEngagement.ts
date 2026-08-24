@@ -55,7 +55,7 @@ function isMissingCommentSchemaColumn(error: {
 }
 
 export async function queryReelComments<T extends { data: unknown; error: unknown }>(
-  run: (select: string) => Promise<T>
+  run: (select: string) => PromiseLike<T>
 ): Promise<T> {
   const full = await run(REEL_COMMENTS_SELECT)
   if (

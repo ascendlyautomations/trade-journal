@@ -173,6 +173,7 @@ export function milestoneAccountToTradingListItem(
     mode: account.mode != null ? String(account.mode) : null,
     category,
     is_active: true,
+    can_add_trades: true,
     note: "",
     rules: {
       consistency: parseOptionalNumber(account.consistency),

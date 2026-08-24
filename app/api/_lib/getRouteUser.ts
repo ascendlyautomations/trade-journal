@@ -2,8 +2,9 @@ import { createClient } from "@supabase/supabase-js"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import type { User } from "@supabase/supabase-js"
+import type { Database } from "@/lib/database.types"
 
-const supabaseService = createClient(
+const supabaseService = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
@@ -28,7 +29,7 @@ export async function getRouteUser(req: Request): Promise<User | null> {
   }
 
   const cookieStore = await cookies()
-  const supabaseAuth = createServerClient(
+  const supabaseAuth = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {

@@ -12,6 +12,12 @@ export function normalizeAvatarSrc(src: string | null | undefined): string | nul
   return normalizeImageSrc(src)
 }
 
+/**
+ * Profile header uses h-20 / md:h-24 (2× ≈ 160px transform).
+ * Reuse on all in-profile avatar instances so the browser fetches once.
+ */
+export const PROFILE_PAGE_AVATAR_PX = 160
+
 /** Lucide User-style silhouette — neutral default for missing profile photos. */
 export function DefaultAvatarIcon({
   className = "h-[52%] w-[52%] text-white/60",

@@ -1,12 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  formatHhmmForDisplay,
-  hhmmToParts,
-  normalizeTradeTimeValue,
-  parseTypedTradeTime,
-  partsToHhmm,
-} = require("./tradeTimeInput.ts")
+import { describe, it } from "node:test"
+import { formatHhmmForDisplay, hhmmToParts, normalizeTradeTimeValue, parseTypedTradeTime, partsToHhmm, } from "./tradeTimeInput.ts"
+import assert from "node:assert/strict"
 
 describe("tradeTimeInput", () => {
   it("round-trips HH:mm through 12h parts", () => {
@@ -57,3 +51,4 @@ describe("tradeTimeInput", () => {
     assert.equal(normalizeTradeTimeValue("09:30"), "09:30")
   })
 })
+export {}

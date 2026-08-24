@@ -26,7 +26,12 @@ function nounForKind(kind: LikeMilestoneEntity["kind"]): string {
 }
 
 function likeTableForKind(kind: LikeMilestoneEntity["kind"]): {
-  table: string
+  table:
+    | "trade_likes"
+    | "likes"
+    | "profile_post_likes"
+    | "achievement_post_likes"
+    | "reel_likes"
   column: string
 } {
   switch (kind) {
@@ -40,6 +45,66 @@ function likeTableForKind(kind: LikeMilestoneEntity["kind"]): {
       return { table: "achievement_post_likes", column: "achievement_post_id" }
     case "reel":
       return { table: "reel_likes", column: "reel_id" }
+  }
+}
+
+async function countLikesForEntity(entity: LikeMilestoneEntity): Promise<number | null> {
+  switch (entity.kind) {
+    case "trade": {
+      const { count, error } = await supabaseServiceRole
+        .from("trade_likes")
+        .select("*", { count: "exact", head: true })
+        .eq("trade_id", entity.id)
+      if (error) {
+        console.error("[like-milestone] count failed", error)
+        return null
+      }
+      return count
+    }
+    case "post": {
+      const { count, error } = await supabaseServiceRole
+        .from("likes")
+        .select("*", { count: "exact", head: true })
+        .eq("post_id", entity.id)
+      if (error) {
+        console.error("[like-milestone] count failed", error)
+        return null
+      }
+      return count
+    }
+    case "profile_post": {
+      const { count, error } = await supabaseServiceRole
+        .from("profile_post_likes")
+        .select("*", { count: "exact", head: true })
+        .eq("profile_post_id", entity.id)
+      if (error) {
+        console.error("[like-milestone] count failed", error)
+        return null
+      }
+      return count
+    }
+    case "achievement_post": {
+      const { count, error } = await supabaseServiceRole
+        .from("achievement_post_likes")
+        .select("*", { count: "exact", head: true })
+        .eq("achievement_post_id", entity.id)
+      if (error) {
+        console.error("[like-milestone] count failed", error)
+        return null
+      }
+      return count
+    }
+    case "reel": {
+      const { count, error } = await supabaseServiceRole
+        .from("reel_likes")
+        .select("*", { count: "exact", head: true })
+        .eq("reel_id", entity.id)
+      if (error) {
+        console.error("[like-milestone] count failed", error)
+        return null
+      }
+      return count
+    }
   }
 }
 
@@ -96,18 +161,10 @@ export async function maybeNotifyLikeMilestone(params: {
   const { ownerUserId, actorUserId, entity } = params
   if (!ownerUserId || ownerUserId === actorUserId) return
 
-  const { table, column } = likeTableForKind(entity.kind)
-  const { count, error: countErr } = await supabaseServiceRole
-    .from(table)
-    .select("*", { count: "exact", head: true })
-    .eq(column, entity.id)
+  const count = await countLikesForEntity(entity)
+  if (count == null) return
 
-  if (countErr) {
-    console.error("[like-milestone] count failed", countErr)
-    return
-  }
-
-  const milestone = milestoneForCount(count ?? 0)
+  const milestone = milestoneForCount(count)
   if (milestone == null) return
 
   const key = milestoneKey(entity, milestone)
@@ -136,30 +193,32 @@ export async function maybeNotifyLikeMilestone(params: {
     href: deepLinkForEntity(entity),
   })
 
-  const { error: insertErr } = await supabaseServiceRole.from("notifications").insert({
-    user_id: ownerUserId,
-    sender_id: actorUserId,
-    type: "like_milestone",
-    content,
-    read: false,
-    ...notificationTargetFields(entity),
-  })
-
-  if (insertErr) {
-    if (insertErr.code === "23505") return
-    console.error("[like-milestone] insert failed", insertErr)
-    return
-  }
-
-  const { scheduleIosPushDelivery } = await import(
-    "@/lib/server/push/deliverPushNotification"
+  const { emitActivityNotification } = await import(
+    "@/lib/server/notifications/emit"
   )
-  scheduleIosPushDelivery({
-    recipientUserId: ownerUserId,
-    type: "like_milestone",
-    sender_id: actorUserId,
-    content,
-    prefsAlreadyChecked: true,
-    ...notificationTargetFields(entity),
+  const targetFields = notificationTargetFields(entity)
+  const result = await emitActivityNotification({
+    row: {
+      user_id: ownerUserId,
+      sender_id: actorUserId,
+      type: "like_milestone",
+      content,
+      read: false,
+      ...targetFields,
+    },
+    push: {
+      recipientUserId: ownerUserId,
+      type: "like_milestone",
+      sender_id: actorUserId,
+      content,
+      prefsAlreadyChecked: true,
+      ...targetFields,
+    },
+    logLabel: "like-milestone",
+    awaitPush: true,
   })
+
+  if (!result.ok) {
+    console.error("[like-milestone] emit failed", result.error)
+  }
 }

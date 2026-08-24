@@ -26,10 +26,11 @@ export default function OnboardingGateShell({
     if (loading) return
     if (!user) return
     if (profile?.is_banned) return
+    // Missing profile = still hydrating or a fetch failure — never treat a valid
+    // session as "needs onboarding" (that bounced users off /dashboard after login).
+    if (!profile) return
 
-    const needsOnboarding = profile
-      ? profileNeedsOnboarding(profile)
-      : true
+    const needsOnboarding = profileNeedsOnboarding(profile)
 
     if (needsOnboarding) {
       if (isAllowedPathDuringOnboarding(pathname)) return

@@ -2,11 +2,11 @@
 
 import { memo } from "react"
 import ReelClipPlayOverlay from "@/app/components/ReelClipPlayOverlay"
-import ReelVideoPosterFrame from "@/app/components/ReelVideoPosterFrame"
+import ReelIdlePoster from "@/app/components/ReelIdlePoster"
 import { formatReelDuration, type ReelRow } from "@/lib/reels"
 
 export type ReelThumbnailPreviewProps = {
-  reel: Pick<ReelRow, "thumbnail_url" | "video_url" | "duration_seconds">
+  reel: Pick<ReelRow, "thumbnail_url" | "duration_seconds">
   onClick?: () => void
   className?: string
   priority?: boolean
@@ -38,9 +38,8 @@ function ReelThumbnailPreview({
       } ${className}`}
       aria-label={interactive ? "Watch linked clip" : undefined}
     >
-      <ReelVideoPosterFrame
+      <ReelIdlePoster
         thumbnailUrl={reel.thumbnail_url}
-        videoUrl={reel.video_url}
         priority={priority}
         className="aspect-[9/16] w-full object-cover"
       />

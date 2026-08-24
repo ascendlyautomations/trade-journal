@@ -87,6 +87,7 @@ enum CompositionRoot {
             detailCache: data.detailCache,
             rpc: data.rpc
         )
+        let appBootstrapState = AppBootstrapState()
         FollowMutationCoordinator.shared.configure(
             detailCache: data.detailCache,
             currentUserProfile: currentUserProfile
@@ -107,6 +108,7 @@ enum CompositionRoot {
                 currentUserProfile: currentUserProfile,
                 data: data
             )
+            appBootstrapState.reset()
         }
         authentication.coordinator.onAuthenticatedSessionBound = {
             pushNotifications.syncRegistrationForAuthenticatedSession()
@@ -124,6 +126,7 @@ enum CompositionRoot {
             lifecycle: lifecycle,
             themeManager: themeManager,
             currentUserProfile: currentUserProfile,
+            appBootstrapState: appBootstrapState,
             pushNotifications: pushNotifications
         )
     }

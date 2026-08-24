@@ -28,6 +28,7 @@ type TradesPageMainContentProps = {
   onAccountChange: (value: string) => void
   isPro?: boolean
   copyGroups?: import("@/lib/copyTradingGroups").CopyTradingGroup[]
+  onAccountPickerOpen?: () => void
   accountTypeFilter: string
   onAccountTypeChange: (value: string) => void
   timeframe: string
@@ -62,6 +63,7 @@ type TradesPageMainContentProps = {
   onImportCsv: () => void
   tradeReelsByTradeId?: Record<string, import("@/lib/reels").ReelRow>
   onOpenTradeReplay?: (trade: any) => void
+  editingTradeId?: string | null
 }
 
 function Stat({ title, value, positive }: any) {
@@ -84,6 +86,7 @@ function TradesPageMainContent({
   onAccountChange,
   isPro = false,
   copyGroups = [],
+  onAccountPickerOpen,
   accountTypeFilter,
   onAccountTypeChange,
   timeframe,
@@ -117,6 +120,7 @@ function TradesPageMainContent({
   onImportCsv,
   tradeReelsByTradeId = {},
   onOpenTradeReplay,
+  editingTradeId = null,
 }: TradesPageMainContentProps) {
   const { isNativeIos } = usePlatformPresentation()
 
@@ -133,6 +137,7 @@ function TradesPageMainContent({
           onAccountChange={onAccountChange}
           isPro={isPro}
           copyGroups={copyGroups}
+          onAccountPickerOpen={onAccountPickerOpen}
           accountTypeFilter={accountTypeFilter}
           onAccountTypeChange={onAccountTypeChange}
           timeframe={timeframe}
@@ -364,6 +369,7 @@ function TradesPageMainContent({
                   onSendClick={onSendTrade}
                   onAnalyze={onAnalyzeTrade}
                   onImageClick={onImageClick}
+                  suppressScreenshot={editingTradeId === String(trade.id)}
                 />
               ))
             )}

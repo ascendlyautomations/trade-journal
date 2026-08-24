@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
+import type { TableUpdate } from "@/lib/supabaseTypes"
 import { uploadContentImageToStorage, CONTENT_IMAGE_CROP_PRESET } from "@/lib/contentImagePipeline"
 import { consumeAppRateLimit } from "@/lib/consumeAppRateLimit"
 import { devLog } from "@/lib/devLog"
@@ -21,7 +22,10 @@ import {
   markProfileCsvImportUsed,
 } from "@/lib/csvImportGate"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
-import { ACCOUNTS_SELECT } from "@/lib/appDataCache"
+import {
+  ensureAccountsLoaded,
+  getCachedAccounts,
+} from "@/lib/appDataCache"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
@@ -350,9 +354,20 @@ export default function InputTradeForm({
             subscription_status: contextProfile.subscription_status,
             username: contextProfile.username,
             avatar_url: contextProfile.avatar_url,
+            trial_end: contextProfile.trial_end,
           }
         : null
 
+    // Pro users: Session profile is enough — skip profiles + accounts REST.
+    if (fromContext && isProActive(fromContext)) {
+      setPlanProfile(fromContext)
+      setAccountFieldsLocked(false)
+      setCsvImportBlocked(false)
+      setCsvDaysUntilNextImport(null)
+      return
+    }
+
+    // Free / incomplete session: one profiles GET for lock + CSV cooldown fields.
     const { data: lockedRow } = await supabase
       .from("profiles")
       .select(
@@ -374,17 +389,15 @@ export default function InputTradeForm({
       return
     }
 
-    const { data: existingAccounts, error: countErr } = await supabase
-      .from("accounts")
-      .select("id, can_add_trades")
-      .eq("user_id", uid)
-
-    if (countErr) {
-      console.error(countErr)
+    // Dashboard owns accounts — reuse cache instead of a parallel accounts GET.
+    const existingAccounts =
+      getCachedAccounts(uid) ??
+      (await ensureAccountsLoaded(supabase, uid).catch(() => null))
+    if (!existingAccounts) {
       setAccountFieldsLocked(false)
     } else {
       setAccountFieldsLocked(
-        countTradeEntryEnabledAccounts(existingAccounts ?? []) >=
+        countTradeEntryEnabledAccounts(existingAccounts) >=
           FREE_PLAN_ACCOUNT_LIMIT
       )
     }
@@ -400,29 +413,25 @@ export default function InputTradeForm({
   }, [contextProfile])
 
   const fetchAccountsForUser = useCallback(async (userId: string) => {
-    const { data, error } = await supabase
-      .from("accounts")
-      .select(ACCOUNTS_SELECT)
-      .eq("user_id", userId)
-
-    if (error) {
-      console.error(error)
-      return
+    try {
+      const cached = getCachedAccounts(userId)
+      const data =
+        cached ?? (await ensureAccountsLoaded(supabase, userId).catch(() => []))
+      const formatted = (data || []).map((acc) => ({
+        name: acc.name,
+        size: acc.account_size,
+        id: acc.id,
+        account_number: acc.account_number ?? null,
+        mode: acc.mode,
+        category: acc.category,
+        is_active: acc.is_active !== false,
+        can_add_trades: acc.can_add_trades !== false,
+        note: acc.note ?? "",
+      }))
+      setAccounts(formatted)
+    } catch (err) {
+      console.error(err)
     }
-
-    const formatted = (data || []).map((acc) => ({
-      name: acc.name,
-      size: acc.account_size,
-      id: acc.id,
-      account_number: acc.account_number ?? null,
-      mode: acc.mode,
-      category: acc.category,
-      is_active: acc.is_active !== false,
-      can_add_trades: acc.can_add_trades !== false,
-      note: acc.note ?? "",
-    }))
-
-    setAccounts(formatted)
   }, [])
 
   const refreshPlanAndAccountLock = useCallback(async () => {
@@ -1274,7 +1283,7 @@ export default function InputTradeForm({
       const entryVal = entryPrice.trim() === "" ? null : Number(entryPrice)
       const exitVal = exitPrice.trim() === "" ? null : Number(exitPrice)
 
-      const updateRow: Record<string, unknown> = {
+      const updateRow = {
         ticker: ticker || null,
         direction,
         pnl: Number.isFinite(parsedPnl) ? parsedPnl : 0,
@@ -1326,13 +1335,15 @@ export default function InputTradeForm({
         timeframe: timeframeToSave,
         is_public: isPublic,
         notes: confluences || null,
-      }
+        ...(forceMarkReviewedOnSave ||
+        (existingTrade.is_initial_import === true &&
+          existingTrade.reviewed === false)
+          ? { reviewed: true }
+          : {}),
+      } satisfies TableUpdate<"trades">
       const csvReviewPending =
         existingTrade.is_initial_import === true &&
         existingTrade.reviewed === false
-      if (forceMarkReviewedOnSave || csvReviewPending) {
-        updateRow.reviewed = true
-      }
 
       const { error } = await supabase
         .from("trades")

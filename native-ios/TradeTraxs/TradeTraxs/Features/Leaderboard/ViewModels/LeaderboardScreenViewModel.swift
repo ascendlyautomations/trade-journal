@@ -18,6 +18,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     private let store: LeaderboardSessionStore
 
     private var bootstrapTask: Task<Void, Never>?
+    private var filterGeneration: UInt64 = 0
     private var inFlightFollow: Set<ProfileID> = []
 
     init(
@@ -51,12 +52,14 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     var audience: LeaderboardAudience { state.audience }
     var timeframe: LeaderboardTimeframe { state.timeframe }
     var category: LeaderboardCategory { state.category }
+    var timeframeFallbackMessage: String? { state.timeframeFallbackMessage }
 
     // MARK: - Lifecycle
 
     func bootstrapIfNeeded() async {
         if store.hasBootstrapped, !state.didBootstrap {
             state.audience = store.audience
+            state.requestedTimeframe = store.timeframe
             state.timeframe = store.timeframe
             state.category = store.category
             applyStoreToState(didPlayPodiumEntrance: true)
@@ -83,6 +86,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         do {
             var context = makeContext(cursor: cursor, forceNetwork: false)
             context.cachedTrades = store.rawTrades
+            context.timeframe = state.timeframe
             let result = try await LeaderboardBootstrap.loadPage(context)
             store.appendEntries(
                 result.entries,
@@ -112,17 +116,22 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         ExperienceHaptics.play(.selection)
         state.audience = next
         store.updateFilters(audience: next, timeframe: state.timeframe, category: state.category)
-        applyStoreToState(didPlayPodiumEntrance: true)
+        applyResolvedPresentationFromCache()
     }
 
     func setTimeframe(_ next: LeaderboardTimeframe) {
-        guard state.timeframe != next else { return }
+        guard state.requestedTimeframe != next else { return }
         ExperienceHaptics.play(.selection)
-        state.timeframe = next
-        store.updateFilters(audience: state.audience, timeframe: next, category: state.category)
-        // Web: view change only re-filters the cached trade set — no new fetch.
+        state.requestedTimeframe = next
+        filterGeneration &+= 1
+        let generation = filterGeneration
+        store.updateFilters(
+            audience: state.audience,
+            timeframe: next,
+            category: state.category
+        )
         bootstrapTask?.cancel()
-        bootstrapTask = Task { await refilterFromCachedTrades() }
+        bootstrapTask = Task { await refilterFromCachedTrades(generation: generation) }
     }
 
     func setCategory(_ next: LeaderboardCategory) {
@@ -137,7 +146,6 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         state.didPlayPodiumEntrance = true
     }
 
-    /// Awaits in-flight bootstrap / timeframe refilter (tests + debugging).
     func awaitPendingWork() async {
         await bootstrapTask?.value
     }
@@ -201,20 +209,38 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         }
 
         do {
-            let result = try await LeaderboardBootstrap.loadPage(
-                makeContext(cursor: nil, forceNetwork: forceNetwork)
-            )
+            var context = makeContext(cursor: nil, forceNetwork: forceNetwork)
+            context.timeframe = state.requestedTimeframe
+            let result = try await LeaderboardBootstrap.loadPage(context)
             guard !Task.isCancelled else { return }
+
+            let windowResolved = LeaderboardTimeframeFallback.resolveWindow(
+                trades: result.trades,
+                requested: state.requestedTimeframe
+            )
+            applyResolvedTimeframe(windowResolved.resolution)
+
+            let presentationResult: LeaderboardBootstrap.Result
+            if windowResolved.resolution.effective == state.requestedTimeframe {
+                presentationResult = result
+            } else {
+                var hydratedContext = makeContext(cursor: nil, forceNetwork: false)
+                hydratedContext.timeframe = state.timeframe
+                hydratedContext.cachedTrades = result.trades
+                presentationResult = try await LeaderboardBootstrap.loadPage(hydratedContext)
+                guard !Task.isCancelled else { return }
+            }
+
             store.applyBootstrap(
                 trades: result.trades,
-                entries: result.entries,
-                profiles: result.profiles,
-                verified: result.verified,
-                followers: result.followers,
-                following: result.following,
-                friends: result.friends,
-                viewerID: result.viewerID,
-                nextCursor: result.nextCursor,
+                entries: presentationResult.entries,
+                profiles: presentationResult.profiles,
+                verified: presentationResult.verified,
+                followers: presentationResult.followers,
+                following: presentationResult.following,
+                friends: presentationResult.friends,
+                viewerID: presentationResult.viewerID,
+                nextCursor: presentationResult.nextCursor,
                 audience: state.audience,
                 timeframe: state.timeframe,
                 category: state.category
@@ -230,37 +256,72 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         bootstrapTask = nil
     }
 
-    /// Client-side window filter only — same as web `setView` → `useMemo(buildLeaderboardChartData)`.
-    private func refilterFromCachedTrades() async {
+    private func refilterFromCachedTrades(generation: UInt64) async {
         guard !store.rawTrades.isEmpty else {
             await performBootstrap(forceNetwork: false, resetting: true)
             return
         }
 
-        do {
-            var context = makeContext(cursor: nil, forceNetwork: false)
-            context.cachedTrades = store.rawTrades
-            let result = try await LeaderboardBootstrap.loadPage(context)
-            guard !Task.isCancelled else { return }
-
-            store.replaceEntries(
-                result.entries,
-                nextCursor: result.nextCursor,
-                timeframe: state.timeframe
-            )
-            store.mergeProfiles(
-                result.profiles,
-                verified: result.verified,
-                followers: result.followers
-            )
-            applyStoreToState(didPlayPodiumEntrance: true)
-        } catch {
-            guard !Task.isCancelled else { return }
-            if state.rows.isEmpty {
-                state.phase = .failed(Self.userFacingMessage(for: error))
-            }
+        if state.rows.isEmpty {
+            state.phase = .loading
         }
+
+        let resolved = LeaderboardTimeframeFallback.resolvePage(
+            trades: store.rawTrades,
+            requested: state.requestedTimeframe,
+            audience: state.audience,
+            category: state.category,
+            profiles: store.profilesByID,
+            verified: store.verifiedIDs,
+            followers: store.followerCounts,
+            following: store.followingIDs,
+            friends: store.friendIDs,
+            viewerID: store.viewerID
+        )
+        guard generation == filterGeneration, !Task.isCancelled else { return }
+
+        applyResolvedTimeframe(resolved.resolution)
+        store.replaceEntries(
+            resolved.entries,
+            nextCursor: resolved.nextCursor,
+            timeframe: state.timeframe
+        )
+        applyStoreToState(didPlayPodiumEntrance: true)
         bootstrapTask = nil
+    }
+
+    private func applyResolvedPresentationFromCache() {
+        guard !store.rawTrades.isEmpty else {
+            applyStoreToState(didPlayPodiumEntrance: true)
+            return
+        }
+        let resolved = LeaderboardTimeframeFallback.resolvePage(
+            trades: store.rawTrades,
+            requested: state.requestedTimeframe,
+            audience: state.audience,
+            category: state.category,
+            profiles: store.profilesByID,
+            verified: store.verifiedIDs,
+            followers: store.followerCounts,
+            following: store.followingIDs,
+            friends: store.friendIDs,
+            viewerID: store.viewerID
+        )
+        applyResolvedTimeframe(resolved.resolution)
+        store.replaceEntries(
+            resolved.entries,
+            nextCursor: resolved.nextCursor,
+            timeframe: state.timeframe
+        )
+        applyStoreToState(didPlayPodiumEntrance: true)
+    }
+
+    private func applyResolvedTimeframe(_ resolution: LeaderboardTimeframeFallback.Resolution) {
+        state.timeframe = resolution.effective
+        state.timeframeFallbackMessage = LeaderboardTimeframeFallback.fallbackMessage(
+            requested: resolution.requested,
+            effective: resolution.effective
+        )
     }
 
     private func applyStoreToState(didPlayPodiumEntrance: Bool) {
@@ -277,7 +338,9 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
             nextCursor: store.nextCursor,
             didPlayPodiumEntrance: didPlayPodiumEntrance
         )
+        next.requestedTimeframe = state.requestedTimeframe
         next.timeframe = state.timeframe
+        next.timeframeFallbackMessage = state.timeframeFallbackMessage
         next.isRefreshing = state.isRefreshing
         next.isLoadingMore = state.isLoadingMore
         state = next

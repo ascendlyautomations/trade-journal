@@ -33,6 +33,7 @@ import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { isProActive } from "@/lib/subscription"
+import { ensureInitialImportReviewCountLoaded } from "@/lib/initialImportReviewCount"
 
 const INPUT_TRADE_CSV_INPUT_ID = "input-trade-csv-upload"
 
@@ -58,6 +59,16 @@ export default function Home() {
 
   const csvInputRef = useRef<HTMLInputElement>(null)
   const lastCsvFileRef = useRef<File | null>(null)
+
+  async function fetchReviewCount() {
+    if (!userId) {
+      setReviewCount(0)
+      return
+    }
+
+    const count = await ensureInitialImportReviewCountLoaded(supabase, userId)
+    setReviewCount(count)
+  }
 
   useEffect(() => {
     void fetchReviewCount()
@@ -280,22 +291,6 @@ export default function Home() {
     if (!input) return
     input.value = ""
     input.click()
-  }
-
-  async function fetchReviewCount() {
-    if (!userId) {
-      setReviewCount(0)
-      return
-    }
-
-    const { count } = await supabase
-      .from("trades")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("is_initial_import", true)
-      .eq("reviewed", false)
-
-    setReviewCount(count || 0)
   }
 
   return (

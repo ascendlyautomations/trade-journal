@@ -68,6 +68,25 @@ import {
 } from "./demo/demoUser"
 import { DEMO_PROFILE } from "./demo/fixtures"
 import { DEMO_USER_ID, isDemoUserId } from "./demo/constants"
+import { resolveBackendV2Flag, isBackendV2Enabled } from "./backendV2/flags.ts"
+import {
+  clearSessionBootstrapCache,
+  loadSessionBootstrapForUser,
+} from "./backendV2/sessionBootstrapRepository.ts"
+import { clearDashboardBootstrapCache } from "./backendV2/dashboardBootstrapCache.ts"
+import { clearFeedBootstrapCache } from "./backendV2/feedBootstrapCache.ts"
+import { invalidateProfileBootstrapCache } from "./profileBootstrap/profileBootstrapCache.ts"
+import { clearProfilePreviewCache } from "./profilePreviewCache.ts"
+import { clearMessagingBootstrapCache } from "./backendV2/messagingBootstrapCache.ts"
+import { clearRoomBootstrapCache } from "./backendV2/roomBootstrapCache.ts"
+import { clearConversationThreadCache } from "./backendV2/conversationThreadBootstrapCache.ts"
+import { clearConversationThreadAliases } from "./backendV2/conversationThreadInboxSeed.ts"
+import { clearThreadReadLifecycle } from "./backendV2/conversationThreadReadLifecycle.ts"
+import { clearThreadScrollSessions } from "./conversationThreadScroll.ts"
+import { clearPropFirmBootstrapCache } from "./backendV2/propFirmBootstrapCache.ts"
+import { patchSessionProfileSlice } from "./backendV2/sessionBootstrapCache.ts"
+import { usePathname } from "next/navigation"
+import { shouldWarmAppDataCachesForPath } from "./appWarmPaths"
 
 /**
  * Shared profile columns for shell + dashboard + getting-started.
@@ -78,6 +97,7 @@ export const USER_PROFILE_SELECT =
 
 export type UserProfileSlice = {
   id: string
+  name: string | null
   username: string | null
   avatar_url: string | null
   is_pro: boolean | null
@@ -120,6 +140,7 @@ function pickUserProfileFields(row: unknown): UserProfileSlice | null {
 
   return {
     id,
+    name: o.name != null ? String(o.name) : null,
     username: o.username != null ? String(o.username) : null,
     avatar_url: o.avatar_url != null ? String(o.avatar_url) : null,
     is_pro: typeof o.is_pro === "boolean" ? o.is_pro : null,
@@ -212,6 +233,10 @@ const AUTH_SYNC_EVENTS: AuthChangeEvent[] = [
 ]
 
 export function UserProfileProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
+  const pathnameRef = useRef(pathname)
+  pathnameRef.current = pathname
+
   const [user, setUser] = useState<any>(null)
   const [profile, setProfileState] = useState<UserProfileSlice | null>(null)
   const [loading, setLoading] = useState(true)
@@ -220,6 +245,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const profileRef = useRef<UserProfileSlice | null>(null)
   const sessionUserIdRef = useRef<string | null>(null)
+  const loadGenerationRef = useRef(0)
   profileRef.current = profile
 
   const setProfile = useCallback<Dispatch<SetStateAction<UserProfileSlice | null>>>(
@@ -301,12 +327,30 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       clearAllMessagesInboxSessions()
       clearAllRoomSessions()
       clearAllSessionUserDataCaches()
+      clearSessionBootstrapCache()
+      clearDashboardBootstrapCache()
+      clearFeedBootstrapCache()
+      clearMessagingBootstrapCache()
+      clearRoomBootstrapCache()
+      clearConversationThreadCache()
+      clearConversationThreadAliases()
+      clearThreadReadLifecycle()
+      clearThreadScrollSessions()
+      clearPropFirmBootstrapCache()
+      if (signedOutUserId) {
+        invalidateProfileBootstrapCache({ viewerKey: signedOutUserId })
+      }
+      clearProfilePreviewCache()
       clearAllNotificationsSessions()
       clearAllLeaderboardSessions()
       void clearAllNativeSilentCache()
       if (signedOutUserId) {
         clearFeedSessionsForUser(signedOutUserId)
         clearConversationSessionsForUser(signedOutUserId)
+        clearConversationThreadCache(signedOutUserId)
+        clearConversationThreadAliases(signedOutUserId)
+        clearThreadReadLifecycle(signedOutUserId)
+        clearThreadScrollSessions(signedOutUserId)
       }
       if (!mounted) return
       setUser(null)
@@ -345,6 +389,12 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                 sessionUserId,
                 payload.new as Record<string, unknown>
               )
+              if (isBackendV2Enabled("session")) {
+                patchSessionProfileSlice(
+                  sessionUserId,
+                  payload.new as Record<string, unknown>
+                )
+              }
             }
           }
         }
@@ -385,7 +435,9 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       }
 
       if (!mounted || generation !== loadGeneration) return
-      await subscribeProfileRealtime(sessionUserId, generation)
+      if (shouldWarmAppDataCachesForPath(pathnameRef.current)) {
+        await subscribeProfileRealtime(sessionUserId, generation)
+      }
     }
 
     async function applyDemoAuthSession(generation: number) {
@@ -411,8 +463,12 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    async function applyAuthSession(session: Session | null) {
+    async function applyAuthSession(
+      session: Session | null,
+      authEvent: AuthChangeEvent | "demo" = "INITIAL_SESSION"
+    ) {
       const generation = ++loadGeneration
+      loadGenerationRef.current = generation
 
       removeProfileChannel()
 
@@ -454,6 +510,8 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         })
       if (cachedPicked) {
         setProfileState(cachedPicked)
+        // Unblock shell first paint: Session RPC continues in parallel.
+        // Navbar badges/admin subscribe to Session cache; gates use cached profile.
         if (!billingProfilePending) {
           setLoading(false)
         }
@@ -467,47 +525,98 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
           profileLoading: billingProfilePending,
           profileLoaded: !billingProfilePending,
         })
-      } else if (!profileRef.current) {
-        setLoading(true)
       }
 
-      if (!shouldReconcileStripeMembership(sessionUser.id)) {
+      // Bucket A: Dashboard bootstrap in parallel with Session — app routes, or fresh sign-in.
+      const shouldWarmDashboard =
+        shouldWarmAppDataCachesForPath(pathnameRef.current) ||
+        authEvent === "SIGNED_IN"
+      if (
+        !shouldReconcileStripeMembership(sessionUser.id) &&
+        shouldWarmDashboard
+      ) {
         warmAppDataCaches(supabase, sessionUser.id)
       }
 
-      let resolvedProfile = await fetchSettingsProfileRow(supabase, sessionUser.id)
+      let resolvedProfile: Record<string, unknown> | null = null
+      const sessionFlag = resolveBackendV2Flag("session")
+      const isDemo = isDemoUserId(sessionUser.id)
 
-      if (!resolvedProfile) {
-        const ensureResult = await ensureProfileForUser(supabase, {
-          userId: sessionUser.id,
-          name: null,
-          referredBy: readStoredReferralCode(),
-          userMetadata: sessionUser.user_metadata,
-          signupFlowSource:
-            isCreatorFlowActive() || getPendingCreatorCode()
-              ? "creator"
-              : String(sessionUser.app_metadata?.provider ?? "").toLowerCase() ===
-                  "email"
-                ? "standard_email"
-                : "standard_oauth",
-        })
-
-        if (ensureResult.ok) {
-          if (ensureResult.created && readStoredReferralCode()?.trim()) {
-            notifyAffiliateReferralAttribution()
+      try {
+        if (sessionFlag.enabled && !isDemo) {
+          const loaded = await loadSessionBootstrapForUser(
+            supabase,
+            sessionUser.id,
+            {
+              authEvent,
+              caller: "UserProfileProvider.applyAuthSession",
+            }
+          )
+          resolvedProfile = {
+            ...loaded.bootstrap.data.session_profile,
+            name: loaded.bootstrap.data.viewer.display_name,
           }
-          resolvedProfile = await fetchSettingsProfileRow(supabase, sessionUser.id, {
-            force: true,
-          })
-          if (resolvedProfile && isBetaReferralRef(readStoredReferralCode())) {
-            clearBetaReferralAfterApply(
-              typeof resolvedProfile.is_beta_tester === "boolean"
-                ? resolvedProfile.is_beta_tester
-                : null
+          writeSettingsProfileCache(sessionUser.id, resolvedProfile)
+          writeUserBootstrapProfile(sessionUser.id, resolvedProfile)
+        } else {
+          resolvedProfile = await fetchSettingsProfileRow(
+            supabase,
+            sessionUser.id
+          )
+
+          if (!resolvedProfile) {
+            const ensureResult = await ensureProfileForUser(supabase, {
+              userId: sessionUser.id,
+              name: null,
+              referredBy: readStoredReferralCode(),
+              userMetadata: sessionUser.user_metadata,
+              signupFlowSource:
+                isCreatorFlowActive() || getPendingCreatorCode()
+                  ? "creator"
+                  : String(sessionUser.app_metadata?.provider ?? "").toLowerCase() ===
+                      "email"
+                    ? "standard_email"
+                    : "standard_oauth",
+            })
+
+            if (ensureResult.ok) {
+              if (ensureResult.created && readStoredReferralCode()?.trim()) {
+                notifyAffiliateReferralAttribution()
+              }
+              resolvedProfile = await fetchSettingsProfileRow(
+                supabase,
+                sessionUser.id,
+                {
+                  force: true,
+                }
+              )
+              if (resolvedProfile && isBetaReferralRef(readStoredReferralCode())) {
+                clearBetaReferralAfterApply(
+                  typeof resolvedProfile.is_beta_tester === "boolean"
+                    ? resolvedProfile.is_beta_tester
+                    : null
+                )
+              }
+            } else if (ensureResult.error) {
+              console.error("ensureProfileForUser:", ensureResult.error)
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[UserProfileProvider] profile hydrate:", err)
+        if (sessionFlag.enabled && !resolvedProfile) {
+          try {
+            resolvedProfile = await fetchSettingsProfileRow(
+              supabase,
+              sessionUser.id,
+              { force: true }
+            )
+          } catch (fallbackErr) {
+            console.error(
+              "[UserProfileProvider] session RPC fallback REST failed:",
+              fallbackErr
             )
           }
-        } else if (ensureResult.error) {
-          console.error("ensureProfileForUser:", ensureResult.error)
         }
       }
 
@@ -539,7 +648,9 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         setLoading(false)
       }
 
-      void runDeferredBootstrap(sessionUser.id, generation, picked)
+      if (picked) {
+        void runDeferredBootstrap(sessionUser.id, generation, picked)
+      }
     }
 
     const {
@@ -547,6 +658,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return
 
+      // TOKEN_REFRESHED / USER_UPDATED / PASSWORD_RECOVERY → never Session Bootstrap.
       if (event === "SIGNED_OUT") {
         clearAuthState()
         if (isDemoModeActive() && mounted) {
@@ -555,25 +667,34 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      if (AUTH_SYNC_EVENTS.includes(event)) {
-        const nextUserId = session?.user?.id ?? null
-        // Supabase emits SIGNED_IN on tab focus for session recovery — skip full
-        // profile reload when the signed-in user is unchanged (matches DMs/Rooms).
-        if (
-          event === "SIGNED_IN" &&
-          nextUserId &&
-          nextUserId === sessionUserIdRef.current &&
-          profileRef.current
-        ) {
-          return
+      if (!AUTH_SYNC_EVENTS.includes(event)) {
+        return
+      }
+
+      const nextUserId = session?.user?.id ?? null
+
+      // Same authenticated user already applied this mount — never re-enter.
+      // Covers INITIAL_SESSION after SIGNED_IN (and the reverse) without a 2nd apply.
+      if (nextUserId && nextUserId === sessionUserIdRef.current) {
+        if (process.env.NODE_ENV === "development") {
+          console.info(
+            "[backendV2.session] skip auth re-apply — same user already applied",
+            { event, userId: nextUserId }
+          )
         }
-        // Fresh sign-in (logged out → logged in) exits preview; never clear preview
-        // during session recovery or while profile is still loading.
-        if (event === "SIGNED_IN" && nextUserId && !sessionUserIdRef.current) {
+        return
+      }
+
+      if (event === "SIGNED_IN") {
+        // Fresh sign-in (logged out → logged in) exits preview.
+        if (nextUserId && !sessionUserIdRef.current) {
           disableDemoMode()
         }
-        void applyAuthSession(session)
       }
+
+      // Remount / new listener: refs may be null while global flight/cache exists.
+      // applyAuthSession still runs to hydrate React state; RPC single-flights to 0–1 calls.
+      void applyAuthSession(session, event)
     })
 
     const unsubDemoMode = subscribeDemoModeChanges(() => {
@@ -601,6 +722,52 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       removeProfileChannel()
     }
   }, [realtimeTopicSuffix])
+
+  // Entering an app route after auth on marketing/login — start Dashboard warm + profile WS once.
+  useEffect(() => {
+    const uid = sessionUserIdRef.current
+    if (!uid || isDemoUserId(uid)) return
+    if (!shouldWarmAppDataCachesForPath(pathname)) return
+    if (shouldReconcileStripeMembership(uid)) return
+
+    warmAppDataCaches(supabase, uid)
+
+    if (channelRef.current) return
+
+    const generation = loadGenerationRef.current
+    const topic = `profile:${uid}:${realtimeTopicSuffix}`
+    const ch = supabase.channel(topic)
+    channelRef.current = ch
+
+    ch.on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "profiles",
+        filter: `id=eq.${uid}`,
+      },
+      (payload) => {
+        const picked = pickUserProfileFields(payload.new)
+        if (picked) {
+          setProfileState(picked)
+          if (isProActive(picked) && shouldReconcileStripeMembership(uid)) {
+            clearStripeReconciliationSignals()
+            dispatchStripeReconciliationComplete()
+          }
+          writeUserBootstrapProfile(uid, picked)
+          if (payload.new && typeof payload.new === "object") {
+            writeSettingsProfileCache(uid, payload.new as Record<string, unknown>)
+            if (isBackendV2Enabled("session")) {
+              patchSessionProfileSlice(uid, payload.new as Record<string, unknown>)
+            }
+          }
+        }
+      }
+    )
+
+    ch.subscribe()
+  }, [pathname, realtimeTopicSuffix])
 
   useEffect(() => {
     captureStripeCheckoutSuccessFromUrl()

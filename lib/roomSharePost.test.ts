@@ -1,17 +1,12 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  buildRoomSharePostInsert,
-  formatRoomMemberCount,
-  isRoomSharePost,
-  pendingRoomShareFromRoom,
-} = require("./roomSharePost.ts")
+import { describe, it } from "node:test"
+import { buildRoomSharePostInsert, formatRoomMemberCount, isRoomSharePost, pendingRoomShareFromRoom, } from "./roomSharePost.ts"
+import assert from "node:assert/strict"
 
 describe("roomSharePost", () => {
   it("detects room share posts by room_id", () => {
     assert.equal(isRoomSharePost({ room_id: "abc" }), true)
     assert.equal(isRoomSharePost({ room_id: "" }), false)
-    assert.equal(isRoomSharePost({ content: "hello" }), false)
+    assert.equal(isRoomSharePost({ room_name: "hello" }), false)
   })
 
   it("builds insert payload with room snapshot fields", () => {
@@ -51,3 +46,4 @@ describe("roomSharePost", () => {
     assert.equal(draft.roomDescription, "Charts")
   })
 })
+export {}

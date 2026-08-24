@@ -17,6 +17,13 @@ import { hapticLight } from "@/lib/nativeHaptics"
 import { fetchTotalUnreadMessageCount } from "@/lib/messageUnread"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags.ts"
+import { MESSAGING_DM_UNREAD_LOCAL_PATCH } from "@/lib/backendV2/messagingInboxLocalPatch.ts"
+import {
+  getSessionBadges,
+  patchSessionBadges,
+  subscribeSessionBootstrapCache,
+} from "@/lib/backendV2/sessionBootstrapCache.ts"
 
 type RouteTab = {
   id: "dashboard" | "feed" | "add" | "messages" | "profile"
@@ -55,17 +62,70 @@ export default function NativeIosBottomNav() {
       return
     }
     let cancelled = false
+
+    const applyFromSession = () => {
+      if (!isBackendV2Enabled("session")) return false
+      const badges = getSessionBadges(user.id)
+      if (!badges) return false
+      setUnreadMessages(badges.dm_unread)
+      return true
+    }
+
+    if (applyFromSession()) {
+      const onRefresh = () => {
+        if (isBackendV2Enabled("messageThreads")) return
+        void fetchTotalUnreadMessageCount(user.id).then((count) => {
+          if (cancelled) return
+          setUnreadMessages(count)
+          patchSessionBadges(user.id, { dm_unread: count })
+        })
+      }
+      window.addEventListener("tj-unread-messages-refresh", onRefresh)
+      return () => {
+        cancelled = true
+        window.removeEventListener("tj-unread-messages-refresh", onRefresh)
+      }
+    }
+
+    const unsub = isBackendV2Enabled("session")
+      ? subscribeSessionBootstrapCache(() => {
+          if (!cancelled) applyFromSession()
+        })
+      : () => {}
+
     const refresh = () => {
       void fetchTotalUnreadMessageCount(user.id).then((count) => {
-        if (!cancelled) setUnreadMessages(count)
+        if (cancelled) return
+        setUnreadMessages(count)
+        if (isBackendV2Enabled("session")) {
+          patchSessionBadges(user.id, { dm_unread: count })
+        }
       })
     }
-    refresh()
-    const onRefresh = () => refresh()
+    if (!isBackendV2Enabled("session")) {
+      refresh()
+    }
+    const onRefresh = () => {
+      if (isBackendV2Enabled("messageThreads")) return
+      refresh()
+    }
     window.addEventListener("tj-unread-messages-refresh", onRefresh)
+    const onLocalPatch = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: string; dmUnread?: number }>)
+        .detail
+      if (!user?.id || detail?.userId !== user.id) return
+      if (typeof detail.dmUnread !== "number") return
+      setUnreadMessages(detail.dmUnread)
+      if (isBackendV2Enabled("session")) {
+        patchSessionBadges(user.id, { dm_unread: detail.dmUnread })
+      }
+    }
+    window.addEventListener(MESSAGING_DM_UNREAD_LOCAL_PATCH, onLocalPatch)
     return () => {
       cancelled = true
+      unsub()
       window.removeEventListener("tj-unread-messages-refresh", onRefresh)
+      window.removeEventListener(MESSAGING_DM_UNREAD_LOCAL_PATCH, onLocalPatch)
     }
   }, [enabled, user?.id])
 

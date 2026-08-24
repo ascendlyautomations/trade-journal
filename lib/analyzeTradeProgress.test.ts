@@ -1,13 +1,14 @@
-import { describe, expect, it } from "vitest"
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
 import {
   createAnalyzeProgressController,
   getAnalyzeProgressStages,
-} from "./analyzeTradeProgress"
+} from "./analyzeTradeProgress.ts"
 
 describe("analyzeTradeProgress", () => {
   it("includes chart review stage when screenshots exist", () => {
     const stages = getAnalyzeProgressStages(true)
-    expect(stages.some((s) => s.label.includes("charts"))).toBe(true)
+    assert.ok(stages.some((s) => s.label.includes("charts")))
   })
 
   it("never decreases simulated progress", async () => {
@@ -23,8 +24,8 @@ describe("analyzeTradeProgress", () => {
     controller.stop()
 
     for (let i = 1; i < values.length; i++) {
-      expect(values[i]).toBeGreaterThanOrEqual(values[i - 1]!)
+      assert.ok(values[i]! >= values[i - 1]!)
     }
-    expect(values.at(-1)).toBe(100)
+    assert.equal(values.at(-1), 100)
   })
 })

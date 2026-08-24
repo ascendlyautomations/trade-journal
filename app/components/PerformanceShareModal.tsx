@@ -313,7 +313,7 @@ export default function PerformanceShareModal({
             <div>
               <p className="text-xs text-gray-400">Avg RR</p>
               <p className="font-semibold tabular-nums text-white">
-                {formatRR(stats.avgRR)}
+                {stats.avgRR != null ? formatRR(stats.avgRR) : "—"}
               </p>
             </div>
           </div>

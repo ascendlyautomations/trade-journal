@@ -1,9 +1,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import type { Database } from "./database.types"
 
-let adminClient: SupabaseClient | null | undefined
+let adminClient: SupabaseClient<Database> | null | undefined
 
 /** Service-role Supabase client for server-only public SEO queries. */
-export function createSupabaseAdmin(): SupabaseClient | null {
+export function createSupabaseAdmin(): SupabaseClient<Database> | null {
   if (adminClient !== undefined) return adminClient
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -13,7 +14,7 @@ export function createSupabaseAdmin(): SupabaseClient | null {
     return null
   }
 
-  adminClient = createClient(url, key, {
+  adminClient = createClient<Database>(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
   return adminClient

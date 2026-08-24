@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import type { ReelClipPlaybackHandle } from "@/app/components/ReelClipPlayback"
 import DetailModalVideo from "@/app/components/ui/DetailModalVideo"
-import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
+import { ProfileAvatarImg, PROFILE_PAGE_AVATAR_PX } from "@/app/components/SafeProfileAvatar"
 import type { ReelRow } from "@/lib/reels"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
@@ -81,19 +81,31 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
 
   useEffect(() => {
     if (!reel) {
+      playbackRef.current?.pause()
       setPlaying(false)
       setMuted(true)
+      return
     }
-  }, [reel])
+    if (nativeIos) return
+    playbackRef.current?.pause()
+    setPlaying(false)
+  }, [reel, reel?.id, nativeIos])
 
   useModalScrollLock(Boolean(reel) && !nativeIos)
   useStackedModalEscape(Boolean(reel) && !nativeIos, onClose)
 
   useEffect(() => {
-    if (nativeIos) return
-    playbackRef.current?.pause()
-    setPlaying(false)
-  }, [reel?.id, nativeIos])
+    const playback = playbackRef
+    return () => {
+      const video = playback.current?.getVideoElement()
+      if (video) {
+        video.pause()
+        video.removeAttribute("src")
+        video.load()
+      }
+      playback.current?.pause()
+    }
+  }, [])
 
   useEffect(() => {
     if (nativeIos) return
@@ -185,6 +197,7 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
             <ProfileAvatarImg
               src={creator?.avatar_url}
               className="h-9 w-9 border border-white/10"
+              displaySizePx={PROFILE_PAGE_AVATAR_PX}
             />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">

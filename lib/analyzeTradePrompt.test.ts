@@ -1,11 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  ANALYZE_TRADE_SYSTEM_PROMPT,
-  buildAnalyzeTradeHistoryContext,
-  buildTradeAnalysisPrompt,
-  formatTradeDataSection,
-} = require("./analyzeTradePrompt.ts")
+import { describe, it } from "node:test"
+import { ANALYZE_TRADE_SYSTEM_PROMPT, buildAnalyzeTradeHistoryContext, buildTradeAnalysisPrompt, formatTradeDataSection, } from "./analyzeTradePrompt.ts"
+import assert from "node:assert/strict"
 
 describe("formatTradeDataSection", () => {
   it("includes only populated fields", () => {
@@ -94,3 +89,4 @@ describe("ANALYZE_TRADE_SYSTEM_PROMPT", () => {
     )
   })
 })
+export {}

@@ -8,6 +8,7 @@ struct AppRootView: View {
     let authenticationCoordinator: AuthenticationCoordinator
     let authenticationLifecycle: AuthenticationLifecycle
     @Bindable var currentUserProfile: CurrentUserProfileStore
+    @Bindable var appBootstrapState: AppBootstrapState
     let allowsDevelopmentBypass: Bool
 
     @Environment(\.scenePhase) private var scenePhase
@@ -38,7 +39,25 @@ struct AppRootView: View {
                         currentUserProfile: currentUserProfile
                     )
                     .task {
+                        appBootstrapState.beginLoading()
+                        AuthFlowTracer.trace("bootstrap.started", phase: .bootstrapLoading)
                         currentUserProfile.loadIfNeeded()
+                    }
+                    .onChange(of: currentUserProfile.phase) { _, phase in
+                        switch phase {
+                        case .loaded:
+                            appBootstrapState.markReady()
+                            AuthFlowTracer.trace("bootstrap.completed", phase: .authenticated)
+                        case .failed:
+                            appBootstrapState.markFailedRecoverable(
+                                message: currentUserProfile.errorMessage
+                            )
+                            AuthFlowTracer.trace("bootstrap.failed", phase: .bootstrapFailed)
+                        case .loading:
+                            appBootstrapState.beginLoading()
+                        case .idle:
+                            break
+                        }
                     }
                 }
             }
@@ -72,15 +91,20 @@ struct AppRootView: View {
             NavigationCoordinatorProxy.openManageAccounts = {
                 navigation.coordinator.openSettings([.tradingAccounts])
             }
+            // CompositionRoot already restored Keychain + aligned navigation synchronously.
+            // Never block first paint on network token refresh.
+            ExperienceMotion.withAnimation(
+                ExperienceMotion.navigation,
+                reduceMotion: reduceMotion
+            ) {
+                isLaunchBootstrapping = false
+            }
             Task {
                 await authenticationLifecycle.applicationDidLaunch()
-                ExperienceMotion.withAnimation(
-                    ExperienceMotion.navigation,
-                    reduceMotion: reduceMotion
-                ) {
-                    isLaunchBootstrapping = false
-                }
             }
+        }
+        .onChange(of: authenticationManager.state) { _, newState in
+            authenticationCoordinator.syncNavigation(with: newState)
         }
         .onChange(of: colorScheme) { _, newStyle in
             themeManager.updateInterfaceStyle(newStyle)

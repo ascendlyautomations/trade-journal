@@ -213,7 +213,7 @@ export type PropfirmEquityEvent =
 function equityEventLabelFromIsoTimestamp(isoTimestamp: string): string {
   const parsed = new Date(isoTimestamp)
   if (!Number.isNaN(parsed.getTime())) {
-    return getTradingDayKey(parsed.toISOString())
+    return getTradingDayKey(parsed.toISOString()) ?? isoTimestamp.trim().slice(0, 10)
   }
   return isoTimestamp.trim().slice(0, 10)
 }

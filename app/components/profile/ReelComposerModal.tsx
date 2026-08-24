@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Modal from "@/app/components/ui/Modal"
 import ReelVideoFilePreview from "@/app/components/ReelVideoFilePreview"
-import ReelVideoPosterFrame from "@/app/components/ReelVideoPosterFrame"
+import ReelIdlePoster from "@/app/components/ReelIdlePoster"
 import { supabase } from "@/lib/supabaseClient"
 import { publishReel, updateReelCaption, type ReelRow, isTradeAttachedReel } from "@/lib/reels"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
@@ -165,8 +165,6 @@ export default function ReelComposerModal({
     onClose()
   }
 
-  const readOnlyVideoUrl = isEditMode ? String(editReel?.video_url ?? "") : null
-
   return (
     <Modal
       open={open}
@@ -219,18 +217,9 @@ export default function ReelComposerModal({
         <div className="space-y-4">
           <div className="mx-auto w-full max-w-[220px] overflow-hidden rounded-xl border border-white/10 bg-black/40 shadow-lg shadow-black/40">
             {editReel ? (
-              <ReelVideoPosterFrame
+              <ReelIdlePoster
                 thumbnailUrl={editReel.thumbnail_url}
-                videoUrl={editReel.video_url}
                 className="aspect-[9/16] w-full object-cover"
-              />
-            ) : readOnlyVideoUrl ? (
-              <video
-                src={readOnlyVideoUrl}
-                className="aspect-[9/16] w-full object-cover"
-                controls
-                playsInline
-                preload="metadata"
               />
             ) : null}
           </div>

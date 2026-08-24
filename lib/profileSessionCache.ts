@@ -29,6 +29,15 @@ export type ProfileSessionSnapshot = {
   analyticsTradesReady?: boolean
   summaryTrades?: unknown[]
   summaryReady?: boolean
+  bootstrapPublicStats?: {
+    total_trades: number
+    wins: number
+    total_pnl: number
+  } | null
+  bootstrapSectionCounts?: {
+    has_active_story?: boolean
+    has_room?: boolean
+  } | null
   activeTab?: string
   selectedMode?: string
   scrollY: number
@@ -38,9 +47,9 @@ export type ProfileSessionSnapshot = {
 const sessions = new Map<string, ProfileSessionSnapshot>()
 
 export function readProfileSession(
-  urlSegment: string
+  urlSegment: string | undefined
 ): ProfileSessionSnapshot | null {
-  const key = urlSegment.trim()
+  const key = (urlSegment ?? "").trim()
   if (!key) return null
   const entry = sessions.get(key)
   if (!entry) return null
@@ -55,10 +64,10 @@ export function readProfileSession(
 }
 
 export function writeProfileSession(
-  urlSegment: string,
+  urlSegment: string | undefined,
   snapshot: Omit<ProfileSessionSnapshot, "urlSegment" | "fetchedAt">
 ) {
-  const key = urlSegment.trim()
+  const key = (urlSegment ?? "").trim()
   if (!key) return
   const full: ProfileSessionSnapshot = {
     ...snapshot,
@@ -80,10 +89,10 @@ export function seedProfileSession(
 }
 
 export function patchProfileSession(
-  urlSegment: string,
+  urlSegment: string | undefined,
   patch: Partial<Omit<ProfileSessionSnapshot, "urlSegment" | "fetchedAt">>
 ) {
-  const key = urlSegment.trim()
+  const key = (urlSegment ?? "").trim()
   const prev = sessions.get(key)
   if (!prev) return
   const next = { ...prev, ...patch, fetchedAt: Date.now() }

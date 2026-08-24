@@ -7,6 +7,7 @@ import {
   persistDashboardAccounts,
   persistDashboardTrades,
 } from "./nativeSilentCacheBridge"
+import { isBackendV2Enabled } from "./backendV2/flags.ts"
 
 /** Shared client-side cache for trades and accounts (module-level, survives route remounts). */
 
@@ -356,6 +357,26 @@ export async function ensureAccountsLoaded(
     return getCachedAccounts(userId) ?? [...DEMO_ACCOUNTS]
   }
 
+  // Dashboard RPC owns accounts when flag ON — one network path.
+  if (isBackendV2Enabled("dashboard") && !options?.force) {
+    const hit = getCachedAccounts(userId)
+    if (hit) return hit
+    try {
+      const { loadDashboardBootstrapForUser } = await import(
+        "./backendV2/dashboardBootstrapRepository.ts"
+      )
+      await loadDashboardBootstrapForUser(supabase, userId, {
+        caller: "ensureAccountsLoaded",
+      })
+      return getCachedAccounts(userId) ?? []
+    } catch (err) {
+      console.warn(
+        "[appDataCache] dashboard bootstrap accounts failed; REST fallback",
+        err
+      )
+    }
+  }
+
   const cached = getCachedAccounts(userId)
   const entry = accountsByUser.get(userId)
   if (cached && !options?.force) {
@@ -503,6 +524,34 @@ export async function ensureTradesLoaded(
   const wantFullHistory = options?.fullHistory === true
   const cached = getCachedTrades(userId)
   const entry = tradesByUser.get(userId)
+
+  // Dashboard RPC owns trade window when flag ON — one network path.
+  if (isBackendV2Enabled("dashboard") && !options?.force) {
+    if (!cached) {
+      try {
+        const { loadDashboardBootstrapForUser } = await import(
+          "./backendV2/dashboardBootstrapRepository.ts"
+        )
+        await loadDashboardBootstrapForUser(supabase, userId, {
+          caller: "ensureTradesLoaded",
+        })
+      } catch (err) {
+        console.warn(
+          "[appDataCache] dashboard bootstrap trades failed; REST fallback",
+          err
+        )
+      }
+    }
+    const after = getCachedTrades(userId)
+    const afterEntry = tradesByUser.get(userId)
+    if (after) {
+      if (wantFullHistory && !afterEntry?.historyComplete) {
+        void ensureFullTradesHistory(supabase, userId)
+      }
+      return after
+    }
+  }
+
   if (cached && !options?.force) {
     if (
       entry &&

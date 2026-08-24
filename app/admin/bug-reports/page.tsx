@@ -12,6 +12,7 @@ import {
   type BugReportStatus,
 } from "@/lib/bugReports"
 import { supabase } from "@/lib/supabaseClient"
+import type { TableUpdate } from "@/lib/supabaseTypes"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import CustomSelect from "@/app/components/CustomSelect"
 import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
@@ -126,14 +127,14 @@ export default function AdminBugReportsPage() {
     setSavingDetail(true)
 
     const resolved = detailStatus === "resolved"
-    const updatePayload: Record<string, unknown> = {
+    const updatePayload = {
       status: detailStatus,
       resolved_at: resolved
         ? selected.status === "resolved" && selected.resolved_at
           ? selected.resolved_at
           : new Date().toISOString()
         : null,
-    }
+    } satisfies TableUpdate<"bug_reports">
 
     const { error } = await supabase.from("bug_reports").update(updatePayload).eq("id", selected.id)
 

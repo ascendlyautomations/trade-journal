@@ -1,14 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it, beforeEach } = require("node:test")
-const {
-  clearAppDataCache,
-  getCachedTrades,
-  mergeTradesInCache,
-  prependTradeInCache,
-  removeTradeFromCache,
-  setTradesCache,
-  upsertTradeInCache,
-} = require("./appDataCache.ts")
+import { describe, it, beforeEach } from "node:test"
+import { clearAppDataCache, getCachedTrades, mergeTradesInCache, prependTradeInCache, removeTradeFromCache, setTradesCache, upsertTradeInCache, } from "./appDataCache.ts"
+import assert from "node:assert/strict"
 
 describe("appDataCache", () => {
   const userId = "user-1"
@@ -25,7 +17,7 @@ describe("appDataCache", () => {
   it("upserts an existing trade", () => {
     setTradesCache(userId, [{ id: "t1", pnl: 100, ticker: "ES" }])
     upsertTradeInCache(userId, { id: "t1", pnl: 200 })
-    assert.partialDeepStrictEqual(getCachedTrades(userId)?.[0], {
+    assert.deepStrictEqual(getCachedTrades(userId)?.[0], {
       id: "t1",
       pnl: 200,
       ticker: "ES",
@@ -68,3 +60,4 @@ describe("appDataCache", () => {
     assert.equal(getCachedTrades(userId)?.[0]?.pnl, 5)
   })
 })
+export {}

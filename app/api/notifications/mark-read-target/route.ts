@@ -1,7 +1,6 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { markNotificationsReadForTarget } from "@/lib/notificationReadSync"
-import { deleteBatch } from "@/lib/server/push/batchWindows"
-import { invalidateAppIconBadgeCache } from "@/lib/server/push/messagingPush"
+import { invalidateAppIconBadgeCache } from "@/lib/server/push/badgeService"
 
 type Body = {
   conversationId?: string
@@ -39,16 +38,11 @@ export async function POST(req: Request) {
   if (body.conversationId?.trim()) {
     const conversationId = body.conversationId.trim()
 
-    // Parallelize independent work: Activity read flip + DM batch clear.
-    const [notifUpdated] = await Promise.all([
-      markNotificationsReadForTarget(
-        user.id,
-        { kind: "conversation", conversationId },
-        supabaseServiceRole
-      ),
-      deleteBatch(user.id, "dm", conversationId),
-    ])
-    updated += notifUpdated
+    updated += await markNotificationsReadForTarget(
+      user.id,
+      { kind: "conversation", conversationId },
+      supabaseServiceRole
+    )
     invalidateAppIconBadgeCache(user.id)
 
     if (body.markConversationRead !== false) {
@@ -89,6 +83,7 @@ export async function POST(req: Request) {
       },
       supabaseServiceRole
     )
+    invalidateAppIconBadgeCache(user.id)
 
     if (body.markRoomRead !== false && roomId) {
       const { error } = await supabaseServiceRole
@@ -122,6 +117,7 @@ export async function POST(req: Request) {
       },
       supabaseServiceRole
     )
+    invalidateAppIconBadgeCache(user.id)
   }
 
   if (body.followRequestSenderId?.trim()) {
@@ -133,6 +129,7 @@ export async function POST(req: Request) {
       },
       supabaseServiceRole
     )
+    invalidateAppIconBadgeCache(user.id)
   }
 
   return Response.json({ ok: true, updated })

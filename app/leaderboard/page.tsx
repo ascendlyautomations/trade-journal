@@ -21,13 +21,16 @@ import {
   Legend,
 } from "recharts"
 import {
-  buildLeaderboardChartData,
   getDefaultLeaderboardCustomRange,
   type LeaderboardAccountTypeFilter,
   type LeaderboardChartRow,
   type LeaderboardView,
   type TradeForLeaderboard,
 } from "../../lib/leaderboardChart"
+import {
+  buildLeaderboardChartDataWithFallback,
+  leaderboardTimeframeFallbackMessage,
+} from "../../lib/leaderboardTimeframeFallback"
 import { formatPnlCurrency } from "../../lib/formatMoney"
 import { formatRR, formatSignedPnlDisplay, pnlTextClassName } from "@/lib/formatDisplay"
 import { profilePath } from "@/lib/profileRoutes"
@@ -270,9 +273,17 @@ export default function Leaderboard() {
     return customRangeStart > customRangeEnd
   }, [view, customRangeStart, customRangeEnd])
 
-  const { chartData, todayStats, rankedTraders, yourRank, hasData } = useMemo(
+  const {
+    chartData,
+    todayStats,
+    rankedTraders,
+    yourRank,
+    hasData,
+    effectiveView,
+    usedFallback,
+  } = useMemo(
     () =>
-      buildLeaderboardChartData(
+      buildLeaderboardChartDataWithFallback(
         trades,
         view,
         userId,
@@ -280,6 +291,11 @@ export default function Leaderboard() {
         accountTypeFilter
       ),
     [trades, view, userId, customRange, accountTypeFilter]
+  )
+
+  const timeframeFallbackMessage = useMemo(
+    () => leaderboardTimeframeFallbackMessage(view, effectiveView),
+    [view, effectiveView]
   )
 
   const rankedTraderIds = useMemo(
@@ -379,7 +395,7 @@ export default function Leaderboard() {
             </h1>
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
               <CustomSelect
-                value={view}
+                value={tradesLoading || leaderboardLoadError ? view : effectiveView}
                 onChange={(val) => setView(val as LeaderboardView)}
                 className="sm:w-auto"
                 triggerClassName={LEADERBOARD_SELECT_CLASS}
@@ -436,6 +452,10 @@ export default function Leaderboard() {
             <p className="text-sm text-amber-300">
               Start date must be on or before end date.
             </p>
+          ) : null}
+
+          {timeframeFallbackMessage && !tradesLoading && !leaderboardLoadError ? (
+            <p className="text-sm text-blue-200/90">{timeframeFallbackMessage}</p>
           ) : null}
 
           <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-5">
@@ -583,7 +603,23 @@ export default function Leaderboard() {
                     tickFormatter={yAxisTickFormatter}
                     width={72}
                   />
-                  <Tooltip content={(props) => <LeaderboardTooltip {...props} />} />
+                  <Tooltip
+                    content={(props) => (
+                      <LeaderboardTooltip
+                        active={props.active}
+                        payload={
+                          Array.isArray(props.payload)
+                            ? (props.payload as TooltipPayload[])
+                            : undefined
+                        }
+                        label={
+                          typeof props.label === "string"
+                            ? props.label
+                            : undefined
+                        }
+                      />
+                    )}
+                  />
                   <Legend
                     formatter={(value) => (
                       <span className="text-xs text-gray-300">{value}</span>
@@ -626,7 +662,7 @@ export default function Leaderboard() {
 
           <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-6">
             <h2 className="mb-3 text-lg font-semibold text-blue-300">
-              Top Traders ({view})
+              Top Traders ({effectiveView})
             </h2>
 
             {!showLeaderboardContent ? (

@@ -12,7 +12,7 @@ import { formatEST } from "@/lib/formatEST"
 import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/lib/formatDisplay"
 import { safeAccountNumberLabel, formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
-import SavedImage from "@/app/components/ui/SavedImage"
+import TradeScreenshotPreview from "@/app/components/ui/TradeScreenshotPreview"
 import { TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS } from "@/lib/tradeScreenshotDisplay"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
 import TradeCopyTradingDetails from "@/app/components/trade/TradeCopyTradingDetails"
@@ -38,6 +38,8 @@ export type TradesPageTradeCardProps = {
   onSendClick: (trade: any) => void
   onAnalyze?: (trade: any) => void
   onImageClick: (imageUrl: string) => void
+  /** When set, suppress list screenshot to avoid duplicate loads with the edit modal. */
+  suppressScreenshot?: boolean
 }
 
 function TradesPageTradeCard({
@@ -53,6 +55,7 @@ function TradesPageTradeCard({
   onImageClick,
   attachedReel = null,
   onOpenReplay,
+  suppressScreenshot = false,
 }: TradesPageTradeCardProps) {
   const entryPrice = trade.entry_price ?? trade.entry ?? null
   const exitPrice = trade.exit_price ?? trade.exit ?? null
@@ -455,13 +458,13 @@ function TradesPageTradeCard({
         </div>
       </div>
 
-      {screenshotUrl ? (
-        <SavedImage
+      {screenshotUrl && !suppressScreenshot ? (
+        <TradeScreenshotPreview
           src={screenshotUrl}
-          alt=""
+          fullSrc={screenshotUrl}
           maxHeightClassName={TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS}
           className="mx-auto mt-4 block rounded-lg"
-          onClick={() => onImageClick(screenshotUrl)}
+          onOpenFull={onImageClick}
         />
       ) : null}
 

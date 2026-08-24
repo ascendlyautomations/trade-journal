@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation"
 import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
 import AffiliatePayoutRequestModal from "@/app/components/AffiliatePayoutRequestModal"
 import {
-  AFFILIATE_CONNECT_SELECT,
   isAffiliatePayoutSetupComplete,
-  parseAffiliateConnectRow,
   type AffiliateConnectRow,
 } from "@/lib/affiliateStripeConnect"
+import { ensureAffiliateConnectLoaded } from "@/lib/affiliateDataRepository"
+import { syncAffiliateConnectStatus } from "@/lib/affiliateConnectSyncClient"
 import { COMMISSION_RATE } from "@/lib/affiliateEarnings"
 import {
   fetchAffiliatePayoutBalance,
@@ -23,7 +23,6 @@ import {
   type AffiliatePayoutStatus,
 } from "@/lib/affiliatePayoutRequests"
 import { supabase } from "@/lib/supabaseClient"
-import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { AFFILIATE_PRIMARY_BUTTON_CLASS } from "@/lib/affiliateUi"
 import { devLog } from "@/lib/devLog"
 import { SkeletonPayoutsPage } from "@/app/components/ui/skeletons"
@@ -110,32 +109,20 @@ export default function AffiliatePayoutsPage() {
       return
     }
 
-    const [balRes, affRes, payoutsRes] = await Promise.all([
+    const [balRes, connectRowInitial, payoutsRes] = await Promise.all([
       fetchAffiliatePayoutBalance(supabase, user.id),
-      supabase.from("affiliates").select(AFFILIATE_CONNECT_SELECT).eq("user_id", user.id).maybeSingle(),
+      ensureAffiliateConnectLoaded(supabase, user.id),
       fetchMyAffiliatePayoutRequests(supabase, user.id),
     ])
 
-    let connectRow: AffiliateConnectRow | null = null
-    if (affRes.data && typeof affRes.data === "object") {
-      connectRow = parseAffiliateConnectRow(affRes.data as Record<string, unknown>)
-    }
+    let connectRow = connectRowInitial
 
     if (connectRow?.stripe_connected_account_id) {
-      try {
-        const syncRes = await fetch("/api/affiliates/connect/sync", {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            ...(await supabaseBearerHeaders()),
-          },
-        })
-        const sj = (await syncRes.json().catch(() => ({}))) as {
-          affiliate?: AffiliateConnectRow | null
-        }
-        if (sj?.affiliate) connectRow = sj.affiliate
-      } catch {
-        // ignore
+      const sync = await syncAffiliateConnectStatus(user.id, { force: true })
+      if (sync.affiliate) {
+        connectRow = sync.affiliate
+      } else if (!sync.ok && sync.error && process.env.NODE_ENV === "development") {
+        devLog("[payouts] connect sync", sync.error)
       }
     }
 

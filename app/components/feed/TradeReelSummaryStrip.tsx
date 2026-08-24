@@ -57,7 +57,9 @@ export default function TradeReelSummaryStrip({
     ? formatPnlCurrency(pnl)
     : "—"
   const rr =
-    trade.rr != null && trade.rr !== "" ? formatRR(trade.rr) : "—"
+    trade.rr != null && String(trade.rr).trim() !== ""
+      ? formatRR(trade.rr)
+      : "—"
   const outcome = Number.isFinite(pnl)
     ? pnl > 0
       ? "WIN"

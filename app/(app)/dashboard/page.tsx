@@ -54,6 +54,7 @@ import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
 import {
   isValidAccountFilterValue,
+  isCopyGroupFilterValue,
   resolveCopyGroupAccountIdsForFilter,
 } from "@/lib/tradeAccountSelection"
 import {
@@ -79,7 +80,6 @@ import {
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { shouldShowProForLifeCard } from "@/lib/earlyAccess"
-import { profilePath } from "@/lib/profileRoutes"
 import { usePrefetchSecondaryRoutesWhenReady } from "@/lib/usePrefetchSecondaryRoutesWhenReady"
 import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
 import {
@@ -150,8 +150,25 @@ export default function Dashboard() {
   const { accounts: accountRows, loading: accountsLoading } =
     useCachedAccounts(user?.id)
   const isPro = isProActive(profile)
-  const { copyGroups } = useCopyTradingGroups(user?.id, isPro)
+  const [deferredSectionsReady, setDeferredSectionsReady] = useState(false)
   const [accountFilter, setAccountFilter] = useState("all")
+  const [copyGroupsRequested, setCopyGroupsRequested] = useState(false)
+  const requestCopyGroups = useCallback(() => {
+    setCopyGroupsRequested(true)
+  }, [])
+  useEffect(() => {
+    if (!isPro) return
+    const prefs = loadDashboardGearPrefs()
+    if (isCopyGroupFilterValue(prefs?.accountFilter)) {
+      setCopyGroupsRequested(true)
+    }
+  }, [isPro])
+  // Copy Trading loads on demand — saved copy-group filter or account/filter UI open.
+  const { copyGroups } = useCopyTradingGroups(
+    user?.id,
+    isPro &&
+      (copyGroupsRequested || isCopyGroupFilterValue(accountFilter))
+  )
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
   const [timeFilter, setTimeFilter] = useState("all")
   const [customRangeStart, setCustomRangeStart] = useState("")
@@ -192,7 +209,6 @@ export default function Dashboard() {
     closeTrade,
   } = useDashboardModals()
   const tradingReportsRef = useRef<TradingReportsSectionHandle>(null)
-  const [deferredSectionsReady, setDeferredSectionsReady] = useState(false)
   const didHydrateDashboardPrefs = useRef(false)
   /** Same fetch as /trades — used only for filter dropdown labels (#account_number vs UUID). */
 
@@ -600,14 +616,7 @@ export default function Dashboard() {
   const dashboardInteractive =
     user?.id != null && (!pageDataLoading || dashboardHasCachedData)
 
-  usePrefetchSecondaryRoutesWhenReady(
-    dashboardInteractive,
-    profile
-      ? profilePath(profile)
-      : user?.id
-        ? profilePath({ id: user.id })
-        : null
-  )
+  usePrefetchSecondaryRoutesWhenReady(dashboardInteractive)
 
   const hasNoTrades =
     !statsStillLoading && tradesExcludingBacktest.length === 0
@@ -893,6 +902,7 @@ export default function Dashboard() {
               showTradingReportButton={Boolean(user?.id && dashboardUserIsPro && totalTrades > 0)}
               onOpenTradingReport={() => tradingReportsRef.current?.openReport()}
               showPropFirmLink={showPropFirmLink}
+              onRequestCopyGroups={requestCopyGroups}
             />
           ) : null}
           <DashboardHeader
@@ -905,6 +915,7 @@ export default function Dashboard() {
   {/* Large Founding Challenge card only until the first trade; afterwards it
       stays reachable from the navbar Getting Started entry. */}
   {user?.id &&
+  deferredSectionsReady &&
   shouldShowProForLifeCard(profile) &&
   checklistSignalsReady &&
   checklistSignals.tradeCount === 0 ? (

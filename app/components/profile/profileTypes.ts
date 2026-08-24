@@ -34,6 +34,9 @@ export type ProfileTradeRow = TradePointsSource &
     is_public?: boolean | null
     mode?: string | null
     session?: string | null
+    trade_mode?: unknown
+    copied_account_ids?: unknown
+    copy_trading_group_id?: unknown
     [key: string]: unknown
   }
 

@@ -14,11 +14,9 @@ function supabaseStorageHostname(): string | undefined {
 const supabaseHost = supabaseStorageHostname()
 
 const nextConfig: NextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     qualities: [75, 85, 100],
+    deviceSizes: [640, 828, 1200, 1920],
     remotePatterns: [
       {
         protocol: "https",
@@ -35,6 +33,28 @@ const nextConfig: NextConfig = {
           ]
         : []),
     ],
+  },
+  async headers() {
+    return [
+      {
+        source: "/favicon.ico",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/logo.png",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+    ]
   },
   async redirects() {
     return [

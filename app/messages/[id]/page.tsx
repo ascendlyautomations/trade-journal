@@ -104,18 +104,29 @@ import {
   dmTradePreviewCacheKey,
 } from "@/lib/conversationPreviewCache"
 import { markConversationMessagesSeen } from "@/lib/conversationReadMarking"
+import { markMessageNotificationsRead } from "@/lib/messageNotificationReadSync"
 import {
-  computeNewestMessage,
   areConversationPreviewsReady,
   filterMessagesForUser,
   isScrollNearBottom,
   mergeMessageLists,
   sortMessagesByCreatedAt,
+  computeNewestMessage,
 } from "@/lib/conversationMessageUtils"
 import {
-  isLastMessageInDom,
-  scrollContainerToBottom,
-} from "@/lib/conversationScroll"
+  beginThreadScrollOpen,
+  captureThreadPaginationAnchor,
+  getThreadScrollSession,
+  isThreadNearBottom,
+  requestThreadJumpToNewest,
+  requestThreadLocalSendScroll,
+  restoreThreadPaginationAnchor,
+  runThreadScrollLayoutPass,
+  scrollThreadContainerToBottom,
+  shouldPinThreadOnKeyboard,
+  updateThreadPinnedBottomIntent,
+} from "@/lib/conversationThreadScroll"
+import { isLastMessageInDom } from "@/lib/conversationScroll"
 import {
   findConversationSessionByUrlSegment,
   patchConversationSession,
@@ -137,6 +148,7 @@ import {
   resolveDemoConversationIdFromSegment,
 } from "@/lib/demo/demoMessages"
 import { queryDmMessages } from "@/lib/dmMessageSelect"
+import { mapProjectedRows } from "@/lib/supabaseProjectedQuery"
 import ConversationSettingsModal from "@/app/components/messages/ConversationSettingsModal"
 import SharedMediaModal from "@/app/components/messages/SharedMediaModal"
 import {
@@ -152,6 +164,29 @@ import {
 import { clearMessagesInboxSessionsForUser } from "@/lib/messagesInboxSessionCache"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import { useNativeIosKeyboardInset } from "@/lib/useNativeIosKeyboardInset"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags"
+import {
+  applyConversationThreadBootstrap,
+  type ConversationThreadApplyTarget,
+} from "@/lib/backendV2/conversationThreadBootstrapApply"
+import {
+  ConversationThreadLoadError,
+  ConversationThreadStaleError,
+  loadConversationThreadBootstrap,
+  readConversationThreadNextCursor,
+} from "@/lib/backendV2/conversationThreadBootstrapRepository"
+import {
+  conversationThreadCacheKey,
+  readConversationThreadCache,
+} from "@/lib/backendV2/conversationThreadBootstrapCache"
+import { readConversationThreadHeaderSeed } from "@/lib/backendV2/conversationThreadInboxSeed"
+import { mapThreadBootstrapMessagesToWire } from "@/lib/backendV2/conversationThreadContracts"
+import {
+  beginThreadOpenLifecycle,
+  markThreadReadInFlight,
+  releaseThreadReadInFlight,
+  resolveThreadBootstrapMarkRead,
+} from "@/lib/backendV2/conversationThreadReadLifecycle"
 
 const DM_SHARE_CARD_CLASS = "w-full max-w-[min(100%,22rem)]"
 
@@ -962,6 +997,8 @@ export default function DMPage() {
   const [tradesById, setTradesById] = useState<Record<string, any>>({})
   const [postsById, setPostsById] = useState<Record<string, any>>({})
   const [messageLayoutGeneration, setMessageLayoutGeneration] = useState(0)
+  const [threadScrollRevealReady, setThreadScrollRevealReady] = useState(false)
+  const [newMessagesBelowCount, setNewMessagesBelowCount] = useState(0)
   const [pageAccess, setPageAccess] =
     useState<ConversationPageAccess>("loading")
 
@@ -1030,14 +1067,18 @@ export default function DMPage() {
   }, [previewUrl])
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const bottomAnchorRef = useRef<HTMLDivElement>(null)
   const userIdRef = useRef<string | null>(null)
+  const conversationIdRef = useRef<string | null>(null)
 
   const keepComposerVisibleAboveKeyboard = useCallback(() => {
     const el = scrollRef.current
-    if (!el) return
-    requestAnimationFrame(() => {
-      scrollContainerToBottom(el, { behavior: "auto" })
-    })
+    const uid = userIdRef.current
+    const cid = conversationIdRef.current
+    if (!el || !uid || !cid) return
+    const session = getThreadScrollSession(uid, cid)
+    if (!shouldPinThreadOnKeyboard(session)) return
+    scrollThreadContainerToBottom(el, "auto")
   }, [])
 
   useNativeIosKeyboardInset(nativeIos, {
@@ -1045,17 +1086,12 @@ export default function DMPage() {
     onKeyboardShow: keepComposerVisibleAboveKeyboard,
   })
 
-  const conversationIdRef = useRef<string | null>(null)
   const messagesChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(
     null
   )
   const userNearBottomRef = useRef(true)
-  const pendingSmoothScrollRef = useRef(false)
-  const prevLastMessageIdRef = useRef<string | null>(null)
-  const scrollAnchorRef = useRef<{
-    conversationId: string
-    lastMessageId: string | null
-  } | null>(null)
+  const threadScrollOpenTokenRef = useRef(0)
+  const paginationAnchorRef = useRef<ReturnType<typeof captureThreadPaginationAnchor>>(null)
   const persistConversationCacheRef = useRef<() => void>(() => {})
   const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -1072,6 +1108,10 @@ export default function DMPage() {
   const postsByIdRef = useRef(postsById)
   postsByIdRef.current = postsById
   const restoredFromCacheRef = useRef(false)
+  const threadLoadGenerationRef = useRef(0)
+  const threadOpenIdRef = useRef(0)
+  const threadBootstrapOwnedReadRef = useRef(false)
+  const messagesRef = useRef<any[]>([])
   const loadOlderMessagesRef = useRef<() => void>(() => {})
   const loadingOlderMessagesRef = useRef(false)
 
@@ -1141,11 +1181,12 @@ export default function DMPage() {
     }
 
     userNearBottomRef.current = true
-    prevLastMessageIdRef.current = null
-    scrollAnchorRef.current = {
+    beginThreadScrollOpen(
+      getThreadScrollSession(sessionUser.id, conversationId),
+      sessionUser.id,
       conversationId,
-      lastMessageId: computeNewestMessage(cached.messages).id,
-    }
+      threadScrollOpenTokenRef.current
+    )
   }
 
   useEffect(() => {
@@ -1177,7 +1218,13 @@ export default function DMPage() {
   }, [activeConversationId])
 
   useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  useEffect(() => {
     if (!user?.id || !activeConversationId || pageAccess !== "allowed") return
+    if (isBackendV2Enabled("messageThreads")) return
+    if (threadBootstrapOwnedReadRef.current) return
     void import("@/lib/notificationReadSync").then(
       ({ markNotificationsReadForTarget }) => {
         void markNotificationsReadForTarget(user.id, {
@@ -1208,8 +1255,8 @@ export default function DMPage() {
       }
     })()
     void import("@/lib/clearDeliveredConversationNotifications").then(
-      ({ clearDeliveredNotificationsForConversation }) => {
-        void clearDeliveredNotificationsForConversation(activeConversationId)
+      ({ clearDeliveredConversationNotifications }) => {
+        void clearDeliveredConversationNotifications(activeConversationId)
       }
     )
   }, [user?.id, activeConversationId, pageAccess])
@@ -1289,20 +1336,18 @@ export default function DMPage() {
     const el = scrollRef.current
     if (!el) return
 
-    userNearBottomRef.current = isScrollNearBottom(
-      el.scrollTop,
-      el.scrollHeight,
-      el.clientHeight
-    )
-    if (!userNearBottomRef.current) {
-      scrollAnchorRef.current = null
+    const uid = userIdRef.current
+    const cid = conversationIdRef.current
+    const nearBottom = isThreadNearBottom(el)
+    userNearBottomRef.current = nearBottom
+    if (uid && cid) {
+      updateThreadPinnedBottomIntent(getThreadScrollSession(uid, cid), nearBottom)
     }
+
     if (el.scrollTop < 80) {
       loadOlderMessagesRef.current()
     }
 
-    const uid = userIdRef.current
-    const cid = conversationIdRef.current
     if (!uid || !cid) return
 
     if (scrollPersistTimerRef.current) {
@@ -1349,41 +1394,6 @@ export default function DMPage() {
 
   function viewSharedPost(post: Parameters<typeof getSharedContentViewHref>[0]) {
     router.push(getSharedContentViewHref(post))
-  }
-
-  async function markMessageNotificationsRead(currentUserId: string) {
-    if (isDemoSupabaseBlocked()) return
-
-    devLog("[messages/[id]] mark read start", {
-      userId: currentUserId,
-      conversationId: activeConversationId,
-      type: "message",
-    })
-
-    const { data, error, count } = await supabase
-      .from("notifications")
-      .update({ read: true })
-      .eq("user_id", currentUserId)
-      .eq("type", "message")
-      .eq("read", false)
-      .select("id,type", { count: "exact" })
-
-    if (error) {
-      console.error("[messages/[id]] mark read error:", {
-        userId: currentUserId,
-        conversationId: activeConversationId,
-        error,
-      })
-      return
-    }
-
-    devLog("[messages/[id]] mark read success", {
-      userId: currentUserId,
-      conversationId: activeConversationId,
-      updated: count ?? data?.length ?? 0,
-    })
-
-    window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
   }
 
   useEffect(() => {
@@ -1433,12 +1443,14 @@ export default function DMPage() {
           void (async () => {
             let row: any = raw
             if (raw.id) {
+              const messageId = raw.id
               const { data } = await queryDmMessages((select) =>
                 supabase
                   .from("messages")
                   .select(select)
-                  .eq("id", raw.id)
+                  .eq("id", messageId)
                   .maybeSingle()
+                  .overrideTypes<Record<string, unknown> | null, { merge: false }>()
               )
               if (data) row = data
             }
@@ -1502,58 +1514,118 @@ export default function DMPage() {
   }, [])
 
   useLayoutEffect(() => {
-    if (!messagesLoaded || !activeConversationId) return
+    const anchor = paginationAnchorRef.current
+    const el = scrollRef.current
+    if (anchor && el) {
+      restoreThreadPaginationAnchor(el, anchor)
+      paginationAnchorRef.current = null
+    }
+  }, [messages])
+
+  useLayoutEffect(() => {
+    if (!messagesLoaded || !activeConversationId || !user?.id) return
     const el = scrollRef.current
     if (!el) return
 
     const lastMsg = messages[messages.length - 1]
     const lastId = lastMsg ? String(lastMsg.id) : null
+    const previewsReady = areConversationPreviewsReady(
+      messages,
+      tradesById,
+      postsById,
+      dmTradePreviewCacheKey,
+      dmPostPreviewCacheKey
+    )
+    const lastInDom = isLastMessageInDom(lastId, el, lastMsg)
+    const session = getThreadScrollSession(user.id, activeConversationId)
+    const reducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
-    if (pendingSmoothScrollRef.current) {
-      pendingSmoothScrollRef.current = false
-      scrollContainerToBottom(el, { behavior: "smooth" })
-      prevLastMessageIdRef.current = lastId
-      userNearBottomRef.current = true
-      return
-    }
+    const { revealReady } = runThreadScrollLayoutPass({
+      session,
+      container: el,
+      messagesLoaded,
+      newestMessageId: lastId,
+      previewsReady,
+      lastMessageInDom: lastInDom,
+      prefersReducedMotion: reducedMotion,
+    })
 
-    if (scrollAnchorRef.current && userNearBottomRef.current) {
-      scrollContainerToBottom(el, { behavior: "auto" })
-
-      const atBottom = isScrollNearBottom(
-        el.scrollTop,
-        el.scrollHeight,
-        el.clientHeight
-      )
-      const previewsReady = areConversationPreviewsReady(
-        messages,
-        tradesById,
-        postsById,
-        dmTradePreviewCacheKey,
-        dmPostPreviewCacheKey
-      )
-      const lastInDom = isLastMessageInDom(lastId, el, lastMsg)
-
-      if (atBottom && previewsReady && lastInDom) {
-        scrollAnchorRef.current = null
-      }
-    } else if (
-      lastId &&
-      lastId !== prevLastMessageIdRef.current &&
-      userNearBottomRef.current
-    ) {
-      scrollContainerToBottom(el, { behavior: "smooth" })
-    }
-
-    prevLastMessageIdRef.current = lastId
+    setThreadScrollRevealReady(revealReady)
+    setNewMessagesBelowCount(session.newMessagesBelow)
   }, [
     messages,
     messagesLoaded,
     activeConversationId,
+    user?.id,
     tradesById,
     postsById,
     messageLayoutGeneration,
   ])
+
+  useEffect(() => {
+    if (!messagesLoaded || !activeConversationId || !user?.id) return
+    const el = scrollRef.current
+    if (!el) return
+
+    const session = getThreadScrollSession(user.id, activeConversationId)
+    if (session.phase !== "stabilizing" && session.phase !== "committed") return
+    if (!session.pinnedBottomIntent) return
+
+    const observer = new ResizeObserver(() => {
+      if (!session.pinnedBottomIntent || !isThreadNearBottom(el)) return
+      scrollThreadContainerToBottom(el, "auto")
+      if (session.phase === "stabilizing") {
+        const previewsReady = areConversationPreviewsReady(
+          messagesRef.current,
+          tradesByIdRef.current,
+          postsByIdRef.current,
+          dmTradePreviewCacheKey,
+          dmPostPreviewCacheKey
+        )
+        const lastMsg = messagesRef.current[messagesRef.current.length - 1]
+        const lastId = lastMsg ? String(lastMsg.id) : null
+        const lastInDom = isLastMessageInDom(lastId, el, lastMsg)
+        const { revealReady } = runThreadScrollLayoutPass({
+          session,
+          container: el,
+          messagesLoaded: true,
+          newestMessageId: lastId,
+          previewsReady,
+          lastMessageInDom: lastInDom,
+        })
+        setThreadScrollRevealReady(revealReady)
+      }
+    })
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [messagesLoaded, activeConversationId, user?.id])
+
+  function jumpToNewestMessages() {
+    const uid = userIdRef.current
+    const cid = conversationIdRef.current
+    const el = scrollRef.current
+    if (!uid || !cid || !el) return
+    requestThreadJumpToNewest(getThreadScrollSession(uid, cid))
+    const reducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    runThreadScrollLayoutPass({
+      session: getThreadScrollSession(uid, cid),
+      container: el,
+      messagesLoaded: true,
+      newestMessageId: messages[messages.length - 1]
+        ? String(messages[messages.length - 1]!.id)
+        : null,
+      previewsReady: true,
+      lastMessageInDom: true,
+      prefersReducedMotion: reducedMotion,
+    })
+    setThreadScrollRevealReady(true)
+    setNewMessagesBelowCount(0)
+  }
 
   useEffect(() => {
     if (!isTyping) return
@@ -1566,6 +1638,7 @@ export default function DMPage() {
   }, [conversation?.name])
 
   useEffect(() => {
+    if (isBackendV2Enabled("messageThreads")) return
     if (
       !activeConversationId ||
       !user?.id ||
@@ -1676,12 +1749,13 @@ export default function DMPage() {
               `created_at.gt.${pageCursorTs},and(created_at.eq.${pageCursorTs},id.gt.${pageCursorId})`
             )
           : query.gt("created_at", pageCursorTs)
-        return query
+        return query.overrideTypes<Record<string, unknown>[], { merge: false }>()
       })
 
       if (!batch?.length) break
-      incoming.push(...batch)
-      const last = batch[batch.length - 1]
+      const batchRows = mapProjectedRows(batch, (row) => row)
+      incoming.push(...batchRows)
+      const last = batchRows[batchRows.length - 1]
       cursorTs = String(last.created_at)
       cursorId = String(last.id)
       if (batch.length < SYNC_PAGE_SIZE) break
@@ -1755,13 +1829,41 @@ export default function DMPage() {
     conversationId: string,
     cached: ConversationSessionSnapshot | null
   ) {
+    if (isBackendV2Enabled("messageThreads")) {
+      if (cached?.messagesLoaded) {
+        const generation = threadLoadGenerationRef.current
+        void loadConversationThreadBootstrap(supabase, userId, {
+          conversationId,
+          markRead: false,
+          caller: "thread-revalidate",
+        })
+          .then((result) => {
+            if (generation !== threadLoadGenerationRef.current) return
+            applyConversationThreadBootstrap(
+              result.bootstrap,
+              userId,
+              conversationId,
+              buildThreadApplyTarget(urlSegmentRef.current),
+              {
+                skipReadSideEffects: true,
+                existingMessages: messagesRef.current,
+              }
+            )
+          })
+          .catch(() => {
+            /* preserve cached messages on revalidation failure */
+          })
+      }
+      return
+    }
+
     const allowed = await isConversationParticipant(conversationId, userId)
     if (!allowed) {
       setPageAccess("unavailable")
       return
     }
 
-    void markMessageNotificationsRead(userId)
+    void markMessageNotificationsRead(userId, "thread-open")
     void markConversationMessagesSeen(userId, conversationId)
 
     const detailsPromise = fetchConversationDetails(userId, conversationId, {
@@ -1775,6 +1877,171 @@ export default function DMPage() {
     if (isConversationUuidSegment(urlSegment)) {
       const details = await detailsPromise
       await maybeCanonicalizeGroupDmUrl(details)
+    }
+  }
+
+  function buildThreadApplyTarget(segment: string): ConversationThreadApplyTarget {
+    return {
+      setConversation,
+      setParticipants,
+      setOtherUser,
+      setNotificationsEnabled,
+      setDmBlockStatus,
+      setBlockStatusLoading,
+      setMessages,
+      setHasOlderMessages,
+      setMessagesLoaded,
+      setMessagesLoadError,
+      conversationMetaRef,
+      patchConversationSession,
+      urlSegment: segment,
+    }
+  }
+
+  function applyInboxHeaderSeed(
+    seed: NonNullable<ReturnType<typeof readConversationThreadHeaderSeed>>
+  ) {
+    setConversation(seed.conversation)
+    setParticipants(seed.participants)
+    setOtherUser(seed.otherUser)
+    setNotificationsEnabled(seed.notificationsEnabled)
+    conversationMetaRef.current = {
+      conversation: seed.conversation,
+      participants: seed.participants,
+      otherUser: seed.otherUser,
+    }
+  }
+
+  async function initThreadV2(sessionUser: { id: string }) {
+    const generation = ++threadLoadGenerationRef.current
+    threadBootstrapOwnedReadRef.current = false
+    if (!threadOpenIdRef.current) {
+      threadOpenIdRef.current = beginThreadOpenLifecycle(sessionUser.id)
+    }
+
+    const inboxConversationId = peekInboxConversationId(urlSegment)
+    const conversationId = await resolveConversationIdFromUrl(
+      sessionUser,
+      inboxConversationId
+    )
+    if (!conversationId) {
+      setPageAccess("unavailable")
+      return
+    }
+
+    consumeInboxConversationId(urlSegment)
+
+    const headerSeed = readConversationThreadHeaderSeed({
+      userId: sessionUser.id,
+      conversationId,
+      urlSegment,
+    })
+    if (headerSeed) {
+      applyInboxHeaderSeed(headerSeed)
+    }
+
+    setActiveConversationId(conversationId)
+    beginThreadScrollOpen(
+      getThreadScrollSession(sessionUser.id, conversationId),
+      sessionUser.id,
+      conversationId,
+      threadScrollOpenTokenRef.current
+    )
+    setPageAccess("allowed")
+    setUser(sessionUser)
+
+    const cacheKey = conversationThreadCacheKey({
+      userId: sessionUser.id,
+      conversationId,
+    })
+    const cachedBootstrap = readConversationThreadCache(cacheKey)
+    const previousUnread =
+      headerSeed?.unreadCount ??
+      cachedBootstrap?.data.unread_count ??
+      0
+    if (cachedBootstrap?.data.messages.length) {
+      applyConversationThreadBootstrap(
+        cachedBootstrap,
+        sessionUser.id,
+        conversationId,
+        buildThreadApplyTarget(urlSegment),
+        { skipReadSideEffects: true }
+      )
+    } else {
+      setMessages([])
+      setMessagesLoaded(false)
+      setMessagesLoadError(null)
+      if (!headerSeed) {
+        setConversation(null)
+        setParticipants([])
+        setOtherUser(null)
+      }
+      setInput("")
+      setReplyTarget(null)
+      setTradesById({})
+      setPostsById({})
+      userNearBottomRef.current = true
+    }
+
+    const openId = threadOpenIdRef.current
+    const markRead = resolveThreadBootstrapMarkRead({
+      viewerId: sessionUser.id,
+      conversationId,
+      openId,
+      mode: "intentional-open",
+      authenticated: !isDemoSupabaseBlocked(),
+    })
+    if (markRead) {
+      markThreadReadInFlight(sessionUser.id, conversationId, openId)
+    }
+
+    try {
+      const result = await loadConversationThreadBootstrap(
+        supabase,
+        sessionUser.id,
+        {
+          conversationId,
+          markRead,
+          caller: "thread-open",
+        },
+        { loadGeneration: generation, expectedGeneration: generation }
+      )
+
+      if (generation !== threadLoadGenerationRef.current) return
+
+      if (result.bootstrap.data.mark_read.applied) {
+        threadBootstrapOwnedReadRef.current = true
+      } else if (markRead) {
+        releaseThreadReadInFlight(sessionUser.id, conversationId, openId)
+      }
+
+      applyConversationThreadBootstrap(
+        result.bootstrap,
+        sessionUser.id,
+        conversationId,
+        buildThreadApplyTarget(urlSegment),
+        {
+          existingMessages: messagesRef.current,
+          previousConversationUnread: previousUnread,
+          openId,
+        }
+      )
+
+      const details = {
+        isGroup: result.bootstrap.data.conversation.is_group,
+        otherProfile: conversationMetaRef.current?.otherUser ?? null,
+      }
+      await maybeCanonicalizeGroupDmUrl(details)
+    } catch (err) {
+      if (err instanceof ConversationThreadStaleError) return
+      if (generation !== threadLoadGenerationRef.current) return
+      if (cachedBootstrap?.data.messages.length) return
+      console.error("[dm-thread-v2] bootstrap failed", err)
+      setMessagesLoadError("Couldn't load messages. Please try again.")
+      setMessagesLoaded(true)
+      if (!headerSeed) {
+        setPageAccess("unavailable")
+      }
     }
   }
 
@@ -1811,6 +2078,11 @@ export default function DMPage() {
 
     setUser(sessionUser)
 
+    if (isBackendV2Enabled("messageThreads") && !isDemoSupabaseBlocked()) {
+      await initThreadV2(sessionUser)
+      return
+    }
+
     const inboxConversationId = peekInboxConversationId(urlSegment)
     const conversationId = await resolveConversationIdFromUrl(
       sessionUser,
@@ -1833,6 +2105,12 @@ export default function DMPage() {
     }
 
     setActiveConversationId(conversationId)
+    beginThreadScrollOpen(
+      getThreadScrollSession(sessionUser.id, conversationId),
+      sessionUser.id,
+      conversationId,
+      threadScrollOpenTokenRef.current
+    )
     setPageAccess("allowed")
 
     setMessages([])
@@ -1846,8 +2124,6 @@ export default function DMPage() {
     setTradesById({})
     setPostsById({})
     userNearBottomRef.current = true
-    prevLastMessageIdRef.current = null
-    scrollAnchorRef.current = null
 
     const details = await fetchConversationDetails(
       sessionUser.id,
@@ -1855,7 +2131,7 @@ export default function DMPage() {
     )
     await loadMessages(sessionUser.id, conversationId)
     if (!isDemoSupabaseBlocked()) {
-      void markMessageNotificationsRead(sessionUser.id)
+      void markMessageNotificationsRead(sessionUser.id, "thread-open")
       void markConversationMessagesSeen(sessionUser.id, conversationId)
     }
     await maybeCanonicalizeGroupDmUrl(details)
@@ -1895,12 +2171,18 @@ export default function DMPage() {
   }
 
   useLayoutEffect(() => {
-    scrollAnchorRef.current = null
-    pendingSmoothScrollRef.current = false
+    threadScrollOpenTokenRef.current += 1
+    setThreadScrollRevealReady(false)
+    setNewMessagesBelowCount(0)
     userNearBottomRef.current = true
-    prevLastMessageIdRef.current = null
+    paginationAnchorRef.current = null
 
     restoredFromCacheRef.current = false
+    threadBootstrapOwnedReadRef.current = false
+    if (profileUser?.id) {
+      threadOpenIdRef.current = beginThreadOpenLifecycle(profileUser.id)
+    }
+    threadLoadGenerationRef.current += 1
     persistConversationCacheRef.current()
     if (profileUser?.id && tryRestoreCachedConversation(profileUser)) {
       return
@@ -2015,9 +2297,12 @@ export default function DMPage() {
     }
   }
 
-  function queueSmoothScrollToBottom() {
+  function requestScrollAfterLocalSend() {
+    const uid = userIdRef.current
+    const cid = conversationIdRef.current
+    if (!uid || !cid) return
     userNearBottomRef.current = true
-    pendingSmoothScrollRef.current = true
+    requestThreadLocalSendScroll(getThreadScrollSession(uid, cid))
   }
 
   async function loadMessages(currentUserId: string, conversationId: string) {
@@ -2029,7 +2314,12 @@ export default function DMPage() {
       if (uid) {
         updateConversationMessages(uid, conversationId, () => fetched)
       }
-      queueSmoothScrollToBottom()
+      beginThreadScrollOpen(
+        getThreadScrollSession(currentUserId, conversationId),
+        currentUserId,
+        conversationId,
+        threadScrollOpenTokenRef.current
+      )
       return
     }
 
@@ -2058,6 +2348,7 @@ export default function DMPage() {
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(messagePageSize + 1)
+        .overrideTypes<Record<string, unknown>[], { merge: false }>()
     )
 
     console.log("[dm-thread-load] result", {
@@ -2076,7 +2367,10 @@ export default function DMPage() {
       return
     }
 
-    const fetchedPage = (fetched || []).slice(0, messagePageSize)
+    const fetchedPage = mapProjectedRows(
+      (fetched || []).slice(0, messagePageSize),
+      (row) => row
+    )
     const pageHasOlder = (fetched?.length ?? 0) > messagePageSize
     const deletedIds = await fetchConversationDeletedMessageIds(
       currentUserId,
@@ -2089,11 +2383,12 @@ export default function DMPage() {
     setMessages(sorted)
     setHasOlderMessages(pageHasOlder)
     setMessagesLoadError(null)
-    prevLastMessageIdRef.current = null
-    scrollAnchorRef.current = {
+    beginThreadScrollOpen(
+      getThreadScrollSession(currentUserId, conversationId),
+      currentUserId,
       conversationId,
-      lastMessageId: computeNewestMessage(sorted).id,
-    }
+      threadScrollOpenTokenRef.current
+    )
     setMessagesLoaded(true)
 
     const newest = computeNewestMessage(sorted)
@@ -2128,8 +2423,41 @@ export default function DMPage() {
 
     loadingOlderMessagesRef.current = true
     setLoadingOlderMessages(true)
-    const previousScrollHeight = el?.scrollHeight ?? 0
+    if (el) {
+      paginationAnchorRef.current = captureThreadPaginationAnchor(el)
+    }
     try {
+      if (isBackendV2Enabled("messageThreads") && !isDemoSupabaseBlocked()) {
+        const cursor =
+          readConversationThreadNextCursor(currentUserId, conversationId) ??
+          `${oldest.created_at}|${oldest.id}`
+        const result = await loadConversationThreadBootstrap(
+          supabase,
+          currentUserId,
+          {
+            conversationId,
+            cursor,
+            markRead: false,
+            caller: "thread-pagination",
+          }
+        )
+        const wireMessages = mapThreadBootstrapMessagesToWire(
+          result.bootstrap.data.messages
+        )
+        setHasOlderMessages(result.bootstrap.data.has_more_messages)
+        patchConversationSession(currentUserId, conversationId, {
+          hasOlderMessages: result.bootstrap.data.has_more_messages,
+          messages: sortMessagesByCreatedAt(wireMessages),
+        })
+        setMessagesWithCache((current) => {
+          if (wireMessages.length >= current.length + 1) {
+            return sortMessagesByCreatedAt(wireMessages)
+          }
+          return mergeMessageLists(wireMessages, current)
+        })
+        return
+      }
+
       const cursor = `created_at.lt.${oldest.created_at},and(created_at.eq.${oldest.created_at},id.lt.${oldest.id})`
       const { data: fetched, error } = await queryDmMessages((select) =>
         supabase
@@ -2140,13 +2468,17 @@ export default function DMPage() {
           .order("created_at", { ascending: false })
           .order("id", { ascending: false })
           .limit(messagePageSize + 1)
+          .overrideTypes<Record<string, unknown>[], { merge: false }>()
       )
       if (error) {
         console.error("[dm-thread-load-older] query failed", error)
         return
       }
 
-      const fetchedPage = (fetched || []).slice(0, messagePageSize)
+      const fetchedPage = mapProjectedRows(
+        (fetched || []).slice(0, messagePageSize),
+        (row) => row
+      )
       const deletedIds = await fetchConversationDeletedMessageIds(
         currentUserId,
         fetchedPage.map((message) => String(message.id))
@@ -2160,10 +2492,6 @@ export default function DMPage() {
         hasOlderMessages: nextHasOlder,
       })
       setMessagesWithCache((current) => mergeMessageLists(older, current))
-
-      requestAnimationFrame(() => {
-        if (el) el.scrollTop += el.scrollHeight - previousScrollHeight
-      })
     } finally {
       loadingOlderMessagesRef.current = false
       setLoadingOlderMessages(false)
@@ -2273,7 +2601,7 @@ export default function DMPage() {
       )
     } else {
       setMessagesWithCache((prev) => [...prev, optimisticRow])
-      queueSmoothScrollToBottom()
+      requestScrollAfterLocalSend()
     }
 
     sendingMessageRef.current = true
@@ -2384,8 +2712,6 @@ export default function DMPage() {
         last_message: preview,
         last_message_at: lastMessageAt,
       })
-
-      queueSmoothScrollToBottom()
     } finally {
       sendingMessageRef.current = false
       setSendingMessage(false)
@@ -2457,7 +2783,7 @@ export default function DMPage() {
       last_message_at: lastMessageAt,
     })
 
-    queueSmoothScrollToBottom()
+    requestScrollAfterLocalSend()
     setShowTradePicker(false)
     setReplyTarget(null)
     } finally {
@@ -2997,6 +3323,13 @@ export default function DMPage() {
                 />
               )
             ) : null}
+            <div
+              className={
+                messages.length > 0 && messagesLoaded && !threadScrollRevealReady
+                  ? "invisible"
+                  : undefined
+              }
+            >
             {messages.map((message, i) => {
               if (message.is_system) {
                 return (
@@ -3277,7 +3610,21 @@ export default function DMPage() {
             {typingText ? (
               <p className="text-xs text-gray-400 italic">{typingText}</p>
             ) : null}
-            <div id="chat-bottom" />
+            </div>
+            {newMessagesBelowCount > 0 ? (
+              <div className="sticky bottom-2 z-10 flex justify-center pb-2">
+                <button
+                  type="button"
+                  onClick={jumpToNewestMessages}
+                  className="rounded-full bg-blue-500 px-4 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-blue-600"
+                >
+                  {newMessagesBelowCount === 1
+                    ? "New message"
+                    : `${newMessagesBelowCount} new messages`}
+                </button>
+              </div>
+            ) : null}
+            <div id="chat-bottom" ref={bottomAnchorRef} />
           </div>
 
           {/* INPUT */}

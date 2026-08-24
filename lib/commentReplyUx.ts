@@ -75,7 +75,7 @@ export function parseLeadingCommentMention(content: string): {
   body: string
 } {
   const trimmed = content.trimStart()
-  const match = trimmed.match(/^@([a-z0-9_]+)(?:\s+(.*))?$/is)
+  const match = trimmed.match(/^@([a-z0-9_]+)(?:\s+([\s\S]*))?$/i)
   if (!match) {
     return { username: null, body: content }
   }

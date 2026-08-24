@@ -13,11 +13,13 @@ import {
   resolveRecordedAffiliateEarnings,
 } from "@/lib/affiliateEarnings"
 import {
-  AFFILIATE_CONNECT_SELECT,
-  parseAffiliateConnectRow,
   type AffiliateConnectRow,
 } from "@/lib/affiliateStripeConnect"
 import { fetchLatestAffiliateApplication, type AffiliateApplicationRow } from "@/lib/affiliateApplication"
+import {
+  ensureAffiliateConnectLoaded,
+} from "@/lib/affiliateDataRepository"
+import { syncAffiliateConnectStatus } from "@/lib/affiliateConnectSyncClient"
 import {
   classifyReferredSubscriberStatus,
   formatAffiliateReferralJoinDate,
@@ -27,7 +29,6 @@ import {
   sumCommissionByReferredUser,
   type ReferredSubscriberStatus,
 } from "@/lib/affiliateReferredUserStatus"
-import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { AFFILIATE_PRIMARY_BUTTON_CLASS } from "@/lib/affiliateUi"
 import {
   SkeletonAffiliateDashboardPage,
@@ -94,33 +95,21 @@ export default function AffiliateDashboard() {
       readSettingsProfileCache(user.id) ??
       (await fetchSettingsProfileRow(supabase, user.id).catch(() => null))
 
-    const [appRes, affConnRes] = await Promise.all([
+    const [appRes, connectRowInitial] = await Promise.all([
       fetchLatestAffiliateApplication(supabase, user.id),
-      supabase.from("affiliates").select(AFFILIATE_CONNECT_SELECT).eq("user_id", user.id).maybeSingle(),
+      ensureAffiliateConnectLoaded(supabase, user.id),
     ])
 
     setLatestApp(appRes)
 
-    let connectRow: AffiliateConnectRow | null = null
-    if (affConnRes.data && typeof affConnRes.data === "object") {
-      connectRow = parseAffiliateConnectRow(affConnRes.data as Record<string, unknown>)
-    }
+    let connectRow = connectRowInitial
 
     if (connectRow?.stripe_connected_account_id) {
-      try {
-        const syncRes = await fetch("/api/affiliates/connect/sync", {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            ...(await supabaseBearerHeaders()),
-          },
-        })
-        const sj = (await syncRes.json().catch(() => ({}))) as {
-          affiliate?: AffiliateConnectRow | null
-        }
-        if (sj?.affiliate) connectRow = sj.affiliate
-      } catch {
-        // non-fatal; UI still shows last known DB state
+      const sync = await syncAffiliateConnectStatus(user.id)
+      if (sync.affiliate) {
+        connectRow = sync.affiliate
+      } else if (!sync.ok && sync.error && process.env.NODE_ENV === "development") {
+        console.warn("[affiliate dashboard] connect sync:", sync.error)
       }
     }
 

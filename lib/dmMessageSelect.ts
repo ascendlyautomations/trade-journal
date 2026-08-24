@@ -59,9 +59,15 @@ function isMissingSenderAnonymizedColumn(error: {
   return msg.includes("sender_anonymized")
 }
 
+/** Runtime-validated DM row shape for dynamic select strings (see DM_MESSAGE_SELECT). */
+export type DmMessageProjectedRow = Record<string, unknown> & {
+  id: string
+  created_at: string
+}
+
 /** Select DM messages, falling back when sender_anonymized column is absent. */
 export async function queryDmMessages<T extends { data: unknown; error: unknown }>(
-  run: (select: string) => Promise<T>
+  run: (select: string) => PromiseLike<T>
 ): Promise<T> {
   const full = await run(DM_MESSAGE_SELECT)
   if (

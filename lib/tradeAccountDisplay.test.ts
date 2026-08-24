@@ -1,18 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  buildAccountFilterKeyFromRow,
-  buildAccountFilterOptionsFromRows,
-  buildTradeAccountFilterKey,
-  formatAccountBalanceForDisplay,
-  formatAccountLabelForDisplay,
-  formatAccountNameWithSizeDisplay,
-  formatTradeAccountDisplay,
-  formatTradeAccountNameSizeLine,
-  formatTradingAccountSelectorLabel,
-  resolveTradeAccountName,
-  tradeMatchesAccountFilter,
-} = require("./tradeAccountDisplay.ts")
+import { describe, it } from "node:test"
+import { buildAccountFilterKeyFromRow, buildAccountFilterOptionsFromRows, buildTradeAccountFilterKey, formatAccountBalanceForDisplay, formatAccountLabelForDisplay, formatAccountNameWithSizeDisplay, formatTradeAccountDisplay, formatTradeAccountNameSizeLine, formatTradingAccountSelectorLabel, resolveTradeAccountName, tradeMatchesAccountFilter, } from "./tradeAccountDisplay.ts"
+import assert from "node:assert/strict"
 
 describe("formatAccountBalanceForDisplay", () => {
   it("abbreviates thousands", () => {
@@ -244,3 +232,4 @@ describe("formatTradeAccountNameSizeLine", () => {
     )
   })
 })
+export {}

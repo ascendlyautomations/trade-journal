@@ -948,7 +948,7 @@ export default function AdminUsersPage() {
                     <p className="text-sm text-gray-400">Loading account summary…</p>
                   ) : deletePreview ? (
                     <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-                      {[
+                      {([
                         ["Username", deletePreview.username ? `@${String(deletePreview.username)}` : "—"],
                         ["Email", deletePreview.email || "—"],
                         [
@@ -973,7 +973,8 @@ export default function AdminUsersPage() {
                         ["Followers", deletePreview.followerCount],
                         ["Affiliate", deletePreview.affiliateStatus || "—"],
                         ["Stripe customer", deletePreview.stripeCustomerId || "—"],
-                      ].map(([label, value]) => (
+                      ] as [string, string | number | boolean | null | undefined][]).map(
+                        ([label, value]) => (
                         <div key={label} className="flex justify-between gap-2 rounded bg-black/30 px-3 py-2">
                           <dt className="text-gray-400">{label}</dt>
                           <dd className="truncate text-right text-gray-200">{String(value)}</dd>

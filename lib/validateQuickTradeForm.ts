@@ -1,6 +1,6 @@
-import { isExitBeforeEntry } from "./inputTradeDateTime"
-import { tradeFormHasFutureDate } from "./tradeDateValidation"
-import { parseOptionalRr } from "./tradeRr"
+import { isExitBeforeEntry } from "./inputTradeDateTime.ts"
+import { tradeFormHasFutureDate } from "./tradeDateValidation.ts"
+import { parseOptionalRr } from "./tradeRr.ts"
 
 export type QuickTradeFormField =
   | "account"

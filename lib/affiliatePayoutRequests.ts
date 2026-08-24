@@ -1,6 +1,7 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
 
 import { formatPostgrestErrorMessage } from "@/lib/postgrestError"
+import { asJsonObject } from "@/lib/supabaseProjectedQuery"
 
 export type AffiliatePayoutStatus = "pending" | "approved" | "paid" | "rejected"
 
@@ -72,7 +73,9 @@ export async function fetchMyAffiliatePayoutRequests(
     return { rows: [], error: new Error(formatPostgrestErrorMessage(error)) }
   }
 
-  const list = (data || []).map((r) => parseAffiliatePayoutRequestRow(r as Record<string, unknown>))
+  const list = (data || []).map((r) =>
+    parseAffiliatePayoutRequestRow(asJsonObject(r) ?? {})
+  )
   return { rows: list, error: null }
 }
 

@@ -5,9 +5,10 @@ import {
   NOTIFICATION_PREFERENCES_SELECT,
   type NotificationPreferenceKey,
   type NotificationPreferences,
-} from "./notificationPreferences"
+} from "./notificationPreferences.ts"
 
 const STORAGE_KEY = "tj_notification_preferences_v1"
+const SOFT_STALE_MS = 5 * 60_000
 
 type PreferencesEntry = {
   userId: string
@@ -17,6 +18,20 @@ type PreferencesEntry = {
 
 const memory = new Map<string, PreferencesEntry>()
 const listeners = new Set<() => void>()
+const inflightByViewer = new Map<string, Promise<NotificationPreferences>>()
+
+/** @internal */
+export function resetNotificationPreferencesCacheForTests() {
+  memory.clear()
+  inflightByViewer.clear()
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+  }
+}
 
 function readStorage(): Record<string, PreferencesEntry> {
   if (typeof window === "undefined") return {}
@@ -47,7 +62,9 @@ function notify() {
 
 export function subscribeNotificationPreferencesCache(listener: () => void) {
   listeners.add(listener)
-  return () => listeners.delete(listener)
+  return () => {
+    void listeners.delete(listener)
+  }
 }
 
 export function getCachedNotificationPreferences(
@@ -112,18 +129,11 @@ export function clearAllNotificationPreferencesCaches() {
   notify()
 }
 
-export async function ensureNotificationPreferencesLoaded(
+async function fetchNotificationPreferencesFromDb(
   client: SupabaseClient,
-  userId: string,
-  options?: { force?: boolean }
+  key: string
 ): Promise<NotificationPreferences> {
-  const key = userId.trim()
-  if (!key) {
-    return mapNotificationPreferencesRow(null, "")
-  }
-
   const cached = getCachedNotificationPreferences(key)
-  if (cached && !options?.force) return cached
 
   const { data, error } = await client
     .from("notification_preferences")
@@ -143,6 +153,39 @@ export async function ensureNotificationPreferencesLoaded(
   const preferences = mapNotificationPreferencesRow(data, key)
   writeNotificationPreferencesCache(key, preferences)
   return preferences
+}
+
+export async function ensureNotificationPreferencesLoaded(
+  client: SupabaseClient,
+  userId: string,
+  options?: { force?: boolean }
+): Promise<NotificationPreferences> {
+  const key = userId.trim()
+  if (!key) {
+    return mapNotificationPreferencesRow(null, "")
+  }
+
+  const cached = getCachedNotificationPreferences(key)
+  if (cached && !options?.force) {
+    const entry = memory.get(key)
+    const age = entry ? Date.now() - entry.fetchedAt : SOFT_STALE_MS + 1
+    if (age <= SOFT_STALE_MS) return cached
+    if (!inflightByViewer.has(key)) {
+      void fetchNotificationPreferencesFromDb(client, key).catch(() => cached)
+    }
+    return cached
+  }
+
+  const existing = inflightByViewer.get(key)
+  if (existing && !options?.force) return existing
+
+  const inflight = fetchNotificationPreferencesFromDb(client, key).finally(() => {
+    if (inflightByViewer.get(key) === inflight) {
+      inflightByViewer.delete(key)
+    }
+  })
+  inflightByViewer.set(key, inflight)
+  return inflight
 }
 
 export async function updateNotificationPreference(

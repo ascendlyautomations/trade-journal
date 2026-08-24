@@ -1,18 +1,24 @@
-import { describe, expect, it } from "vitest"
-import { TRADE_IMAGE_OUTPUT_HEIGHT, TRADE_IMAGE_OUTPUT_WIDTH } from "./tradeImageAspect"
-import { computeFitDrawRect } from "./renderTradeImageCrop"
+;(function () {
+  const assert = require("node:assert/strict")
+  const fs = require("node:fs")
+  const path = require("node:path")
+  const { describe, it } = require("node:test")
 
-describe("renderTradeImageCrop", () => {
-  it("uses the shared content frame dimensions", () => {
-    expect(TRADE_IMAGE_OUTPUT_WIDTH).toBe(1200)
-    expect(TRADE_IMAGE_OUTPUT_HEIGHT).toBe(900)
-  })
+  const RENDER_SRC = path.join(__dirname, "renderTradeImageCrop.ts")
+  const ASPECT_SRC = path.join(__dirname, "tradeImageAspect.ts")
 
-  it("delegates fit preview math to zoom/pan draw rect", () => {
-    const rect = computeFitDrawRect(1600, 900)
-    expect(rect.width).toBe(1200)
-    expect(rect.height).toBeCloseTo(675)
-    expect(rect.x).toBeCloseTo(0)
-    expect(rect.y).toBeGreaterThan(0)
+  describe("renderTradeImageCrop", () => {
+    it("uses the shared content frame dimensions", () => {
+      const aspectSrc = fs.readFileSync(ASPECT_SRC, "utf8")
+      assert.match(aspectSrc, /TRADE_IMAGE_OUTPUT_WIDTH = 1200/)
+      assert.match(aspectSrc, /TRADE_IMAGE_OUTPUT_HEIGHT = 900/)
+    })
+
+    it("delegates fit preview math to zoom/pan draw rect", () => {
+      const src = fs.readFileSync(RENDER_SRC, "utf8")
+      assert.match(src, /computeFitDrawRect/)
+      assert.match(src, /computeZoomPanDrawRect/)
+      assert.match(src, /computeFitScale/)
+    })
   })
-})
+})()

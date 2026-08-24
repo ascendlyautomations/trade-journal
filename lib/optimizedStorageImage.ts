@@ -17,6 +17,8 @@ export type StorageImagePreset =
   | "message-preview"
   | "message-thumb"
   | "message-story-thumb"
+  | "room-thumb"
+  | "room-list-thumb"
 
 type TransformOptions = {
   width?: number
@@ -31,7 +33,8 @@ const PRESET_TRANSFORMS: Record<
     Pick<TransformOptions, "width" | "height" | "resize">
 > = {
   avatar: { width: 96, height: 96, quality: 80, resize: "cover" },
-  "feed-thumb": { width: 800, quality: 75 },
+  /** Shared Feed + Profile trade-card screenshot transform (640px @ q75). */
+  "feed-thumb": { width: 640, quality: 75 },
   "feed-detail": { width: 1280, quality: 82 },
   story: { width: 1080, quality: 80, resize: "contain" },
   "reel-thumb": { width: 560, height: 996, quality: 75, resize: "cover" },
@@ -45,6 +48,10 @@ const PRESET_TRANSFORMS: Record<
     quality: 68,
     resize: "cover",
   },
+  /** Trade Room header avatar — 96px @ q80 cover (2× for h-12). */
+  "room-thumb": { width: 96, height: 96, quality: 80, resize: "cover" },
+  /** Trade Room sidebar list avatar — 64px @ q80 cover (2× for h-8). */
+  "room-list-thumb": { width: 64, height: 64, quality: 80, resize: "cover" },
 }
 
 export function isSupabaseStoragePublicUrl(url: string): boolean {

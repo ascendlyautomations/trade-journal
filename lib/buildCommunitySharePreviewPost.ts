@@ -57,7 +57,7 @@ export function buildCommunitySharePreviewReelStub(
   }
 }
 
-function parseNumericField(value: string | number): number | null {
+function parseNumericField(value: string | number | null | undefined): number | null {
   if (value === "" || value === null || value === undefined) return null
   const n = Number(String(value).replace(/,/g, ""))
   return Number.isFinite(n) ? n : null

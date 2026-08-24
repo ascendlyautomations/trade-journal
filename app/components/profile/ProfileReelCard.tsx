@@ -1,7 +1,7 @@
 "use client"
 
 import ReelClipPlayOverlay from "@/app/components/ReelClipPlayOverlay"
-import ReelVideoPosterFrame from "@/app/components/ReelVideoPosterFrame"
+import ReelIdlePoster from "@/app/components/ReelIdlePoster"
 import type { ReelRow } from "@/lib/reels"
 import { resolveReelCaption } from "@/lib/reels"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
@@ -21,9 +21,8 @@ export default function ProfileReelCard({ reel, onOpen }: ProfileReelCardProps) 
       className="group w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 text-left transition hover:border-emerald-400/30 hover:bg-white/[0.07]"
     >
       <div className="relative aspect-[9/16] w-full overflow-hidden bg-black/40">
-        <ReelVideoPosterFrame
+        <ReelIdlePoster
           thumbnailUrl={reel.thumbnail_url}
-          videoUrl={reel.video_url}
           className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
         />
         <div className="opacity-0 transition group-hover:opacity-100">

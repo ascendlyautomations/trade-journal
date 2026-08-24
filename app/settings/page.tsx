@@ -8,6 +8,7 @@ import CustomSelect from "@/app/components/CustomSelect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
+import type { TableUpdate } from "@/lib/supabaseTypes"
 import { compressImage } from "@/lib/compressImage"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
 import ImageCropModal from "@/app/components/ImageCropModal"
@@ -51,13 +52,13 @@ import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
 import { mirrorAccountSettingsUsernameChangeCount } from "@/lib/profileSplitMirrorWrites"
 
 import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
-import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { fetchLatestAffiliateApplication, type AffiliateApplicationRow } from "@/lib/affiliateApplication"
 import {
-  AFFILIATE_CONNECT_SELECT,
-  parseAffiliateConnectRow,
-  type AffiliateConnectRow,
-} from "@/lib/affiliateStripeConnect"
+  ensureAffiliateConnectLoaded,
+  patchAffiliateApplicationCache,
+} from "@/lib/affiliateDataRepository"
+import { syncAffiliateConnectStatus } from "@/lib/affiliateConnectSyncClient"
+import { type AffiliateConnectRow } from "@/lib/affiliateStripeConnect"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
@@ -427,32 +428,14 @@ export default function SettingsPage() {
   }
 
   async function refreshAffiliateConnect(userId: string) {
-    const { data } = await supabase
-      .from("affiliates")
-      .select(AFFILIATE_CONNECT_SELECT)
-      .eq("user_id", userId)
-      .maybeSingle()
-
-    let row: AffiliateConnectRow | null =
-      data && typeof data === "object"
-        ? parseAffiliateConnectRow(data as Record<string, unknown>)
-        : null
+    let row = await ensureAffiliateConnectLoaded(supabase, userId)
 
     if (row?.stripe_connected_account_id) {
-      try {
-        const syncRes = await fetch("/api/affiliates/connect/sync", {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            ...(await supabaseBearerHeaders()),
-          },
-        })
-        const j = (await syncRes.json().catch(() => ({}))) as {
-          affiliate?: AffiliateConnectRow | null
-        }
-        if (j?.affiliate) row = j.affiliate
-      } catch {
-        // ignore
+      const sync = await syncAffiliateConnectStatus(userId)
+      if (sync.affiliate) {
+        row = sync.affiliate
+      } else if (!sync.ok && sync.error && process.env.NODE_ENV === "development") {
+        console.warn("[settings] affiliate connect sync:", sync.error)
       }
     }
 
@@ -568,7 +551,7 @@ export default function SettingsPage() {
       }
     }
 
-    const updatePayload: Record<string, unknown> = {
+    const updatePayload = {
       name: name.trim() || null,
       is_private: isPrivate,
       bio,
@@ -578,14 +561,15 @@ export default function SettingsPage() {
       primary_market: primaryMarket.trim() || null,
       trading_model: tradingModel || tradingStyle || null,
       started_trading: startedTrading.trim() || null,
-    }
-
-    if (usernameChanged) {
-      updatePayload.username = cleanUsername
-      updatePayload.username_change_count = changeCount + 1
-    } else if (cleanUsername !== String(profile?.username ?? "")) {
-      updatePayload.username = cleanUsername
-    }
+      ...(usernameChanged
+        ? {
+            username: cleanUsername,
+            username_change_count: changeCount + 1,
+          }
+        : cleanUsername !== String(profile?.username ?? "")
+          ? { username: cleanUsername }
+          : {}),
+    } satisfies TableUpdate<"profiles">
 
     const nextProfile: Record<string, unknown> = {
       ...(profile ?? {}),
@@ -937,11 +921,13 @@ export default function SettingsPage() {
   async function afterAffiliateModalSubmit() {
     if (!user) return
     setShowAffiliateModal(false)
-    await Promise.all([
+    const [, latest] = await Promise.all([
       fetchProfile(user.id, { force: true }),
-      refreshAffiliateState(user.id),
-      refreshAffiliateConnect(user.id),
+      fetchLatestAffiliateApplication(supabase, user.id, { force: true }),
     ])
+    setLatestApp(latest)
+    patchAffiliateApplicationCache(user.id, latest)
+    await refreshAffiliateConnect(user.id)
   }
 
   const cachedSettingsProfile = user?.id

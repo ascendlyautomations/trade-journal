@@ -1,25 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  buildDailyPnLMap,
-  buildPropfirmEquityCurveData,
-  buildPropfirmEquityEvents,
-  computePropfirmAccountMetrics,
-  computePropfirmEvalDisplayStatus,
-  computePropfirmFundedDisplayStatus,
-  computePropfirmEquityCurveYDomain,
-  computePropfirmEquityCurveYTicks,
-  computeConsistencyRule,
-  computeDailyMetrics,
-  computePayoutDrawdownFloor,
-  computePropfirmProgress,
-  computeTrailingDrawdown,
-  countWinningDays,
-  dedupeTradesById,
-  getPropfirmTradingDay,
-  isWinningTradingDay,
-  replayPropfirmEquityEvents,
-} = require("./propfirmMetrics.ts")
+import { describe, it } from "node:test"
+import { buildDailyPnLMap, buildPropfirmEquityCurveData, buildPropfirmEquityEvents, computePropfirmAccountMetrics, computePropfirmEvalDisplayStatus, computePropfirmFundedDisplayStatus, computePropfirmEquityCurveYDomain, computePropfirmEquityCurveYTicks, computeConsistencyRule, computeDailyMetrics, computePayoutDrawdownFloor, computePropfirmProgress, computeTrailingDrawdown, countWinningDays, dedupeTradesById, getPropfirmTradingDay, isWinningTradingDay, replayPropfirmEquityEvents, } from "./propfirmMetrics.ts"
+import assert from "node:assert/strict"
 
 describe("dedupeTradesById", () => {
   it("removes duplicate ids", () => {
@@ -817,3 +798,4 @@ describe("propfirm account display status", () => {
     assert.equal(fundedStatus, "PAYOUT_READY")
   })
 })
+export {}

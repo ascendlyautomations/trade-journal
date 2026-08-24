@@ -130,10 +130,17 @@ export default function FeedReelDetailModal({
   }, [openTradeRef, pid, tradeExpandSignal])
 
   useEffect(() => {
+    const playback = playbackRef
     return () => {
-      playbackRef.current?.pause()
+      const video = playback.current?.getVideoElement()
+      if (video) {
+        video.pause()
+        video.removeAttribute("src")
+        video.load()
+      }
+      playback.current?.pause()
     }
-  }, [])
+  }, [pid])
 
   const modalDetails = useMemo(() => {
     const rawAvatar = post.profiles?.avatar_url

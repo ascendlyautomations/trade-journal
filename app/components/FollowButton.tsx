@@ -173,7 +173,7 @@ export default function FollowButton({
     setBusy(true)
 
     try {
-      const result = await followOrRequest(supabase, currentUserId, {
+      const result = await followOrRequest(supabase, currentUserId as string, {
         id: targetUserId,
         is_private: targetIsPrivate,
       })
@@ -181,8 +181,8 @@ export default function FollowButton({
       if (!result.ok) {
         console.error("[follow] request failed", result.message)
         setFollowState(prevState)
-        onFollowingChange?.(targetUserId, prevState === "following")
-        onRequestedChange?.(targetUserId, prevState === "requested")
+        onFollowingChange?.(targetUserId, false)
+        onRequestedChange?.(targetUserId, false)
         return
       }
 

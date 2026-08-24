@@ -70,15 +70,17 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
 
       const formatted = (data || []).map((acc) => ({
         name: acc.name,
-        size: acc.account_size,
-        id: acc.id,
+        size: acc.account_size ?? "",
+        id: String(acc.id),
         account_number: acc.account_number ?? null,
         mode: acc.mode,
         category: acc.category,
         can_add_trades: acc.can_add_trades !== false,
       }))
 
-      setAccounts(formatted)
+      setAccounts(
+        formatted.map(({ can_add_trades: _canAdd, ...account }) => account)
+      )
       const userIsPro = isProActive(profile)
       setCanCreateMoreAccounts(
         userIsPro ||
@@ -171,12 +173,11 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
 
     const row: TradeAccountOption = {
       name: data.name,
-      size: data.account_size,
-      id: data.id,
+      size: data.account_size ?? "",
+      id: String(data.id),
       account_number: data.account_number ?? null,
       mode: data.mode,
       category: data.category,
-      can_add_trades: data.can_add_trades !== false,
     }
 
     setAccounts((prev) => {

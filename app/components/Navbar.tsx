@@ -15,7 +15,15 @@ import { useUserProfile } from "../../lib/useUserProfile"
 import { isProActive } from "../../lib/subscription"
 import { getAdminCheckResultForUser } from "../../lib/adminUsers"
 import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
-import { NOTIFICATION_INBOX_TYPES } from "../../lib/notificationEngagementTypes"
+import { fetchSocialNotificationUnreadCount } from "@/lib/socialNotificationUnreadCount"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags.ts"
+import { MESSAGING_DM_UNREAD_LOCAL_PATCH } from "@/lib/backendV2/messagingInboxLocalPatch.ts"
+import {
+  getSessionBadges,
+  getSessionIsAdmin,
+  patchSessionBadges,
+  subscribeSessionBootstrapCache,
+} from "@/lib/backendV2/sessionBootstrapCache.ts"
 import { profilePath } from "../../lib/profileRoutes"
 import { prefetchCriticalAppRoutes } from "../../lib/routePrefetch"
 import { scheduleDeferredWork } from "../../lib/scheduleDeferredWork"
@@ -213,6 +221,9 @@ export default function Navbar() {
     if (!user?.id) return
     const count = await fetchTotalUnreadMessageCount(user.id)
     setUnreadMessagesCount(count)
+    if (isBackendV2Enabled("session")) {
+      patchSessionBadges(user.id, { dm_unread: count })
+    }
   }, [user])
 
   const fetchUnread = useCallback(async () => {
@@ -223,27 +234,19 @@ export default function Navbar() {
       return
     }
 
-    const { count, error } = await supabase
-      .from("notifications")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("read", false)
-      .in("type", [...NOTIFICATION_INBOX_TYPES])
-
-    if (error) {
-      console.error("[navbar] unread notifications fetch failed", {
-        query:
-          "notifications select count where user_id = currentUser and read = false (like, comment, room_join, follow)",
-        userId: user.id,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      })
-      return
+    if (isBackendV2Enabled("session")) {
+      const badges = getSessionBadges(user.id)
+      if (badges) {
+        setUnreadCount(badges.notifications_unread)
+        return
+      }
     }
 
-    setUnreadCount(count ?? 0)
+    const next = await fetchSocialNotificationUnreadCount(user.id)
+    setUnreadCount(next)
+    if (isBackendV2Enabled("session")) {
+      patchSessionBadges(user.id, { notifications_unread: next })
+    }
   }, [user])
 
   useEffect(() => {
@@ -280,6 +283,7 @@ export default function Navbar() {
 
   useEffect(() => {
     const onMessagesRefresh = () => {
+      if (isBackendV2Enabled("messageThreads")) return
       void fetchUnreadMessages()
     }
     window.addEventListener("tj-unread-messages-refresh", onMessagesRefresh)
@@ -289,9 +293,54 @@ export default function Navbar() {
   }, [fetchUnreadMessages])
 
   useEffect(() => {
+    const onLocalDmUnread = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: string; dmUnread?: number }>)
+        .detail
+      if (!user?.id || detail?.userId !== user.id) return
+      if (typeof detail.dmUnread !== "number") return
+      setUnreadMessagesCount(detail.dmUnread)
+      if (isBackendV2Enabled("session")) {
+        patchSessionBadges(user.id, { dm_unread: detail.dmUnread })
+      }
+    }
+    window.addEventListener(MESSAGING_DM_UNREAD_LOCAL_PATCH, onLocalDmUnread)
+    return () => {
+      window.removeEventListener(MESSAGING_DM_UNREAD_LOCAL_PATCH, onLocalDmUnread)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
     if (!user?.id || loading || membershipReconciling) return
 
     let cancelled = false
+
+    const applyBadgesFromSession = () => {
+      if (!isBackendV2Enabled("session") || !user?.id) return false
+      const badges = getSessionBadges(user.id)
+      if (!badges) return false
+      setUnreadCount(badges.notifications_unread)
+      setUnreadMessagesCount(badges.dm_unread)
+      setHasFetchedNotifications(true)
+      setHasFetchedMessages(true)
+      return true
+    }
+
+    // Session RPC already owns initial badge counts — do not re-fetch on paint.
+    if (applyBadgesFromSession()) {
+      return
+    }
+
+    // Bootstrap may still be in-flight while loading=false from cache paint.
+    // Session ON: wait for cache only — never REST-duplicate badge stack.
+    if (isBackendV2Enabled("session")) {
+      const unsub = subscribeSessionBootstrapCache(() => {
+        if (!cancelled) applyBadgesFromSession()
+      })
+      return () => {
+        cancelled = true
+        unsub()
+      }
+    }
 
     scheduleDeferredWork(() => {
       void (async () => {
@@ -312,8 +361,8 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!user?.id || loading || membershipReconciling) return
-    prefetchCriticalAppRoutes(router)
-  }, [user?.id, loading, membershipReconciling, router])
+    prefetchCriticalAppRoutes(router, pathname ?? undefined)
+  }, [user?.id, loading, membershipReconciling, router, pathname])
 
   useEffect(() => {
     if (!user?.id || loading || membershipReconciling) {
@@ -331,6 +380,30 @@ export default function Navbar() {
     }
 
     let cancelled = false
+
+    const applyAdminFromSession = () => {
+      if (!isBackendV2Enabled("session") || !user?.id) return false
+      const fromSession = getSessionIsAdmin(user.id)
+      if (fromSession === null) return false
+      setIsAdmin(fromSession)
+      setHasFetchedAdmin(true)
+      return true
+    }
+
+    // Session owns is_admin — do not REST-duplicate admin_users on paint.
+    if (applyAdminFromSession()) {
+      return
+    }
+
+    if (isBackendV2Enabled("session")) {
+      const unsub = subscribeSessionBootstrapCache(() => {
+        if (!cancelled) applyAdminFromSession()
+      })
+      return () => {
+        cancelled = true
+        unsub()
+      }
+    }
 
     scheduleDeferredWork(() => {
       void (async () => {
@@ -371,17 +444,31 @@ export default function Navbar() {
   }
 
   const handleToggleNotifications = async () => {
-    if (!hasFetchedNotifications) {
-      await fetchUnread()
-      setHasFetchedNotifications(true)
+    if (hasFetchedNotifications) return
+    if (user?.id && isBackendV2Enabled("session")) {
+      const badges = getSessionBadges(user.id)
+      if (badges) {
+        setUnreadCount(badges.notifications_unread)
+        setHasFetchedNotifications(true)
+        return
+      }
     }
+    await fetchUnread()
+    setHasFetchedNotifications(true)
   }
 
   const handleToggleMessages = async () => {
-    if (!hasFetchedMessages) {
-      await fetchUnreadMessages()
-      setHasFetchedMessages(true)
+    if (hasFetchedMessages) return
+    if (user?.id && isBackendV2Enabled("session")) {
+      const badges = getSessionBadges(user.id)
+      if (badges) {
+        setUnreadMessagesCount(badges.dm_unread)
+        setHasFetchedMessages(true)
+        return
+      }
     }
+    await fetchUnreadMessages()
+    setHasFetchedMessages(true)
   }
 
   const handleToggleAccountMenu = async () => {
@@ -390,6 +477,14 @@ export default function Navbar() {
     setAccountMenuOpen((open) => !open)
 
     if (!hasFetchedAdmin && user?.id) {
+      if (isBackendV2Enabled("session")) {
+        const fromSession = getSessionIsAdmin(user.id)
+        if (fromSession !== null) {
+          setIsAdmin(fromSession)
+          setHasFetchedAdmin(true)
+          return
+        }
+      }
       const check = await getAdminCheckResultForUser(user.id, user.email)
       if (process.env.NODE_ENV !== "production") {
         console.debug("[admin-check][navbar] resolved", {

@@ -102,6 +102,8 @@ type TradeAccountPickerProps = {
   filterOptions?: FilterOption[]
   onFilterChange?: (value: string) => void
   filterPlaceholder?: string
+  /** Lazy-load hook for copy trading groups when the menu opens. */
+  onPickerOpen?: () => void
 }
 
 function RowText({ children }: { children: React.ReactNode }) {
@@ -222,6 +224,7 @@ export default function TradeAccountPicker({
   filterOptions = [],
   onFilterChange,
   filterPlaceholder = "All Accounts",
+  onPickerOpen,
 }: TradeAccountPickerProps) {
   const router = useRouter()
   const isFilterMode = onFilterChange != null
@@ -554,7 +557,12 @@ export default function TradeAccountPicker({
           type="button"
           aria-haspopup="listbox"
           aria-expanded={open}
-          onClick={() => setOpen((prev) => !prev)}
+          onClick={() => {
+            setOpen((prev) => {
+              if (!prev) onPickerOpen?.()
+              return !prev
+            })
+          }}
           className={resolvedTriggerClassName}
         >
           <span className="flex min-w-0 flex-1 items-center text-left">

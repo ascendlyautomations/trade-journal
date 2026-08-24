@@ -54,7 +54,9 @@ export function computeDemoDashboardStats(trades: any[]): DemoDashboardStats {
     hourlyMap[hour] = (hourlyMap[hour] ?? 0) + pnl
 
     const weekday = getTradingWeekday(trade.exit_time ?? trade.created_at)
-    weekdayPnl[weekday] = (weekdayPnl[weekday] ?? 0) + pnl
+    if (weekday) {
+      weekdayPnl[weekday] = (weekdayPnl[weekday] ?? 0) + pnl
+    }
   }
 
   const dayTotals = [...dailyPnl.values()]

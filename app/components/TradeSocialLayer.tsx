@@ -12,7 +12,6 @@ import {
   type RefObject,
 } from "react"
 import { supabase } from "../../lib/supabaseClient"
-import { randomId } from "@/lib/randomId"
 import FeedCommentList from "@/app/components/feed/FeedCommentList"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
 import ActionButton from "@/app/components/ui/ActionButton"
@@ -58,6 +57,7 @@ type TradeSocialContextValue = {
   likes: number
   liked: boolean
   comments: any[]
+  commentCount: number
   showComments: boolean
   setShowComments: (open: boolean | ((prev: boolean) => boolean)) => void
   commentsExpanded: boolean
@@ -99,6 +99,8 @@ type TradeSocialProviderProps = {
   scrollToCommentsOnMount?: boolean
   /** Live like/comment updates via Realtime (detail views only; off for grid cards). */
   enableRealtime?: boolean
+  /** Skip per-card comment row fetch until the viewer opens comments (Profile cards). */
+  deferCommentsUntilExpanded?: boolean
   children: ReactNode
 }
 
@@ -111,12 +113,14 @@ export function TradeSocialProvider({
   onRequestComments,
   scrollToCommentsOnMount = false,
   enableRealtime = false,
+  deferCommentsUntilExpanded = false,
   children,
 }: TradeSocialProviderProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [likes, setLikes] = useState(0)
   const [liked, setLiked] = useState(false)
   const [comments, setComments] = useState<any[]>([])
+  const [commentCount, setCommentCount] = useState(0)
   const [showComments, setShowComments] = useState(false)
   const [newComment, setNewComment] = useState("")
   const [replyTarget, setReplyTarget] = useState<CommentReplyTarget | null>(null)
@@ -127,6 +131,25 @@ export function TradeSocialProvider({
   const commentSubmittingRef = useRef(false)
 
   const resolvedId = tradeId != null ? String(tradeId).trim() : ""
+
+  const loadCommentsForTrade = useCallback(async () => {
+    if (!resolvedId) return
+    const { data: commentData } = await supabase
+      .from("trade_comments")
+      .select("*, profiles(username, avatar_url)")
+      .eq("trade_id", resolvedId)
+      .order("created_at", { ascending: true })
+    const rows = commentData || []
+    setComments(rows)
+    setCommentCount(rows.length)
+    const cached = readTradeSocial(resolvedId)
+    writeTradeSocial(resolvedId, {
+      likes: cached?.likes ?? likes,
+      liked: cached?.liked ?? liked,
+      commentCount: rows.length,
+      comments: rows,
+    })
+  }, [resolvedId, likes, liked])
 
   useEffect(() => {
     replyTargetRef.current = replyTarget
@@ -143,6 +166,7 @@ export function TradeSocialProvider({
         setLikes(cached.likes)
         setLiked(cached.liked)
         setComments(cached.comments)
+        setCommentCount(cached.commentCount ?? cached.comments.length)
         return
       }
 
@@ -157,8 +181,28 @@ export function TradeSocialProvider({
       setLikes(rows.length)
       setLiked(
         currentUserId != null &&
-          rows.some((l: { user_id: string }) => l.user_id === currentUserId)
+          rows.some((l) => l.user_id != null && l.user_id === currentUserId)
       )
+
+      if (deferCommentsUntilExpanded) {
+        const { count } = await supabase
+          .from("trade_comments")
+          .select("id", { count: "exact", head: true })
+          .eq("trade_id", resolvedId)
+        if (cancelled) return
+        const n = count ?? 0
+        setCommentCount(n)
+        setComments([])
+        writeTradeSocial(resolvedId, {
+          likes: rows.length,
+          liked:
+            currentUserId != null &&
+            rows.some((l) => l.user_id != null && l.user_id === currentUserId),
+          commentCount: n,
+          comments: [],
+        })
+        return
+      }
 
       const { data: commentData } = await supabase
         .from("trade_comments")
@@ -169,11 +213,13 @@ export function TradeSocialProvider({
       if (cancelled) return
 
       setComments(commentData || [])
+      setCommentCount((commentData || []).length)
       writeTradeSocial(resolvedId, {
         likes: rows.length,
         liked:
           currentUserId != null &&
-          rows.some((l: { user_id: string }) => l.user_id === currentUserId),
+          rows.some((l) => l.user_id != null && l.user_id === currentUserId),
+        commentCount: (commentData || []).length,
         comments: commentData || [],
       })
     }
@@ -183,12 +229,23 @@ export function TradeSocialProvider({
     return () => {
       cancelled = true
     }
-  }, [resolvedId, currentUserId])
+  }, [resolvedId, currentUserId, deferCommentsUntilExpanded])
+
+  useEffect(() => {
+    if (!deferCommentsUntilExpanded || !showComments) return
+    if (comments.length > 0) return
+    void loadCommentsForTrade()
+  }, [
+    comments.length,
+    deferCommentsUntilExpanded,
+    loadCommentsForTrade,
+    showComments,
+  ])
 
   useEffect(() => {
     if (!resolvedId || !enableRealtime) return
 
-    const topic = `trade-${resolvedId}-${randomId()}`
+    const topic = `trade-social:${resolvedId}`
     const channel = supabase.channel(topic)
 
     channel.on(
@@ -209,7 +266,7 @@ export function TradeSocialProvider({
           const rows = data || []
           const nextLiked =
             currentUserId != null &&
-            rows.some((l: { user_id: string }) => l.user_id === currentUserId)
+            rows.some((l) => l.user_id != null && l.user_id === currentUserId)
           setLikes(rows.length)
           setLiked(nextLiked)
           patchTradeSocialLikes(resolvedId, rows.length, nextLiked)
@@ -298,7 +355,7 @@ export function TradeSocialProvider({
         onMetaChange: (next) => {
           setLiked(next.liked)
           setLikes(next.count)
-          patchTradeSocialLikes(resolvedId, next.liked, next.count)
+          patchTradeSocialLikes(resolvedId, next.count, next.liked)
         },
       })
       if (!ok) {
@@ -564,6 +621,7 @@ export function TradeSocialProvider({
       likes,
       liked,
       comments,
+      commentCount,
       showComments,
       setShowComments,
       commentsExpanded,
@@ -588,6 +646,7 @@ export function TradeSocialProvider({
     likes,
     liked,
     comments,
+    commentCount,
     showComments,
     commentsExpanded,
     onRequestComments,
@@ -626,6 +685,7 @@ export function TradeSocialEngagementBar({
     liked,
     likes,
     comments,
+    commentCount,
     showComments,
     commentsExpanded,
     onRequestComments,
@@ -683,7 +743,7 @@ export function TradeSocialEngagementBar({
 
       <EngagementCountButton
         icon={<span>💬</span>}
-        count={comments.length}
+        count={commentCount}
         ariaLabel="View comments"
         onClick={(e) => {
           e.stopPropagation()

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useId, useRef, useState } from "react"
+import { useCallback, useId, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import TradeShareCard from "./TradeShareCard"
 import ShareToConversationsModal from "./ShareToConversationsModal"
@@ -47,7 +47,7 @@ export default function ShareTradeButton({
   const [isOpen, setIsOpen] = useState(false)
   const [showExportUpgradeModal, setShowExportUpgradeModal] = useState(false)
   const [conversationOpen, setConversationOpen] = useState(false)
-  const [exportHostReady, setExportHostReady] = useState(false)
+  const [exportCardMounted, setExportCardMounted] = useState(false)
   const lockRef = useRef(false)
   const instanceId = useId().replace(/:/g, "")
   const exportDomId = tradeShareExportDomId(trade, instanceId)
@@ -55,10 +55,6 @@ export default function ShareTradeButton({
     trade?.id != null && String(trade.id).trim() !== ""
       ? String(trade.id)
       : null
-
-  useEffect(() => {
-    setExportHostReady(true)
-  }, [])
 
   const handleDownload = useCallback(async () => {
     if (!isPro) {
@@ -69,9 +65,14 @@ export default function ShareTradeButton({
     if (lockRef.current) return
     lockRef.current = true
     setBusy(true)
+    setExportCardMounted(true)
     try {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      })
       await downloadTradeShareCardPng(trade, instanceId)
     } finally {
+      setExportCardMounted(false)
       lockRef.current = false
       setBusy(false)
     }
@@ -115,7 +116,7 @@ export default function ShareTradeButton({
         onClose={() => setShowExportUpgradeModal(false)}
         variant="custom"
       />
-      {mode === "full" && exportHostReady
+      {mode === "full" && exportCardMounted
         ? createPortal(
             <div
               className="pointer-events-none fixed left-0 top-0 overflow-hidden"

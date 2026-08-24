@@ -1,6 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const { matchesTradingAccountSearch } = require("./tradingAccountsSearch.ts")
+import { describe, it } from "node:test"
+import { matchesTradingAccountSearch } from "./tradingAccountsSearch.ts"
+import assert from "node:assert/strict"
 
 const sampleAccount = {
   id: "uuid-1",
@@ -45,3 +45,4 @@ describe("matchesTradingAccountSearch", () => {
     assert.equal(matchesTradingAccountSearch(sampleAccount, "   "), true)
   })
 })
+export {}

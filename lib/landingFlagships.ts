@@ -71,3 +71,36 @@ export const LANDING_FLAGSHIPS: LandingFlagship[] = [
     imageObjectPosition: "object-center",
   },
 ]
+
+export type LandingSupportingFeature = { title: string; tagline: string }
+
+export const LANDING_SUPPORTING_FEATURES: LandingSupportingFeature[] = [
+  {
+    title: "Calendar",
+    tagline: "See your trading days, streaks, and session rhythm at a glance.",
+  },
+  {
+    title: "CSV Import",
+    tagline: "Bring your history in without rebuilding your journal from scratch.",
+  },
+  {
+    title: "Saved Trades",
+    tagline: "Bookmark setups and executions you want to revisit later.",
+  },
+  {
+    title: "Achievements",
+    tagline: "Celebrate milestones and funded-account wins on your profile.",
+  },
+  {
+    title: "Followers",
+    tagline: "Grow credibility and stay connected with traders who follow your journey.",
+  },
+  {
+    title: "Advanced Analytics",
+    tagline: "Go deeper on performance with stats that surface your real edge.",
+  },
+  {
+    title: "Performance Insights",
+    tagline: "Spot patterns, mistakes, and consistency gaps faster.",
+  },
+]

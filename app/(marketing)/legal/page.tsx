@@ -53,7 +53,9 @@ export default function LegalHubPage() {
             title={doc.title}
             description={doc.description}
             href={"href" in doc ? doc.href : undefined}
-            comingSoon={"comingSoon" in doc ? doc.comingSoon : false}
+            comingSoon={
+              "comingSoon" in doc ? Boolean(doc.comingSoon) : false
+            }
           />
         ))}
       </div>

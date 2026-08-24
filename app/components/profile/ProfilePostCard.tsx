@@ -18,7 +18,7 @@ import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFoc
 import FeedRoomShareCard from "@/app/components/feed/FeedRoomShareCard"
 import { isRoomSharePost } from "@/lib/roomSharePost"
 import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
-import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
+import { ProfileAvatarImg, PROFILE_PAGE_AVATAR_PX } from "@/app/components/SafeProfileAvatar"
 import { ConfirmModal } from "@/app/components/ui"
 import ExpandableText from "@/app/components/ui/ExpandableText"
 import { devLog } from "@/lib/devLog"
@@ -265,6 +265,7 @@ export default function ProfilePostCard({
         <ProfileAvatarImg
           src={profile.avatar_url}
           className="h-9 w-9 ring-2 ring-white/10 md:h-10 md:w-10"
+          displaySizePx={PROFILE_PAGE_AVATAR_PX}
         />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-white">

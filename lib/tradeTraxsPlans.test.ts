@@ -1,22 +1,8 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  TRADETRAXS_FEATURE_LABELS,
-  TRADETRAXS_FREE_PLAN,
-  TRADETRAXS_PRO_FEATURE_GROUPS,
-  TRADETRAXS_PRO_PLAN,
-  formatPlanFeaturesList,
-  getTradeTraxsPlan,
-} = require("./tradeTraxsPlans.ts")
-const {
-  FREE_PLAN_DAILY_CLIP_PRICING_LABEL,
-  FREE_PLAN_DAILY_POST_PRICING_LABEL,
-  FREE_PLAN_DAILY_TRADE_PRICING_LABEL,
-} = require("./freePlanDailyLimits.ts")
-const {
-  FREE_PLAN_DAILY_DM_PRICING_LABEL,
-  FREE_PLAN_UNLIMITED_TRADE_ROOM_MESSAGES_PRICING_LABEL,
-} = require("./freePlanMessagingLimits.ts")
+import { describe, it } from "node:test"
+import { TRADETRAXS_FEATURE_LABELS, TRADETRAXS_FREE_PLAN, TRADETRAXS_PRO_FEATURE_GROUPS, TRADETRAXS_PRO_PLAN, formatPlanFeaturesList, getTradeTraxsPlan, } from "./tradeTraxsPlans.ts"
+import { FREE_PLAN_DAILY_CLIP_PRICING_LABEL, FREE_PLAN_DAILY_POST_PRICING_LABEL, FREE_PLAN_DAILY_TRADE_PRICING_LABEL, } from "./freePlanDailyLimits.ts"
+import { FREE_PLAN_DAILY_DM_PRICING_LABEL, FREE_PLAN_UNLIMITED_TRADE_ROOM_MESSAGES_PRICING_LABEL, } from "./freePlanMessagingLimits.ts"
+import assert from "node:assert/strict"
 
 describe("tradeTraxsPlans", () => {
   it("canonical plan names", () => {
@@ -95,3 +81,4 @@ describe("tradeTraxsPlans", () => {
     )
   })
 })
+export {}

@@ -23,7 +23,7 @@ import {
 } from "../components/ui/skeletons"
 import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
-import { buildRealtimeInFilter } from "@/lib/realtimeFilters"
+import { stableIdKey } from "@/lib/realtimeFilters"
 import { compressImage, compressScreenshot } from "@/lib/compressImage"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
@@ -94,8 +94,12 @@ import {
 } from "@/lib/roomChannelNotificationPreferences"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { isUserAdmin } from "@/lib/adminUsers"
+import { isProfileUuidSegment } from "@/lib/profileRoutes"
 import { isBetaAnnouncementsSection } from "@/lib/betaHub"
 import { createRoomPresenceSession } from "@/lib/roomPresence"
+import { subscribeCommunityRoomLiveChannel } from "@/lib/communityRoomLiveChannel"
+import { subscribeCommunityRoomUnreadRealtime } from "@/lib/communityRoomUnread"
+import { isRoomRealtimePresenceEnabled } from "@/lib/roomRealtimePresence"
 import {
   patchRoomMessageReactions,
   type RoomMessageReactionEmoji,
@@ -114,6 +118,28 @@ import {
   ProfileUsernameLink,
 } from "../components/ProfileLink"
 import StorageImage from "../components/ui/StorageImage"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags"
+import {
+  loadRoomBootstrapForUser,
+  ROOM_BOOTSTRAP_MESSAGE_LIMIT,
+  RoomBootstrapLoadError,
+} from "@/lib/backendV2/roomBootstrapRepository"
+import {
+  applyRoomBootstrapToCommunityState,
+  applyRoomBootstrapSectionSwitch,
+  roomBootstrapEffectsKey,
+} from "@/lib/backendV2/roomBootstrapApply"
+import { shouldSkipLegacyRoomDataEffects } from "@/lib/backendV2/roomBootstrapCommunityLoad"
+import {
+  ROOM_MESSAGE_SELECT_SHAPE,
+} from "@/lib/roomMessageSelect"
+import { asJsonObject } from "@/lib/supabaseProjectedQuery"
+import { logRoomMessagePostgrestError } from "@/lib/roomMessagePostgrest"
+import {
+  buildPendingSendContentKey,
+  getRoomMessageReconciliation,
+  resetRoomMessageReconciliation,
+} from "@/lib/roomMessageReconciliation"
 
 type Room = {
   id: string
@@ -174,37 +200,7 @@ type RoomMessage = {
   room_message_reactions?: RoomMessageReactionRow[] | null
 }
 
-/** PostgREST embed: disambiguate trade_id vs pinned_trade_id FKs (PGRST201). */
 const ROOM_MESSAGE_PAGE_SIZE = 25
-
-const ROOM_MESSAGE_SELECT_SHAPE = `
-  id,
-  room_id,
-  user_id,
-  seen_by,
-  pinned,
-  section_id,
-  parent_message_id,
-  type,
-  trade_id,
-  content,
-  image_url,
-  created_at,
-  trades!room_messages_trade_id_fkey (
-    id
-  ),
-  profiles (
-    username,
-    avatar_url
-  ),
-  room_message_reactions (
-    id,
-    message_id,
-    user_id,
-    reaction
-  )
-`
-
 const ROOM_MESSAGE_REALTIME_SELECT = ROOM_MESSAGE_SELECT_SHAPE
 
 type ActivePresence = {
@@ -367,6 +363,10 @@ function CommunityContent() {
   const [creatingRoom, setCreatingRoom] = useState(false)
   const creatingRoomRef = useRef(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
+  const [roomMessagesLoadError, setRoomMessagesLoadError] = useState<
+    string | null
+  >(null)
+  const [roomBootstrapRetryNonce, setRoomBootstrapRetryNonce] = useState(0)
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false)
   const [hasOlderMessages, setHasOlderMessages] = useState(false)
   const [draft, setDraft] = useState("")
@@ -478,6 +478,17 @@ function CommunityContent() {
     >
   >({})
   const roomMessagesFetchGenRef = useRef(0)
+  const roomLoadGenRef = useRef(0)
+  const roomSectionLoadGenRef = useRef(0)
+  const roomBootstrapEffectsSkipRef = useRef<string | null>(null)
+  const presenceSessionKeyRef = useRef<string>(
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `presence-${Date.now()}`
+  )
+  const presenceRoomIdRef = useRef<string | null>(null)
+  const selectedRoomIdRef = useRef<string | null>(null)
+  const roomAppNotificationMarkedRef = useRef<string | null>(null)
   const pendingScrollMessageIdRef = useRef<string | null>(null)
   const scrollContextRef = useRef<string | null>(null)
   const didInitialScrollRef = useRef(false)
@@ -488,24 +499,15 @@ function CommunityContent() {
   messagesByRoomRef.current = messagesByRoom
 
   useEffect(() => {
+    selectedRoomIdRef.current = selectedRoomId
+  }, [selectedRoomId])
+
+  useEffect(() => {
     roomMessageIdsRef.current = new Set([
       ...messages.map((m) => m.id),
       ...pinnedMessages.map((m) => m.id),
     ])
   }, [messages, pinnedMessages])
-
-  const roomVisibleMessageIdsKey = useMemo(
-    () =>
-      [
-        ...new Set([
-          ...messages.map((m) => String(m.id)),
-          ...pinnedMessages.map((m) => String(m.id)),
-        ]),
-      ]
-        .sort()
-        .join(","),
-    [messages, pinnedMessages]
-  )
 
   // TODO: Re-enable room scroll persistence after beta
   // const scrollPersistRoomRef = useRef<string | null>(null)
@@ -686,6 +688,7 @@ function CommunityContent() {
   }, [inviteTargetRoom, selectedRoomId, rooms])
 
   useEffect(() => {
+    if (shouldSkipLegacyRoomDataEffects()) return
     if (!user?.id || !selectedRoomId || needsJoin) return
     void import("@/lib/notificationReadSync").then(
       ({ markNotificationsReadForTarget }) => {
@@ -785,18 +788,24 @@ function CommunityContent() {
   }, [rooms, user?.id])
 
   useEffect(() => {
+    setRoomMessagesLoadError(null)
+  }, [selectedRoomId])
+
+  useEffect(() => {
+    if (isBackendV2Enabled("rooms")) return
     if (!selectedRoomId || !user?.id || needsJoin || loadingMessages) return
     const markKey = `${selectedRoomId}:${user.id}`
     if (markedReadRoomKeyRef.current === markKey) return
 
-    const roomIds = roomIdsForUnreadRef.current
     let cancelled = false
     void (async () => {
       await markAllRoomMessagesSeenForUser(selectedRoomId, user.id)
       if (cancelled) return
       markedReadRoomKeyRef.current = markKey
-      const next = await fetchUnreadByRoomIds(roomIds, user.id)
-      if (!cancelled) setUnreadByRoomId(next)
+      setUnreadByRoomId((prev) => ({
+        ...prev,
+        [selectedRoomId]: false,
+      }))
     })()
     return () => {
       cancelled = true
@@ -804,30 +813,53 @@ function CommunityContent() {
   }, [selectedRoomId, user?.id, loadingMessages, needsJoin])
 
   useEffect(() => {
-    if (!user?.id) return
-
-    const refreshUnread = () => {
-      if (document.visibilityState !== "visible") return
-      const ids = roomIdsForUnreadRef.current
-      if (ids.length === 0) return
-      void (async () => {
-        const next = await fetchUnreadByRoomIds(ids, user.id)
-        setUnreadByRoomId(next)
-      })()
-    }
-
-    const onVis = () => {
-      if (document.visibilityState === "visible") refreshUnread()
-    }
-
-    document.addEventListener("visibilitychange", onVis)
-    const intervalId = window.setInterval(refreshUnread, 60_000)
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVis)
-      window.clearInterval(intervalId)
-    }
+    if (user?.id) return
+    resetRoomMessageReconciliation()
   }, [user?.id])
+
+  useEffect(() => {
+    const roomId = selectedRoomId
+    return () => {
+      const uid = userIdRef.current
+      if (uid && roomId) {
+        getRoomMessageReconciliation(uid).clearRoom(roomId)
+      }
+    }
+  }, [selectedRoomId])
+
+  const joinedRoomIdsKey = useMemo(
+    () => stableIdKey(rooms.map((room) => room.id)),
+    [rooms]
+  )
+
+  useEffect(() => {
+    if (!user?.id || isDemoSupabaseBlocked() || joinedRoomIdsKey === "") return
+
+    const roomIds = joinedRoomIdsKey.split(",").filter(Boolean)
+
+    return subscribeCommunityRoomUnreadRealtime(
+      supabase,
+      {
+        userId: user.id,
+        getSelectedRoomId: () => selectedRoomIdRef.current,
+        isRoomMarkedRead: (roomId) => {
+          const uid = userIdRef.current
+          if (!uid) return false
+          return markedReadRoomKeyRef.current === `${roomId}:${uid}`
+        },
+        patchUnread: (patch) => {
+          setUnreadByRoomId((prev) => ({ ...prev, ...patch }))
+        },
+        reconcile: async (ids) => {
+          const uid = userIdRef.current
+          if (!uid) return
+          const next = await fetchUnreadByRoomIds(ids, uid)
+          setUnreadByRoomId(next)
+        },
+      },
+      roomIds
+    )
+  }, [user?.id, joinedRoomIdsKey])
 
   const inviteRoomKey = useMemo(() => {
     if (!selectedRoom) return ""
@@ -911,6 +943,7 @@ function CommunityContent() {
   }, [sections.length, selectedSectionId])
 
   useEffect(() => {
+    if (shouldSkipLegacyRoomDataEffects()) return
     if (!selectedRoomId || needsJoin || !user?.id) {
       setRoomNotificationsEnabled(true)
       return
@@ -943,6 +976,7 @@ function CommunityContent() {
   }, [selectedRoomId, needsJoin, user?.id])
 
   useEffect(() => {
+    if (shouldSkipLegacyRoomDataEffects()) return
     if (!selectedRoomId || needsJoin || !user?.id) {
       setChannelNotificationPrefs({})
       return
@@ -1094,6 +1128,7 @@ function CommunityContent() {
   }, [selectedRoomId, selectedSectionId])
 
   useEffect(() => {
+    if (shouldSkipLegacyRoomDataEffects()) return
     if (!selectedRoomId || !isOwner || needsJoin) {
       setActiveMembers(0)
       setLeftMembers(0)
@@ -1266,7 +1301,10 @@ function CommunityContent() {
       setMessages(demo.main as RoomMessage[])
       setHasOlderMessages(false)
       setLoadingMessages(false)
-      messagesByRoomRef.current[cacheKey] = demo
+      messagesByRoomRef.current[cacheKey] = {
+        pinned: demo.pinned as RoomMessage[],
+        main: demo.main as RoomMessage[],
+      }
       return
     }
 
@@ -1363,6 +1401,118 @@ function CommunityContent() {
     }
 
     setLoadingMessages(false)
+  }
+
+  function buildBootstrapApplyTarget() {
+    return {
+      setSections,
+      setSelectedSectionId,
+      setPinnedMessages,
+      setMessages,
+      setHasOlderMessages,
+      setLoadingMessages,
+      setRoomNotificationsEnabled,
+      setChannelNotificationPrefs,
+      setActiveMembers,
+      setLeftMembers,
+      setUnreadByRoomId,
+      patchRoomSectionsInSession,
+      patchRoomMessagesInSession,
+      buildRoomMessagesCacheKey,
+      messagesByRoomRef,
+      setMessagesByRoom,
+      markedReadRoomKeyRef,
+    }
+  }
+
+  function markRoomAppNotificationsReadOnce(
+    roomId: string,
+    userId: string,
+    roomSlug: string | null | undefined
+  ) {
+    const key = `${roomId}:${userId}`
+    if (roomAppNotificationMarkedRef.current === key) return
+    roomAppNotificationMarkedRef.current = key
+    void import("@/lib/notificationReadSync").then(
+      ({ markNotificationsReadForTarget }) => {
+        void markNotificationsReadForTarget(userId, {
+          kind: "room",
+          roomId,
+          roomSlug: roomSlug ?? null,
+        })
+      }
+    )
+  }
+
+  async function loadRoomSectionViaBootstrap(
+    roomId: string,
+    sectionId: string,
+    options?: { force?: boolean }
+  ) {
+    const uid = userIdRef.current
+    if (!uid || isDemoSupabaseBlocked()) return
+
+    if (!shouldSkipLegacyRoomDataEffects()) {
+      await fetchRoomMessages(roomId, sectionsRef.current, sectionId, {
+        bypassCache: options?.force,
+      })
+      return
+    }
+
+    const loadGen = ++roomSectionLoadGenRef.current
+    const sectionsList = sectionsRef.current
+    const cacheKey = buildRoomMessagesCacheKey(roomId, sectionsList, sectionId)
+    const cached =
+      !options?.force && messagesByRoomRef.current[cacheKey]
+        ? messagesByRoomRef.current[cacheKey]
+        : null
+
+    if (cached && loadGen === roomSectionLoadGenRef.current) {
+      setSelectedSectionId(sectionId)
+      setPinnedMessages(cached.pinned)
+      setMessages(cached.main)
+      setHasOlderMessages(cached.hasOlder ?? false)
+      setLoadingMessages(false)
+    } else {
+      setSelectedSectionId(sectionId)
+      setLoadingMessages(true)
+    }
+
+    try {
+      const { bootstrap } = await loadRoomBootstrapForUser(
+        supabase,
+        uid,
+        {
+          roomId,
+          sectionId,
+          messageLimit: ROOM_BOOTSTRAP_MESSAGE_LIMIT,
+          markRead: false,
+          force: options?.force,
+          caller: "community-section-switch",
+        },
+        { loadGeneration: loadGen, expectedGeneration: loadGen }
+      )
+
+      if (loadGen !== roomSectionLoadGenRef.current) return
+
+      applyRoomBootstrapSectionSwitch(
+        bootstrap,
+        roomId,
+        uid,
+        buildBootstrapApplyTarget()
+      )
+      setRoomMessagesLoadError(null)
+    } catch (err) {
+      if (loadGen !== roomSectionLoadGenRef.current) return
+      setLoadingMessages(false)
+      if (cached) return
+      const message =
+        err instanceof RoomBootstrapLoadError
+          ? err.message
+          : "Could not load messages for this channel."
+      console.error("room section bootstrap:", err)
+      setRoomMessagesLoadError(message)
+    }
   }
 
   async function loadOlderRoomMessages() {
@@ -1565,6 +1715,67 @@ function CommunityContent() {
     })
   }
 
+  async function reconcileAndApplyRealtimeMessage(
+    roomId: string,
+    messageId: string,
+    partial: Record<string, unknown>
+  ) {
+    if (selectedRoomIdRef.current !== roomId) return
+
+    const viewerId = userIdRef.current
+    if (!viewerId) return
+
+    const reconciliation = getRoomMessageReconciliation(viewerId)
+    const { result, row } = await reconciliation.reconcileRealtimeInsert({
+      messageId,
+      partial,
+      roomId,
+      viewerId,
+      hydrate: async () => {
+        const { data, error } = await supabase
+          .from("room_messages")
+          .select(ROOM_MESSAGE_REALTIME_SELECT)
+          .eq("id", messageId)
+          .maybeSingle()
+
+        if (error) {
+          console.error("room_messages realtime hydrate:", error)
+          return null
+        }
+        return (data ?? null) as Record<string, unknown> | null
+      },
+    })
+
+    if (result === "skipped_confirmed" || !row) return
+
+    const hydrated = row as unknown as RoomMessage
+    if (
+      !roomMessageMatchesSectionFilter(
+        hydrated,
+        sectionsRef.current,
+        sectionFilterRef.current
+      )
+    ) {
+      return
+    }
+
+    if (hydrated.pinned === true) {
+      const sectionId =
+        sectionFilterRef.current.id ?? selectedSectionId ?? null
+      if (sectionId) {
+        void loadRoomSectionViaBootstrap(roomId, sectionId, { force: true })
+      }
+      return
+    }
+
+    appendRoomMessageToState(hydrated)
+
+    if (hydrated.user_id !== viewerId) {
+      await markAllRoomMessagesSeenForUser(roomId, viewerId)
+      setUnreadByRoomId((prev) => ({ ...prev, [roomId]: false }))
+    }
+  }
+
   function startEditMessage(msg: RoomMessage) {
     setActiveMessageMenuId(null)
     setEditingMessageId(msg.id)
@@ -1680,6 +1891,9 @@ function CommunityContent() {
           return
         }
 
+        const roomId = selectedRoomIdRef.current
+        if (!roomId) return
+
         const optimistic: RoomMessageReactionRow = {
           id: `optimistic-${messageId}-${reaction}`,
           message_id: messageId,
@@ -1694,6 +1908,7 @@ function CommunityContent() {
             message_id: messageId,
             user_id: uid,
             reaction,
+            room_id: roomId,
           })
           .select("id, message_id, user_id, reaction, created_at")
           .single()
@@ -1800,6 +2015,29 @@ function CommunityContent() {
     if (!selectedRoomId) return
     const preserveSectionId =
       sectionFilterRef.current.id ?? selectedSectionId ?? null
+    if (shouldSkipLegacyRoomDataEffects()) {
+      const uid = userIdRef.current
+      if (!uid) return
+      try {
+        const { bootstrap } = await loadRoomBootstrapForUser(supabase, uid, {
+          roomId: selectedRoomId,
+          sectionId: preserveSectionId,
+          messageLimit: ROOM_BOOTSTRAP_MESSAGE_LIMIT,
+          markRead: false,
+          force: true,
+          caller: "community-refetch-sections",
+        })
+        applyRoomBootstrapToCommunityState(
+          bootstrap,
+          selectedRoomId,
+          uid,
+          buildBootstrapApplyTarget()
+        )
+      } catch (err) {
+        console.error("refetchSections bootstrap:", err)
+      }
+      return
+    }
     const { list, activeSectionId } = await loadSections(
       selectedRoomId,
       preserveSectionId
@@ -2067,7 +2305,7 @@ function CommunityContent() {
   async function loadManageMembers(roomId: string) {
     if (isDemoUserId(userIdRef.current ?? "")) {
       setManageMembers([])
-      setManageBans([])
+      setBannedUsers([])
       setLoadingManageMembers(false)
       return
     }
@@ -2592,7 +2830,7 @@ function CommunityContent() {
       writeRoomSession(user.id, {
         rooms: nextRooms,
         messagesByKey: messagesByRoomRef.current,
-        sectionsByRoom: cached?.sectionsByRoom ?? {},
+        sectionsByRoom: {},
       })
 
       if (nextRooms.length > 0 && !rp && !createMode) {
@@ -2678,6 +2916,7 @@ function CommunityContent() {
 
   useEffect(() => {
     if (!selectedRoomId || needsJoin) {
+      roomBootstrapEffectsSkipRef.current = null
       setMessages([])
       setPinnedMessages([])
       setSections([])
@@ -2691,17 +2930,97 @@ function CommunityContent() {
     }
 
     let cancelled = false
+    const loadGen = ++roomLoadGenRef.current
+    roomBootstrapEffectsSkipRef.current = null
 
     ;(async () => {
       const uid = userIdRef.current
-      const cachedSession = uid ? readRoomSession(uid) : null
-      const cachedSections = cachedSession?.sectionsByRoom[selectedRoomId]
       const preferredSectionId = deepLinkSectionId
       if (messageParam?.trim() && selectedRoomMatchesUrl) {
         pendingScrollMessageIdRef.current = messageParam.trim()
       } else {
         pendingScrollMessageIdRef.current = null
       }
+
+      if (isBackendV2Enabled("rooms") && uid && !isDemoSupabaseBlocked()) {
+        let appliedCache = false
+        try {
+          const cachedSession = readRoomSession(uid)
+          const cachedSections = cachedSession?.sectionsByRoom[selectedRoomId]
+          if (cachedSections) {
+            const cachedActiveSectionId =
+              preferredSectionId &&
+              cachedSections.list.some(
+                (section) => section.id === preferredSectionId
+              )
+                ? preferredSectionId
+                : cachedSections.activeSectionId
+            const cacheKey = buildRoomMessagesCacheKey(
+              selectedRoomId,
+              cachedSections.list,
+              cachedActiveSectionId
+            )
+            const cachedMsgs =
+              cachedSession?.messagesByKey[cacheKey] ??
+              messagesByRoomRef.current[cacheKey]
+            if (cachedMsgs && loadGen === roomLoadGenRef.current) {
+              setSections(cachedSections.list)
+              setSelectedSectionId(cachedActiveSectionId)
+              setPinnedMessages(cachedMsgs.pinned)
+              setMessages(cachedMsgs.main)
+              setHasOlderMessages(cachedMsgs.hasOlder ?? false)
+              setLoadingMessages(false)
+              appliedCache = true
+            }
+          }
+
+          const markKey = `${selectedRoomId}:${uid}`
+          const shouldMarkRead = markedReadRoomKeyRef.current !== markKey
+
+          const { bootstrap } = await loadRoomBootstrapForUser(
+            supabase,
+            uid,
+            {
+              roomId: selectedRoomId,
+              sectionId: preferredSectionId,
+              messageLimit: ROOM_BOOTSTRAP_MESSAGE_LIMIT,
+              markRead: shouldMarkRead,
+              caller: "community-room-open",
+            },
+            { loadGeneration: loadGen, expectedGeneration: loadGen }
+          )
+
+          if (cancelled || loadGen !== roomLoadGenRef.current) return
+
+          applyRoomBootstrapToCommunityState(bootstrap, selectedRoomId, uid, {
+            ...buildBootstrapApplyTarget(),
+          })
+          roomBootstrapEffectsSkipRef.current =
+            roomBootstrapEffectsKey(selectedRoomId)
+          setRoomMessagesLoadError(null)
+          if (shouldMarkRead) {
+            markRoomAppNotificationsReadOnce(
+              selectedRoomId,
+              uid,
+              selectedRoom?.slug ?? null
+            )
+          }
+        } catch (err) {
+          if (cancelled || loadGen !== roomLoadGenRef.current) return
+          setLoadingMessages(false)
+          if (appliedCache) return
+          const message =
+            err instanceof RoomBootstrapLoadError
+              ? err.message
+              : "Could not load messages for this room."
+          console.error("room bootstrap:", err)
+          setRoomMessagesLoadError(message)
+        }
+        return
+      }
+
+      const cachedSession = uid ? readRoomSession(uid) : null
+      const cachedSections = cachedSession?.sectionsByRoom[selectedRoomId]
       if (cachedSections) {
         const cachedActiveSectionId =
           preferredSectionId &&
@@ -2737,7 +3056,7 @@ function CommunityContent() {
         selectedRoomId,
         preferredSectionId
       )
-      if (cancelled) return
+      if (cancelled || loadGen !== roomLoadGenRef.current) return
       await fetchRoomMessages(selectedRoomId, list, activeSectionId)
     })()
 
@@ -2752,6 +3071,7 @@ function CommunityContent() {
     selectedRoomMatchesUrl,
     roomParam,
     loadingRooms,
+    roomBootstrapRetryNonce,
   ])
 
   useEffect(() => {
@@ -2759,7 +3079,9 @@ function CommunityContent() {
       const stopPresence = presenceStopRef.current
       presenceStopRef.current = null
       if (stopPresence) void stopPresence()
-      setActiveUsers([])
+      if (!isRoomRealtimePresenceEnabled()) {
+        setActiveUsers([])
+      }
       return
     }
 
@@ -2768,13 +3090,19 @@ function CommunityContent() {
       return
     }
 
+    if (isRoomRealtimePresenceEnabled()) {
+      return
+    }
+
     const roomId = selectedRoomId
     const userId = user.id
+    presenceRoomIdRef.current = roomId
 
     const session = createRoomPresenceSession(supabase, {
       roomId,
       userId,
       onActiveUsers: (users) => {
+        if (presenceRoomIdRef.current !== roomId) return
         setActiveUsers(users as ActivePresence[])
       },
       onError: (error) => {
@@ -2785,6 +3113,7 @@ function CommunityContent() {
     presenceStopRef.current = session.stop
 
     return () => {
+      presenceRoomIdRef.current = null
       presenceStopRef.current = null
       void session.stop()
     }
@@ -2794,166 +3123,64 @@ function CommunityContent() {
     if (!selectedRoomId || needsJoin) return
     if (isDemoSupabaseBlocked()) return
 
-    const channel = supabase.channel(`room-${selectedRoomId}`)
-    channel.on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "room_messages",
-        filter: `room_id=eq.${selectedRoomId}`,
+    const roomId = selectedRoomId
+    presenceRoomIdRef.current = roomId
+    const useRealtimePresence =
+      isRoomRealtimePresenceEnabled() && Boolean(user?.id)
+
+    const detach = subscribeCommunityRoomLiveChannel({
+      supabase,
+      roomId,
+      isMessageVisible: (messageId) =>
+        roomMessageIdsRef.current.has(messageId),
+      onReactionChange: ({ eventType, row }) => {
+        if (eventType === "INSERT") {
+          patchMessageReaction(row.message_id, row, "insert")
+          return
+        }
+        if (eventType === "DELETE") {
+          patchMessageReaction(row.message_id, row, "delete")
+        }
       },
-      async (payload) => {
-        const id = (payload.new as { id?: string })?.id
-        if (!id) return
-
-        const { data, error } = await supabase
-          .from("room_messages")
-          .select(ROOM_MESSAGE_REALTIME_SELECT)
-          .eq("id", id)
-          .maybeSingle()
-
-        if (error) {
-          console.error("room_messages realtime hydrate:", error)
-          return
-        }
-        if (!data) return
-
-        const row = data as unknown as RoomMessage
-        if (
-          !roomMessageMatchesSectionFilter(
-            row,
-            sectionsRef.current,
-            sectionFilterRef.current
-          )
-        ) {
-          return
-        }
-
-        if (row.pinned === true) {
-          void fetchRoomMessages(
-            selectedRoomId,
-            sectionsRef.current,
-            sectionFilterRef.current.id,
-            { bypassCache: true }
-          )
-          return
-        }
-
-        appendRoomMessageToState(row)
-
-        const viewerId = userIdRef.current
-        if (viewerId && row.user_id !== viewerId) {
-          await markAllRoomMessagesSeenForUser(selectedRoomId, viewerId)
-          const next = await fetchUnreadByRoomIds(
-            roomIdsForUnreadRef.current,
-            viewerId
-          )
-          setUnreadByRoomId(next)
-        }
-      }
-    )
-
-    const visibleMessageIds = roomVisibleMessageIdsKey
-      ? roomVisibleMessageIdsKey.split(",").filter(Boolean)
-      : []
-    const reactionFilter = buildRealtimeInFilter(
-      "message_id",
-      visibleMessageIds
-    )
-
-    if (reactionFilter) {
-      channel.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "room_message_reactions",
-          filter: reactionFilter,
-        },
-        (payload) => {
-          const eventType = payload.eventType
-          const row = (payload.new ?? payload.old) as
-            | RoomMessageReactionRow
-            | undefined
-          if (!row?.message_id || !roomMessageIdsRef.current.has(row.message_id)) {
-            return
-          }
-
-          if (eventType === "INSERT" && payload.new) {
-            patchMessageReaction(
-              row.message_id,
-              payload.new as RoomMessageReactionRow,
-              "insert"
-            )
-            return
-          }
-
-          if (eventType === "DELETE" && payload.old) {
-            patchMessageReaction(
-              row.message_id,
-              payload.old as RoomMessageReactionRow,
-              "delete"
-            )
-          }
-        }
-      )
-    } else if (visibleMessageIds.length > 0) {
-      // Too many visible messages for one in-(...) filter: register per-id filters
-      // (capped) instead of listening to every room's reactions globally.
-      for (const messageId of visibleMessageIds.slice(0, 100)) {
-        channel.on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "room_message_reactions",
-            filter: `message_id=eq.${messageId}`,
-          },
-          (payload) => {
-            const eventType = payload.eventType
-            const row = (payload.new ?? payload.old) as
-              | RoomMessageReactionRow
-              | undefined
-            if (
-              !row?.message_id ||
-              !roomMessageIdsRef.current.has(row.message_id)
-            ) {
-              return
-            }
-
-            if (eventType === "INSERT" && payload.new) {
-              patchMessageReaction(
-                row.message_id,
-                payload.new as RoomMessageReactionRow,
-                "insert"
+      onMessageInsert: ({ id, new: partial }) => {
+        void reconcileAndApplyRealtimeMessage(roomId, id, partial)
+      },
+      presence: useRealtimePresence
+        ? {
+            presenceKey: presenceSessionKeyRef.current,
+            userId: user!.id,
+            username: usernameRef.current,
+            avatarUrl: profile?.avatar_url ?? null,
+            onActiveUsers: (users) => {
+              if (presenceRoomIdRef.current !== roomId) return
+              setActiveUsers(
+                users.map((u) => ({
+                  user_id: u.user_id,
+                  profiles: {
+                    id: u.user_id,
+                    username: u.username,
+                    avatar_url: u.avatar_url,
+                  },
+                })) as ActivePresence[]
               )
-              return
-            }
-
-            if (eventType === "DELETE" && payload.old) {
-              patchMessageReaction(
-                row.message_id,
-                payload.old as RoomMessageReactionRow,
-                "delete"
-              )
-            }
+            },
+            onError: (error) => {
+              console.error("room_presence realtime:", error)
+            },
           }
-        )
-      }
-    }
-
-    channel.subscribe()
+        : undefined,
+    })
 
     return () => {
-      supabase.removeChannel(channel)
+      if (presenceRoomIdRef.current === roomId) {
+        presenceRoomIdRef.current = null
+      }
+      detach()
+      if (useRealtimePresence) {
+        setActiveUsers([])
+      }
     }
-  }, [
-    selectedRoomId,
-    needsJoin,
-    patchMessageReaction,
-    roomVisibleMessageIdsKey,
-  ])
+  }, [selectedRoomId, needsJoin, user?.id, profile?.avatar_url, patchMessageReaction])
 
   useEffect(() => {
     if (!selectedRoomId || needsJoin || !user?.id) {
@@ -3153,6 +3380,20 @@ function CommunityContent() {
             report({ percent: 82, stage: "Publishing…" })
 
             const { sectionId: insertSectionId } = resolveInsertSectionId()
+            const imageTempId = `temp-img-${Date.now()}`
+            const imagePending = getRoomMessageReconciliation(user.id).beginPendingSend(
+              {
+                tempId: imageTempId,
+                roomId: selectedRoomId,
+                userId: user.id,
+                sectionId: insertSectionId,
+                type: "image",
+                contentKey: buildPendingSendContentKey({
+                  type: "image",
+                  content: messageContent || "",
+                }),
+              }
+            )
 
             const { data: insertedRow, error } = await supabase
               .from("room_messages")
@@ -3169,14 +3410,23 @@ function CommunityContent() {
               })
               .select(ROOM_MESSAGE_REALTIME_SELECT)
               .single()
+              .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
             if (error) {
+              imagePending.fail()
               throw new Error(handleSupabaseError(error))
             }
 
-            if (insertedRow) {
-              appendRoomMessageToState(insertedRow as unknown as RoomMessage)
-              void createRoomMessageNotifications(supabase, insertedRow.id)
+            const insertedMessage = asJsonObject(insertedRow)
+            if (insertedMessage) {
+              imagePending.complete(insertedMessage)
+              appendRoomMessageToState(insertedMessage as unknown as RoomMessage)
+              void createRoomMessageNotifications(
+                supabase,
+                String(insertedMessage.id)
+              )
+            } else {
+              imagePending.fail()
             }
 
             setDraft("")
@@ -3224,6 +3474,15 @@ function CommunityContent() {
     clearComposerImage()
     appendRoomMessageToState(optimisticRow)
 
+    const pendingSend = getRoomMessageReconciliation(user.id).beginPendingSend({
+      tempId,
+      roomId: selectedRoomId,
+      userId: user.id,
+      sectionId: insertSectionId,
+      type: "text",
+      contentKey: buildPendingSendContentKey({ type: "text", content }),
+    })
+
     try {
       if (process.env.NODE_ENV !== "production") {
         console.log("[room_messages insert]", {
@@ -3249,8 +3508,10 @@ function CommunityContent() {
         })
         .select(ROOM_MESSAGE_REALTIME_SELECT)
         .single()
+        .overrideTypes<Record<string, unknown> | null, { merge: false }>()
       if (error) {
-        console.error("room_messages insert:", error)
+        pendingSend.fail()
+        logRoomMessagePostgrestError("insert", error)
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId ? { ...m, send_status: "failed" as const } : m
@@ -3259,9 +3520,16 @@ function CommunityContent() {
         return
       }
 
-      if (insertedRow) {
-        appendRoomMessageToState(insertedRow as unknown as RoomMessage)
-        void createRoomMessageNotifications(supabase, insertedRow.id)
+      const insertedMessage = asJsonObject(insertedRow)
+      if (insertedMessage) {
+        pendingSend.complete(insertedMessage)
+        appendRoomMessageToState(insertedMessage as unknown as RoomMessage)
+        void createRoomMessageNotifications(
+          supabase,
+          String(insertedMessage.id)
+        )
+      } else {
+        pendingSend.fail()
       }
     } finally {
       sendingMessageRef.current = false
@@ -3290,6 +3558,14 @@ function CommunityContent() {
 
     try {
       const { sectionId: insertSectionId } = resolveInsertSectionId()
+      const pendingSend = getRoomMessageReconciliation(user.id).beginPendingSend({
+        tempId,
+        roomId: selectedRoomId,
+        userId: user.id,
+        sectionId: insertSectionId,
+        type: "text",
+        contentKey: buildPendingSendContentKey({ type: "text", content }),
+      })
       const { data: insertedRow, error } = await supabase
         .from("room_messages")
         .insert({
@@ -3303,9 +3579,11 @@ function CommunityContent() {
         })
         .select(ROOM_MESSAGE_REALTIME_SELECT)
         .single()
+        .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
       if (error) {
-        console.error("room_messages retry:", error)
+        pendingSend.fail()
+        logRoomMessagePostgrestError("retry", error)
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId ? { ...m, send_status: "failed" as const } : m
@@ -3314,9 +3592,16 @@ function CommunityContent() {
         return
       }
 
-      if (insertedRow) {
-        appendRoomMessageToState(insertedRow as unknown as RoomMessage)
-        void createRoomMessageNotifications(supabase, insertedRow.id)
+      const insertedMessage = asJsonObject(insertedRow)
+      if (insertedMessage) {
+        pendingSend.complete(insertedMessage)
+        appendRoomMessageToState(insertedMessage as unknown as RoomMessage)
+        void createRoomMessageNotifications(
+          supabase,
+          String(insertedMessage.id)
+        )
+      } else {
+        pendingSend.fail()
       }
     } finally {
       sendingMessageRef.current = false
@@ -3351,8 +3636,20 @@ function CommunityContent() {
   async function sendTradeMessage(trade: any) {
     if (!user?.id || !selectedRoomId || !canPostInRoom) return
 
+    const tradeTempId = `temp-trade-${Date.now()}`
     const { sectionId: insertSectionId, source: sectionIdSource } =
       resolveInsertSectionId()
+    const pendingSend = getRoomMessageReconciliation(user.id).beginPendingSend({
+      tempId: tradeTempId,
+      roomId: selectedRoomId,
+      userId: user.id,
+      sectionId: insertSectionId,
+      type: "trade",
+      contentKey: buildPendingSendContentKey({
+        type: "trade",
+        trade_id: trade.id,
+      }),
+    })
     if (process.env.NODE_ENV !== "production") {
       console.log("[room_messages insert]", {
         selectedRoomId,
@@ -3379,16 +3676,25 @@ function CommunityContent() {
       })
       .select(ROOM_MESSAGE_REALTIME_SELECT)
       .single()
+      .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
     if (error) {
+      pendingSend.fail()
       console.error("room trade message insert:", error)
       showPopup({ type: "error", message: handleSupabaseError(error) })
       return
     }
 
-    if (insertedRow) {
-      appendRoomMessageToState(insertedRow as unknown as RoomMessage)
-      void createRoomMessageNotifications(supabase, insertedRow.id)
+    const insertedMessage = asJsonObject(insertedRow)
+    if (insertedMessage) {
+      pendingSend.complete(insertedMessage)
+      appendRoomMessageToState(insertedMessage as unknown as RoomMessage)
+      void createRoomMessageNotifications(
+        supabase,
+        String(insertedMessage.id)
+      )
+    } else {
+      pendingSend.fail()
     }
 
     setSelectTrade(false)
@@ -3588,10 +3894,8 @@ function CommunityContent() {
                         >
                           <StorageImage
                             src={sidebarAvatarSrc}
-                            originalSrc={sidebarAvatarSrc}
-                            preset="avatar"
-                            transformWidth={64}
-                            transformHeight={64}
+                            preset="room-list-thumb"
+                            fallbackToOriginal={false}
                             alt="room avatar"
                             intrinsicWidth={32}
                             intrinsicHeight={32}
@@ -3659,10 +3963,9 @@ function CommunityContent() {
                       inviteTargetRoom?.image_url) ||
                     "/default-avatar.png"
                   }
-                  preset="avatar"
-                  transformWidth={96}
-                  transformHeight={96}
+                  preset="room-thumb"
                   localTransformWidth={96}
+                  fallbackToOriginal={false}
                   priority
                   intrinsicWidth={48}
                   intrinsicHeight={48}
@@ -3923,11 +4226,9 @@ function CommunityContent() {
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedSectionId(section.id)
                             if (selectedRoomId) {
-                              void fetchRoomMessages(
+                              void loadRoomSectionViaBootstrap(
                                 selectedRoomId,
-                                sections,
                                 section.id
                               )
                             }
@@ -4007,12 +4308,10 @@ function CommunityContent() {
                               key={`mobile-section-${section.id}`}
                               type="button"
                               onClick={() => {
-                                setSelectedSectionId(section.id)
                                 setMobileSectionsOpen(false)
                                 if (selectedRoomId) {
-                                  void fetchRoomMessages(
+                                  void loadRoomSectionViaBootstrap(
                                     selectedRoomId,
-                                    sections,
                                     section.id
                                   )
                                 }
@@ -4065,6 +4364,21 @@ function CommunityContent() {
               ) : null}
               {!selectedRoomId ? (
                 <p className="text-sm text-gray-400">Pick a room to start chatting.</p>
+              ) : roomMessagesLoadError ? (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-8 text-center">
+                  <p className="text-sm font-medium text-red-200">
+                    {roomMessagesLoadError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRoomBootstrapRetryNonce((nonce) => nonce + 1)
+                    }
+                    className="mt-3 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/15"
+                  >
+                    Try again
+                  </button>
+                </div>
               ) : loadingMessages ? (
                 <div className="tt-trade-rooms-message-list space-y-3">
                   {Array.from({ length: 6 }).map((_, i) => (

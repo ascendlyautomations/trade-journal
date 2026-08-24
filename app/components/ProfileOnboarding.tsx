@@ -79,7 +79,7 @@ export default function ProfileOnboarding({
   initialAvatarUrl = null,
   onComplete,
 }: ProfileOnboardingProps) {
-  const { showPopup, ...feedbackModalProps } = useFeedbackPopup()
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { runUpload } = useUploadProgress()
   const [username, setUsername] = useState(() =>
     sanitizeUsernameInputForTyping(

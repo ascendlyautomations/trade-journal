@@ -1,10 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  getDefaultAchievementDateInputValue,
-  normalizeAchievementDateInputValue,
-  resolveNewAchievementDateInputValue,
-} = require("./achievementDate.ts")
+import { describe, it } from "node:test"
+import { getDefaultAchievementDateInputValue, normalizeAchievementDateInputValue, resolveNewAchievementDateInputValue, } from "./achievementDate.ts"
+import assert from "node:assert/strict"
 
 describe("achievementDate", () => {
   const fixedNow = new Date(2026, 5, 28, 23, 30, 0)
@@ -25,3 +21,4 @@ describe("achievementDate", () => {
     assert.equal(normalizeAchievementDateInputValue("2026-06-01"), "2026-06-01")
   })
 })
+export {}

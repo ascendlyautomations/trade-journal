@@ -17,6 +17,7 @@ type NativeIosDashboardActionBarProps = {
   copyGroups: CopyTradingGroup[]
   onOpenQuickInput: () => void
   onOpenFilters: () => void
+  onAccountPickerOpen?: () => void
 }
 
 /**
@@ -32,6 +33,7 @@ export default function NativeIosDashboardActionBar({
   copyGroups,
   onOpenQuickInput: _onOpenQuickInput,
   onOpenFilters,
+  onAccountPickerOpen,
 }: NativeIosDashboardActionBarProps) {
   return (
     <PlatformPageHeader
@@ -47,6 +49,7 @@ export default function NativeIosDashboardActionBar({
             filterPlaceholder="All Accounts"
             showExternalCreateButton={false}
             hideManageAccounts={false}
+            onPickerOpen={onAccountPickerOpen}
           />
         </div>
       }

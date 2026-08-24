@@ -8,6 +8,7 @@ import { compressImage } from "@/lib/compressImage"
 import { useToast } from "@/app/components/ui"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import type { TableInsert } from "@/lib/supabaseTypes"
 import { USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
 
 export default function SuggestionsPage() {
@@ -60,11 +61,16 @@ export default function SuggestionsPage() {
       .from("suggestions")
       .getPublicUrl(fileName)
 
-    const { error: insertError } = await supabase.from("suggestions").insert({
+    const insertPayload = {
       user_id: user.id,
-      note: note.trim(),
-      image_url: publicUrl.publicUrl,
-    })
+      message: note.trim(),
+      screenshot_url: publicUrl.publicUrl,
+      status: "open",
+    } satisfies TableInsert<"feedback_submissions">
+
+    const { error: insertError } = await supabase
+      .from("feedback_submissions")
+      .insert(insertPayload)
 
     if (insertError) {
       console.error("[suggestions] insert failed", insertError)

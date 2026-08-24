@@ -1,9 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  DELETED_USER_LABEL,
-  resolveDmSenderDisplay,
-} = require("./deletedUserDisplay.ts")
+import { describe, it } from "node:test"
+import { DELETED_USER_LABEL, isDirectConversationPeerDeleted, resolveDmSenderDisplay, } from "./deletedUserDisplay.ts"
+import assert from "node:assert/strict"
 
 describe("resolveDmSenderDisplay", () => {
   it("returns Deleted User when sender_anonymized is true", () => {
@@ -42,8 +39,6 @@ describe("resolveDmSenderDisplay", () => {
 })
 
 describe("isDirectConversationPeerDeleted", () => {
-  const { isDirectConversationPeerDeleted } = require("./deletedUserDisplay.ts")
-
   it("detects deleted peer in 1:1 threads with history", () => {
     assert.equal(
       isDirectConversationPeerDeleted(false, null, true),
@@ -58,3 +53,4 @@ describe("isDirectConversationPeerDeleted", () => {
     )
   })
 })
+export {}

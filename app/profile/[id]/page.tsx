@@ -1,7 +1,6 @@
 "use client"
 
 import { SkeletonProfilePage } from "../../components/ui/skeletons"
-import AchievementDetailModal from "../../components/AchievementDetailModal"
 import FeedProfilePostDetailModal from "../../components/feed/FeedProfilePostDetailModal"
 import type { ChangeEvent } from "react"
 import {
@@ -25,7 +24,6 @@ import {
 } from "@/lib/uploadProgress/reportProgress"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
-import FeedPostDetailModal from "../../components/feed/FeedPostDetailModal"
 import DetailModalShell from "../../components/ui/DetailModalShell"
 import ImageLightbox from "../../components/ui/ImageLightbox"
 import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
@@ -81,7 +79,6 @@ import {
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
-import ShareToConversationsModal from "../../components/ShareToConversationsModal"
 import {
   type Achievement,
   fetchVisibleProfileAchievements,
@@ -109,15 +106,8 @@ import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
 import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
-import ProfileAchievementsTab from "../../components/profile/ProfileAchievementsTab"
-import ProfileCalendarTab from "../../components/profile/ProfileCalendarTab"
 import { PlatformProfileHeader } from "../../components/platform"
 import ProfileOverviewStats from "../../components/profile/ProfileOverviewStats"
-import ProfilePostsTab from "../../components/profile/ProfilePostsTab"
-import ProfileReelsTab from "../../components/profile/ProfileReelsTab"
-import ProfileStatisticsTab, {
-  type ProfileStatisticsMode,
-} from "../../components/profile/ProfileStatisticsTab"
 import ProfileTabs, {
   type ProfileTab,
 } from "../../components/profile/ProfileTabs"
@@ -133,7 +123,6 @@ import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import PostCard from "../../components/profile/ProfilePostCard"
 import QuickTradeModal from "../../components/QuickTradeModal"
 import ReelComposerModal from "../../components/profile/ReelComposerModal"
-import FeedReelDetailModal from "../../components/feed/FeedReelDetailModal"
 import { type ReelRow, deleteReel, fetchReelsByTradeIds, fetchUserProfileReels, replaceTradeReelVideo, isTradeAttachedReel } from "@/lib/reels"
 import {
   patchFeedReelInSessionsForUser,
@@ -150,13 +139,11 @@ import {
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import ImageCropModal from "../../components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
-import FeedStoryViewer from "../../components/feed/FeedStoryViewer"
-import { publishStory } from "@/lib/publishStory"
 import {
   getActiveStoriesForUser,
-  userHasActiveStory,
 } from "@/lib/activeStories"
 import { useActiveStories } from "@/lib/useActiveStories"
+import { readStoriesSession } from "@/lib/storiesSessionCache"
 import {
   createStoryPreviewUrl,
   prepareStoryImageFile,
@@ -178,29 +165,100 @@ import {
   sanitizeTradesForViewer,
   tradeSelectForViewer,
 } from "@/lib/publicAccountPrivacy"
+import {
+  asJsonObject,
+  mapProjectedRows,
+} from "@/lib/supabaseProjectedQuery"
+import type { TableInsert } from "@/lib/supabaseTypes"
+import {
+  overviewStatsFromBootstrapPublicStats,
+  shouldFetchProfileSummaryTrades,
+  type ProfileBootstrapPublicStatsV1,
+} from "@/lib/profilePublicStatistics"
 import { useProfileStatistics } from "./useProfileStatistics"
-import { scheduleDeferredWork } from "@/lib/scheduleDeferredWork"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags.ts"
+import {
+  loadProfileBootstrapWithResilience,
+  type ProfileBootstrapLoadResult,
+} from "@/lib/profileBootstrap/profileBootstrapRepository.ts"
+import {
+  invalidateProfileBootstrapCache,
+  profileBootstrapViewerKey,
+  readProfileBootstrapCache,
+  shouldRevalidateProfileBootstrapCache,
+} from "@/lib/profileBootstrap/profileBootstrapCache.ts"
+import {
+  previewProfileRowFromHeaderPreview,
+  profileSessionPayloadFromBootstrap,
+} from "@/lib/profileBootstrap/profileBootstrapPagePatch.ts"
+import { readProfileHeaderPreview } from "@/lib/profilePreviewCache.ts"
+import { batchLoadProfileTradeEngagement } from "@/lib/profileTradeEngagementBatch.ts"
+import {
+  PROFILE_ROOM_SELECT,
+  profileRoomKeyFromRow,
+  resolveProfileHasActiveStory,
+  resolveProfileHasRoom,
+  type ProfileBootstrapSectionCounts,
+  type ProfileRoomRow,
+} from "@/lib/profileDeferredLoads"
+import {
+  readDashboardPublicTradeCompleteness,
+  resolveOwnProfileHeaderFromSession,
+  resolveOwnPublicTradesFromCache,
+  resolveOwnSummaryTradesFromCache,
+} from "@/lib/profileOwnPath.ts"
+import { publishStory } from "@/lib/publishStory"
+import type { ProfileStatisticsMode } from "../../components/profile/ProfileStatisticsTab"
 
 const InputTradeForm = dynamic(() => import("../../components/InputTradeForm"), {
   ssr: false,
 })
 
-type ProfilePrefetchResource =
-  | "posts"
-  | "reels"
-  | "analytics"
-  | "achievements"
-  | "room"
+const ProfileTabFallback = () => (
+  <div className="h-40 animate-pulse rounded-xl border border-white/10 bg-white/5" />
+)
 
-const PROFILE_PREFETCH_ORDER: readonly ProfilePrefetchResource[] = [
-  "posts",
-  "reels",
-  // One existing analytics query supplies both Statistics and Calendar.
-  "analytics",
-  "achievements",
-  "room",
-]
+const ProfileAchievementsTab = dynamic(
+  () => import("../../components/profile/ProfileAchievementsTab"),
+  { loading: ProfileTabFallback }
+)
+const ProfileCalendarTab = dynamic(
+  () => import("../../components/profile/ProfileCalendarTab"),
+  { loading: ProfileTabFallback }
+)
+const ProfileStatisticsTab = dynamic(
+  () => import("../../components/profile/ProfileStatisticsTab"),
+  { loading: ProfileTabFallback }
+)
+const ProfilePostsTab = dynamic(
+  () => import("../../components/profile/ProfilePostsTab"),
+  { loading: ProfileTabFallback }
+)
+const ProfileReelsTab = dynamic(
+  () => import("../../components/profile/ProfileReelsTab"),
+  { loading: ProfileTabFallback }
+)
+const LazyFeedStoryViewer = dynamic(
+  () => import("../../components/feed/FeedStoryViewer"),
+  { ssr: false }
+)
+const LazyFeedReelDetailModal = dynamic(
+  () => import("../../components/feed/FeedReelDetailModal"),
+  { ssr: false }
+)
+const LazyFeedPostDetailModal = dynamic(
+  () => import("../../components/feed/FeedPostDetailModal"),
+  { ssr: false }
+)
+const LazyAchievementDetailModal = dynamic(
+  () => import("../../components/AchievementDetailModal"),
+  { ssr: false }
+)
+const LazyShareToConversationsModal = dynamic(
+  () => import("../../components/ShareToConversationsModal"),
+  { ssr: false }
+)
 
 /** Public profile columns only — never fetch billing, referral, or moderation fields here. */
 const PUBLIC_PROFILE_SELECT =
@@ -263,10 +321,18 @@ function ProfilePageContent() {
   const [tradesReady, setTradesReady] = useState(false)
   const [summaryTrades, setSummaryTrades] = useState<any[]>([])
   const [summaryReady, setSummaryReady] = useState(false)
+  const [bootstrapPublicStats, setBootstrapPublicStats] =
+    useState<ProfileBootstrapPublicStatsV1 | null>(null)
+  const [bootstrapSectionCounts, setBootstrapSectionCounts] =
+    useState<ProfileBootstrapSectionCounts | null>(null)
   const [analyticsTradeRows, setAnalyticsTradeRows] = useState<any[]>([])
   const [analyticsTradesReady, setAnalyticsTradesReady] = useState(false)
   const [analyticsTradesLoading, setAnalyticsTradesLoading] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [bootstrapRefreshing, setBootstrapRefreshing] = useState(false)
+  const [bootstrapTransientError, setBootstrapTransientError] = useState(false)
+  const [headerPreviewOnly, setHeaderPreviewOnly] = useState(false)
+  const profileFetchAbortRef = useRef<AbortController | null>(null)
   const [metaLoading, setMetaLoading] = useState(false)
   const [tradesLoading, setTradesLoading] = useState(false)
   /** Set when profile row fails to load (wrong env, RLS, missing row, or network). */
@@ -293,6 +359,37 @@ function ProfilePageContent() {
         isFollowing),
     [profile, currentUserId, isFollowing]
   )
+
+  const applyBootstrapLoadResult = useCallback(
+    (boot: ProfileBootstrapLoadResult, segment: string) => {
+      if (!boot.profile) return
+      setProfile(boot.profile)
+      setFollowersCount(boot.followersCount)
+      setFollowingCount(boot.followingCount)
+      setIsFollowing(boot.isFollowing)
+      setIsRequested(boot.isRequested)
+      setFollowsYou(boot.followsYou)
+      setAllTrades(boot.trades)
+      setVisibleTradeCount(boot.trades.length)
+      setTradeHasMore(boot.tradeHasMore)
+      setTradesReady(boot.canViewTrades)
+      setTradesLoading(false)
+      if (boot.publicStats) {
+        setBootstrapPublicStats(boot.publicStats)
+        setSummaryReady(true)
+      }
+      if (boot.sectionCounts) {
+        setBootstrapSectionCounts(boot.sectionCounts)
+      }
+      setHeaderPreviewOnly(false)
+      setBootstrapTransientError(false)
+      writeProfileSession(
+        segment,
+        profileSessionPayloadFromBootstrap(boot, PAGE_SIZE)
+      )
+    },
+    [PAGE_SIZE]
+  )
   const [messageBusy, setMessageBusy] = useState(false)
   const [room, setRoom] = useState<any | null>(null)
   const [roomReady, setRoomReady] = useState(false)
@@ -308,33 +405,11 @@ function ProfilePageContent() {
   const replaceReelInputRef = useRef<HTMLInputElement>(null)
   const [replacingReelPost, setReplacingReelPost] = useState<any | null>(null)
   const [activeTab, setActiveTab] = useState<ProfileTab>("trades")
-  const [profilePrefetchStep, setProfilePrefetchStep] = useState<{
-    profileId: string
-    resource: ProfilePrefetchResource
-  } | null>(null)
-  const prefetchProfileRef = useRef(profileId)
-  const prefetchGenerationRef = useRef(0)
-  const prefetchStartedGenerationRef = useRef(-1)
-  if (prefetchProfileRef.current !== profileId) {
-    prefetchProfileRef.current = profileId
-    prefetchGenerationRef.current += 1
-  }
-  const prefetchStepForCurrentProfile =
-    profilePrefetchStep?.profileId === profileId
-      ? profilePrefetchStep.resource
-      : null
-  const prefetchingPosts = prefetchStepForCurrentProfile === "posts"
-  const prefetchingReels = prefetchStepForCurrentProfile === "reels"
-  const prefetchingAnalytics = prefetchStepForCurrentProfile === "analytics"
-  const prefetchingAchievements =
-    prefetchStepForCurrentProfile === "achievements"
-  const prefetchingRoom = prefetchStepForCurrentProfile === "room"
-  const postsRequested = activeTab === "posts" || prefetchingPosts
-  const reelsRequested = activeTab === "reels" || prefetchingReels
+  const postsRequested = activeTab === "posts"
+  const reelsRequested = activeTab === "reels"
   const analyticsRequested =
-    activeTab === "calendar" || activeTab === "stats" || prefetchingAnalytics
-  const achievementsRequested =
-    activeTab === "achievements" || prefetchingAchievements
+    activeTab === "calendar" || activeTab === "stats"
+  const achievementsRequested = activeTab === "achievements"
   const [showCreatePost, setShowCreatePost] = useState(false)
   const [showReelComposer, setShowReelComposer] = useState(false)
   const [showQuickTrade, setShowQuickTrade] = useState(false)
@@ -403,8 +478,8 @@ function ProfilePageContent() {
   const STORY_SLIDE_MS = 7000
   const [profileStoryOpen, setProfileStoryOpen] = useState(false)
   const [profileStoryIndex, setProfileStoryIndex] = useState(0)
-  const [profileStoriesRequested, setProfileStoriesRequested] = useState(false)
-  const roomRequested = profileStoriesRequested || prefetchingRoom
+  const [profileStoriesLoadRequested, setProfileStoriesLoadRequested] =
+    useState(false)
   const profileStoryTriggerRef = useRef<HTMLDivElement>(null)
   const likeBusyRef = useRef<Set<string>>(new Set())
   const commentSubmittingRef = useRef<Set<string>>(new Set())
@@ -471,67 +546,57 @@ function ProfilePageContent() {
   )
 
   const { storiesByUser: profileStoriesByUser, loadStories: loadProfileStories } =
-    useActiveStories(profileStoryUserIds, !!profile?.id && profileStoriesRequested)
-
-  useEffect(() => {
-    setProfileStoriesRequested(false)
-    const node = profileStoryTriggerRef.current
-    if (!node || !profile?.id) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setProfileStoriesRequested(true)
-          observer.disconnect()
-        }
-      },
-      { rootMargin: "100px" }
+    useActiveStories(
+      profileStoryUserIds,
+      !!profile?.id,
+      profileStoriesLoadRequested
     )
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [profile?.id])
 
-  useEffect(() => {
-    if (!profile?.id || !roomRequested || roomReady) return
-    let cancelled = false
-
-    void (async () => {
-      let roomRow: (Record<string, unknown> & { owner_user_id?: string }) | null =
-        null
-      if (isDemoModeActive() && isDemoProfileId(String(profile.id))) {
-        roomRow =
-          getDemoProfileMetadata(String(profile.id), currentUserId)?.roomRow ?? null
-      } else {
-        const { data, error } = await supabase
-          .from("rooms")
-          .select("*")
-          .eq("owner_user_id", profile.id)
-          .maybeSingle()
-        if (error) console.error(error)
-        roomRow = data ?? null
-      }
-      if (cancelled) return
-      const resolved =
-        roomRow && roomRow.owner_user_id === profile.id ? roomRow : null
-      setRoom(resolved)
-      setRoomReady(true)
-      patchProfileSession(profileId, { room: resolved, roomReady: true })
-    })()
-
-    return () => {
-      cancelled = true
+  const ensureProfileRoomLoaded = useCallback(async (): Promise<ProfileRoomRow | null> => {
+    if (!profile?.id) return null
+    if (room && String(room.owner_user_id) === String(profile.id)) {
+      return room as ProfileRoomRow
     }
-  }, [
-    currentUserId,
-    profile?.id,
-    profileId,
-    roomRequested,
-    roomReady,
-  ])
+    if (roomReady && !room) return null
 
-  const profileHasActiveStory = userHasActiveStory(
-    profileStoriesByUser,
-    profile?.id
-  )
+    let roomRow: ProfileRoomRow | null = null
+    if (isDemoModeActive() && isDemoProfileId(String(profile.id))) {
+      roomRow =
+        (getDemoProfileMetadata(String(profile.id), currentUserId)
+          ?.roomRow as ProfileRoomRow | null) ?? null
+    } else {
+      const { data, error } = await supabase
+        .from("rooms")
+        .select(PROFILE_ROOM_SELECT)
+        .eq("owner_user_id", profile.id)
+        .maybeSingle()
+      if (error) console.error(error)
+      roomRow = (data as ProfileRoomRow | null) ?? null
+    }
+
+    const resolved =
+      roomRow && String(roomRow.owner_user_id) === String(profile.id)
+        ? roomRow
+        : null
+    setRoom(resolved)
+    setRoomReady(true)
+    patchProfileSession(profileId, { room: resolved, roomReady: true })
+    return resolved
+  }, [currentUserId, profile?.id, profileId, room, roomReady])
+
+  const handleOpenProfileStory = useCallback(async () => {
+    if (!profile?.id) return
+    setProfileStoriesLoadRequested(true)
+    await loadProfileStories()
+    setProfileStoryIndex(0)
+    setProfileStoryOpen(true)
+  }, [loadProfileStories, profile?.id])
+
+  const profileHasActiveStory = resolveProfileHasActiveStory({
+    bootstrapHasActiveStory: bootstrapSectionCounts?.has_active_story,
+    storiesByUser: profileStoriesByUser,
+    profileId: profile?.id,
+  })
 
   const profileStorySlides = useMemo(
     () => getActiveStoriesForUser(profileStoriesByUser, profile?.id),
@@ -657,6 +722,7 @@ function ProfilePageContent() {
           }
 
           showPopup({ type: "success", message: "Story uploaded!" })
+          setProfileStoriesLoadRequested(true)
           await loadProfileStories()
         },
       })
@@ -694,6 +760,19 @@ function ProfilePageContent() {
         }
       }
 
+      if (isOwner && offset === 0) {
+        const completeness = readDashboardPublicTradeCompleteness(forProfileId)
+        if (completeness?.historyComplete) {
+          const cached = resolveOwnPublicTradesFromCache(forProfileId)
+          if (cached?.length) {
+            return {
+              rows: cached.slice(0, pageSize),
+              hasMore: cached.length > pageSize,
+            }
+          }
+        }
+      }
+
       // Inclusive range end fetches pageSize + 1 rows to detect hasMore.
       const { data, error } = await supabase
         .from("trades")
@@ -702,13 +781,16 @@ function ProfilePageContent() {
         .eq("is_public", true)
         .order("created_at", { ascending: false })
         .range(offset, offset + pageSize)
+        .overrideTypes<Record<string, unknown>[], { merge: false }>()
 
       if (error) {
         console.error("profile trades page fetch:", error)
         return { rows: [], hasMore: false }
       }
 
-      const rows = sanitizeTradesForViewer(data || [], { isOwner })
+      const rows = sanitizeTradesForViewer(mapProjectedRows(data, (row) => row), {
+        isOwner,
+      })
       return {
         rows: rows.slice(0, pageSize),
         hasMore: rows.length > pageSize,
@@ -730,11 +812,15 @@ function ProfilePageContent() {
         .eq("user_id", forProfileId)
         .eq("is_public", true)
         .order("created_at", { ascending: false })
+        .overrideTypes<Record<string, unknown>[], { merge: false }>()
+
       if (error) {
         console.error("profile analytics trades fetch:", error)
         return []
       }
-      return sanitizeTradesForViewer(data || [], { isOwner })
+      return sanitizeTradesForViewer(mapProjectedRows(data, (row) => row), {
+        isOwner,
+      })
     },
     [currentUserId]
   )
@@ -836,6 +922,9 @@ function ProfilePageContent() {
       setTradesReady(false)
       setSummaryTrades([])
       setSummaryReady(false)
+      setBootstrapPublicStats(null)
+      setBootstrapSectionCounts(null)
+      setProfileStoriesLoadRequested(false)
       setAnalyticsTradeRows([])
       setAnalyticsTradesReady(false)
       setLoading(false)
@@ -870,6 +959,20 @@ function ProfilePageContent() {
       setAnalyticsTradesReady(cached.analyticsTradesReady ?? false)
       setSummaryTrades((cached.summaryTrades ?? []) as any[])
       setSummaryReady(cached.summaryReady ?? false)
+      setBootstrapPublicStats(
+        (cached.bootstrapPublicStats as ProfileBootstrapPublicStatsV1 | null) ??
+          null
+      )
+      setBootstrapSectionCounts(
+        (cached.bootstrapSectionCounts as ProfileBootstrapSectionCounts | null) ??
+          null
+      )
+      setProfileStoriesLoadRequested(
+        Boolean(
+          cached.profile?.id &&
+            readStoriesSession(String(cached.profile.id))
+        )
+      )
       if (cached.activeTab) {
         setActiveTab(cached.activeTab as typeof activeTab)
       }
@@ -904,13 +1007,49 @@ function ProfilePageContent() {
     setAnalyticsTradesReady(false)
     setSummaryTrades([])
     setSummaryReady(false)
+    setBootstrapPublicStats(null)
+    setBootstrapSectionCounts(null)
+    setProfileStoriesLoadRequested(false)
     setRoom(null)
     setRoomReady(false)
-    setLoading(true)
+    setBootstrapRefreshing(false)
+    setBootstrapTransientError(false)
+    setHeaderPreviewOnly(false)
 
-    fetchProfile(profileId)
+    profileFetchAbortRef.current?.abort()
+    const fetchAbort = new AbortController()
+    profileFetchAbortRef.current = fetchAbort
+
+    const viewerKey = profileBootstrapViewerKey(viewerUser?.id ?? null)
+    const bootstrapCached = readProfileBootstrapCache(viewerKey, profileId)
+    if (bootstrapCached.entry) {
+      applyBootstrapLoadResult(bootstrapCached.entry.loadResult, profileId)
+      setLoading(false)
+      setMetaLoading(false)
+      setBootstrapRefreshing(
+        shouldRevalidateProfileBootstrapCache(bootstrapCached.entry.fetchedAt)
+      )
+    } else {
+      const preview = readProfileHeaderPreview(profileId)
+      if (preview) {
+        setProfile(previewProfileRowFromHeaderPreview(preview))
+        setLoading(false)
+        setMetaLoading(true)
+        setHeaderPreviewOnly(true)
+        setTradesReady(false)
+        setTradesLoading(true)
+      } else {
+        setLoading(true)
+      }
+    }
+
+    fetchProfile(profileId, fetchAbort.signal)
     deepLinkHandledRef.current = null
-  }, [profileId])
+
+    return () => {
+      fetchAbort.abort()
+    }
+  }, [profileId, applyBootstrapLoadResult, viewerUser?.id])
 
   useEffect(() => {
     if (!profile?.id || !canViewTrades || activeTab !== "trades" || tradesReady) {
@@ -930,19 +1069,24 @@ function ProfilePageContent() {
 
     void (async () => {
       const page = await fetchTradesForProfile(profile.id, 0)
-      if (!cancelled) {
-        setAllTrades(page.rows)
-        setVisibleTradeCount(page.rows.length)
-        setTradeHasMore(page.hasMore)
-        setTradesReady(true)
-        setTradesLoading(false)
-        patchProfileSession(profileId, {
-          allTrades: page.rows,
-          visibleTradeCount: page.rows.length,
-          tradeHasMore: page.hasMore,
-          tradesReady: true,
+      if (cancelled) return
+      const tradeIds = page.rows.map((t) => String(t.id)).filter(Boolean)
+      if (tradeIds.length > 0) {
+        await batchLoadProfileTradeEngagement(supabase, tradeIds, currentUserId, {
+          seedCommentPreviews: false,
         })
       }
+      setAllTrades(page.rows)
+      setVisibleTradeCount(page.rows.length)
+      setTradeHasMore(page.hasMore)
+      setTradesReady(true)
+      setTradesLoading(false)
+      patchProfileSession(profileId, {
+        allTrades: page.rows,
+        visibleTradeCount: page.rows.length,
+        tradeHasMore: page.hasMore,
+        tradesReady: true,
+      })
     })()
 
     return () => {
@@ -955,12 +1099,43 @@ function ProfilePageContent() {
     profile?.id,
     profileId,
     tradesReady,
+    currentUserId,
   ])
 
   useEffect(() => {
-    if (!profile?.id || !canViewTrades || summaryReady) return
+    if (
+      !shouldFetchProfileSummaryTrades({
+        profileId: profile?.id,
+        canViewTrades,
+        summaryReady,
+        bootstrapPublicStats,
+      })
+    ) {
+      return
+    }
     let cancelled = false
-    void fetchSummaryTrades(String(profile.id)).then((rows) => {
+
+    const isOwner =
+      currentUserId != null && String(currentUserId) === String(profile!.id)
+    if (isOwner) {
+      const completeness = readDashboardPublicTradeCompleteness(String(profile!.id))
+      if (completeness?.historyComplete) {
+        const cachedSummary = resolveOwnSummaryTradesFromCache(String(profile!.id))
+        if (cachedSummary) {
+          setSummaryTrades(cachedSummary)
+          setSummaryReady(true)
+          patchProfileSession(profileId, {
+            summaryTrades: cachedSummary,
+            summaryReady: true,
+          })
+          return () => {
+            cancelled = true
+          }
+        }
+      }
+    }
+
+    void fetchSummaryTrades(String(profile!.id)).then((rows) => {
       if (cancelled) return
       setSummaryTrades(rows)
       setSummaryReady(true)
@@ -969,81 +1144,14 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [canViewTrades, fetchSummaryTrades, profile?.id, profileId, summaryReady])
-
-  // Start secondary work only after the critical profile is interactive:
-  // header resolved, default Trades usable, and overview summary available.
-  // Each completion schedules the next resource in a separate idle slice, so
-  // tab warming never creates a request burst or competes with first paint.
-  useEffect(() => {
-    if (!profileId || loading || !profile?.id) return
-    if (canViewTrades && (!tradesReady || !summaryReady)) return
-
-    const generation = prefetchGenerationRef.current
-    if (prefetchStartedGenerationRef.current === generation) return
-    prefetchStartedGenerationRef.current = generation
-
-    scheduleDeferredWork(() => {
-      if (
-        prefetchGenerationRef.current !== generation ||
-        prefetchProfileRef.current !== profileId
-      ) {
-        return
-      }
-      setProfilePrefetchStep({
-        profileId,
-        resource: PROFILE_PREFETCH_ORDER[0],
-      })
-    }, 1000)
   }, [
+    bootstrapPublicStats,
     canViewTrades,
-    loading,
+    currentUserId,
+    fetchSummaryTrades,
     profile?.id,
     profileId,
     summaryReady,
-    tradesReady,
-  ])
-
-  useEffect(() => {
-    const step = profilePrefetchStep
-    if (!step || step.profileId !== profileId) return
-
-    const ready =
-      step.resource === "posts"
-        ? wallPostsReady
-        : step.resource === "reels"
-          ? profileReelsReady
-          : step.resource === "analytics"
-            ? analyticsTradesReady
-            : step.resource === "achievements"
-              ? achievementsReady
-              : roomReady
-    if (!ready) return
-
-    const currentIndex = PROFILE_PREFETCH_ORDER.indexOf(step.resource)
-    const nextResource = PROFILE_PREFETCH_ORDER[currentIndex + 1]
-    const generation = prefetchGenerationRef.current
-    scheduleDeferredWork(() => {
-      if (
-        prefetchGenerationRef.current !== generation ||
-        prefetchProfileRef.current !== step.profileId
-      ) {
-        return
-      }
-      setProfilePrefetchStep(
-        nextResource
-          ? { profileId: step.profileId, resource: nextResource }
-          : null
-      )
-    }, 750)
-  }, [
-    achievementsReady,
-    analyticsTradesReady,
-    profileId,
-    profilePrefetchStep,
-    profileReelsReady,
-    roomReady,
-    wallPostsReady,
   ])
 
   useEffect(() => {
@@ -1091,13 +1199,14 @@ function ProfilePageContent() {
   }, [profile?.id, canViewTrades])
 
   useEffect(() => {
-    if (activeTab !== "trades" || !allTrades.length) {
+    if (activeTab !== "trades" || !trades.length) {
       setTradeReelsByTradeId({})
       return
     }
 
     let cancelled = false
-    const tradeIds = allTrades
+    const reelsAbort = new AbortController()
+    const tradeIds = trades
       .map((trade) => String(trade.id))
       .filter((id) => id.trim() !== "")
 
@@ -1117,7 +1226,9 @@ function ProfilePageContent() {
       }
     }
 
-    void fetchReelsByTradeIds(supabase, tradeIds).then((map) => {
+    void fetchReelsByTradeIds(supabase, viewerUser?.id ?? "", tradeIds, {
+      signal: reelsAbort.signal,
+    }).then((map) => {
       if (cancelled) return
       const record: Record<string, ReelRow> = {}
       map.forEach((reel, tradeId) => {
@@ -1128,8 +1239,9 @@ function ProfilePageContent() {
 
     return () => {
       cancelled = true
+      reelsAbort.abort()
     }
-  }, [activeTab, allTrades, profile?.id])
+  }, [activeTab, trades, profile?.id, viewerUser?.id])
 
   useEffect(() => {
     // Profile is null during the first commit on remount (before the session
@@ -1499,6 +1611,32 @@ function ProfilePageContent() {
   async function refreshProfileInBackground(urlSegment: string) {
     const segment = urlSegment.trim()
     const lookupByUuid = isProfileUuidSegment(segment)
+    const uid = viewerUser?.id ?? null
+
+    if (isBackendV2Enabled("profile")) {
+      setMetaLoading(true)
+      setBootstrapRefreshing(true)
+      try {
+        const loaded = await loadProfileBootstrapWithResilience(supabase, {
+          identifier: segment,
+          viewerId: uid,
+          forceNetwork: true,
+        })
+        if (loaded.result?.profile) {
+          applyBootstrapLoadResult(loaded.result, segment)
+          if (lookupByUuid && loaded.result.profile.username) {
+            const target = profilePath(loaded.result.profile)
+            aliasProfileSession(segment, String(loaded.result.profile.username).trim())
+            const qs = searchParams.toString()
+            router.replace(qs ? `${target}?${qs}` : target, { scroll: false })
+          }
+        }
+      } finally {
+        setMetaLoading(false)
+        setBootstrapRefreshing(false)
+      }
+      return
+    }
 
     let profileQuery = supabase.from("profiles").select(PUBLIC_PROFILE_SELECT)
     if (lookupByUuid) {
@@ -1509,8 +1647,6 @@ function ProfilePageContent() {
         normalizeProfileUsername(segment)
       )
     }
-
-    const uid = viewerUser?.id ?? null
 
     setMetaLoading(true)
     try {
@@ -1533,7 +1669,7 @@ function ProfilePageContent() {
     }
   }
 
-  async function fetchProfile(urlSegment: string) {
+  async function fetchProfile(urlSegment: string, signal?: AbortSignal) {
     const segment = urlSegment.trim()
     const lookupByUuid = isProfileUuidSegment(segment)
     const devProfileDebug =
@@ -1610,6 +1746,72 @@ function ProfilePageContent() {
             sampleIds: listProbe.data?.slice(0, 5).map((r: { id: string }) => r.id),
           })
         })
+    }
+
+    const ownHeader = resolveOwnProfileHeaderFromSession(uid, segment)
+    if (ownHeader) {
+      setProfile(ownHeader)
+      setLoading(false)
+      writeProfileSession(segment, {
+        profile: ownHeader,
+        room: null,
+        followersCount: 0,
+        followingCount: 0,
+        isFollowing: false,
+        isRequested: false,
+        followsYou: false,
+        allTrades: [],
+        wallPosts: [],
+        visibleTradeCount: PAGE_SIZE,
+        scrollY: 0,
+      })
+      setMetaLoading(true)
+      try {
+        const meta = await applyProfileMetadata(segment, ownHeader, uid)
+        writeProfileSession(segment, {
+          profile: ownHeader,
+          room: null,
+          roomReady: false,
+          followersCount: meta.followersN,
+          followingCount: meta.followingN,
+          isFollowing: meta.following,
+          isRequested: meta.requested,
+          followsYou: meta.profileFollowsYou,
+          allTrades: [],
+          wallPosts: [],
+          visibleTradeCount: PAGE_SIZE,
+          scrollY: 0,
+        })
+      } finally {
+        setMetaLoading(false)
+      }
+      return
+    }
+
+    if (isBackendV2Enabled("profile")) {
+      const loaded = await loadProfileBootstrapWithResilience(supabase, {
+        identifier: segment,
+        viewerId: uid,
+        signal,
+      })
+      if (signal?.aborted) return
+      if (loaded.result?.profile) {
+        applyBootstrapLoadResult(loaded.result, segment)
+        setLoading(false)
+        setMetaLoading(false)
+        setBootstrapRefreshing(loaded.revalidating)
+        return
+      }
+      if (loaded.transientError) {
+        setBootstrapTransientError(true)
+        setLoading(false)
+        setMetaLoading(false)
+        setBootstrapRefreshing(false)
+        if (!readProfileHeaderPreview(segment)) {
+          setTradesLoading(false)
+        }
+        return
+      }
     }
 
     let profileQuery = supabase.from("profiles").select(PUBLIC_PROFILE_SELECT)
@@ -1923,7 +2125,7 @@ function ProfilePageContent() {
           String(row.id) === reelId ? { ...row, ...patch } : row
         )
       )
-      setSelectedReelDetail((prev) => {
+      setSelectedReelDetail((prev: any | null) => {
         if (!prev || String(prev.id) !== reelId) return prev
         return reelDetailFeedItem({ ...prev, ...patch }, profile)
       })
@@ -2096,6 +2298,7 @@ function ProfilePageContent() {
           .select(select)
           .in("profile_post_id", ids)
           .order("created_at", { ascending: true })
+          .overrideTypes<Record<string, unknown>[], { merge: false }>()
       ),
     ])
 
@@ -2112,7 +2315,7 @@ function ProfilePageContent() {
 
     const commentsMap: Record<string, any[]> = {}
     for (const id of ids) commentsMap[String(id)] = []
-    for (const row of commentsRows || []) {
+    for (const row of mapProjectedRows(commentsRows, (item) => item)) {
       const key = String(row.profile_post_id)
       if (!commentsMap[key]) commentsMap[key] = []
       commentsMap[key].push(row)
@@ -2183,22 +2386,24 @@ function ProfilePageContent() {
     try {
     const postRow = posts.find((p) => String(p.id) === key)
     const existingComments = commentsByPost[key] || []
-    const insertPayload: Record<string, unknown> = {
+    const insertPayload = {
       profile_post_id: key,
       user_id: currentUserId,
       content: text,
-    }
-    if (parentCommentId) {
-      insertPayload.parent_comment_id = parentCommentId
-    }
+      ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
+    } satisfies TableInsert<"profile_post_comments">
 
     const { data, error } = await supabase
       .from("profile_post_comments")
       .insert(insertPayload)
       .select(PROFILE_POST_COMMENT_INSERT_SELECT)
       .single()
+      .overrideTypes<Record<string, unknown> | null, { merge: false }>()
     if (error) return console.error(error)
-    const insertedRow = withInsertedProfilePostParentCommentId(data, parentCommentId)
+    const insertedRow = withInsertedProfilePostParentCommentId(
+      asJsonObject(data) ?? {},
+      parentCommentId
+    )
     setCommentsByPost((prev) => ({ ...prev, [key]: [...(prev[key] || []), insertedRow] }))
     setCommentDraft((prev) => ({ ...prev, [key]: "" }))
 
@@ -2290,20 +2495,19 @@ function ProfilePageContent() {
 
     try {
       const existingComments = commentsByPost[key] || []
-      const insertPayload: Record<string, unknown> = {
+      const insertPayload = {
         achievement_post_id: key,
         user_id: currentUserId,
         content: trimmed,
-      }
-      if (parentCommentId) {
-        insertPayload.parent_comment_id = parentCommentId
-      }
+        ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
+      } satisfies TableInsert<"achievement_post_comments">
 
       const { data, error } = await supabase
         .from("achievement_post_comments")
         .insert(insertPayload)
         .select(ACHIEVEMENT_POST_COMMENT_INSERT_SELECT)
         .single()
+        .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
       if (error) {
         console.error(error)
@@ -2311,7 +2515,7 @@ function ProfilePageContent() {
       }
 
       const insertedRow = withInsertedAchievementPostParentCommentId(
-        data,
+        asJsonObject(data) ?? {},
         parentCommentId
       )
       setCommentsByPost((prev) => ({
@@ -2382,27 +2586,29 @@ function ProfilePageContent() {
 
     try {
       const existingComments = commentsByPost[key] || []
-      const insertPayload: Record<string, unknown> = {
+      const insertPayload = {
         reel_id: key,
         user_id: currentUserId,
         content: trimmed,
-      }
-      if (parentCommentId) {
-        insertPayload.parent_comment_id = parentCommentId
-      }
+        ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
+      } satisfies TableInsert<"reel_comments">
 
       const { data, error } = await supabase
         .from("reel_comments")
         .insert(insertPayload)
         .select(REEL_COMMENT_INSERT_SELECT)
         .single()
+        .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
       if (error) {
         console.error(error)
         return false
       }
 
-      const insertedRow = withInsertedReelParentCommentId(data, parentCommentId)
+      const insertedRow = withInsertedReelParentCommentId(
+        asJsonObject(data) ?? {},
+        parentCommentId
+      )
       setCommentsByPost((prev) => ({
         ...prev,
         [key]: [...(prev[key] || []), insertedRow],
@@ -2728,7 +2934,7 @@ function ProfilePageContent() {
     setSummaryTrades((prev) =>
       prev.filter((t) => String(t.id) !== String(tradeId))
     )
-    setSelectedTradeDetail((prev) =>
+    setSelectedTradeDetail((prev: any | null) =>
       prev && String(prev.id) === String(tradeId) ? null : prev
     )
     try {
@@ -2761,6 +2967,26 @@ function ProfilePageContent() {
     return new Set([profile.id])
   }, [profile?.id, followsYou, emptyFollowSet])
 
+  const retryProfileBootstrap = useCallback(async () => {
+    if (!profileId) return
+    setBootstrapTransientError(false)
+    setBootstrapRefreshing(true)
+    try {
+      const loaded = await loadProfileBootstrapWithResilience(supabase, {
+        identifier: profileId,
+        viewerId: currentUserId,
+        forceNetwork: true,
+      })
+      if (loaded.result?.profile) {
+        applyBootstrapLoadResult(loaded.result, profileId)
+      } else if (loaded.transientError) {
+        setBootstrapTransientError(true)
+      }
+    } finally {
+      setBootstrapRefreshing(false)
+    }
+  }, [applyBootstrapLoadResult, currentUserId, profileId])
+
   const handleProfileFollowingChange = useCallback(
     async (_targetId: string, following: boolean) => {
       setIsFollowing(following)
@@ -2769,6 +2995,11 @@ function ProfilePageContent() {
       // Follow graph changed — drop session caches so modals stay accurate.
       invalidateFollowListCache(profile.id)
       if (currentUserId) invalidateFollowListCache(currentUserId)
+      invalidateProfileBootstrapCache({
+        viewerKey: profileBootstrapViewerKey(currentUserId),
+        profileId: String(profile.id),
+        identifier: String(profile.username ?? profile.id),
+      })
 
       if (!following && profile.is_private === true) {
         setAllTrades([])
@@ -2809,6 +3040,7 @@ function ProfilePageContent() {
             .select(select)
             .eq("post_id", postId)
             .order("created_at", { ascending: true })
+            .overrideTypes<Record<string, unknown>[], { merge: false }>()
         ),
       ])
 
@@ -2820,7 +3052,7 @@ function ProfilePageContent() {
       }
 
       setFeedDeepLinkLikeMeta({ count, liked })
-      setFeedDeepLinkComments(commentsRows || [])
+      setFeedDeepLinkComments(mapProjectedRows(commentsRows, (row) => row))
       if (openComments) {
         feedOpenCommentsRef.current[postId] = true
       }
@@ -2840,26 +3072,28 @@ function ProfilePageContent() {
         .select(FEED_POSTS_SELECT)
         .eq("id", postId)
         .maybeSingle()
+        .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
-      if (error || !feedPost) {
+      const feedPostRow = asJsonObject(feedPost)
+      if (error || !feedPostRow) {
         clearProfileQueryParams()
         return
       }
 
-      const tradeJoin = feedPost?.trades
+      const tradeJoin = feedPostRow.trades
       const tradeRow = tradeJoin
         ? Array.isArray(tradeJoin)
-          ? tradeJoin[0]
-          : tradeJoin
+          ? (tradeJoin[0] as Record<string, unknown> | undefined)
+          : (tradeJoin as Record<string, unknown>)
         : null
-      const ownerId = tradeRow?.user_id ?? feedPost.user_id
+      const ownerId = tradeRow?.user_id ?? feedPostRow.user_id
       if (ownerId && profile?.id && String(ownerId) !== String(profile.id)) {
         clearProfileQueryParams()
         return
       }
 
       await loadFeedPostEngagement(postId, openComments)
-      setFeedDeepLinkPost(feedPost)
+      setFeedDeepLinkPost(feedPostRow)
       clearProfileQueryParams()
     },
     [canViewTrades, clearProfileQueryParams, loadFeedPostEngagement, profile?.id]
@@ -2888,12 +3122,14 @@ function ProfilePageContent() {
           .eq("user_id", profile.id)
           .eq("is_public", true)
           .maybeSingle()
+          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
-        if (error || !data) {
+        const tradeRow = asJsonObject(data)
+        if (error || !tradeRow) {
           clearProfileQueryParams()
           return
         }
-        trade = sanitizeTradeForViewer(data, { isOwner }) as typeof data
+        trade = sanitizeTradeForViewer(tradeRow, { isOwner })
         setAllTrades((prev) => mergeUniqueById(prev, [trade]))
       }
 
@@ -3229,6 +3465,14 @@ function ProfilePageContent() {
     [currentUserId, feedDeepLinkComments]
   )
 
+  const bootstrapOverviewStats = useMemo(
+    () =>
+      bootstrapPublicStats
+        ? overviewStatsFromBootstrapPublicStats(bootstrapPublicStats)
+        : null,
+    [bootstrapPublicStats]
+  )
+
   const {
     sortedTrades,
     filteredTrades,
@@ -3257,6 +3501,7 @@ function ProfilePageContent() {
     visibleTrades: trades,
     analyticsTradeRows,
     summaryTrades,
+    bootstrapOverviewStats,
     selectedMode,
     canViewTrades,
     analyticsTradesReady,
@@ -3336,7 +3581,7 @@ function ProfilePageContent() {
     )
   }
 
-  if (loading) {
+  if (loading && !profile) {
     return (
       <>
         <SkeletonProfilePage />
@@ -3345,6 +3590,26 @@ function ProfilePageContent() {
   }
 
   if (!profile) {
+    if (bootstrapTransientError) {
+      return (
+        <>
+          <div className="mx-auto max-w-lg px-4 py-12 text-center">
+            <p className="text-sm text-gray-300">
+              Profile is temporarily unavailable. The database may be reloading.
+            </p>
+            <button
+              type="button"
+              onClick={() => void retryProfileBootstrap()}
+              disabled={bootstrapRefreshing}
+              className="mt-4 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 disabled:opacity-50"
+            >
+              {bootstrapRefreshing ? "Retrying…" : "Retry"}
+            </button>
+          </div>
+        </>
+      )
+    }
+
     const showFetchDebug =
       process.env.NODE_ENV === "development" ||
       process.env.NEXT_PUBLIC_PROFILE_FETCH_DEBUG === "1"
@@ -3380,19 +3645,20 @@ function ProfilePageContent() {
 
   const isOwnProfile = currentUserId === profile.id
   const ownedRoom =
-    room && room.owner_user_id === profile.id ? room : null
-  const hasRoom = !!ownedRoom
-  const profileRoomKey =
-    ownedRoom?.slug != null && String(ownedRoom.slug).trim() !== ""
-      ? String(ownedRoom.slug)
-      : ownedRoom?.id != null
-        ? String(ownedRoom.id)
-        : null
+    room && String(room.owner_user_id) === String(profile.id)
+      ? (room as ProfileRoomRow)
+      : null
+  const hasRoom = resolveProfileHasRoom({
+    bootstrapHasRoom: bootstrapSectionCounts?.has_room,
+    roomRow: ownedRoom,
+  })
+  const profileRoomKey = profileRoomKeyFromRow(ownedRoom)
   const canShowVisitorRoomCta =
     canViewTrades &&
-    ownedRoom != null &&
-    ownedRoom.show_on_profile !== false &&
-    profileRoomKey != null
+    !isOwnProfile &&
+    (ownedRoom
+      ? ownedRoom.show_on_profile !== false && profileRoomKey != null
+      : bootstrapSectionCounts?.has_room === true)
 
   return (
     <>
@@ -3404,7 +3670,7 @@ function ProfilePageContent() {
           open={storyComposeOpen}
           posting={postingStory}
           profile={
-            profile
+            profile && currentUserId
               ? {
                   id: currentUserId,
                   username: profile.username,
@@ -3456,7 +3722,7 @@ function ProfilePageContent() {
       />
 
       {profileStoryOpen && profile?.id && profileCurrentStory ? (
-        <FeedStoryViewer
+        <LazyFeedStoryViewer
           activeStoryUser={String(profile.id)}
           users={profileStoryBarUsers}
           storiesByUser={profileStoriesByUser}
@@ -3499,6 +3765,27 @@ function ProfilePageContent() {
           }}
         >
         <div className="mx-auto max-w-5xl space-y-2 pt-3 pb-6 pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] sm:space-y-4 sm:px-6 sm:pt-4 lg:px-8">
+          {bootstrapTransientError || (bootstrapRefreshing && headerPreviewOnly) ? (
+            <div
+              role="status"
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-100/90"
+            >
+              {bootstrapTransientError ? (
+                <>
+                  Profile data may be outdated.{" "}
+                  <button
+                    type="button"
+                    onClick={() => void retryProfileBootstrap()}
+                    className="font-semibold underline underline-offset-2 hover:text-white"
+                  >
+                    Retry
+                  </button>
+                </>
+              ) : (
+                "Refreshing profile…"
+              )}
+            </div>
+          ) : null}
           <PlatformProfileHeader
             profile={profile}
             currentUserId={currentUserId}
@@ -3514,10 +3801,7 @@ function ProfilePageContent() {
             hasRoom={hasRoom}
             canShowVisitorRoomCta={canShowVisitorRoomCta}
             onStoryFileSelect={(event) => void handleStoryFileSelect(event)}
-            onOpenStory={() => {
-              setProfileStoryIndex(0)
-              setProfileStoryOpen(true)
-            }}
+            onOpenStory={() => void handleOpenProfileStory()}
             onFollowingChange={handleProfileFollowingChange}
             onRequestedChange={handleProfileRequestedChange}
             onMessage={handleMessage}
@@ -3529,11 +3813,20 @@ function ProfilePageContent() {
             onCreateReel={openCreateReelModal}
             onCreateQuickTrade={openQuickTradeModal}
             onCreateRoom={() => router.push("/community?create=true")}
-            onViewRoom={() =>
-              router.push(
-                `/community?room=${encodeURIComponent(profileRoomKey!)}`
-              )
-            }
+            onViewRoom={() => {
+              void (async () => {
+                const row = ownedRoom ?? (await ensureProfileRoomLoaded())
+                if (
+                  !isOwnProfile &&
+                  row?.show_on_profile === false
+                ) {
+                  return
+                }
+                const key = profileRoomKeyFromRow(row)
+                if (!key) return
+                router.push(`/community?room=${encodeURIComponent(key)}`)
+              })()
+            }}
           />
 
           <ProfileOverviewStats
@@ -3559,13 +3852,14 @@ function ProfilePageContent() {
                 hasMore={hasMore}
                 onLoadMore={loadMoreTrades}
                 onOpenTrade={openTradeDetailFromGrid}
-                renderTrade={(trade) => (
+                renderTrade={(trade, index) => (
                   <TradeCard
                     trade={trade}
                     profile={profile}
                     currentUserId={currentUserId}
                     shareProfile={viewerShareProfile}
                     canManageTrade={currentUserId === profile.id}
+                    screenshotPriority={index === 0}
                     attachedReel={
                       tradeReelsByTradeId[String(trade.id)] ?? null
                     }
@@ -3838,7 +4132,7 @@ function ProfilePageContent() {
         )}
 
       {selectedAchievementDetail ? (
-        <AchievementDetailModal
+        <LazyAchievementDetailModal
           achievement={selectedAchievementDetail}
           onClose={() => setSelectedAchievementDetail(null)}
         />
@@ -3896,10 +4190,13 @@ function ProfilePageContent() {
       ) : null}
 
       {selectedReelDetail ? (
-        <FeedReelDetailModal
+        <LazyFeedReelDetailModal
           post={selectedReelDetail}
           user={currentUserId ? { id: currentUserId } : null}
           comments={commentsByPost[String(selectedReelDetail.id)] || []}
+          commentCount={
+            (commentsByPost[String(selectedReelDetail.id)] || []).length
+          }
           likeMeta={
             likesByPost[String(selectedReelDetail.id)] || EMPTY_LIKE_META
           }
@@ -3989,16 +4286,19 @@ function ProfilePageContent() {
             onTogglePinComment={togglePinComment}
             disableOpen
             onImageClick={setScreenshotLightboxUrl}
-            onSharePost={currentUserId ? handleSharePost : undefined}
+            onSharePost={(post) => {
+            if (currentUserId) handleSharePost(post)
+          }}
           />
         </DetailModalShell>
       ) : null}
 
       {feedDeepLinkPost ? (
-        <FeedPostDetailModal
+        <LazyFeedPostDetailModal
           post={feedDeepLinkPost}
           user={currentUserId ? { id: currentUserId } : null}
           comments={feedDeepLinkComments}
+          commentCount={feedDeepLinkComments.length}
           likeMeta={feedDeepLinkLikeMeta}
           commentSubmitting={feedDeepLinkCommentSubmitting}
           draftSyncRef={feedDraftSyncRef}
@@ -4008,7 +4308,9 @@ function ProfilePageContent() {
           onSubmitComment={submitFeedDeepLinkComment}
           onDeleteComment={deleteComment}
           onTogglePinComment={togglePinComment}
-          onSharePost={currentUserId ? handleSharePost : undefined}
+          onSharePost={(post) => {
+            if (currentUserId) handleSharePost(post)
+          }}
         />
       ) : null}
 
@@ -4023,6 +4325,10 @@ function ProfilePageContent() {
           user={currentUserId ? { id: currentUserId } : null}
           comments={
             commentsByPost[String(selectedAchievementPostDetail.id)] || []
+          }
+          commentCount={
+            (commentsByPost[String(selectedAchievementPostDetail.id)] || [])
+              .length
           }
           likeMeta={
             likesByPost[String(selectedAchievementPostDetail.id)] ||
@@ -4053,7 +4359,7 @@ function ProfilePageContent() {
       ) : null}
 
       {sharePost ? (
-        <ShareToConversationsModal
+        <LazyShareToConversationsModal
           open
           onClose={() => setSharePost(null)}
           title="Send Post"

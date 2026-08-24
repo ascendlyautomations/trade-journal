@@ -13,6 +13,8 @@ struct AppEnvironment {
     let themeManager: ThemeManager
     /// Session-scoped authenticated profile cache (header + tab avatar).
     let currentUserProfile: CurrentUserProfileStore
+    /// Profile/shell bootstrap progress — separate from session validity.
+    let appBootstrapState: AppBootstrapState
     /// Centralized APNs registration + notification routing.
     let pushNotifications: PushNotificationCenter
 

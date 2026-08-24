@@ -1,20 +1,17 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  AFFILIATE_DISCOUNT_PERCENT_OFF,
-  applyAffiliateOncePercentOff,
-  buildAffiliateAttributionMetadata,
-  normalizeAffiliateCode,
-  readAffiliateCodeFromStripeMetadata,
-  resolveAffiliateCodeForCommission,
-  shouldRecordAffiliateCommission,
-} = require("./affiliateStripeDiscount.ts")
-const {
-  COMMISSION_RATE,
-  calculateAffiliateCommission,
-  centsToMajorUnits,
-  resolveAffiliateCommissionBaseCents,
-} = require("./affiliateEarnings.ts")
+import { describe, it } from "node:test"
+import { AFFILIATE_DISCOUNT_PERCENT_OFF, applyAffiliateOncePercentOff, buildAffiliateAttributionMetadata, normalizeAffiliateCode, readAffiliateCodeFromStripeMetadata, resolveAffiliateCodeForCommission, shouldRecordAffiliateCommission, } from "./affiliateStripeDiscount.ts"
+import { COMMISSION_RATE, calculateAffiliateCommission, centsToMajorUnits, resolveAffiliateCommissionBaseCents, type AffiliateCommissionInvoice, } from "./affiliateEarnings.ts"
+import assert from "node:assert/strict"
+
+type AffiliateCommissionInvoiceFixture = AffiliateCommissionInvoice & {
+  amount_paid?: number
+}
+
+function commissionInvoice(
+  invoice: AffiliateCommissionInvoiceFixture
+): AffiliateCommissionInvoice {
+  return invoice
+}
 
 describe("affiliate once discount helpers", () => {
   it("normalizes affiliate codes", () => {
@@ -87,11 +84,13 @@ describe("affiliate once discount helpers", () => {
 
 describe("affiliate commission scenarios (total_excluding_tax)", () => {
   it("trial $0 invoice — no commission", () => {
-    const base = resolveAffiliateCommissionBaseCents({
-      total: 0,
-      total_excluding_tax: 0,
-      amount_paid: 0,
-    })
+    const base = resolveAffiliateCommissionBaseCents(
+      commissionInvoice({
+        total: 0,
+        total_excluding_tax: 0,
+        amount_paid: 0,
+      })
+    )
     assert.equal(base.basisCents, 0)
     assert.equal(
       shouldRecordAffiliateCommission({
@@ -106,12 +105,14 @@ describe("affiliate commission scenarios (total_excluding_tax)", () => {
     // List $23.99, 10% once → $21.59 pre-tax; tax $1.72 → total paid $23.31
     const discountedPreTax = applyAffiliateOncePercentOff(2399)
     const tax = 172
-    const result = resolveAffiliateCommissionBaseCents({
-      total: discountedPreTax + tax,
-      total_excluding_tax: discountedPreTax,
-      amount_paid: discountedPreTax + tax,
-      total_taxes: [{ amount: tax }],
-    })
+    const result = resolveAffiliateCommissionBaseCents(
+      commissionInvoice({
+        total: discountedPreTax + tax,
+        total_excluding_tax: discountedPreTax,
+        amount_paid: discountedPreTax + tax,
+        total_taxes: [{ amount: tax }],
+      })
+    )
     assert.equal(result.source, "total_excluding_tax")
     assert.equal(result.basisCents, 2159)
     const major = centsToMajorUnits(result.basisCents)
@@ -127,12 +128,14 @@ describe("affiliate commission scenarios (total_excluding_tax)", () => {
   })
 
   it("second paid renewal — full pre-tax, attribution independent of discount", () => {
-    const result = resolveAffiliateCommissionBaseCents({
-      total: 2599,
-      total_excluding_tax: 2399,
-      amount_paid: 2599,
-      total_taxes: [{ amount: 200 }],
-    })
+    const result = resolveAffiliateCommissionBaseCents(
+      commissionInvoice({
+        total: 2599,
+        total_excluding_tax: 2399,
+        amount_paid: 2599,
+        total_taxes: [{ amount: 200 }],
+      })
+    )
     assert.equal(result.basisCents, 2399)
     assert.equal(calculateAffiliateCommission(23.99), 4.32)
     // Attribution still resolvable without any discount metadata
@@ -170,12 +173,14 @@ describe("affiliate commission scenarios (total_excluding_tax)", () => {
   })
 
   it("coupon + tax — commission on discounted pre-tax", () => {
-    const result = resolveAffiliateCommissionBaseCents({
-      total: 2331,
-      total_excluding_tax: 2159,
-      amount_paid: 2331,
-      total_taxes: [{ amount: 172 }],
-    })
+    const result = resolveAffiliateCommissionBaseCents(
+      commissionInvoice({
+        total: 2331,
+        total_excluding_tax: 2159,
+        amount_paid: 2331,
+        total_taxes: [{ amount: 172 }],
+      })
+    )
     assert.equal(result.basisCents, 2159)
     assert.equal(calculateAffiliateCommission(21.59), 3.89)
   })
@@ -241,3 +246,4 @@ describe("affiliate commission scenarios (total_excluding_tax)", () => {
     assert.equal(calculateAffiliateCommission(centsToMajorUnits(yearly.basisCents)), 44.05)
   })
 })
+export {}

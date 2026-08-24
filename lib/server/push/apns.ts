@@ -14,6 +14,8 @@ export type ApnsAlertPayload = {
   roomId?: string
   roomSlug?: string
   followRequestId?: string
+  /** Actor profile UUID — native follow / social deep links resolve by id. */
+  senderId?: string
   /**
    * APNs thread-id — groups related alerts in Notification Center.
    * For DMs this is stable per conversation (`dm:{conversationId}`).
@@ -25,6 +27,9 @@ export type ApnsAlertPayload = {
    */
   collapseId?: string
 }
+
+/** Keep alerts eligible for offline delivery (~24h). `0` means expire immediately. */
+const APNS_EXPIRATION_TTL_SECONDS = 24 * 60 * 60
 
 type ApnsConfig = {
   keyId: string
@@ -92,6 +97,36 @@ export type ApnsSendResult =
   | { ok: true }
   | { ok: false; status: number; reason: string; invalidToken: boolean }
 
+/**
+ * APNs reasons where this device token can never succeed for our current
+ * topic / environment. Safe to delete from `device_push_tokens`.
+ *
+ * Do NOT include transient or request/config errors (TooManyRequests,
+ * InternalServerError, PayloadTooLarge, BadTopic, Forbidden, etc.).
+ */
+export function isPermanentlyInvalidApnsToken(
+  status: number,
+  reason: string
+): boolean {
+  const normalized = reason.trim()
+  if (status === 410) return true
+  switch (normalized) {
+    case "BadDeviceToken":
+    // Malformed token, or token for the opposite APNs environment.
+    case "Unregistered":
+    // Token inactive for this topic (uninstall / invalidated).
+    case "ExpiredToken":
+    // Token expired for this topic (410 companion reason).
+    case "DeviceTokenNotForTopic":
+      // Token was issued for a different App ID / bundle topic (old build,
+      // renamed bundle, simulator/wrong target). Will never work with our
+      // current apns-topic.
+      return true
+    default:
+      return false
+  }
+}
+
 export function isApnsConfigured(): boolean {
   return readApnsConfig() != null
 }
@@ -155,6 +190,7 @@ export async function sendApnsAlert(
     ...(payload.followRequestId
       ? { followRequestId: payload.followRequestId }
       : {}),
+    ...(payload.senderId ? { senderId: payload.senderId } : {}),
   })
 
   const jwt = createApnsJwt(config)
@@ -225,6 +261,9 @@ export async function sendApnsAlert(
     })
 
     const collapseId = payload.collapseId?.trim().slice(0, 64)
+    const expiration = String(
+      Math.floor(Date.now() / 1000) + APNS_EXPIRATION_TTL_SECONDS
+    )
     const req = client.request({
       ":method": "POST",
       ":path": `/3/device/${deviceToken}`,
@@ -232,7 +271,7 @@ export async function sendApnsAlert(
       "apns-topic": config.bundleId,
       "apns-push-type": "alert",
       "apns-priority": "10",
-      "apns-expiration": "0",
+      "apns-expiration": expiration,
       "content-type": "application/json",
       ...(collapseId ? { "apns-collapse-id": collapseId } : {}),
     })
@@ -282,11 +321,7 @@ export async function sendApnsAlert(
         environment: config.production ? "production" : "sandbox",
         bundleId: config.bundleId,
       })
-      const invalidToken =
-        status === 410 ||
-        reason === "BadDeviceToken" ||
-        reason === "Unregistered" ||
-        reason === "ExpiredToken"
+      const invalidToken = isPermanentlyInvalidApnsToken(status, reason)
       finish({ ok: false, status, reason, invalidToken })
     })
     req.on("error", (err) => {

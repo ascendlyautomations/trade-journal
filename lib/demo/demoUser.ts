@@ -17,6 +17,7 @@ export function getDemoAuthUser() {
 export function getDemoProfileSlice(): UserProfileSlice {
   return {
     id: DEMO_USER_ID,
+    name: DEMO_PROFILE.name,
     username: DEMO_PROFILE.username,
     avatar_url: DEMO_PROFILE.avatar_url,
     is_pro: DEMO_PROFILE.is_pro,

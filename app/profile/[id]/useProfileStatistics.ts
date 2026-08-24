@@ -8,11 +8,16 @@ import {
 import { averageRrFromTrades } from "@/lib/tradeRr"
 import type { ProfileStatisticsMode } from "@/app/components/profile/ProfileStatisticsTab"
 import type { ProfileTradeRow } from "@/app/components/profile/profileTypes"
+import {
+  computeProfileOverviewWinRate,
+  type ProfilePublicStatsAggregate,
+} from "@/lib/profilePublicStatistics"
 
 type UseProfileStatisticsOptions = {
   visibleTrades: ProfileTradeRow[]
   analyticsTradeRows: ProfileTradeRow[]
   summaryTrades: ProfileTradeRow[]
+  bootstrapOverviewStats: ProfilePublicStatsAggregate | null
   selectedMode: ProfileStatisticsMode
   canViewTrades: boolean
   analyticsTradesReady: boolean
@@ -26,6 +31,7 @@ export function useProfileStatistics({
   visibleTrades,
   analyticsTradeRows,
   summaryTrades,
+  bootstrapOverviewStats,
   selectedMode,
   canViewTrades,
   analyticsTradesReady,
@@ -72,9 +78,13 @@ export function useProfileStatistics({
       return modeValue !== "backtest" && accountType !== "backtest"
     })
 
+    const useBootstrapOverview =
+      bootstrapOverviewStats != null && summaryTrades.length === 0
+
     const statsVisible =
       canViewTrades && analyticsTradesReady && !analyticsTradesLoading
-    const overviewStatsVisible = canViewTrades && summaryReady
+    const overviewStatsVisible =
+      canViewTrades && (summaryReady || useBootstrapOverview)
     const totalTrades = canViewTrades ? analyticsTrades.length : 0
     const wins = canViewTrades
       ? analyticsTrades.filter((trade) => Number(trade.pnl) > 0).length
@@ -115,31 +125,46 @@ export function useProfileStatistics({
       equityData.length > 0 ? equityData[equityData.length - 1].equity : 0
 
     const overviewTotalTrades = overviewStatsVisible
-      ? profileOverviewTrades.length
+      ? useBootstrapOverview
+        ? bootstrapOverviewStats.totalTrades
+        : profileOverviewTrades.length
       : 0
     const overviewWins = overviewStatsVisible
-      ? profileOverviewTrades.filter(
-          (trade) => (Number(trade.pnl) || 0) > 0
-        ).length
+      ? useBootstrapOverview
+        ? bootstrapOverviewStats.wins
+        : profileOverviewTrades.filter(
+            (trade) => (Number(trade.pnl) || 0) > 0
+          ).length
       : 0
-    const overviewWinRate =
-      overviewStatsVisible && overviewTotalTrades
-        ? (overviewWins / overviewTotalTrades) * 100
-        : 0
+    const overviewWinRate = overviewStatsVisible
+      ? useBootstrapOverview
+        ? computeProfileOverviewWinRate(bootstrapOverviewStats)
+        : overviewTotalTrades
+          ? (overviewWins / overviewTotalTrades) * 100
+          : 0
+      : 0
     const overviewTotalPnL = overviewStatsVisible
-      ? profileOverviewTrades.reduce(
-          (sum, trade) => sum + (Number(trade.pnl) || 0),
-          0
-        )
+      ? useBootstrapOverview
+        ? bootstrapOverviewStats.totalPnl
+        : profileOverviewTrades.reduce(
+            (sum, trade) => sum + (Number(trade.pnl) || 0),
+            0
+          )
       : 0
     const overviewAvgRR = overviewStatsVisible
-      ? averageRrFromTrades(profileOverviewTrades)
+      ? useBootstrapOverview
+        ? bootstrapOverviewStats.avgRr
+        : averageRrFromTrades(profileOverviewTrades)
       : null
     const overviewPayoutTotal = achievementsReady
       ? sumPayoutAchievementTotals(achievements)
       : null
     const currentStreakLabel = (() => {
-      if (!overviewStatsVisible || profileOverviewTrades.length === 0) {
+      if (
+        !overviewStatsVisible ||
+        useBootstrapOverview ||
+        profileOverviewTrades.length === 0
+      ) {
         return "—"
       }
       const ordered = [...profileOverviewTrades].sort(
@@ -284,6 +309,7 @@ export function useProfileStatistics({
     analyticsTradeRows,
     analyticsTradesLoading,
     analyticsTradesReady,
+    bootstrapOverviewStats,
     canViewTrades,
     selectedMode,
     summaryReady,

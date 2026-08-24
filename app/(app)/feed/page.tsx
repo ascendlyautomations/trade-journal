@@ -75,6 +75,7 @@ import {
 import {
   type ActiveStoryRow,
   type StoryBarProfile,
+  groupActiveStoriesByUser,
   userHasActiveStory,
 } from "@/lib/activeStories"
 import { useActiveStories } from "@/lib/useActiveStories"
@@ -119,6 +120,8 @@ import {
   withInsertedReelParentCommentId,
 } from "@/lib/reelEngagement"
 import { toggleContentLike } from "@/lib/toggleContentLike"
+import { asJsonObject } from "@/lib/supabaseProjectedQuery"
+import type { TableInsert } from "@/lib/supabaseTypes"
 import { createOptimisticTempId } from "@/lib/optimisticMutation"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { deleteReel, isTradeAttachedReel, replaceTradeReelVideo, type ReelRow } from "@/lib/reels"
@@ -135,6 +138,18 @@ import {
   loadDemoFeedEngagement,
 } from "@/lib/demo/demoFeed"
 import type { DemoSignupReason } from "@/lib/demo/DemoModeContext"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags"
+import {
+  feedBootstrapEngagementMaps,
+  feedBootstrapToFeedItems,
+  loadFeedBootstrapForUser,
+  webContentToFilter,
+} from "@/lib/backendV2/feedBootstrapRepository"
+import {
+  getSessionFollowingIds,
+  subscribeSessionBootstrapCache,
+} from "@/lib/backendV2/sessionBootstrapCache"
+import { writeStoriesSession } from "@/lib/storiesSessionCache"
 
 const FeedPostOverlays = dynamic(
   () => import("../../components/feed/FeedPostOverlays")
@@ -206,6 +221,8 @@ function FeedPageContent() {
   const profileExhaustedRef = useRef(false)
   const achievementExhaustedRef = useRef(false)
   const reelExhaustedRef = useRef(false)
+  /** Backend V2 cursor for feed pages when backendV2.feed is ON. */
+  const feedV2CursorRef = useRef<string | null>(null)
   const userIdRef = useRef<string | null>(null)
   userIdRef.current = user?.id ?? null
   const profileRef = useRef(profile)
@@ -305,12 +322,54 @@ function FeedPageContent() {
 
     if (!defaultModeResolvedRef.current) {
       const explore = readExploreSession()
-      if (explore?.currentUserId === user.id) {
+      if (explore && explore.currentUserId === user.id) {
         setFollowingIds(explore.followingIds)
         if (explore.followingIds.length > 0) {
           setMode("following")
         }
         defaultModeResolvedRef.current = true
+      } else {
+        // Prefer Session-owned following_ids so the first Feed RPC uses the
+        // correct scope (avoids global→following double bootstrap).
+        const sessionFollowing = getSessionFollowingIds(user.id)
+        if (sessionFollowing != null) {
+          setFollowingIds(sessionFollowing)
+          if (sessionFollowing.length > 0) {
+            setMode("following")
+          }
+          defaultModeResolvedRef.current = true
+        } else if (
+          isBackendV2Enabled("feed") &&
+          isBackendV2Enabled("session")
+        ) {
+          // Wait briefly for Session bootstrap before the first Feed RPC.
+          setFeedDefaultModeReady(false)
+          const unsub = subscribeSessionBootstrapCache(() => {
+            if (defaultModeUserIdRef.current !== user.id) return
+            if (userPickedModeRef.current) {
+              defaultModeResolvedRef.current = true
+              setFeedDefaultModeReady(true)
+              return
+            }
+            const ids = getSessionFollowingIds(user.id)
+            if (ids == null) return
+            setFollowingIds(ids)
+            if (ids.length > 0) {
+              setMode("following")
+            }
+            defaultModeResolvedRef.current = true
+            setFeedDefaultModeReady(true)
+          })
+          const timeout = window.setTimeout(() => {
+            if (defaultModeResolvedRef.current) return
+            defaultModeResolvedRef.current = true
+            setFeedDefaultModeReady(true)
+          }, 2500)
+          return () => {
+            unsub()
+            window.clearTimeout(timeout)
+          }
+        }
       }
     }
 
@@ -400,7 +459,10 @@ function FeedPageContent() {
     followingStoryUserIds,
     !!user?.id &&
       mode === "following" &&
-      followingStoryUserIds.length > 0
+      followingStoryUserIds.length > 0 &&
+      // When Feed RPC owns stories, wait until bootstrap seeded storiesSessionCache
+      // so useActiveStories does not fan-out a parallel stories REST on cold load.
+      (!isBackendV2Enabled("feed") || feedReady)
   )
 
   const currentStories = useMemo(
@@ -1043,7 +1105,121 @@ function FeedPageContent() {
       }
 
       try {
-        const followingIds = await fetchFollowingIds(supabase, userId)
+        if (
+          isBackendV2Enabled("feed") &&
+          !isDemoUserId(userId) &&
+          !isDemoModeActive()
+        ) {
+          if (currentPage === 0) {
+            feedV2CursorRef.current = null
+          }
+          const cursor =
+            currentPage === 0 ? null : feedV2CursorRef.current
+          const result = await loadFeedBootstrapForUser(supabase, userId, {
+            scope: mode,
+            contentFilter: webContentToFilter(contentType),
+            cursor,
+            limit: FEED_PAGE_SIZE,
+            caller: "feed.loadPosts",
+          })
+          if (!isActive()) return
+
+          const bootstrap = result.bootstrap
+          const followingIds = bootstrap.data.following_ids_echo.map(String)
+          setFollowingIds(followingIds)
+          if (mode === "following") {
+            setFollowingStoryUserIds([...new Set([...followingIds, userId])])
+            const storyKey = [...new Set([...followingIds, userId])]
+              .map(String)
+              .sort()
+              .join(",")
+            writeStoriesSession(
+              storyKey,
+              groupActiveStoriesByUser(
+                bootstrap.data.stories as ActiveStoryRow[]
+              )
+            )
+          }
+
+          if (
+            !defaultModeResolvedRef.current &&
+            !userPickedModeRef.current
+          ) {
+            defaultModeResolvedRef.current = true
+            if (followingIds.length > 0 && mode === "global") {
+              if (!isActive()) return
+              setMode("following")
+              return
+            }
+          }
+
+          if (
+            mode === "following" &&
+            followingIds.length === 0 &&
+            currentPage === 0
+          ) {
+            if (!isActive()) return
+            hasMoreRef.current = false
+            setHasMore(false)
+            feedEmptyStateRef.current = "following_nobody"
+            setFeedEmptyState("following_nobody")
+            hasLoadedFeedRef.current = true
+            setFeedReady(true)
+            return
+          }
+
+          const list = feedBootstrapToFeedItems(bootstrap)
+          feedV2CursorRef.current = bootstrap.data.next_cursor
+          const more = Boolean(bootstrap.data.page_meta.has_more)
+          hasMoreRef.current = more
+          setHasMore(more)
+
+          if (currentPage === 0 && list.length === 0) {
+            feedEmptyStateRef.current = "no_posts"
+            setFeedEmptyState("no_posts")
+          }
+
+          const painted =
+            currentPage === 0 ? list : [...postsRef.current, ...list]
+          const { likesMap, commentCountsMap } =
+            feedBootstrapEngagementMaps(bootstrap)
+          const mergedLikes = { ...likesByPostRef.current, ...likesMap }
+          const mergedCommentCounts = {
+            ...commentCountsByPostRef.current,
+            ...commentCountsMap,
+          }
+          postsRef.current = painted
+          setPosts(painted)
+          setLikesByPost(mergedLikes)
+          commentCountsByPostRef.current = mergedCommentCounts
+          setCommentCountsByPost(mergedCommentCounts)
+
+          if (currentPage === 0) {
+            hasLoadedFeedRef.current = true
+            setFeedReady(true)
+          }
+
+          persistFeedSnapshot(
+            painted,
+            mergedLikes,
+            commentsByPostRef.current,
+            {
+              hasLoaded: hasLoadedFeedRef.current,
+              feedEmptyState: feedEmptyStateRef.current,
+            },
+            requestGen
+          )
+
+          const nextPage =
+            pageOverride != null ? pageOverride + 1 : pageRef.current + 1
+          pageRef.current = nextPage
+          setPage(nextPage)
+          return
+        }
+
+        const sessionFollowing = getSessionFollowingIds(userId)
+        const followingIds =
+          sessionFollowing ?? (await fetchFollowingIds(supabase, userId))
         if (!isActive()) return
 
         setFollowingIds(followingIds)
@@ -1332,6 +1508,7 @@ function FeedPageContent() {
     setCommentCountsByPost({})
     setCommentsByPost({})
     commentCountsByPostRef.current = {}
+    feedV2CursorRef.current = null
     commentsLoadedRef.current.clear()
     commentsLoadingRef.current.clear()
     setFeedEmptyState(null)
@@ -1470,6 +1647,7 @@ function FeedPageContent() {
           .select(FEED_POSTS_SELECT)
           .eq("id", String(row.id))
           .maybeSingle()
+          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
         if (!data) return
         if (realtimeGeneration !== feedRequestGenerationRef.current) return
@@ -1477,7 +1655,7 @@ function FeedPageContent() {
         // INSERT rows cannot have engagement yet in the normal creation flow.
         // Seed empty metadata and let the existing engagement realtime handlers
         // apply later changes instead of issuing a global engagement refetch.
-        const post = normalizeTradeFeedItem(data as Record<string, unknown>)
+        const post = normalizeTradeFeedItem(asJsonObject(data) ?? {})
         const postId = String(post.id)
         const likesMap = { [postId]: { count: 0, liked: false } }
         const commentCountsMap = { [postId]: 0 }
@@ -1720,16 +1898,17 @@ function FeedPageContent() {
           .select(FEED_REELS_SELECT)
           .eq("id", String(row.id))
           .maybeSingle()
+          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
         if (!data) return
         if (realtimeGeneration !== feedRequestGenerationRef.current) return
 
-        const post = normalizeReelFeedItem(data as Record<string, unknown>)
+        const post = normalizeReelFeedItem(asJsonObject(data) ?? {})
         // Match dedupeFeedItems: trade-attached reels already render on the trade card.
         if (
           post.trade_id != null &&
           String(post.trade_id).trim() !== "" &&
-          (contentType === "all" || contentType === "trades")
+          contentType === "all"
         ) {
           return
         }
@@ -2236,20 +2415,19 @@ function FeedPageContent() {
       }
 
       if (isProfile) {
-        const insertPayload: Record<string, unknown> = {
+        const insertPayload = {
           profile_post_id: pid,
           user_id: user.id,
           content: trimmed,
-        }
-        if (parentCommentId) {
-          insertPayload.parent_comment_id = parentCommentId
-        }
+          ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
+        } satisfies TableInsert<"profile_post_comments">
 
         const { data: newRow, error } = await supabase
           .from("profile_post_comments")
           .insert(insertPayload)
           .select(PROFILE_POST_COMMENT_INSERT_SELECT)
           .single()
+          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
         if (error) {
           console.error("[profile-post-comment] insert failed", {
@@ -2270,7 +2448,7 @@ function FeedPageContent() {
         }
 
         const insertedRow = withInsertedProfilePostParentCommentId(
-          newRow,
+          asJsonObject(newRow) ?? {},
           parentCommentId
         )
 
@@ -2293,20 +2471,19 @@ function FeedPageContent() {
       }
 
       if (isReel) {
-        const insertPayload: Record<string, unknown> = {
+        const insertPayload = {
           reel_id: pid,
           user_id: user.id,
           content: trimmed,
-        }
-        if (parentCommentId) {
-          insertPayload.parent_comment_id = parentCommentId
-        }
+          ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
+        } satisfies TableInsert<"reel_comments">
 
         const { data: newRow, error } = await supabase
           .from("reel_comments")
           .insert(insertPayload)
           .select(REEL_COMMENT_INSERT_SELECT)
           .single()
+          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
         if (error) {
           console.error("[reel-comment] insert failed", {
@@ -2327,7 +2504,7 @@ function FeedPageContent() {
         }
 
         const insertedRow = withInsertedReelParentCommentId(
-          newRow,
+          asJsonObject(newRow) ?? {},
           parentCommentId
         )
 
@@ -2350,20 +2527,19 @@ function FeedPageContent() {
       }
 
       if (isAchievement) {
-        const insertPayload: Record<string, unknown> = {
+        const insertPayload = {
           achievement_post_id: pid,
           user_id: user.id,
           content: trimmed,
-        }
-        if (parentCommentId) {
-          insertPayload.parent_comment_id = parentCommentId
-        }
+          ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
+        } satisfies TableInsert<"achievement_post_comments">
 
         const { data: newRow, error } = await supabase
           .from("achievement_post_comments")
           .insert(insertPayload)
           .select(ACHIEVEMENT_POST_COMMENT_INSERT_SELECT)
           .single()
+          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
         if (error) {
           console.error("[achievement-post-comment] insert failed", {
@@ -2384,7 +2560,7 @@ function FeedPageContent() {
         }
 
         const insertedRow = withInsertedAchievementPostParentCommentId(
-          newRow,
+          asJsonObject(newRow) ?? {},
           parentCommentId
         )
 
@@ -2406,20 +2582,19 @@ function FeedPageContent() {
         return true
       }
 
-      const insertPayload: Record<string, unknown> = {
+      const insertPayload = {
         post_id: pid,
         user_id: user.id,
         content: trimmed,
-      }
-      if (parentCommentId) {
-        insertPayload.parent_comment_id = parentCommentId
-      }
+        ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
+      } satisfies TableInsert<"comments">
 
       const { data: newRow, error } = await supabase
         .from("comments")
         .insert(insertPayload)
         .select(FEED_COMMENT_INSERT_SELECT)
         .single()
+        .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
       if (error) {
         console.error("[post-comment] insert failed", {
@@ -2440,7 +2615,10 @@ function FeedPageContent() {
         return true
       }
 
-      const insertedRow = withInsertedParentCommentId(newRow, parentCommentId)
+      const insertedRow = withInsertedParentCommentId(
+        asJsonObject(newRow) ?? {},
+        parentCommentId
+      )
 
       confirmOptimistic(insertedRow)
 
@@ -2821,6 +2999,7 @@ function FeedPageContent() {
                 feedEmptyState === "following_nobody" ? (
                   <Link
                     href="/explore"
+                    prefetch={false}
                     className="text-sm font-medium text-blue-300 hover:text-blue-200"
                   >
                     Explore traders →

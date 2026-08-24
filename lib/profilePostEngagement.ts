@@ -33,7 +33,7 @@ function isMissingCommentSchemaColumn(error: {
 }
 
 export async function queryProfilePostComments<T extends { data: unknown; error: unknown }>(
-  run: (select: string) => Promise<T>
+  run: (select: string) => PromiseLike<T>
 ): Promise<T> {
   const full = await run(PROFILE_POST_COMMENTS_SELECT)
   if (

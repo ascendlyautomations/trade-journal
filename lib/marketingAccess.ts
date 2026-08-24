@@ -22,8 +22,10 @@ export function isInAppEntryFlow(
 ): boolean {
   if (isSignupFlowActive()) return true
   if (!isAuthenticatedAppUser(user)) return false
-  if (loading && !profile) return true
-  if (!profile) return true
+  // Missing profile is "still hydrating" only while auth/profile loading is true.
+  // After loading settles without a profile, do NOT treat the session as entry-flow
+  // (that previously stuck users on "Setting up your account…").
+  if (!profile) return Boolean(loading)
   return profileNeedsOnboarding(profile) || needsSubscriptionCheckout(profile)
 }
 

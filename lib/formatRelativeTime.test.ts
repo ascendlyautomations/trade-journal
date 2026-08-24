@@ -1,11 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  formatRelativeTime,
-  formatSocialTimestamp,
-  formatPostedTimestamp,
-  getNotificationTimeSection,
-} = require("./formatRelativeTime.ts")
+import { describe, it } from "node:test"
+import { formatRelativeTime, formatSocialTimestamp, formatPostedTimestamp, getNotificationTimeSection, } from "./formatRelativeTime.ts"
+import assert from "node:assert/strict"
 
 describe("formatRelativeTime", () => {
   const now = new Date("2026-06-25T15:00:00.000Z")
@@ -97,3 +92,4 @@ describe("getNotificationTimeSection", () => {
     )
   })
 })
+export {}

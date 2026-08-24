@@ -13,6 +13,7 @@ import {
   TradeSocialProvider,
 } from "../../components/TradeSocialLayer"
 import { supabase } from "../../../lib/supabaseClient"
+import { asJsonObject } from "@/lib/supabaseProjectedQuery"
 import {
   formatSignedPnlDisplay,
   formatTradePoints,
@@ -105,12 +106,14 @@ export default function TradeDetailPageClient({
         .select(tradeSelectForViewer(isOwner))
         .eq("id", tradeId)
         .maybeSingle()
+        .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
       if (cancelled) return
 
-      const resolvedTrade = error
-        ? null
-        : sanitizeTradeForViewer(data, { isOwner })
+      const tradeRow = asJsonObject(error ? null : data)
+      const resolvedTrade = tradeRow
+        ? sanitizeTradeForViewer(tradeRow, { isOwner })
+        : null
 
       let owner: typeof ownerProfile = null
       if (error && !resolvedTrade) {
@@ -119,10 +122,11 @@ export default function TradeDetailPageClient({
       } else {
         setTrade(resolvedTrade)
         if (resolvedTrade?.user_id) {
+          const ownerId = String(resolvedTrade.user_id)
           const { data: ownerRow } = await supabase
             .from("profiles")
             .select("id, username, name, avatar_url")
-            .eq("id", resolvedTrade.user_id)
+            .eq("id", ownerId)
             .maybeSingle()
           owner = ownerRow
           if (!cancelled) setOwnerProfile(owner)

@@ -53,14 +53,23 @@ struct LeaderboardScreenView: View {
     // MARK: - Pinned header (never replaced)
 
     private var pinnedFilters: some View {
-        LeaderboardFiltersView(
-            audience: viewModel.audience,
-            timeframe: viewModel.timeframe,
-            category: viewModel.category,
-            onAudience: { viewModel.setAudience($0) },
-            onTimeframe: { viewModel.setTimeframe($0) },
-            onCategory: { viewModel.setCategory($0) }
-        )
+        VStack(spacing: ExperienceSpacing.sm) {
+            LeaderboardFiltersView(
+                audience: viewModel.audience,
+                timeframe: viewModel.timeframe,
+                category: viewModel.category,
+                onAudience: { viewModel.setAudience($0) },
+                onTimeframe: { viewModel.setTimeframe($0) },
+                onCategory: { viewModel.setCategory($0) }
+            )
+            if let message = viewModel.timeframeFallbackMessage {
+                Text(message)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .accessibilityIdentifier("leaderboard.timeframe.fallback")
+            }
+        }
         .accessibilityIdentifier("leaderboard.filters.pinned")
     }
 

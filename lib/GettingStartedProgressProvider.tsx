@@ -51,6 +51,15 @@ import {
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { supabase } from "@/lib/supabaseClient"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags.ts"
+import {
+  readSessionBootstrapCache,
+  subscribeSessionBootstrapCache,
+} from "@/lib/backendV2/sessionBootstrapCache.ts"
+import {
+  readDashboardBootstrapCache,
+  subscribeDashboardBootstrapCache,
+} from "@/lib/backendV2/dashboardBootstrapCache.ts"
 
 const EMPTY_SIGNALS: GettingStartedChecklistSignals = {
   onboardingCompleted: false,
@@ -118,6 +127,9 @@ export function GettingStartedProgressProvider({
   const signalsReadyRef = useRef(false)
   const baselineResolvedRef = useRef(false)
   const refreshGenerationRef = useRef(0)
+  const scheduleGenerationRef = useRef(0)
+  const refreshInFlightRef = useRef<Promise<void> | null>(null)
+  const baselineKickScheduledRef = useRef(false)
   const userIdRef = useRef<string | null>(null)
   const pendingRefreshRef = useRef(false)
   const popupQueueRef = useRef<FeedbackPopupInput[]>([])
@@ -266,6 +278,13 @@ export function GettingStartedProgressProvider({
         return
       }
 
+      // Coalesce concurrent baseline refreshes (StrictMode / overlapping schedules).
+      if (!fromUserAction && refreshInFlightRef.current) {
+        await refreshInFlightRef.current
+        return
+      }
+
+      const run = (async () => {
       const generation = ++refreshGenerationRef.current
       const isBaselineFetch = !baselineResolvedRef.current
       const prevOnboardingCompleted = signalsRef.current.onboardingCompleted
@@ -385,8 +404,22 @@ export function GettingStartedProgressProvider({
       })
 
       enqueuePopups(popups)
+      })()
+
+      if (!fromUserAction) {
+        refreshInFlightRef.current = run
+        try {
+          await run
+        } finally {
+          if (refreshInFlightRef.current === run) {
+            refreshInFlightRef.current = null
+          }
+        }
+      } else {
+        await run
+      }
     },
-    [enqueuePopups, profile]
+    [enqueuePopups, profile, profileLoading]
   )
 
   useEffect(() => {
@@ -406,6 +439,7 @@ export function GettingStartedProgressProvider({
       introPopupActiveRef.current = false
       completionPopupActiveRef.current = false
       baselineResolvedRef.current = false
+      baselineKickScheduledRef.current = false
       prevMountedUserIdRef.current = nextUserId
       // Never carry one user's resolved signals over to another user.
       setSignals(EMPTY_SIGNALS)
@@ -446,22 +480,104 @@ export function GettingStartedProgressProvider({
     if (profileLoading && !profile) return
     if (membershipReconciling) return
 
-    scheduleDeferredWork(() => {
-      void refreshChecklistSignals().then(() => {
-        if (pendingRefreshRef.current) {
-          pendingRefreshRef.current = false
-          void refreshChecklistSignals({ fromUserAction: true })
+    let cancelled = false
+    let unsubSession: (() => void) | undefined
+    let unsubDashboard: (() => void) | undefined
+    let bootstrapWaitTimeout: ReturnType<typeof setTimeout> | undefined
+    const scheduleGen = ++scheduleGenerationRef.current
+
+    const criticalBootstrapsReady = (uid: string) => {
+      if (!isBackendV2Enabled("session")) return true
+      if (readSessionBootstrapCache(uid) == null) return false
+      if (
+        isBackendV2Enabled("dashboard") &&
+        readDashboardBootstrapCache(uid) == null
+      ) {
+        return false
+      }
+      return true
+    }
+
+    const kickDeferredFetch = () => {
+      if (baselineKickScheduledRef.current || baselineResolvedRef.current) {
+        return
+      }
+      baselineKickScheduledRef.current = true
+      scheduleDeferredWork(() => {
+        if (cancelled || scheduleGen !== scheduleGenerationRef.current) return
+        void refreshChecklistSignals().then(() => {
+          if (cancelled || scheduleGen !== scheduleGenerationRef.current) return
+          if (pendingRefreshRef.current) {
+            pendingRefreshRef.current = false
+            void refreshChecklistSignals({ fromUserAction: true })
+          }
+        })
+      }, 2500)
+    }
+
+    const tryScheduleAfterCriticalBootstrap = (uid: string) => {
+      if (!criticalBootstrapsReady(uid)) return false
+      unsubSession?.()
+      unsubSession = undefined
+      unsubDashboard?.()
+      unsubDashboard = undefined
+      if (bootstrapWaitTimeout != null) {
+        clearTimeout(bootstrapWaitTimeout)
+        bootstrapWaitTimeout = undefined
+      }
+      kickDeferredFetch()
+      return true
+    }
+
+    // Wait for Session + Dashboard bootstrap before checklist RPC (no race with critical path).
+    if (isBackendV2Enabled("session")) {
+      if (tryScheduleAfterCriticalBootstrap(nextUserId)) {
+        return () => {
+          cancelled = true
+          scheduleGenerationRef.current += 1
         }
-      })
-    })
+      }
+
+      const onBootstrapReady = () => {
+        if (cancelled) return
+        tryScheduleAfterCriticalBootstrap(nextUserId)
+      }
+
+      unsubSession = subscribeSessionBootstrapCache(onBootstrapReady)
+      if (isBackendV2Enabled("dashboard")) {
+        unsubDashboard = subscribeDashboardBootstrapCache(onBootstrapReady)
+      }
+
+      bootstrapWaitTimeout = setTimeout(() => {
+        if (cancelled) return
+        unsubSession?.()
+        unsubSession = undefined
+        unsubDashboard?.()
+        unsubDashboard = undefined
+        bootstrapWaitTimeout = undefined
+        kickDeferredFetch()
+      }, 3000)
+
+      return () => {
+        cancelled = true
+        scheduleGenerationRef.current += 1
+        unsubSession?.()
+        unsubDashboard?.()
+        if (bootstrapWaitTimeout != null) {
+          clearTimeout(bootstrapWaitTimeout)
+        }
+      }
+    }
+
+    kickDeferredFetch()
+    return () => {
+      cancelled = true
+      scheduleGenerationRef.current += 1
+    }
   }, [
     user?.id,
     profileLoading,
     membershipReconciling,
-    profile?.onboarding_completed,
-    profile?.subscription_status,
-    profile?.trial_end,
-    profile?.is_pro,
     refreshChecklistSignals,
   ])
 

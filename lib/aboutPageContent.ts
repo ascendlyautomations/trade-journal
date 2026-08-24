@@ -34,35 +34,35 @@ export type AboutDifferentiator = {
 
 export const ABOUT_DIFFERENTIATORS: readonly AboutDifferentiator[] = [
   {
-    
+    icon: "📊",
     title: "Advanced Performance Analytics",
     description:
       "Discover your strengths with powerful insights and detailed performance tracking.",
   },
   {
-    
+    icon: "🤖",
     title: "AI Analyst",
     description:
       "Receive AI-powered feedback designed to help improve your decision making.",
   },
   {
-    
+    icon: "🧪",
     title: "Backtest Lab",
     description: "Test ideas and refine strategies before risking real capital.",
   },
   {
-    
+    icon: "🏦",
     title: "Prop Firm Mode",
     description:
       "Track evaluations and funded accounts with features built specifically for prop traders.",
   },
   {
-    
+    icon: "🎬",
     title: "Trade Clips",
     description: "Review your execution with screenshots and replay videos.",
   },
   {
-    
+    icon: "💬",
     title: "Trade Rooms",
     description:
       "Share trades, clips, ideas, and learn from traders around the world.",

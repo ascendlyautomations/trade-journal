@@ -69,12 +69,11 @@ export default function TraxsProForLifeCard({
   )
 
   useEffect(() => {
-    void refresh()
-    const interval = window.setInterval(() => void refresh(), 30_000)
+    // Hook already loads once when enabled — do not force-refresh on mount
+    // (that duplicated /api/early-access/status with GettingStartedMobileEntry).
     const onFocus = () => void refresh()
     window.addEventListener("focus", onFocus)
     return () => {
-      window.clearInterval(interval)
       window.removeEventListener("focus", onFocus)
     }
   }, [refresh])

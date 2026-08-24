@@ -49,12 +49,14 @@ export function achievementFromPost(post: any): Achievement {
     account_type: null,
     account_name: null,
     account_size: null,
+    account_id: null,
     mode: null,
     firm: row.firm != null ? String(row.firm) : null,
     image_url: row.image_url != null ? String(row.image_url) : null,
     achieved_at: row.achieved_at != null ? String(row.achieved_at) : null,
-    created_at: post.created_at != null ? String(post.created_at) : null,
-    updated_at: null,
+    created_at:
+      post.created_at != null ? String(post.created_at) : new Date(0).toISOString(),
+    updated_at: new Date(0).toISOString(),
     is_featured: Boolean(row.is_featured),
     is_public: row.is_public !== false,
     sort_order: null,
@@ -109,7 +111,7 @@ function isMissingCommentSchemaColumn(error: {
 
 export async function queryAchievementPostComments<
   T extends { data: unknown; error: unknown },
->(run: (select: string) => Promise<T>): Promise<T> {
+>(run: (select: string) => PromiseLike<T>): Promise<T> {
   const full = await run(ACHIEVEMENT_POST_COMMENTS_SELECT)
   if (
     !full.error ||

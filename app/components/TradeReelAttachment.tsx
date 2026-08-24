@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import ReelVideoPosterFrame from "@/app/components/ReelVideoPosterFrame"
+import ReelIdlePoster from "@/app/components/ReelIdlePoster"
 import ReelVideoFilePreview from "@/app/components/ReelVideoFilePreview"
 import type { ReelRow } from "@/lib/reels"
 import {
@@ -132,9 +132,8 @@ export default function TradeReelAttachment({
         <div className="mt-2 space-y-3">
           <div className="flex items-center gap-3">
             <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40">
-              <ReelVideoPosterFrame
+              <ReelIdlePoster
                 thumbnailUrl={attachedReel.thumbnail_url}
-                videoUrl={attachedReel.video_url}
                 className="h-full w-full object-cover"
               />
               {attachedReel.duration_seconds != null ? (

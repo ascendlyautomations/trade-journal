@@ -62,6 +62,7 @@ const DEMO_NOTIFICATIONS: NotificationRecord[] = [
     sender_id: DEMO_USER_MIKE,
     type: "like",
     post_id: null,
+    trade_id: null,
     profile_post_id: null,
     achievement_post_id: null,
     reel_id: "demo-reel-1",

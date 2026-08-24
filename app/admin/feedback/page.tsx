@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import { supabase } from "@/lib/supabaseClient"
+import type { TableUpdate } from "@/lib/supabaseTypes"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import CustomSelect from "@/app/components/CustomSelect"
 import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
@@ -101,14 +102,14 @@ export default function AdminFeedbackPage() {
     if (!selectedFeedback?.id) return
     setSavingDetail(true)
 
-    const updatePayload: Record<string, unknown> = {
+    const updatePayload = {
       viewed: detailViewed,
       status: detailStatus.trim() || "open",
       admin_notes: detailAdminNotes.trim() || null,
       updated_at: new Date().toISOString(),
       viewed_at: detailViewed ? new Date().toISOString() : null,
       viewed_by: detailViewed ? adminUserId : null,
-    }
+    } satisfies TableUpdate<"feedback_submissions">
 
     const { error } = await supabase
       .from("feedback_submissions")

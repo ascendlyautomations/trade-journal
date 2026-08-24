@@ -1,5 +1,6 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { NOTIFICATION_INBOX_TYPES } from "@/lib/notificationEngagementTypes"
+import { invalidateAppIconBadgeCache } from "@/lib/server/push/badgeService"
 import { jsonUserFacingError } from "@/lib/userFacingError"
 
 export async function DELETE(req: Request) {
@@ -18,5 +19,6 @@ export async function DELETE(req: Request) {
     return jsonUserFacingError(error, 500, "[api/notifications/clear]")
   }
 
+  invalidateAppIconBadgeCache(user.id)
   return Response.json({ ok: true })
 }

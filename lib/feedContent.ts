@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { isDemoUserId } from "./demo/constants"
+import { mapProjectedRows } from "./supabaseProjectedQuery"
 import { isDemoModeActive } from "./demo/demoMode"
 import {
   fetchDemoFeedBatch,
@@ -78,6 +79,7 @@ function applyScopeFilter<T extends { neq: Function; in: Function; not: Function
 
 async function hydrateTradeFeedItemsWithReels(
   supabase: SupabaseClient,
+  viewerId: string,
   items: FeedItem[]
 ): Promise<FeedItem[]> {
   const tradeIds = items
@@ -89,7 +91,7 @@ async function hydrateTradeFeedItemsWithReels(
 
   if (tradeIds.length === 0) return items
 
-  const reelMap = await fetchReelsByTradeIds(supabase, tradeIds)
+  const reelMap = await fetchReelsByTradeIds(supabase, viewerId, tradeIds)
   if (reelMap.size === 0) return items
 
   return items.map((item) => {
@@ -148,7 +150,10 @@ export async function fetchTradeFeedBatch(
     return { items: [], emptyFollowing: true }
   }
 
-  const { data, error } = await scoped
+  const { data, error } = await scoped.overrideTypes<
+    Record<string, unknown>[],
+    { merge: false }
+  >()
 
   let rows = data
 
@@ -171,21 +176,22 @@ export async function fetchTradeFeedBatch(
     if (!retryScoped) {
       return { items: [], emptyFollowing: true }
     }
-    const retryResult = await retryScoped
+    const retryResult = await retryScoped.overrideTypes<
+      Record<string, unknown>[],
+      { merge: false }
+    >()
     if (retryResult.error) throw retryResult.error
     rows = retryResult.data
   }
 
-  let items = (rows ?? []).map((row) =>
-    normalizeTradeFeedItem(row as Record<string, unknown>)
-  )
+  let items = mapProjectedRows(rows, normalizeTradeFeedItem)
 
   if (
     items.some(
       (item) => item.feedKind === "trade" && !postAttachedReel(item)
     )
   ) {
-    items = await hydrateTradeFeedItemsWithReels(supabase, items)
+    items = await hydrateTradeFeedItemsWithReels(supabase, options.userId, items)
   }
 
   return { items }
@@ -230,13 +236,14 @@ export async function fetchProfileFeedBatch(
     return { items: [], emptyFollowing: true }
   }
 
-  const { data, error } = await scoped
+  const { data, error } = await scoped.overrideTypes<
+    Record<string, unknown>[],
+    { merge: false }
+  >()
   if (error) throw error
 
   return {
-    items: (data ?? []).map((row) =>
-      normalizeProfileFeedItem(row as Record<string, unknown>)
-    ),
+    items: mapProjectedRows(data, normalizeProfileFeedItem),
   }
 }
 
@@ -280,13 +287,14 @@ export async function fetchAchievementFeedBatch(
     return { items: [], emptyFollowing: true }
   }
 
-  const { data, error } = await scoped
+  const { data, error } = await scoped.overrideTypes<
+    Record<string, unknown>[],
+    { merge: false }
+  >()
   if (error) throw error
 
   return {
-    items: (data ?? []).map((row) =>
-      normalizeAchievementFeedItem(row as Record<string, unknown>)
-    ),
+    items: mapProjectedRows(data, normalizeAchievementFeedItem),
   }
 }
 
@@ -329,13 +337,14 @@ export async function fetchReelFeedBatch(
     return { items: [], emptyFollowing: true }
   }
 
-  const { data, error } = await scoped
+  const { data, error } = await scoped.overrideTypes<
+    Record<string, unknown>[],
+    { merge: false }
+  >()
   if (error) throw error
 
   return {
-    items: (data ?? []).map((row) =>
-      normalizeReelFeedItem(row as Record<string, unknown>)
-    ),
+    items: mapProjectedRows(data, normalizeReelFeedItem),
   }
 }
 
@@ -352,13 +361,14 @@ export async function fetchTradeFeedPostById(
     .select(FEED_POSTS_SELECT)
     .eq("id", postId)
     .maybeSingle()
+    .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
   if (error) {
     console.error("fetchTradeFeedPostById:", error)
     return null
   }
   if (!data) return null
-  return normalizeTradeFeedItem(data as Record<string, unknown>)
+  return normalizeTradeFeedItem(data)
 }
 
 export async function fetchTradeFeedPostByTradeId(
@@ -374,13 +384,14 @@ export async function fetchTradeFeedPostByTradeId(
     .select(FEED_POSTS_SELECT)
     .eq("trade_id", tradeId)
     .maybeSingle()
+    .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
   if (error) {
     console.error("fetchTradeFeedPostByTradeId:", error)
     return null
   }
   if (!data) return null
-  return normalizeTradeFeedItem(data as Record<string, unknown>)
+  return normalizeTradeFeedItem(data)
 }
 
 export async function fetchProfileFeedPostById(
@@ -396,13 +407,14 @@ export async function fetchProfileFeedPostById(
     .select(FEED_PROFILE_POSTS_SELECT)
     .eq("id", postId)
     .maybeSingle()
+    .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
   if (error) {
     console.error("fetchProfileFeedPostById:", error)
     return null
   }
   if (!data) return null
-  return normalizeProfileFeedItem(data as Record<string, unknown>)
+  return normalizeProfileFeedItem(data)
 }
 
 export async function topUpMergedFeedBuffer(
@@ -539,7 +551,7 @@ export async function topUpMergedFeedBuffer(
     buffer = sortFeedItemsDesc(buffer)
   }
 
-  buffer = await hydrateTradeFeedItemsWithReels(supabase, buffer)
+  buffer = await hydrateTradeFeedItemsWithReels(supabase, options.userId, buffer)
 
   return {
     buffer,

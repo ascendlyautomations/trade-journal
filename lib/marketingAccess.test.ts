@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-
-const { shouldShowMarketingNavbar } = require("./marketingAccess.ts")
+import { shouldShowMarketingNavbar } from "./marketingAccess.ts"
 
 describe("shouldShowMarketingNavbar", () => {
   it("always shows on homepage for logged-out users, even while auth loading", () => {

@@ -1,16 +1,13 @@
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime"
 
-/** Immediately after login — dashboard only. */
+/** Immediately after login — dashboard only (when not already there). */
 export const APP_PREFETCH_CRITICAL_ROUTES = ["/dashboard"] as const
 
-/** After dashboard is interactive — highest-probability destinations. */
-export const APP_PREFETCH_SECONDARY_ROUTES = [
-  "/trades",
-  "/feed",
-  "/messages",
-  "/community",
-  "/explore",
-] as const
+/**
+ * After dashboard is interactive — next most likely tabs only.
+ * Excludes community/explore/messages/profile (intent-hover or click).
+ */
+export const APP_PREFETCH_SECONDARY_ROUTES = ["/trades", "/feed"] as const
 
 const prefetchedHrefs = new Set<string>()
 let criticalPrefetchDone = false
@@ -20,12 +17,24 @@ let prefetchGeneration = 0
 function normalizeHref(href: string): string | null {
   const trimmed = href.trim()
   if (!trimmed || !trimmed.startsWith("/")) return null
-  return trimmed
+  return trimmed.split("?")[0] ?? trimmed
 }
 
-function prefetchRoute(router: AppRouterInstance, href: string) {
+function isCurrentOrChildRoute(href: string, currentPathname?: string): boolean {
+  if (!currentPathname) return false
+  const current = normalizeHref(currentPathname)
+  if (!current) return false
+  return current === href || current.startsWith(`${href}/`)
+}
+
+function prefetchRoute(
+  router: AppRouterInstance,
+  href: string,
+  currentPathname?: string
+) {
   const normalized = normalizeHref(href)
   if (!normalized || prefetchedHrefs.has(normalized)) return
+  if (isCurrentOrChildRoute(normalized, currentPathname)) return
   prefetchedHrefs.add(normalized)
   try {
     router.prefetch(normalized)
@@ -34,44 +43,37 @@ function prefetchRoute(router: AppRouterInstance, href: string) {
   }
 }
 
-/** Prefetch dashboard as soon as auth is ready (login critical path). */
-export function prefetchCriticalAppRoutes(router: AppRouterInstance) {
+/** Prefetch dashboard once auth is ready (skips when already on dashboard). */
+export function prefetchCriticalAppRoutes(
+  router: AppRouterInstance,
+  currentPathname?: string
+) {
   if (criticalPrefetchDone) return
   criticalPrefetchDone = true
   for (const href of APP_PREFETCH_CRITICAL_ROUTES) {
-    prefetchRoute(router, href)
+    prefetchRoute(router, href, currentPathname)
   }
 }
 
-/** Prefetch high-traffic routes once dashboard is fully interactive. */
+/** Prefetch high-traffic routes once dashboard is interactive (deduped, no profile). */
 export function prefetchSecondaryAppRoutes(
   router: AppRouterInstance,
-  profileHref?: string | null
+  currentPathname?: string
 ) {
   if (secondaryPrefetchDone) return
   secondaryPrefetchDone = true
-  const routes = [
-    ...APP_PREFETCH_SECONDARY_ROUTES,
-    ...(profileHref ? [profileHref] : []),
-  ]
-  if (typeof window === "undefined") {
-    for (const href of routes) prefetchRoute(router, href)
-    return
+  for (const href of APP_PREFETCH_SECONDARY_ROUTES) {
+    prefetchRoute(router, href, currentPathname)
   }
-  const generation = prefetchGeneration
-  routes.forEach((href, index) => {
-    window.setTimeout(() => {
-      if (generation === prefetchGeneration) prefetchRoute(router, href)
-    }, index * 250)
-  })
 }
 
 /** Intent-based prefetch (hover / focus / tap) — deduped per session. */
 export function prefetchRouteOnIntent(
   router: AppRouterInstance,
-  href: string
+  href: string,
+  currentPathname?: string
 ) {
-  prefetchRoute(router, href)
+  prefetchRoute(router, href, currentPathname)
 }
 
 export function resetRoutePrefetchSession() {

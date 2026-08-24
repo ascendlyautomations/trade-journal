@@ -8,13 +8,14 @@ import {
 } from "@/lib/analyzeTradePrompt"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import { isProActive } from "@/lib/subscription"
+import type { Database } from "@/lib/database.types"
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
 // 🔥 SERVER-LEVEL SUPABASE CLIENT
-const supabaseAdmin = createClient(
+const supabaseAdmin = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
@@ -109,7 +110,7 @@ async function createTradeAnalysisCompletion(
 export async function POST(req: Request) {
   const token = req.headers.get("authorization")?.replace("Bearer ", "")
 
-  const supabase = createClient(
+  const supabase = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {

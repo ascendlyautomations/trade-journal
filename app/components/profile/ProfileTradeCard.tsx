@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import IntentPrefetchLink from "@/lib/IntentPrefetchLink"
 import { useEffect, useRef, useState } from "react"
 import DropdownMenu from "@/app/components/ui/DropdownMenu"
 import DetailModalImage from "@/app/components/ui/DetailModalImage"
@@ -19,7 +19,7 @@ import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
-import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
+import { ProfileAvatarImg, PROFILE_PAGE_AVATAR_PX } from "@/app/components/SafeProfileAvatar"
 import { formatPublicAccountTypeLabel } from "@/lib/publicAccountPrivacy"
 import { isCopyTradedMode } from "@/lib/tradeMode"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
@@ -56,6 +56,8 @@ export type ProfileTradeCardProps = {
   onOpenComments?: () => void
   attachedReel?: ReelRow | null
   onOpenReplay?: () => void
+  /** First visible card — prioritize screenshot download. */
+  screenshotPriority?: boolean
   commentsExpanded?: boolean
   scrollToCommentsOnMount?: boolean
   inDetailModal?: boolean
@@ -77,6 +79,7 @@ export default function ProfileTradeCard({
   onOpenComments,
   attachedReel,
   onOpenReplay,
+  screenshotPriority = false,
   commentsExpanded = false,
   scrollToCommentsOnMount = false,
   inDetailModal = false,
@@ -155,13 +158,14 @@ export default function ProfileTradeCard({
           </span>
 
           {trade.id ? (
-            <Link
+            <IntentPrefetchLink
               href={`/trade/${trade.id}`}
+              prefetch={false}
               className="min-w-0 truncate font-medium text-white hover:text-blue-200"
               onClick={(e) => e.stopPropagation()}
             >
               {ticker} · {direction}
-            </Link>
+            </IntentPrefetchLink>
           ) : (
             <span className="min-w-0 truncate font-medium text-white">
               {ticker} · {direction}
@@ -227,6 +231,7 @@ export default function ProfileTradeCard({
         <ProfileAvatarImg
           src={profile.avatar_url}
           className="h-9 w-9 shrink-0 ring-2 ring-white/10 md:h-10 md:w-10"
+          displaySizePx={PROFILE_PAGE_AVATAR_PX}
         />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-white">
@@ -304,6 +309,7 @@ export default function ProfileTradeCard({
           src={imageSrc}
           preset="feed-thumb"
           objectFit="cover"
+          priority={screenshotPriority}
           onClick={onImageClick}
           logContext="profile-trade-card-mobile"
           className="h-full w-full"
@@ -313,6 +319,7 @@ export default function ProfileTradeCard({
         <TradeScreenshotImage
           src={imageSrc}
           preset="feed-thumb"
+          priority={screenshotPriority}
           onClick={onImageClick}
           logContext="profile-trade-card"
         />
@@ -425,14 +432,15 @@ export default function ProfileTradeCard({
 
       {showInteractions ? (
         <div onKeyDown={(e) => e.stopPropagation()}>
-          <TradeSocialProvider
-            tradeId={trade.id}
-            currentUserId={currentUserId ?? undefined}
-            tradeOwnerUserId={trade.user_id}
-            commentsExpanded={commentsExpanded}
-            onRequestComments={commentsExpanded ? undefined : onOpenComments}
-            scrollToCommentsOnMount={scrollToCommentsOnMount}
-          >
+            <TradeSocialProvider
+              tradeId={trade.id}
+              currentUserId={currentUserId ?? undefined}
+              tradeOwnerUserId={trade.user_id}
+              commentsExpanded={commentsExpanded}
+              onRequestComments={commentsExpanded ? undefined : onOpenComments}
+              scrollToCommentsOnMount={scrollToCommentsOnMount}
+              deferCommentsUntilExpanded={!commentsExpanded}
+            >
             <div className="border-t border-white/10 px-3 py-1.5 md:px-4 md:py-2">
               <TradeSocialEngagementBar />
             </div>

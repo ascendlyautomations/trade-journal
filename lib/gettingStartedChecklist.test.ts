@@ -1,6 +1,7 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const { computeGettingStartedProgress, detectNewlyCompletedTasks } = require("./gettingStartedChecklist.ts")
+import { describe, it, beforeEach } from "node:test"
+import { computeGettingStartedProgress, detectNewlyCompletedTasks, shouldAutoShowGettingStartedChecklist, shouldOfferGettingStartedChecklist, shouldShowGettingStartedIntroPopup, } from "./gettingStartedChecklist.ts"
+import { applyStickyGettingStartedProgress, writeStickyCompletedItemIds, } from "./gettingStartedSticky.ts"
+import assert from "node:assert/strict"
 
 const EMPTY = {
   onboardingCompleted: false,
@@ -123,12 +124,6 @@ describe("computeGettingStartedProgress", () => {
 })
 
 describe("getting started visibility", () => {
-  const {
-    shouldAutoShowGettingStartedChecklist,
-    shouldOfferGettingStartedChecklist,
-    shouldShowGettingStartedIntroPopup,
-  } = require("./gettingStartedChecklist.ts")
-
   it("offers navbar checklist while any task remains", () => {
     assert.equal(
       shouldOfferGettingStartedChecklist("user-1", {
@@ -214,25 +209,24 @@ describe("getting started visibility", () => {
 
 describe("applyStickyGettingStartedProgress", () => {
   const localStorageMock = new Map<string, string>()
-  if (typeof globalThis.window === "undefined") {
-    ;(globalThis as typeof globalThis & { window: Window }).window = {
-      localStorage: {
-        getItem: (key: string) => localStorageMock.get(key) ?? null,
-        setItem: (key: string, value: string) => {
-          localStorageMock.set(key, value)
-        },
-        removeItem: (key: string) => {
-          localStorageMock.delete(key)
+
+  beforeEach(() => {
+    localStorageMock.clear()
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        localStorage: {
+          getItem: (key: string) => localStorageMock.get(key) ?? null,
+          setItem: (key: string, value: string) => {
+            localStorageMock.set(key, value)
+          },
+          removeItem: (key: string) => {
+            localStorageMock.delete(key)
+          },
         },
       },
-    } as unknown as Window
-  }
-
-  const {
-    applyStickyGettingStartedProgress,
-    writeStickyCompletedItemIds,
-  } = require("./gettingStartedSticky.ts")
-  const { computeGettingStartedProgress } = require("./gettingStartedChecklist.ts")
+    })
+  })
 
   const userId = "test-user-sticky"
 
@@ -261,3 +255,4 @@ describe("applyStickyGettingStartedProgress", () => {
     assert.equal(merged.items.find((i) => i.id === "trade")?.complete, false)
   })
 })
+export {}

@@ -1,10 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  AdminUserDeletionError,
-  AdminUserDeletionStepError,
-  assertAdminCanDeleteTarget,
-} = require("./deleteUserAdmin.ts")
+import { describe, it } from "node:test"
+import { AdminUserDeletionError, AdminUserDeletionStepError, assertAdminCanDeleteTarget, } from "./deleteUserAdmin.ts"
+import assert from "node:assert/strict"
 
 describe("assertAdminCanDeleteTarget", () => {
   it("blocks self-delete", async () => {
@@ -61,3 +57,4 @@ describe("assertAdminCanDeleteTarget", () => {
     assert.equal(err.message, "Table does not exist")
   })
 })
+export {}

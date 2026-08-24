@@ -16,6 +16,9 @@ import {
 import { isProActive } from "@/lib/subscription"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags.ts"
+import { readSessionBootstrapCache } from "@/lib/backendV2/sessionBootstrapCache.ts"
+import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 
 type TradeStatRow = {
   account_id: string | null
@@ -105,6 +108,21 @@ export default function FreePlanAccountSlotShell({
       setAccounts([])
       setRawCanAddFlags([])
       return
+    }
+
+    if (isBackendV2Enabled("session")) {
+      const session = readSessionBootstrapCache(user.id)
+      const summary = session?.data.accounts_summary ?? []
+      if (summary.length <= FREE_PLAN_ACCOUNT_LIMIT) {
+        setRawCanAddFlags(
+          summary.map((row) => ({
+            id: String(row.id),
+            can_add_trades: true,
+          }))
+        )
+        setAccounts([])
+        return
+      }
     }
 
     let accountRows: unknown[]

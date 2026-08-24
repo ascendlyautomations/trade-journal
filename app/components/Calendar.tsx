@@ -16,6 +16,7 @@ import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import {
   accountRowForTrade,
   formatTradeAccountNameSizeLine,
+  type TradeAccountDisplayInput,
 } from "@/lib/tradeAccountDisplay"
 type TradeLike = {
   id: string | number
@@ -69,8 +70,14 @@ function accountContextLine(
     return publicAccountBadgeFromTrade(trade)
   }
 
-  const accountRow = accountRowForTrade(trade, accountById)
-  const accountLine = formatTradeAccountNameSizeLine(trade, accountRow)
+  const accountRow = accountRowForTrade(
+    trade as TradeAccountDisplayInput,
+    accountById
+  )
+  const accountLine = formatTradeAccountNameSizeLine(
+    trade as TradeAccountDisplayInput,
+    accountRow
+  )
   if (trade.account_type && accountLine) {
     return `${trade.account_type} · ${accountLine}`
   }

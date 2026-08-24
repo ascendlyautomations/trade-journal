@@ -1,6 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const { sanitizeCsvTextField } = require("./csvFormulaSanitize.ts")
+import { describe, it } from "node:test"
+import { sanitizeCsvTextField } from "./csvFormulaSanitize.ts"
+import assert from "node:assert/strict"
 
 describe("sanitizeCsvTextField", () => {
   it("prefixes formula-like values", () => {
@@ -14,3 +14,4 @@ describe("sanitizeCsvTextField", () => {
     assert.equal(sanitizeCsvTextField("Good entry, held target"), "Good entry, held target")
   })
 })
+export {}

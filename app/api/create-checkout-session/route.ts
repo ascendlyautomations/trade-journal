@@ -21,12 +21,13 @@ import { devLog } from "@/lib/devLog"
 import { resolveCheckoutTrialPeriodDays } from "@/lib/checkoutTrial"
 import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
 import { getRequestOrigin } from "@/lib/requestOrigin"
+import type { Database } from "@/lib/database.types"
 
 export const runtime = "nodejs"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
 
-const supabase = createClient(
+const supabase = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
     }
 
     const cookieStore = await cookies()
-    const supabaseAuth = createServerClient(
+    const supabaseAuth = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {

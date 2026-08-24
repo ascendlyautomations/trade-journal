@@ -25,6 +25,7 @@ import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { isProActive } from "@/lib/subscription"
 import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
 import {
+  isCopyGroupFilterValue,
   isValidAccountFilterValue,
   resolveCopyGroupAccountIdsForFilter,
 } from "@/lib/tradeAccountSelection"
@@ -53,7 +54,7 @@ export default function TradesPage() {
     refresh: refreshAccounts,
   } = useCachedAccounts(user?.id)
   const trades = useMemo(
-    () => excludeBacktestTrades(cachedTrades),
+    () => excludeBacktestTrades([...cachedTrades]),
     [cachedTrades]
   )
   const tradesHasCachedData =
@@ -67,11 +68,19 @@ export default function TradesPage() {
     (accountsLoading && accountRows.length === 0 && !accountsHasCachedData)
 
   const isPro = isProActive(gateProfile)
-  const { copyGroups } = useCopyTradingGroups(user?.id, isPro)
 
   const [resultFilter, setResultFilter] = useState<"all" | "wins" | "losses">("all")
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [accountFilter, setAccountFilter] = useState("all")
+  const [copyGroupsRequested, setCopyGroupsRequested] = useState(false)
+  const requestCopyGroups = useCallback(() => {
+    setCopyGroupsRequested(true)
+  }, [])
+  const { copyGroups } = useCopyTradingGroups(
+    user?.id,
+    isPro &&
+      (copyGroupsRequested || isCopyGroupFilterValue(accountFilter))
+  )
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
   const [showPublicOnly, setShowPublicOnly] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -111,31 +120,6 @@ export default function TradesPage() {
   }, [timeframe, accountFilter, accountTypeFilter, resultFilter, sortBy])
 
   useEffect(() => {
-    if (trades.length === 0) {
-      setTradeReelsByTradeId({})
-      return
-    }
-
-    let cancelled = false
-    const tradeIds = trades
-      .map((trade) => String(trade.id))
-      .filter((id) => id.trim() !== "")
-
-    void fetchReelsByTradeIds(supabase, tradeIds).then((map) => {
-      if (cancelled) return
-      const record: Record<string, ReelRow> = {}
-      map.forEach((reel, tradeId) => {
-        record[tradeId] = reel
-      })
-      setTradeReelsByTradeId(record)
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [trades])
-
-  useEffect(() => {
     if (typeof window === "undefined" || loading || trades.length === 0) return
 
     const editId = new URLSearchParams(window.location.search).get("edit")?.trim()
@@ -151,10 +135,14 @@ export default function TradesPage() {
 
     // Keep the same object while the modal is open so trade-cache refreshes
     // do not wipe in-progress edits via InputTradeForm hydration.
-    setEditingTrade((prev) =>
+    setEditingTrade((prev: any | null) =>
       prev && String(prev.id) === editId ? prev : { ...trade }
     )
   }, [loading, trades])
+
+  const handleImportCsv = useCallback(() => {
+    router.push("/import")
+  }, [router])
 
   const handleEditTrade = useCallback((trade: any) => {
     if (isDemoModeActive()) {
@@ -374,6 +362,44 @@ export default function TradesPage() {
     [visibleTrades, visibleCount]
   )
 
+  const reelFetchTradeIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          displayedTrades
+            .map((trade) => String(trade.id))
+            .filter((id) => id.trim() !== "")
+        ),
+      ],
+    [displayedTrades]
+  )
+
+  useEffect(() => {
+    if (!user?.id) {
+      setTradeReelsByTradeId({})
+      return
+    }
+    if (reelFetchTradeIds.length === 0) {
+      setTradeReelsByTradeId({})
+      return
+    }
+
+    let cancelled = false
+
+    void fetchReelsByTradeIds(supabase, user.id, reelFetchTradeIds).then((map) => {
+      if (cancelled) return
+      const record: Record<string, ReelRow> = {}
+      map.forEach((reel, tradeId) => {
+        record[tradeId] = reel
+      })
+      setTradeReelsByTradeId(record)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [reelFetchTradeIds, user?.id])
+
   const tradeStats = useMemo(() => {
     const totalTrades = visibleTrades.length
     const wins = visibleTrades.filter((t) => t.pnl > 0)
@@ -418,6 +444,7 @@ export default function TradesPage() {
           onOpenPerformanceShare={handleOpenPerformanceShare}
           sortBy={sortBy}
           onSortByChange={setSortBy}
+          onAccountPickerOpen={requestCopyGroups}
         />
 
         <div className="w-full px-1 md:px-6 md:max-w-[1600px] md:mx-auto">
@@ -428,6 +455,7 @@ export default function TradesPage() {
             onAccountChange={setAccountFilter}
             isPro={isPro}
             copyGroups={copyGroups}
+            onAccountPickerOpen={requestCopyGroups}
             accountTypeFilter={accountTypeFilter}
             onAccountTypeChange={setAccountTypeFilter}
             timeframe={timeframe}
@@ -458,8 +486,12 @@ export default function TradesPage() {
             onAnalyzeTrade={handleAnalyzeTrade}
             onImageClick={handleImageClick}
             onLoadMore={handleLoadMore}
+            onImportCsv={handleImportCsv}
             tradeReelsByTradeId={tradeReelsByTradeId}
             onOpenTradeReplay={handleOpenTradeReplay}
+            editingTradeId={
+              editingTrade?.id != null ? String(editingTrade.id) : null
+            }
           />
         </div>
       </div>

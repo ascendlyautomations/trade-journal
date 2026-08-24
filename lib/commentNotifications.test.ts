@@ -1,9 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  buildCommentNotificationInsertPayload,
-  resolveCommentNotificationRecipients,
-} = require("./commentNotifications.ts")
+import { describe, it } from "node:test"
+import { buildCommentNotificationInsertPayload, resolveCommentNotificationRecipients, } from "./commentNotifications.ts"
+import assert from "node:assert/strict"
 
 describe("resolveCommentNotificationRecipients", () => {
   it("notifies post owner for top-level comments", () => {
@@ -74,3 +71,4 @@ describe("buildCommentNotificationInsertPayload", () => {
     )
   })
 })
+export {}

@@ -120,7 +120,11 @@ export function scoreActiveTrader(
 }
 
 export function buildTradeSummaries(
-  trades: { user_id: string; pnl?: number | string | null; created_at: string }[]
+  trades: {
+    user_id: string
+    pnl?: number | string | null
+    created_at?: string | null
+  }[]
 ): Record<string, UserTradeSummary> {
   const map: Record<string, UserTradeSummary> = {}
 
@@ -144,8 +148,9 @@ export function buildTradeSummaries(
     if (Number.isFinite(pnl)) row.totalPnl += pnl
 
     if (
-      !row.lastTradeAt ||
-      new Date(trade.created_at).getTime() > new Date(row.lastTradeAt).getTime()
+      trade.created_at &&
+      (!row.lastTradeAt ||
+        new Date(trade.created_at).getTime() > new Date(row.lastTradeAt).getTime())
     ) {
       row.lastTradeAt = trade.created_at
     }
@@ -396,7 +401,17 @@ export async function fetchExploreTradeMetaAggregates(
       return empty
     }
 
-    const list = rows || []
+    const list = (rows || []).filter(
+      (
+        row
+      ): row is {
+        user_id: string
+        session: string | null
+        ticker: string | null
+        created_at: string
+        pnl: number | null
+      } => row.user_id != null && row.created_at != null
+    )
     return {
       tradeSummaries: buildTradeSummaries(list),
       tradeMetaByUserId: buildTraderTradeMeta(list),
@@ -462,7 +477,7 @@ export async function fetchExploreTradeMetaAggregates(
 
 export function buildTraderTradeMeta(
   trades: {
-    user_id: string
+    user_id: string | null
     session?: string | null
     ticker?: string | null
   }[]

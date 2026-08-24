@@ -1,11 +1,6 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  buildTradeTimingPresentation,
-  formatHoldDurationFromTimes,
-  formatHoldDurationSeconds,
-  isMultiCalendarDayTrade,
-} = require("./tradeTimingDisplay.ts")
+import { describe, it } from "node:test"
+import { buildTradeTimingPresentation, formatHoldDurationFromTimes, formatHoldDurationSeconds, isMultiCalendarDayTrade, } from "./tradeTimingDisplay.ts"
+import assert from "node:assert/strict"
 
 describe("formatHoldDurationSeconds", () => {
   it("formats under 24 hours with hours and minutes", () => {
@@ -96,3 +91,4 @@ describe("formatHoldDurationFromTimes", () => {
     assert.match(formatHoldDurationFromTimes(entry, exit) ?? "", /3d/)
   })
 })
+export {}

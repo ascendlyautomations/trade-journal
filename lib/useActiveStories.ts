@@ -21,7 +21,11 @@ function normalizeUserIds(userIds: string[]): string[] {
 /**
  * Shared active-story state: fetch, realtime refresh, and client-side expiry pruning.
  */
-export function useActiveStories(userIds: string[], enabled = true) {
+export function useActiveStories(
+  userIds: string[],
+  enabled = true,
+  autoLoad = true
+) {
   const userIdsKey = useMemo(
     () => normalizeUserIds(userIds).sort().join(","),
     [userIds]
@@ -66,14 +70,16 @@ export function useActiveStories(userIds: string[], enabled = true) {
       setStoriesByUser(warm)
       return
     }
+    if (!autoLoad) return
     void loadStories()
-  }, [enabled, loadStories, userIdsKey])
+  }, [autoLoad, enabled, loadStories, userIdsKey])
 
   useEffect(() => {
     if (!enabled || isDemoModeActive()) return
 
     const ids = normalizeUserIds(userIdsRef.current)
     if (ids.length === 0) return
+    if (!autoLoad && Object.keys(storiesByUser).length === 0) return
 
     const channel = supabase.channel(`active-stories:${userIdsKey}`)
 
@@ -97,7 +103,7 @@ export function useActiveStories(userIds: string[], enabled = true) {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [enabled, loadStories, userIdsKey])
+  }, [autoLoad, enabled, loadStories, storiesByUser, userIdsKey])
 
   useEffect(() => {
     if (!enabled) return

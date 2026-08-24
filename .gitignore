@@ -42,5 +42,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Xcode user state (local IDE metadata)
+*.xcuserstate
+
+# Network captures (may contain auth tokens or session data)
+*.har
+
 # iOS client secrets (public anon key / URLs — still do not commit)
 native-ios/TradeTraxs/TradeTraxs/Config/Secrets.plist

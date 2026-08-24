@@ -1,12 +1,10 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  computeUserReviewStats,
-  resolvePublicReviewAvatar,
-  selectFeaturedHomepageReviews,
-} = require("./userReviewDisplay.ts")
+import { describe, it } from "node:test"
+import { computeUserReviewStats, resolvePublicReviewAvatar, selectFeaturedHomepageReviews, type PublicUserReview, } from "./userReviewDisplay.ts"
+import assert from "node:assert/strict"
 
-function row(partial) {
+function row(
+  partial: Partial<PublicUserReview> & Pick<PublicUserReview, "id">
+): PublicUserReview {
   return {
     title: "Great",
     review: "Love it",
@@ -16,6 +14,7 @@ function row(partial) {
     display_name: "Alex",
     username_snapshot: "alex",
     avatar_snapshot: null,
+    rating: 5,
     ...partial,
   }
 }
@@ -68,3 +67,4 @@ describe("resolvePublicReviewAvatar", () => {
     assert.equal(resolvePublicReviewAvatar(row({ id: "1", avatar_snapshot: null })), null)
   })
 })
+export {}

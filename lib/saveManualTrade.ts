@@ -91,9 +91,9 @@ async function resolveRowAccount(
 
   const rowAcct = {
     type: modeLower,
-    name: String(account.name ?? "").trim() || null,
-    size: String(account.size ?? "").trim() || null,
-    id: account.id != null ? String(account.id).trim() || null : null,
+    name: String(account.name ?? "").trim(),
+    size: String(account.size ?? "").trim(),
+    id: account.id != null ? String(account.id).trim() : "",
     account_number: String(account.account_number ?? "").trim() || null,
     mode: String(account.mode ?? "live"),
     category: account.category ?? null,

@@ -1,11 +1,7 @@
-const assert = require("node:assert/strict")
-const { describe, it } = require("node:test")
-const {
-  LANDING_COMPARISON_COLUMNS,
-  LANDING_COMPARISON_FEATURE_LABELS,
-  LANDING_COMPARISON_ROWS,
-} = require("./landingComparison.ts")
-const { TRADETRAXS_FEATURE_LABELS } = require("./tradeTraxsPlans.ts")
+import { describe, it } from "node:test"
+import { LANDING_COMPARISON_COLUMNS, LANDING_COMPARISON_FEATURE_LABELS, LANDING_COMPARISON_ROWS, } from "./landingComparison.ts"
+import { TRADETRAXS_FEATURE_LABELS } from "./tradeTraxsPlans.ts"
+import assert from "node:assert/strict"
 
 describe("landingComparison", () => {
   it("rows follow recommended selling order", () => {
@@ -55,3 +51,4 @@ describe("landingComparison", () => {
     }
   })
 })
+export {}

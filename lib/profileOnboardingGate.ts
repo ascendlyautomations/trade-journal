@@ -27,14 +27,15 @@ export type ProfileOnboardingGateFields = {
 export function profileNeedsOnboarding(
   profile: ProfileOnboardingGateFields
 ): boolean {
-  if (profile.onboarding_completed === true) return false
+  const onboardingCompleted = profile.onboarding_completed === true
+  if (onboardingCompleted) return false
 
   return (
     profileNeedsUsername(profile.username) ||
     profileFieldMissing(profile.trader_type) ||
     profileFieldMissing(profile.trading_style) ||
     profileFieldMissing(profile.started_trading) ||
-    profile.onboarding_completed !== true
+    !onboardingCompleted
   )
 }
 

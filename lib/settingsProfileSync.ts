@@ -87,11 +87,17 @@ export async function fetchSettingsProfileRow(
   if (existing) return existing
 
   const promise = (async () => {
-    const { data } = await client
+    const { data, error } = await client
       .from("profiles")
       .select(APP_PROFILE_SELECT)
       .eq("id", key)
       .single()
+
+    // PGRST116 = no rows — treat as missing profile (ensure path may create).
+    // Any other error must surface so auth hydration can settle without hanging.
+    if (error && error.code !== "PGRST116") {
+      throw error
+    }
 
     if (data && !options?.skipCacheWrite) {
       writeSettingsProfileCache(key, data)

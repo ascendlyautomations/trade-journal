@@ -15,6 +15,7 @@ struct ContentView: View {
             authenticationCoordinator: appEnvironment.authentication.coordinator,
             authenticationLifecycle: appEnvironment.authentication.lifecycle,
             currentUserProfile: appEnvironment.currentUserProfile,
+            appBootstrapState: appEnvironment.appBootstrapState,
             allowsDevelopmentBypass: appEnvironment.authentication.configuration.allowsDevelopmentSessionBypass
         )
     }
@@ -29,6 +30,7 @@ struct ContentView: View {
         authenticationCoordinator: environment.authentication.coordinator,
         authenticationLifecycle: environment.authentication.lifecycle,
         currentUserProfile: environment.currentUserProfile,
+        appBootstrapState: environment.appBootstrapState,
         allowsDevelopmentBypass: environment.authentication.configuration.allowsDevelopmentSessionBypass
     )
     .environment(\.appEnvironment, environment)

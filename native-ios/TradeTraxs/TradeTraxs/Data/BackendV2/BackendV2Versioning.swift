@@ -13,7 +13,6 @@ nonisolated enum BackendV2Versioning {
         case profileTabPosts = "rpc_v1_profile_tab_posts"
         case profileTabReels = "rpc_v1_profile_tab_reels"
         case profileTabAchievements = "rpc_v1_profile_tab_achievements"
-        case messagingHome = "rpc_v1_messaging_bootstrap"
         case messaging = "rpc_v1_messaging_bootstrap"
         case conversation = "rpc_v1_conversation_bootstrap"
         case room = "rpc_v1_room_bootstrap"

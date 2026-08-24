@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { asJsonObject, mapProjectedRows } from "./supabaseProjectedQuery.ts"
 
 export const ROOM_PRESENCE_HEARTBEAT_MS = 60_000
 export const ROOM_PRESENCE_ACTIVE_THRESHOLD_MS = 135_000
@@ -70,7 +71,25 @@ export async function fetchActiveRoomPresence(
 
   return Array.from(
     new Map(
-      ((data ?? []) as RoomActivePresence[]).map((row) => [row.user_id, row])
+      mapProjectedRows(data, (row): RoomActivePresence => {
+        const profilesRaw = row.profiles
+        const profileRow = asJsonObject(
+          Array.isArray(profilesRaw) ? profilesRaw[0] : profilesRaw
+        )
+        return {
+          user_id: String(row.user_id ?? ""),
+          profiles: profileRow
+            ? {
+                id: String(profileRow.id ?? ""),
+                username: String(profileRow.username ?? ""),
+                avatar_url:
+                  profileRow.avatar_url != null
+                    ? String(profileRow.avatar_url)
+                    : null,
+              }
+            : null,
+        }
+      }).map((row) => [row.user_id, row])
     ).values()
   )
 }
@@ -115,13 +134,22 @@ export function createRoomPresenceSession(
     const task = (async () => {
       if (stopped) return
 
-      await upsertRoomPresenceHeartbeat(supabase, roomId, userId)
-      if (stopped) return
+      const upsertTask = upsertRoomPresenceHeartbeat(supabase, roomId, userId).catch(
+        (error) => {
+          if (!stopped) onError?.(error)
+        }
+      )
 
-      const users = await fetchActiveRoomPresence(supabase, roomId)
-      if (stopped) return
+      const readTask = fetchActiveRoomPresence(supabase, roomId)
+        .then((users) => {
+          if (stopped) return
+          onActiveUsers(users)
+        })
+        .catch((error) => {
+          if (!stopped) onError?.(error)
+        })
 
-      onActiveUsers(users)
+      await Promise.allSettled([upsertTask, readTask])
     })()
 
     inFlight = task

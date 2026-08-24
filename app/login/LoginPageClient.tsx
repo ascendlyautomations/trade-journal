@@ -387,7 +387,15 @@ export default function LoginPageClient({
     })
 
     if (error) {
-      showPopup({ type: "error", message: "Incorrect email or password" })
+      const retryable =
+        error.name === "AuthRetryableFetchError" ||
+        /fetch|network|timeout/i.test(error.message || "")
+      showPopup({
+        type: "error",
+        message: retryable
+          ? "Unable to reach authentication. Please try again."
+          : "Incorrect email or password",
+      })
       setEmail("")
       setPassword("")
       setLoading(false)

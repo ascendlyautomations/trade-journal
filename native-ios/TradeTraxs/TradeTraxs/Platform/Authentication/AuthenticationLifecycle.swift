@@ -15,7 +15,7 @@ final class AuthenticationLifecycle {
     }
 
     func applicationDidLaunch() async {
-        AppLog.authentication.info("AuthenticationLifecycle — cold launch restore")
+        AppLog.authentication.info("AuthenticationLifecycle — deferred session refresh")
         await authenticationCoordinator.bootstrapSession()
     }
 
