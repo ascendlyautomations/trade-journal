@@ -16,26 +16,41 @@ struct ProfilePostCard: View {
         return trimmed.isEmpty ? "Post" : trimmed
     }
 
+    private var mediaReference: MediaReference? {
+        ProfileCardMediaPresence.postMedia(in: post)
+    }
+
     var body: some View {
         ExperienceCard {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                    TradeImageView(
-                        reference: post.media.first,
-                        imagePipeline: imagePipeline,
-                        purpose: .postImage,
-                        contentMode: .fill,
-                        side: thumbnailSide
-                    )
-                    .accessibilityHidden(true)
+                Group {
+                    if let mediaReference {
+                        HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                            TradeImageView(
+                                reference: mediaReference,
+                                imagePipeline: imagePipeline,
+                                purpose: .postImage,
+                                contentMode: .fill,
+                                side: thumbnailSide
+                            )
+                            .accessibilityHidden(true)
 
-                    PostCardTextPreview(
-                        text: caption,
-                        maxHeight: thumbnailSide,
-                        isPinned: post.isPinned,
-                        dateText: TradeDisplay.dateText(post.createdAt)
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: thumbnailSide, alignment: .topLeading)
+                            PostCardTextPreview(
+                                text: caption,
+                                maxHeight: thumbnailSide,
+                                isPinned: post.isPinned,
+                                dateText: TradeDisplay.dateText(post.createdAt)
+                            )
+                            .frame(maxWidth: .infinity, maxHeight: thumbnailSide, alignment: .topLeading)
+                        }
+                    } else {
+                        PostCardTextPreview(
+                            text: caption,
+                            maxHeight: nil,
+                            isPinned: post.isPinned,
+                            dateText: TradeDisplay.dateText(post.createdAt)
+                        )
+                    }
                 }
                 .contentShape(Rectangle())
                 .experienceDoubleTapLike(
@@ -68,7 +83,7 @@ struct ProfilePostCard: View {
 /// Caption clipped to the thumbnail height; shows link-styled “See more...” only when truncated.
 private struct PostCardTextPreview: View {
     let text: String
-    let maxHeight: CGFloat
+    let maxHeight: CGFloat?
     let isPinned: Bool
     let dateText: String
 
@@ -76,15 +91,29 @@ private struct PostCardTextPreview: View {
     @State private var isTruncated = false
 
     var body: some View {
+        if let maxHeight {
+            thumbnailAlignedPreview(maxHeight: maxHeight)
+        } else {
+            mediaLessPreview
+        }
+    }
+
+    private var mediaLessPreview: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            HStack(spacing: ExperienceSpacing.xs) {
-                if isPinned {
-                    ExperienceTag(title: "Pinned", tone: .info)
-                }
-                Text(dateText)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                Spacer(minLength: 0)
-            }
+            previewHeader
+
+            Text(text)
+                .experienceStyle(.body, color: colors.primaryText)
+                .multilineTextAlignment(.leading)
+                .lineLimit(4)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func thumbnailAlignedPreview(maxHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            previewHeader
 
             Text(text)
                 .experienceStyle(.body, color: colors.primaryText)
@@ -105,6 +134,17 @@ private struct PostCardTextPreview: View {
         }
         .onPreferenceChange(PostPreviewFullHeightKey.self) { fullHeight in
             isTruncated = fullHeight > maxHeight + 0.5
+        }
+    }
+
+    private var previewHeader: some View {
+        HStack(spacing: ExperienceSpacing.xs) {
+            if isPinned {
+                ExperienceTag(title: "Pinned", tone: .info)
+            }
+            Text(dateText)
+                .experienceStyle(.caption, color: colors.secondaryText)
+            Spacer(minLength: 0)
         }
     }
 

@@ -94,7 +94,7 @@ final class CreateReelViewModel {
                     from: url,
                     contentType: contentType
                 )
-                var next = ReelDraft(
+                let next = ReelDraft(
                     localVideoURL: prepared.fileURL,
                     contentType: prepared.contentType,
                     byteCount: prepared.byteCount,

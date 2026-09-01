@@ -5,9 +5,20 @@ struct CommentRowView: View {
     let comment: InteractionComment
     let isOwn: Bool
     let imagePipeline: any ImagePipeline
+    let likeSnapshot: CommentLikeSnapshot
+    let canLike: Bool
+    let isLikeBusy: Bool
+    let onToggleLike: () -> Void
+    let canPin: Bool
+    let isPinBusy: Bool
+    let onTogglePin: ((Bool) -> Void)?
     var onDelete: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
+
+    private var isPinnedTopLevel: Bool {
+        CommentPinSemantics.isCommentPinned(comment)
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
@@ -18,6 +29,15 @@ struct CommentRowView: View {
             )
 
             VStack(alignment: .leading, spacing: 4) {
+                if isPinnedTopLevel {
+                    HStack(spacing: 4) {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("Pinned")
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                    }
+                    .accessibilityIdentifier("interaction.comment.pinned")
+                }
                 HStack(spacing: ExperienceSpacing.xs) {
                     Text(comment.authorUsername.map { "@\($0)" } ?? "Trader")
                         .experienceStyle(.footnote, color: colors.primaryText)
@@ -28,6 +48,16 @@ struct CommentRowView: View {
                 Text(comment.body)
                     .experienceStyle(.body, color: colors.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: ExperienceSpacing.sm) {
+                    CommentLikeButton(
+                        snapshot: likeSnapshot,
+                        isEnabled: canLike,
+                        isBusy: isLikeBusy,
+                        onToggle: onToggleLike
+                    )
+                    Spacer(minLength: 0)
+                }
             }
         }
         .padding(.vertical, ExperienceSpacing.xs)
@@ -38,6 +68,23 @@ struct CommentRowView: View {
                 ExperienceHaptics.play(.success)
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
+            }
+            if canPin, let onTogglePin {
+                if isPinnedTopLevel {
+                    Button {
+                        onTogglePin(false)
+                    } label: {
+                        Label("Unpin", systemImage: "pin.slash")
+                    }
+                    .disabled(isPinBusy)
+                } else {
+                    Button {
+                        onTogglePin(true)
+                    } label: {
+                        Label("Pin", systemImage: "pin")
+                    }
+                    .disabled(isPinBusy)
+                }
             }
             if isOwn, let onDelete {
                 Divider()

@@ -4,6 +4,8 @@ import Foundation
 nonisolated enum BackendV2RPCError: Error, Sendable, Equatable {
     case cancelled
     case unknownRPCName(String)
+    /// HTTP / PostgREST request rejected before a decodable bootstrap payload (4xx body).
+    case requestValidation(PostgRESTValidationDetail)
     case transport(String)
     case decode(String)
     case contractVersionMismatch(expected: String, got: String)
@@ -13,6 +15,7 @@ nonisolated enum BackendV2RPCError: Error, Sendable, Equatable {
         switch self {
         case .cancelled: return "cancelled"
         case .unknownRPCName: return "validation"
+        case .requestValidation: return "validation"
         case .transport: return "rpc_error"
         case .decode: return "decode"
         case .contractVersionMismatch: return "contract_version"
@@ -77,28 +80,48 @@ nonisolated struct BackendV2RPCClient: Sendable {
             throw BackendV2RPCError.unknownRPCName(name)
         }
 
+        let correlation = BackendV2RpcStageTracer.begin(name)
+        BackendV2RpcStageTracer.trace(name, stage: "request.started", correlation: correlation)
+
         let execStart = ContinuousClock.now
         var decodeMs: Double?
         var payloadBytes: Int?
-        var success = false
         var errorCode: String?
 
         do {
+            BackendV2RpcStageTracer.trace(name, stage: "transport.await", correlation: correlation)
             let data = try await transport.call(
                 functionName: name,
                 jsonBody: argumentsJSON
             )
+            BackendV2RpcStageTracer.trace(
+                name,
+                stage: "body.read.completed",
+                correlation: correlation,
+                detail: "bytes=\(data.count)"
+            )
             payloadBytes = data.count
+            BackendV2RpcStageTracer.trace(name, stage: "decoder.started", correlation: correlation)
             let decodeStart = ContinuousClock.now
             let value: T
             do {
                 value = try decoder.decode(T.self, from: data)
+            } catch let decodingError as DecodingError {
+                BackendV2DecodingDiagnostics.trace(
+                    rpcName: name,
+                    correlation: correlation,
+                    error: decodingError
+                )
+                errorCode = BackendV2RPCError.decode("").code
+                throw decodingError
             } catch {
+                BackendV2RpcStageTracer.trace(name, stage: "decoder.failed", correlation: correlation)
                 errorCode = BackendV2RPCError.decode("").code
                 throw BackendV2RPCError.decode(String(describing: error))
             }
             decodeMs = durationMilliseconds(from: decodeStart)
-            success = true
+            BackendV2RpcStageTracer.trace(name, stage: "decoder.completed", correlation: correlation)
+            BackendV2RpcStageTracer.trace(name, stage: "single-flight.completed", correlation: correlation)
             let executionMs = durationMilliseconds(from: execStart)
             BackendV2Telemetry.record(
                 BackendV2TelemetryEvent(
@@ -114,40 +137,9 @@ nonisolated struct BackendV2RPCClient: Sendable {
                 )
             )
             return value
-        } catch let error as BackendV2RPCError {
-            errorCode = error.code
-            BackendV2Telemetry.record(
-                BackendV2TelemetryEvent(
-                    rpcName: name,
-                    success: false,
-                    executionMs: durationMilliseconds(from: execStart),
-                    decodeMs: decodeMs,
-                    payloadBytes: payloadBytes,
-                    cacheHit: options.cacheHit,
-                    cacheMiss: options.cacheMiss,
-                    errorCode: errorCode,
-                    flagName: options.flagName
-                )
-            )
-            throw error
-        } catch is CancellationError {
-            errorCode = BackendV2RPCError.cancelled.code
-            BackendV2Telemetry.record(
-                BackendV2TelemetryEvent(
-                    rpcName: name,
-                    success: false,
-                    executionMs: durationMilliseconds(from: execStart),
-                    decodeMs: decodeMs,
-                    payloadBytes: payloadBytes,
-                    cacheHit: options.cacheHit,
-                    cacheMiss: options.cacheMiss,
-                    errorCode: errorCode,
-                    flagName: options.flagName
-                )
-            )
-            throw BackendV2RPCError.cancelled
         } catch {
-            errorCode = BackendV2RPCError.transport("").code
+            let mapped = Self.mapFailure(error, rpcName: name, correlation: correlation)
+            errorCode = mapped.code
             BackendV2Telemetry.record(
                 BackendV2TelemetryEvent(
                     rpcName: name,
@@ -161,8 +153,64 @@ nonisolated struct BackendV2RPCClient: Sendable {
                     flagName: options.flagName
                 )
             )
-            throw BackendV2RPCError.transport(String(describing: error))
+            throw mapped
         }
+    }
+
+    private static func mapFailure(
+        _ error: Error,
+        rpcName: String,
+        correlation: String
+    ) -> BackendV2RPCError {
+        if let rpc = error as? BackendV2RPCError {
+            if case .requestValidation(let detail) = rpc {
+                BackendV2RpcStageTracer.trace(
+                    rpcName,
+                    stage: "transport.failed",
+                    correlation: correlation,
+                    detail: detail.telemetrySummary
+                )
+            }
+            return rpc
+        }
+        if error is CancellationError {
+            BackendV2RpcStageTracer.trace(rpcName, stage: "cancellation.received", correlation: correlation)
+            return .cancelled
+        }
+        if let detail = validationDetail(from: error) {
+            BackendV2RpcStageTracer.trace(
+                rpcName,
+                stage: "transport.failed",
+                correlation: correlation,
+                detail: detail.telemetrySummary
+            )
+            return .requestValidation(detail)
+        }
+        let summary = MessagesBootstrapFailureDiagnostic.make(error: error).summary
+        BackendV2RpcStageTracer.trace(
+            rpcName,
+            stage: "transport.failed",
+            correlation: correlation,
+            detail: summary
+        )
+        return .transport(summary)
+    }
+
+    private static func validationDetail(from error: Error) -> PostgRESTValidationDetail? {
+        if let app = error as? AppError, case .transport(let network) = app {
+            return validationDetail(from: network)
+        }
+        if let network = error as? NetworkError {
+            return validationDetail(from: network)
+        }
+        return nil
+    }
+
+    private static func validationDetail(from network: NetworkError) -> PostgRESTValidationDetail? {
+        if case .validation(let statusCode, let message) = network {
+            return PostgRESTValidationDetail.parse(httpStatus: statusCode, body: message)
+        }
+        return nil
     }
 
     private func durationMilliseconds(from start: ContinuousClock.Instant) -> Double {

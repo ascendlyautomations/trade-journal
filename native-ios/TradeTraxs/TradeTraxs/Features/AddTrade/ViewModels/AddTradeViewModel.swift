@@ -53,6 +53,7 @@ final class AddTradeViewModel {
     var shareToProfile = false
     var screenshotData: Data?
     var screenshotPreview: UIImage?
+    var hasScreenshotPreview: Bool { screenshotPreview != nil }
     /// Local new-clip draft — uploaded + inserted with `trade_id` after trade save.
     var reelDraft: ReelDraft?
     private(set) var isPreparingClipVideo = false
@@ -133,11 +134,11 @@ final class AddTradeViewModel {
     }
 
     var eligibleAccounts: [TradingAccount] {
-        accounts.filter { $0.isActive && $0.canAddTrades }
+        TradingAccountDropdownFilter.selectableForNewTrades(accounts)
     }
 
     var ineligibleAccounts: [TradingAccount] {
-        accounts.filter { $0.isActive && !$0.canAddTrades }
+        accounts.filter { $0.isActive && (!$0.canAddTrades || !$0.showInAccountDropdowns) }
     }
 
     /// Picker list — edit mode keeps the original account even when read-only.
@@ -148,8 +149,12 @@ final class AddTradeViewModel {
         {
             list.insert(selected, at: 0)
         }
-        return list
+        let resolved = OwnerAccountDropdownSupport.resolvedAccounts(profileID: viewerID, fallback: accounts)
+        let byID = Dictionary(uniqueKeysWithValues: resolved.map { ($0.id, $0) })
+        return list.map { byID[$0.id] ?? $0 }
     }
+
+    var ownerAccountsProfileID: ProfileID? { viewerID }
 
     var recentSymbols: [String] {
         if let viewerID, viewerID.rawValue.hasPrefix("dev.") {
@@ -226,10 +231,15 @@ final class AddTradeViewModel {
         raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     }
 
-    /// Web `parseOptionalRr` — finite number, blank → nil.
+    /// Web `parseOptionalRr` — finite number, blank → nil. Accepts `1:2.35` reward-multiple input.
     static func parseOptionalRiskReward(_ raw: String) -> Decimal? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
+        if let colon = trimmed.firstIndex(of: ":") {
+            let reward = trimmed[trimmed.index(after: colon)...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return parseDecimal(reward)
+        }
         return parseDecimal(trimmed)
     }
 
@@ -442,7 +452,8 @@ final class AddTradeViewModel {
                 for: viewerID,
                 detailCache: detailCache,
                 repository: trades,
-                forceNetwork: forceNetwork
+                forceNetwork: forceNetwork,
+                requiresFullOwnerSnapshot: true
             )
             accounts = loaded
             if editingTrade == nil {
@@ -619,22 +630,16 @@ final class AddTradeViewModel {
             let ticker = symbolText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             let quantity = Self.parseDecimal(contractsText) ?? 1
             let pnl = Self.parseDecimal(pnlText) ?? 0
-            // Edit preserves a manually-set session when present; create auto-detects.
-            let sessionLabel: String = {
-                if isEditing, let existing = editingTrade?.sessionLabel?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                   !existing.isEmpty
-                {
-                    return existing
-                }
-                return TradingSessionLabel.session(from: entryAt) ?? "NY"
-            }()
+            let sessionLabel = TradingSessionLabel.session(from: entryAt) ?? "NY"
             let draft = TradeDraft(
                 accountID: account.id,
                 accountName: account.name,
                 accountSizeLabel: account.size.map { "\($0.amount)" },
                 accountModeLabel: account.mode.rawValue,
                 accountCategoryLabel: account.category.rawValue,
+                ownerAccountNumber: account.accountNumber,
+                ownerAccountCategory: account.category,
+                ownerAccountMode: account.mode,
                 symbol: Symbol(ticker: ticker),
                 side: side,
                 mode: mapTradeMode(from: account),

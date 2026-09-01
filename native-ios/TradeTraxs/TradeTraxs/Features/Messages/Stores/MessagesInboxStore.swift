@@ -15,6 +15,8 @@ final class MessagesInboxStore {
     private(set) var rooms: [TradeRoom] = []
     private(set) var roomPreviews: [RoomID: String] = [:]
     private(set) var roomUnread: [RoomID: Int] = [:]
+    /// DM thread currently open — suppresses inbox unread bumps from home realtime.
+    private(set) var activeConversationID: ConversationID?
     /// Room currently open in the conversation shell — suppresses inbox unread bumps.
     private(set) var activeRoomID: RoomID?
     private(set) var hasLoaded = false
@@ -33,7 +35,27 @@ final class MessagesInboxStore {
     private var roomUnreadOverrides: [RoomID: Int] = [:]
     private var hiddenConversationIDs: Set<ConversationID> = []
 
-    private init() {}
+    /// Monotonic publish token — SwiftUI observes this for preview/order updates.
+    private(set) var activityRevision: UInt64 = 0
+
+#if DEBUG
+    /// Non-sensitive store identity for wiring audits.
+    let debugInstanceToken: String = String(UUID().uuidString.prefix(8))
+#endif
+
+    private init() {
+#if DEBUG
+        SafeInboxLog.storeCreated(instance: debugInstanceToken)
+#endif
+    }
+
+    var debugInstance: String {
+#if DEBUG
+        debugInstanceToken
+#else
+        "release"
+#endif
+    }
 
     /// Web `sortConversationsDesc` order with hidden rows removed.
     var visibleConversations: [Conversation] {
@@ -73,12 +95,200 @@ final class MessagesInboxStore {
         }
         unreadOverrides = nextOverrides
         conversations = Self.sortConversationsDesc(merged, pinned: pinnedConversationIDs)
+        DirectConversationPairIndex.shared.rebuild(from: conversations)
         hasLoaded = true
         lastLoadedAt = .now
+        bumpActivityRevision()
+    }
+
+    /// Merge bootstrap rows without clobbering newer local send/realtime activity.
+    func mergeConversationsFromBootstrap(_ incoming: [Conversation]) {
+        pinnedConversationIDs.formUnion(incoming.filter(\.isPinned).map(\.id))
+        mutedConversationIDs.formUnion(incoming.filter(\.isMuted).map(\.id))
+
+        let previousOverrides = unreadOverrides
+        var byID: [ConversationID: Conversation] = Dictionary(
+            uniqueKeysWithValues: conversations.map { ($0.id, $0) }
+        )
+
+        for item in incoming {
+            if let existing = byID[item.id] {
+                var merged = ConversationInboxActivity.mergeConversations(existing: existing, incoming: item)
+                if let override = previousOverrides[item.id] {
+                    if item.unreadCount == override {
+                        unreadOverrides.removeValue(forKey: item.id)
+                    } else {
+                        merged.unreadCount = override
+                        unreadOverrides[item.id] = override
+                    }
+                }
+                byID[item.id] = merged
+            } else {
+                var copy = item
+                if let override = previousOverrides[item.id] {
+                    copy.unreadCount = override
+                    unreadOverrides[item.id] = override
+                }
+                byID[item.id] = copy
+            }
+        }
+
+        conversations = Self.sortConversationsDesc(Array(byID.values), pinned: pinnedConversationIDs)
+        DirectConversationPairIndex.shared.rebuild(from: conversations)
+        hasLoaded = true
+        lastLoadedAt = .now
+        bumpActivityRevision()
+#if DEBUG
+        SafeInboxLog.bootstrapApplied(
+            instance: debugInstanceToken,
+            owner: "mergeConversationsFromBootstrap",
+            conversationCount: conversations.count,
+            forceNetwork: false
+        )
+#endif
+    }
+
+    /// Merge a denormalized server conversation row (legacy REST revalidation only).
+    ///
+    /// Message-driven inbox updates must use ``patchFromMessage(_:viewerID:...)`` instead.
+    func patchFromServerConversation(_ incoming: Conversation) {
+        if let existing = conversations.first(where: { $0.id == incoming.id }) {
+            var merged = ConversationInboxActivity.mergeConversations(existing: existing, incoming: incoming)
+            if activeConversationID == incoming.id {
+                merged.unreadCount = 0
+                unreadOverrides[incoming.id] = 0
+            } else if let override = unreadOverrides[incoming.id] {
+                merged.unreadCount = override
+            }
+            applyConversationUpdate(merged)
+        } else {
+            var copy = incoming
+            if activeConversationID == incoming.id {
+                copy.unreadCount = 0
+                unreadOverrides[incoming.id] = 0
+            }
+            applyConversationUpdate(copy)
+        }
+    }
+
+    enum MessagePatchPolicy: Sendable {
+        /// Standard merge — reject stale realtime/bootstrap candidates.
+        case canonical
+        /// Viewer confirmed send in open thread — always wins for preview/order.
+        case confirmedOutgoing
+    }
+
+    /// Patch inbox row from a message activity event.
+    func patchFromMessage(
+        _ message: Message,
+        viewerID: ProfileID,
+        conversationOpen: Bool = true,
+        policy: MessagePatchPolicy = .canonical,
+        fallbackConversation: Conversation? = nil,
+        source: String = "unknown"
+    ) {
+#if DEBUG
+        SafeInboxLog.patchRequested(
+            instance: debugInstanceToken,
+            source: source,
+            conversationID: message.conversationID,
+            messageID: message.id
+        )
+#endif
+        let positionBefore = conversations.firstIndex(where: { $0.id == message.conversationID })
+        let previousPreview = conversations.first(where: { $0.id == message.conversationID })?.lastMessagePreview
+
+        let baseConversation = conversations.first(where: { $0.id == message.conversationID })
+            ?? fallbackConversation
+
+        guard let baseConversation else {
+#if DEBUG
+            SafeInboxLog.patchApplied(
+                instance: debugInstanceToken,
+                source: source,
+                conversationID: message.conversationID,
+                messageID: message.id,
+                previewChanged: false,
+                positionBefore: positionBefore,
+                positionAfter: positionBefore,
+                conversationCount: conversations.count
+            )
+#endif
+            return
+        }
+
+        let patched: Conversation?
+        switch policy {
+        case .confirmedOutgoing:
+            patched = ConversationInboxActivity.applyingConfirmedSendActivity(to: baseConversation, message: message)
+        case .canonical:
+            patched = ConversationInboxActivity.applyingMessageActivity(to: baseConversation, message: message)
+        }
+
+        guard let patched else {
+#if DEBUG
+            let existing = conversations.first(where: { $0.id == message.conversationID })
+            SafeInboxLog.activityCompare(
+                instance: debugInstanceToken,
+                incomingAt: message.createdAt,
+                existingAt: existing?.lastMessageAt,
+                incomingMessageID: message.id,
+                existingMessageID: existing?.lastMessageID,
+                accepted: false
+            )
+            SafeInboxLog.patchApplied(
+                instance: debugInstanceToken,
+                source: source,
+                conversationID: message.conversationID,
+                messageID: message.id,
+                previewChanged: false,
+                positionBefore: positionBefore,
+                positionAfter: positionBefore,
+                conversationCount: conversations.count
+            )
+#endif
+            return
+        }
+
+        var convo = patched
+        let isIncoming = message.senderProfileID != viewerID
+        let isOpen = conversationOpen || activeConversationID == message.conversationID
+        if isIncoming, !isOpen {
+            let nextUnread = max(1, unreadCount(for: convo) + 1)
+            unreadOverrides[convo.id] = nextUnread
+            convo.unreadCount = nextUnread
+        } else if !isIncoming || isOpen {
+            unreadOverrides[convo.id] = 0
+            convo.unreadCount = 0
+        }
+        applyConversationUpdate(convo)
+
+#if DEBUG
+        let positionAfter = conversations.firstIndex(where: { $0.id == message.conversationID })
+        let previewChanged = previousPreview != convo.lastMessagePreview
+        SafeInboxLog.patchApplied(
+            instance: debugInstanceToken,
+            source: source,
+            conversationID: message.conversationID,
+            messageID: message.id,
+            previewChanged: previewChanged,
+            positionBefore: positionBefore,
+            positionAfter: positionAfter,
+            conversationCount: conversations.count
+        )
+#endif
     }
 
     func replaceRooms(_ items: [TradeRoom], previews: [RoomID: String] = [:], unread: [RoomID: Int] = [:]) {
-        rooms = items.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let preservedCounts = Dictionary(uniqueKeysWithValues: rooms.map { ($0.id, $0.memberCount) })
+        rooms = items.map { item in
+            var room = item
+            if room.memberCount == nil, let preserved = preservedCounts[item.id] {
+                room.memberCount = preserved
+            }
+            return room
+        }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         if !previews.isEmpty { roomPreviews.merge(previews) { _, new in new } }
         if !unread.isEmpty {
             var merged = roomUnread
@@ -96,6 +306,21 @@ final class MessagesInboxStore {
             roomUnread = merged
         }
         hasLoadedRooms = true
+    }
+
+    func applyMemberCounts(_ counts: [RoomID: Int]) {
+        guard !counts.isEmpty else { return }
+        rooms = rooms.map { room in
+            guard let count = counts[room.id] else { return room }
+            var copy = room
+            copy.memberCount = count
+            return copy
+        }
+    }
+
+    func updateRoomMemberCount(roomID: RoomID, count: Int?) {
+        guard let index = rooms.firstIndex(where: { $0.id == roomID }) else { return }
+        rooms[index].memberCount = count
     }
 
     func applyConversationUpdate(_ conversation: Conversation) {
@@ -119,7 +344,13 @@ final class MessagesInboxStore {
         // Web inbox patches re-run `sortConversationsDesc` so the row jumps to the top.
         // Full array reassignment so Observation invalidates inbox rows (unread + sort).
         conversations = Self.sortConversationsDesc(conversations, pinned: pinnedConversationIDs)
+        DirectConversationPairIndex.shared.register(conversation: conversation)
         hasLoaded = true
+        bumpActivityRevision()
+    }
+
+    private func bumpActivityRevision() {
+        activityRevision &+= 1
     }
 
     func upsertConversation(_ conversation: Conversation) {
@@ -255,6 +486,10 @@ final class MessagesInboxStore {
         roomUnread = updated
     }
 
+    func setActiveConversation(_ conversationID: ConversationID?) {
+        activeConversationID = conversationID
+    }
+
     func setActiveRoom(_ roomID: RoomID?) {
         activeRoomID = roomID
     }
@@ -298,6 +533,7 @@ final class MessagesInboxStore {
         rooms = []
         roomPreviews = [:]
         roomUnread = [:]
+        activeConversationID = nil
         activeRoomID = nil
         hasLoaded = false
         hasLoadedRooms = false
@@ -310,26 +546,48 @@ final class MessagesInboxStore {
         unreadOverrides = [:]
         roomUnreadOverrides = [:]
         hiddenConversationIDs = []
+        activityRevision = 0
+        DirectConversationPairIndex.shared.invalidate()
     }
 
 #if DEBUG
     func resetForTesting() {
         invalidate()
     }
+
+    func markStaleForTesting() {
+        lastLoadedAt = Date().addingTimeInterval(-(MessagingInboxFreshness.softStaleSeconds + 60))
+    }
+
+    func seedForTesting(conversationCount: Int) {
+        let viewer = ProfileID("viewer-1")
+        let peer = ProfileID("peer-1")
+        let items = (0..<conversationCount).map { index in
+            Conversation(
+                id: ConversationID("c-\(index)"),
+                participantProfileIDs: [viewer, peer],
+                title: "Chat \(index)",
+                peerUsername: "peer",
+                avatar: nil,
+                isGroup: false,
+                isPinned: false,
+                lastMessagePreview: "hi",
+                lastMessageAt: .now,
+                lastMessageID: MessageID("m-\(index)"),
+                unreadCount: 0,
+                isMuted: false,
+                updatedAt: .now
+            )
+        }
+        replaceConversations(items)
+    }
 #endif
 
-    /// Exact web `sortConversationsDesc` — pinned first, then `last_message_at` descending.
+    /// Web `sortConversationsDesc` — pinned first, then activity descending with tie-breaks.
     private static func sortConversationsDesc(
         _ items: [Conversation],
         pinned: Set<ConversationID>
     ) -> [Conversation] {
-        items.sorted { lhs, rhs in
-            let lp = pinned.contains(lhs.id) || lhs.isPinned
-            let rp = pinned.contains(rhs.id) || rhs.isPinned
-            if lp != rp { return lp && !rp }
-            let ld = lhs.lastMessageAt ?? .distantPast
-            let rd = rhs.lastMessageAt ?? .distantPast
-            return ld > rd
-        }
+        ConversationInboxActivity.sortConversations(items, pinned: pinned)
     }
 }

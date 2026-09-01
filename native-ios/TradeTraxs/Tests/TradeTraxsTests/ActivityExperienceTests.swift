@@ -182,7 +182,8 @@ final class ActivityExperienceTests: XCTestCase {
             session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
             detailCache: cache,
             navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
-            inboxStore: .shared
+            inboxStore: .shared,
+            router: NotificationRouter()
         )
         viewModel.loadIfNeeded()
         try? await Task.sleep(nanoseconds: 80_000_000)
@@ -204,7 +205,8 @@ final class ActivityExperienceTests: XCTestCase {
             session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
             detailCache: DetailPresentationCache(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
-            inboxStore: .shared
+            inboxStore: .shared,
+            router: NotificationRouter()
         )
         viewModel.markAllRead()
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -254,6 +256,7 @@ final class ActivityExperienceTests: XCTestCase {
     func testActivityOpensNotificationSettingsStack() {
         let store = NavigationStore()
         store.sessionPhase = .authenticated
+        store.selectedTab = .profile
         let coordinator = NavigationCoordinator(store: store)
         let viewModel = ActivityHomeViewModel(
             notifications: ActivityStubNotificationRepository(),
@@ -262,12 +265,12 @@ final class ActivityExperienceTests: XCTestCase {
             session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
             detailCache: DetailPresentationCache(),
             navigationCoordinator: coordinator,
-            inboxStore: .shared
+            inboxStore: .shared,
+            router: NotificationRouter()
         )
         viewModel.openNotificationSettings()
         XCTAssertEqual(store.selectedTab, .profile)
-        XCTAssertTrue(store.paths.profile.contains(.settings(.home)))
-        XCTAssertTrue(store.paths.profile.contains(.settings(.notifications)))
+        XCTAssertEqual(store.paths.profile, [.settings(.notifications)])
     }
 
     func testDTOMappingParsesRoomMentionJSON() {
@@ -310,7 +313,8 @@ final class ActivityExperienceTests: XCTestCase {
             session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
             detailCache: DetailPresentationCache(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
-            inboxStore: .shared
+            inboxStore: .shared,
+            router: NotificationRouter()
         )
         viewModel.loadIfNeeded()
         try? await Task.sleep(nanoseconds: 80_000_000)
@@ -326,7 +330,8 @@ final class ActivityExperienceTests: XCTestCase {
             session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
             detailCache: DetailPresentationCache(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
-            inboxStore: .shared
+            inboxStore: .shared,
+            router: NotificationRouter()
         )
         await failedVM.refresh()
         if case .failed = failedVM.phase {
@@ -346,7 +351,8 @@ final class ActivityExperienceTests: XCTestCase {
                 profiles: ActivityFixtures.profiles()
             ),
             detailCache: DetailPresentationCache(),
-            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: .shared
         )
         viewModel.loadIfNeeded()
         try? await Task.sleep(nanoseconds: 50_000_000)

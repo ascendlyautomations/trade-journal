@@ -152,21 +152,7 @@ enum LeaderboardPresentation {
         viewerID: ProfileID?,
         category: LeaderboardCategory
     ) -> LeaderboardRow? {
-        let profile = profiles[entry.profileID] ?? Profile(
-            id: entry.profileID,
-            userID: UserID(entry.profileID.rawValue),
-            username: entry.username,
-            displayName: entry.username,
-            bio: nil,
-            avatar: nil,
-            traderType: nil,
-            tradingStyle: nil,
-            primaryMarket: nil,
-            startedTradingAt: nil,
-            isPrivate: false,
-            isCreator: false,
-            createdAt: .now
-        )
+        let profile = resolveProfile(entry.profileID, from: profiles)
         var row = LeaderboardRow(
             rank: rank,
             profileID: entry.profileID,
@@ -214,6 +200,41 @@ enum LeaderboardPresentation {
             }
             return "\(row.tradeCount) trades"
         }
+    }
+
+    /// Resolve display profile from the shared userID-keyed dictionary.
+    static func resolveProfile(_ profileID: ProfileID, from profiles: [ProfileID: Profile]) -> Profile {
+        leaderboardProfile(profiles[profileID], profileID: profileID)
+    }
+
+    private static func leaderboardProfile(_ profile: Profile?, profileID: ProfileID) -> Profile {
+        let displayName = ProfileIdentitySanitizer.leaderboardDisplayName(
+            name: profile?.displayName,
+            username: profile?.username
+        )
+        let username = ProfileIdentitySanitizer.leaderboardUsername(profile?.username) ?? ""
+
+        if var profile {
+            profile.displayName = displayName
+            profile.username = username
+            return profile
+        }
+
+        return Profile(
+            id: profileID,
+            userID: UserID(profileID.rawValue),
+            username: username,
+            displayName: displayName,
+            bio: nil,
+            avatar: nil,
+            traderType: nil,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        )
     }
 
     private static func trend(for row: LeaderboardRow, category: LeaderboardCategory) -> LeaderboardTrend {

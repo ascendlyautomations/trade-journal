@@ -1,7 +1,7 @@
 import Foundation
 
 /// Shared unimplemented / empty responses for repository skeletons.
-enum DataPlaceholder {
+nonisolated enum DataPlaceholder {
     static func unimplemented(_ feature: String = #function) -> AppError {
         .notImplemented(feature: feature)
     }

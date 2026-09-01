@@ -1,7 +1,7 @@
 import Foundation
 
 /// Deterministic sample posts for DEBUG development sessions / screenshots.
-enum ProfilePostFixtures {
+nonisolated enum ProfilePostFixtures {
     /// Landscape sample — verifies aspect-fit (not square crop / zoom).
     private static let sampleLandscapeURL =
         "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80"

@@ -39,7 +39,8 @@ nonisolated struct InteractionTarget: Hashable, Codable, Sendable {
         InteractionTarget(kind: .feedPost, id: id.rawValue)
     }
 
-    /// Target id is the `achievement_posts.id` (web) when available; profile fixtures use the achievement id.
+    /// Target id is usually `achievement_posts.id`. Profile surfaces may pass `achievements.id`;
+    /// ``DefaultInteractionRepository`` resolves that before likes/comments.
     static func achievement(_ id: AchievementID) -> InteractionTarget {
         InteractionTarget(kind: .achievement, id: id.rawValue)
     }

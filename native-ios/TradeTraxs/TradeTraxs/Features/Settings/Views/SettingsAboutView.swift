@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct SettingsAboutView: View {
-    let navigationCoordinator: NavigationCoordinator
-
+    @Environment(\.stackNavigation) private var stackNavigation
     @Environment(\.themeColors) private var colors
 
     private var version: String {
@@ -40,7 +39,7 @@ struct SettingsAboutView: View {
     private func legalButton(_ route: SettingsRoute) -> some View {
         Button {
             ExperienceHaptics.play(.selection)
-            navigationCoordinator.open(.profile(.settings(route)))
+            stackNavigation?.pushSettings(route)
         } label: {
             SettingsNavigationRow(title: route.title, systemImage: "doc.text")
         }

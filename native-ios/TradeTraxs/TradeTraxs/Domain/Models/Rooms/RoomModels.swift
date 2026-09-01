@@ -20,7 +20,8 @@ nonisolated struct TradeRoom: Hashable, Codable, Sendable, Identifiable {
     var slug: String
     var description: String?
     var image: MediaReference?
-    var memberCount: Int
+    /// Active members (`left_at IS NULL`). Nil until batch-loaded or room detail fetch.
+    var memberCount: Int?
     var showsOnProfile: Bool
     var createdAt: Date
 }
@@ -54,6 +55,20 @@ nonisolated struct RoomChannel: Hashable, Codable, Sendable, Identifiable {
     }
 }
 
+nonisolated struct RoomMessageReaction: Hashable, Codable, Sendable, Identifiable {
+    var id: String
+    var messageID: RoomMessageID
+    var userID: ProfileID
+    var reaction: String
+    var createdAt: Date?
+}
+
+nonisolated struct RoomMessageReactionSummary: Hashable, Sendable {
+    var emoji: String
+    var count: Int
+    var reactedByViewer: Bool
+}
+
 nonisolated struct RoomMessage: Hashable, Codable, Sendable, Identifiable {
     var id: RoomMessageID
     var roomID: RoomID
@@ -66,4 +81,5 @@ nonisolated struct RoomMessage: Hashable, Codable, Sendable, Identifiable {
     var channelID: RoomChannelID?
     var isPinned: Bool
     var createdAt: Date
+    var reactions: [RoomMessageReaction] = []
 }

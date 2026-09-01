@@ -41,6 +41,16 @@ final class TradingAccountDisplayTests: XCTestCase {
             ),
             "Alpha Futures"
         )
+        XCTAssertEqual(
+            TradingAccountDisplay.title(
+                name: "Apex 104582",
+                accountNumber: "104582",
+                audience: .public,
+                category: .propFirm,
+                mode: .evaluation
+            ),
+            "Evaluation Account"
+        )
         let account = TradingAccount(
             id: TradingAccountID("a1"),
             ownerProfileID: ProfileID("u1"),
@@ -82,6 +92,73 @@ final class TradingAccountDisplayTests: XCTestCase {
                 audience: .public
             ),
             "Alpha Futures"
+        )
+        XCTAssertEqual(
+            TradeDisplay.accountIdentityLine(
+                name: "Apex 104582",
+                mode: .evaluation,
+                accountNumber: "104582",
+                audience: .public,
+                category: .propFirm
+            ),
+            "Evaluation Account"
+        )
+    }
+
+    func testOwnerDropdownLineMasksLongAccountNumberOnce() {
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "Alpha Futures",
+                mode: .evaluation,
+                accountNumber: "500123"
+            ),
+            "Alpha Futures · Eval · ••••0123"
+        )
+    }
+
+    func testOwnerDropdownLineDoesNotRemaskAlreadyMaskedNumber() {
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "Alpha Futures",
+                mode: .evaluation,
+                accountNumber: "••••0123"
+            ),
+            "Alpha Futures · Eval · ••••0123"
+        )
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "Tradovate Personal",
+                mode: .live,
+                accountNumber: "****0482"
+            ),
+            "Tradovate Personal · Live · ••••0482"
+        )
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "Alpha Futures",
+                mode: .evaluation,
+                accountNumber: "•••• 0123"
+            ),
+            "Alpha Futures · Eval · ••••0123"
+        )
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "Alpha Futures",
+                mode: .evaluation,
+                accountNumber: "•••• •••• 0123"
+            ),
+            "Alpha Futures · Eval · ••••0123"
+        )
+    }
+
+    func testOwnerDropdownLineShowsShortNumbersUnmasked() {
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "Topstep",
+                mode: .funded,
+                accountNumber: "0123"
+            ),
+            "Topstep · Funded · 0123"
         )
     }
 }

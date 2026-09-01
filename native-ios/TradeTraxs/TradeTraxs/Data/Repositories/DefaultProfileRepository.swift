@@ -11,6 +11,9 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
     private static let publicProfileSelect =
         "id,username,name,bio,avatar_url,trading_style,trader_type,primary_market,started_trading,is_private,created_at"
 
+    private static let onboardingFieldsSelect =
+        "id,username,name,onboarding_completed,trader_type,trading_style,started_trading,bio,avatar_url"
+
     init(
         supabase: SupabaseInfrastructure,
         cache: CacheStack = .placeholder(),
@@ -102,6 +105,100 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         return profile
     }
 
+    func ensureProfileExists(for profileID: ProfileID) async throws -> Profile {
+        let rows: [ProfileDTO.Profile] = try await supabase.database.select(
+            ProfileDTO.Profile.self,
+            from: "profiles",
+            query: [
+                SupabaseQuery.select(Self.publicProfileSelect),
+                SupabaseQuery.eq("id", profileID.rawValue),
+            ]
+        )
+        if let dto = rows.first {
+            let mapped = try ProfileMapper.mapToDomain(dto)
+            cache.memory.set(mapped, forKey: "profile:\(profileID.rawValue)")
+            return mapped
+        }
+        return try await insertProfileShell(for: profileID)
+    }
+
+    func onboardingSnapshot(for profileID: ProfileID) async throws -> ProfileOnboardingSnapshot {
+        if let bootstrap = await MainActor.run(body: { SessionBootstrapStore.shared.last }),
+           bootstrap.data.session_profile.id == profileID.rawValue
+           || bootstrap.data.viewer.id == profileID.rawValue {
+            return ProfileOnboardingSnapshot.from(
+                session: bootstrap.data.session_profile,
+                viewerID: profileID.rawValue
+            )
+        }
+        let dto: ProfileDTO.OnboardingFields = try await supabase.database.selectOne(
+            ProfileDTO.OnboardingFields.self,
+            from: "profiles",
+            query: [
+                SupabaseQuery.select(Self.onboardingFieldsSelect),
+                SupabaseQuery.eq("id", profileID.rawValue),
+            ]
+        )
+        return ProfileOnboardingSnapshot.from(dto: dto, profileID: profileID)
+    }
+
+    func isUsernameTaken(_ username: String, excluding profileID: ProfileID) async throws -> Bool {
+        let normalized = ProfileUsernamePolicy.normalize(username)
+        guard !normalized.isEmpty else { return false }
+        guard let transport = supabase.transport else {
+            throw AppError.unknown(message: "Network transport unavailable")
+        }
+        let params = ProfileDTO.UsernameAvailabilityParams(check_username: normalized)
+        let data = try await supabase.database.rpcData(
+            functionName: "profile_username_is_taken",
+            parametersJSON: try transport.encodeJSON(params)
+        )
+        if let taken = try? JSONDecoder().decode(Bool.self, from: data) {
+            if !taken { return false }
+            // RPC says taken — still verify it is not the current profile.
+        }
+        let rows: [ProfileDTO.OnboardingFields] = try await supabase.database.select(
+            ProfileDTO.OnboardingFields.self,
+            from: "profiles",
+            query: [
+                SupabaseQuery.select("id,username"),
+                SupabaseQuery.eq("username", normalized),
+            ]
+        )
+        guard let match = rows.first, let ownerID = match.id else { return false }
+        return ProfileID(ownerID) != profileID
+    }
+
+    func completeProfileOnboarding(_ submission: ProfileOnboardingSubmission) async throws -> Profile {
+        let body = ProfileDTO.OnboardingCompletionBody(
+            username: ProfileUsernamePolicy.normalize(submission.username),
+            name: ProfileDisplayNamePolicy.normalized(submission.displayName),
+            bio: ProfileDisplayNamePolicy.normalized(submission.bio),
+            trading_style: submission.tradingStyle.trimmingCharacters(in: .whitespacesAndNewlines),
+            trader_type: submission.traderType.rawValue,
+            primary_market: Self.trimmedNonEmpty(submission.primaryMarket),
+            started_trading: submission.startedTrading.trimmingCharacters(in: .whitespacesAndNewlines),
+            avatar_url: submission.avatarURL,
+            onboarding_completed: true
+        )
+        let dto: ProfileDTO.Profile = try await supabase.database.update(
+            body,
+            table: "profiles",
+            query: [SupabaseQuery.eq("id", submission.profileID.rawValue)],
+            returning: ProfileDTO.Profile.self
+        )
+        let profile = try ProfileMapper.mapToDomain(dto)
+        cache.memory.set(profile, forKey: "profile:\(profile.id.rawValue)")
+        cache.memory.remove(forKey: "profile-stats:\(profile.id.rawValue)")
+        Task {
+            await mirrorAccountSettingsOnboardingCompleted(
+                profileID: submission.profileID,
+                completed: true
+            )
+        }
+        return profile
+    }
+
     func updateProfile(_ profile: Profile) async throws -> Profile {
         let body = ProfileDTO.UpdateBody(
             username: profile.username,
@@ -137,7 +234,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             }
 
             // Mirror web Profile: followers + posts + summary trades + payout achievement total.
-            // Payouts = web `sumPayoutAchievementTotals` over visible public achievements.
+            // Payouts = web `sumPayoutAchievementTotals` over viewer-visible payout achievements.
             async let followersTask = followerCount(of: profileID)
             async let followingTask = followingCount(of: profileID)
             async let postsTask = profilePostCount(of: profileID)
@@ -344,20 +441,24 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
 
     // MARK: - Private (web-parity sources)
 
-    /// Web `sumPayoutAchievementTotals` over `fetchVisibleProfileAchievements` rows.
+    /// Web `sumPayoutAchievementTotals` over owner or visitor-visible payout achievements.
     private func fetchPayoutTotal(for profileID: ProfileID) async throws -> Decimal {
         struct Row: Codable, Sendable {
             var achievement_type: String?
             var value_numeric: FlexibleNumber?
         }
+        let isOwner = await session.currentUserID.map { ProfileID($0.rawValue) == profileID } ?? false
+        var query: [URLQueryItem] = [
+            SupabaseQuery.select("achievement_type,value_numeric"),
+            SupabaseQuery.eq("user_id", profileID.rawValue),
+        ]
+        if !isOwner {
+            query.append(SupabaseQuery.eq("is_public", "true"))
+        }
         let rows: [Row] = try await supabase.database.select(
             Row.self,
             from: "achievements",
-            query: [
-                SupabaseQuery.select("achievement_type,value_numeric"),
-                SupabaseQuery.eq("user_id", profileID.rawValue),
-                SupabaseQuery.eq("is_public", "true"),
-            ]
+            query: query
         )
         return rows.reduce(Decimal(0)) { partial, row in
             guard Self.isPayoutAchievementType(row.achievement_type) else { return partial }
@@ -365,12 +466,13 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         }
     }
 
-    /// Web `isPayoutAchievementType`.
+    /// Web `isPayoutAchievementType` (`lib/achievementTypes.ts`).
     private static func isPayoutAchievementType(_ raw: String?) -> Bool {
         let type = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return type == "prop_firm_payout"
             || type == "live_trading_payout"
             || type == "payout"
+            || type.contains("payout")
     }
 
     /// Web: `.from("followers").select("*", { count: "exact", head: true }).eq("following_id", id)`
@@ -495,5 +597,74 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             createdAt: created,
             updatedAt: created
         )
+    }
+
+    private func insertProfileShell(for profileID: ProfileID) async throws -> Profile {
+        let generatedUsername = Self.generatedUsername(for: profileID)
+        let body = ProfileDTO.InsertBody(
+            id: profileID.rawValue,
+            username: generatedUsername,
+            name: "New User"
+        )
+        do {
+            let dto: ProfileDTO.Profile = try await supabase.database.insert(
+                body,
+                into: "profiles",
+                returning: ProfileDTO.Profile.self
+            )
+            let profile = try ProfileMapper.mapToDomain(dto)
+            cache.memory.set(profile, forKey: "profile:\(profileID.rawValue)")
+            return profile
+        } catch {
+            // Auth trigger or concurrent client may have won the insert race.
+            let rows: [ProfileDTO.Profile] = try await supabase.database.select(
+                ProfileDTO.Profile.self,
+                from: "profiles",
+                query: [
+                    SupabaseQuery.select(Self.publicProfileSelect),
+                    SupabaseQuery.eq("id", profileID.rawValue),
+                ]
+            )
+            guard let dto = rows.first else { throw error }
+            let profile = try ProfileMapper.mapToDomain(dto)
+            cache.memory.set(profile, forKey: "profile:\(profileID.rawValue)")
+            return profile
+        }
+    }
+
+    private static func generatedUsername(for profileID: ProfileID) -> String {
+        let prefix = profileID.rawValue
+            .replacingOccurrences(of: "-", with: "")
+            .prefix(8)
+        return "user_\(prefix)".lowercased()
+    }
+
+    private func mirrorAccountSettingsOnboardingCompleted(
+        profileID: ProfileID,
+        completed: Bool
+    ) async {
+        let body = ProfileDTO.AccountSettingsOnboardingMirrorBody(
+            id: profileID.rawValue,
+            onboarding_completed: completed
+        )
+        _ = try? await supabase.database.upsert(
+            body,
+            into: "account_settings",
+            onConflict: "id",
+            returning: ProfileDTO.AccountSettingsOnboardingMirrorBody.self,
+            select: "id"
+        )
+    }
+    private static func trimmedNonEmpty(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private extension String {
+    var nonEmptyOrNil: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

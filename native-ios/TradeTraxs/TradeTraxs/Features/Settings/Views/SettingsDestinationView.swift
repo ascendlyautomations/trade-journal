@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Maps ``SettingsRoute`` → feature screens for the Profile navigation stack.
+/// Maps ``SettingsRoute`` → feature screens on any tab navigation stack.
 struct SettingsDestinationView: View {
     let route: SettingsRoute
     let data: DataEnvironment
@@ -15,7 +15,6 @@ struct SettingsDestinationView: View {
             switch route {
             case .home:
                 SettingsHomeView(
-                    navigationCoordinator: navigationCoordinator,
                     authenticationCoordinator: authenticationCoordinator
                 )
             case .account:
@@ -91,7 +90,7 @@ struct SettingsDestinationView: View {
             case .support:
                 SettingsSupportView()
             case .about:
-                SettingsAboutView(navigationCoordinator: navigationCoordinator)
+                SettingsAboutView()
             case .legalTerms, .legalPrivacy, .legalCommunityGuidelines, .legalRefund:
                 SettingsLegalView(route: route)
             }

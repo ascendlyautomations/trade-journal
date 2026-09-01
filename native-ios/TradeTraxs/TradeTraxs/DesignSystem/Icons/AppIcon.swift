@@ -11,6 +11,8 @@ enum AppIcon: String, CaseIterable, Sendable {
     case settings = "gearshape.fill"
     case search = "magnifyingglass"
     case trades = "list.bullet.rectangle"
+    /// Bank/building glyph — same SF Symbol as the former Profile Accounts tab (`building.columns`).
+    case payouts = "building.columns"
     case reports = "doc.text.fill"
     case calendar = "calendar"
     case rooms = "person.3.fill"

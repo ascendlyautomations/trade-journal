@@ -2,6 +2,14 @@ import XCTest
 @testable import TradeTraxs
 
 final class BackendV2ContractTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        BackendV2FeatureFlags.resetFlagsForTests()
+        for flag in BackendV2FeatureFlag.allCases {
+            unsetenv(flag.processEnvKey)
+        }
+    }
+
     override func tearDown() {
         BackendV2FeatureFlags.resetFlagsForTests()
         BackendV2Telemetry.setSink(nil)
@@ -10,7 +18,7 @@ final class BackendV2ContractTests: XCTestCase {
 
     func testAllFeatureFlagsDefaultOff() {
         let flags = BackendV2FeatureFlags.allFlags()
-        XCTAssertEqual(flags.count, 12)
+        XCTAssertEqual(flags.count, BackendV2FeatureFlag.allCases.count)
         for entry in flags {
             XCTAssertFalse(entry.enabled, entry.name)
             XCTAssertFalse(BackendV2FeatureFlags.isEnabled(entry.flag))
@@ -56,18 +64,62 @@ final class BackendV2ContractTests: XCTestCase {
             BackendV2ContractFixtures.profile
         )
         try value.validateContractVersion()
-        XCTAssertTrue(value.data.follow_edge.is_following)
+        XCTAssertTrue(value.data.viewer.is_following)
+        XCTAssertEqual(value.data.profile?.username, "trader_a")
+        XCTAssertEqual(value.data.public_stats?.profit_factor?.value, 1.85)
+        XCTAssertEqual(value.data.public_stats?.average_rr?.value, 2.1)
+        XCTAssertEqual(value.data.public_stats?.payout_total?.value, 2500)
+    }
+
+    @MainActor
+    func testProfileBootstrapApplierMapsProfitFactorToHeaderStats() throws {
+        let bootstrap: ProfileBootstrapV1 = try decodeFixture(
+            BackendV2ContractFixtures.profile
+        )
+        let profileID = ProfileID("22222222-2222-2222-2222-222222222222")
+        let state = try ProfileBootstrapApplier.apply(
+            bootstrap,
+            profileID: profileID,
+            detailCache: DetailPresentationCache()
+        )
+        XCTAssertEqual(state.stats?.profitFactor, Decimal(string: "1.85"))
+        XCTAssertEqual(state.stats?.payoutTotal, 2500)
+        let metrics = ProfileDisplay.headerMetrics(from: state.stats)
+        XCTAssertEqual(metrics.map(\.id), ["publicTrades", "posts", "payouts", "winRate", "profitFactor"])
+        XCTAssertEqual(metrics.first(where: { $0.id == "payouts" })?.value, "$2,500")
+        XCTAssertEqual(metrics.first(where: { $0.id == "profitFactor" })?.value, "1.9")
+    }
+
+    @MainActor
+    func testProfileBootstrapApplierMapsPayoutOnLockedPrivateProfile() throws {
+        let json = """
+        {"meta":{"contract_version":"v1","found":true,"server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"profile":{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","name":"Trader A","bio":"bio","avatar_url":null,"trading_style":null,"trader_type":"Futures","primary_market":null,"started_trading":null,"is_private":true,"created_at":"2026-08-19T20:00:00.000Z"},"viewer":{"is_own_profile":false,"can_view_trades":false,"is_following":false,"is_requested":false,"follows_you":false},"followers_count":5,"following_count":2,"section_counts":{},"public_stats":{"payout_total":1800},"owned_room":null,"active_tab":"trades","trades_page":null,"trade_engagement":null}}
+        """
+        let bootstrap: ProfileBootstrapV1 = try decodeFixture(json)
+        let profileID = ProfileID("22222222-2222-2222-2222-222222222222")
+        let state = try ProfileBootstrapApplier.apply(
+            bootstrap,
+            profileID: profileID,
+            detailCache: DetailPresentationCache()
+        )
+        XCTAssertFalse(state.canViewTrades)
+        XCTAssertEqual(state.stats?.payoutTotal, 1800)
+        let metrics = ProfileDisplay.headerMetrics(from: state.stats)
+        XCTAssertEqual(metrics.first(where: { $0.id == "payouts" })?.value, "$1,800")
     }
 
     func testMessagesRoomsActivityExploreLeaderboardCalendarDetailSettingsDecode() throws {
         let _: MessagesBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.messages)
+        let _: ConversationThreadBootstrapV1 = try decodeFixture(ConversationThreadContractFixtures.directOpen)
         let _: RoomsBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.rooms)
         let _: ActivityBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.activity)
         let _: ExploreBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.explore)
         let _: LeaderboardBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.leaderboard)
         let _: CalendarBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.calendar)
+        let _: TradesListBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.tradesList)
         let _: TradeDetailBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.tradeDetail)
         let _: SettingsBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.settings)
+        let _: PropFirmBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.propFirm)
     }
 
     func testContractVersionMismatchThrows() {
@@ -173,7 +225,7 @@ enum BackendV2ContractFixtures {
     """
 
     static let dashboard = """
-    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"accounts":[{"id":"33333333-3333-3333-3333-333333333333","account_number":1,"name":"Main","account_size":50000,"mode":"live","category":"personal","is_active":true,"can_add_trades":true}],"trade_window":[{"id":"t1","pnl":100}],"trade_window_meta":{"limit":500,"returned":1,"history_complete":true,"total_trade_count":1,"oldest_created_at":"2026-08-01T00:00:00.000Z","next_cursor":null},"metrics":{"win_rate":0.55,"net_pnl":100,"total_trades":1},"equity_points":[{"t":"2026-08-01","v":1000}],"payout_total":0,"recent_trades":[{"id":"t1"}]}}
+    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"accounts":[{"id":"33333333-3333-3333-3333-333333333333","account_number":"1","name":"Main","account_size":"50000","mode":"live","category":"personal","is_active":true,"can_add_trades":true,"note":null,"consistency":null,"max_drawdown":null,"daily_drawdown":null,"profit_target":null,"winning_days":null,"winning_day_threshold":null}],"trade_window":[{"id":"t1","user_id":"11111111-1111-1111-1111-111111111111","ticker":null,"direction":"Long","entry_time":"2026-08-01T12:00:00.000Z","created_at":"2026-08-01T12:00:00.000Z","pnl":100,"mode":"live","account_size":"50000","notes":null,"image_url":null,"copied_account_ids":[]}],"trade_window_meta":{"limit":500,"returned":1,"history_complete":true,"total_trade_count":1,"oldest_created_at":"2026-08-01T00:00:00.000Z","next_cursor":null},"metrics":{"total_trades":1,"wins":1,"losses":0,"win_rate":1,"net_pnl":100,"avg_rr":null,"avg_win":100,"avg_loss":null,"biggest_win":100,"biggest_loss":null},"equity_points":[{"t":"2026-08-01T12:00:00.000Z","v":100}],"payout_total":0,"recent_trades":[{"id":"t1"}]}}
     """
 
     static let feed = """
@@ -181,7 +233,7 @@ enum BackendV2ContractFixtures {
     """
 
     static let profile = """
-    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"profile":{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","display_name":"Trader A","avatar_url":null,"bio":"bio","is_private":false,"trader_type":"day"},"stats":{"trades":10,"followers":5},"follow_edge":{"is_following":true,"is_followed_by":false,"request_pending":false,"follower_count":5,"following_count":2},"owned_room":null,"tab_availability":{"trades":true,"posts":true,"reels":true,"achievements":true}}}
+    {"meta":{"contract_version":"v1","found":true,"server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"profile":{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","name":"Trader A","bio":"bio","avatar_url":null,"trading_style":null,"trader_type":"Futures","primary_market":null,"started_trading":null,"is_private":false,"created_at":"2026-08-19T20:00:00.000Z"},"viewer":{"is_own_profile":false,"can_view_trades":true,"is_following":true,"is_requested":false,"follows_you":false},"followers_count":5,"following_count":2,"section_counts":{"profile_posts":3},"public_stats":{"total_trades":10,"wins":6,"total_pnl":1000,"profit_factor":1.85,"average_rr":2.1,"payout_total":2500},"owned_room":null,"active_tab":"trades","trades_page":{"items":[],"page_meta":{"limit":6,"returned":0,"has_more":false,"next_cursor":null}},"trade_engagement":{}}}
     """
 
     static let messages = """
@@ -189,15 +241,15 @@ enum BackendV2ContractFixtures {
     """
 
     static let rooms = """
-    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"room":{"id":"r1","name":"Room"},"membership":{"role":"member"},"messages":[{"id":"m1"}],"sections":null,"unread":0,"peers":{"22222222-2222-2222-2222-222222222222":{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","display_name":"Trader A","avatar_url":null}},"next_cursor":null}}
+    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"room":{"id":"r1111111-1111-1111-1111-111111111111","name":"Room","slug":"room","owner_user_id":"22222222-2222-2222-2222-222222222222","show_on_profile":true,"created_at":"2026-08-19T20:00:00.000Z"},"membership":{"notification_enabled":true,"is_owner":false},"sections":[{"id":"s1111111-1111-1111-1111-111111111111","room_id":"r1111111-1111-1111-1111-111111111111","name":"General","position":0,"allow_members_chat":true}],"active_section_id":"s1111111-1111-1111-1111-111111111111","channel_preferences":{},"member_stats":{"total_members":1,"active_members":1,"left_members":0},"unread_count":0,"mark_read":{"applied":false},"pinned_messages":[],"messages":[{"id":"m1111111-1111-1111-1111-111111111111","room_id":"r1111111-1111-1111-1111-111111111111","user_id":"22222222-2222-2222-2222-222222222222","content":"hello","section_id":"s1111111-1111-1111-1111-111111111111","created_at":"2026-08-19T19:00:00.000Z"}],"has_more_messages":false,"next_message_cursor":null}}
     """
 
     static let activity = """
-    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"notifications":[{"id":"n1","type":"like"}],"actors":{"22222222-2222-2222-2222-222222222222":{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","display_name":"Trader A","avatar_url":null}},"follow_requests":[],"unread_total":2,"next_cursor":null}}
+    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"notifications":[{"id":"n1","user_id":"11111111-1111-1111-1111-111111111111","sender_id":"22222222-2222-2222-2222-222222222222","type":"like","read":false,"created_at":"2026-08-19T20:00:00.000Z"}],"actors":{"22222222-2222-2222-2222-222222222222":{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","display_name":"Trader A","avatar_url":null}},"follow_requests":[],"unread_total":2,"next_cursor":null}}
     """
 
     static let explore = """
-    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"traders":[{"id":"22222222-2222-2222-2222-222222222222"}],"rooms":[],"social_counts":{"22222222-2222-2222-2222-222222222222":{"followers":5,"following":2}},"following_ids":["22222222-2222-2222-2222-222222222222"],"activity_meta":{}}}
+    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"traders":[{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","name":"Trader A","bio":"bio","avatar_url":null,"trader_type":"Futures","is_private":false}],"rooms":[{"id":"r1111111-1111-1111-1111-111111111111","name":"Room","slug":"room","member_count":12,"image_url":null}],"social_counts":{"22222222-2222-2222-2222-222222222222":{"followers":5,"following":2}},"following_ids":["33333333-3333-3333-3333-333333333333"],"activity_meta":{"22222222-2222-2222-2222-222222222222":{"trade_count":10,"last_trade_at":"2026-08-19T20:00:00.000Z"}},"traders_next_cursor":"24"}}
     """
 
     static let leaderboard = """
@@ -205,7 +257,11 @@ enum BackendV2ContractFixtures {
     """
 
     static let calendar = """
-    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"year":2026,"month":8,"accounts":[{"id":"33333333-3333-3333-3333-333333333333","name":"Main","type":"live","currency":"USD","is_active":true}],"day_buckets":[{"day":"2026-08-01","pnl":10}],"trades_by_day":{"2026-08-01":[{"id":"t1"}]},"metrics_month":{"net_pnl":10}}}
+    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"year":2026,"month":8,"accounts":[{"id":"33333333-3333-3333-3333-333333333333","account_number":"1","name":"Main","account_size":"50000","mode":"live","category":"personal","is_active":true,"can_add_trades":true}],"trades":[{"id":"t1","user_id":"11111111-1111-1111-1111-111111111111","ticker":"ES","direction":"Long","entry_time":"2026-08-01T12:00:00.000Z","created_at":"2026-08-01T12:00:00.000Z","pnl":100,"mode":"live"}],"metrics_month":{"net_pnl":100}}}
+    """
+
+    static let tradesList = """
+    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"accounts":[{"id":"33333333-3333-3333-3333-333333333333","account_number":"1","name":"Main","account_size":"50000","mode":"live","category":"personal","is_active":true,"can_add_trades":true}],"trades":[{"id":"t1","user_id":"11111111-1111-1111-1111-111111111111","ticker":"ES","direction":"Long","entry_time":"2026-08-01T12:00:00.000Z","created_at":"2026-08-01T12:00:00.000Z","pnl":100,"mode":"live","account_name":"Main","strategy":"breakout"}],"next_cursor":null,"page_meta":{"limit":40,"returned":1,"has_more":false}}}
     """
 
     static let tradeDetail = """
@@ -214,5 +270,9 @@ enum BackendV2ContractFixtures {
 
     static let settings = """
     {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"profile_settings":{"username":"viewer"},"notification_prefs":{"likes":true},"messaging_prefs":{},"accounts":[{"id":"33333333-3333-3333-3333-333333333333","name":"Main","type":"live","currency":"USD","is_active":true}],"entitlement":{"plan":"pro","status":"active","flags":{"early_access":false}}}}
+    """
+
+    static let propFirm = """
+    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"accounts":[{"id":"33333333-3333-3333-3333-333333333333","name":"APEX 50K","account_size":50000,"account_number":"12345","mode":"Eval","consistency":40,"max_drawdown":2500,"daily_drawdown":1250,"profit_target":3000,"winning_days":5,"winning_day_threshold":100,"payout_drawdown_behavior":null,"remember_payout_drawdown_behavior":false}],"payout_cycles":[],"achievements":[],"trades":[{"id":"t1","account_id":"33333333-3333-3333-3333-333333333333","pnl":150,"date":"2026-08-01","trade_date":"2026-08-01","entry_time":"2026-08-01T14:00:00.000Z","exit_time":"2026-08-01T15:00:00.000Z","created_at":"2026-08-01T15:00:00.000Z"}]}}
     """
 }

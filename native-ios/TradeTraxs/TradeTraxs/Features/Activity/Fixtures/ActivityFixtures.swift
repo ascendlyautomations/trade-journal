@@ -169,8 +169,9 @@ enum ActivityFixtures {
         ]
     }
 
+    @MainActor
     static func seedStore(
-        _ store: ActivityInboxStore = .shared,
+        _ store: ActivityInboxStore,
         now: Date = .now,
         unreadCount: Int? = nil
     ) {

@@ -129,6 +129,12 @@ final class ActivityInboxStore {
         unreadCount = 0
     }
 
+    /// Confirms server-side mark-all-read — keeps rows read and reconciles badge count.
+    func confirmMarkAllRead(unreadCount: Int) {
+        markAllReadLocally()
+        setUnreadCount(unreadCount)
+    }
+
     func setUnreadCount(_ count: Int) {
         unreadCount = max(0, count)
         AppIconBadgeSync.refresh(animated: true)
@@ -138,13 +144,17 @@ final class ActivityInboxStore {
     func ensureUnreadBootstrap(
         notifications: any NotificationRepository,
         session: any SessionProviding,
-        realtimeHub: RealtimeHub?
+        realtimeHub: RealtimeHub?,
+        detailCache: DetailPresentationCache? = nil,
+        rpc: (any RPCClient)? = nil
     ) {
         Task {
             await bootstrapUnreadIfNeeded(
                 notifications: notifications,
                 session: session,
-                realtimeHub: realtimeHub
+                realtimeHub: realtimeHub,
+                detailCache: detailCache,
+                rpc: rpc
             )
         }
     }
@@ -169,12 +179,16 @@ final class ActivityInboxStore {
         notifications: any NotificationRepository,
         followRequests: (any FollowRequestRepository)?,
         session: any SessionProviding,
-        realtimeHub: RealtimeHub?
+        realtimeHub: RealtimeHub?,
+        detailCache: DetailPresentationCache? = nil,
+        rpc: (any RPCClient)? = nil
     ) async {
         await bootstrapUnreadIfNeeded(
             notifications: notifications,
             session: session,
-            realtimeHub: realtimeHub
+            realtimeHub: realtimeHub,
+            detailCache: detailCache,
+            rpc: rpc
         )
 
         guard let userID = await session.currentUserID?.rawValue else { return }
@@ -206,6 +220,28 @@ final class ActivityInboxStore {
             nextCursor = nil
             hasMore = true
             startedForUserID = userID
+        }
+
+        if let applied = await loadRpcBootstrapIfAvailable(
+            viewerID: ProfileID(userID),
+            detailCache: detailCache,
+            rpc: rpc,
+            limit: Self.pageSize,
+            cursor: nil
+        ) {
+            replace(
+                items: applied.items,
+                unreadCount: applied.unreadCount,
+                nextCursor: applied.nextCursor,
+                pendingFollowRequestCount: applied.pendingFollowRequestCount
+            )
+            startRealtime(
+                userID: userID,
+                notifications: notifications,
+                session: session,
+                realtimeHub: realtimeHub
+            )
+            return
         }
 
         do {
@@ -254,7 +290,9 @@ final class ActivityInboxStore {
     func bootstrapUnreadIfNeeded(
         notifications: any NotificationRepository,
         session: any SessionProviding,
-        realtimeHub: RealtimeHub?
+        realtimeHub: RealtimeHub?,
+        detailCache: DetailPresentationCache? = nil,
+        rpc: (any RPCClient)? = nil
     ) async {
         guard let userID = await session.currentUserID?.rawValue else { return }
         if startedForUserID == userID, hasBootstrappedUnread {
@@ -284,6 +322,27 @@ final class ActivityInboxStore {
             startedForUserID = userID
         }
 
+        if let applied = await loadRpcBootstrapIfAvailable(
+            viewerID: ProfileID(userID),
+            detailCache: detailCache,
+            rpc: rpc,
+            limit: 0,
+            cursor: nil
+        ) {
+            setUnreadCount(applied.unreadCount)
+            if !hasLoaded {
+                pendingFollowRequestCount = applied.pendingFollowRequestCount
+            }
+            hasBootstrappedUnread = true
+            startRealtime(
+                userID: userID,
+                notifications: notifications,
+                session: session,
+                realtimeHub: realtimeHub
+            )
+            return
+        }
+
         do {
             let unread = try await DashboardLoadProbe.measure(
                 "activity.unreadCount",
@@ -310,8 +369,28 @@ final class ActivityInboxStore {
 
     func refresh(
         notifications: any NotificationRepository,
-        followRequests: (any FollowRequestRepository)?
+        followRequests: (any FollowRequestRepository)?,
+        detailCache: DetailPresentationCache? = nil,
+        rpc: (any RPCClient)? = nil
     ) async throws {
+        if let viewerRaw = startedForUserID,
+           let applied = await loadRpcBootstrapIfAvailable(
+               viewerID: ProfileID(viewerRaw),
+               detailCache: detailCache,
+               rpc: rpc,
+               limit: Self.pageSize,
+               cursor: nil
+           )
+        {
+            replace(
+                items: applied.items,
+                unreadCount: applied.unreadCount,
+                nextCursor: applied.nextCursor,
+                pendingFollowRequestCount: applied.pendingFollowRequestCount
+            )
+            return
+        }
+
         let previousFollowCount = pendingFollowRequestCount
         async let pageTask = notifications.notifications(
             page: PageRequest(limit: Self.pageSize)
@@ -363,6 +442,23 @@ final class ActivityInboxStore {
     }
 
     // MARK: - Private
+
+    private func loadRpcBootstrapIfAvailable(
+        viewerID: ProfileID,
+        detailCache: DetailPresentationCache?,
+        rpc: (any RPCClient)?,
+        limit: Int,
+        cursor: String?
+    ) async -> ActivityBootstrapApplier.Applied? {
+        guard let rpc else { return nil }
+        return try? await ActivityBootstrapLoader.load(
+            viewerID: viewerID,
+            rpc: rpc,
+            detailCache: detailCache,
+            limit: limit,
+            cursor: cursor
+        )
+    }
 
     private func invalidateRealtimeOnly() {
         realtimeTask?.cancel()

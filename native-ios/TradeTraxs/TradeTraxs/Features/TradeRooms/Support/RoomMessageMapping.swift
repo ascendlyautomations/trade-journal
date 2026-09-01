@@ -23,7 +23,8 @@ enum RoomMessageMapping {
                 ],
                 replyToMessageID: roomMessage.parentMessageID.map { MessageID($0.rawValue) },
                 createdAt: roomMessage.createdAt,
-                isReadByViewer: true
+                isReadByViewer: true,
+                roomReactions: roomMessage.reactions
             )
         }
 
@@ -53,7 +54,8 @@ enum RoomMessageMapping {
             attachments: attachments,
             replyToMessageID: roomMessage.parentMessageID.map { MessageID($0.rawValue) },
             createdAt: roomMessage.createdAt,
-            isReadByViewer: true
+            isReadByViewer: true,
+            roomReactions: roomMessage.reactions
         )
     }
 

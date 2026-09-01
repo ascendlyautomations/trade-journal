@@ -49,7 +49,7 @@ nonisolated enum SupabaseQuery {
 
 extension Array {
     /// Bounded PostgREST `in.()` batches (URL length / payload).
-    func chunked(into size: Int) -> [[Element]] {
+    nonisolated func chunked(into size: Int) -> [[Element]] {
         guard size > 0, !isEmpty else { return isEmpty ? [] : [self] }
         var result: [[Element]] = []
         var index = startIndex

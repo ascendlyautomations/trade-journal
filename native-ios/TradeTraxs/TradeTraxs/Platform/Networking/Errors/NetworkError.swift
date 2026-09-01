@@ -10,7 +10,7 @@ nonisolated enum NetworkError: Error, Sendable, Equatable {
     case rateLimited(retryAfter: TimeInterval?)
     case server(statusCode: Int, message: String?)
     case decoding(message: String)
-    case validation(message: String)
+    case validation(statusCode: Int?, message: String)
     case unknown(message: String)
 
     var isRetryable: Bool {

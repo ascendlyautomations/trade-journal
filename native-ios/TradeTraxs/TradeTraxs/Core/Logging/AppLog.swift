@@ -4,8 +4,11 @@ import OSLog
 /// Centralized logging via Apple `Logger` / `os.Logger`.
 ///
 /// Categories match architecture subsystems. Never log tokens, passwords, or PII.
-enum AppLog {
-    static let subsystem = Bundle.main.bundleIdentifier ?? "com.tradetraxs.TradeTraxs"
+///
+/// Uses a compile-time subsystem string — `Bundle.main` is MainActor-isolated in Swift 6 and
+/// must not back shared loggers invoked from repositories or networking.
+nonisolated enum AppLog {
+    static let subsystem = "com.tradetraxs.TradeTraxs"
 
     static let application = Logger(subsystem: subsystem, category: "Application")
     static let navigation = Logger(subsystem: subsystem, category: "Navigation")

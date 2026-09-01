@@ -116,17 +116,17 @@ nonisolated struct DefaultAIRepository: AIRepository {
 
 // MARK: - BFF DTOs (Data-layer only)
 
-private struct AnalyzeTradeBFFBody: Encodable {
+private nonisolated struct AnalyzeTradeBFFBody: Encodable {
     var trade: TradeAITradePayload
     var messages: [AnalyzeTradeBFFMessage]
 }
 
-private struct AnalyzeTradeBFFMessage: Encodable {
+private nonisolated struct AnalyzeTradeBFFMessage: Encodable {
     var role: String
     var content: String
 }
 
-private struct AnalyzeTradeBFFResponse: Decodable {
+private nonisolated struct AnalyzeTradeBFFResponse: Decodable {
     var reply: String?
     var result: String?
     var error: String?
@@ -134,7 +134,7 @@ private struct AnalyzeTradeBFFResponse: Decodable {
 
 // MARK: - Persistence DTOs
 
-private struct TradeAIMessageDTO: Decodable {
+private nonisolated struct TradeAIMessageDTO: Decodable {
     var id: String?
     var trade_id: String?
     var user_id: String?
@@ -159,7 +159,7 @@ private struct TradeAIMessageDTO: Decodable {
     }
 }
 
-private struct TradeAIMessageInsertDTO: Encodable {
+private nonisolated struct TradeAIMessageInsertDTO: Encodable {
     var id: String
     var trade_id: String
     var user_id: String

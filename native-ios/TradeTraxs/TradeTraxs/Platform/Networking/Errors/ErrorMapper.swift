@@ -25,7 +25,7 @@ nonisolated struct NetworkErrorMapper: Sendable {
             if let message = data.flatMap({ String(data: $0, encoding: .utf8) }),
                !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             {
-                return .validation(message: message)
+                return .validation(statusCode: http.statusCode, message: message)
             }
             return .forbidden
         case 408:
@@ -38,7 +38,7 @@ nonisolated struct NetworkErrorMapper: Sendable {
             return .server(statusCode: http.statusCode, message: message)
         case 400..<500:
             let message = data.flatMap { String(data: $0, encoding: .utf8) } ?? "Request failed"
-            return .validation(message: message)
+            return .validation(statusCode: http.statusCode, message: message)
         default:
             return .unknown(message: "Unexpected status \(http.statusCode)")
         }

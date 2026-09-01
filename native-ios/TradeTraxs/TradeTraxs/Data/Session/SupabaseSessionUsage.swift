@@ -5,7 +5,7 @@ import OSLog
 /// DEBUG-only Supabase REST/RPC request budget for an authenticated session.
 ///
 /// Counts transport hits to `/rest/v1/` and `/rest/v1/rpc/` — not Realtime frames.
-enum SupabaseSessionUsage {
+nonisolated enum SupabaseSessionUsage {
     private static let logger = Logger(subsystem: "com.tradetraxs.TradeTraxs", category: "SupabaseUsage")
     private static let lock = NSLock()
 
@@ -147,7 +147,7 @@ enum SupabaseSessionUsage {
     }
 }
 #else
-enum SupabaseSessionUsage {
+nonisolated enum SupabaseSessionUsage {
     static func beginSession() {}
     static func resetForTesting() {}
     static func recordREST(path: String, method: String, bytes: Int?) {}

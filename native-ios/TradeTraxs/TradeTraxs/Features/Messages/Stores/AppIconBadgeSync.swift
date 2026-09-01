@@ -8,7 +8,6 @@ import OSLog
 @MainActor
 enum AppIconBadgeSync {
     private static var client: (any AppIconBadgeClienting)?
-    private static var inFlight: Task<Void, Never>?
 
     static func configure(client: any AppIconBadgeClienting) {
         self.client = client
@@ -20,18 +19,22 @@ enum AppIconBadgeSync {
             return
         }
 
-        inFlight?.cancel()
-        inFlight = Task {
-            do {
-                let badge = try await client!.fetchBadge()
+        Task {
+            await AppIconBadgeRefreshFlight.shared.run {
+                await SessionNetworkGate.shared.awaitReady()
                 guard !Task.isCancelled else { return }
-                AppIconBadgeController.shared.setBadge(badge, animated: animated)
-            } catch {
-                guard !Task.isCancelled else { return }
-                // Do not invent a local Activity+DM sum — leave the last server value.
-                AppLog.notifications.error(
-                    "App icon badge mirror failed: \(error.localizedDescription, privacy: .public)"
-                )
+                do {
+                    let badge = try await client!.fetchBadge()
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run {
+                        AppIconBadgeController.shared.setBadge(badge, animated: animated)
+                    }
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    AppLog.notifications.error(
+                        "App icon badge mirror failed: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
             }
         }
     }

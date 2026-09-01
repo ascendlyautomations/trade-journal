@@ -1,7 +1,7 @@
 import Foundation
 
 /// Deterministic sample achievements for DEBUG development sessions / screenshots.
-enum ProfileAchievementFixtures {
+nonisolated enum ProfileAchievementFixtures {
     private static let sampleImageURL =
         "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80"
 

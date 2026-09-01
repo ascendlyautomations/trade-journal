@@ -18,25 +18,39 @@ nonisolated struct DefaultSearchRepository: SearchRepository {
     func search(
         query: String,
         kinds: Set<SearchResultKind>,
-        page: PageRequest
+        page: PageRequest,
+        excludingProfileID: ProfileID? = nil
     ) async throws -> CursorPage<SearchResult> {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = SearchQueryNormalization.normalizePeopleQuery(query)
         guard !trimmed.isEmpty else {
+            return CursorPage(items: [], nextCursor: nil)
+        }
+        let pattern = SearchQueryNormalization.escapeILikePattern(trimmed)
+        guard !pattern.isEmpty else {
             return CursorPage(items: [], nextCursor: nil)
         }
 
         var results: [SearchResult] = []
         if kinds.isEmpty || kinds.contains(.profile) {
+            var profileQuery: [URLQueryItem] = [
+                SupabaseQuery.select("id,username,name,avatar_url,is_private"),
+                URLQueryItem(
+                    name: "or",
+                    value: "(username.ilike.*\(pattern)*,name.ilike.*\(pattern)*)"
+                ),
+                URLQueryItem(name: "username", value: "not.is.null"),
+                URLQueryItem(name: "is_private", value: "neq.true"),
+                URLQueryItem(name: "limit", value: String(page.limit)),
+            ]
+            if let excludingProfileID {
+                profileQuery.append(
+                    URLQueryItem(name: "id", value: "neq.\(excludingProfileID.rawValue)")
+                )
+            }
             let profiles: [ProfileDTO.Profile] = try await supabase.database.select(
                 ProfileDTO.Profile.self,
                 from: "profiles",
-                query: [
-                    SupabaseQuery.select("id,username,name,avatar_url,is_private"),
-                    URLQueryItem(name: "or", value: "(username.ilike.*\(trimmed)*,name.ilike.*\(trimmed)*)"),
-                    URLQueryItem(name: "username", value: "not.is.null"),
-                    URLQueryItem(name: "is_private", value: "neq.true"),
-                    URLQueryItem(name: "limit", value: String(page.limit)),
-                ]
+                query: profileQuery
             )
             results += profiles.compactMap { dto in
                 guard let id = dto.id else { return nil }
@@ -61,7 +75,7 @@ nonisolated struct DefaultSearchRepository: SearchRepository {
                     id: room.id.rawValue,
                     kind: .room,
                     title: room.name,
-                    subtitle: "\(room.memberCount) members",
+                    subtitle: room.memberCount.map { "\($0) members" } ?? "Trade Room",
                     profileID: nil,
                     tradeID: nil,
                     roomID: room.id,
@@ -71,12 +85,13 @@ nonisolated struct DefaultSearchRepository: SearchRepository {
         }
 
         if kinds.isEmpty || kinds.contains(.trade) {
+            let tradePattern = SearchQueryNormalization.escapeILikePattern(trimmed)
             let trades: [TradeDTO.Trade] = try await supabase.database.select(
                 TradeDTO.Trade.self,
                 from: "trades",
                 query: [
                     SupabaseQuery.select("id,ticker,user_id,is_public"),
-                    URLQueryItem(name: "ticker", value: "ilike.*\(trimmed)*"),
+                    URLQueryItem(name: "ticker", value: "ilike.*\(tradePattern)*"),
                     URLQueryItem(name: "is_public", value: "eq.true"),
                     URLQueryItem(name: "limit", value: String(page.limit)),
                 ]

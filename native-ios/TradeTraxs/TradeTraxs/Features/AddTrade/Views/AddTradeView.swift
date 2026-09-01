@@ -18,6 +18,7 @@ struct AddTradeView: View {
     @State private var showsClipPreview = false
     @State private var showsInstrumentPicker = false
     @State private var didApplyScreenshotPrefill = false
+    @State private var screenshotPickerShowsPreview = false
     @FocusState private var focusedField: AddTradeViewModel.Field?
 
     @Environment(\.themeColors) private var colors
@@ -200,6 +201,9 @@ struct AddTradeView: View {
                 applyScreenshotPrefillIfNeeded()
             }
             #endif
+        }
+        .onChange(of: viewModel.hasScreenshotPreview) { _, hasPreview in
+            screenshotPickerShowsPreview = hasPreview
         }
         .onChange(of: photoItem) { _, item in
             Task { await loadPhoto(item) }
@@ -437,12 +441,10 @@ struct AddTradeView: View {
                     photoItem = nil
                 }
             }
-            PhotosPicker(selection: $photoItem, matching: .images) {
-                Label(
-                    viewModel.screenshotPreview == nil ? "Add Screenshot" : "Replace Screenshot",
-                    systemImage: "photo.on.rectangle"
-                )
-            }
+            AddTradeScreenshotPicker(
+                hasPreview: screenshotPickerShowsPreview,
+                photoItem: $photoItem
+            )
             .accessibilityIdentifier("addTrade.media.picker")
 
             if let draft = viewModel.reelDraft {
@@ -563,12 +565,10 @@ struct AddTradeView: View {
                     photoItem = nil
                 }
             }
-            PhotosPicker(selection: $photoItem, matching: .images) {
-                Label(
-                    viewModel.screenshotPreview == nil ? "Add Screenshot" : "Replace Screenshot",
-                    systemImage: "photo.on.rectangle"
-                )
-            }
+            AddTradeScreenshotPicker(
+                hasPreview: screenshotPickerShowsPreview,
+                photoItem: $photoItem
+            )
         }
     }
 
@@ -578,14 +578,18 @@ struct AddTradeView: View {
             set: { viewModel.selectAccount(TradingAccountID($0)) }
         )) {
             ForEach(viewModel.accountsForPicker) { account in
-                Text(accountLabel(account)).tag(account.id.rawValue)
+                OwnerAccountDropdownPickerLabel(account: account)
+                    .tag(account.id.rawValue)
             }
         }
         .accessibilityIdentifier("addTrade.account")
-    }
-
-    private func accountLabel(_ account: TradingAccount) -> String {
-        TradingAccountDisplay.title(for: account, audience: .owner)
+        .onAppear {
+            OwnerAccountDropdownSupport.logBoundary(
+                .addTrade,
+                accounts: viewModel.accountsForPicker,
+                profileID: viewModel.ownerAccountsProfileID
+            )
+        }
     }
 
     private func compactNumericField(
@@ -968,5 +972,27 @@ struct AddTradeNewClipComposerView: View {
             }
         }
         .accessibilityIdentifier("addTrade.newClip")
+    }
+}
+
+private struct ScreenshotPickerLabel: View {
+    let hasPreview: Bool
+
+    var body: some View {
+        Label(
+            hasPreview ? "Replace Screenshot" : "Add Screenshot",
+            systemImage: "photo.on.rectangle"
+        )
+    }
+}
+
+private struct AddTradeScreenshotPicker: View {
+    let hasPreview: Bool
+    @Binding var photoItem: PhotosPickerItem?
+
+    var body: some View {
+        PhotosPicker(selection: $photoItem, matching: .images) {
+            ScreenshotPickerLabel(hasPreview: hasPreview)
+        }
     }
 }

@@ -32,6 +32,7 @@ enum LeaderboardBootstrap: ScreenBootstrap {
         var friends: Set<ProfileID>
         var viewerID: ProfileID?
         var nextCursor: String?
+        var timeframeResolution: LeaderboardTimeframeFallback.Resolution
         var usedDevelopmentFixtures: Bool
         var didFetchTrades: Bool
     }
@@ -45,24 +46,24 @@ enum LeaderboardBootstrap: ScreenBootstrap {
 
         if let viewer, ProfileSectionSupport.isLocalDevelopmentProfile(viewer) {
             let trades = LeaderboardFixtures.trades(viewerID: viewer)
-            let page = LeaderboardTradeWindowFilter.entries(
-                from: trades,
-                window: context.timeframe.repositoryWindow,
-                interval: context.timeframe.customInterval,
-                page: PageRequest(cursor: context.cursor, limit: context.limit)
+            let resolved = LeaderboardTimeframeFallback.resolveWindow(
+                trades: trades,
+                requested: context.timeframe,
+                limit: context.limit
             )
-            let profiles = LeaderboardFixtures.profiles(from: page.items)
+            let profiles = LeaderboardFixtures.profiles(from: resolved.entries)
             for profile in profiles.values { context.detailCache.seed(profile) }
             return Result(
                 trades: trades,
-                entries: page.items,
+                entries: resolved.entries,
                 profiles: profiles,
                 verified: Set(profiles.values.filter(\.isCreator).map(\.id)),
-                followers: LeaderboardFixtures.followerCounts(from: page.items),
-                following: Set(page.items.dropFirst(min(3, page.items.count)).prefix(2).map(\.profileID)),
-                friends: Set(page.items.dropFirst(min(1, page.items.count)).prefix(2).map(\.profileID)),
+                followers: LeaderboardFixtures.followerCounts(from: resolved.entries),
+                following: Set(resolved.entries.dropFirst(min(3, resolved.entries.count)).prefix(2).map(\.profileID)),
+                friends: Set(resolved.entries.dropFirst(min(1, resolved.entries.count)).prefix(2).map(\.profileID)),
                 viewerID: viewer,
-                nextCursor: page.nextCursor,
+                nextCursor: resolved.nextCursor,
+                timeframeResolution: resolved.resolution,
                 usedDevelopmentFixtures: true,
                 didFetchTrades: true
             )
@@ -78,61 +79,182 @@ enum LeaderboardBootstrap: ScreenBootstrap {
             didFetch = true
         }
 
-        let page = LeaderboardTradeWindowFilter.entries(
-            from: trades,
-            window: context.timeframe.repositoryWindow,
-            interval: context.timeframe.customInterval,
-            page: PageRequest(cursor: context.cursor, limit: context.limit)
+        let resolved = LeaderboardTimeframeFallback.resolveWindow(
+            trades: trades,
+            requested: context.timeframe,
+            limit: context.limit
         )
+        let ids = resolved.entries.map(\.profileID)
 
         async let followingTask = loadFollowingIDs(viewer: viewer, context: context)
+
         let following = await followingTask
-        let friends = didFetch
-            ? await loadFriendIDs(viewer: viewer, following: following, context: context)
-            : []
 
-        let ids = page.items.map(\.profileID)
-        async let profilesTask = loadProfiles(ids: ids, context: context)
-        async let countsTask = loadFollowerCounts(ids: ids, context: context)
-        async let verifiedTask = loadVerified(ids: ids, context: context)
-
-        let profiles = await profilesTask
-        let followers = await countsTask
-        let verified = await verifiedTask
-
-        for profile in profiles.values {
-            context.detailCache.seed(profile)
+        let friends: Set<ProfileID>
+        if context.audience == .friends, didFetch {
+            friends = await loadFriendIDs(viewer: viewer, following: following, context: context)
+        } else {
+            friends = []
         }
+
+        async let countsTask = loadFollowerCounts(ids: ids, context: context)
+        let profiles = await loadProfiles(ids: ids, trades: trades, context: context)
+        let followers = await countsTask
+
         if didFetch {
             context.detailCache.seedViewerFollowingIDs(following)
         }
 
         return Result(
             trades: trades,
-            entries: page.items,
+            entries: resolved.entries,
             profiles: profiles,
-            verified: verified,
+            verified: [],
             followers: followers,
             following: following,
             friends: friends,
             viewerID: viewer,
-            nextCursor: page.nextCursor,
+            nextCursor: resolved.nextCursor,
+            timeframeResolution: resolved.resolution,
             usedDevelopmentFixtures: false,
             didFetchTrades: didFetch
         )
     }
 
+    /// Friends filter only — one followers edge query intersected with cached following IDs.
+    static func loadFriends(
+        viewer: ProfileID,
+        following: Set<ProfileID>,
+        context: Context
+    ) async -> Set<ProfileID> {
+        await loadFriendIDs(viewer: viewer, following: following, context: context)
+    }
+
     // MARK: - Helpers
+
+    /// Batch-hydrate missing profiles for visible leaderboard traders.
+    /// Merges ``existing``, detail-cache hits, embedded trade identity, then one ``profiles.batch``.
+    static func hydrateMissingProfiles(
+        ids: [ProfileID],
+        trades: [LeaderboardTradeRow],
+        existing: [ProfileID: Profile],
+        context: Context
+    ) async -> [ProfileID: Profile] {
+        guard !ids.isEmpty else { return existing }
+
+        var profiles = existing
+        let embedded = LeaderboardTradeIdentity.profiles(from: trades)
+        for (profileID, embeddedProfile) in embedded where ids.contains(profileID) {
+            profiles[profileID] = LeaderboardTradeIdentity.mergeLeaderboardProfile(
+                existing: profiles[profileID],
+                fetched: embeddedProfile
+            )
+        }
+
+        let unique = Array(Set(ids))
+        for profileID in unique {
+            guard !LeaderboardTradeIdentity.isLeaderboardCacheComplete(profiles[profileID] ?? placeholderProfile(profileID)) else {
+                continue
+            }
+            if let cached = context.detailCache.profile(id: profileID) {
+                profiles[profileID] = LeaderboardTradeIdentity.mergeLeaderboardProfile(
+                    existing: profiles[profileID],
+                    fetched: cached
+                )
+            }
+        }
+
+        #if DEBUG
+        ProfileAvatarSourceKind.logLeaderboardStage("embedded", profiles: profiles.values.filter { unique.contains($0.id) })
+        #endif
+
+        let remaining = unique.filter { profileID in
+            !LeaderboardTradeIdentity.isLeaderboardCacheComplete(
+                profiles[profileID] ?? placeholderProfile(profileID)
+            )
+        }
+        guard !remaining.isEmpty else {
+            for profileID in unique {
+                if let profile = profiles[profileID] {
+                    context.detailCache.seed(profile)
+                }
+            }
+            #if DEBUG
+            ProfileAvatarSourceKind.logLeaderboardStage(
+                "final",
+                profiles: unique.compactMap { profiles[$0] }
+            )
+            #endif
+            return profiles
+        }
+
+        guard let batch = try? await SessionProfileStore.shared.profiles(
+            ids: remaining,
+            detailCache: context.detailCache,
+            repository: context.profiles,
+            forceNetwork: context.forceNetwork,
+            acceptCached: LeaderboardTradeIdentity.isLeaderboardCacheComplete
+        ) else {
+            #if DEBUG
+            ProfileAvatarSourceKind.logLeaderboardStage(
+                "final",
+                profiles: unique.compactMap { profiles[$0] }
+            )
+            #endif
+            return profiles
+        }
+
+        #if DEBUG
+        ProfileAvatarSourceKind.logLeaderboardStage("batchMapped", profiles: batch)
+        #endif
+
+        for fetched in batch {
+            let merged = LeaderboardTradeIdentity.mergeLeaderboardProfile(
+                existing: profiles[fetched.id],
+                fetched: fetched
+            )
+            profiles[fetched.id] = merged
+            context.detailCache.seed(merged)
+        }
+
+        #if DEBUG
+        ProfileAvatarSourceKind.logLeaderboardStage(
+            "final",
+            profiles: unique.compactMap { profiles[$0] }
+        )
+        #endif
+        return profiles
+    }
+
+    private static func placeholderProfile(_ profileID: ProfileID) -> Profile {
+        Profile(
+            id: profileID,
+            userID: UserID(profileID.rawValue),
+            username: "",
+            displayName: "",
+            bio: nil,
+            avatar: nil,
+            traderType: nil,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        )
+    }
 
     private static func loadProfiles(
         ids: [ProfileID],
+        trades: [LeaderboardTradeRow],
         context: Context
     ) async -> [ProfileID: Profile] {
-        guard !ids.isEmpty else { return [:] }
-        if let batch = try? await context.profiles.profiles(ids: ids) {
-            return Dictionary(uniqueKeysWithValues: batch.map { ($0.id, $0) })
-        }
-        return [:]
+        await hydrateMissingProfiles(
+            ids: ids,
+            trades: trades,
+            existing: [:],
+            context: context
+        )
     }
 
     private static func loadFollowerCounts(
@@ -140,30 +262,14 @@ enum LeaderboardBootstrap: ScreenBootstrap {
         context: Context
     ) async -> [ProfileID: Int] {
         guard !ids.isEmpty else { return [:] }
-        let counts = (try? await context.explore.socialCounts(for: ids)) ?? .empty
+        let unique = Array(Set(ids))
+        let key = unique.map(\.rawValue).sorted().joined(separator: ",")
+        let counts = (try? await RepositoryRequestFlight.shared.coalesce(
+            key: "leaderboard.socialCounts:\(key)",
+            resource: "explore.socialCounts",
+            fetch: { try await context.explore.socialCounts(for: unique) }
+        )) ?? .empty
         return counts.followers
-    }
-
-    private static func loadVerified(
-        ids: [ProfileID],
-        context: Context
-    ) async -> Set<ProfileID> {
-        guard !ids.isEmpty else { return [] }
-        var verified = Set<ProfileID>()
-        await withTaskGroup(of: ProfileID?.self) { group in
-            for id in ids.prefix(40) {
-                group.addTask {
-                    if let creator = try? await context.profiles.creator(for: id), creator.isVerified {
-                        return id
-                    }
-                    return nil
-                }
-            }
-            for await id in group {
-                if let id { verified.insert(id) }
-            }
-        }
-        return verified
     }
 
     private static func loadFollowingIDs(
@@ -198,9 +304,15 @@ enum LeaderboardBootstrap: ScreenBootstrap {
     ) async -> Set<ProfileID> {
         guard let viewer, !following.isEmpty else { return [] }
         do {
-            let page = try await context.profiles.followers(
-                of: viewer,
-                page: PageRequest(limit: 500)
+            let page = try await RepositoryRequestFlight.shared.coalesce(
+                key: "leaderboard.viewerFollowers:\(viewer.rawValue)",
+                resource: "profiles.followers",
+                fetch: {
+                    try await context.profiles.followers(
+                        of: viewer,
+                        page: PageRequest(limit: 500)
+                    )
+                }
             )
             return Set(page.items.map(\.id)).intersection(following)
         } catch {

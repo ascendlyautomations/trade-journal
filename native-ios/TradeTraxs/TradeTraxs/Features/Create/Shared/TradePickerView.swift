@@ -31,7 +31,7 @@ struct TradePickerView: View {
                                 .experienceStyle(.headline, color: colors.primaryText)
                             HStack(spacing: ExperienceSpacing.sm) {
                                 if let pnl = trade.realizedPnL {
-                                    Text(pnl.amount >= 0 ? "+\(pnl.amount)" : "\(pnl.amount)")
+                                    Text(TradeDisplay.pnlText(pnl))
                                         .experienceStyle(
                                             .subheadline,
                                             color: pnl.amount >= 0 ? colors.profit : colors.loss

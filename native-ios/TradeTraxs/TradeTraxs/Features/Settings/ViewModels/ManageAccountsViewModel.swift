@@ -15,6 +15,9 @@ final class ManageAccountsViewModel {
     private(set) var formError: String?
     private var hasLoaded = false
     private var viewerID: ProfileID?
+    private var payoutEntriesByAccount: [TradingAccountID: [AccountPayoutEntry]] = [:]
+    private(set) var isLoadingPayouts = false
+    private(set) var payoutError: String?
 
     init(
         trades: any TradeRepository,
@@ -33,7 +36,7 @@ final class ManageAccountsViewModel {
     func loadIfNeeded() {
         guard !hasLoaded else { return }
         hasLoaded = true
-        Task { await loadAccounts(forceNetwork: false) }
+        Task { await loadAccounts(requiresFullOwnerSnapshot: true) }
     }
 
     func refresh() async {
@@ -41,7 +44,10 @@ final class ManageAccountsViewModel {
     }
 
     /// Cache-first initial open; pull-to-refresh uses ``refresh``.
-    func loadAccounts(forceNetwork: Bool = false) async {
+    func loadAccounts(
+        forceNetwork: Bool = false,
+        requiresFullOwnerSnapshot: Bool = false
+    ) async {
         isLoading = accounts.isEmpty
         do {
             guard let userID = await session.currentUserID else {
@@ -54,7 +60,8 @@ final class ManageAccountsViewModel {
                 for: ProfileID(userID.rawValue),
                 detailCache: detailCache,
                 repository: trades,
-                forceNetwork: forceNetwork
+                forceNetwork: forceNetwork,
+                requiresFullOwnerSnapshot: requiresFullOwnerSnapshot
             )
             accounts = Self.sorted(loaded)
             errorMessage = nil
@@ -127,12 +134,101 @@ final class ManageAccountsViewModel {
         }
     }
 
+    func payoutEntries(for accountID: TradingAccountID) -> [AccountPayoutEntry] {
+        payoutEntriesByAccount[accountID] ?? []
+    }
+
+    func loadPayoutEntries(for accountID: TradingAccountID) async {
+        isLoadingPayouts = payoutEntries(for: accountID).isEmpty
+        payoutError = nil
+        defer { isLoadingPayouts = false }
+        do {
+            let rows = try await trades.payoutEntries(for: accountID)
+            payoutEntriesByAccount[accountID] = rows
+        } catch {
+            payoutError = UserFacingError.message(for: error)
+        }
+    }
+
+    func loadAllPayoutEntries() async {
+        for account in accounts {
+            await loadPayoutEntries(for: account.id)
+        }
+    }
+
+    func updateInsightsSettings(
+        accountID: TradingAccountID,
+        showInAccountDropdowns: Bool,
+        customPublicStatus: String
+    ) async -> Bool {
+        await mutate {
+            guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
+            let trimmedStatus = customPublicStatus.trimmingCharacters(in: .whitespacesAndNewlines)
+            let updated = try await trades.updateAccountInsightsSettings(
+                id: accountID,
+                ownerID: viewerID,
+                showInAccountDropdowns: showInAccountDropdowns,
+                customPublicStatus: trimmedStatus.isEmpty ? nil : trimmedStatus
+            )
+            accounts = Self.sorted(accounts.map { $0.id == accountID ? updated : $0 })
+            SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
+            AccountMutationStore.shared.noteAccountUpdated(accountID)
+            ExperienceHaptics.play(.success)
+        }
+    }
+
+    func createPayout(
+        accountID: TradingAccountID,
+        draft: AccountPayoutEntryDraft
+    ) async -> Bool {
+        await mutate {
+            guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
+            let created = try await trades.createPayoutEntry(
+                ownerID: viewerID,
+                accountID: accountID,
+                draft: draft
+            )
+            var rows = payoutEntriesByAccount[accountID] ?? []
+            rows.insert(created, at: 0)
+            payoutEntriesByAccount[accountID] = rows
+            AccountMutationStore.shared.noteAccountsChanged()
+            ExperienceHaptics.play(.success)
+        }
+    }
+
+    func updatePayout(
+        entryID: AccountPayoutEntryID,
+        accountID: TradingAccountID,
+        draft: AccountPayoutEntryDraft
+    ) async -> Bool {
+        await mutate {
+            let updated = try await trades.updatePayoutEntry(id: entryID, draft: draft)
+            var rows = payoutEntriesByAccount[accountID] ?? []
+            rows = rows.map { $0.id == entryID ? updated : $0 }
+            payoutEntriesByAccount[accountID] = rows
+            AccountMutationStore.shared.noteAccountsChanged()
+            ExperienceHaptics.play(.success)
+        }
+    }
+
+    func deletePayout(entryID: AccountPayoutEntryID, accountID: TradingAccountID) async -> Bool {
+        await mutate {
+            try await trades.deletePayoutEntry(id: entryID)
+            payoutEntriesByAccount[accountID] = payoutEntries(for: accountID).filter { $0.id != entryID }
+            AccountMutationStore.shared.noteAccountsChanged()
+            ExperienceHaptics.play(.selection)
+        }
+    }
+
     func subtitle(for account: TradingAccount) -> String {
         var parts: [String] = []
         parts.append(account.category == .propFirm ? "Prop Firm" : account.category.rawValue.capitalized)
         parts.append(Self.modeLabel(account.mode, category: account.category))
         if let size = account.size {
             parts.append(size.amount.formatted(.number.precision(.fractionLength(0))))
+        }
+        if !account.showInAccountDropdowns {
+            parts.append("Hidden from Pickers")
         }
         if !account.canAddTrades {
             parts.append("Read Only")

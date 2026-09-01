@@ -1,7 +1,7 @@
 import Foundation
 
 /// Presentation-ready error copy. Views never show raw ``AppError`` strings.
-struct UserFacingError: Sendable, Equatable {
+nonisolated struct UserFacingError: Sendable, Equatable {
     let title: String
     let message: String
     let action: Action?
@@ -101,6 +101,18 @@ struct UserFacingError: Sendable, Equatable {
                 message: "This sign-in method is not available yet.",
                 action: .dismiss
             )
+        case .providerMisconfigured(_):
+            return UserFacingError(
+                title: "Sign in unavailable",
+                message: "Apple sign-in is not configured yet. Try email sign-in or contact support.",
+                action: .dismiss
+            )
+        case .providerTokenInvalid(_):
+            return UserFacingError(
+                title: "Sign in failed",
+                message: "Apple could not verify your account. Please try again.",
+                action: .retry
+            )
         case .cancelled:
             return UserFacingError(
                 title: "Cancelled",
@@ -166,7 +178,7 @@ struct UserFacingError: Sendable, Equatable {
                 message: "We couldn't read the server response.",
                 action: .retry
             )
-        case .validation(let message):
+        case .validation(_, let message):
             let lowered = message.lowercased()
             if lowered.contains("base url") || lowered.contains("not configured") {
                 return UserFacingError(

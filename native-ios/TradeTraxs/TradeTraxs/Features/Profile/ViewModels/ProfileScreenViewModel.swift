@@ -46,7 +46,8 @@ final class ProfileScreenViewModel {
             store: content,
             messages: data.messages,
             session: data.session,
-            navigationCoordinator: navigationCoordinator
+            navigationCoordinator: navigationCoordinator,
+            detailCache: data.detailCache
         )
     }
 
@@ -259,7 +260,7 @@ final class ProfileScreenViewModel {
         }
     }
     private func bootstrapIfNeeded(force: Bool) {
-        if let bootstrapTask, !force { return }
+        if bootstrapTask != nil, !force { return }
         bootstrapTask?.cancel()
         bootstrapTask = Task { [weak self] in
             await self?.performBootstrap(force: force)
@@ -284,6 +285,8 @@ final class ProfileScreenViewModel {
                 rooms: data.rooms,
                 session: data.session,
                 detailCache: data.detailCache,
+                engagementStore: data.engagementStore,
+                rpc: data.rpc,
                 force: force
             )
         )
@@ -322,7 +325,7 @@ final class ProfileScreenViewModel {
         if let profile = currentUserProfile.profile {
             data.detailCache.seed(profile)
         }
-        if let stats = currentUserProfile.stats {
+        if let stats = currentUserProfile.stats, stats.hasLoadedHeaderMetrics {
             data.detailCache.seed(stats: stats)
         }
     }

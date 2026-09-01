@@ -39,7 +39,6 @@ struct TradesContainerView: View {
                     ForEach(viewModel.visibleItems) { trade in
                         ProfileTradeCard(
                             trade: trade,
-                            accountName: viewModel.accountName(for: trade),
                             imagePipeline: imagePipeline,
                             engagementStore: engagementStore,
                             showsOwnerActions: viewModel.showsOwnerActions,

@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Staging is activated with the `STAGING` active compilation condition
 /// (add via an Xcode scheme / xcconfig when that lane is wired).
-enum BuildConfiguration: String, Sendable, CaseIterable {
+nonisolated enum BuildConfiguration: String, Sendable, CaseIterable {
     case debug
     case staging
     case production

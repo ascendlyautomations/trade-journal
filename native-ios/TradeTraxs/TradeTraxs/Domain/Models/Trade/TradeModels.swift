@@ -74,6 +74,10 @@ nonisolated struct TradingAccount: Hashable, Codable, Sendable, Identifiable {
     var size: Money?
     var isActive: Bool
     var canAddTrades: Bool
+    /// When false, account stays in Manage Accounts and history but hides from pickers.
+    var showInAccountDropdowns: Bool = true
+    /// Optional public profile label (e.g. Blown, Passed, Funded).
+    var customPublicStatus: String? = nil
     /// Web `accounts.account_number` (optional broker/firm ID).
     var accountNumber: String? = nil
     /// Web `accounts.note`.
@@ -121,6 +125,11 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var notePreview: String?
     /// Optional setup/strategy label from `trades.strategy` when present.
     var strategy: String? = nil
+    /// Authoritative hold duration from `duration_text` / `duration_seconds` when present.
+    var durationText: String? = nil
+    var durationSeconds: Int? = nil
+    /// Compact public account badge (Eval / Funded / Live / …) from denormalized trade mode fields.
+    var publicAccountBadge: String? = nil
     var createdAt: Date
     var updatedAt: Date
 }
@@ -177,6 +186,10 @@ nonisolated struct TradeDraft: Hashable, Codable, Sendable {
     var accountSizeLabel: String? = nil
     var accountModeLabel: String? = nil
     var accountCategoryLabel: String? = nil
+    /// Owner-only metadata for public-trade denormalization redaction (never sent on wire).
+    var ownerAccountNumber: String? = nil
+    var ownerAccountCategory: TradingAccountCategory? = nil
+    var ownerAccountMode: TradingAccountMode? = nil
     var symbol: Symbol
     var side: TradeSide
     var mode: TradeMode

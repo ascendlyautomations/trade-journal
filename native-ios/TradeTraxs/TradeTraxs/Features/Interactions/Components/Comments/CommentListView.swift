@@ -50,6 +50,17 @@ struct CommentListView: View {
                             comment: comment,
                             isOwn: currentUserID == comment.authorProfileID,
                             imagePipeline: imagePipeline,
+                            likeSnapshot: viewModel.likeSnapshot(for: comment.id),
+                            canLike: viewModel.canLikeComments,
+                            isLikeBusy: viewModel.isCommentLikeBusy(comment.id),
+                            onToggleLike: {
+                                Task { await viewModel.toggleCommentLike(comment) }
+                            },
+                            canPin: viewModel.canPinComment(comment),
+                            isPinBusy: viewModel.isCommentPinBusy(comment.id),
+                            onTogglePin: { pinned in
+                                Task { await viewModel.toggleCommentPin(comment, pinned: pinned) }
+                            },
                             onDelete: currentUserID == comment.authorProfileID
                                 ? {
                                     ExperienceHaptics.play(.warning)
@@ -62,6 +73,15 @@ struct CommentListView: View {
                                 comment: reply,
                                 isOwn: currentUserID == reply.authorProfileID,
                                 imagePipeline: imagePipeline,
+                                likeSnapshot: viewModel.likeSnapshot(for: reply.id),
+                                canLike: viewModel.canLikeComments,
+                                isLikeBusy: viewModel.isCommentLikeBusy(reply.id),
+                                onToggleLike: {
+                                    Task { await viewModel.toggleCommentLike(reply) }
+                                },
+                                canPin: false,
+                                isPinBusy: false,
+                                onTogglePin: nil,
                                 onDelete: currentUserID == reply.authorProfileID
                                     ? {
                                         ExperienceHaptics.play(.warning)

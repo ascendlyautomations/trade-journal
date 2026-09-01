@@ -24,6 +24,8 @@ final class AuthenticationCoordinator {
     private var boundUserID: UserID?
     /// Prevents a stale sign-in attempt from overwriting a newer success.
     private var signInGeneration: UInt64 = 0
+    /// Prevents stale restore completion from publishing authenticated shell.
+    private var restoreGeneration: UInt64 = 0
 
     init(
         authenticationManager: AuthenticationManager,
@@ -33,21 +35,39 @@ final class AuthenticationCoordinator {
         self.navigation = navigation
     }
 
-    /// Cold-launch: complete any deferred token refresh without blocking first paint.
+    /// Cold-launch: validate/refresh session before entering authenticated shell.
     func bootstrapSession() async {
+        restoreGeneration &+= 1
+        let generation = restoreGeneration
         let correlation = AuthFlowTracer.beginCorrelation()
         AuthFlowTracer.trace(
             "session.restore.started",
             phase: authenticationManager.state.authFlowPhase,
-            correlation: correlation
+            correlation: correlation,
+            generation: generation
         )
         await authenticationManager.restoreSession()
-        syncNavigation(with: authenticationManager.state)
+        guard generation == restoreGeneration else {
+            AuthFlowTracer.trace(
+                "auth.restore.cancelled reason=supersededBootstrap",
+                phase: authenticationManager.state.authFlowPhase,
+                correlation: correlation,
+                generation: generation
+            )
+            return
+        }
+        applyNavigation(for: authenticationManager.state, correlation: correlation)
         AuthFlowTracer.trace(
             "session.restore.completed",
             phase: authenticationManager.state.authFlowPhase,
-            correlation: correlation
+            correlation: correlation,
+            generation: generation
         )
+    }
+
+    func retrySessionValidation() async {
+        await authenticationManager.retrySessionValidation()
+        applyNavigation(for: authenticationManager.state)
     }
 
     func signIn(email: String, password: String) async throws {
@@ -65,6 +85,12 @@ final class AuthenticationCoordinator {
     func signInWithApple() async throws {
         try await performSignIn(operation: {
             try await self.authenticationManager.signInWithApple()
+        })
+    }
+
+    func signInWithApple(credential: AppleIDCredentialPayload) async throws {
+        try await performSignIn(operation: {
+            try await self.authenticationManager.signInWithApple(credential: credential)
         })
     }
 
@@ -86,16 +112,29 @@ final class AuthenticationCoordinator {
     }
 
     func logout() async {
+        restoreGeneration &+= 1
         let correlation = AuthFlowTracer.beginCorrelation()
-        AuthFlowTracer.trace("logout.started", phase: authenticationManager.state.authFlowPhase, correlation: correlation)
+        AuthFlowTracer.trace(
+            "logout.started",
+            phase: authenticationManager.state.authFlowPhase,
+            correlation: correlation,
+            generation: restoreGeneration
+        )
         if let prepareSessionTeardown {
             await prepareSessionTeardown()
         }
         await authenticationManager.logout()
         await invalidateCachesForSessionChange()
         boundUserID = nil
+        navigation.clearDeferredAuthenticatedSnapshot()
+        navigation.clearPersistedState()
         navigation.coordinator.markUnauthenticated()
-        AuthFlowTracer.trace("logout.completed", phase: .unauthenticated, correlation: correlation)
+        AuthFlowTracer.trace(
+            "logout.completed",
+            phase: .unauthenticated,
+            correlation: correlation,
+            generation: restoreGeneration
+        )
     }
 
     /// Authenticated session email when present (nil for development bypass).
@@ -109,18 +148,46 @@ final class AuthenticationCoordinator {
     }
 
     func syncNavigation(with state: AuthenticationState) {
-        if state.isAuthenticated {
+        _ = state
+        applyNavigation(for: authenticationManager.state)
+    }
+
+    // MARK: - Session cache lifecycle
+
+    private func applyNavigation(for state: AuthenticationState, correlation: String? = nil) {
+        let bootstrapAllowed = state.isSessionReady
+        AuthFlowTracer.traceBootstrapAllowed(
+            bootstrapAllowed,
+            generation: authenticationManager.restorationGeneration
+        )
+
+        switch state {
+        case .authenticated, .locked:
             if boundUserID == nil {
                 boundUserID = state.session?.userID
             }
             if navigation.store.sessionPhase != .authenticated {
-                AuthFlowTracer.trace("root.authenticated", phase: .authenticated)
-                navigation.coordinator.markAuthenticated()
+                AuthFlowTracer.trace(
+                    "root.authenticated",
+                    phase: .authenticated,
+                    correlation: correlation,
+                    generation: authenticationManager.restorationGeneration
+                )
+                let deferred = navigation.consumeDeferredAuthenticatedSnapshot()
+                navigation.coordinator.markAuthenticated(applyingDeferred: deferred)
             }
-        } else if state != .unknown {
+            Task { await bindAuthenticatedUser() }
+
+        case .sessionValidationFailed, .refreshing, .unknown:
+            if navigation.store.sessionPhase == .authenticated {
+                navigation.coordinator.markUnauthenticated()
+            }
+
+        case .unauthenticated, .failure, .authenticating:
             if navigation.store.sessionPhase != .unauthenticated {
                 navigation.coordinator.markUnauthenticated()
             }
+            navigation.clearDeferredAuthenticatedSnapshot()
             if boundUserID != nil {
                 boundUserID = nil
                 Task {
@@ -130,55 +197,105 @@ final class AuthenticationCoordinator {
                     await invalidateCachesForSessionChange()
                 }
             }
+            if case .unauthenticated = state {
+                navigation.clearPersistedState()
+            }
         }
     }
 
-    // MARK: - Session cache lifecycle
-
     private func performSignIn(operation: () async throws -> Void) async throws {
         signInGeneration &+= 1
+        restoreGeneration &+= 1
         let generation = signInGeneration
         let correlation = AuthFlowTracer.beginCorrelation()
-        AuthFlowTracer.trace("auth.signIn.started", phase: .authenticating, correlation: correlation)
+        AuthFlowTracer.trace(
+            "auth.signIn.started",
+            phase: .authenticating,
+            correlation: correlation,
+            generation: generation
+        )
 
         do {
             try await operation()
             guard !Task.isCancelled else {
-                AuthFlowTracer.trace("auth.signIn.cancelled", phase: .unauthenticated, correlation: correlation)
+                AuthFlowTracer.trace(
+                    "auth.signIn.cancelled",
+                    phase: .unauthenticated,
+                    correlation: correlation,
+                    generation: generation
+                )
                 syncNavigationIfAuthenticatedAfterCancellation()
                 throw CancellationError()
             }
             guard generation == signInGeneration else {
-                AuthFlowTracer.trace("auth.signIn.stale", phase: authenticationManager.state.authFlowPhase, correlation: correlation)
+                AuthFlowTracer.trace(
+                    "auth.signIn.stale",
+                    phase: authenticationManager.state.authFlowPhase,
+                    correlation: correlation,
+                    generation: generation
+                )
                 return
             }
-            guard authenticationManager.state.isAuthenticated else {
-                AuthFlowTracer.trace("auth.signIn.failed", phase: .unauthenticated, correlation: correlation)
+            guard authenticationManager.state.isSessionReady else {
+                AuthFlowTracer.trace(
+                    "auth.signIn.failed",
+                    phase: .unauthenticated,
+                    correlation: correlation,
+                    generation: generation
+                )
                 return
             }
 
-            AuthFlowTracer.trace("auth.signIn.completed", phase: .authenticated, correlation: correlation)
-            AuthFlowTracer.trace("auth.session.available", phase: .authenticated, correlation: correlation)
+            AuthFlowTracer.trace(
+                "auth.signIn.completed",
+                phase: .authenticated,
+                correlation: correlation,
+                generation: generation
+            )
+            AuthFlowTracer.trace(
+                "auth.session.available",
+                phase: .authenticated,
+                correlation: correlation,
+                generation: generation
+            )
             await bindAuthenticatedUser()
-            navigation.coordinator.markAuthenticated()
-            AuthFlowTracer.trace("root.authenticated", phase: .authenticated, correlation: correlation)
+            navigation.coordinator.markAuthenticated(
+                applyingDeferred: navigation.consumeDeferredAuthenticatedSnapshot()
+            )
+            AuthFlowTracer.trace(
+                "root.authenticated",
+                phase: .authenticated,
+                correlation: correlation,
+                generation: generation
+            )
         } catch is CancellationError {
-            AuthFlowTracer.trace("auth.signIn.cancelled", phase: .unauthenticated, correlation: correlation)
+            AuthFlowTracer.trace(
+                "auth.signIn.cancelled",
+                phase: .unauthenticated,
+                correlation: correlation,
+                generation: generation
+            )
             syncNavigationIfAuthenticatedAfterCancellation()
             throw CancellationError()
         } catch {
-            AuthFlowTracer.trace("auth.signIn.failed", phase: .unauthenticated, correlation: correlation)
+            AuthFlowTracer.trace(
+                "auth.signIn.failed",
+                phase: .unauthenticated,
+                correlation: correlation,
+                generation: generation
+            )
             throw error
         }
     }
 
     private func syncNavigationIfAuthenticatedAfterCancellation() {
-        if authenticationManager.state.isAuthenticated {
+        if authenticationManager.state.isSessionReady {
             syncNavigation(with: authenticationManager.state)
         }
     }
 
     private func bindAuthenticatedUser() async {
+        guard authenticationManager.state.isSessionReady else { return }
         let newID = authenticationManager.state.session?.userID
         let switchedAccounts = boundUserID != nil && newID != nil && boundUserID != newID
         if switchedAccounts {

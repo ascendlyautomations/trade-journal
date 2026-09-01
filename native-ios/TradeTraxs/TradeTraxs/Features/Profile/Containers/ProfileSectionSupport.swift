@@ -1,6 +1,6 @@
 import Foundation
 
-enum ProfileSectionSupport {
+nonisolated enum ProfileSectionSupport {
     /// Debug development sessions use `dev.*` IDs that are not in Supabase.
     static func isLocalDevelopmentProfile(_ id: ProfileID) -> Bool {
         id.rawValue.hasPrefix("dev.")

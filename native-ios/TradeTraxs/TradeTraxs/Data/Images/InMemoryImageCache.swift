@@ -1,12 +1,16 @@
 import Foundation
+import Synchronization
 
 /// Process-lifetime image byte cache. Avoids duplicate avatar downloads.
 ///
 /// Bounded LRU eviction keeps long sessions from retaining every feed / chat image.
 nonisolated final class InMemoryImageCache: ImageCaching, @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: [String: Data] = [:]
-    private var order: [String] = []
+    private struct CacheState {
+        var storage: [String: Data] = [:]
+        var order: [String] = []
+    }
+
+    private let state = Mutex(CacheState())
     private let maxEntries: Int
 
     init(maxEntries: Int = 64) {
@@ -14,38 +18,38 @@ nonisolated final class InMemoryImageCache: ImageCaching, @unchecked Sendable {
     }
 
     func imageData(forKey key: String) async -> Data? {
-        lock.lock(); defer { lock.unlock() }
-        guard let data = storage[key] else { return nil }
-        touch(key)
-        return data
+        state.withLock { cache in
+            guard let data = cache.storage[key] else { return nil }
+            touch(key, in: &cache)
+            return data
+        }
     }
 
     func setImageData(_ data: Data, forKey key: String) async {
-        lock.lock()
-        if storage[key] != nil {
-            storage[key] = data
-            touch(key)
-            lock.unlock()
-            return
+        state.withLock { cache in
+            if cache.storage[key] != nil {
+                cache.storage[key] = data
+                touch(key, in: &cache)
+                return
+            }
+            while cache.storage.count >= maxEntries, let oldest = cache.order.first {
+                cache.order.removeFirst()
+                cache.storage.removeValue(forKey: oldest)
+            }
+            cache.storage[key] = data
+            cache.order.append(key)
         }
-        while storage.count >= maxEntries, let oldest = order.first {
-            order.removeFirst()
-            storage.removeValue(forKey: oldest)
-        }
-        storage[key] = data
-        order.append(key)
-        lock.unlock()
     }
 
     func removeImage(forKey key: String) async {
-        lock.lock()
-        storage.removeValue(forKey: key)
-        order.removeAll { $0 == key }
-        lock.unlock()
+        state.withLock { cache in
+            cache.storage.removeValue(forKey: key)
+            cache.order.removeAll { $0 == key }
+        }
     }
 
-    private func touch(_ key: String) {
-        order.removeAll { $0 == key }
-        order.append(key)
+    private func touch(_ key: String, in cache: inout CacheState) {
+        cache.order.removeAll { $0 == key }
+        cache.order.append(key)
     }
 }

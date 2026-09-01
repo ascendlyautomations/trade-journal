@@ -33,9 +33,11 @@ struct RoomConversationHeaderView: View {
                             .experienceStyle(.caption2, color: colors.tertiaryText)
                             .lineLimit(1)
                     }
-                    Text(memberCountLabel)
-                        .experienceStyle(.caption2, color: colors.tertiaryText)
-                        .lineLimit(1)
+                    if !memberCountLabel.isEmpty {
+                        Text(memberCountLabel)
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                            .lineLimit(1)
+                    }
                 }
             }
             Spacer(minLength: ExperienceSpacing.xs)

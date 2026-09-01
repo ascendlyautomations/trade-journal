@@ -7,14 +7,16 @@ struct CommentsSectionView: View {
     private let session: any SessionProviding
     private let imagePipeline: any ImagePipeline
 
-    init(target: InteractionTarget, data: DataEnvironment) {
+    init(target: InteractionTarget, contentOwnerUserID: String? = nil, data: DataEnvironment) {
         _viewModel = State(
             initialValue: CommentsViewModel(
                 target: target,
                 repository: data.interactions,
                 engagementStore: data.engagementStore,
                 session: data.session,
-                detailCache: data.detailCache
+                contentOwnerUserID: contentOwnerUserID,
+                detailCache: data.detailCache,
+                realtimeHub: data.realtimeHub
             )
         )
         self.session = data.session
@@ -35,6 +37,9 @@ struct CommentsSectionView: View {
             }
             .refreshable {
                 await viewModel.refresh()
+            }
+            .onDisappear {
+                viewModel.stopCommentRealtime()
             }
     }
 }

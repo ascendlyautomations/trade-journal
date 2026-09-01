@@ -13,7 +13,8 @@ struct CalendarHomeView: View {
                 session: data.session,
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
-                realtimeHub: data.realtimeHub
+                realtimeHub: data.realtimeHub,
+                rpc: data.rpc
             )
         )
     }
@@ -131,35 +132,23 @@ struct CalendarHomeView: View {
     }
 
     private var accountMenu: some View {
-        Menu {
-            Button {
-                viewModel.setAccountFilter(.all)
-            } label: {
-                if case .all = viewModel.accountFilter {
-                    Label("All Accounts", systemImage: "checkmark")
-                } else {
-                    Text("All Accounts")
-                }
-            }
-            ForEach(viewModel.accounts) { account in
-                Button {
-                    viewModel.setAccountFilter(.account(account.id))
-                } label: {
-                    let title = viewModel.accountMenuTitle(for: account)
-                    if case .account(let id) = viewModel.accountFilter, id == account.id {
-                        Label(title, systemImage: "checkmark")
-                    } else {
-                        Text(title)
-                    }
-                }
-            }
-            Divider()
-            Button {
-                viewModel.openManageAccounts()
-            } label: {
-                Label("Manage Accounts", systemImage: "slider.horizontal.3")
-            }
-        } label: {
+        OwnerAccountFilterDropdown(
+            accounts: viewModel.accountsForMenu,
+            isAllAccountsSelected: {
+                if case .all = viewModel.accountFilter { return true }
+                return false
+            }(),
+            selectedAccountID: {
+                if case .account(let id) = viewModel.accountFilter { return id }
+                return nil
+            }(),
+            onSelectAll: { viewModel.setAccountFilter(.all) },
+            onSelectAccount: { viewModel.setAccountFilter(.account($0)) },
+            onManageAccounts: { viewModel.openManageAccounts() },
+            accessibilityIdentifier: "calendar.account",
+            boundary: .calendar,
+            profileID: viewModel.ownerAccountsProfileID
+        ) {
             HStack(spacing: 4) {
                 Text(viewModel.accountFilterToolbarTitle)
                     .font(.subheadline.weight(.semibold))
@@ -172,7 +161,6 @@ struct CalendarHomeView: View {
         }
         .accessibilityLabel("Account")
         .accessibilityValue(viewModel.accountFilterTitle)
-        .accessibilityIdentifier("calendar.account")
     }
 
     @ToolbarContentBuilder

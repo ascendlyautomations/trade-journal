@@ -192,9 +192,33 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         return live.watchRoomMessages(roomID: roomID.rawValue, accessToken: accessToken)
     }
 
+    /// Web `subscribeCommunityRoomLiveChannel` — messages, reactions, optional presence track.
+    func watchRoomLive(
+        roomID: RoomID,
+        accessToken: String?,
+        presenceTrack: RoomPresenceTrackConfig?
+    ) -> RoomLiveWatchStreams {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return RoomLiveWatchStreams(
+                messages: AsyncStream { $0.finish() },
+                presence: AsyncStream { $0.finish() }
+            )
+        }
+        return live.watchRoomLive(
+            roomID: roomID.rawValue,
+            accessToken: accessToken,
+            presenceTrack: presenceTrack
+        )
+    }
+
     func stopWatchingRoomMessages(roomID: RoomID) async {
         guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
         await live.stopWatchingRoomMessages(roomID: roomID.rawValue)
+    }
+
+    func stopWatchingRoomLive(roomID: RoomID) async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingRoomLive(roomID: roomID.rawValue)
     }
 
     /// Web DM thread — idle until `messages` postgres_changes arrive.
@@ -248,6 +272,40 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         await live.stopWatchingMemberRoomMessages()
     }
 
+    func watchMemberRoomMembership(
+        roomIDs: [String],
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchMemberRoomMembership(roomIDs: roomIDs, accessToken: accessToken)
+    }
+
+    func stopWatchingMemberRoomMembership() async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingMemberRoomMembership()
+    }
+
+    /// Inbox — idle until `messages` arrive for loaded DM conversations.
+    func watchInboxConversationMessages(
+        conversationIDs: [String],
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchInboxConversationMessages(
+            conversationIDs: conversationIDs,
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingInboxConversationMessages() async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingInboxConversationMessages()
+    }
+
     /// Inbox — idle until `room_members` read-cursor changes for the viewer.
     func watchRoomReadCursors(
         userID: String,
@@ -288,5 +346,57 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
     func stopWatchingNotifications(userID: String) async {
         guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
         await live.stopWatchingNotifications(userID: userID)
+    }
+
+    func watchViewerProfile(userID: String, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchViewerProfile(userID: userID, accessToken: accessToken)
+    }
+
+    func stopWatchingViewerProfile(userID: String) async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingViewerProfile(userID: userID)
+    }
+
+    /// Detail comments — `comment_likes` postgres_changes for visible ids.
+    func watchCommentLikes(
+        source: CommentLikeSource,
+        commentIDs: [String],
+        accessToken: String?
+    ) -> AsyncStream<CommentLikeRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchCommentLikes(
+            source: source,
+            commentIDs: commentIDs,
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingCommentLikes(
+        source: CommentLikeSource,
+        commentIDs: [String]
+    ) async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingCommentLikes(source: source, commentIDs: commentIDs)
+    }
+
+    /// Detail comments — `UPDATE` postgres_changes for `pinned` on the content's comment table.
+    func watchCommentPinUpdates(
+        target: InteractionTarget,
+        accessToken: String?
+    ) -> AsyncStream<CommentPinRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchCommentPinUpdates(target: target, accessToken: accessToken)
+    }
+
+    func stopWatchingCommentPinUpdates(target: InteractionTarget) async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingCommentPinUpdates(target: target)
     }
 }

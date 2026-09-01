@@ -1,7 +1,7 @@
 import Foundation
 
 /// Deterministic sample trades for DEBUG development sessions / screenshots.
-enum ProfileTradeFixtures {
+nonisolated enum ProfileTradeFixtures {
     /// HTTPS sample so ImagePipeline exercises the public-URL branch in DEBUG.
     private static let sampleScreenshotURL =
         "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80"

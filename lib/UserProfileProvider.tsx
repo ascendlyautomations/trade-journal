@@ -243,10 +243,98 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   const [membershipReconciling, setMembershipReconciling] = useState(false)
   const realtimeTopicSuffix = useId().replace(/:/g, "")
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const profileRealtimeUserIdRef = useRef<string | null>(null)
   const profileRef = useRef<UserProfileSlice | null>(null)
   const sessionUserIdRef = useRef<string | null>(null)
   const loadGenerationRef = useRef(0)
   profileRef.current = profile
+
+  const removeProfileChannel = useCallback(() => {
+    const ch = channelRef.current
+    channelRef.current = null
+    profileRealtimeUserIdRef.current = null
+    if (ch) {
+      void supabase.removeChannel(ch)
+    }
+  }, [])
+
+  const applyProfileRealtimePayload = useCallback(
+    (sessionUserId: string, row: unknown) => {
+      const picked = pickUserProfileFields(row)
+      if (!picked) return
+      setProfileState(picked)
+      if (isProActive(picked) && shouldReconcileStripeMembership(sessionUserId)) {
+        clearStripeReconciliationSignals()
+        dispatchStripeReconciliationComplete()
+      }
+      writeUserBootstrapProfile(sessionUserId, picked)
+      if (row && typeof row === "object") {
+        writeSettingsProfileCache(sessionUserId, row as Record<string, unknown>)
+        if (isBackendV2Enabled("session")) {
+          patchSessionProfileSlice(sessionUserId, row as Record<string, unknown>)
+        }
+      }
+    },
+    []
+  )
+
+  /** One viewer-profile Realtime channel — idempotent for the same authenticated user. */
+  const ensureProfileRealtimeSubscription = useCallback(
+    (
+      sessionUserId: string,
+      options?: { generation?: number; isActive?: () => boolean }
+    ) => {
+      if (isDemoUserId(sessionUserId)) return
+
+      if (
+        profileRealtimeUserIdRef.current === sessionUserId &&
+        channelRef.current
+      ) {
+        return
+      }
+
+      removeProfileChannel()
+
+      const topic = `profile:${sessionUserId}:${realtimeTopicSuffix}`
+      const ch = supabase.channel(topic)
+      channelRef.current = ch
+      profileRealtimeUserIdRef.current = sessionUserId
+
+      const generation = options?.generation
+      const isActive = options?.isActive ?? (() => true)
+
+      ch.on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${sessionUserId}`,
+        },
+        (payload) => {
+          if (!isActive()) return
+          if (
+            generation !== undefined &&
+            generation !== loadGenerationRef.current
+          ) {
+            return
+          }
+          applyProfileRealtimePayload(sessionUserId, payload.new)
+        }
+      )
+
+      if (
+        !isActive() ||
+        (generation !== undefined && generation !== loadGenerationRef.current)
+      ) {
+        removeProfileChannel()
+        return
+      }
+
+      ch.subscribe()
+    },
+    [applyProfileRealtimePayload, realtimeTopicSuffix, removeProfileChannel]
+  )
 
   const setProfile = useCallback<Dispatch<SetStateAction<UserProfileSlice | null>>>(
     (action) => {
@@ -304,14 +392,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     let mounted = true
     let loadGeneration = 0
 
-    const removeProfileChannel = () => {
-      const ch = channelRef.current
-      channelRef.current = null
-      if (ch) {
-        void supabase.removeChannel(ch)
-      }
-    }
-
     const clearAuthState = () => {
       loadGeneration += 1
       removeProfileChannel()
@@ -358,57 +438,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     }
 
-    async function subscribeProfileRealtime(
-      sessionUserId: string,
-      generation: number
-    ) {
-      const topic = `profile:${sessionUserId}:${realtimeTopicSuffix}`
-      const ch = supabase.channel(topic)
-      channelRef.current = ch
-
-      ch.on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "profiles",
-          filter: `id=eq.${sessionUserId}`,
-        },
-        (payload) => {
-          if (!mounted || generation !== loadGeneration) return
-          const picked = pickUserProfileFields(payload.new)
-          if (picked) {
-            setProfileState(picked)
-            if (isProActive(picked) && shouldReconcileStripeMembership(sessionUserId)) {
-              clearStripeReconciliationSignals()
-              dispatchStripeReconciliationComplete()
-            }
-            writeUserBootstrapProfile(sessionUserId, picked)
-            if (payload.new && typeof payload.new === "object") {
-              writeSettingsProfileCache(
-                sessionUserId,
-                payload.new as Record<string, unknown>
-              )
-              if (isBackendV2Enabled("session")) {
-                patchSessionProfileSlice(
-                  sessionUserId,
-                  payload.new as Record<string, unknown>
-                )
-              }
-            }
-          }
-        }
-      )
-
-      if (!mounted || generation !== loadGeneration) {
-        void supabase.removeChannel(ch)
-        channelRef.current = null
-        return
-      }
-
-      ch.subscribe()
-    }
-
     async function runDeferredBootstrap(
       sessionUserId: string,
       generation: number,
@@ -436,7 +465,10 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
       if (!mounted || generation !== loadGeneration) return
       if (shouldWarmAppDataCachesForPath(pathnameRef.current)) {
-        await subscribeProfileRealtime(sessionUserId, generation)
+        ensureProfileRealtimeSubscription(sessionUserId, {
+          generation,
+          isActive: () => mounted && generation === loadGeneration,
+        })
       }
     }
 
@@ -721,7 +753,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       unsubDemoMode()
       removeProfileChannel()
     }
-  }, [realtimeTopicSuffix])
+  }, [ensureProfileRealtimeSubscription, realtimeTopicSuffix, removeProfileChannel])
 
   // Entering an app route after auth on marketing/login — start Dashboard warm + profile WS once.
   useEffect(() => {
@@ -731,43 +763,8 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     if (shouldReconcileStripeMembership(uid)) return
 
     warmAppDataCaches(supabase, uid)
-
-    if (channelRef.current) return
-
-    const generation = loadGenerationRef.current
-    const topic = `profile:${uid}:${realtimeTopicSuffix}`
-    const ch = supabase.channel(topic)
-    channelRef.current = ch
-
-    ch.on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "profiles",
-        filter: `id=eq.${uid}`,
-      },
-      (payload) => {
-        const picked = pickUserProfileFields(payload.new)
-        if (picked) {
-          setProfileState(picked)
-          if (isProActive(picked) && shouldReconcileStripeMembership(uid)) {
-            clearStripeReconciliationSignals()
-            dispatchStripeReconciliationComplete()
-          }
-          writeUserBootstrapProfile(uid, picked)
-          if (payload.new && typeof payload.new === "object") {
-            writeSettingsProfileCache(uid, payload.new as Record<string, unknown>)
-            if (isBackendV2Enabled("session")) {
-              patchSessionProfileSlice(uid, payload.new as Record<string, unknown>)
-            }
-          }
-        }
-      }
-    )
-
-    ch.subscribe()
-  }, [pathname, realtimeTopicSuffix])
+    ensureProfileRealtimeSubscription(uid)
+  }, [ensureProfileRealtimeSubscription, pathname, realtimeTopicSuffix])
 
   useEffect(() => {
     captureStripeCheckoutSuccessFromUrl()

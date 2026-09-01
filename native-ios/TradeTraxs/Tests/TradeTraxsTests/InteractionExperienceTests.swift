@@ -15,6 +15,95 @@ final class InteractionExperienceTests: XCTestCase {
         XCTAssertEqual(unliked.commentCount, 1)
     }
 
+    func testCommentLikeSemanticsAvoidsDoubleCountDuringOptimisticToggle() {
+        let meta = CommentLikeSnapshot(count: 1, liked: true)
+        let fromSelfInsert = CommentLikeSemantics.applyRealtimeEvent(
+            meta,
+            event: .insert,
+            actorUserID: "viewer",
+            currentUserID: "viewer"
+        )
+        XCTAssertEqual(fromSelfInsert.count, 1)
+        XCTAssertTrue(fromSelfInsert.liked)
+
+        let fromPeerInsert = CommentLikeSemantics.applyRealtimeEvent(
+            meta,
+            event: .insert,
+            actorUserID: "peer",
+            currentUserID: "viewer"
+        )
+        XCTAssertEqual(fromPeerInsert.count, 2)
+        XCTAssertTrue(fromPeerInsert.liked)
+
+        let fromSelfDelete = CommentLikeSemantics.applyRealtimeEvent(
+            CommentLikeSnapshot(count: 0, liked: false),
+            event: .delete,
+            actorUserID: "viewer",
+            currentUserID: "viewer"
+        )
+        XCTAssertEqual(fromSelfDelete.count, 0)
+        XCTAssertFalse(fromSelfDelete.liked)
+    }
+
+    func testCommentPinSemanticsEnforcesSinglePinnedTopLevelComment() {
+        let target = InteractionTarget.trade(TradeID("t-pin"))
+        let first = InteractionComment(
+            id: CommentID("c1"),
+            target: target,
+            authorProfileID: ProfileID("a1"),
+            authorUsername: "a",
+            body: "first",
+            parentCommentID: nil,
+            createdAt: Date(timeIntervalSince1970: 100),
+            isPinned: true
+        )
+        let second = InteractionComment(
+            id: CommentID("c2"),
+            target: target,
+            authorProfileID: ProfileID("a2"),
+            authorUsername: "b",
+            body: "second",
+            parentCommentID: nil,
+            createdAt: Date(timeIntervalSince1970: 200),
+            isPinned: false
+        )
+        let updated = CommentPinSemantics.applyPinnedState([first, second], commentID: second.id, pinned: true)
+        XCTAssertTrue(updated.first { $0.id == second.id }?.isPinned == true)
+        XCTAssertFalse(updated.first { $0.id == first.id }?.isPinned == true)
+        let order = CommentPinSemantics.sortedTopLevel(updated, order: .oldest)
+        XCTAssertEqual(order.first?.id, second.id)
+    }
+
+    func testCommentLikeToggleRollsBackOnFailure() async {
+        let target = InteractionTarget.trade(TradeID("trade-comment-like"))
+        let repository = InMemoryInteractionRepository()
+        repository.shouldFailCommentLike = true
+        let store = EngagementStore(repository: repository)
+        let comment = InteractionComment(
+            id: CommentID("c1"),
+            target: target,
+            authorProfileID: ProfileID("author"),
+            authorUsername: "author",
+            body: "Nice setup",
+            parentCommentID: nil,
+            createdAt: Date(),
+            isPinned: false
+        )
+        repository.commentsByTarget[target] = [comment]
+        repository.commentLikeMeta[comment.id] = .empty
+
+        let viewModel = CommentsViewModel(
+            target: target,
+            repository: repository,
+            engagementStore: store,
+            session: InteractionStubSession(userID: UserID("viewer"))
+        )
+        await viewModel.refresh()
+
+        await viewModel.toggleCommentLike(comment)
+        XCTAssertEqual(viewModel.likeSnapshot(for: comment.id), .empty)
+    }
+
     func testInteractionTargetsAreContentAgnostic() {
         let trade = InteractionTarget.trade(TradeID("t1"))
         let post = InteractionTarget.profilePost(PostID("p1"))
@@ -374,6 +463,29 @@ private final class CountingInteractionRepository: InteractionRepository, @unche
     }
 
     func deleteComment(id: CommentID, on target: InteractionTarget) async throws {}
+
+    func commentLikeMeta(
+        for commentIDs: [CommentID],
+        source: CommentLikeSource
+    ) async throws -> [CommentID: CommentLikeSnapshot] {
+        var meta: [CommentID: CommentLikeSnapshot] = [:]
+        for id in commentIDs {
+            meta[id] = .empty
+        }
+        return meta
+    }
+
+    func setCommentLiked(
+        _ liked: Bool,
+        commentID: CommentID,
+        source: CommentLikeSource
+    ) async throws {}
+
+    func setCommentPinned(
+        _ pinned: Bool,
+        commentID: CommentID,
+        on target: InteractionTarget
+    ) async throws {}
 }
 
 private final class InMemoryInteractionRepository: InteractionRepository, @unchecked Sendable {
@@ -382,6 +494,9 @@ private final class InMemoryInteractionRepository: InteractionRepository, @unche
     var setLikedCalls: [(Bool, InteractionTarget)] = []
     var shouldFailLike = false
     var shouldFailAddComment = false
+    var shouldFailCommentLike = false
+    var shouldFailCommentPin = false
+    var commentLikeMeta: [CommentID: CommentLikeSnapshot] = [:]
     var likeDelayNanoseconds: UInt64 = 0
     private let lock = NSLock()
 
@@ -446,6 +561,63 @@ private final class InMemoryInteractionRepository: InteractionRepository, @unche
 
     func deleteComment(id: CommentID, on target: InteractionTarget) async throws {
         commentsByTarget[target]?.removeAll { $0.id == id || $0.parentCommentID == id }
+    }
+
+    func commentLikeMeta(
+        for commentIDs: [CommentID],
+        source: CommentLikeSource
+    ) async throws -> [CommentID: CommentLikeSnapshot] {
+        lock.lock()
+        let stored = commentLikeMeta
+        lock.unlock()
+        var meta: [CommentID: CommentLikeSnapshot] = [:]
+        for id in commentIDs {
+            meta[id] = stored[id] ?? .empty
+        }
+        return meta
+    }
+
+    func setCommentLiked(
+        _ liked: Bool,
+        commentID: CommentID,
+        source: CommentLikeSource
+    ) async throws {
+        lock.lock()
+        if shouldFailCommentLike {
+            lock.unlock()
+            throw AppError.unknown(message: "comment like failed")
+        }
+        var snap = commentLikeMeta[commentID] ?? .empty
+        if liked {
+            if !snap.liked {
+                snap.liked = true
+                snap.count += 1
+            }
+        } else if snap.liked {
+            snap.liked = false
+            snap.count = max(0, snap.count - 1)
+        }
+        commentLikeMeta[commentID] = snap
+        lock.unlock()
+    }
+
+    func setCommentPinned(
+        _ pinned: Bool,
+        commentID: CommentID,
+        on target: InteractionTarget
+    ) async throws {
+        lock.lock()
+        if shouldFailCommentPin {
+            lock.unlock()
+            throw AppError.unknown(message: "comment pin failed")
+        }
+        let items = commentsByTarget[target] ?? []
+        commentsByTarget[target] = CommentPinSemantics.applyPinnedState(
+            items,
+            commentID: commentID,
+            pinned: pinned
+        )
+        lock.unlock()
     }
 }
 

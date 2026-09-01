@@ -33,6 +33,9 @@ final class ProfileContentStore {
     private(set) var errorMessage: String?
     private(set) var isOwner = false
     private(set) var isFollowing = false
+    private(set) var isRequested = false
+    private(set) var followsYou = false
+    private(set) var canViewTrades = true
     private(set) var resolvedProfileID: ProfileID?
     /// First owned Trade Room when present (hidden in UI when nil after resolve).
     private(set) var ownedTradeRoom: TradeRoom?
@@ -92,6 +95,9 @@ final class ProfileContentStore {
         resolvedProfileID = state.profileID
         isOwner = state.isOwner
         isFollowing = state.isFollowing
+        isRequested = state.isRequested
+        followsYou = state.followsYou
+        canViewTrades = state.canViewTrades
         profile = state.profile
         stats = state.stats
         ownedTradeRoom = state.ownedTradeRoom
@@ -120,7 +126,7 @@ final class ProfileContentStore {
         // Screen-owned Profile uses ``ProfileBootstrap`` — keep this path for unit tests
         // and any non-screen callers.
         if isScreenOwned, !force { return }
-        if let loadTask, !force { return }
+        if loadTask != nil, !force { return }
         if !force, phase == .loaded, profile != nil {
             if !didResolveTradeRoom, let profileID = resolvedProfileID {
                 loadTask = Task { [weak self] in
@@ -228,7 +234,8 @@ final class ProfileContentStore {
 
         if !force,
            let cachedProfile = detailCache.profile(id: profileID),
-           let cachedStats = detailCache.stats(for: profileID)
+           let cachedStats = detailCache.stats(for: profileID),
+           cachedStats.hasLoadedHeaderMetrics
         {
             profile = cachedProfile
             stats = cachedStats

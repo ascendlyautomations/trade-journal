@@ -3,6 +3,7 @@ import SwiftUI
 /// Premium top-three podium — render-only, subtle entrance animation owned by the screen.
 struct LeaderboardPodiumView: View {
     let podium: [LeaderboardRow]
+    let profileFor: (ProfileID) -> Profile
     let imagePipeline: any ImagePipeline
     let animateEntrance: Bool
     let onOpen: (LeaderboardRow) -> Void
@@ -51,11 +52,13 @@ struct LeaderboardPodiumView: View {
         }
     }
 
+    @ViewBuilder
     private func card(for row: LeaderboardRow, emphasized: Bool) -> some View {
+        let profile = profileFor(row.profileID)
         VStack(spacing: ExperienceSpacing.sm) {
             ZStack(alignment: .topTrailing) {
                 FollowListAvatarView(
-                    profile: row.profile,
+                    profile: profile,
                     imagePipeline: imagePipeline,
                     size: emphasized ? 72 : 56
                 )
@@ -70,7 +73,7 @@ struct LeaderboardPodiumView: View {
 
             VStack(spacing: 2) {
                 HStack(spacing: 3) {
-                    Text(row.profile.displayName)
+                    Text(profile.displayName)
                         .experienceStyle(emphasized ? .headline : .subheadline, color: colors.primaryText)
                         .fontWeight(.semibold)
                         .lineLimit(1)
@@ -80,9 +83,11 @@ struct LeaderboardPodiumView: View {
                             .foregroundStyle(colors.accent)
                     }
                 }
-                Text("@\(row.profile.username)")
-                    .experienceStyle(.caption2, color: colors.secondaryText)
-                    .lineLimit(1)
+                if LeaderboardRowView.showsUsername(profile.username) {
+                    Text("@\(profile.username)")
+                        .experienceStyle(.caption2, color: colors.secondaryText)
+                        .lineLimit(1)
+                }
                 Text(row.primaryMetricText)
                     .experienceStyle(emphasized ? .body : .subheadline, color: metricColor(row.primaryMetricText))
                     .fontWeight(.bold)

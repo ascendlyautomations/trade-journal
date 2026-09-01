@@ -53,6 +53,74 @@ final class TradeRoomsExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.filteredItems.first?.room.name, "Risk First")
     }
 
+    func testRoomMessageReactionSemanticsAggregateAndPatch() {
+        let viewer = ProfileID("viewer")
+        let peer = ProfileID("peer")
+        let messageID = RoomMessageID("m1")
+        let reactions = [
+            RoomMessageReaction(id: "r1", messageID: messageID, userID: peer, reaction: "👍", createdAt: nil),
+            RoomMessageReaction(id: "r2", messageID: messageID, userID: viewer, reaction: "👍", createdAt: nil),
+            RoomMessageReaction(id: "r3", messageID: messageID, userID: peer, reaction: "🔥", createdAt: nil),
+        ]
+        let summaries = RoomMessageReactionSemantics.aggregate(reactions, viewerID: viewer)
+        XCTAssertEqual(summaries.map(\.emoji), ["👍", "🔥"])
+        XCTAssertEqual(summaries.first?.count, 2)
+        XCTAssertTrue(summaries.first?.reactedByViewer == true)
+
+        let optimistic = RoomMessageReaction(
+            id: "optimistic-m1-😂",
+            messageID: messageID,
+            userID: viewer,
+            reaction: "😂",
+            createdAt: nil
+        )
+        let inserted = RoomMessageReactionSemantics.patch(reactions, next: optimistic, mode: .insert)
+        XCTAssertEqual(inserted.count, reactions.count + 1)
+
+        let duplicate = RoomMessageReactionSemantics.patch(
+            inserted,
+            next: RoomMessageReaction(id: "r1", messageID: messageID, userID: peer, reaction: "👍", createdAt: nil),
+            mode: .insert
+        )
+        XCTAssertEqual(duplicate.count, inserted.count)
+    }
+
+    func testRoomPresenceSemanticsDedupesMultipleDevicesByUserID() {
+        let now = ISO8601DateFormatter().string(from: Date())
+        let earlier = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-60))
+        let state: [String: [RoomPresenceWireUser]] = [
+            "device-a": [
+                RoomPresenceWireUser(
+                    userID: "user-1",
+                    username: "alpha",
+                    avatarURL: nil,
+                    enteredAt: earlier
+                ),
+            ],
+            "device-b": [
+                RoomPresenceWireUser(
+                    userID: "user-1",
+                    username: "alpha",
+                    avatarURL: "https://example.com/a.jpg",
+                    enteredAt: now
+                ),
+            ],
+            "device-c": [
+                RoomPresenceWireUser(
+                    userID: "user-2",
+                    username: "beta",
+                    avatarURL: nil,
+                    enteredAt: now
+                ),
+            ],
+        ]
+        let deduped = RoomPresenceSemantics.dedupeByUserID(state)
+        XCTAssertEqual(deduped.count, 2)
+        let alpha = deduped.first { $0.userID == "user-1" }
+        XCTAssertEqual(alpha?.enteredAt, now)
+        XCTAssertEqual(alpha?.avatarURL, "https://example.com/a.jpg")
+    }
+
     func testRoomConversationMapsMessagesOntoSharedTimeline() async {
         let store = MessagesInboxStore.shared
         TradeRoomsFixtures.seedInbox(store)
@@ -364,6 +432,30 @@ private struct TradeRoomsStubMessageRepository: MessageRepository {
     func createConversation(participantIDs: [ProfileID]) async throws -> Conversation {
         throw AppError.notImplemented(feature: "createConversation")
     }
+
+    func findExistingDirectConversationID(
+        viewerID: ProfileID,
+        recipientID: ProfileID
+    ) async throws -> ConversationID? {
+        nil
+    }
+
+    func usersHaveActiveBlock(viewerID: ProfileID, otherID: ProfileID) async -> Bool {
+        false
+    }
+
+    func createDirectConversation(viewerID: ProfileID, recipient: Profile) async throws -> Conversation {
+        throw AppError.notImplemented(feature: "createDirectConversation")
+    }
+
+    func createGroupConversation(
+        viewerID: ProfileID,
+        recipients: [Profile],
+        name: String?
+    ) async throws -> Conversation {
+        throw AppError.notImplemented(feature: "createGroupConversation")
+    }
+
     func deleteConversation(id: ConversationID) async throws {}
 }
 
@@ -436,6 +528,23 @@ private struct TradeRoomsStubRoomRepository: RoomRepository {
     }
 
     func send(_ message: RoomMessage) async throws -> RoomMessage { message }
+
+    func insertMessageReaction(
+        roomID: RoomID,
+        messageID: RoomMessageID,
+        userID: ProfileID,
+        reaction: String
+    ) async throws -> RoomMessageReaction {
+        RoomMessageReaction(
+            id: "stub-\(messageID.rawValue)-\(reaction)",
+            messageID: messageID,
+            userID: userID,
+            reaction: reaction,
+            createdAt: Date()
+        )
+    }
+
+    func deleteMessageReaction(id: String) async throws {}
 
     func moderate(
         roomID: RoomID,

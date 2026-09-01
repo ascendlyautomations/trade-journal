@@ -5,7 +5,7 @@ import Foundation
 /// Public client values (Supabase URL / anon key / BFF URL) come from
 /// ``SecretsLoader`` (Secrets.plist, Info.plist, or process environment).
 /// Service-role keys must never be embedded in the iOS client.
-struct AppConfiguration: Sendable, Equatable {
+nonisolated struct AppConfiguration: Sendable, Equatable {
     let buildConfiguration: BuildConfiguration
 
     /// Public site / BFF origin.

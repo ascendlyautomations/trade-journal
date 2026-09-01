@@ -27,8 +27,20 @@ final class InboxMarkReadCoordinator {
     }
 
     /// Optimistic inbox clear + RPC — badge mirrors server after the cursor advances.
+    ///
+    /// When ``BackendV2FeatureFlag/messageThreads`` is enabled, thread bootstrap RPC owns
+    /// `mark_conversation_read` on intentional cold open — no duplicate coordinator RPC.
     func prepareOpenConversation(_ conversationID: ConversationID) {
         MessagesInboxStore.shared.markRead(conversationID: conversationID)
+        guard !BackendV2FeatureFlags.isEnabled(.messageThreads) else {
+            ThreadMarkReadTelemetry.log(
+                owner: "bootstrap",
+                intent: "open",
+                applied: false,
+                conversationID: conversationID
+            )
+            return
+        }
         Task { await confirmConversationRead(conversationID) }
     }
 
@@ -58,6 +70,12 @@ final class InboxMarkReadCoordinator {
         do {
             try await messages.markRead(conversationID: conversationID)
             MessagesInboxStore.shared.markRead(conversationID: conversationID)
+            ThreadMarkReadTelemetry.log(
+                owner: "coordinator",
+                intent: "open",
+                applied: true,
+                conversationID: conversationID
+            )
             AppIconBadgeSync.refresh(animated: false)
         } catch {
             // Drop optimistic override so the next inbox refresh shows server unread.

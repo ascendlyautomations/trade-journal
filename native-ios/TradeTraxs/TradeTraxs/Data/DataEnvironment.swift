@@ -182,6 +182,7 @@ final class DataEnvironment {
             session: session
         )
         let detailCache = DetailPresentationCache()
+        TradeJournalMutationStore.shared.configure(detailCache: detailCache)
 
         return DataEnvironment(
             configuration: configuration,

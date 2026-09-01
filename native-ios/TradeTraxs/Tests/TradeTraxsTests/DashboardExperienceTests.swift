@@ -187,6 +187,9 @@ final class DashboardExperienceTests: XCTestCase {
 
         viewModel.openReports()
         XCTAssertEqual(navigationStore.paths.home.last, .reports)
+
+        viewModel.openPayouts()
+        XCTAssertEqual(navigationStore.paths.home.last, .payouts)
     }
 
     func testNetworkBootstrapSkipsHomeDashboardAndDefersAchievements() async {

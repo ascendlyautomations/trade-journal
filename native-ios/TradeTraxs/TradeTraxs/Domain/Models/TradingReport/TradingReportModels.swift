@@ -1,7 +1,7 @@
 import Foundation
 
 /// Web `TradingReportPeriodKey` — exact period catalog used by Dashboard Trading Reports.
-enum TradingReportPeriodKey: String, Hashable, Codable, Sendable, CaseIterable, Identifiable {
+nonisolated enum TradingReportPeriodKey: String, Hashable, Codable, Sendable, CaseIterable, Identifiable {
     case weeklyThis = "weekly_this"
     case weeklyLast = "weekly_last"
     case monthlyThis = "monthly_this"
@@ -48,7 +48,7 @@ enum TradingReportPeriodKey: String, Hashable, Codable, Sendable, CaseIterable, 
     var reportID: ReportID { ReportID(rawValue) }
 }
 
-enum TradingReportKind: String, Hashable, Codable, Sendable {
+nonisolated enum TradingReportKind: String, Hashable, Codable, Sendable {
     case weekly
     case monthly
 
@@ -99,7 +99,7 @@ struct TradingReport: Hashable, Codable, Sendable, Identifiable {
     var id: ReportID { periodKey.reportID }
 }
 
-struct TradingReportsSnapshot: Hashable, Codable, Sendable {
+nonisolated struct TradingReportsSnapshot: Hashable, Codable, Sendable {
     var reports: [TradingReportPeriodKey: TradingReport]
     var computedAt: TimeInterval
 

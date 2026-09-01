@@ -20,7 +20,7 @@ nonisolated struct RequestBuilder: Sendable {
         }
         let path = endpoint.path.hasPrefix("/") ? endpoint.path : "/\(endpoint.path)"
         guard var components = URLComponents(string: base + path) else {
-            throw NetworkError.validation(message: "Invalid URL components for \(endpoint.path)")
+            throw NetworkError.validation(statusCode: nil, message: "Invalid URL components for \(endpoint.path)")
         }
 
         if !endpoint.queryItems.isEmpty {
@@ -28,7 +28,7 @@ nonisolated struct RequestBuilder: Sendable {
         }
 
         guard let url = components.url else {
-            throw NetworkError.validation(message: "Unable to form URL for \(endpoint.path)")
+            throw NetworkError.validation(statusCode: nil, message: "Unable to form URL for \(endpoint.path)")
         }
 
         var headers = configuration.defaultHeaders
@@ -65,6 +65,7 @@ nonisolated struct RequestBuilder: Sendable {
 
         guard let url else {
             throw NetworkError.validation(
+                statusCode: nil,
                 message: "Base URL for \(host.rawValue) is not configured"
             )
         }

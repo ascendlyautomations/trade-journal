@@ -31,13 +31,11 @@ struct TradeSharePickerSheet: View {
                                     .experienceStyle(.headline, color: colors.primaryText)
                                 HStack(spacing: ExperienceSpacing.sm) {
                                     if let pnl = trade.realizedPnL {
-                                        Text(pnl.amount as NSDecimalNumber as Decimal >= 0
-                                            ? "+\(pnl.amount)"
-                                            : "\(pnl.amount)")
+                                        Text(TradeDisplay.pnlText(pnl))
                                             .experienceStyle(.subheadline, color: colors.secondaryText)
                                     }
                                     if let rr = trade.riskReward {
-                                        Text("RR \(rr)")
+                                        Text(TradeDisplay.rrText(rr))
                                             .experienceStyle(.caption, color: colors.tertiaryText)
                                     }
                                 }

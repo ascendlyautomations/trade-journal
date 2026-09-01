@@ -22,4 +22,24 @@ nonisolated protocol InteractionRepository: Sendable {
     ) async throws -> InteractionComment
 
     func deleteComment(id: CommentID, on target: InteractionTarget) async throws
+
+    /// Batch like meta for visible comments — one `comment_likes` SELECT.
+    func commentLikeMeta(
+        for commentIDs: [CommentID],
+        source: CommentLikeSource
+    ) async throws -> [CommentID: CommentLikeSnapshot]
+
+    /// Insert/delete on `comment_likes` — treats unique violation as success on insert.
+    func setCommentLiked(
+        _ liked: Bool,
+        commentID: CommentID,
+        source: CommentLikeSource
+    ) async throws
+
+    /// Update `pinned` on a top-level comment — content-owner RLS on the comments table.
+    func setCommentPinned(
+        _ pinned: Bool,
+        commentID: CommentID,
+        on target: InteractionTarget
+    ) async throws
 }

@@ -120,6 +120,29 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         query: TradeHistoryQuery,
         page: PageRequest
     ) async throws -> CursorPage<Trade> {
+        let key = Self.tradeHistoryFlightKey(profileID: profileID, query: query, page: page)
+        return try await RepositoryRequestFlight.shared.coalesce(
+            key: key,
+            resource: "trades.history"
+        ) { [supabase] in
+            try await Self.fetchTradeHistory(
+                profileID: profileID,
+                query: query,
+                page: page,
+                supabase: supabase
+            )
+        }
+    }
+
+    private static func fetchTradeHistory(
+        profileID: ProfileID,
+        query: TradeHistoryQuery,
+        page: PageRequest,
+        supabase: SupabaseInfrastructure
+    ) async throws -> CursorPage<Trade> {
+        TradeMappingTelemetry.beginLoad("trades.history")
+        defer { TradeMappingTelemetry.endLoad() }
+
         let filters = query.filters
         let (orderColumn, ascending): (String, Bool) = {
             switch filters.sort {
@@ -305,13 +328,24 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             throw AppError.domain(.permission(.notAuthenticated))
         }
         let body = TradeMapper.updateBody(from: draft, createdAt: previous.createdAt)
-        let dto: TradeDTO.Trade = try await supabase.database.update(
+        #if DEBUG
+        TradeUpdateDiagnostics.logUpdateAttempt(tradeID: id, body: body)
+        #endif
+        _ = try await supabase.database.update(
             body,
             table: "trades",
-            query: [SupabaseQuery.eq("id", id.rawValue)],
+            query: [
+                SupabaseQuery.select(TradeDTO.profileListSelect),
+                SupabaseQuery.eq("id", id.rawValue),
+                SupabaseQuery.eq("user_id", userID.rawValue),
+            ],
             returning: TradeDTO.Trade.self
         )
-        let trade = try TradeMapper.mapToDomain(dto)
+        // Authoritative read — same select as Trade Detail / list seeds (PATCH representation can omit columns).
+        let trade = try await trade(id: id)
+        #if DEBUG
+        TradeUpdateDiagnostics.logVerifyPersisted(tradeID: id, draft: draft, persisted: trade)
+        #endif
 
         // Web edit: upsert public feed post, or delete when privatized.
         if draft.visibility == .public {
@@ -430,8 +464,9 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         )
     }
 
+    /// Mirror web `ACCOUNTS_SELECT` column order/meanings + owner insight columns + `user_id`.
     private static let accountsSelect =
-        "id,user_id,name,account_size,account_number,note,mode,category,is_active,can_add_trades,consistency,max_drawdown,daily_drawdown,profit_target,winning_days,winning_day_threshold,payout_drawdown_behavior"
+        "id,account_number,name,account_size,mode,category,is_active,can_add_trades,note,consistency,max_drawdown,daily_drawdown,profit_target,winning_days,winning_day_threshold,show_in_account_dropdowns,custom_public_status,payout_drawdown_behavior,user_id"
 
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
         // Mirror web `loadTradingAccounts` / `ACCOUNTS_SELECT` — `trades.account_id` → `accounts.id`.
@@ -449,7 +484,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                     SupabaseQuery.eq("user_id", profileID.rawValue),
                 ]
             )
-            return rows.compactMap { dto in
+            let mapped = rows.compactMap { dto -> TradingAccount? in
                 do {
                     return try TradingAccountMapper.mapToDomain(dto)
                 } catch {
@@ -459,6 +494,8 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                     return nil
                 }
             }
+            TradingAccountOwnerDiagnostics.logLoadSummary(accounts: mapped, source: .restSelect)
+            return mapped
         }
     }
 
@@ -517,7 +554,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 var account_name: String
                 var account_size: String?
             }
-            try? await supabase.database.update(
+            _ = try? await supabase.database.update(
                 TradeLabels(
                     account_name: account.name,
                     account_size: draft.sizeDigits.isEmpty ? nil : draft.sizeDigits
@@ -553,6 +590,89 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         )
     }
 
+    func updateAccountInsightsSettings(
+        id: TradingAccountID,
+        ownerID: ProfileID,
+        showInAccountDropdowns: Bool,
+        customPublicStatus: String?
+    ) async throws -> TradingAccount {
+        let trimmedStatus = customPublicStatus?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = TradeDTO.AccountSettingsBody(
+            show_in_account_dropdowns: showInAccountDropdowns,
+            custom_public_status: (trimmedStatus?.isEmpty == false) ? trimmedStatus : nil
+        )
+        let row: TradeDTO.Account = try await supabase.database.update(
+            body,
+            table: "accounts",
+            query: [
+                SupabaseQuery.eq("id", id.rawValue),
+                SupabaseQuery.eq("user_id", ownerID.rawValue),
+            ],
+            returning: TradeDTO.Account.self
+        )
+        return try TradingAccountMapper.mapToDomain(row)
+    }
+
+    func payoutEntries(for accountID: TradingAccountID) async throws -> [AccountPayoutEntry] {
+        let rows: [TradeDTO.AccountPayoutEntryRow] = try await supabase.database.select(
+            TradeDTO.AccountPayoutEntryRow.self,
+            from: "account_payout_entries",
+            query: [
+                SupabaseQuery.select("id,account_id,user_id,amount,payout_date,note,created_at,updated_at"),
+                SupabaseQuery.eq("account_id", accountID.rawValue),
+                URLQueryItem(name: "order", value: "payout_date.desc,id.desc"),
+            ]
+        )
+        return rows.compactMap { try? AccountPayoutEntryMapper.mapToDomain($0) }
+    }
+
+    func createPayoutEntry(
+        ownerID: ProfileID,
+        accountID: TradingAccountID,
+        draft: AccountPayoutEntryDraft
+    ) async throws -> AccountPayoutEntry {
+        let body = try AccountPayoutEntryMapper.writeBody(
+            ownerID: ownerID,
+            accountID: accountID,
+            draft: draft
+        )
+        let row: TradeDTO.AccountPayoutEntryRow = try await supabase.database.insert(
+            body,
+            into: "account_payout_entries",
+            returning: TradeDTO.AccountPayoutEntryRow.self
+        )
+        return try AccountPayoutEntryMapper.mapToDomain(row)
+    }
+
+    func updatePayoutEntry(
+        id: AccountPayoutEntryID,
+        draft: AccountPayoutEntryDraft
+    ) async throws -> AccountPayoutEntry {
+        let body = try AccountPayoutEntryMapper.updateBody(from: draft)
+        let row: TradeDTO.AccountPayoutEntryRow = try await supabase.database.update(
+            body,
+            table: "account_payout_entries",
+            query: [SupabaseQuery.eq("id", id.rawValue)],
+            returning: TradeDTO.AccountPayoutEntryRow.self
+        )
+        return try AccountPayoutEntryMapper.mapToDomain(row)
+    }
+
+    func deletePayoutEntry(id: AccountPayoutEntryID) async throws {
+        try await supabase.database.delete(
+            from: "account_payout_entries",
+            query: [SupabaseQuery.eq("id", id.rawValue)]
+        )
+    }
+
+    func profileAccountInsights(for profileID: ProfileID) async throws -> [ProfileAccountInsight] {
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_profile_account_insights",
+            parametersJSON: try JSONEncoder().encode(["p_identifier": profileID.rawValue])
+        )
+        return try ProfileAccountInsightMapper.mapAccounts(from: data)
+    }
+
     private static func mapAccountMutationError(_ error: Error) -> Error {
         let text = String(describing: error)
         if text.contains("23505") || text.localizedCaseInsensitiveContains("duplicate") {
@@ -570,6 +690,16 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     // MARK: - Request flight keys
+
+    private static func tradeHistoryFlightKey(
+        profileID: ProfileID,
+        query: TradeHistoryQuery,
+        page: PageRequest
+    ) -> String {
+        let queryKey = query.cacheKey(profileID: profileID)
+        let cursor = page.cursor ?? "-"
+        return "trades.history:\(queryKey):limit=\(page.limit):cursor=\(cursor)"
+    }
 
     private static func ownedTradesFlightKey(
         profileID: ProfileID,
@@ -589,6 +719,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             do {
                 return try TradeMapper.mapToDomain(dto)
             } catch {
+                TradeMappingTelemetry.recordSkippedTrade()
                 let id = dto.id ?? "unknown"
                 AppLog.networking.error(
                     "Skipping trade \(id, privacy: .public) — \(String(describing: error), privacy: .public)"

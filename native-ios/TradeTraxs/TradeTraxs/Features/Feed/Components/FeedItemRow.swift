@@ -10,20 +10,6 @@ struct FeedItemRow: View {
     let onOpenAuthor: () -> Void
 
     @Environment(\.themeColors) private var colors
-    @Environment(\.experienceTheme) private var theme
-
-    private let badgeColumns = [
-        GridItem(.adaptive(minimum: 52), spacing: ExperienceSpacing.xs, alignment: .leading),
-    ]
-
-    private var interactionTarget: InteractionTarget {
-        switch entry {
-        case .trade(_, let trade): return .trade(trade.id)
-        case .post(_, let post): return .profilePost(post.id)
-        case .clip(_, let reel): return .reel(reel.id)
-        case .achievement(_, let achievement): return .achievement(achievement.id)
-        }
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -60,7 +46,7 @@ struct FeedItemRow: View {
                 Label("View Profile", systemImage: "person.crop.circle")
             }
             Button {
-                Task { await engagementStore.toggleLike(on: interactionTarget) }
+                Task { await engagementStore.toggleLike(on: entry.interactionTarget) }
             } label: {
                 Label("Like", systemImage: "heart")
             }
@@ -86,7 +72,7 @@ struct FeedItemRow: View {
                     Color.clear
                         .contentShape(Rectangle())
                         .experienceDoubleTapLike(
-                            target: interactionTarget,
+                            target: entry.interactionTarget,
                             store: engagementStore,
                             onSingleTap: onOpen
                         )
@@ -114,7 +100,7 @@ struct FeedItemRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .experienceDoubleTapLike(
-                target: interactionTarget,
+                target: entry.interactionTarget,
                 store: engagementStore,
                 onSingleTap: onOpen
             )
@@ -190,16 +176,11 @@ struct FeedItemRow: View {
 
     @ViewBuilder
     private var engagement: some View {
-        switch entry {
-        case .trade(_, let trade):
-            EngagementBar(target: .trade(trade.id), store: engagementStore, onCommentTap: onOpen)
-        case .post(_, let post):
-            EngagementBar(target: .profilePost(post.id), store: engagementStore, onCommentTap: onOpen)
-        case .clip(_, let reel):
-            EngagementBar(target: .reel(reel.id), store: engagementStore, onCommentTap: onOpen)
-        case .achievement(_, let achievement):
-            EngagementBar(target: .achievement(achievement.id), store: engagementStore, onCommentTap: onOpen)
-        }
+        EngagementBar(
+            target: entry.interactionTarget,
+            store: engagementStore,
+            onCommentTap: onOpen
+        )
     }
 
     // MARK: - Summary (trade chips / titles)
@@ -223,37 +204,14 @@ struct FeedItemRow: View {
 
     private func tradeSummary(_ trade: Trade) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(trade.symbol.ticker)
-                    .experienceStyle(.title, color: colors.primaryText)
-                Spacer(minLength: ExperienceSpacing.sm)
-                Text(TradeDisplay.pnlText(trade.realizedPnL))
-                    .experienceStyle(
-                        .metricLarge,
-                        color: theme.metricColor(
-                            for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
-                        )
-                    )
-            }
+            PublicTradeHeadlineRow(
+                ticker: trade.symbol.ticker,
+                realizedPnL: trade.realizedPnL
+            )
             .accessibilityIdentifier("feed.trade.headline")
 
-            LazyVGrid(columns: badgeColumns, alignment: .leading, spacing: ExperienceSpacing.xs) {
-                ExperienceTag(
-                    title: TradeDisplay.sideTitle(trade.side),
-                    tone: trade.side == .long ? .success : .error
-                )
-                if trade.riskReward != nil {
-                    ExperienceTag(title: TradeDisplay.rrText(trade.riskReward), tone: .info)
-                }
-                ExperienceTag(title: TradeDisplay.quantityBadgeText(trade.quantity), tone: .info)
-                if let session = trade.sessionLabel?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                    !session.isEmpty
-                {
-                    ExperienceTag(title: session, tone: .info)
-                }
-            }
-            .accessibilityIdentifier("feed.trade.badges")
+            PublicTradeMetaChipRow(trade: trade)
+                .accessibilityIdentifier("feed.trade.badges")
         }
     }
 

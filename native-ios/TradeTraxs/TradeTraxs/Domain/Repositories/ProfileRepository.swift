@@ -6,6 +6,10 @@ nonisolated protocol ProfileRepository: Sendable {
     /// Bounded batch — PostgREST `id=in.(…)`. Prefer ``SessionProfileStore`` at call sites.
     func profiles(ids: [ProfileID]) async throws -> [Profile]
     func profile(username: String) async throws -> Profile
+    func ensureProfileExists(for profileID: ProfileID) async throws -> Profile
+    func onboardingSnapshot(for profileID: ProfileID) async throws -> ProfileOnboardingSnapshot
+    func isUsernameTaken(_ username: String, excluding profileID: ProfileID) async throws -> Bool
+    func completeProfileOnboarding(_ submission: ProfileOnboardingSubmission) async throws -> Profile
     func updateProfile(_ profile: Profile) async throws -> Profile
     func stats(for profileID: ProfileID) async throws -> ProfileStats
     /// Web Profile wall — `profile_posts` (not feed `posts`).
@@ -31,6 +35,23 @@ extension ProfileRepository {
 
     func deleteWallPost(id: PostID) async throws {
         throw AppError.notImplemented(feature: "deleteWallPost")
+    }
+
+    /// Default: load existing profile. Production overrides with idempotent shell insert.
+    func ensureProfileExists(for profileID: ProfileID) async throws -> Profile {
+        try await profile(id: profileID)
+    }
+
+    func onboardingSnapshot(for profileID: ProfileID) async throws -> ProfileOnboardingSnapshot {
+        throw AppError.notImplemented(feature: "onboardingSnapshot")
+    }
+
+    func isUsernameTaken(_ username: String, excluding profileID: ProfileID) async throws -> Bool {
+        throw AppError.notImplemented(feature: "isUsernameTaken")
+    }
+
+    func completeProfileOnboarding(_ submission: ProfileOnboardingSubmission) async throws -> Profile {
+        throw AppError.notImplemented(feature: "completeProfileOnboarding")
     }
 
     /// Default: sequential singles (tests / incomplete backends). Production overrides with `in.()`.

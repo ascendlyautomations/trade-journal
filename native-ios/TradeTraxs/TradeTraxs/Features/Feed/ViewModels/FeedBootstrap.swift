@@ -154,7 +154,46 @@ enum FeedBootstrap: ScreenBootstrap {
 
     // MARK: - Hydration (unchanged query semantics)
 
-    private static func hydrate(
+    /// Builds timeline entries from RPC-seeded cache — no network (V2 bootstrap path).
+    static func buildEntriesFromSeededItems(
+        _ items: [FeedItem],
+        detailCache: DetailPresentationCache
+    ) -> [FeedTimelineEntry] {
+        for item in items {
+            seedAuthor(from: item, detailCache: detailCache)
+        }
+        var result: [FeedTimelineEntry] = []
+        result.reserveCapacity(items.count)
+        for item in items {
+            switch item.kind {
+            case .trade:
+                guard let tradeID = item.tradeID,
+                      let trade = detailCache.trade(id: tradeID)
+                else { continue }
+                result.append(.trade(item, trade))
+            case .post:
+                guard let postID = item.postID,
+                      let post = detailCache.post(id: postID)
+                else { continue }
+                result.append(.post(item, post))
+            case .reel:
+                guard let reelID = item.reelID,
+                      let reel = detailCache.reel(id: reelID)
+                else { continue }
+                result.append(.clip(item, reel))
+            case .achievement:
+                guard let achievementID = item.achievementID,
+                      let achievement = detailCache.achievement(id: achievementID)
+                else { continue }
+                result.append(.achievement(item, achievement))
+            case .story:
+                continue
+            }
+        }
+        return result
+    }
+
+    static func hydrate(
         _ items: [FeedItem],
         feed: any FeedRepository,
         trades: any TradeRepository,

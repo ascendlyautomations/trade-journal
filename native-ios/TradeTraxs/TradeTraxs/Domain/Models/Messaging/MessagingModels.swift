@@ -20,6 +20,8 @@ nonisolated struct Conversation: Hashable, Codable, Sendable, Identifiable {
     var isPinned: Bool
     var lastMessagePreview: String?
     var lastMessageAt: Date?
+    /// Canonical latest message for preview tie-break and stale-event rejection.
+    var lastMessageID: MessageID? = nil
     var unreadCount: Int
     var isMuted: Bool
     var updatedAt: Date
@@ -41,4 +43,6 @@ nonisolated struct Message: Hashable, Codable, Sendable, Identifiable {
     var replyToMessageID: MessageID?
     var createdAt: Date
     var isReadByViewer: Bool
+    /// Trade Room only — web `room_message_reactions` embed.
+    var roomReactions: [RoomMessageReaction] = []
 }

@@ -2,8 +2,8 @@ import Foundation
 import OSLog
 
 #if DEBUG
-enum AddTradeLoadProbe {
-    private static let log = Logger(subsystem: "com.tradetraxs.TradeTraxs", category: "AddTradeLoad")
+nonisolated enum AddTradeLoadProbe {
+    private static let log = Logger(subsystem: AppLog.subsystem, category: "AddTradeLoad")
 
     struct Snapshot: Sendable {
         var requestCount: Int
@@ -13,9 +13,9 @@ enum AddTradeLoadProbe {
         var deferred: [String]
     }
 
-    private static var startedAt: Date?
-    private static var requests = 0
-    private static var blocking = 0
+    nonisolated(unsafe) private static var startedAt: Date?
+    nonisolated(unsafe) private static var requests = 0
+    nonisolated(unsafe) private static var blocking = 0
 
     static func begin() {
         startedAt = Date()

@@ -581,6 +581,47 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         return strip
     }
 
+    func createStory(userID: ProfileID, imageURL: String) async throws -> Story {
+        struct Body: Encodable {
+            var user_id: String
+            var image_url: String
+        }
+        struct Row: Codable {
+            var id: String?
+            var user_id: String?
+            var image_url: String?
+            var created_at: String?
+        }
+
+        let trimmedURL = imageURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedURL.isEmpty else {
+            throw AppError.unknown(message: "Missing story image")
+        }
+
+        let row: Row = try await supabase.database.insert(
+            Body(user_id: userID.rawValue, image_url: trimmedURL),
+            into: "stories",
+            returning: Row.self
+        )
+
+        guard let id = row.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
+              let author = row.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !author.isEmpty,
+              let media = row.image_url?.trimmingCharacters(in: .whitespacesAndNewlines), !media.isEmpty,
+              let created = ISO8601.date(from: row.created_at)
+        else {
+            throw AppError.unknown(message: "Story couldn't be published. Please try again.")
+        }
+
+        return Story(
+            id: StoryID(id),
+            authorProfileID: ProfileID(author),
+            media: MediaReference(id: media, kind: .image, altText: nil),
+            expiresAt: created.addingTimeInterval(ActiveStorySemantics.window),
+            createdAt: created,
+            viewerHasSeen: false
+        )
+    }
+
     func reel(id: ReelID) async throws -> Reel {
         let row: ProfileReelRow = try await supabase.database.selectOne(
             ProfileReelRow.self,

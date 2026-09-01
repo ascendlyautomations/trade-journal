@@ -33,7 +33,7 @@ struct TradeRoomInboxItem: Identifiable, Hashable, Sendable {
     var isPrivate: Bool { !room.showsOnProfile }
 }
 
-enum MessagesInboxSupport {
+nonisolated enum MessagesInboxSupport {
     static func isLocalDevelopmentProfile(_ id: ProfileID) -> Bool {
         id.rawValue.hasPrefix("dev.")
     }

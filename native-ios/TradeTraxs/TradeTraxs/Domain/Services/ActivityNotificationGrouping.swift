@@ -13,7 +13,6 @@ enum ActivityNotificationGrouping {
         _ notifications: [ActivityNotification],
         actors: [ProfileID: Profile]
     ) -> [GroupedItem] {
-        var result: [GroupedItem] = []
         var likeBuckets: [String: [ActivityNotification]] = [:]
         var commentBuckets: [String: [ActivityNotification]] = [:]
         var likeOrder: [String] = []

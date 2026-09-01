@@ -22,9 +22,16 @@ struct CSVImportPreviewView: View {
                     } else {
                         Picker("Account", selection: accountBinding) {
                             ForEach(viewModel.eligibleAccounts) { account in
-                                Text(TradingAccountDisplay.title(for: account, audience: .owner))
+                                OwnerAccountDropdownPickerLabel(account: account)
                                     .tag(Optional(account.id))
                             }
+                        }
+                        .onAppear {
+                            OwnerAccountDropdownSupport.logBoundary(
+                                .csvImport,
+                                accounts: viewModel.eligibleAccounts,
+                                profileID: viewModel.ownerProfileID
+                            )
                         }
                     }
                     Button("Manage Accounts") {

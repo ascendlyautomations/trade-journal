@@ -19,8 +19,12 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case streaks
     /// AI reports catalog (weekly / monthly / yearly / custom).
     case reports
+    /// Owner-only manual payout ledger.
+    case payouts
     /// Single report detail (generated or notification deep-link).
     case report(ReportID)
+    /// Hierarchical Settings — owned by the Home tab stack that opened Settings.
+    case settings(SettingsRoute)
 }
 
 /// Feed / Social tab push hierarchy.
@@ -32,11 +36,14 @@ enum FeedRoute: Hashable, Codable, Sendable {
     case achievement(AchievementID)
     case profile(ProfileID)
     case explore
+    case suggestedTraders
     case leaderboard
     case rooms
     case room(RoomID)
     case roomMembers(RoomID)
     case roomInfo(RoomID)
+    /// Hierarchical Settings — owned by the Feed tab stack that opened Settings.
+    case settings(SettingsRoute)
 }
 
 /// Messages tab push hierarchy (DMs + Trade Rooms opened from inbox).
@@ -49,6 +56,8 @@ enum MessagesRoute: Hashable, Codable, Sendable {
     case room(RoomID)
     case roomMembers(RoomID)
     case roomInfo(RoomID)
+    /// Hierarchical Settings — owned by the Messages tab stack that opened Settings.
+    case settings(SettingsRoute)
 }
 
 /// Profile (You) tab push hierarchy.

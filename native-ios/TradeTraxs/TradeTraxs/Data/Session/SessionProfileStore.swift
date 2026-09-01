@@ -23,7 +23,8 @@ final class SessionProfileStore {
         ids: [ProfileID],
         detailCache: DetailPresentationCache,
         repository: any ProfileRepository,
-        forceNetwork: Bool = false
+        forceNetwork: Bool = false,
+        acceptCached: ((Profile) -> Bool)? = nil
     ) async throws -> [Profile] {
         let unique = Array(Set(ids)).filter { !$0.rawValue.isEmpty }
         guard !unique.isEmpty else { return [] }
@@ -32,7 +33,11 @@ final class SessionProfileStore {
         var missing: [ProfileID] = []
         for id in unique {
             if !forceNetwork, let cached = detailCache.profile(id: id) {
-                hit.append(cached)
+                if acceptCached?(cached) ?? true {
+                    hit.append(cached)
+                } else {
+                    missing.append(id)
+                }
             } else {
                 missing.append(id)
             }

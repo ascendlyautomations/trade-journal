@@ -124,18 +124,18 @@ nonisolated struct DashboardAccountV1: Codable, Sendable, Equatable {
     var id: String
     var account_number: JSONValue?
     var name: String?
-    var account_size: Double?
+    var account_size: PostgresAccountSizeWire?
     var mode: String?
     var category: String?
-    var is_active: Bool?
-    var can_add_trades: Bool?
+    var is_active: PostgresFlexibleBool?
+    var can_add_trades: PostgresFlexibleBool?
     var note: String?
-    var consistency: Double?
-    var max_drawdown: Double?
-    var daily_drawdown: Double?
-    var profit_target: Double?
-    var winning_days: Double?
-    var winning_day_threshold: Double?
+    var consistency: PostgresFlexibleDouble?
+    var max_drawdown: PostgresFlexibleDouble?
+    var daily_drawdown: PostgresFlexibleDouble?
+    var profit_target: PostgresFlexibleDouble?
+    var winning_days: PostgresFlexibleDouble?
+    var winning_day_threshold: PostgresFlexibleDouble?
     var type: String?
     var currency: String?
 }
@@ -145,13 +145,13 @@ nonisolated struct DashboardBootstrapV1: Codable, Sendable, Equatable {
     var data: DataPayload
 
     nonisolated struct DataPayload: Codable, Sendable, Equatable {
-        var accounts: [DashboardAccountV1]
-        var trade_window: [JSONValue]
+        var accounts: [DashboardAccountWireV1]
+        var trade_window: [DashboardTradeWireV1]
         var trade_window_meta: TradeWindowMeta
-        var metrics: [String: JSONValue]
-        var equity_points: [EquityPoint]
-        var payout_total: Double?
-        var recent_trades: [JSONValue]
+        var metrics: DashboardMetricsWireV1
+        var equity_points: [DashboardEquityPointWireV1]
+        var payout_total: PostgresFlexibleDouble?
+        var recent_trades: [DashboardRecentTradeWireV1]
 
         nonisolated struct TradeWindowMeta: Codable, Sendable, Equatable {
             var limit: Int
@@ -161,15 +161,17 @@ nonisolated struct DashboardBootstrapV1: Codable, Sendable, Equatable {
             var oldest_created_at: String?
             var next_cursor: String?
         }
-
-        nonisolated struct EquityPoint: Codable, Sendable, Equatable {
-            var t: String
-            var v: Double
-        }
     }
 
     func validateContractVersion() throws {
         try BackendV2Versioning.assertContractVersion(meta.contract_version)
+    }
+
+    func validateContract() throws {
+        try validateContractVersion()
+        guard data.trade_window_meta.limit >= 1 else {
+            throw BackendV2RPCError.decode("trade_window_meta.limit invalid")
+        }
     }
 }
 
@@ -217,38 +219,86 @@ nonisolated struct FeedBootstrapV1: Codable, Sendable, Equatable {
 }
 
 nonisolated struct ProfileBootstrapV1: Codable, Sendable, Equatable {
-    var meta: BootstrapMetaV1
+    var meta: ProfileBootstrapMetaV1
     var data: DataPayload
 
+    nonisolated struct ProfileBootstrapMetaV1: Codable, Sendable, Equatable {
+        var contract_version: String
+        var found: Bool?
+        var server_time: String?
+        var viewer_id: String?
+    }
+
+    nonisolated struct ProfileHeaderWire: Codable, Sendable, Equatable {
+        var id: String
+        var username: String?
+        var name: String?
+        var bio: String?
+        var avatar_url: String?
+        var trading_style: String?
+        var trader_type: String?
+        var primary_market: String?
+        var started_trading: String?
+        var is_private: Bool?
+        var created_at: String?
+    }
+
+    nonisolated struct ViewerWire: Codable, Sendable, Equatable {
+        var is_own_profile: Bool
+        var can_view_trades: Bool
+        var is_following: Bool
+        var is_requested: Bool
+        var follows_you: Bool
+    }
+
+    nonisolated struct PublicStatsWire: Codable, Sendable, Equatable {
+        var total_trades: Int?
+        var wins: Int?
+        var total_pnl: PostgresFlexibleDouble?
+        /// Gross winning P&L / abs(gross losing P&L); null when there are no losses.
+        var profit_factor: PostgresFlexibleDouble?
+        /// Mean `rr` across eligible public trades; null when no RR values exist.
+        var average_rr: PostgresFlexibleDouble?
+        /// Sum of viewer-visible payout achievement values — web `sumPayoutAchievementTotals`.
+        var payout_total: PostgresFlexibleDouble?
+    }
+
+    nonisolated struct OwnedRoomWire: Codable, Sendable, Equatable {
+        var id: String
+        var name: String?
+        var slug: String?
+        var show_on_profile: Bool?
+    }
+
+    nonisolated struct TradesPageWire: Codable, Sendable, Equatable {
+        var items: [DashboardTradeWireV1]
+        var page_meta: PageMeta
+
+        nonisolated struct PageMeta: Codable, Sendable, Equatable {
+            var limit: Int
+            var returned: Int
+            var has_more: Bool
+            var next_cursor: String?
+        }
+    }
+
+    nonisolated struct TradeEngagementWire: Codable, Sendable, Equatable {
+        var like_count: Int
+        var liked_by_me: Bool
+        var comment_count: Int
+    }
+
     nonisolated struct DataPayload: Codable, Sendable, Equatable {
-        var profile: ProfileCard
-        var stats: [String: JSONValue]
-        var follow_edge: FollowEdgeV1
-        var owned_room: OwnedRoom?
-        var tab_availability: TabAvailability
-
-        nonisolated struct ProfileCard: Codable, Sendable, Equatable {
-            var id: String
-            var username: String?
-            var display_name: String?
-            var avatar_url: String?
-            var is_verified: Bool?
-            var bio: String?
-            var is_private: Bool
-            var trader_type: String?
-        }
-
-        nonisolated struct OwnedRoom: Codable, Sendable, Equatable {
-            var id: String
-            var name: String?
-        }
-
-        nonisolated struct TabAvailability: Codable, Sendable, Equatable {
-            var trades: Bool
-            var posts: Bool
-            var reels: Bool
-            var achievements: Bool
-        }
+        var profile: ProfileHeaderWire?
+        var viewer: ViewerWire
+        var followers_count: Int
+        var following_count: Int
+        var section_counts: [String: JSONValue]?
+        var public_stats: PublicStatsWire?
+        var owned_room: OwnedRoomWire?
+        var active_tab: String?
+        var trades_page: TradesPageWire?
+        var trade_engagement: [String: TradeEngagementWire]?
     }
 
     func validateContractVersion() throws {
@@ -288,6 +338,9 @@ nonisolated struct MessagingConversationV1: Codable, Sendable, Equatable {
     var is_pinned: Bool
     var name: String?
     var avatar_url: String?
+    var last_message_id: String?
+    var last_message_sender_id: String?
+    var last_message_type: String?
     var last_message: String?
     var last_message_at: String?
     var unread_count: Int
@@ -302,18 +355,57 @@ nonisolated struct MessagingParticipantV1: Codable, Sendable, Equatable {
     var avatar_url: String?
 }
 
-nonisolated struct RoomsBootstrapV1: Codable, Sendable, Equatable {
+nonisolated struct RoomsBootstrapV1: Codable, Sendable {
     var meta: BootstrapMetaV1
     var data: DataPayload
 
-    nonisolated struct DataPayload: Codable, Sendable, Equatable {
-        var room: JSONValue
-        var membership: JSONValue?
-        var messages: [JSONValue]
-        var sections: [JSONValue]?
-        var unread: Int
-        var peers: [String: AuthorCardV1]
-        var next_cursor: String?
+    nonisolated struct RoomSectionWire: Codable, Sendable, Equatable {
+        var id: String
+        var room_id: String
+        var name: String
+        var position: Int
+        var allow_members_chat: Bool
+    }
+
+    nonisolated struct RoomShellWire: Codable, Sendable, Equatable {
+        var id: String
+        var name: String?
+        var description: String?
+        var slug: String?
+        var image_url: String?
+        var owner_user_id: String?
+        var show_on_profile: Bool?
+        var created_at: String?
+    }
+
+    nonisolated struct MembershipWire: Codable, Sendable, Equatable {
+        var notification_enabled: Bool
+        var is_owner: Bool
+    }
+
+    nonisolated struct MemberStatsWire: Codable, Sendable, Equatable {
+        var total_members: Int
+        var active_members: Int
+        var left_members: Int
+    }
+
+    nonisolated struct MarkReadWire: Codable, Sendable, Equatable {
+        var applied: Bool
+    }
+
+    nonisolated struct DataPayload: Codable, Sendable {
+        var room: RoomShellWire
+        var membership: MembershipWire
+        var sections: [RoomSectionWire]
+        var active_section_id: String?
+        var channel_preferences: [String: Bool]?
+        var member_stats: MemberStatsWire?
+        var unread_count: Int
+        var mark_read: MarkReadWire
+        var pinned_messages: [RoomDTO.Message]
+        var messages: [RoomDTO.Message]
+        var has_more_messages: Bool
+        var next_message_cursor: String?
     }
 
     func validateContractVersion() throws {
@@ -321,14 +413,164 @@ nonisolated struct RoomsBootstrapV1: Codable, Sendable, Equatable {
     }
 }
 
+nonisolated struct PropFirmAccountWireV1: Codable, Sendable, Equatable {
+    var id: String
+    var name: String?
+    var account_size: PostgresAccountSizeWire?
+    var account_number: PostgresAccountSizeWire?
+    var mode: String?
+    var consistency: PostgresFlexibleDouble?
+    var max_drawdown: PostgresFlexibleDouble?
+    var daily_drawdown: PostgresFlexibleDouble?
+    var profit_target: PostgresFlexibleDouble?
+    var winning_days: PostgresFlexibleDouble?
+    var winning_day_threshold: PostgresFlexibleDouble?
+    var payout_drawdown_behavior: String?
+    var remember_payout_drawdown_behavior: PostgresFlexibleBool?
+
+    func asAccountDTO(ownerID: String) -> TradeDTO.Account {
+        TradeDTO.Account(
+            id: id,
+            user_id: ownerID,
+            name: name,
+            account_name: nil,
+            account_type: "Prop Firm",
+            category: "Prop Firm",
+            mode: mode,
+            account_size: account_size.map { FlexibleNumber($0.decimal) },
+            size: nil,
+            account_number: account_number?.raw,
+            note: nil,
+            is_active: true,
+            can_add_trades: true,
+            show_in_account_dropdowns: nil,
+            custom_public_status: nil,
+            consistency: consistency.map { FlexibleNumber($0.decimal) },
+            max_drawdown: max_drawdown.map { FlexibleNumber($0.decimal) },
+            daily_drawdown: daily_drawdown.map { FlexibleNumber($0.decimal) },
+            profit_target: profit_target.map { FlexibleNumber($0.decimal) },
+            winning_days: winning_days.map { FlexibleNumber($0.decimal) },
+            winning_day_threshold: winning_day_threshold.map { FlexibleNumber($0.decimal) },
+            payout_drawdown_behavior: payout_drawdown_behavior
+        )
+    }
+}
+
+nonisolated struct PropFirmTradeWireV1: Codable, Sendable, Equatable {
+    var id: String
+    var account_id: String?
+    var pnl: PostgresFlexibleDouble?
+    var date: String?
+    var trade_date: String?
+    var entry_time: String?
+    var exit_time: String?
+    var created_at: String?
+
+    func asTradeDTO(ownerID: String) -> TradeDTO.Trade {
+        TradeDTO.Trade(
+            id: id,
+            user_id: ownerID,
+            account_id: account_id,
+            ticker: nil,
+            direction: nil,
+            mode: nil,
+            account_type: nil,
+            contracts: nil,
+            entry_price: nil,
+            exit_price: nil,
+            entry_time: entry_time,
+            exit_time: exit_time,
+            pnl: pnl.map { FlexibleNumber($0.decimal) },
+            rr: nil,
+            points: nil,
+            session: nil,
+            is_public: nil,
+            is_pinned: nil,
+            public_description: nil,
+            image_url: nil,
+            notes: nil,
+            created_at: created_at,
+            date: date,
+            trade_date: trade_date,
+            account_name: nil,
+            strategy: nil
+        )
+    }
+}
+
+nonisolated struct PropFirmBootstrapV1: Codable, Sendable {
+    var meta: BootstrapMetaV1
+    var data: DataPayload
+
+    nonisolated struct DataPayload: Codable, Sendable {
+        var accounts: [PropFirmAccountWireV1]
+        var payout_cycles: [JSONValue]
+        var achievements: [JSONValue]
+        var trades: [PropFirmTradeWireV1]
+    }
+
+    func validateContractVersion() throws {
+        try BackendV2Versioning.assertContractVersion(meta.contract_version)
+    }
+}
+
+nonisolated struct ActivityNotificationWireV1: Codable, Sendable, Equatable {
+    var id: String?
+    var user_id: String?
+    var sender_id: String?
+    var type: String?
+    var post_id: String?
+    var trade_id: String?
+    var profile_post_id: String?
+    var achievement_post_id: String?
+    var reel_id: String?
+    var comment_id: String?
+    var room_id: String?
+    var room_message_id: String?
+    var content: String?
+    var read: Bool?
+    var created_at: String?
+
+    func asNotificationDTO() -> NotificationDTO.Item {
+        NotificationDTO.Item(
+            id: id,
+            type: type,
+            kind: nil,
+            user_id: user_id,
+            sender_id: sender_id,
+            actor_profile_id: nil,
+            title: nil,
+            content: content,
+            body: nil,
+            created_at: created_at,
+            read: read,
+            is_read: nil,
+            trade_id: trade_id,
+            post_id: post_id,
+            profile_post_id: profile_post_id,
+            achievement_post_id: achievement_post_id,
+            reel_id: reel_id,
+            comment_id: comment_id,
+            room_id: room_id,
+            room_message_id: room_message_id
+        )
+    }
+}
+
+nonisolated struct ActivityFollowRequestWireV1: Codable, Sendable, Equatable {
+    var id: String
+    var requester_id: String
+    var created_at: String?
+}
+
 nonisolated struct ActivityBootstrapV1: Codable, Sendable, Equatable {
     var meta: BootstrapMetaV1
     var data: DataPayload
 
     nonisolated struct DataPayload: Codable, Sendable, Equatable {
-        var notifications: [JSONValue]
+        var notifications: [ActivityNotificationWireV1]
         var actors: [String: AuthorCardV1]
-        var follow_requests: [JSONValue]
+        var follow_requests: [ActivityFollowRequestWireV1]
         var unread_total: Int
         var next_cursor: String?
     }
@@ -338,21 +580,50 @@ nonisolated struct ActivityBootstrapV1: Codable, Sendable, Equatable {
     }
 }
 
+nonisolated struct ExploreTraderWireV1: Codable, Sendable, Equatable {
+    var id: String
+    var username: String?
+    var name: String?
+    var bio: String?
+    var avatar_url: String?
+    var trader_type: String?
+    var trading_style: String?
+    var primary_market: String?
+    var started_trading: String?
+    var is_private: Bool?
+    var created_at: String?
+}
+
+nonisolated struct ExploreRoomWireV1: Codable, Sendable, Equatable {
+    var id: String
+    var name: String?
+    var description: String?
+    var slug: String?
+    var member_count: PostgresFlexibleInt?
+    var image_url: String?
+}
+
+nonisolated struct ExploreActivityMetaWireV1: Codable, Sendable, Equatable {
+    var trade_count: Int?
+    var last_trade_at: String?
+}
+
 nonisolated struct ExploreBootstrapV1: Codable, Sendable, Equatable {
     var meta: BootstrapMetaV1
     var data: DataPayload
 
+    nonisolated struct SocialCount: Codable, Sendable, Equatable {
+        var followers: Int
+        var following: Int
+    }
+
     nonisolated struct DataPayload: Codable, Sendable, Equatable {
-        var traders: [JSONValue]
-        var rooms: [JSONValue]
+        var traders: [ExploreTraderWireV1]
+        var rooms: [ExploreRoomWireV1]
         var social_counts: [String: SocialCount]
         var following_ids: [String]
-        var activity_meta: [String: JSONValue]
-
-        nonisolated struct SocialCount: Codable, Sendable, Equatable {
-            var followers: Int
-            var following: Int
-        }
+        var activity_meta: [String: ExploreActivityMetaWireV1]
+        var traders_next_cursor: String?
     }
 
     func validateContractVersion() throws {
@@ -383,10 +654,35 @@ nonisolated struct CalendarBootstrapV1: Codable, Sendable, Equatable {
     nonisolated struct DataPayload: Codable, Sendable, Equatable {
         var year: Int
         var month: Int
-        var accounts: [AccountSummaryV1]
-        var day_buckets: [JSONValue]
-        var trades_by_day: [String: [JSONValue]]
-        var metrics_month: [String: JSONValue]
+        var accounts: [DashboardAccountWireV1]
+        var trades: [DashboardTradeWireV1]
+        var metrics_month: CalendarMetricsWireV1?
+    }
+
+    nonisolated struct CalendarMetricsWireV1: Codable, Sendable, Equatable {
+        var net_pnl: PostgresFlexibleDouble?
+    }
+
+    func validateContractVersion() throws {
+        try BackendV2Versioning.assertContractVersion(meta.contract_version)
+    }
+}
+
+nonisolated struct TradesListBootstrapV1: Codable, Sendable, Equatable {
+    var meta: BootstrapMetaV1
+    var data: DataPayload
+
+    nonisolated struct PageMeta: Codable, Sendable, Equatable {
+        var limit: Int
+        var returned: Int
+        var has_more: Bool
+    }
+
+    nonisolated struct DataPayload: Codable, Sendable, Equatable {
+        var accounts: [DashboardAccountWireV1]
+        var trades: [DashboardTradeWireV1]
+        var next_cursor: String?
+        var page_meta: PageMeta
     }
 
     func validateContractVersion() throws {

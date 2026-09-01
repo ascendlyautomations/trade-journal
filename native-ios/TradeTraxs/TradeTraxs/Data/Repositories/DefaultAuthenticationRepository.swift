@@ -9,17 +9,17 @@ struct DefaultAuthenticationRepository: AuthenticationRepository, @unchecked Sen
     }
 
     func currentSessionUserID() async throws -> UserID? {
-        manager.state.session?.userID
+        await MainActor.run { manager.state.session?.userID }
     }
 
     func signIn(email: String, password: String) async throws -> User {
         try await manager.signIn(email: email, password: password)
-        return try makeUser()
+        return try await makeUser()
     }
 
     func signUp(email: String, password: String) async throws -> User {
         try await manager.signUp(email: email, password: password)
-        return try makeUser()
+        return try await makeUser()
     }
 
     func signOut() async throws {
@@ -30,14 +30,16 @@ struct DefaultAuthenticationRepository: AuthenticationRepository, @unchecked Sen
         try await manager.requestPasswordReset(email: email)
     }
 
-    private func makeUser() throws -> User {
-        guard let session = manager.state.session else {
-            throw AuthenticationError.sessionMissing
+    private func makeUser() async throws -> User {
+        try await MainActor.run {
+            guard let session = manager.state.session else {
+                throw AuthenticationError.sessionMissing
+            }
+            return User(
+                id: session.userID,
+                email: session.email,
+                createdAt: session.createdAt
+            )
         }
-        return User(
-            id: session.userID,
-            email: session.email,
-            createdAt: session.createdAt
-        )
     }
 }

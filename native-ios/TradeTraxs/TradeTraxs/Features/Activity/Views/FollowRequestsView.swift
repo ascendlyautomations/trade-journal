@@ -15,7 +15,8 @@ struct FollowRequestsView: View {
                 followRequests: data.followRequests,
                 notifications: data.notifications,
                 detailCache: data.detailCache,
-                navigationCoordinator: navigationCoordinator
+                navigationCoordinator: navigationCoordinator,
+                inboxStore: .shared
             )
         )
         self.imagePipeline = data.imagePipeline

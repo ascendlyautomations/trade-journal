@@ -176,7 +176,11 @@ struct ClipDetailView: View {
                 }
             }
 
-            CommentsSectionView(target: .reel(reel.id), data: data)
+            CommentsSectionView(
+                target: .reel(reel.id),
+                contentOwnerUserID: reel.authorProfileID.rawValue,
+                data: data
+            )
                 .id(Self.commentsAnchorID)
         }
     }

@@ -4,6 +4,7 @@ import UIKit
 /// Compact suggested-trader card for the horizontal discovery rail.
 struct ExploreTraderCard: View {
     let trader: ExploreTraderSuggestion
+    let profile: Profile
     let imagePipeline: any ImagePipeline
     let isFollowing: Bool
     let onOpen: () -> Void
@@ -15,13 +16,13 @@ struct ExploreTraderCard: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             Button(action: onOpen) {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    FollowListAvatarView(profile: trader.profile, imagePipeline: imagePipeline, size: 52)
+                    FollowListAvatarView(profile: profile, imagePipeline: imagePipeline, size: 52)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(trader.profile.displayName)
+                        Text(profile.displayName)
                             .experienceStyle(.subheadline, color: colors.primaryText)
                             .fontWeight(.semibold)
                             .lineLimit(1)
-                        Text("@\(trader.profile.username)")
+                        Text("@\(profile.username)")
                             .experienceStyle(.caption, color: colors.secondaryText)
                             .lineLimit(1)
                         if let identity = trader.identityLine {
@@ -90,6 +91,7 @@ struct ExploreTraderCard: View {
         } preview: {
             ExploreTraderCard(
                 trader: trader,
+                profile: profile,
                 imagePipeline: imagePipeline,
                 isFollowing: isFollowing,
                 onOpen: {},

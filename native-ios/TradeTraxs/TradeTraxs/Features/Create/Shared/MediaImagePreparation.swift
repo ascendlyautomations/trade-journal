@@ -17,4 +17,9 @@ enum MediaImagePreparation {
         }
         return rendered.jpegData(compressionQuality: quality)
     }
+
+    /// Web `prepareStoryImageFile` — default compress preset (max width 1200).
+    static func storyJPEGData(from image: UIImage) -> Data? {
+        jpegData(from: image, maxDimension: 1200, quality: 0.92)
+    }
 }

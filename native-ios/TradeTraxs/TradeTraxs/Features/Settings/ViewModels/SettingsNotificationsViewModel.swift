@@ -91,12 +91,6 @@ final class SettingsNotificationsViewModel {
         await pushNotifications?.refreshAuthorizationStatus()
     }
 
-    func openCategory(_ category: NotificationPreferenceCategory) {
-        guard let route = category.settingsRoute else { return }
-        ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.profile(.settings(route)))
-    }
-
     func binding(for key: NotificationPreferenceKey) -> Bool {
         preferences?.values[key] ?? true
     }

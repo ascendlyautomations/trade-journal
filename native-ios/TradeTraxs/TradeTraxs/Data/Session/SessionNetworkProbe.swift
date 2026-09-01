@@ -3,7 +3,7 @@ import OSLog
 
 #if DEBUG
 /// DEBUG-only cache / network instrumentation for session data policy verification.
-enum SessionNetworkProbe {
+nonisolated enum SessionNetworkProbe {
     enum Event: String, Sendable {
         case cacheHit = "CACHE HIT"
         case cacheMiss = "CACHE MISS"
@@ -15,8 +15,9 @@ enum SessionNetworkProbe {
         case localMutation = "LOCAL MUTATION"
     }
 
-    private static var events: [(event: Event, resource: String, detail: String)] = []
-    private static var networkCounts: [String: Int] = [:]
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var events: [(event: Event, resource: String, detail: String)] = []
+    nonisolated(unsafe) private static var networkCounts: [String: Int] = [:]
 
     static func record(
         _ event: Event,
@@ -57,7 +58,7 @@ enum SessionNetworkProbe {
     }
 }
 #else
-enum SessionNetworkProbe {
+nonisolated enum SessionNetworkProbe {
     enum Event: String, Sendable {
         case cacheHit, cacheMiss, cacheStale, cacheInvalidated
         case networkFetch, realtimeUpdate, requestCoalesced, localMutation

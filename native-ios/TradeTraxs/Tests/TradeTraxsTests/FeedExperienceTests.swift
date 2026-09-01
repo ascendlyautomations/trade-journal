@@ -456,6 +456,16 @@ private struct FeedWebShapedStubFeedRepository: FeedRepository {
     func addComment(_ comment: Comment) async throws -> Comment { comment }
     func setReaction(on item: FeedItem, kind: ReactionKind, isActive: Bool) async throws {}
     func stories(for viewer: ProfileID) async throws -> [Story] { [] }
+    func createStory(userID: ProfileID, imageURL: String) async throws -> Story {
+        Story(
+            id: StoryID("stub-story"),
+            authorProfileID: userID,
+            media: MediaReference(id: imageURL, kind: .image, altText: nil),
+            expiresAt: Date().addingTimeInterval(ActiveStorySemantics.window),
+            createdAt: Date(),
+            viewerHasSeen: false
+        )
+    }
     func reel(id: ReelID) async throws -> Reel {
         ProfileClipFixtures.samples(owner: FeedFixtures.viewerID)[0]
     }
@@ -490,6 +500,16 @@ private struct FeedStubFeedRepository: FeedRepository {
     func addComment(_ comment: Comment) async throws -> Comment { comment }
     func setReaction(on item: FeedItem, kind: ReactionKind, isActive: Bool) async throws {}
     func stories(for viewer: ProfileID) async throws -> [Story] { [] }
+    func createStory(userID: ProfileID, imageURL: String) async throws -> Story {
+        Story(
+            id: StoryID("stub-story"),
+            authorProfileID: userID,
+            media: MediaReference(id: imageURL, kind: .image, altText: nil),
+            expiresAt: Date().addingTimeInterval(ActiveStorySemantics.window),
+            createdAt: Date(),
+            viewerHasSeen: false
+        )
+    }
     func reel(id: ReelID) async throws -> Reel {
         ProfileClipFixtures.samples(owner: FeedFixtures.viewerID)[0]
     }
@@ -688,4 +708,23 @@ private struct FeedStubInteractionRepository: InteractionRepository {
     }
 
     func deleteComment(id: CommentID, on target: InteractionTarget) async throws {}
+
+    func commentLikeMeta(
+        for commentIDs: [CommentID],
+        source: CommentLikeSource
+    ) async throws -> [CommentID: CommentLikeSnapshot] {
+        Dictionary(uniqueKeysWithValues: commentIDs.map { ($0, .empty) })
+    }
+
+    func setCommentLiked(
+        _ liked: Bool,
+        commentID: CommentID,
+        source: CommentLikeSource
+    ) async throws {}
+
+    func setCommentPinned(
+        _ pinned: Bool,
+        commentID: CommentID,
+        on target: InteractionTarget
+    ) async throws {}
 }

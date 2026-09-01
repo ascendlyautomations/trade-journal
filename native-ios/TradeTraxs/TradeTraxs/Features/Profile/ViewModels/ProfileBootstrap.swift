@@ -16,6 +16,8 @@ enum ProfileBootstrap: ScreenBootstrap {
         var rooms: any RoomRepository
         var session: any SessionProviding
         var detailCache: DetailPresentationCache
+        var engagementStore: EngagementStore?
+        var rpc: (any RPCClient)?
         var force: Bool
     }
 
@@ -42,10 +44,35 @@ enum ProfileBootstrap: ScreenBootstrap {
         }
 
         state.profileID = profileID
-        state.isOwner = viewerID == profileID
+        let isOwner = viewerID == profileID
+        state.isOwner = isOwner
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
-            return developmentState(profileID: profileID, isOwner: state.isOwner, viewerID: viewerID)
+            return developmentState(profileID: profileID, isOwner: isOwner, viewerID: viewerID)
+        }
+
+        if let rpc = context.rpc {
+            do {
+                return try await ProfileBootstrapLoader.load(
+                    profileID: profileID,
+                    username: nil,
+                    rpc: rpc,
+                    detailCache: context.detailCache,
+                    engagementStore: context.engagementStore,
+                    forceNetwork: context.force
+                )
+            } catch ProfileBootstrapLoader.LoaderError.flagOff,
+                    ProfileBootstrapLoader.LoaderError.rpcUnavailable {
+                // Fall through to REST bootstrap.
+            } catch ProfileBootstrapLoader.LoaderError.profileNotFound {
+                state.phase = .failed
+                state.errorMessage = UserFacingError.map(
+                    AppError.domain(.notFound(entity: "profile", id: profileID.rawValue))
+                ).message
+                return state
+            } catch {
+                // Decode / transport errors — REST fallback preserves first paint.
+            }
         }
 
         do {
@@ -55,7 +82,7 @@ enum ProfileBootstrap: ScreenBootstrap {
             async let roomTask = loadOwnedRoom(profileID, context: context)
             async let followTask = loadFollowState(
                 profileID: profileID,
-                isOwner: state.isOwner,
+                isOwner: isOwner,
                 viewerID: viewerID,
                 context: context
             )
@@ -63,7 +90,7 @@ enum ProfileBootstrap: ScreenBootstrap {
             let loadedProfile = try await profileTask
             let loadedStats = try await statsTask
             let room = await roomTask
-            let isFollowing = await followTask
+            let follow = await followTask
 
             guard !Task.isCancelled else { return state }
 
@@ -75,7 +102,9 @@ enum ProfileBootstrap: ScreenBootstrap {
             state.stats = loadedStats
             state.ownedTradeRoom = room
             state.didResolveTradeRoom = true
-            state.isFollowing = isFollowing
+            state.isFollowing = follow.isFollowing
+            state.isRequested = follow.isRequested
+            state.canViewTrades = isOwner || !loadedProfile.isPrivate || follow.isFollowing
             // Section lists intentionally deferred — flags stay false until tab load.
             state.didLoadTrades = false
             state.didLoadPosts = false
@@ -112,7 +141,10 @@ enum ProfileBootstrap: ScreenBootstrap {
         _ profileID: ProfileID,
         context: Context
     ) async throws -> ProfileStats {
-        if !context.force, let cached = context.detailCache.stats(for: profileID) {
+        if !context.force,
+           let cached = context.detailCache.stats(for: profileID),
+           cached.hasLoadedHeaderMetrics
+        {
             return cached
         }
         return try await context.profiles.stats(for: profileID)
@@ -138,19 +170,26 @@ enum ProfileBootstrap: ScreenBootstrap {
         isOwner: Bool,
         viewerID: ProfileID?,
         context: Context
-    ) async -> Bool {
-        guard !isOwner, let viewerID else { return false }
+    ) async -> (isFollowing: Bool, isRequested: Bool) {
+        guard !isOwner, let viewerID else { return (false, false) }
         // Prefer per-edge cache — never treat a partial following-ID set as complete.
         if let edge = context.detailCache.viewerFollowEdge(for: profileID) {
-            return edge
+            return (edge, false)
         }
         do {
             let follow = try await context.profiles.followState(from: viewerID, to: profileID)
-            let isFollowing = follow == .following
-            context.detailCache.setViewerFollows(profileID, isFollowing: isFollowing)
-            return isFollowing
+            switch follow {
+            case .following:
+                context.detailCache.setViewerFollows(profileID, isFollowing: true)
+                return (true, false)
+            case .requested:
+                return (false, true)
+            case .none:
+                context.detailCache.setViewerFollows(profileID, isFollowing: false)
+                return (false, false)
+            }
         } catch {
-            return false
+            return (false, false)
         }
     }
 
@@ -200,7 +239,7 @@ enum ProfileBootstrap: ScreenBootstrap {
         state.isOwner = isOwner
         state.trades = ProfileTradeFixtures.samples(owner: profileID)
         state.accountNames = ProfileTradeFixtures.accountNames()
-        state.accountNumbers = isOwner ? ProfileTradeFixtures.accountNumbers() : [:]
+        state.accountNumbers = [:]
         state.accountModes = ProfileTradeFixtures.accountModes()
         state.accountSizes = ProfileTradeFixtures.accountSizes()
         state.posts = ProfilePostFixtures.samples(owner: profileID)

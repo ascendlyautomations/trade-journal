@@ -40,8 +40,9 @@ final class ManageAccountsExperienceTests: XCTestCase {
 
         viewModel.openManageAccounts()
 
-        XCTAssertEqual(store.selectedTab, .profile)
-        XCTAssertEqual(settingsRoutes(in: store), [.home, .tradingAccounts])
+        XCTAssertEqual(store.selectedTab, .home)
+        XCTAssertEqual(homeSettingsRoutes(in: store), [.tradingAccounts])
+        XCTAssertTrue(store.paths.profile.isEmpty)
         XCTAssertEqual(viewModel.accountFilter, .account(accountID))
     }
 
@@ -62,8 +63,9 @@ final class ManageAccountsExperienceTests: XCTestCase {
         viewModel.setAccountFilter(.account(accountID))
         viewModel.openManageAccounts()
 
-        XCTAssertEqual(store.selectedTab, .profile)
-        XCTAssertEqual(settingsRoutes(in: store), [.home, .tradingAccounts])
+        XCTAssertEqual(store.selectedTab, .home)
+        XCTAssertEqual(homeSettingsRoutes(in: store), [.tradingAccounts])
+        XCTAssertTrue(store.paths.profile.isEmpty)
         XCTAssertEqual(viewModel.accountFilter, .account(accountID))
     }
 
@@ -179,8 +181,8 @@ final class ManageAccountsExperienceTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func settingsRoutes(in store: NavigationStore) -> [SettingsRoute] {
-        store.paths.profile.compactMap { route in
+    private func homeSettingsRoutes(in store: NavigationStore) -> [SettingsRoute] {
+        store.paths.home.compactMap { route in
             if case .settings(let settings) = route { return settings }
             return nil
         }

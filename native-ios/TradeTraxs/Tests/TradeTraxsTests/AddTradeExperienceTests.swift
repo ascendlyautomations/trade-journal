@@ -400,6 +400,7 @@ final class AddTradeExperienceTests: XCTestCase {
         XCTAssertEqual(AddTradeViewModel.formatRiskReward(2), "1 : 2")
         XCTAssertEqual(AddTradeViewModel.parseOptionalRiskReward(""), nil)
         XCTAssertEqual(AddTradeViewModel.parseOptionalRiskReward("2.35"), Decimal(string: "2.35"))
+        XCTAssertEqual(AddTradeViewModel.parseOptionalRiskReward("1 : 2.35"), Decimal(string: "2.35"))
         XCTAssertNil(AddTradeViewModel.parseOptionalRiskReward("abc"))
         XCTAssertEqual(AddTradeViewModel.normalizeSymbol("  es "), "ES")
     }
@@ -466,6 +467,16 @@ private final class AddTradeStubFeedRepository: FeedRepository, @unchecked Senda
     func addComment(_ comment: Comment) async throws -> Comment { comment }
     func setReaction(on item: FeedItem, kind: ReactionKind, isActive: Bool) async throws {}
     func stories(for viewer: ProfileID) async throws -> [Story] { [] }
+    func createStory(userID: ProfileID, imageURL: String) async throws -> Story {
+        Story(
+            id: StoryID("stub-story"),
+            authorProfileID: userID,
+            media: MediaReference(id: imageURL, kind: .image, altText: nil),
+            expiresAt: Date().addingTimeInterval(ActiveStorySemantics.window),
+            createdAt: Date(),
+            viewerHasSeen: false
+        )
+    }
     func reel(id: ReelID) async throws -> Reel { throw AppError.unknown(message: "stub") }
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
         CursorPage(items: AddTradeFixtures.unattachedReels(owner: profileID), nextCursor: nil)

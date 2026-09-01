@@ -31,7 +31,7 @@ struct FollowListView: View {
     var body: some View {
         Group {
             switch viewModel.phase {
-            case .idle, .loading where viewModel.items.isEmpty:
+            case .idle where viewModel.items.isEmpty, .loading where viewModel.items.isEmpty:
                 skeleton
             case .failed(let message) where viewModel.items.isEmpty:
                 ExperienceErrorState(

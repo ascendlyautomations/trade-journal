@@ -162,13 +162,12 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             image_url: imageURL,
             parent_message_id: message.replyToMessageID?.rawValue
         )
-        let payloadJSON = String(data: (try? JSONEncoder().encode(body)) ?? Data(), encoding: .utf8) ?? "{}"
         AppLog.networking.info(
             """
             messages.send begin \
-            conversation=\(message.conversationID.rawValue, privacy: .public) \
-            sender=\(message.senderProfileID.rawValue, privacy: .public) \
-            payload=\(payloadJSON, privacy: .public)
+            convo=\(SafeInboxLog.hash(message.conversationID.rawValue), privacy: .public) \
+            bodyChars=\((message.body ?? "").count, privacy: .public) \
+            hasImage=\(imageURL != nil, privacy: .public)
             """
         )
         do {
@@ -183,7 +182,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
                 throw AppError.unknown(message: "Message insert returned no id")
             }
             AppLog.networking.info(
-                "messages.send ok id=\(id, privacy: .public) created_at=\(inserted.created_at ?? "nil", privacy: .public)"
+                "messages.send ok message=\(SafeInboxLog.hash(id), privacy: .public) status=201"
             )
             // Web: `void createDirectMessagePush(supabase, insertedMessage.id)` — push must not
             // gate message persistence. Failures are logged inside the client.
@@ -204,9 +203,8 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             AppLog.networking.error(
                 """
                 messages.send failed \
-                conversation=\(message.conversationID.rawValue, privacy: .public) \
-                sender=\(message.senderProfileID.rawValue, privacy: .public) \
-                payload=\(payloadJSON, privacy: .public) \
+                convo=\(SafeInboxLog.hash(message.conversationID.rawValue), privacy: .public) \
+                bodyChars=\((message.body ?? "").count, privacy: .public) \
                 error=\(String(describing: error), privacy: .public)
                 """
             )
@@ -215,10 +213,9 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
     }
 
     func markRead(conversationID: ConversationID) async throws {
-        struct Params: Encodable {
-            var p_conversation_id: String
-        }
-        let data = try JSONEncoder().encode(Params(p_conversation_id: conversationID.rawValue))
+        let data = try JSONEncoder().encode(
+            MessageRPCParams.ConversationID(p_conversation_id: conversationID.rawValue)
+        )
         _ = try await supabase.database.rpcData(
             functionName: "mark_conversation_read",
             parametersJSON: data
@@ -226,10 +223,9 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
     }
 
     func markUnread(conversationID: ConversationID) async throws {
-        struct Params: Encodable {
-            var p_conversation_id: String
-        }
-        let data = try JSONEncoder().encode(Params(p_conversation_id: conversationID.rawValue))
+        let data = try JSONEncoder().encode(
+            MessageRPCParams.ConversationID(p_conversation_id: conversationID.rawValue)
+        )
         _ = try await supabase.database.rpcData(
             functionName: "mark_conversation_unread",
             parametersJSON: data
@@ -240,17 +236,66 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
-        let me = userID.rawValue
-        let others = participantIDs.map(\.rawValue).filter { $0 != me }
-        guard let other = others.first, others.count == 1 else {
+        let viewerID = ProfileID(userID.rawValue)
+        let others = participantIDs.filter { $0 != viewerID }
+        guard others.count == 1, let recipientID = others.first else {
             throw AppError.unknown(message: "Direct messages require exactly one other participant")
         }
+        let recipient = Profile(
+            id: recipientID,
+            userID: UserID(recipientID.rawValue),
+            username: "user",
+            displayName: "User",
+            bio: nil,
+            avatar: nil,
+            traderType: nil,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        )
+        return try await createDirectConversation(viewerID: viewerID, recipient: recipient)
+    }
+
+    func findExistingDirectConversationID(
+        viewerID: ProfileID,
+        recipientID: ProfileID
+    ) async throws -> ConversationID? {
+        #if DEBUG
+        ConversationCreationTelemetry.recordRequest()
+        #endif
+        let me = viewerID.rawValue
+        let them = recipientID.rawValue
+        guard let raw = try await findExistingDMConversationID(me: me, them: them) else {
+            return nil
+        }
+        return ConversationID(raw)
+    }
+
+    func usersHaveActiveBlock(viewerID: ProfileID, otherID: ProfileID) async -> Bool {
+        #if DEBUG
+        ConversationCreationTelemetry.recordRequest()
+        #endif
+        return await usersHaveActiveBlock(me: viewerID.rawValue, them: otherID.rawValue)
+    }
+
+    func createDirectConversation(viewerID: ProfileID, recipient: Profile) async throws -> Conversation {
+        guard await session.currentUserID != nil else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let me = viewerID.rawValue
+        let other = recipient.id.rawValue
 
         if let existingID = try await findExistingDMConversationID(me: me, them: other) {
-            return try await conversation(id: ConversationID(existingID))
+            return ConversationCreationSupport.buildDirectConversation(
+                id: ConversationID(existingID),
+                viewerID: viewerID,
+                recipient: recipient
+            )
         }
 
-        // Web `users_have_active_block` — fail closed on true.
         if await usersHaveActiveBlock(me: me, them: other) {
             throw AppError.unknown(
                 message: "Direct messaging is unavailable while a user block is active."
@@ -258,19 +303,16 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         }
 
         let conversationID = UUID().uuidString.lowercased()
-        struct ConversationShell: Encodable {
-            var id: String
-            var is_group: Bool
-        }
+        #if DEBUG
+        ConversationCreationTelemetry.recordRequest()
+        #endif
         try await supabase.database.insert(
             ConversationShell(id: conversationID, is_group: false),
             into: "conversations"
         )
-
-        struct ParticipantInsert: Encodable {
-            var conversation_id: String
-            var user_id: String
-        }
+        #if DEBUG
+        ConversationCreationTelemetry.recordRequest()
+        #endif
         try await supabase.database.insert(
             [
                 ParticipantInsert(conversation_id: conversationID, user_id: me),
@@ -279,7 +321,61 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             into: "conversation_participants"
         )
 
-        return try await conversation(id: ConversationID(conversationID))
+        return ConversationCreationSupport.buildDirectConversation(
+            id: ConversationID(conversationID),
+            viewerID: viewerID,
+            recipient: recipient
+        )
+    }
+
+    func createGroupConversation(
+        viewerID: ProfileID,
+        recipients: [Profile],
+        name: String?
+    ) async throws -> Conversation {
+        guard await session.currentUserID != nil else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let me = viewerID.rawValue
+        let uniqueRecipients = recipients.filter { $0.id != viewerID }
+        guard uniqueRecipients.count >= 2 else {
+            throw AppError.unknown(message: "Group chats require at least two other participants")
+        }
+
+        let conversationID = UUID().uuidString.lowercased()
+        let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = (trimmedName?.isEmpty == false)
+            ? trimmedName!
+            : ConversationCreationSupport.fallbackGroupTitle(recipients: uniqueRecipients)
+
+        #if DEBUG
+        ConversationCreationTelemetry.recordRequest()
+        #endif
+        try await supabase.database.insert(
+            GroupConversationShell(id: conversationID, is_group: true, name: resolvedName),
+            into: "conversations"
+        )
+
+        var rows = uniqueRecipients.map {
+            ParticipantInsert(conversation_id: conversationID, user_id: $0.id.rawValue)
+        }
+        rows.append(ParticipantInsert(conversation_id: conversationID, user_id: me))
+
+        #if DEBUG
+        ConversationCreationTelemetry.recordRequest()
+        #endif
+        do {
+            try await supabase.database.insert(rows, into: "conversation_participants")
+        } catch {
+            throw AppError.unknown(message: "Could not add all group members. Please try again.")
+        }
+
+        return ConversationCreationSupport.buildGroupConversation(
+            id: ConversationID(conversationID),
+            viewerID: viewerID,
+            recipients: uniqueRecipients,
+            name: resolvedName
+        )
     }
 
     func deleteConversation(id: ConversationID) async throws {
@@ -314,13 +410,12 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
 
     private func fetchUnreadCounts(conversationIDs: [String]) async -> [String: Int] {
         guard !conversationIDs.isEmpty else { return [:] }
-        struct Params: Encodable {
-            var p_conversation_ids: [String]
-        }
         do {
             let data = try await supabase.database.rpcData(
                 functionName: "get_conversation_unread_counts",
-                parametersJSON: try JSONEncoder().encode(Params(p_conversation_ids: conversationIDs))
+                parametersJSON: try JSONEncoder().encode(
+                    MessageRPCParams.ConversationIDs(p_conversation_ids: conversationIDs)
+                )
             )
             let rows = try JSONDecoder().decode([MessageDTO.UnreadCountRow].self, from: data)
             var map: [String: Int] = [:]
@@ -366,6 +461,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         let ids = Array(Set(mine.compactMap(\.conversation_id).filter { !$0.isEmpty }))
         guard !ids.isEmpty else { return nil }
 
+        var matches: [String] = []
         for chunk in ids.chunked(into: 80) {
             let meta: [MessageDTO.Conversation] = try await supabase.database.select(
                 MessageDTO.Conversation.self,
@@ -396,22 +492,20 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             }
             for (cid, users) in byConvo {
                 if users.count == 2, users.contains(me), users.contains(them) {
-                    return cid
+                    matches.append(cid)
                 }
             }
         }
-        return nil
+        return matches.sorted().first
     }
 
     private func usersHaveActiveBlock(me: String, them: String) async -> Bool {
-        struct Params: Encodable {
-            var p_user_a: String
-            var p_user_b: String
-        }
         do {
             let data = try await supabase.database.rpcData(
                 functionName: "users_have_active_block",
-                parametersJSON: try JSONEncoder().encode(Params(p_user_a: me, p_user_b: them))
+                parametersJSON: try JSONEncoder().encode(
+                    MessageRPCParams.UserPair(p_user_a: me, p_user_b: them)
+                )
             )
             if let flag = try? JSONDecoder().decode(Bool.self, from: data) {
                 return flag
@@ -457,7 +551,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             lastMessageAt: lastAt,
             unreadCount: unreadCount,
             isMuted: isMuted,
-            updatedAt: lastAt ?? Date()
+            updatedAt: lastAt ?? .distantPast
         )
     }
 
@@ -504,33 +598,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
 
     /// Web `handleSendTrade` payload — does not invent a new message type.
     private func sendTradeShare(_ message: Message, tradeID: TradeID) async throws -> Message {
-        struct TradeBody: Encodable {
-            var conversation_id: String
-            var sender_id: String
-            var type: String
-            var trade_id: String
-            var content: String?
-            var parent_message_id: String?
-
-            private enum CodingKeys: String, CodingKey {
-                case conversation_id, sender_id, type, trade_id, content, channel, parent_message_id
-            }
-
-            func encode(to encoder: Encoder) throws {
-                var container = encoder.container(keyedBy: CodingKeys.self)
-                try container.encode(conversation_id, forKey: .conversation_id)
-                try container.encode(sender_id, forKey: .sender_id)
-                try container.encode(type, forKey: .type)
-                try container.encode(trade_id, forKey: .trade_id)
-                try container.encodeNil(forKey: .content)
-                try container.encodeNil(forKey: .channel)
-                if let parent_message_id {
-                    try container.encode(parent_message_id, forKey: .parent_message_id)
-                }
-            }
-        }
-
-        let body = TradeBody(
+        let body = MessageInsertBodies.TradeShare(
             conversation_id: message.conversationID.rawValue,
             sender_id: message.senderProfileID.rawValue,
             type: "trade",
@@ -578,8 +646,66 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
     }
 }
 
-/// Web `sendMessage` insert body — `channel` must be JSON `null` (DM RLS).
-private struct DMSendBody: Encodable {
+private nonisolated struct ConversationShell: Encodable, Sendable {
+    var id: String
+    var is_group: Bool
+}
+
+private nonisolated struct GroupConversationShell: Encodable, Sendable {
+    var id: String
+    var is_group: Bool
+    var name: String
+}
+
+private nonisolated struct ParticipantInsert: Encodable, Sendable {
+    var conversation_id: String
+    var user_id: String
+}
+
+private nonisolated enum MessageRPCParams {
+    struct ConversationID: Encodable, Sendable {
+        var p_conversation_id: String
+    }
+
+    struct ConversationIDs: Encodable, Sendable {
+        var p_conversation_ids: [String]
+    }
+
+    struct UserPair: Encodable, Sendable {
+        var p_user_a: String
+        var p_user_b: String
+    }
+}
+
+private nonisolated enum MessageInsertBodies {
+    struct TradeShare: Encodable, Sendable {
+        var conversation_id: String
+        var sender_id: String
+        var type: String
+        var trade_id: String
+        var content: String?
+        var parent_message_id: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case conversation_id, sender_id, type, trade_id, content, channel, parent_message_id
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(conversation_id, forKey: .conversation_id)
+            try container.encode(sender_id, forKey: .sender_id)
+            try container.encode(type, forKey: .type)
+            try container.encode(trade_id, forKey: .trade_id)
+            try container.encodeNil(forKey: .content)
+            try container.encodeNil(forKey: .channel)
+            if let parent_message_id {
+                try container.encode(parent_message_id, forKey: .parent_message_id)
+            }
+        }
+    }
+}
+
+private nonisolated struct DMSendBody: Encodable, Sendable {
     var conversation_id: String
     var sender_id: String
     var content: String
@@ -609,12 +735,12 @@ private struct DMSendBody: Encodable {
     }
 }
 
-private struct DMInsertRow: Decodable {
+private nonisolated struct DMInsertRow: Decodable, Sendable {
     var id: String?
     var created_at: String?
 }
 
-private extension String {
+private nonisolated extension String {
     var nilIfEmpty: String? {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed

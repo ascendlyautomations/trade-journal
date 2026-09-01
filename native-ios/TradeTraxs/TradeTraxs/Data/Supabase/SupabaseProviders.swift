@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Opaque handle for the configured Supabase project client.
 nonisolated protocol SupabaseClientProviding: Sendable {
@@ -116,18 +117,33 @@ nonisolated struct LiveSupabaseStorageProvider: SupabaseStorageProviding {
 
 /// Realtime websocket + shared `postgres_changes` joins for DMs and Trade Rooms.
 nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding, @unchecked Sendable {
-    private struct WatchSpec: Sendable {
-        var topic: String
+    private struct PostgresChangeBinding: Sendable {
         var table: String
         var filter: String
-        /// Key used to route inbound events (`room:{id}` / `dm:{id}`).
-        var routeKey: String
-        /// Column that identifies the route (`room_id` / `conversation_id`).
         var routeColumn: String
+        var emitsReactionEvents: Bool
+        var emitsCommentLikeEvents: Bool = false
+        var emitsCommentPinEvents: Bool = false
+    }
+
+    private struct CommentLikeWatchSpec: Sendable {
+        var topic: String
+        var routeKey: String
+        var filter: String
+        var source: String
+        var visibleCommentIDs: Set<String>
+    }
+
+    private struct WatchSpec: Sendable {
+        var topic: String
+        var routeKey: String
+        var bindings: [PostgresChangeBinding]
+        /// Non-empty enables Realtime Presence on the same channel (web `room-live-${id}`).
+        var presenceKey: String? = nil
     }
 
     private let configuration: AppConfiguration
-    private let lock = NSLock()
+    private let lock = Mutex(())
     private var webSocketTask: URLSessionWebSocketTask?
     private var _isConnected = false
     private let session: URLSession
@@ -138,18 +154,29 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
     private var intentionalDisconnect = false
     private var refCounter = 0
     private var continuations: [String: [AsyncStream<MessageRealtimeSignal>.Continuation]] = [:]
+    private var presenceContinuations: [String: [AsyncStream<[RoomPresenceWireUser]>.Continuation]] = [:]
     private var joinedTopics: Set<String> = []
     private var specsByRouteKey: [String: WatchSpec] = [:]
     private var accessTokensByRouteKey: [String: String?] = [:]
+    private var presenceTrackConfigByRouteKey: [String: RoomPresenceTrackConfig] = [:]
+    private var presenceTrackedByRouteKey: [String: Bool] = [:]
+    /// Ephemeral Phoenix presence state keyed by topic — never persisted.
+    private var presenceStateByTopic: [String: [String: [[String: Any]]]] = [:]
+    private var commentLikeContinuations: [String: [AsyncStream<CommentLikeRealtimeSignal>.Continuation]] = [:]
+    private var commentLikeSpecsByRouteKey: [String: CommentLikeWatchSpec] = [:]
+    private var commentPinContinuations: [String: [AsyncStream<CommentPinRealtimeSignal>.Continuation]] = [:]
 
     init(configuration: AppConfiguration, urlSession: URLSession = .shared) {
         self.configuration = configuration
         self.session = urlSession
     }
 
+    private func withLocked<R>(_ body: () -> R) -> R {
+        lock.withLock { _ in body() }
+    }
+
     var isConnected: Bool {
-        lock.lock(); defer { lock.unlock() }
-        return _isConnected
+        withLocked { _isConnected }
     }
 
     func connect() async throws {
@@ -180,12 +207,12 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
 
         let task = session.webSocketTask(with: url)
         task.resume()
-        lock.lock()
+        withLocked {
         intentionalDisconnect = false
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = task
         _isConnected = true
-        lock.unlock()
+        }
         startReceiveLoopIfNeeded()
         startHeartbeat()
     }
@@ -195,7 +222,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         reconnectTask = nil
         heartbeatTask?.cancel()
         heartbeatTask = nil
-        lock.lock()
+        withLocked {
         intentionalDisconnect = true
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
@@ -206,20 +233,41 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                 continuation.finish()
             }
         }
+        for values in presenceContinuations.values {
+            for continuation in values {
+                continuation.finish()
+            }
+        }
         continuations.removeAll()
+        presenceContinuations.removeAll()
         joinedTopics.removeAll()
         specsByRouteKey.removeAll()
         accessTokensByRouteKey.removeAll()
-        lock.unlock()
+        presenceTrackConfigByRouteKey.removeAll()
+        presenceTrackedByRouteKey.removeAll()
+        presenceStateByTopic.removeAll()
+        for values in commentLikeContinuations.values {
+            for continuation in values {
+                continuation.finish()
+            }
+        }
+        commentLikeContinuations.removeAll()
+        commentLikeSpecsByRouteKey.removeAll()
+        for values in commentPinContinuations.values {
+            for continuation in values {
+                continuation.finish()
+            }
+        }
+        commentPinContinuations.removeAll()
+        }
     }
 
     /// Foreground / network recovery — reconnect and rejoin active watches without
     /// finishing product streams (avoids duplicate subscriptions at the domain layer).
     func resumeAfterForeground() async {
-        lock.lock()
-        let connected = _isConnected
-        let hasSpecs = !specsByRouteKey.isEmpty
-        lock.unlock()
+        let (connected, hasSpecs) = withLocked {
+            (_isConnected, !specsByRouteKey.isEmpty)
+        }
         if connected { return }
         if hasSpecs {
             await reconnectAndRejoin()
@@ -228,21 +276,105 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         }
     }
 
-    /// Web Community `room-${id}` + `room_messages` filter.
+    /// Web Community `room-live-${id}` topic — messages + reactions (no presence track).
     func watchRoomMessages(roomID: String, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
-        watch(
-            WatchSpec(
-                topic: "realtime:room-\(roomID)",
-                table: "room_messages",
-                filter: "room_id=eq.\(roomID)",
-                routeKey: "room:\(roomID)",
-                routeColumn: "room_id"
-            ),
-            accessToken: accessToken
-        )
+        let streams = watchRoomLive(roomID: roomID, accessToken: accessToken, presenceTrack: nil)
+        return streams.messages
     }
 
     func stopWatchingRoomMessages(roomID: String) async {
+        await stopWatchingRoomLive(roomID: roomID)
+    }
+
+    /// Web `subscribeCommunityRoomLiveChannel` — messages, reactions, and optional presence.
+    func watchRoomLive(
+        roomID: String,
+        accessToken: String?,
+        presenceTrack: RoomPresenceTrackConfig?
+    ) -> RoomLiveWatchStreams {
+        let routeKey = "room:\(roomID)"
+        let spec = WatchSpec(
+            topic: "realtime:room-live-\(roomID)",
+            routeKey: routeKey,
+            bindings: [
+                PostgresChangeBinding(
+                    table: "room_messages",
+                    filter: "room_id=eq.\(roomID)",
+                    routeColumn: "room_id",
+                    emitsReactionEvents: false
+                ),
+                PostgresChangeBinding(
+                    table: "room_message_reactions",
+                    filter: "room_id=eq.\(roomID)",
+                    routeColumn: "room_id",
+                    emitsReactionEvents: true
+                ),
+            ],
+            presenceKey: presenceTrack?.presenceKey
+        )
+
+        let messages = AsyncStream<MessageRealtimeSignal> { continuation in
+            Task {
+                try? await self.ensureConnected()
+                let needsJoin = self.withLocked {
+                    self.continuations[routeKey, default: []].append(continuation)
+                    self.specsByRouteKey[routeKey] = spec
+                    self.accessTokensByRouteKey[routeKey] = accessToken
+                    if let presenceTrack {
+                        self.presenceTrackConfigByRouteKey[routeKey] = presenceTrack
+                    } else {
+                        self.presenceTrackConfigByRouteKey.removeValue(forKey: routeKey)
+                    }
+                    let needsJoin = !self.joinedTopics.contains(spec.topic)
+                    if needsJoin {
+                        self.joinedTopics.insert(spec.topic)
+                    }
+                    return needsJoin
+                }
+                if needsJoin {
+                    await self.joinChannel(spec, accessToken: accessToken)
+                } else if presenceTrack != nil {
+                    await self.trackRoomPresenceIfNeeded(routeKey: routeKey, topic: spec.topic)
+                }
+                continuation.onTermination = { _ in }
+            }
+        }
+
+        let presence = AsyncStream<[RoomPresenceWireUser]> { continuation in
+            Task {
+                try? await self.ensureConnected()
+                let joinState = self.withLocked { () -> (needsJoin: Bool, snapshot: [String: [[String: Any]]]?) in
+                    self.presenceContinuations[routeKey, default: []].append(continuation)
+                    self.specsByRouteKey[routeKey] = spec
+                    self.accessTokensByRouteKey[routeKey] = accessToken
+                    if let presenceTrack {
+                        self.presenceTrackConfigByRouteKey[routeKey] = presenceTrack
+                    }
+                    let needsJoin = !self.joinedTopics.contains(spec.topic)
+                    if needsJoin {
+                        self.joinedTopics.insert(spec.topic)
+                    }
+                    let snapshot = self.presenceStateByTopic[spec.topic]
+                    return (needsJoin, snapshot)
+                }
+                let needsJoin = joinState.needsJoin
+                let snapshot = joinState.snapshot
+                if needsJoin {
+                    await self.joinChannel(spec, accessToken: accessToken)
+                } else if presenceTrack != nil {
+                    await self.trackRoomPresenceIfNeeded(routeKey: routeKey, topic: spec.topic)
+                }
+                if let snapshot {
+                    continuation.yield(RoomPresenceSemantics.dedupeByUserID(snapshot))
+                }
+                continuation.onTermination = { _ in }
+            }
+        }
+
+        return RoomLiveWatchStreams(messages: messages, presence: presence)
+    }
+
+    func stopWatchingRoomLive(roomID: String) async {
         await stopWatch(routeKey: "room:\(roomID)")
     }
 
@@ -254,10 +386,15 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         watch(
             WatchSpec(
                 topic: "realtime:dm-\(conversationID)",
-                table: "messages",
-                filter: "conversation_id=eq.\(conversationID)",
                 routeKey: "dm:\(conversationID)",
-                routeColumn: "conversation_id"
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "messages",
+                        filter: "conversation_id=eq.\(conversationID)",
+                        routeColumn: "conversation_id",
+                        emitsReactionEvents: false
+                    ),
+                ]
             ),
             accessToken: accessToken
         )
@@ -276,10 +413,15 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         watch(
             WatchSpec(
                 topic: "realtime:dm-read-\(userID)",
-                table: "conversation_member_preferences",
-                filter: "user_id=eq.\(userID)",
                 routeKey: "dm-read:\(userID)",
-                routeColumn: "conversation_id"
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "conversation_member_preferences",
+                        filter: "user_id=eq.\(userID)",
+                        routeColumn: "conversation_id",
+                        emitsReactionEvents: false
+                    ),
+                ]
             ),
             accessToken: accessToken
         )
@@ -304,10 +446,15 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         return watch(
             WatchSpec(
                 topic: "realtime:member-rooms",
-                table: "room_messages",
-                filter: filter,
                 routeKey: "member-rooms",
-                routeColumn: "room_id"
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "room_messages",
+                        filter: filter,
+                        routeColumn: "room_id",
+                        emitsReactionEvents: false
+                    ),
+                ]
             ),
             accessToken: accessToken
         )
@@ -315,6 +462,78 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
 
     func stopWatchingMemberRoomMessages() async {
         await stopWatch(routeKey: "member-rooms")
+    }
+
+    /// Member room cards — `room_members` insert/update/delete for visible rooms.
+    func watchMemberRoomMembership(
+        roomIDs: [String],
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        let sorted = Array(Set(roomIDs)).sorted()
+        guard !sorted.isEmpty else {
+            return AsyncStream { $0.finish() }
+        }
+        let filter: String
+        if sorted.count == 1 {
+            filter = "room_id=eq.\(sorted[0])"
+        } else {
+            filter = "room_id=in.(\(sorted.joined(separator: ",")))"
+        }
+        return watch(
+            WatchSpec(
+                topic: "realtime:member-room-membership",
+                routeKey: "member-room-membership",
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "room_members",
+                        filter: filter,
+                        routeColumn: "room_id",
+                        emitsReactionEvents: false
+                    ),
+                ]
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingMemberRoomMembership() async {
+        await stopWatch(routeKey: "member-room-membership")
+    }
+
+    /// Inbox — `messages` for loaded DM conversations (preview + reorder when not in thread).
+    func watchInboxConversationMessages(
+        conversationIDs: [String],
+        accessToken: String?
+    ) -> AsyncStream<MessageRealtimeSignal> {
+        let sorted = Array(Set(conversationIDs)).sorted()
+        guard !sorted.isEmpty else {
+            return AsyncStream { $0.finish() }
+        }
+        let filter: String
+        if sorted.count == 1 {
+            filter = "conversation_id=eq.\(sorted[0])"
+        } else {
+            filter = "conversation_id=in.(\(sorted.joined(separator: ",")))"
+        }
+        return watch(
+            WatchSpec(
+                topic: "realtime:inbox-dms",
+                routeKey: "inbox-dms",
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "messages",
+                        filter: filter,
+                        routeColumn: "conversation_id",
+                        emitsReactionEvents: false
+                    ),
+                ]
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingInboxConversationMessages() async {
+        await stopWatch(routeKey: "inbox-dms")
     }
 
     /// Inbox read-cursor sync — `room_members` for the signed-in user.
@@ -325,10 +544,15 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         watch(
             WatchSpec(
                 topic: "realtime:room-read-\(userID)",
-                table: "room_members",
-                filter: "user_id=eq.\(userID)",
                 routeKey: "room-read:\(userID)",
-                routeColumn: "room_id"
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "room_members",
+                        filter: "user_id=eq.\(userID)",
+                        routeColumn: "room_id",
+                        emitsReactionEvents: false
+                    ),
+                ]
             ),
             accessToken: accessToken
         )
@@ -343,10 +567,15 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         watch(
             WatchSpec(
                 topic: "realtime:feed-posts",
-                table: "posts",
-                filter: "id=neq.00000000-0000-0000-0000-000000000000",
                 routeKey: "feed-posts",
-                routeColumn: "id"
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "posts",
+                        filter: "id=neq.00000000-0000-0000-0000-000000000000",
+                        routeColumn: "id",
+                        emitsReactionEvents: false
+                    ),
+                ]
             ),
             accessToken: accessToken
         )
@@ -361,10 +590,15 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         watch(
             WatchSpec(
                 topic: "realtime:notifications-\(userID)",
-                table: "notifications",
-                filter: "user_id=eq.\(userID)",
                 routeKey: "notifications:\(userID)",
-                routeColumn: "user_id"
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "notifications",
+                        filter: "user_id=eq.\(userID)",
+                        routeColumn: "user_id",
+                        emitsReactionEvents: false
+                    ),
+                ]
             ),
             accessToken: accessToken
         )
@@ -374,6 +608,205 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         await stopWatch(routeKey: "notifications:\(userID)")
     }
 
+    /// Viewer profile row — cross-device onboarding completion.
+    func watchViewerProfile(userID: String, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        watch(
+            WatchSpec(
+                topic: "realtime:viewer-profile-\(userID)",
+                routeKey: "viewer-profile:\(userID)",
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "profiles",
+                        filter: "id=eq.\(userID)",
+                        routeColumn: "id",
+                        emitsReactionEvents: false
+                    ),
+                ]
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingViewerProfile(userID: String) async {
+        await stopWatch(routeKey: "viewer-profile:\(userID)")
+    }
+
+    /// Web `useCommentLikes` — `comment_likes` postgres_changes for visible comment ids.
+    func watchCommentLikes(
+        source: CommentLikeSource,
+        commentIDs: [String],
+        accessToken: String?
+    ) -> AsyncStream<CommentLikeRealtimeSignal> {
+        let unique = Array(Set(commentIDs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }))
+            .filter { !$0.isEmpty }
+        guard !unique.isEmpty else {
+            return AsyncStream { $0.finish() }
+        }
+
+        let filter = CommentLikeSemantics.realtimeFilter(source: source, commentIDs: unique)
+        let routeKey = "comment-likes:\(CommentLikeSemantics.stableRouteSuffix(source: source, commentIDs: unique))"
+        let topic = "realtime:\(routeKey)"
+
+        return AsyncStream { continuation in
+            Task {
+                try? await self.ensureConnected()
+                let spec = CommentLikeWatchSpec(
+                    topic: topic,
+                    routeKey: routeKey,
+                    filter: filter,
+                    source: source.rawValue,
+                    visibleCommentIDs: Set(unique)
+                )
+                let joinSpec = WatchSpec(
+                    topic: topic,
+                    routeKey: routeKey,
+                    bindings: [
+                        PostgresChangeBinding(
+                            table: "comment_likes",
+                            filter: filter,
+                            routeColumn: "comment_id",
+                            emitsReactionEvents: false,
+                            emitsCommentLikeEvents: true
+                        ),
+                    ]
+                )
+                let needsJoin = self.withLocked {
+                    self.commentLikeContinuations[routeKey, default: []].append(continuation)
+                    self.commentLikeSpecsByRouteKey[routeKey] = spec
+                    self.specsByRouteKey[routeKey] = joinSpec
+                    self.accessTokensByRouteKey[routeKey] = accessToken
+                    let needsJoin = !self.joinedTopics.contains(topic)
+                    if needsJoin {
+                        self.joinedTopics.insert(topic)
+                    }
+                    return needsJoin
+                }
+                if needsJoin {
+                    await self.joinChannel(joinSpec, accessToken: accessToken)
+                }
+                continuation.onTermination = { _ in }
+            }
+        }
+    }
+
+    func stopWatchingCommentLikes(
+        source: CommentLikeSource,
+        commentIDs: [String]
+    ) async {
+        let unique = Array(Set(commentIDs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }))
+            .filter { !$0.isEmpty }
+        guard !unique.isEmpty else { return }
+        let routeKey = "comment-likes:\(CommentLikeSemantics.stableRouteSuffix(source: source, commentIDs: unique))"
+        await stopCommentLikeWatch(routeKey: routeKey)
+    }
+
+    private func stopCommentLikeWatch(routeKey: String) async {
+        let cleanup = withLocked { () -> ([AsyncStream<CommentLikeRealtimeSignal>.Continuation], WatchSpec?) in
+            let conts = commentLikeContinuations.removeValue(forKey: routeKey) ?? []
+            commentLikeSpecsByRouteKey.removeValue(forKey: routeKey)
+            let spec = specsByRouteKey.removeValue(forKey: routeKey)
+            accessTokensByRouteKey.removeValue(forKey: routeKey)
+            if let topic = spec?.topic {
+                joinedTopics.remove(topic)
+            }
+            return (conts, spec)
+        }
+        let conts = cleanup.0
+        let spec = cleanup.1
+        for continuation in conts {
+            continuation.finish()
+        }
+        if let spec {
+            await leaveChannel(topic: spec.topic)
+        }
+    }
+
+    /// Web TradeSocialLayer — `UPDATE` on comment rows for `pinned` flips.
+    func watchCommentPinUpdates(
+        target: InteractionTarget,
+        accessToken: String?
+    ) -> AsyncStream<CommentPinRealtimeSignal> {
+        let table = Self.commentTable(for: target.kind)
+        let foreignKey = Self.commentForeignKey(for: target.kind)
+        let filter = "\(foreignKey)=eq.\(target.id)"
+        let routeKey = "comment-pin:\(target.kind.rawValue):\(target.id)"
+        let topic = "realtime:\(routeKey)"
+
+        return AsyncStream<CommentPinRealtimeSignal>(bufferingPolicy: .unbounded) { continuation in
+            Task {
+                try? await self.ensureConnected()
+                let joinSpec = WatchSpec(
+                    topic: topic,
+                    routeKey: routeKey,
+                    bindings: [
+                        PostgresChangeBinding(
+                            table: table,
+                            filter: filter,
+                            routeColumn: foreignKey,
+                            emitsReactionEvents: false,
+                            emitsCommentPinEvents: true
+                        ),
+                    ]
+                )
+                let needsJoin = self.withLocked {
+                    self.commentPinContinuations[routeKey, default: []].append(continuation)
+                    self.specsByRouteKey[routeKey] = joinSpec
+                    self.accessTokensByRouteKey[routeKey] = accessToken
+                    let needsJoin = !self.joinedTopics.contains(topic)
+                    if needsJoin {
+                        self.joinedTopics.insert(topic)
+                    }
+                    return needsJoin
+                }
+                if needsJoin {
+                    await self.joinChannel(joinSpec, accessToken: accessToken)
+                }
+                continuation.onTermination = { _ in }
+            }
+        }
+    }
+
+    func stopWatchingCommentPinUpdates(target: InteractionTarget) async {
+        let routeKey = "comment-pin:\(target.kind.rawValue):\(target.id)"
+        let cleanup = withLocked { () -> ([AsyncStream<CommentPinRealtimeSignal>.Continuation], WatchSpec?) in
+            let conts = commentPinContinuations.removeValue(forKey: routeKey) ?? []
+            let spec = specsByRouteKey.removeValue(forKey: routeKey)
+            accessTokensByRouteKey.removeValue(forKey: routeKey)
+            if let topic = spec?.topic {
+                joinedTopics.remove(topic)
+            }
+            return (conts, spec)
+        }
+        let conts = cleanup.0
+        let spec = cleanup.1
+        for continuation in conts {
+            continuation.finish()
+        }
+        if let spec {
+            await leaveChannel(topic: spec.topic)
+        }
+    }
+
+    private static func commentTable(for kind: InteractionContentKind) -> String {
+        switch kind {
+        case .trade: return "trade_comments"
+        case .profilePost: return "profile_post_comments"
+        case .reel: return "reel_comments"
+        case .feedPost: return "comments"
+        case .achievement: return "achievement_post_comments"
+        }
+    }
+
+    private static func commentForeignKey(for kind: InteractionContentKind) -> String {
+        switch kind {
+        case .trade: return "trade_id"
+        case .profilePost: return "profile_post_id"
+        case .reel: return "reel_id"
+        case .feedPost: return "post_id"
+        case .achievement: return "achievement_post_id"
+        }
+    }
+
     private func watch(
         _ spec: WatchSpec,
         accessToken: String?
@@ -381,15 +814,16 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         AsyncStream { continuation in
             Task {
                 try? await self.ensureConnected()
-                self.lock.lock()
-                self.continuations[spec.routeKey, default: []].append(continuation)
-                self.specsByRouteKey[spec.routeKey] = spec
-                self.accessTokensByRouteKey[spec.routeKey] = accessToken
-                let needsJoin = !self.joinedTopics.contains(spec.topic)
-                if needsJoin {
-                    self.joinedTopics.insert(spec.topic)
+                let needsJoin = self.withLocked {
+                    self.continuations[spec.routeKey, default: []].append(continuation)
+                    self.specsByRouteKey[spec.routeKey] = spec
+                    self.accessTokensByRouteKey[spec.routeKey] = accessToken
+                    let needsJoin = !self.joinedTopics.contains(spec.topic)
+                    if needsJoin {
+                        self.joinedTopics.insert(spec.topic)
+                    }
+                    return needsJoin
                 }
-                self.lock.unlock()
                 if needsJoin {
                     await self.joinChannel(spec, accessToken: accessToken)
                 }
@@ -399,18 +833,36 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
     }
 
     private func stopWatch(routeKey: String) async {
-        lock.lock()
-        let continuations = continuations.removeValue(forKey: routeKey) ?? []
-        let spec = specsByRouteKey.removeValue(forKey: routeKey)
-        accessTokensByRouteKey.removeValue(forKey: routeKey)
-        if let topic = spec?.topic {
-            joinedTopics.remove(topic)
+        let cleanup = withLocked { () -> (
+            [AsyncStream<MessageRealtimeSignal>.Continuation],
+            [AsyncStream<[RoomPresenceWireUser]>.Continuation],
+            WatchSpec?
+        ) in
+            let messageContinuations = continuations.removeValue(forKey: routeKey) ?? []
+            let presenceConts = presenceContinuations.removeValue(forKey: routeKey) ?? []
+            let spec = specsByRouteKey.removeValue(forKey: routeKey)
+            accessTokensByRouteKey.removeValue(forKey: routeKey)
+            presenceTrackConfigByRouteKey.removeValue(forKey: routeKey)
+            presenceTrackedByRouteKey.removeValue(forKey: routeKey)
+            if let topic = spec?.topic {
+                joinedTopics.remove(topic)
+                presenceStateByTopic.removeValue(forKey: topic)
+            }
+            return (messageContinuations, presenceConts, spec)
         }
-        lock.unlock()
-        for continuation in continuations {
+        let messageContinuations = cleanup.0
+        let presenceConts = cleanup.1
+        let spec = cleanup.2
+        for continuation in messageContinuations {
+            continuation.finish()
+        }
+        for continuation in presenceConts {
             continuation.finish()
         }
         if let spec {
+            if spec.presenceKey != nil {
+                await untrackRoomPresence(topic: spec.topic)
+            }
             await leaveChannel(topic: spec.topic)
         }
     }
@@ -421,26 +873,33 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
     }
 
     private func nextRef() -> String {
-        lock.lock()
-        refCounter += 1
-        let value = refCounter
-        lock.unlock()
+        let value = withLocked {
+            refCounter += 1
+            return refCounter
+        }
         return String(value)
     }
 
     private func joinChannel(_ spec: WatchSpec, accessToken: String?) async {
         let ref = nextRef()
+        let postgresChanges: [[String: Any]] = spec.bindings.map { binding in
+            [
+                "event": "*",
+                "schema": "public",
+                "table": binding.table,
+                "filter": binding.filter,
+            ]
+        }
+        let presenceConfig: [String: Any]
+        if let key = spec.presenceKey, !key.isEmpty {
+            presenceConfig = ["key": key, "enabled": true]
+        } else {
+            presenceConfig = ["key": "", "enabled": false]
+        }
         let config: [String: Any] = [
             "broadcast": ["ack": false, "self": false],
-            "presence": ["key": ""],
-            "postgres_changes": [
-                [
-                    "event": "*",
-                    "schema": "public",
-                    "table": spec.table,
-                    "filter": spec.filter,
-                ],
-            ],
+            "presence": presenceConfig,
+            "postgres_changes": postgresChanges,
         ]
         var payload: [String: Any] = ["config": config]
         if let accessToken, !accessToken.isEmpty {
@@ -483,13 +942,14 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
     }
 
     private func startReceiveLoopIfNeeded() {
-        lock.lock()
-        if receiveLoopRunning {
-            lock.unlock()
-            return
+        let shouldStart = withLocked { () -> Bool in
+            if receiveLoopRunning {
+                return false
+            }
+            receiveLoopRunning = true
+            return true
         }
-        receiveLoopRunning = true
-        lock.unlock()
+        guard shouldStart else { return }
         Task { [weak self] in
             await self?.receiveLoop()
         }
@@ -497,10 +957,9 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
 
     private func receiveLoop() async {
         while !Task.isCancelled {
-            lock.lock()
-            let task = webSocketTask
-            let connected = _isConnected
-            lock.unlock()
+            let snapshot = withLocked { (webSocketTask, _isConnected) }
+            let task = snapshot.0
+            let connected = snapshot.1
             guard connected, let task else { break }
             do {
                 let message = try await task.receive()
@@ -520,15 +979,15 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         }
         heartbeatTask?.cancel()
         heartbeatTask = nil
-        lock.lock()
-        receiveLoopRunning = false
-        _isConnected = false
-        // Allow rejoin after reconnect — stale topic set would skip `phx_join`.
-        joinedTopics.removeAll()
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
-        let shouldReconnect = !intentionalDisconnect && !specsByRouteKey.isEmpty
-        lock.unlock()
+        let shouldReconnect = withLocked { () -> Bool in
+            receiveLoopRunning = false
+            _isConnected = false
+            // Allow rejoin after reconnect — stale topic set would skip `phx_join`.
+            joinedTopics.removeAll()
+            webSocketTask?.cancel(with: .goingAway, reason: nil)
+            webSocketTask = nil
+            return !intentionalDisconnect && !specsByRouteKey.isEmpty
+        }
         if shouldReconnect {
             scheduleReconnectAndRejoin()
         }
@@ -545,25 +1004,31 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         let policy = ReconnectPolicy.default
         var attempt = 1
         while !Task.isCancelled, attempt <= policy.maximumAttempts {
-            lock.lock()
-            let intentional = intentionalDisconnect
-            let specs = Array(specsByRouteKey.values)
-            let tokens = accessTokensByRouteKey
-            lock.unlock()
+            let snapshot = withLocked {
+                (intentionalDisconnect, Array(specsByRouteKey.values), accessTokensByRouteKey)
+            }
+            let intentional = snapshot.0
+            let specs = snapshot.1
+            let tokens = snapshot.2
             guard !intentional, !specs.isEmpty else { return }
 
             do {
                 try await connect()
                 for spec in specs {
                     if Task.isCancelled { return }
-                    lock.lock()
-                    let needsJoin = !joinedTopics.contains(spec.topic)
-                    if needsJoin {
-                        joinedTopics.insert(spec.topic)
+                    let needsJoin = withLocked { () -> Bool in
+                        let needsJoin = !joinedTopics.contains(spec.topic)
+                        if needsJoin {
+                            joinedTopics.insert(spec.topic)
+                        }
+                        presenceTrackedByRouteKey[spec.routeKey] = false
+                        presenceStateByTopic.removeValue(forKey: spec.topic)
+                        return needsJoin
                     }
-                    lock.unlock()
                     if needsJoin {
                         await joinChannel(spec, accessToken: tokens[spec.routeKey] ?? nil)
+                    } else if spec.presenceKey != nil {
+                        await trackRoomPresenceIfNeeded(routeKey: spec.routeKey, topic: spec.topic)
                     }
                 }
                 return
@@ -581,9 +1046,136 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         else { return }
 
         let event = object["event"] as? String ?? ""
-        guard event == "postgres_changes" || event == "INSERT" || event == "UPDATE" || event == "DELETE"
+        switch event {
+        case "presence_state":
+            handlePresenceState(object)
+        case "presence_diff":
+            handlePresenceDiff(object)
+        case "phx_reply":
+            handlePhxReply(object)
+        case "postgres_changes", "INSERT", "UPDATE", "DELETE":
+            handlePostgresChanges(object)
+        default:
+            break
+        }
+    }
+
+    private func handlePhxReply(_ object: [String: Any]) {
+        guard let payload = object["payload"] as? [String: Any],
+              let status = payload["status"] as? String,
+              status == "ok",
+              let topic = object["topic"] as? String,
+              topic.hasPrefix("realtime:room-live-")
         else { return }
 
+        let routeKey = withLocked {
+            specsByRouteKey.first(where: { $0.value.topic == topic })?.key
+        }
+        guard let routeKey else { return }
+        Task { await trackRoomPresenceIfNeeded(routeKey: routeKey, topic: topic) }
+    }
+
+    private func handlePresenceState(_ object: [String: Any]) {
+        guard let topic = object["topic"] as? String,
+              let payload = object["payload"] as? [String: Any]
+        else { return }
+        withLocked {
+        var parsed: [String: [[String: Any]]] = [:]
+        for (key, value) in payload {
+            if let metas = value as? [[String: Any]] {
+                parsed[key] = metas
+            }
+        }
+        presenceStateByTopic[topic] = parsed
+        }
+        emitPresence(forTopic: topic)
+    }
+
+    private func handlePresenceDiff(_ object: [String: Any]) {
+        guard let topic = object["topic"] as? String,
+              let payload = object["payload"] as? [String: Any]
+        else { return }
+
+        withLocked {
+        var state = presenceStateByTopic[topic] ?? [:]
+        if let joins = payload["joins"] as? [String: [[String: Any]]] {
+            for (key, metas) in joins {
+                state[key] = metas
+            }
+        }
+        if let leaves = payload["leaves"] as? [String: [[String: Any]]] {
+            for key in leaves.keys {
+                state.removeValue(forKey: key)
+            }
+        }
+        presenceStateByTopic[topic] = state
+        }
+        emitPresence(forTopic: topic)
+    }
+
+    private func emitPresence(forTopic topic: String) {
+        let snapshot = withLocked { () -> (
+            [String: [[String: Any]]],
+            [AsyncStream<[RoomPresenceWireUser]>.Continuation]
+        ) in
+            let state = presenceStateByTopic[topic] ?? [:]
+            let routeKey = specsByRouteKey.first(where: { $0.value.topic == topic })?.key
+            let presenceConts = routeKey.flatMap { presenceContinuations[$0] } ?? []
+            return (state, presenceConts)
+        }
+        let state = snapshot.0
+        let presenceConts = snapshot.1
+        let users = RoomPresenceSemantics.dedupeByUserID(state)
+        for continuation in presenceConts {
+            continuation.yield(users)
+        }
+    }
+
+    private func trackRoomPresenceIfNeeded(routeKey: String, topic: String) async {
+        let snapshot = withLocked {
+            (presenceTrackConfigByRouteKey[routeKey], presenceTrackedByRouteKey[routeKey] ?? false)
+        }
+        let config = snapshot.0
+        let alreadyTracked = snapshot.1
+        guard let config, !alreadyTracked else { return }
+
+        let enteredAt = ISO8601DateFormatter().string(from: Date())
+        var trackPayload: [String: Any] = [
+            "user_id": config.userID,
+            "username": config.username,
+            "entered_at": enteredAt,
+        ]
+        if let avatarURL = config.avatarURL {
+            trackPayload["avatar_url"] = avatarURL
+        }
+        await sendJSON([
+            "topic": topic,
+            "event": "presence",
+            "payload": [
+                "event": "track",
+                "payload": trackPayload,
+            ],
+            "ref": nextRef(),
+        ])
+        withLocked {
+            presenceTrackedByRouteKey[routeKey] = true
+        }
+    }
+
+    private func untrackRoomPresence(topic: String) async {
+        await sendJSON([
+            "topic": topic,
+            "event": "presence",
+            "payload": [
+                "event": "untrack",
+                "payload": [:] as [String: Any],
+            ],
+            "ref": nextRef(),
+        ])
+    }
+
+    private func handlePostgresChanges(_ object: [String: Any]) {
+        let event = object["event"] as? String ?? ""
         let payload = object["payload"] as? [String: Any] ?? [:]
         let dataPayload = (payload["data"] as? [String: Any]) ?? payload
         let type = (dataPayload["type"] as? String)
@@ -595,6 +1187,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             ?? dataPayload["old"] as? [String: Any]
         let messageID = (record?["id"] as? String)
             ?? (oldRecord?["id"] as? String)
+        let table = (dataPayload["table"] as? String) ?? ""
 
         let kind: MessageRealtimeSignal.Kind
         switch type.uppercased() {
@@ -604,21 +1197,51 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         default: kind = .insert
         }
 
-        lock.lock()
-        let specs = Array(specsByRouteKey.values)
-        let allContinuations = continuations
-        lock.unlock()
+        let snapshot = withLocked {
+            (
+                Array(specsByRouteKey.values),
+                continuations,
+                commentLikeSpecsByRouteKey,
+                commentLikeContinuations,
+                commentPinContinuations
+            )
+        }
+        let specs = snapshot.0
+        let allContinuations = snapshot.1
+        let likeSpecs = snapshot.2
+        let allCommentLikeContinuations = snapshot.3
+        let allCommentPinContinuations = snapshot.4
+
+        if table == "comment_likes" {
+            handleCommentLikeChanges(
+                type: type,
+                record: record,
+                oldRecord: oldRecord,
+                likeSpecs: likeSpecs,
+                continuations: allCommentLikeContinuations
+            )
+            return
+        }
+
+        if type.uppercased() == "UPDATE" {
+            handleCommentPinChanges(
+                record: record,
+                specs: specs,
+                continuations: allCommentPinContinuations
+            )
+        }
 
         for spec in specs {
-            let scope = (record?[spec.routeColumn] as? String)
-                ?? (oldRecord?[spec.routeColumn] as? String)
-            // Inbox watches are filtered by user_id / multi-room `in` lists; route keys
-            // do not end with the row's room/conversation id — match by route key instead.
+            guard let binding = spec.bindings.first(where: { $0.table == table }) else { continue }
+            if binding.emitsCommentLikeEvents || binding.emitsCommentPinEvents { continue }
+            let scope = (record?[binding.routeColumn] as? String)
+                ?? (oldRecord?[binding.routeColumn] as? String)
             let scopedMatch: Bool
             if spec.routeKey.hasPrefix("dm-read:")
                 || spec.routeKey.hasPrefix("room-read:")
                 || spec.routeKey.hasPrefix("notifications:")
                 || spec.routeKey == "member-rooms"
+                || spec.routeKey == "inbox-dms"
                 || spec.routeKey == "feed-posts"
             {
                 scopedMatch = scope != nil
@@ -626,12 +1249,92 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                 scopedMatch = scope.map { spec.routeKey.hasSuffix(":\($0)") } ?? false
             }
             guard scopedMatch else { continue }
-            let signal = MessageRealtimeSignal(
-                kind: kind,
-                messageID: messageID,
-                conversationID: scope
-            )
+
+            let signal: MessageRealtimeSignal
+            if binding.emitsReactionEvents {
+                let reactionMessageID = (record?["message_id"] as? String)
+                    ?? (oldRecord?["message_id"] as? String)
+                guard let reactionMessageID,
+                      let reactionID = messageID,
+                      let userID = (record?["user_id"] as? String) ?? (oldRecord?["user_id"] as? String),
+                      let emoji = (record?["reaction"] as? String) ?? (oldRecord?["reaction"] as? String)
+                else { continue }
+                signal = MessageRealtimeSignal(
+                    kind: kind,
+                    messageID: reactionMessageID,
+                    conversationID: scope,
+                    reactionEvent: MessageRealtimeSignal.ReactionEvent(
+                        reactionID: reactionID,
+                        messageID: reactionMessageID,
+                        userID: userID,
+                        emoji: emoji
+                    )
+                )
+            } else {
+                signal = MessageRealtimeSignal(
+                    kind: kind,
+                    messageID: messageID,
+                    conversationID: scope
+                )
+            }
             for continuation in allContinuations[spec.routeKey] ?? [] {
+                continuation.yield(signal)
+            }
+        }
+    }
+
+    private func handleCommentLikeChanges(
+        type: String,
+        record: [String: Any]?,
+        oldRecord: [String: Any]?,
+        likeSpecs: [String: CommentLikeWatchSpec],
+        continuations: [String: [AsyncStream<CommentLikeRealtimeSignal>.Continuation]]
+    ) {
+        let row = record ?? oldRecord
+        guard let row else { return }
+        let commentID = (row["comment_id"] as? String) ?? ""
+        let userID = (row["user_id"] as? String) ?? ""
+        let commentSource = (row["comment_source"] as? String) ?? ""
+        guard !commentID.isEmpty, !userID.isEmpty else { return }
+
+        let kind: CommentLikeSemantics.RealtimeMutationKind
+        switch type.uppercased() {
+        case "INSERT": kind = .insert
+        case "DELETE": kind = .delete
+        default: return
+        }
+
+        let signal = CommentLikeRealtimeSignal(
+            kind: kind,
+            commentID: commentID,
+            userID: userID,
+            commentSource: commentSource
+        )
+
+        for (routeKey, spec) in likeSpecs {
+            guard spec.visibleCommentIDs.contains(commentID) else { continue }
+            if !commentSource.isEmpty, spec.source != commentSource { continue }
+            for continuation in continuations[routeKey] ?? [] {
+                continuation.yield(signal)
+            }
+        }
+    }
+
+    private func handleCommentPinChanges(
+        record: [String: Any]?,
+        specs: [WatchSpec],
+        continuations: [String: [AsyncStream<CommentPinRealtimeSignal>.Continuation]]
+    ) {
+        guard let record,
+              let commentID = record["id"] as? String,
+              !commentID.isEmpty
+        else { return }
+        let pinned = record["pinned"] as? Bool ?? false
+
+        let signal = CommentPinRealtimeSignal(commentID: commentID, pinned: pinned)
+        for spec in specs {
+            guard spec.bindings.contains(where: { $0.emitsCommentPinEvents }) else { continue }
+            for continuation in continuations[spec.routeKey] ?? [] {
                 continuation.yield(signal)
             }
         }
@@ -642,14 +1345,12 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
               let data = try? JSONSerialization.data(withJSONObject: object, options: []),
               let text = String(data: data, encoding: .utf8)
         else { return }
-        lock.lock()
-        let task = webSocketTask
-        lock.unlock()
+        let task = withLocked { webSocketTask }
         try? await task?.send(.string(text))
     }
 }
 
-/// Shared signal for DM `messages` and Trade Room `room_messages` postgres_changes.
+/// Shared signal for DM `messages`, Trade Room `room_messages`, and room reactions.
 nonisolated struct MessageRealtimeSignal: Sendable {
     enum Kind: String, Sendable {
         case insert
@@ -657,13 +1358,28 @@ nonisolated struct MessageRealtimeSignal: Sendable {
         case delete
     }
 
+    struct ReactionEvent: Sendable, Equatable {
+        var reactionID: String
+        var messageID: String
+        var userID: String
+        var emoji: String
+    }
+
     var kind: Kind
     var messageID: String?
     /// Populated from the postgres_changes filter column (e.g. `conversation_id`).
     var conversationID: String? = nil
+    /// Present when the event originated from `room_message_reactions`.
+    var reactionEvent: ReactionEvent? = nil
 }
 
 typealias RoomRealtimeSignal = MessageRealtimeSignal
+
+/// Combined Trade Room live channel — messages/reactions + optional presence stream.
+nonisolated struct RoomLiveWatchStreams: Sendable {
+    var messages: AsyncStream<MessageRealtimeSignal>
+    var presence: AsyncStream<[RoomPresenceWireUser]>
+}
 
 nonisolated struct LiveSupabaseRPCProvider: SupabaseRPCProviding {
     private let database: any SupabaseDatabaseExecuting

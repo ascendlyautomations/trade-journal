@@ -1,14 +1,19 @@
 import Foundation
+import Synchronization
 
 /// Schedules proactive refresh before access-token expiry.
-final class TokenRefreshCoordinator: @unchecked Sendable {
+nonisolated final class TokenRefreshCoordinator: @unchecked Sendable {
+    private struct CoordinatorState {
+        var refreshTask: Task<Void, Never>?
+        var onRefreshed: ((AuthenticationSession) -> Void)?
+        var onFailed: ((AuthenticationError) -> Void)?
+        var sessionGenerationProvider: () -> UInt64 = { 0 }
+    }
+
     private let sessionManager: SessionManager
     private let emailProvider: any AuthenticationProviding
     private let expiration: SessionExpiration
-    private let lock = NSLock()
-    private var refreshTask: Task<Void, Never>?
-    private var onRefreshed: ((AuthenticationSession) -> Void)?
-    private var onFailed: ((AuthenticationError) -> Void)?
+    private let state = Mutex(CoordinatorState())
 
     init(
         sessionManager: SessionManager,
@@ -24,10 +29,16 @@ final class TokenRefreshCoordinator: @unchecked Sendable {
         onRefreshed: @escaping (AuthenticationSession) -> Void,
         onFailed: @escaping (AuthenticationError) -> Void
     ) {
-        lock.lock()
-        self.onRefreshed = onRefreshed
-        self.onFailed = onFailed
-        lock.unlock()
+        state.withLock { coordinator in
+            coordinator.onRefreshed = onRefreshed
+            coordinator.onFailed = onFailed
+        }
+    }
+
+    func setSessionGenerationProvider(_ provider: @escaping () -> UInt64) {
+        state.withLock { coordinator in
+            coordinator.sessionGenerationProvider = provider
+        }
     }
 
     func schedule(for session: AuthenticationSession) {
@@ -39,30 +50,47 @@ final class TokenRefreshCoordinator: @unchecked Sendable {
             guard !Task.isCancelled else { return }
             await self?.refreshNow()
         }
-        lock.lock(); refreshTask = task; lock.unlock()
+        state.withLock { coordinator in
+            coordinator.refreshTask = task
+        }
     }
 
     func refreshNow() async {
         guard let session = sessionManager.currentSession else { return }
+        let generation = state.withLock { $0.sessionGenerationProvider() }
+        let fingerprint = SessionFingerprint.make(session)
         do {
-            let refreshed = try await emailProvider.refresh(session: session)
+            let refreshed = try await AuthRefreshSingleFlight.shared.refresh(
+                fingerprint: fingerprint,
+                generation: generation
+            ) {
+                try await self.emailProvider.refresh(session: session)
+            }
             try sessionManager.install(refreshed)
-            lock.lock(); let handler = onRefreshed; lock.unlock()
+            let handler = state.withLock { coordinator -> ((AuthenticationSession) -> Void)? in
+                let handler = coordinator.onRefreshed
+                return handler
+            }
             handler?(refreshed)
             schedule(for: refreshed)
         } catch let error as AuthenticationError {
-            lock.lock(); let handler = onFailed; lock.unlock()
+            let handler = state.withLock { $0.onFailed }
             handler?(error)
+        } catch is CancellationError {
+            let handler = state.withLock { $0.onFailed }
+            handler?(.cancelled)
+        } catch AuthBootstrapError.staleSessionResult {
+            // Superseded by a newer login — ignore.
         } catch {
-            lock.lock(); let handler = onFailed; lock.unlock()
+            let handler = state.withLock { $0.onFailed }
             handler?(.refreshFailed)
         }
     }
 
     func cancel() {
-        lock.lock()
-        refreshTask?.cancel()
-        refreshTask = nil
-        lock.unlock()
+        state.withLock { coordinator in
+            coordinator.refreshTask?.cancel()
+            coordinator.refreshTask = nil
+        }
     }
 }

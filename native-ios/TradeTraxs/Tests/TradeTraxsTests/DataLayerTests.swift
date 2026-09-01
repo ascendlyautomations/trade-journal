@@ -38,7 +38,7 @@ final class DataLayerTests: XCTestCase {
             contracts: nil,
             entry_price: nil,
             exit_price: nil,
-            entry_time: "2024-06-01 15:30:00+00",
+            entry_time: nil,
             exit_time: nil,
             pnl: FlexibleNumber(10),
             rr: nil,
@@ -49,14 +49,19 @@ final class DataLayerTests: XCTestCase {
             public_description: nil,
             image_url: nil,
             notes: nil,
-            created_at: "2024-06-01 15:30:00+00",
+            created_at: nil,
             date: nil,
             trade_date: nil
         )
         XCTAssertThrowsError(try TradeMapper.mapToDomain(bad))
 
-        bad.ticker = "NQ"
+        bad.entry_time = "2024-06-01 15:30:00+00"
+        bad.created_at = "2024-06-01 15:30:00+00"
         XCTAssertNoThrow(try TradeMapper.mapToDomain(bad))
+
+        bad.ticker = "NQ"
+        let mapped = try? TradeMapper.mapToDomain(bad)
+        XCTAssertEqual(mapped?.symbol.ticker, "NQ")
     }
 
     func testProfileOverviewMetricsMatchWebFormulas() {

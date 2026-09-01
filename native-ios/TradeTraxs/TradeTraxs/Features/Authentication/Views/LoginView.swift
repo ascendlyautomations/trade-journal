@@ -73,8 +73,14 @@ struct LoginView: View {
         SocialSignInButtons(
             isEnabled: !viewModel.isSubmitting,
             isLoading: viewModel.isSubmitting,
-            onApple: {
-                Task { await viewModel.signInWithApple() }
+            onAppleCredential: { credential in
+                Task { await viewModel.signInWithApple(credential: credential) }
+            },
+            onAppleCancelled: {
+                viewModel.handleAppleSignInCancelled()
+            },
+            onAppleFailure: { error in
+                viewModel.handleAppleSignInFailure(error)
             },
             onGoogle: {
                 Task { await viewModel.signInWithGoogle() }

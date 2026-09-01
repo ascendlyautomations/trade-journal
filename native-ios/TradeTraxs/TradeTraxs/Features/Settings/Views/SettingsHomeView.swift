@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct SettingsHomeView: View {
-    let navigationCoordinator: NavigationCoordinator
     let authenticationCoordinator: AuthenticationCoordinator
 
+    @Environment(\.stackNavigation) private var stackNavigation
     @Environment(\.themeColors) private var colors
     @State private var confirmsLogout = false
 
@@ -14,7 +14,7 @@ struct SettingsHomeView: View {
                     ForEach(section.items) { item in
                         Button {
                             ExperienceHaptics.play(.selection)
-                            navigationCoordinator.open(.profile(.settings(item.route)))
+                            stackNavigation?.pushSettings(item.route)
                         } label: {
                             SettingsNavigationRow(
                                 title: item.route.title,
@@ -23,6 +23,7 @@ struct SettingsHomeView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("settings.row.\(item.route.rawValue)")
                     }
                 } header: {
                     Text(section.title)

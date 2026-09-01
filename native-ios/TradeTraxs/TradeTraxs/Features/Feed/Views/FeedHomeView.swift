@@ -27,7 +27,8 @@ struct FeedHomeView: View {
                 detailCache: data.detailCache,
                 engagementStore: data.engagementStore,
                 navigationCoordinator: navigationCoordinator,
-                realtimeHub: data.realtimeHub
+                realtimeHub: data.realtimeHub,
+                rpc: data.rpc
             )
         )
         self.imagePipeline = data.imagePipeline
@@ -69,9 +70,9 @@ struct FeedHomeView: View {
                 }
             case .loaded where viewModel.showsEmpty:
                 VStack(spacing: 0) {
-                    if viewModel.scope == .following, !viewModel.stories.isEmpty {
-                        storiesSection
-                    }
+                if viewModel.scope == .following {
+                    storiesSection
+                }
                     ExperienceEmptyState(
                         icon: .feed,
                         title: emptyTitle,
@@ -122,7 +123,12 @@ struct FeedHomeView: View {
             }
         }
         .onChange(of: ContentMutationStore.shared.revision) { _, _ in
-            Task { await viewModel.refresh() }
+            switch ContentMutationStore.shared.latest {
+            case .story(let story):
+                viewModel.applyStoryCreated(story)
+            default:
+                Task { await viewModel.refresh() }
+            }
         }
         .onChange(of: FollowMutationCoordinator.shared.revision) { _, _ in
             // Following scope membership changed — soft refresh timeline without timers.
@@ -151,7 +157,7 @@ struct FeedHomeView: View {
     private var feedList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                if viewModel.scope == .following, !viewModel.stories.isEmpty {
+                if viewModel.scope == .following {
                     storiesSection
                     Rectangle()
                         .fill(colors.border.opacity(0.55))
@@ -194,8 +200,10 @@ struct FeedHomeView: View {
     private var storiesSection: some View {
         FeedStoriesRow(
             stories: viewModel.stories,
+            viewerID: viewModel.viewerID,
             detailCache: detailCache,
             imagePipeline: imagePipeline,
+            onAddStory: { viewModel.openCreateStory() },
             onOpen: { viewModel.openStory($0) }
         )
     }

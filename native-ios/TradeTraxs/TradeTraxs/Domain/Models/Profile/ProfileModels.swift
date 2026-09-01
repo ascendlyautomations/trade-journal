@@ -49,6 +49,29 @@ nonisolated struct Profile: Hashable, Codable, Sendable, Identifiable {
     var createdAt: Date
 }
 
+extension Profile {
+    /// Merge a newer cache seed without dropping richer fields such as avatars.
+    nonisolated func mergingCachedPresentation(with incoming: Profile) -> Profile {
+        guard id == incoming.id else { return incoming }
+        var merged = self
+        merged.avatar = incoming.avatar ?? merged.avatar
+        if !incoming.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            merged.username = incoming.username
+        }
+        if !incoming.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            merged.displayName = incoming.displayName
+        }
+        merged.bio = incoming.bio ?? merged.bio
+        merged.traderType = incoming.traderType ?? merged.traderType
+        merged.tradingStyle = incoming.tradingStyle ?? merged.tradingStyle
+        merged.primaryMarket = incoming.primaryMarket ?? merged.primaryMarket
+        merged.startedTradingAt = incoming.startedTradingAt ?? merged.startedTradingAt
+        merged.isPrivate = incoming.isPrivate
+        merged.isCreator = incoming.isCreator || merged.isCreator
+        return merged
+    }
+}
+
 nonisolated struct Creator: Hashable, Codable, Sendable, Identifiable {
     var id: ProfileID
     var profileID: ProfileID
@@ -85,4 +108,27 @@ nonisolated struct ProfileStats: Hashable, Codable, Sendable {
     var payoutTotal: Decimal? = nil
     /// Not on web Profile — kept for forward compatibility; always `nil` today.
     var expectancy: Decimal? = nil
+}
+
+extension ProfileStats {
+    /// True when overview metrics were computed from summary trades (REST aggregation).
+    /// Session bootstrap stubs leave ``winRate`` nil.
+    var hasLoadedHeaderMetrics: Bool {
+        winRate != nil
+    }
+
+    /// Prefer richer cached header metrics over partial session projections.
+    func mergingRicher(with incoming: ProfileStats) -> ProfileStats {
+        guard profileID == incoming.profileID else { return self }
+        if hasLoadedHeaderMetrics, !incoming.hasLoadedHeaderMetrics {
+            var merged = self
+            if incoming.followerCount > 0 { merged.followerCount = incoming.followerCount }
+            if incoming.followingCount > 0 { merged.followingCount = incoming.followingCount }
+            merged.postCount = max(merged.postCount, incoming.postCount)
+            merged.publicTradeCount = max(merged.publicTradeCount, incoming.publicTradeCount)
+            merged.tradeCount = max(merged.tradeCount, incoming.tradeCount)
+            return merged
+        }
+        return incoming
+    }
 }

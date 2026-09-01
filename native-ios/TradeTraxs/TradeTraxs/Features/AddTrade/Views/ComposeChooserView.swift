@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// Create hub — Trade / Post / Clip / Achievement.
+/// Create hub — Trade / Post / Clip / Achievement / Story.
 struct ComposeChooserView: View {
     let onAddTrade: () -> Void
     let onCreatePost: () -> Void
     let onCreateReel: () -> Void
     let onCreateAchievement: () -> Void
+    let onCreateStory: () -> Void
     let onImportCSV: () -> Void
     let onClose: () -> Void
 
@@ -53,6 +54,16 @@ struct ComposeChooserView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("compose.achievement")
+
+                Button(action: onCreateStory) {
+                    SettingsNavigationRow(
+                        title: "Story",
+                        subtitle: "Share a photo for 24 hours",
+                        systemImage: "camera.circle.fill"
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("compose.story")
             }
 
             Section {

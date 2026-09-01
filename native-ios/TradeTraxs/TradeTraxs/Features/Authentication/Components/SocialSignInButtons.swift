@@ -1,27 +1,77 @@
+import AuthenticationServices
 import SwiftUI
 
 struct SocialSignInButtons: View {
     var isEnabled: Bool
     var isLoading: Bool
-    var onApple: () -> Void
+    var onAppleCredential: (AppleIDCredentialPayload) -> Void
+    var onAppleCancelled: () -> Void
+    var onAppleFailure: (Error) -> Void
     var onGoogle: () -> Void
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var currentNonce: String?
 
     var body: some View {
         VStack(spacing: ExperienceSpacing.sm) {
-            socialButton(
-                title: "Continue with Apple",
-                systemImage: "apple.logo",
-                identifier: "auth.apple",
-                action: onApple
+            SignInWithAppleButton(.continue) { request in
+                guard isEnabled, !isLoading else { return }
+                let nonce = AppleSignInNonce.generate()
+                currentNonce = nonce
+                request.requestedScopes = [.fullName, .email]
+                request.nonce = AppleSignInNonce.sha256Hex(nonce)
+            } onCompletion: { result in
+                handleAppleCompletion(result)
+            }
+            .signInWithAppleButtonStyle(
+                colorScheme == .dark ? .white : .black
             )
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: ExperienceAccessibility.minTouchTarget)
+            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous))
+            .disabled(!isEnabled || isLoading)
+            .opacity(isEnabled && !isLoading ? ExperienceOpacity.opaque : ExperienceOpacity.disabled)
+            .accessibilityIdentifier("auth.apple")
+
             socialButton(
                 title: "Continue with Google",
                 systemImage: "g.circle.fill",
                 identifier: "auth.google",
                 action: onGoogle
             )
+        }
+    }
+
+    private func handleAppleCompletion(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            guard isEnabled, !isLoading else { return }
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let tokenData = credential.identityToken,
+                  let idToken = String(data: tokenData, encoding: .utf8)
+            else {
+                onAppleFailure(AuthenticationError.providerTokenInvalid(.apple))
+                return
+            }
+            ExperienceHaptics.play(.selection)
+            onAppleCredential(
+                AppleIDCredentialPayload(
+                    idToken: idToken,
+                    nonce: currentNonce,
+                    fullName: credential.fullName?.formattedDisplayName(),
+                    email: ProfileDisplayNamePolicy.normalized(credential.email)
+                )
+            )
+            currentNonce = nil
+
+        case .failure(let error):
+            currentNonce = nil
+            if let authError = error as? ASAuthorizationError, authError.code == .canceled {
+                onAppleCancelled()
+                return
+            }
+            onAppleFailure(error)
         }
     }
 

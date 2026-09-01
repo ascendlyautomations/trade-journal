@@ -18,6 +18,7 @@ struct TradeTraxsApp: App {
                 authenticationLifecycle: appEnvironment.authentication.lifecycle,
                 currentUserProfile: appEnvironment.currentUserProfile,
                 appBootstrapState: appEnvironment.appBootstrapState,
+                profileOnboardingGate: appEnvironment.profileOnboardingGate,
                 allowsDevelopmentBypass: appEnvironment.authentication.configuration.allowsDevelopmentSessionBypass
             )
             .environment(\.appEnvironment, appEnvironment)
@@ -25,6 +26,7 @@ struct TradeTraxsApp: App {
             .environment(appEnvironment.themeManager)
             .environment(appEnvironment.authentication.manager)
             .environment(appEnvironment.currentUserProfile)
+            .environmentObject(OwnerAccountFilterDropdownController.shared)
             .onAppear {
                 appDelegate.lifecycle = appEnvironment.lifecycle
                 appDelegate.pushNotifications = appEnvironment.pushNotifications
@@ -57,6 +59,7 @@ struct TradeTraxsApp: App {
                 applyActivityScreenshotLaunchArgumentsIfNeeded()
                 applyAddTradeScreenshotLaunchArgumentsIfNeeded()
                 applyCreateScreenshotLaunchArgumentsIfNeeded()
+                applyNavigationUITestLaunchArgumentsIfNeeded()
                 #endif
             }
             .onChange(of: scenePhase) { _, newPhase in
@@ -395,7 +398,7 @@ struct TradeTraxsApp: App {
             else if wantsSubscription { stack.append(.subscription) }
             else if wantsPrivacy { stack.append(.privacy) }
 
-            appEnvironment.navigation.coordinator.openSettings(stack)
+            appEnvironment.navigation.coordinator.open(.settingsStack(stack))
             try? await Task.sleep(nanoseconds: 500_000_000)
         }
     }
@@ -519,6 +522,46 @@ struct TradeTraxsApp: App {
             } else if wantsReel {
                 appEnvironment.navigation.coordinator.openCompose(.reel)
             }
+        }
+    }
+
+    /// Seeds a deterministic authenticated shell for rendered navigation UI tests.
+    private func applyNavigationUITestLaunchArgumentsIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-uitesting-navigation-shell") else { return }
+
+        Task { @MainActor in
+            await appEnvironment.authentication.coordinator.logout()
+            try await appEnvironment.authentication.coordinator.continueAsDevelopmentSessionIfAllowed()
+            let viewerID = ProfileID(
+                await appEnvironment.authentication.sessionBridge.currentUserID?.rawValue
+                    ?? MessagesInboxFixtures.viewerID.rawValue
+            )
+
+            MessagesInboxStore.shared.invalidate()
+            MessagesInboxFixtures.seedStore(MessagesInboxStore.shared, viewerID: viewerID)
+            for profile in MessagesInboxFixtures.profiles(
+                for: MessagesInboxStore.shared.conversations,
+                viewerID: viewerID
+            ) {
+                appEnvironment.data.detailCache.seed(profile)
+            }
+
+            ActivityInboxStore.shared.invalidate()
+            for profile in ActivityFixtures.profiles() {
+                appEnvironment.data.detailCache.seed(profile)
+            }
+            ActivityFixtures.seedStore(ActivityInboxStore.shared, unreadCount: 2)
+
+            appEnvironment.navigation.store.selectedTab = .home
+            if args.contains("-uitesting-navigation-start-trades") {
+                appEnvironment.navigation.coordinator.pushHome(.trades)
+            }
+            if args.contains("-uitesting-navigation-start-trades-manage-accounts") {
+                appEnvironment.navigation.coordinator.pushHome(.trades)
+                appEnvironment.navigation.coordinator.pushHome(.settings(.tradingAccounts))
+            }
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
         }
     }
     #endif

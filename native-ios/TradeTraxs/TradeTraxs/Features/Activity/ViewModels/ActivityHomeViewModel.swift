@@ -13,6 +13,7 @@ final class ActivityHomeViewModel {
     private let realtimeHub: RealtimeHub?
     private let inboxStore: ActivityInboxStore
     private let router: any NotificationRouting
+    private let rpc: (any RPCClient)?
 
     private(set) var phase: ActivityLoadPhase = .idle
     private(set) var actors: [ProfileID: Profile] = [:]
@@ -27,8 +28,9 @@ final class ActivityHomeViewModel {
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
         realtimeHub: RealtimeHub? = nil,
-        inboxStore: ActivityInboxStore = .shared,
-        router: any NotificationRouting = NotificationRouter()
+        inboxStore: ActivityInboxStore,
+        router: any NotificationRouting,
+        rpc: (any RPCClient)? = nil
     ) {
         self.notifications = notifications
         self.followRequests = followRequests
@@ -39,6 +41,7 @@ final class ActivityHomeViewModel {
         self.realtimeHub = realtimeHub
         self.inboxStore = inboxStore
         self.router = router
+        self.rpc = rpc
     }
 
     var sections: [ActivitySectionModel] {
@@ -110,7 +113,7 @@ final class ActivityHomeViewModel {
 
     func openNotificationSettings() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.openSettings([.home, .notifications])
+        navigationCoordinator.pushProfile(.settings(.notifications))
     }
 
     func markRead(id: NotificationID, playHaptic: Bool = true) {
@@ -138,22 +141,43 @@ final class ActivityHomeViewModel {
     }
 
     func markAllRead() {
-        guard unreadCount > 0, !isMarkingAllRead else { return }
+        guard unreadCount > 0, !isMarkingAllRead else {
+            ActivityMarkReadDiagnostics.logMarkAllRead(
+                outcome: .skipped,
+                unreadBefore: unreadCount,
+                rowCount: inboxStore.items.count
+            )
+            return
+        }
         isMarkingAllRead = true
         let previousItems = inboxStore.items
         let previousUnread = inboxStore.unreadCount
+        let rowCount = previousItems.count
         inboxStore.markAllReadLocally()
         Task {
             defer { isMarkingAllRead = false }
             do {
                 try await notifications.markAllRead()
-                AppIconBadgeSync.refresh(animated: true)
+                let reconciledUnread = (try? await notifications.unreadCount()) ?? 0
+                inboxStore.confirmMarkAllRead(unreadCount: reconciledUnread)
+                ActivityMarkReadDiagnostics.logMarkAllRead(
+                    outcome: .success,
+                    unreadBefore: previousUnread,
+                    rowCount: rowCount
+                )
             } catch {
                 inboxStore.replace(
                     items: previousItems,
                     unreadCount: previousUnread,
                     nextCursor: inboxStore.nextCursor,
                     pendingFollowRequestCount: inboxStore.pendingFollowRequestCount
+                )
+                ExperienceHaptics.play(.warning)
+                ActivityMarkReadDiagnostics.logMarkAllRead(
+                    outcome: .failure,
+                    unreadBefore: previousUnread,
+                    rowCount: rowCount,
+                    errorType: ActivityMarkReadDiagnostics.errorType(error)
                 )
             }
         }
@@ -169,7 +193,9 @@ final class ActivityHomeViewModel {
                 notifications: notifications,
                 followRequests: followRequests,
                 session: session,
-                realtimeHub: realtimeHub
+                realtimeHub: realtimeHub,
+                detailCache: detailCache,
+                rpc: rpc
             )
             return
         }
@@ -182,14 +208,18 @@ final class ActivityHomeViewModel {
             notifications: notifications,
             followRequests: followRequests,
             session: session,
-            realtimeHub: realtimeHub
+            realtimeHub: realtimeHub,
+            detailCache: detailCache,
+            rpc: rpc
         )
 
         if force {
             do {
                 try await inboxStore.refresh(
                     notifications: notifications,
-                    followRequests: followRequests
+                    followRequests: followRequests,
+                    detailCache: detailCache,
+                    rpc: rpc
                 )
                 phase = .loaded
             } catch {

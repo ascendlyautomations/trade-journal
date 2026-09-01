@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ProfileTradeCard: View {
     let trade: Trade
-    let accountName: String?
     let imagePipeline: any ImagePipeline
     let engagementStore: EngagementStore
     let showsOwnerActions: Bool
@@ -12,45 +11,29 @@ struct ProfileTradeCard: View {
     let onDelete: () -> Void
 
     @Environment(\.themeColors) private var colors
-    @Environment(\.experienceTheme) private var theme
 
     private var target: InteractionTarget { .trade(trade.id) }
+
+    private var mediaReference: MediaReference? {
+        ProfileCardMediaPresence.tradeMedia(in: trade)
+    }
 
     var body: some View {
         ExperienceCard {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                    TradeImageView(
-                        reference: trade.thumbnail,
-                        imagePipeline: imagePipeline
-                    )
-                    .accessibilityHidden(true)
-
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(trade.symbol.ticker)
-                                .experienceStyle(.headline, color: colors.primaryText)
-                            Spacer(minLength: ExperienceSpacing.xs)
-                            Text(TradeDisplay.pnlText(trade.realizedPnL))
-                                .experienceStyle(
-                                    .metric,
-                                    color: theme.metricColor(
-                                        for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
-                                    )
-                                )
-                        }
-
-                        HStack(spacing: ExperienceSpacing.xs) {
-                            ExperienceTag(
-                                title: TradeDisplay.sideTitle(trade.side),
-                                tone: trade.side == .long ? .success : .error
+                Group {
+                    if let mediaReference {
+                        HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                            TradeImageView(
+                                reference: mediaReference,
+                                imagePipeline: imagePipeline
                             )
-                            Text(TradeDisplay.dateText(trade.createdAt))
-                                .experienceStyle(.caption, color: colors.secondaryText)
-                            visibilityIcon
-                        }
+                            .accessibilityHidden(true)
 
-                        metaRow
+                            tradeSummaryColumn
+                        }
+                    } else {
+                        tradeSummaryColumn
                     }
                 }
                 .contentShape(Rectangle())
@@ -109,12 +92,32 @@ struct ProfileTradeCard: View {
         .accessibilityIdentifier("profile.trades.card.\(trade.id.rawValue)")
     }
 
+    private var tradeSummaryColumn: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            PublicTradeHeadlineRow(
+                ticker: trade.symbol.ticker,
+                realizedPnL: trade.realizedPnL
+            )
+            .accessibilityIdentifier("profile.trade.headline")
+
+            HStack(spacing: ExperienceSpacing.xs) {
+                ExperienceTag(
+                    title: TradeDisplay.sideTitle(trade.side),
+                    tone: trade.side == .long ? .success : .error
+                )
+                Text(TradeDisplay.dateText(trade.createdAt))
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                visibilityIcon
+            }
+
+            metaRow
+        }
+    }
+
     private var metaRow: some View {
         HStack(spacing: ExperienceSpacing.sm) {
-            if let accountName, !accountName.isEmpty {
-                Text(accountName)
-                    .experienceStyle(.caption, color: colors.tertiaryText)
-                    .lineLimit(1)
+            if let accountBadge = trade.publicAccountBadge {
+                ExperienceTag(title: accountBadge, tone: .info)
             }
             Text(TradeDisplay.rrText(trade.riskReward))
                 .experienceStyle(.caption, color: colors.tertiaryText)

@@ -3,8 +3,8 @@ import OSLog
 
 #if DEBUG
 /// DEBUG-only Explore bootstrap timings — not used in Release.
-enum ExploreLoadProbe {
-    private static let log = Logger(subsystem: "com.tradetraxs.TradeTraxs", category: "ExploreLoad")
+nonisolated enum ExploreLoadProbe {
+    private static let log = Logger(subsystem: AppLog.subsystem, category: "ExploreLoad")
 
     struct Snapshot: Sendable {
         var requestCount: Int
@@ -15,9 +15,9 @@ enum ExploreLoadProbe {
         var notes: String
     }
 
-    private static var startedAt: Date?
-    private static var requests = 0
-    private static var blocking = 0
+    nonisolated(unsafe) private static var startedAt: Date?
+    nonisolated(unsafe) private static var requests = 0
+    nonisolated(unsafe) private static var blocking = 0
 
     static func beginBootstrap() {
         startedAt = Date()

@@ -227,6 +227,10 @@ nonisolated struct TradeHistoryQuery: Hashable, Sendable {
     var trimmedSearch: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    func cacheKey(profileID: ProfileID) -> String {
+        "\(profileID.rawValue)|\(filters.account)|\(filters.dateRange.rawValue)|\(filters.customStart?.timeIntervalSince1970 ?? 0)|\(filters.customEnd?.timeIntervalSince1970 ?? 0)|\(filters.result.rawValue)|\(filters.pnlMin.map(String.init(describing:)) ?? "")|\(filters.pnlMax.map(String.init(describing:)) ?? "")|\(filters.direction.rawValue)|\(filters.visibility.rawValue)|\(filters.sort.rawValue)|\(trimmedSearch.lowercased())"
+    }
 }
 
 nonisolated struct TradeHistorySummary: Hashable, Sendable {

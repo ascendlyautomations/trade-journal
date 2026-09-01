@@ -21,9 +21,11 @@ final class FeedScreenViewModel {
     private let engagementStore: EngagementStore
     private let navigationCoordinator: NavigationCoordinator
     private let realtimeHub: RealtimeHub?
+    private let rpc: (any RPCClient)?
 
     private var bootstrapTask: Task<Void, Never>?
     private var realtimeTask: Task<Void, Never>?
+    private var bootstrapGeneration: UInt64 = 0
 
     init(
         feed: any FeedRepository,
@@ -34,7 +36,8 @@ final class FeedScreenViewModel {
         detailCache: DetailPresentationCache,
         engagementStore: EngagementStore,
         navigationCoordinator: NavigationCoordinator,
-        realtimeHub: RealtimeHub? = nil
+        realtimeHub: RealtimeHub? = nil,
+        rpc: (any RPCClient)? = nil
     ) {
         self.feed = feed
         self.trades = trades
@@ -45,6 +48,7 @@ final class FeedScreenViewModel {
         self.engagementStore = engagementStore
         self.navigationCoordinator = navigationCoordinator
         self.realtimeHub = realtimeHub
+        self.rpc = rpc
     }
 
     // MARK: - Published façade (views bind these; owned by ``state``)
@@ -123,7 +127,9 @@ final class FeedScreenViewModel {
             state.stories = []
         }
         bootstrapTask?.cancel()
-        bootstrapTask = Task { await performBootstrap(forceNetwork: true, resetting: true) }
+        bootstrapGeneration &+= 1
+        let generation = bootstrapGeneration
+        bootstrapTask = Task { await performBootstrap(forceNetwork: true, resetting: true, generation: generation) }
     }
 
     func setContentFilter(_ next: FeedContentFilter) {
@@ -137,6 +143,9 @@ final class FeedScreenViewModel {
         switch entry {
         case .trade(_, let trade):
             detailCache.seed(trade)
+            if let postID = entry.feedTradeEngagementPostID {
+                detailCache.seedFeedEngagementTarget(.feedPost(postID), forTrade: trade.id)
+            }
             navigationCoordinator.open(.feed(.trade(trade.id)))
         case .post(_, let post):
             detailCache.seed(post)
@@ -146,6 +155,7 @@ final class FeedScreenViewModel {
             navigationCoordinator.open(.feed(.reel(reel.id)))
         case .achievement(_, let achievement):
             detailCache.seed(achievement)
+            detailCache.seedFeedEngagementTarget(entry.interactionTarget, forAchievement: achievement.id)
             navigationCoordinator.open(.feed(.achievement(achievement.id)))
         }
     }
@@ -166,6 +176,29 @@ final class FeedScreenViewModel {
         navigationCoordinator.present(fullScreen: .storyViewer(story.id))
     }
 
+    func openCreateStory() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.openCompose(.story)
+    }
+
+    /// Inserts a newly published story into the strip without a full feed reload.
+    func applyStoryCreated(_ story: Story) {
+        guard state.scope == .following else { return }
+        guard ActiveStorySemantics.isActive(createdAt: story.createdAt) else { return }
+        detailCache.seed(story)
+        guard let viewerID = state.viewerID else { return }
+
+        if story.authorProfileID == viewerID {
+            let others = state.stories.filter { $0.authorProfileID != viewerID }
+            state.stories = [story] + others
+        } else {
+            var merged = state.stories.filter { $0.id != story.id && $0.authorProfileID != story.authorProfileID }
+            merged.append(story)
+            state.stories = ActiveStorySemantics.stripStories(from: merged, viewerID: viewerID)
+        }
+        state.lastUpdated = Date()
+    }
+
     func author(for profileID: ProfileID) -> Profile? {
         detailCache.profile(id: profileID)
             ?? FollowListFixtures.profile(id: profileID)
@@ -183,11 +216,66 @@ final class FeedScreenViewModel {
 
     // MARK: - Bootstrap
 
-    private func performBootstrap(forceNetwork _: Bool, resetting: Bool) async {
+    private func performBootstrap(forceNetwork: Bool, resetting: Bool, generation: UInt64? = nil) async {
+        let activeGeneration = generation ?? bootstrapGeneration
         if resetting {
             state.phase = state.entries.isEmpty ? .loading : state.phase
             state.nextCursor = nil
             state.hasMore = true
+        }
+
+        if BackendV2FeatureFlags.isEnabled(.feed), let rpc {
+            if let userID = await session.currentUserID {
+                let viewerID = ProfileID(userID.rawValue)
+                do {
+                    let loaded = try await FeedBootstrapLoader.loadTimeline(
+                        viewerID: viewerID,
+                        scope: state.scope,
+                        contentFilter: state.contentFilter,
+                        cursor: resetting ? nil : state.nextCursor,
+                        limit: 20,
+                        rpc: rpc,
+                        feed: feed,
+                        trades: trades,
+                        profiles: profiles,
+                        achievements: achievements,
+                        detailCache: detailCache,
+                        forceNetwork: forceNetwork
+                    )
+                    guard activeGeneration == bootstrapGeneration, !Task.isCancelled else { return }
+                    state.viewerID = viewerID
+                    if resetting {
+                        state.entries = loaded.entries
+                        state.stories = loaded.stories
+                    } else {
+                        let existing = Set(state.entries.map(\.id))
+                        let appended = loaded.entries.filter { !existing.contains($0.id) }
+                        state.entries = FeedSupport.sortDescending(state.entries + appended)
+                    }
+                    state.nextCursor = loaded.nextCursor
+                    state.hasMore = loaded.nextCursor != nil
+                    for (target, snapshot) in loaded.engagement {
+                        engagementStore.seed(snapshot, for: target)
+                    }
+                    if loaded.engagement.isEmpty {
+                        prefetchEngagement()
+                    }
+                    state.phase = .loaded
+                    state.didBootstrap = true
+                    state.lastUpdated = Date()
+                    await startRealtimeIfNeeded()
+                    bootstrapTask = nil
+                    return
+                } catch is FeedBootstrapLoader.LoaderError {
+                    // Controlled fallback to legacy REST merge.
+                } catch {
+                    if state.entries.isEmpty {
+                        state.phase = .failed(FeedSupport.message(for: error))
+                    }
+                    bootstrapTask = nil
+                    return
+                }
+            }
         }
 
         let context = FeedBootstrap.Context(
@@ -240,14 +328,7 @@ final class FeedScreenViewModel {
     }
 
     private func prefetchEngagement() {
-        let targets: [InteractionTarget] = state.visibleEntries.compactMap { entry in
-            switch entry {
-            case .trade(_, let trade): return .trade(trade.id)
-            case .post(_, let post): return .profilePost(post.id)
-            case .clip(_, let reel): return .reel(reel.id)
-            case .achievement(_, let achievement): return .achievement(achievement.id)
-            }
-        }
+        let targets = state.visibleEntries.map(\.interactionTarget)
         engagementStore.prefetch(targets)
     }
 

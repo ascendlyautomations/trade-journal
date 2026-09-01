@@ -2,10 +2,10 @@ import Foundation
 import OSLog
 
 /// Entry façade for push notification routing.
-struct NotificationRouterFacade: Sendable {
+nonisolated struct NotificationRouterFacade: Sendable {
     private let router: any NotificationRouting
 
-    init(router: any NotificationRouting = NotificationRouter()) {
+    init(router: any NotificationRouting) {
         self.router = router
     }
 

@@ -4,12 +4,17 @@ import SwiftUI
 struct ManageAccountEditorView: View {
     enum Mode {
         case create
-        case edit(TradingAccountID)
+        case edit(TradingAccount)
     }
 
     @Bindable var viewModel: ManageAccountsViewModel
     let mode: Mode
     @State private var draft: TradingAccountDraft
+    @State private var showInAccountDropdowns = true
+    @State private var customPublicStatus = ""
+    @State private var payoutDraft = AccountPayoutEntryDraft(amountDigits: "", payoutDate: .now, note: "")
+    @State private var editingPayoutID: AccountPayoutEntryID?
+    @State private var showsPayoutSheet = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColors) private var colors
 
@@ -17,6 +22,10 @@ struct ManageAccountEditorView: View {
         self.viewModel = viewModel
         self.mode = mode
         _draft = State(initialValue: draft)
+        if case .edit(let account) = mode {
+            _showInAccountDropdowns = State(initialValue: account.showInAccountDropdowns)
+            _customPublicStatus = State(initialValue: account.customPublicStatus ?? "")
+        }
     }
 
     private var title: String {
@@ -24,6 +33,11 @@ struct ManageAccountEditorView: View {
         case .create: return "Add Account"
         case .edit: return "Edit Account"
         }
+    }
+
+    private var saveAccountID: TradingAccountID? {
+        if case .edit(let account) = mode { return account.id }
+        return nil
     }
 
     var body: some View {
@@ -114,6 +128,51 @@ struct ManageAccountEditorView: View {
                 }
             }
 
+            if case .edit(let account) = mode {
+                Section {
+                    Toggle("Display in Account Dropdowns", isOn: $showInAccountDropdowns)
+                        .accessibilityIdentifier("manageAccounts.showInDropdowns")
+
+                    SettingsLabeledField(
+                        title: "Public Status",
+                        helper: "Optional label on your profile (e.g. Passed, Funded, Blown)"
+                    ) {
+                        TextField("Optional", text: $customPublicStatus)
+                            .textInputAutocapitalization(.words)
+                            .accessibilityIdentifier("manageAccounts.publicStatus")
+                    }
+                } header: {
+                    Text("Profile & Pickers")
+                } footer: {
+                    Text("Hidden accounts stay in Manage Accounts and your trade history. They only disappear from Add Trade and account filters.")
+                }
+
+                Section {
+                    AccountPayoutListContent(
+                        viewModel: viewModel,
+                        accountID: account.id,
+                        onAdd: {
+                            editingPayoutID = nil
+                            payoutDraft = AccountPayoutEntryDraft(amountDigits: "", payoutDate: .now, note: "")
+                            showsPayoutSheet = true
+                        },
+                        onEdit: { entry in
+                            editingPayoutID = entry.id
+                            payoutDraft = AccountPayoutEntryDraft(
+                                amountDigits: NSDecimalNumber(decimal: entry.amount.amount).stringValue,
+                                payoutDate: entry.payoutDate,
+                                note: entry.note ?? ""
+                            )
+                            showsPayoutSheet = true
+                        }
+                    )
+                } header: {
+                    Text("Manual Payouts")
+                } footer: {
+                    Text("Private to you. Share payouts publicly by posting payout achievements.")
+                }
+            }
+
             if let formError = viewModel.formError {
                 Section {
                     Text(formError)
@@ -141,15 +200,42 @@ struct ManageAccountEditorView: View {
         }
         .disabled(viewModel.isSaving)
         .accessibilityIdentifier("manageAccounts.editor")
+        .sheet(isPresented: $showsPayoutSheet) {
+            if let accountID = saveAccountID {
+                AccountPayoutEditorSheet(
+                    viewModel: viewModel,
+                    accountID: accountID,
+                    editingEntryID: editingPayoutID,
+                    draft: $payoutDraft,
+                    isPresented: $showsPayoutSheet
+                )
+            }
+        }
+        .task(id: editAccountID?.rawValue) {
+            guard let accountID = editAccountID else { return }
+            await viewModel.loadPayoutEntries(for: accountID)
+        }
+    }
+
+    private var editAccountID: TradingAccountID? {
+        if case .edit(let account) = mode { return account.id }
+        return nil
     }
 
     private func save() async {
-        let ok: Bool
+        var ok: Bool
         switch mode {
         case .create:
             ok = await viewModel.create(draft)
-        case .edit(let id):
-            ok = await viewModel.update(id: id, draft: draft)
+        case .edit(let account):
+            ok = await viewModel.update(id: account.id, draft: draft)
+            if ok {
+                ok = await viewModel.updateInsightsSettings(
+                    accountID: account.id,
+                    showInAccountDropdowns: showInAccountDropdowns,
+                    customPublicStatus: customPublicStatus
+                )
+            }
         }
         if ok { dismiss() }
     }

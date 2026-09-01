@@ -49,7 +49,6 @@ final class SettingsAccountViewModel {
             username = profile.username
             createdAt = profile.createdAt
             if email == nil {
-                // Fall back to auth user record when session email is absent (e.g. some OAuth flows).
                 email = try? await profiles.currentUser().email
             }
             errorMessage = nil
@@ -57,11 +56,6 @@ final class SettingsAccountViewModel {
             errorMessage = UserFacingError.message(for: error)
         }
         isLoading = false
-    }
-
-    func openSecurity() {
-        ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.profile(.settings(.security)))
     }
 
     func requestPasswordReset() {

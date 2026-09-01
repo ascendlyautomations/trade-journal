@@ -10,6 +10,7 @@ final class PropFirmDetailViewModel {
     private(set) var errorMessage: String?
 
     private let trades: any TradeRepository
+    private let rpc: (any RPCClient)?
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
     private let realtimeHub: RealtimeHub?
@@ -23,10 +24,12 @@ final class PropFirmDetailViewModel {
         trades: any TradeRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
+        rpc: (any RPCClient)? = nil,
         realtimeHub: RealtimeHub? = nil
     ) {
         self.accountID = accountID
         self.trades = trades
+        self.rpc = rpc
         self.session = session
         self.detailCache = detailCache
         self.realtimeHub = realtimeHub
@@ -44,6 +47,32 @@ final class PropFirmDetailViewModel {
         let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
 
         do {
+            if let rpc, !ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+                do {
+                    let result = try await PropFirmBootstrapLoader.load(
+                        accountID: accountID,
+                        profileID: profileID,
+                        rpc: rpc,
+                        detailCache: detailCache
+                    )
+                    snapshot = result.snapshot
+                    hasLoaded = true
+                    await startRealtime(profileID: profileID)
+                    isLoading = false
+                    return
+                } catch PropFirmBootstrapLoader.LoaderError.flagOff,
+                        PropFirmBootstrapLoader.LoaderError.rpcUnavailable {
+                    // Fall through to legacy REST path.
+                } catch PropFirmBootstrapLoader.LoaderError.accountNotFound {
+                    snapshot = nil
+                    errorMessage = "This account is not a prop-firm account."
+                    isLoading = false
+                    return
+                } catch {
+                    // Fall through to legacy REST path.
+                }
+            }
+
             let accounts: [TradingAccount]
             if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
                 accounts = PropFirmFixtures.accounts(owner: profileID)

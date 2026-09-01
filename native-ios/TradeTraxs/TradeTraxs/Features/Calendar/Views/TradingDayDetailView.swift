@@ -135,7 +135,6 @@ struct TradingDayDetailView: View {
                 ForEach(viewModel.dayTrades) { trade in
                     ProfileTradeCard(
                         trade: trade,
-                        accountName: viewModel.displayAccountTitle(for: trade.accountID),
                         imagePipeline: imagePipeline,
                         engagementStore: engagementStore,
                         showsOwnerActions: false,

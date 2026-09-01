@@ -81,7 +81,7 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
     private func fetch(reference: MediaReference, purpose: ImagePurpose) async throws -> Data {
         let identifier = reference.id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !identifier.isEmpty else {
-            throw AppError.network(.validation(message: "Empty media reference"))
+            throw AppError.network(.validation(statusCode: nil, message: "Empty media reference"))
         }
 
         // Prefer public URL resolution (web parity) for storage paths.

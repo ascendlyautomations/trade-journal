@@ -23,7 +23,8 @@ enum CompositionRoot {
         let networking = NetworkingEnvironment.make(
             appConfiguration: configuration,
             accessTokenProvider: {
-                tokenSource.token()
+                await SessionNetworkGate.shared.awaitReady()
+                return tokenSource.token()
             }
         )
 
@@ -51,6 +52,10 @@ enum CompositionRoot {
             session: authentication.sessionBridge,
             authenticationManager: authentication.manager
         )
+        authentication.manager.sessionBootstrap = AuthenticatedSessionBootstrap(
+            profiles: data.profiles,
+            backend: authBackend
+        )
         InboxMarkReadCoordinator.shared.configure(
             messages: data.messages,
             rooms: data.rooms,
@@ -76,9 +81,12 @@ enum CompositionRoot {
         AppLog.application.debug(
             "Active theme: \(themeManager.selectedIdentifier.rawValue, privacy: .public)"
         )
-        AppLog.authentication.debug(
-            "Auth state after cold launch: \(String(describing: authState), privacy: .public)"
+        SafeAuthLog.logState(
+            authState,
+            session: authentication.sessionManager.currentSession,
+            expiration: SessionExpiration(leeway: authentication.configuration.refreshLeeway)
         )
+        BackendV2FeatureFlags.logStartupFlags()
 
         let currentUserProfile = CurrentUserProfileStore(
             profiles: data.profiles,
@@ -88,15 +96,28 @@ enum CompositionRoot {
             rpc: data.rpc
         )
         let appBootstrapState = AppBootstrapState()
+        let profileOnboardingGate = ProfileOnboardingGateStore(
+            profiles: data.profiles,
+            session: data.session,
+            rpc: data.rpc,
+            detailCache: data.detailCache,
+            realtimeHub: data.realtimeHub,
+            profileStore: currentUserProfile
+        )
         FollowMutationCoordinator.shared.configure(
             detailCache: data.detailCache,
             currentUserProfile: currentUserProfile
         )
 
-        let pushNotifications = PushNotificationCenter(
-            tokenClient: DevicePushTokenClient(transport: transport),
-            navigation: navigation
-        )
+        let pushNotifications = MainActor.assumeIsolated {
+            PushNotificationCenter(
+                tokenClient: DevicePushTokenClient(transport: transport),
+                navigation: navigation,
+                activityInbox: .shared,
+                badgeController: .shared,
+                routerFacade: NotificationRouterFacade(router: NotificationRouter())
+            )
+        }
         pushNotifications.attachNotificationsRepository(data.notifications)
 
         // Session caches belong to the authenticated user — invalidate on logout / switch.
@@ -109,15 +130,16 @@ enum CompositionRoot {
                 data: data
             )
             appBootstrapState.reset()
+            profileOnboardingGate.reset()
         }
         authentication.coordinator.onAuthenticatedSessionBound = {
-            pushNotifications.syncRegistrationForAuthenticatedSession()
+            Task {
+                await authentication.manager.awaitNetworkReady()
+                pushNotifications.syncRegistrationForAuthenticatedSession()
+            }
         }
 
-        // Cold restore already authenticated — register once the graph exists.
-        if authentication.manager.state.isAuthenticated {
-            pushNotifications.syncRegistrationForAuthenticatedSession()
-        }
+        // Push registration runs after session restore via onAuthenticatedSessionBound.
 
         return AppEnvironment(
             configuration: configuration,
@@ -127,6 +149,7 @@ enum CompositionRoot {
             themeManager: themeManager,
             currentUserProfile: currentUserProfile,
             appBootstrapState: appBootstrapState,
+            profileOnboardingGate: profileOnboardingGate,
             pushNotifications: pushNotifications
         )
     }
@@ -169,14 +192,18 @@ enum CompositionRoot {
 
     private static func makeNavigationEnvironment() -> NavigationEnvironment {
         let restorer = UserDefaultsNavigationStateRestorer()
-        let state = NavigationRestorationPolicy.bootstrapState(restorer: restorer)
-        let store = NavigationStore(state: state)
+        let bootstrap = NavigationRestorationPolicy.bootstrapState(restorer: restorer)
+        let store = NavigationStore(state: bootstrap.shellState)
         let coordinator = NavigationCoordinator(store: store)
-        return NavigationEnvironment(
+        let environment = NavigationEnvironment(
             store: store,
             coordinator: coordinator,
             stateRestorer: restorer
         )
+        if let deferred = bootstrap.deferredAuthenticatedPaths {
+            environment.deferAuthenticatedSnapshot(deferred)
+        }
+        return environment
     }
 }
 

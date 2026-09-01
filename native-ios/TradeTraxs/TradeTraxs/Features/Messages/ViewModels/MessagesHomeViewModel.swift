@@ -32,8 +32,6 @@ final class MessagesHomeViewModel {
     private let realtimeHub: RealtimeHub?
     private let domain: MessagingDomain
 
-    private var loadTask: Task<Void, Never>?
-
     init(
         messages: any MessageRepository,
         rooms: any RoomRepository,
@@ -43,7 +41,8 @@ final class MessagesHomeViewModel {
         navigationCoordinator: NavigationCoordinator,
         inboxStore: MessagesInboxStore? = nil,
         realtimeHub: RealtimeHub? = nil,
-        domain: MessagingDomain? = nil
+        domain: MessagingDomain? = nil,
+        rpc: (any RPCClient)? = nil
     ) {
         self.messages = messages
         self.rooms = rooms
@@ -54,13 +53,20 @@ final class MessagesHomeViewModel {
         self.inboxStore = inboxStore ?? MessagesInboxStore.shared
         self.realtimeHub = realtimeHub
         self.domain = domain ?? .shared
+#if DEBUG
+        SafeInboxLog.storeObserved(
+            instance: self.inboxStore.debugInstance,
+            source: "MessagesHomeViewModel"
+        )
+#endif
         self.domain.configure(
             messages: messages,
             rooms: rooms,
             profiles: profiles,
             session: session,
             detailCache: detailCache,
-            realtimeHub: realtimeHub
+            realtimeHub: realtimeHub,
+            rpc: rpc
         )
     }
 
@@ -77,6 +83,8 @@ final class MessagesHomeViewModel {
             && directMessageItems.isEmpty
             && tradeRoomItems.isEmpty
     }
+
+    var canonicalInboxStore: MessagesInboxStore { inboxStore }
 
     var pinnedItems: [DirectMessageInboxItem] {
         filteredDirectMessages.filter(\.isPinned)
@@ -113,14 +121,23 @@ final class MessagesHomeViewModel {
     }
 
     func loadIfNeeded() {
-        guard loadTask == nil else { return }
-        loadTask = Task { await performLoad(forceNetwork: false) }
+        Task { await bootstrapIfNeeded() }
+    }
+
+    func bootstrapIfNeeded() async {
+        await domain.bootstrapHomeIfNeeded(forceNetwork: false)
+        syncFromDomain()
+        await domain.retainRealtime()
+    }
+
+    func setHomeScreenVisible(_ visible: Bool) {
+        domain.setHomeScreenVisible(visible)
     }
 
     func refresh() async {
-        loadTask?.cancel()
         isRefreshing = true
-        await performLoad(forceNetwork: true)
+        await domain.refreshHome()
+        syncFromDomain()
         isRefreshing = false
     }
 
@@ -138,8 +155,7 @@ final class MessagesHomeViewModel {
 
     func openSettings() {
         ExperienceHaptics.play(.selection)
-        // Messages gear → Settings → Notifications → Messages (hierarchical back stack).
-        navigationCoordinator.openSettings([.home, .notifications, .notificationsMessages])
+        navigationCoordinator.pushMessages(.settings(.home))
     }
 
     func presentNewChat() {
@@ -173,7 +189,7 @@ final class MessagesHomeViewModel {
                     lastMessageAt: nil,
                     unreadCount: 0,
                     isMuted: false,
-                    updatedAt: .now
+                    updatedAt: .distantPast
                 )
         )
         if unread > 0 {
@@ -270,25 +286,18 @@ final class MessagesHomeViewModel {
 
     func handleCreatedConversation(_ conversation: Conversation) {
         inboxStore.upsertConversation(conversation)
+        #if DEBUG
+        ConversationCreationTelemetry.navigationCompleted()
+        #endif
         navigationCoordinator.open(.messages(.thread(conversation.id)))
     }
 
     // MARK: - Private
 
-    private func performLoad(forceNetwork: Bool) async {
-        if phase != .loaded {
-            phase = .loading
-        }
-        if forceNetwork {
-            await domain.refreshHome()
-        } else {
-            await domain.bootstrapHomeIfNeeded(forceNetwork: false)
-        }
+    private func syncFromDomain() {
         viewerID = domain.state.viewerID
         phase = domain.state.phase
         isRefreshing = domain.state.isRefreshing
-        await domain.retainRealtime()
-        loadTask = nil
     }
 
     private func makeDMItem(_ conversation: Conversation) -> DirectMessageInboxItem {
@@ -312,7 +321,7 @@ final class MessagesHomeViewModel {
                 ?? "Conversation",
             username: username,
             preview: (preview?.isEmpty == false ? preview! : "No messages yet"),
-            timestamp: conversation.lastMessageAt ?? conversation.updatedAt,
+            timestamp: conversation.lastMessageAt,
             unreadCount: unread,
             isMuted: conversation.isMuted || inboxStore.isMuted(conversation.id),
             isPinned: conversation.isPinned || inboxStore.isPinned(conversation.id),

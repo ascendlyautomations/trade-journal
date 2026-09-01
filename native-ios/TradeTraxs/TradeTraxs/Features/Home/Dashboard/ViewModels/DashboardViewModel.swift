@@ -30,14 +30,17 @@ final class DashboardViewModel {
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator
     private let realtimeHub: RealtimeHub?
+    private let rpc: (any RPCClient)?
 
     private var profileID: ProfileID?
     private var tradeInputs: [DashboardChartMetrics.Input] = []
     private var payoutTotal: Decimal?
     private var loadTask: Task<Void, Never>?
     private var secondaryTask: Task<Void, Never>?
-    private var realtimeTask: Task<Void, Never>?
     private var hasLoaded = false
+    private var coldLoadFinished = false
+    private var contractDecodeFailed = false
+    private var loadGeneration: UInt64 = 0
     private var watchedChannel: RealtimeChannelID?
 
     /// Test / composition seam — `home` retained for call-site compatibility but unused.
@@ -48,7 +51,8 @@ final class DashboardViewModel {
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
-        realtimeHub: RealtimeHub? = nil
+        realtimeHub: RealtimeHub? = nil,
+        rpc: (any RPCClient)? = nil
     ) {
         _ = home
         self.trades = trades
@@ -57,6 +61,7 @@ final class DashboardViewModel {
         self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
         self.realtimeHub = realtimeHub
+        self.rpc = rpc
     }
 
     var accountFilterTitle: String {
@@ -65,7 +70,7 @@ final class DashboardViewModel {
             return "All Accounts"
         case .account(let id):
             if let account = accounts.first(where: { $0.id == id }) {
-                return TradingAccountDisplay.title(for: account, audience: .owner)
+                return TradingAccountDisplay.ownerDropdownLine(for: account)
             }
             return accountNames[id] ?? "Account"
         }
@@ -153,8 +158,22 @@ final class DashboardViewModel {
     }
 
     func accountMenuTitle(for account: TradingAccount) -> String {
-        TradingAccountDisplay.title(for: account, audience: .owner)
+        TradingAccountDisplay.ownerDropdownLine(for: account)
     }
+
+    var accountsForMenu: [TradingAccount] {
+        let selectedID: TradingAccountID? = {
+            if case .account(let id) = accountFilter { return id }
+            return nil
+        }()
+        return OwnerAccountDropdownSupport.menuAccounts(
+            profileID: profileID,
+            fallback: accounts,
+            preservingSelection: selectedID
+        )
+    }
+
+    var ownerAccountsProfileID: ProfileID? { profileID }
 
     func openPropFirmDetails() {
         guard case .account(let id) = accountFilter else { return }
@@ -212,15 +231,24 @@ final class DashboardViewModel {
             }
             return
         }
+        if coldLoadFinished {
+            return
+        }
         guard loadTask == nil else { return }
-        loadTask = Task { await performLoad() }
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        loadTask = Task { await performLoad(generation: generation) }
     }
 
     func refresh() async {
         loadTask?.cancel()
         secondaryTask?.cancel()
         isRefreshing = true
-        await performLoad(forceNetwork: true)
+        coldLoadFinished = false
+        contractDecodeFailed = false
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        await performLoad(forceNetwork: true, generation: generation)
         isRefreshing = false
     }
 
@@ -261,8 +289,7 @@ final class DashboardViewModel {
 
     func openManageAccounts() {
         ExperienceHaptics.play(.selection)
-        // Preserve Dashboard filter — only switches to Settings stack on Profile tab.
-        navigationCoordinator.openSettings([.tradingAccounts])
+        navigationCoordinator.pushHome(.settings(.tradingAccounts))
     }
 
     func openTradesList() {
@@ -273,6 +300,11 @@ final class DashboardViewModel {
     func openReports() {
         ExperienceHaptics.play(.selection)
         navigationCoordinator.open(.home(.reports))
+    }
+
+    func openPayouts() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.open(.home(.payouts))
     }
 
     // MARK: - Chart browse (presentation handoff → Trade History)
@@ -386,8 +418,22 @@ final class DashboardViewModel {
 
     // MARK: - Load
 
-    private func performLoad(forceNetwork: Bool = false) async {
-        DashboardLoadProbe.beginSession()
+    private func performLoad(forceNetwork: Bool = false, generation: UInt64? = nil) async {
+        let activeGeneration = generation ?? loadGeneration
+        if !forceNetwork {
+            DashboardLoadProbe.beginSession()
+            DashboardLoadProbe.recordColdAttempt()
+        } else {
+            DashboardLoadProbe.beginSession(label: "dashboard.refresh")
+        }
+        defer {
+            loadTask = nil
+            if !forceNetwork {
+                coldLoadFinished = true
+            }
+        }
+
+        await SessionNetworkGate.shared.awaitReady()
 
         let userID = await session.currentUserID
         let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
@@ -413,7 +459,47 @@ final class DashboardViewModel {
         if summary == nil { phase = .loading }
 
         do {
-            // Session cache — recompute only; never refetch analytics on filter changes
+            if BackendV2FeatureFlags.isEnabled(.dashboard), let rpc {
+                if let v2 = try await BootstrapTransportTimeout.run({ [self] in
+                    try await loadDashboardV2(
+                        profileID: profileID,
+                        rpc: rpc,
+                        forceNetwork: forceNetwork,
+                        generation: activeGeneration
+                    )
+                }) {
+                    guard activeGeneration == loadGeneration, !Task.isCancelled else {
+                        loadTask = nil
+                        return
+                    }
+                    apply(
+                        trades: v2.trades,
+                        accounts: v2.accounts,
+                        profileID: profileID
+                    )
+                    if let payout = v2.payoutTotal {
+                        payoutTotal = payout
+                    }
+                    hasLoaded = true
+                    recompute()
+                    phase = .loaded
+                    DashboardLoadProbe.markFirstUsefulRender()
+                    if v2.payoutTotal != nil {
+                        DashboardLoadProbe.markFullHydration()
+                    } else {
+                        secondaryTask?.cancel()
+                        secondaryTask = Task { [weak self] in
+                            await self?.hydratePayouts(profileID: profileID, forceNetwork: forceNetwork)
+                            DashboardLoadProbe.markFullHydration()
+                        }
+                    }
+                    await startRealtime(profileID: profileID)
+                    loadTask = nil
+                    return
+                }
+            }
+
+            // Legacy REST bootstrap (flag OFF or controlled RPC fallback).
             // or navigation return while this ViewModel is alive.
             if !forceNetwork, hasLoaded, !tradeInputs.isEmpty {
                 SessionNetworkProbe.record(.cacheHit, resource: "dashboard.session")
@@ -448,7 +534,10 @@ final class DashboardViewModel {
             }
 
             apply(trades: page.items, accounts: fetchedAccounts, profileID: profileID)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                loadTask = nil
+                return
+            }
             hasLoaded = true
             recompute()
             phase = .loaded
@@ -462,13 +551,45 @@ final class DashboardViewModel {
                 await self?.hydratePayouts(profileID: profileID, forceNetwork: forceNetwork)
                 DashboardLoadProbe.markFullHydration()
             }
+        } catch is CancellationError {
+            if summary == nil { phase = .idle }
         } catch {
             guard !Task.isCancelled else { return }
+            if isContractDecodeFailure(error) {
+                contractDecodeFailed = true
+            }
             if summary == nil {
                 phase = .failed(ProfileSectionSupport.message(for: error))
             }
         }
-        loadTask = nil
+    }
+
+    private func isContractDecodeFailure(_ error: Error) -> Bool {
+        if error is DecodingError { return true }
+        if let rpc = error as? BackendV2RPCError, case .decode = rpc { return true }
+        return false
+    }
+
+    /// Returns nil to fall through to legacy REST bootstrap.
+    private func loadDashboardV2(
+        profileID: ProfileID,
+        rpc: any RPCClient,
+        forceNetwork: Bool,
+        generation: UInt64
+    ) async throws -> DashboardBootstrapApplier.Applied? {
+        do {
+            let result = try await DashboardBootstrapLoader.load(
+                viewerID: profileID,
+                rpc: rpc,
+                detailCache: detailCache,
+                forceNetwork: forceNetwork,
+                loadGeneration: generation,
+                currentGeneration: { [weak self] in self?.loadGeneration ?? 0 }
+            )
+            return result.applied
+        } catch DashboardBootstrapLoaderError.flagOff, DashboardBootstrapLoaderError.rpcUnavailable {
+            return nil
+        }
     }
 
     private func bootstrapAccounts(
@@ -483,7 +604,8 @@ final class DashboardViewModel {
             SessionAccountsStore.shared.seed(
                 cachedAccounts,
                 for: profileID,
-                detailCache: detailCache
+                detailCache: detailCache,
+                kind: nil
             )
             SessionNetworkProbe.record(.cacheHit, resource: "dashboard.accounts")
             return await DashboardLoadProbe.measure(
@@ -497,7 +619,8 @@ final class DashboardViewModel {
             for: profileID,
             detailCache: detailCache,
             repository: trades,
-            forceNetwork: forceNetwork
+            forceNetwork: forceNetwork,
+            requiresFullOwnerSnapshot: true
         )
         return await DashboardLoadProbe.measure(
             "dashboard.accounts",
@@ -639,19 +762,24 @@ final class DashboardViewModel {
 
     private func reloadAccountsOnly() async {
         guard let profileID else { return }
+        SessionAccountsStore.shared.invalidate(profileID: profileID)
+        await ensureFullOwnerAccounts(profileID: profileID, forceNetwork: true)
+    }
+
+    private func ensureFullOwnerAccounts(profileID: ProfileID?, forceNetwork: Bool = false) async {
+        guard let profileID else { return }
         do {
-            SessionAccountsStore.shared.invalidate(profileID: profileID)
             let loaded = try await SessionAccountsStore.shared.accounts(
                 for: profileID,
                 detailCache: detailCache,
                 repository: trades,
-                forceNetwork: true
+                forceNetwork: forceNetwork,
+                requiresFullOwnerSnapshot: true
             )
             accounts = loaded.sorted {
                 $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
             accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
-            // Rebind account types on existing trades without refetching trades.
             let accountTypes = Dictionary(
                 uniqueKeysWithValues: accounts.map {
                     ($0.id, ProfileStatisticsMetrics.accountTypeString(for: $0.mode))
@@ -684,8 +812,7 @@ final class DashboardViewModel {
     private func startRealtime(profileID: ProfileID) async {
         guard let realtimeHub else { return }
         let channel = RealtimeChannelID(kind: .profile, topic: "dashboard:\(profileID.rawValue)")
-        // Deduplicate — navigation return must not open a second retain on the same channel.
-        if watchedChannel == channel, realtimeTask != nil { return }
+        if watchedChannel == channel { return }
         await stopRealtime()
         watchedChannel = channel
         try? await realtimeHub.subscriptions.subscribe(channel)
@@ -695,19 +822,9 @@ final class DashboardViewModel {
             blocksFirstUsefulRender: false,
             note: "registry-only until trade postgres_changes attach"
         ) { () }
-        // Product trade postgres_changes are not joined yet — subscription marks the
-        // dashboard channel as active so incremental hydrate can attach later without polling.
-        realtimeTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 60_000_000_000)
-            }
-            _ = self
-        }
     }
 
     private func stopRealtime() async {
-        realtimeTask?.cancel()
-        realtimeTask = nil
         guard let realtimeHub, let channel = watchedChannel else { return }
         try? await realtimeHub.subscriptions.unsubscribe(channel)
         watchedChannel = nil

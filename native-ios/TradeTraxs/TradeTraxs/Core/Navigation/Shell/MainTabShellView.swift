@@ -23,12 +23,25 @@ struct MainTabShellView: View {
         }
         .tabViewStyle(.tabBarOnly)
         .experienceAppChrome()
+        .onChange(of: store.selectedTab) { _, _ in
+            OwnerAccountFilterDropdownController.shared.dismiss()
+        }
+#if DEBUG
+        .overlay(alignment: .topLeading) {
+            NavigationPathProbe(store: store)
+        }
+#endif
     }
 
     private var tabView: some View {
         TabView(selection: tabSelection) {
             Tab(TabIdentifier.home.displayName, systemImage: TabIdentifier.home.systemImage, value: TabIdentifier.home) {
-                HomeNavigationStack(store: store, coordinator: coordinator)
+                HomeNavigationStack(
+                    store: store,
+                    coordinator: coordinator,
+                    authenticationCoordinator: authenticationCoordinator,
+                    currentUserProfile: currentUserProfile
+                )
             }
 
             Tab(TabIdentifier.feed.displayName, systemImage: TabIdentifier.feed.systemImage, value: TabIdentifier.feed) {
@@ -41,7 +54,12 @@ struct MainTabShellView: View {
             }
 
             Tab(TabIdentifier.messages.displayName, systemImage: TabIdentifier.messages.systemImage, value: TabIdentifier.messages) {
-                MessagesNavigationStack(store: store, coordinator: coordinator)
+                MessagesNavigationStack(
+                    store: store,
+                    coordinator: coordinator,
+                    authenticationCoordinator: authenticationCoordinator,
+                    currentUserProfile: currentUserProfile
+                )
             }
 
             // Profile tab uses a Label so we can swap in the session avatar UIImage
@@ -82,6 +100,8 @@ struct MainTabShellView: View {
 struct HomeNavigationStack: View {
     @Bindable var store: NavigationStore
     let coordinator: NavigationCoordinator
+    let authenticationCoordinator: AuthenticationCoordinator
+    @Bindable var currentUserProfile: CurrentUserProfileStore
     @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
@@ -94,6 +114,7 @@ struct HomeNavigationStack: View {
                 homeDestination(route)
             }
         }
+        .environment(\.stackNavigation, StackNavigation.home(store: store))
     }
 
     private var homePath: Binding<[HomeRoute]> {
@@ -138,11 +159,21 @@ struct HomeNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .payouts:
+            PayoutsScreenView(data: appEnvironment.data)
         case .report(let reportID):
             ReportDetailView(
                 reportID: reportID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
+            )
+        case .settings(let settingsRoute):
+            SettingsDestinationView(
+                route: settingsRoute,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                authenticationCoordinator: authenticationCoordinator,
+                currentUserProfile: currentUserProfile
             )
         default:
             NavigationInfrastructurePlaceholder(
@@ -168,7 +199,9 @@ struct HomeNavigationStack: View {
         case .achievementDetail: return "Achievement"
         case .streaks: return "Streaks"
         case .reports: return "Reports"
+        case .payouts: return "Payouts"
         case .report: return "Report"
+        case .settings(let route): return route.title
         }
     }
 }
@@ -201,6 +234,7 @@ struct FeedNavigationStack: View {
                 feedDestination(route)
             }
         }
+        .environment(\.stackNavigation, StackNavigation.feed(store: store))
     }
 
     private var feedPath: Binding<[FeedRoute]> {
@@ -278,6 +312,11 @@ struct FeedNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .suggestedTraders:
+            SuggestedTradersView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .leaderboard:
             LeaderboardScreenView(
                 data: appEnvironment.data,
@@ -302,11 +341,13 @@ struct FeedNavigationStack: View {
         case .achievement: return "Achievement"
         case .profile: return "Profile"
         case .explore: return "Explore"
+        case .suggestedTraders: return "Suggested Traders"
         case .leaderboard: return "Leaderboards"
         case .rooms: return "Trade Rooms"
         case .room: return "Trade Room"
         case .roomMembers: return "Members"
         case .roomInfo: return "Room Info"
+        case .settings(let route): return route.title
         }
     }
 }
@@ -314,6 +355,8 @@ struct FeedNavigationStack: View {
 struct MessagesNavigationStack: View {
     @Bindable var store: NavigationStore
     let coordinator: NavigationCoordinator
+    let authenticationCoordinator: AuthenticationCoordinator
+    @Bindable var currentUserProfile: CurrentUserProfileStore
     @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
@@ -326,6 +369,7 @@ struct MessagesNavigationStack: View {
                 messagesDestination(route)
             }
         }
+        .environment(\.stackNavigation, StackNavigation.messages(store: store))
     }
 
     private var messagesPath: Binding<[MessagesRoute]> {
@@ -375,6 +419,14 @@ struct MessagesNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .settings(let settingsRoute):
+            SettingsDestinationView(
+                route: settingsRoute,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                authenticationCoordinator: authenticationCoordinator,
+                currentUserProfile: currentUserProfile
+            )
         default:
             NavigationInfrastructurePlaceholder(
                 title: messagesTitle(route),
@@ -395,6 +447,7 @@ struct MessagesNavigationStack: View {
         case .room: return "Trade Room"
         case .roomMembers: return "Members"
         case .roomInfo: return "Room Info"
+        case .settings(let settingsRoute): return settingsRoute.title
         }
     }
 }
@@ -418,6 +471,7 @@ struct ProfileNavigationStack: View {
                 profileDestination(route)
             }
         }
+        .environment(\.stackNavigation, StackNavigation.profile(store: store))
     }
 
     private var profilePath: Binding<[ProfileRoute]> {
@@ -520,13 +574,6 @@ struct ProfileNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
-        default:
-            NavigationInfrastructurePlaceholder(
-                title: profileTitle(route),
-                subtitle: String(describing: route),
-                systemImage: "person"
-            )
-            .experienceNavigationTitle(profileTitle(route))
         }
     }
 

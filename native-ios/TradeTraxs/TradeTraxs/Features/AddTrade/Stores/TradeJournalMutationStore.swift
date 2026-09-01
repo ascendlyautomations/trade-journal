@@ -33,23 +33,37 @@ final class TradeJournalMutationStore {
         }
     }
 
+    private var detailCache: DetailPresentationCache?
+
     private init() {}
+
+    /// Bind the shared presentation cache once at app bootstrap — central upsert path for all journal mutations.
+    func configure(detailCache: DetailPresentationCache) {
+        self.detailCache = detailCache
+    }
 
     func noteCreated(_ trade: Trade) {
         latest = .created(trade)
-        // Targeted session cache updates — screens observe revision for incremental patch.
-        TradeHistorySessionStore.shared.noteUpserted(trade)
-        CalendarMonthSessionStore.shared.noteUpserted(trade)
-        SessionNetworkProbe.record(.localMutation, resource: "journal.trade.created", detail: trade.id.rawValue)
+        propagateUpsert(trade, resource: "journal.trade.created")
         revision += 1
     }
 
     func noteUpdated(_ trade: Trade) {
         latest = .updated(trade)
+        propagateUpsert(trade, resource: "journal.trade.updated")
+        revision += 1
+    }
+
+    private func propagateUpsert(_ trade: Trade, resource: String) {
+        if let detailCache {
+            detailCache.seed(trade)
+            SessionOwnerTradesStore.shared.upsert(trade, detailCache: detailCache)
+            SessionTradeEntityStore.shared.upsert(trade, detailCache: detailCache)
+        }
         TradeHistorySessionStore.shared.noteUpserted(trade)
         CalendarMonthSessionStore.shared.noteUpserted(trade)
-        SessionNetworkProbe.record(.localMutation, resource: "journal.trade.updated", detail: trade.id.rawValue)
-        revision += 1
+        TradePersistedCacheCoordinator.noteUpserted(trade)
+        SessionNetworkProbe.record(.localMutation, resource: resource, detail: trade.id.rawValue)
     }
 
     func noteDeleted(id: TradeID, owner: ProfileID) {
@@ -57,6 +71,7 @@ final class TradeJournalMutationStore {
         SessionOwnerTradesStore.shared.remove(id: id, owner: owner)
         TradeHistorySessionStore.shared.noteDeleted(id: id, owner: owner)
         CalendarMonthSessionStore.shared.noteDeleted(id: id)
+        TradePersistedCacheCoordinator.noteDeleted(id: id, owner: owner)
         SessionNetworkProbe.record(.localMutation, resource: "journal.trade.deleted", detail: id.rawValue)
         revision += 1
     }

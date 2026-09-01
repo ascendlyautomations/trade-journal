@@ -9,6 +9,18 @@ nonisolated struct LeaderboardTradeRow: Hashable, Sendable, Codable {
     var createdAt: String
     var accountType: String?
     var mode: String?
+    /// Optional when API embeds profile identity (`name` → displayName).
+    var displayName: String?
+    var username: String?
+    var avatarURL: String?
+
+    var embeddedIdentity: LeaderboardTraderIdentity {
+        LeaderboardTraderIdentity(
+            displayName: displayName,
+            username: username,
+            avatarURL: avatarURL
+        )
+    }
 }
 
 /// Custom YYYY-MM-DD range — web `LeaderboardCustomRange`.
@@ -109,7 +121,7 @@ nonisolated enum LeaderboardTradeWindowFilter {
             return LeaderboardEntry(
                 rank: offset + index + 1,
                 profileID: ProfileID(element.key),
-                username: element.key,
+                username: "",
                 totalPnL: Money(amount: element.value.pnl),
                 tradeCount: element.value.count,
                 averageRiskReward: avgRR

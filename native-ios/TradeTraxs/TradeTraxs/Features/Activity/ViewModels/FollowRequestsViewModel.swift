@@ -26,7 +26,7 @@ final class FollowRequestsViewModel {
         notifications: any NotificationRepository,
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
-        inboxStore: ActivityInboxStore = .shared
+        inboxStore: ActivityInboxStore
     ) {
         self.followRequests = followRequests
         self.notifications = notifications

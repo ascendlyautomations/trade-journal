@@ -15,10 +15,7 @@ nonisolated struct BackendV2TelemetryEvent: Sendable {
 }
 
 nonisolated enum BackendV2Telemetry {
-    private static let logger = Logger(
-        subsystem: "com.tradetraxs.TradeTraxs",
-        category: "BackendV2"
-    )
+    private static let logger = Logger(subsystem: AppLog.subsystem, category: "BackendV2")
 
     nonisolated(unsafe) private static var enabled = true
     nonisolated(unsafe) private static var sink: (@Sendable (BackendV2TelemetryEvent) -> Void)?

@@ -29,6 +29,7 @@ final class TradesContainerViewModel {
     private var loadTask: Task<Void, Never>?
     private var hasLoaded = false
     private var isLoadingMore = false
+    private var canViewContent = true
     /// When true, initial data comes from ``ProfileScreenViewModel`` bootstrap.
     private var isScreenOwned = false
 
@@ -90,6 +91,14 @@ final class TradesContainerViewModel {
         if snapshot.didBootstrap || snapshot.phase == .loaded {
             isScreenOwned = true
         }
+        if snapshot.isContentLocked {
+            canViewContent = false
+            hasLoaded = true
+            items = []
+            state = .empty
+            return
+        }
+        canViewContent = true
         guard snapshot.didLoadTrades || !snapshot.trades.isEmpty else {
             if (snapshot.phase == .loading || snapshot.didBootstrap), items.isEmpty {
                 state = .loading
@@ -100,16 +109,16 @@ final class TradesContainerViewModel {
         items = snapshot.trades
         nextCursor = snapshot.tradesNextCursor
         accountNames = snapshot.accountNames
-        accountNumbers = isOwner ? snapshot.accountNumbers : [:]
+        accountNumbers = [:]
         accountModes = snapshot.accountModes
         accountSizes = snapshot.accountSizes
         detailCache.seed(publicTrades: items, for: profileID)
-        detailCache.seed(accountNames: accountNames)
-        detailCache.seed(accountModes: accountModes)
-        detailCache.seed(accountSizes: accountSizes)
-        if isOwner {
-            detailCache.seed(accountNumbers: accountNumbers)
-        }
+        detailCache.seedPublicAccountMetadata(
+            names: sanitizedPublicAccountNames(from: accountNames),
+            modes: accountModes,
+            sizes: accountSizes,
+            for: profileID
+        )
         paginationErrorMessage = nil
         updateStateForVisibleItems()
         prefetchEngagement(for: visibleItems.map(\.id))
@@ -117,6 +126,11 @@ final class TradesContainerViewModel {
 
     func loadIfNeeded() {
         guard !hasLoaded, loadTask == nil else { return }
+        guard canViewContent else {
+            hasLoaded = true
+            state = .empty
+            return
+        }
         loadTask = Task { await performLoad(reset: true) }
     }
 
@@ -165,13 +179,18 @@ final class TradesContainerViewModel {
         detailCache.seed(trade)
         if let accountID = trade.accountID {
             if let name = accountNames[accountID] {
-                detailCache.seedAccountName(name, for: accountID)
+                detailCache.seedAccountName(
+                    PublicAccountPrivacy.publicSafeAccountName(
+                        rawName: name,
+                        accountNumber: nil,
+                        category: nil,
+                        mode: accountModes[accountID]
+                    ),
+                    for: accountID
+                )
             }
             if let mode = accountModes[accountID] {
                 detailCache.seed(accountModes: [accountID: mode])
-            }
-            if let size = accountSizes[accountID] {
-                detailCache.seed(accountSizes: [accountID: size])
             }
         }
         navigationCoordinator.open(.profile(.trade(trade.id)))
@@ -252,13 +271,19 @@ final class TradesContainerViewModel {
     }
 
     func accountName(for trade: Trade) -> String? {
-        guard let accountID = trade.accountID else { return nil }
-        let audience: TradingAccountDisplay.Audience = isOwner ? .owner : .public
-        return TradingAccountDisplay.optionalTitle(
-            name: accountNames[accountID],
-            accountNumber: isOwner ? accountNumbers[accountID] : nil,
-            audience: audience
-        )
+        guard let accountID = trade.accountID else {
+            return PublicAccountPrivacy.publicTradeAccountLabel(mode: trade.mode)
+        }
+        if let name = accountNames[accountID] {
+            return TradingAccountDisplay.optionalTitle(
+                name: name,
+                accountNumber: nil,
+                audience: .public,
+                category: nil,
+                mode: accountModes[accountID]
+            )
+        }
+        return PublicAccountPrivacy.publicTradeAccountLabel(mode: trade.mode)
     }
 
     // MARK: - Private
@@ -277,16 +302,16 @@ final class TradesContainerViewModel {
             hasLoaded = true
             items = ProfileTradeFixtures.samples(owner: profileID)
             accountNames = ProfileTradeFixtures.accountNames()
-            accountNumbers = isOwner ? ProfileTradeFixtures.accountNumbers() : [:]
+            accountNumbers = [:]
             accountModes = ProfileTradeFixtures.accountModes()
             accountSizes = ProfileTradeFixtures.accountSizes()
             detailCache.seed(publicTrades: items, for: profileID)
-            detailCache.seed(accountNames: accountNames)
-            detailCache.seed(accountModes: accountModes)
-            detailCache.seed(accountSizes: accountSizes)
-            if isOwner {
-                detailCache.seed(accountNumbers: accountNumbers)
-            }
+            detailCache.seedPublicAccountMetadata(
+                names: sanitizedPublicAccountNames(from: accountNames),
+                modes: accountModes,
+                sizes: accountSizes,
+                for: profileID
+            )
             nextCursor = nil
             updateStateForVisibleItems()
             prefetchEngagement(for: visibleItems.map(\.id))
@@ -316,15 +341,6 @@ final class TradesContainerViewModel {
             paginationErrorMessage = nil
             updateStateForVisibleItems()
 
-            // Account metadata is secondary — never fail the trades list on account mapping.
-            // Session cache: skip network when Profile already resolved accounts once.
-            if let accounts = try? await SessionAccountsStore.shared.accounts(
-                for: profileID,
-                detailCache: detailCache,
-                repository: trades
-            ) {
-                applyAccounts(accounts)
-            }
             prefetchEngagement(for: visibleItems.map(\.id))
         } catch {
             guard !Task.isCancelled else { return }
@@ -337,23 +353,20 @@ final class TradesContainerViewModel {
         loadTask = nil
     }
 
-    private func applyAccounts(_ accounts: [TradingAccount]) {
-        accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
-        accountNumbers = Dictionary(
-            uniqueKeysWithValues: accounts.compactMap { account in
-                guard let number = TradingAccountDisplay.normalizedAccountNumber(account.accountNumber) else {
-                    return nil
-                }
-                return (account.id, number)
-            }
-        )
-        accountModes = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
-        accountSizes = Dictionary(
-            uniqueKeysWithValues: accounts.compactMap { account in
-                guard let amount = account.size?.amount else { return nil }
-                return (account.id, amount)
-            }
-        )
+    private func sanitizedPublicAccountNames(
+        from names: [TradingAccountID: String]
+    ) -> [TradingAccountID: String] {
+        Dictionary(uniqueKeysWithValues: names.map { id, name in
+            (
+                id,
+                PublicAccountPrivacy.publicSafeAccountName(
+                    rawName: name,
+                    accountNumber: nil,
+                    category: nil,
+                    mode: accountModes[id]
+                )
+            )
+        })
     }
 
     private func appendUnique(_ pageItems: [Trade]) {
@@ -382,7 +395,7 @@ final class TradesContainerViewModel {
     }
 }
 
-enum TradeDisplay {
+nonisolated enum TradeDisplay {
     private static let currency: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -429,6 +442,16 @@ enum TradeDisplay {
         return formatted
     }
 
+    /// Web parity — null/empty tickers render as em dash (`ProfileTradeCard`).
+    static func tickerText(_ ticker: String) -> String {
+        let trimmed = ticker.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "—" : trimmed
+    }
+
+    static func tickerText(_ symbol: Symbol) -> String {
+        tickerText(symbol.ticker)
+    }
+
     static func priceText(_ value: Decimal?) -> String {
         guard let value else { return "—" }
         return priceFormatter.string(from: NSDecimalNumber(decimal: value))
@@ -468,6 +491,23 @@ enum TradeDisplay {
     static func durationText(entryAt: Date, exitAt: Date?) -> String? {
         guard let exitAt, exitAt >= entryAt else { return nil }
         let seconds = Int(exitAt.timeIntervalSince(entryAt))
+        return durationTextFromSeconds(seconds)
+    }
+
+    /// Prefer authoritative DB duration fields, then entry/exit timestamps.
+    static func holdDuration(for trade: Trade) -> String? {
+        if let text = trade.durationText?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty
+        {
+            return text
+        }
+        if let seconds = trade.durationSeconds, seconds > 0 {
+            return durationTextFromSeconds(seconds)
+        }
+        return durationText(entryAt: trade.entryAt, exitAt: trade.exitAt)
+    }
+
+    private static func durationTextFromSeconds(_ seconds: Int) -> String? {
         guard seconds >= 0 else { return nil }
         let hours = seconds / 3_600
         let minutes = (seconds % 3_600) / 60
@@ -478,7 +518,10 @@ enum TradeDisplay {
         if minutes > 0 {
             return "\(minutes)m \(secs)s"
         }
-        return "\(secs)s"
+        if secs > 0 {
+            return "\(secs)s"
+        }
+        return nil
     }
 
     /// Account · date · time line for journal cards.
@@ -573,22 +616,22 @@ enum TradeDisplay {
         return intValue.stringValue
     }
 
-    /// Account identity line — owner: `Name • Number`; public: name only.
-    ///
-    /// `size` / `mode` retained for call-site compatibility; titles follow ``TradingAccountDisplay``.
+    /// Account identity line — journal+owner: `Name • Number`; public/social: sanitized name only.
     static func accountIdentityLine(
         name: String?,
         size: Decimal? = nil,
         mode: TradingAccountMode? = nil,
         accountNumber: String? = nil,
-        audience: TradingAccountDisplay.Audience = .public
+        audience: TradingAccountDisplay.Audience = .public,
+        category: TradingAccountCategory? = nil
     ) -> String? {
         _ = size
-        _ = mode
         return TradingAccountDisplay.optionalTitle(
             name: name,
             accountNumber: accountNumber,
-            audience: audience
+            audience: audience,
+            category: category,
+            mode: mode
         )
     }
 }

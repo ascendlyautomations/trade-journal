@@ -38,6 +38,7 @@ final class TradeDetailViewModel {
     private let navigationCoordinator: NavigationCoordinator
     private var loadTask: Task<Void, Never>?
     /// Prevents repeat account fetches when size is legitimately absent.
+    private let experience: TradeDetailExperience
     private var didResolveAccountMetadata = false
 
     init(
@@ -47,7 +48,8 @@ final class TradeDetailViewModel {
         session: any SessionProviding,
         imagePipeline: any ImagePipeline,
         cache: DetailPresentationCache,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        experience: TradeDetailExperience = .social
     ) {
         self.tradeID = tradeID
         self.trades = trades
@@ -56,6 +58,7 @@ final class TradeDetailViewModel {
         self.imagePipeline = imagePipeline
         self.cache = cache
         self.navigationCoordinator = navigationCoordinator
+        self.experience = experience
     }
 
     var mediaReference: MediaReference? {
@@ -66,15 +69,25 @@ final class TradeDetailViewModel {
     var authorUsername: String { DetailAuthorPresentation.username(for: author) }
     var authorInitials: String { DetailAuthorPresentation.initials(for: author) }
 
-    /// Header identity — owner: `Name • Number`; public: name only.
+    /// Header identity — journal+owner: `Name • Number`; all public/social paths: sanitized name only.
     var accountIdentityLine: String? {
         TradeDisplay.accountIdentityLine(
             name: accountName,
             size: accountSize,
             mode: accountMode,
-            accountNumber: isOwner ? accountNumber : nil,
-            audience: isOwner ? .owner : .public
+            accountNumber: accountDisplayAudience == .owner ? accountNumber : nil,
+            audience: accountDisplayAudience,
+            category: nil
         )
+    }
+
+    private var accountDisplayAudience: TradingAccountDisplay.Audience {
+        switch experience {
+        case .journal where isOwner:
+            return .owner
+        default:
+            return .public
+        }
     }
 
     func loadIfNeeded() {
@@ -196,10 +209,24 @@ final class TradeDetailViewModel {
     private func applySeed(_ seed: Trade) {
         trade = seed
         if let accountID = seed.accountID {
-            accountName = cache.accountName(for: accountID)
-            accountNumber = cache.accountNumber(for: accountID)
+            let cachedName = cache.accountName(for: accountID)
             accountMode = cache.accountMode(for: accountID)
             accountSize = cache.accountSize(for: accountID)
+            switch experience {
+            case .journal:
+                accountName = cachedName
+                accountNumber = cache.accountNumber(for: accountID)
+            case .social:
+                accountName = cachedName.map {
+                    PublicAccountPrivacy.publicSafeAccountName(
+                        rawName: $0,
+                        accountNumber: nil,
+                        category: nil,
+                        mode: accountMode
+                    )
+                }
+                accountNumber = nil
+            }
         }
         if images.isEmpty, let thumb = seed.thumbnail {
             images = [
@@ -231,16 +258,32 @@ final class TradeDetailViewModel {
         if ProfileSectionSupport.isLocalDevelopmentProfile(trade.ownerProfileID) {
             if let accountID = trade.accountID {
                 if accountName == nil {
-                    accountName = ProfileTradeFixtures.accountNames()[accountID]
+                    let raw = ProfileTradeFixtures.accountNames()[accountID]
                         ?? cache.accountName(for: accountID)
+                    accountName = experience == .social
+                        ? raw.map {
+                            PublicAccountPrivacy.publicSafeAccountName(
+                                rawName: $0,
+                                accountNumber: nil,
+                                category: nil,
+                                mode: accountMode
+                            )
+                        }
+                        : raw
                 }
                 if accountMode == nil {
                     accountMode = ProfileTradeFixtures.accountModes()[accountID]
                         ?? cache.accountMode(for: accountID)
                 }
-                if accountSize == nil {
+                if accountSize == nil, experience == .journal, isOwner {
                     accountSize = ProfileTradeFixtures.accountSizes()[accountID]
                         ?? cache.accountSize(for: accountID)
+                }
+                if experience == .journal, isOwner {
+                    accountNumber = ProfileTradeFixtures.accountNumbers()[accountID]
+                        ?? cache.accountNumber(for: accountID)
+                } else {
+                    accountNumber = nil
                 }
             }
             if let cached = cache.profile(id: trade.ownerProfileID) {
@@ -294,16 +337,29 @@ final class TradeDetailViewModel {
         guard let accountID = trade.accountID else { return }
 
         if accountName == nil, let cached = cache.accountName(for: accountID) {
-            accountName = cached
+            accountName = experience == .social
+                ? PublicAccountPrivacy.publicSafeAccountName(
+                    rawName: cached,
+                    accountNumber: nil,
+                    category: nil,
+                    mode: accountMode
+                )
+                : cached
         }
-        if accountNumber == nil, let cached = cache.accountNumber(for: accountID) {
-            accountNumber = cached
+        if experience == .journal, isOwner, accountNumber == nil {
+            accountNumber = cache.accountNumber(for: accountID)
         }
         if accountMode == nil, let cached = cache.accountMode(for: accountID) {
             accountMode = cached
         }
         if accountSize == nil, let cached = cache.accountSize(for: accountID) {
             accountSize = cached
+        }
+
+        guard isOwner, experience == .journal else {
+            accountNumber = nil
+            didResolveAccountMetadata = true
+            return
         }
 
         // Session accounts already resolved for this profile — never refetch.
@@ -322,11 +378,15 @@ final class TradeDetailViewModel {
         }
         guard !didResolveAccountMetadata else { return }
 
-        guard let accounts = try? await SessionAccountsStore.shared.accounts(
-            for: trade.ownerProfileID,
-            detailCache: cache,
-            repository: trades
-        ) else {
+        guard let viewerID = await session.currentUserID,
+              ProfileID(viewerID.rawValue) == trade.ownerProfileID,
+              let _ = try? await SessionAccountsStore.shared.accounts(
+                  for: trade.ownerProfileID,
+                  detailCache: cache,
+                  repository: trades,
+                  viewerProfileID: ProfileID(viewerID.rawValue)
+              )
+        else {
             didResolveAccountMetadata = true
             return
         }

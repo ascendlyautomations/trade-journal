@@ -46,12 +46,6 @@ struct StatsContainerView: View {
                 )
                 sectionDivider
                 metricRow(
-                    label: "Payouts",
-                    value: ProfileDisplay.formatMoney(viewModel.payoutTotal),
-                    tone: viewModel.payoutTotal == nil ? .neutral : .positive
-                )
-                sectionDivider
-                metricRow(
                     label: "Profit / Trade",
                     value: Self.currencyText(metrics.profitPerTrade),
                     tone: profitPerTradeTone(metrics.profitPerTrade)

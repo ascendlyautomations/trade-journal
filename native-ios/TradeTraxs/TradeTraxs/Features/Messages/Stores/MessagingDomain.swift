@@ -21,14 +21,20 @@ final class MessagingDomain {
     private var session: (any SessionProviding)?
     private var detailCache: DetailPresentationCache?
     private var realtimeHub: RealtimeHub?
+    private var rpc: (any RPCClient)?
     private let inboxStore = MessagesInboxStore.shared
 
     private var bootstrapTask: Task<Void, Never>?
+    private var revalidationTask: Task<Void, Never>?
     private var readCursorTask: Task<Void, Never>?
     private var roomUnreadTask: Task<Void, Never>?
     private var roomReadCursorTask: Task<Void, Never>?
+    private var roomMemberCountTask: Task<Void, Never>?
+    private var inboxMessagesTask: Task<Void, Never>?
     private var realtimeRetainCount = 0
     private var isConfigured = false
+    private var loadGeneration: UInt64 = 0
+    private var homeScreenVisible = false
 
     private init() {}
 
@@ -39,7 +45,8 @@ final class MessagingDomain {
         profiles: any ProfileRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
-        realtimeHub: RealtimeHub?
+        realtimeHub: RealtimeHub?,
+        rpc: (any RPCClient)? = nil
     ) {
         self.messages = messages
         self.rooms = rooms
@@ -47,6 +54,7 @@ final class MessagingDomain {
         self.session = session
         self.detailCache = detailCache
         self.realtimeHub = realtimeHub
+        self.rpc = rpc
         isConfigured = true
     }
 
@@ -75,25 +83,47 @@ final class MessagingDomain {
 
     // MARK: - Bootstrap
 
-    /// Full inbox bootstrap (Messages home). Concurrent conversations + rooms.
+    /// Full inbox bootstrap (Messages home). Concurrent callers share one in-flight task.
     func bootstrapHomeIfNeeded(forceNetwork: Bool = false) async {
+        homeScreenVisible = true
         if !forceNetwork, state.didBootstrap, inboxStore.hasLoaded {
             await syncStateFromInbox()
+            scheduleSoftRevalidationIfNeeded()
             return
         }
-        if let existing = bootstrapTask, !forceNetwork {
+        if !forceNetwork, inboxStore.hasLoaded, state.didBootstrap {
+            await syncStateFromInbox()
+            scheduleSoftRevalidationIfNeeded()
+            return
+        }
+        if let existing = bootstrapTask {
             await existing.value
             await syncStateFromInbox()
             return
         }
+
+        loadGeneration &+= 1
         if forceNetwork {
-            bootstrapTask?.cancel()
+            revalidationTask?.cancel()
+            revalidationTask = nil
         }
 
-        let task = Task { await performHomeBootstrap(forceNetwork: forceNetwork) }
+        let generation = loadGeneration
+        let task = Task { [generation] in
+            await performHomeBootstrap(forceNetwork: forceNetwork, generation: generation, owner: "MessagingDomain.home")
+        }
         bootstrapTask = task
         await task.value
         bootstrapTask = nil
+        await syncStateFromInbox()
+    }
+
+    func setHomeScreenVisible(_ visible: Bool) {
+        homeScreenVisible = visible
+        if !visible {
+            revalidationTask?.cancel()
+            revalidationTask = nil
+        }
     }
 
     /// Rooms-only bootstrap (Trade Rooms home when inbox not yet loaded).
@@ -113,10 +143,22 @@ final class MessagingDomain {
             }
         }
         if forceNetwork {
-            bootstrapTask?.cancel()
+            loadGeneration &+= 1
         }
 
-        let task = Task { await performRoomsBootstrap(forceNetwork: forceNetwork) }
+        if let existing = bootstrapTask {
+            await existing.value
+            if inboxStore.hasLoadedRooms {
+                await syncStateFromInbox()
+                state.phase = .loaded
+                return
+            }
+        }
+
+        let generation = loadGeneration
+        let task = Task { [generation] in
+            await performRoomsBootstrap(forceNetwork: forceNetwork, generation: generation)
+        }
         bootstrapTask = task
         await task.value
         bootstrapTask = nil
@@ -150,8 +192,11 @@ final class MessagingDomain {
     }
 
     func invalidate() {
+        loadGeneration &+= 1
         bootstrapTask?.cancel()
         bootstrapTask = nil
+        revalidationTask?.cancel()
+        revalidationTask = nil
         stopRealtime()
         realtimeRetainCount = 0
         state = MessagingState()
@@ -186,35 +231,77 @@ final class MessagingDomain {
         )
     }
 
-    private func performHomeBootstrap(forceNetwork: Bool) async {
+    private func performHomeBootstrap(
+        forceNetwork: Bool,
+        generation: UInt64,
+        owner: String
+    ) async {
         guard let context = makeContext(forceNetwork: forceNetwork) else {
-            state.phase = .failed("Messaging domain is not configured.")
+            applyTerminalFailure("Messaging domain is not configured.", generation: generation)
             return
         }
-        if state.phase != .loaded {
+        if state.phase != .loaded || !inboxStore.hasLoaded {
             state.phase = .loading
         }
         do {
-            let result = try await MessagingBootstrap.loadHome(context)
-            apply(result)
-            state.phase = .loaded
-            state.didBootstrap = true
-            state.lastUpdated = Date()
-            state.errorMessage = nil
-        } catch {
-            if inboxStore.hasLoaded {
-                await syncStateFromInbox()
-                state.phase = .loaded
-            } else {
-                state.phase = .failed(MessagesInboxSupport.message(for: error))
-                state.errorMessage = MessagesInboxSupport.message(for: error)
+            if BackendV2FeatureFlags.isEnabled(.messages),
+               let rpc,
+               let session,
+               let userID = await session.currentUserID
+            {
+                let viewer = ProfileID(userID.rawValue)
+                do {
+                    _ = try await MessagingBootstrapLoader.loadInbox(
+                        viewerID: viewer,
+                        rpc: rpc,
+                        inboxStore: inboxStore,
+                        detailCache: detailCache!,
+                        forceNetwork: forceNetwork,
+                        loadGeneration: generation,
+                        currentGeneration: { [weak self] in self?.loadGeneration ?? 0 },
+                        owner: owner,
+                        viewVisible: homeScreenVisible
+                    )
+                    guard generation == loadGeneration else { return }
+                    async let roomsTask = SessionMemberRoomsStore.shared.memberRooms(
+                        for: viewer,
+                        repository: rooms!,
+                        forceNetwork: forceNetwork
+                    )
+                    let (memberRooms, roomUnread) = try await roomsTask
+                    guard generation == loadGeneration else { return }
+                    inboxStore.replaceRooms(memberRooms, unread: roomUnread)
+                    peerProfiles = [:]
+                    markLoaded(generation: generation)
+                    return
+                } catch is MessagingBootstrapLoader.LoaderError {
+                    if inboxStore.hasLoaded {
+                        await markLoadedFromCache(generation: generation)
+                        return
+                    }
+                } catch {
+                    if await applyBenignOrCachedFailure(error, generation: generation) { return }
+                    throw error
+                }
             }
+
+            guard !inboxStore.hasLoaded else {
+                await markLoadedFromCache(generation: generation)
+                return
+            }
+
+            let result = try await MessagingBootstrap.loadHome(context)
+            guard generation == loadGeneration else { return }
+            apply(result)
+            markLoaded(generation: generation)
+        } catch {
+            _ = await applyBenignOrCachedFailure(error, generation: generation)
         }
     }
 
-    private func performRoomsBootstrap(forceNetwork: Bool) async {
+    private func performRoomsBootstrap(forceNetwork: Bool, generation: UInt64) async {
         guard let context = makeContext(forceNetwork: forceNetwork) else {
-            state.phase = .failed("Messaging domain is not configured.")
+            applyTerminalFailure("Messaging domain is not configured.", generation: generation)
             return
         }
         if state.phase != .loaded {
@@ -222,10 +309,10 @@ final class MessagingDomain {
         }
         do {
             let result = try await MessagingBootstrap.loadRoomsOnly(context)
+            guard generation == loadGeneration else { return }
             apply(result)
             state.phase = .loaded
             state.lastUpdated = Date()
-            // Rooms-only does not mark full home bootstrap complete.
             if result.loadedConversations {
                 state.didBootstrap = true
             }
@@ -235,10 +322,75 @@ final class MessagingDomain {
                 await syncStateFromInbox()
                 state.phase = .loaded
             } else {
-                state.phase = .failed(MessagesInboxSupport.message(for: error))
-                state.errorMessage = MessagesInboxSupport.message(for: error)
+                let benign = await applyBenignOrCachedFailure(error, generation: generation)
+                if !benign {
+                    applyTerminalFailure(MessagesInboxSupport.message(for: error), generation: generation)
+                }
             }
         }
+    }
+
+    private func scheduleSoftRevalidationIfNeeded() {
+        guard homeScreenVisible else { return }
+        guard MessagingInboxFreshness.isSoftStale(lastLoadedAt: inboxStore.lastLoadedAt) else { return }
+        guard revalidationTask == nil, bootstrapTask == nil else { return }
+        let generation = loadGeneration
+        revalidationTask = Task { [generation] in
+            await performHomeBootstrap(forceNetwork: true, generation: generation, owner: "MessagingDomain.revalidate")
+            revalidationTask = nil
+        }
+    }
+
+    private func markLoaded(generation: UInt64) {
+        guard generation == loadGeneration else { return }
+        state.phase = .loaded
+        state.didBootstrap = true
+        state.lastUpdated = Date()
+        state.errorMessage = nil
+    }
+
+    private func markLoadedFromCache(generation: UInt64) async {
+        guard generation == loadGeneration else { return }
+        await syncStateFromInbox()
+        state.errorMessage = nil
+    }
+
+    @discardableResult
+    private func applyBenignOrCachedFailure(_ error: Error, generation: UInt64) async -> Bool {
+        let diagnostic = MessagesBootstrapFailureDiagnostic.make(error: error)
+        if diagnostic.isBenignForUI {
+            return true
+        }
+        if generation != loadGeneration {
+            return true
+        }
+        if inboxStore.hasLoaded {
+            await markLoadedFromCache(generation: generation)
+            return true
+        }
+        if bootstrapTask != nil || revalidationTask != nil {
+            if state.phase != .loaded {
+                state.phase = .loading
+            }
+            return true
+        }
+        applyTerminalFailure(MessagesInboxSupport.message(for: error), generation: generation)
+        return true
+    }
+
+    private func applyTerminalFailure(_ message: String, generation: UInt64) {
+        guard generation == loadGeneration else { return }
+        guard !inboxStore.hasLoaded else {
+            state.phase = .loaded
+            state.errorMessage = nil
+            return
+        }
+        if bootstrapTask != nil {
+            state.phase = .loading
+            return
+        }
+        state.phase = .failed(message)
+        state.errorMessage = message
     }
 
     private func apply(_ result: MessagingBootstrap.Result) {
@@ -310,15 +462,21 @@ final class MessagingDomain {
         await startReadCursorRealtimeIfNeeded(viewerID: viewerID, session: session)
         await startRoomUnreadRealtimeIfNeeded(viewerID: viewerID, session: session)
         await startRoomReadCursorRealtimeIfNeeded(viewerID: viewerID, session: session)
+        await startRoomMemberCountRealtimeIfNeeded(viewerID: viewerID, session: session)
+        await startInboxMessagesRealtimeIfNeeded(viewerID: viewerID, session: session)
     }
 
     private func stopRealtime() {
         readCursorTask?.cancel()
         roomUnreadTask?.cancel()
         roomReadCursorTask?.cancel()
+        roomMemberCountTask?.cancel()
+        inboxMessagesTask?.cancel()
         readCursorTask = nil
         roomUnreadTask = nil
         roomReadCursorTask = nil
+        roomMemberCountTask = nil
+        inboxMessagesTask = nil
         Task { [realtimeHub] in
             try? await realtimeHub?.subscriptions.unsubscribe(
                 RealtimeChannelID(kind: .conversation, topic: "inbox")
@@ -326,6 +484,7 @@ final class MessagingDomain {
             try? await realtimeHub?.subscriptions.unsubscribe(
                 RealtimeChannelID(kind: .room, topic: "trade-rooms-home")
             )
+            await realtimeHub?.stopWatchingMemberRoomMembership()
         }
     }
 
@@ -349,6 +508,12 @@ final class MessagingDomain {
                 guard let existing = inboxStore.conversations.first(where: { $0.id == conversationID })
                 else { continue }
                 let locallyCleared = inboxStore.unreadCount(for: existing) == 0
+                if BackendV2FeatureFlags.isEnabled(.messages) {
+                    if locallyCleared {
+                        inboxStore.markRead(conversationID: conversationID)
+                    }
+                    continue
+                }
                 if var updated = try? await messages.conversation(id: conversationID) {
                     if locallyCleared { updated.unreadCount = 0 }
                     inboxStore.applyConversationUpdate(updated)
@@ -389,6 +554,34 @@ final class MessagingDomain {
         }
     }
 
+    private func startRoomMemberCountRealtimeIfNeeded(
+        viewerID: ProfileID,
+        session: any SessionProviding
+    ) async {
+        guard let realtimeHub, let rooms else { return }
+        guard roomMemberCountTask == nil else { return }
+        let roomIDs = inboxStore.rooms.map(\.id.rawValue)
+        guard !roomIDs.isEmpty else { return }
+
+        roomMemberCountTask = Task { [weak self] in
+            guard let self else { return }
+            let token = await session.accessToken
+            for await _ in realtimeHub.watchMemberRoomMembership(
+                roomIDs: roomIDs,
+                accessToken: token
+            ) {
+                guard !Task.isCancelled else { break }
+                let visible = inboxStore.rooms.map(\.id)
+                guard !visible.isEmpty else { continue }
+                if let counts = try? await rooms.activeMemberCounts(for: visible) {
+                    inboxStore.applyMemberCounts(counts)
+                    SessionMemberRoomsStore.shared.applyMemberCounts(counts, for: viewerID)
+                }
+            }
+            roomMemberCountTask = nil
+        }
+    }
+
     private func startRoomReadCursorRealtimeIfNeeded(
         viewerID: ProfileID,
         session: any SessionProviding
@@ -417,6 +610,66 @@ final class MessagingDomain {
                 }
             }
             roomReadCursorTask = nil
+        }
+    }
+
+    private func startInboxMessagesRealtimeIfNeeded(
+        viewerID: ProfileID,
+        session: any SessionProviding
+    ) async {
+        guard let realtimeHub, let messages else { return }
+        guard inboxMessagesTask == nil else { return }
+        let conversationIDs = inboxStore.conversations.map(\.id.rawValue)
+        guard !conversationIDs.isEmpty else { return }
+
+        inboxMessagesTask = Task { [weak self] in
+            guard let self else { return }
+            let token = await session.accessToken
+            for await signal in realtimeHub.watchInboxConversationMessages(
+                conversationIDs: conversationIDs,
+                accessToken: token
+            ) {
+                guard !Task.isCancelled else { break }
+                guard signal.kind == .insert || signal.kind == .update else { continue }
+                guard let rawID = signal.conversationID else { continue }
+                let conversationID = ConversationID(rawID)
+                guard inboxStore.conversations.contains(where: { $0.id == conversationID }) else {
+                    continue
+                }
+                await applyInboxMessagesRealtimeSignal(
+                    conversationID: conversationID,
+                    viewerID: viewerID,
+                    messages: messages
+                )
+            }
+            inboxMessagesTask = nil
+        }
+    }
+
+    /// Patch inbox activity from canonical `public.messages` — never denormalized conversation rows.
+    private func applyInboxMessagesRealtimeSignal(
+        conversationID: ConversationID,
+        viewerID: ProfileID,
+        messages: any MessageRepository
+    ) async {
+        do {
+            let page = try await messages.messages(
+                in: conversationID,
+                page: PageRequest(limit: 30)
+            )
+            guard let newest = MessageChronology.newest(in: page.items) else { return }
+            let isOpen = inboxStore.activeConversationID == conversationID
+            let policy: MessagesInboxStore.MessagePatchPolicy =
+                newest.senderProfileID == viewerID ? .confirmedOutgoing : .canonical
+            inboxStore.patchFromMessage(
+                newest,
+                viewerID: viewerID,
+                conversationOpen: isOpen,
+                policy: policy,
+                source: "inboxRealtime"
+            )
+        } catch {
+            // Soft-fail — confirmed-send patch remains authoritative.
         }
     }
 }

@@ -3,7 +3,7 @@ import OSLog
 
 #if DEBUG
 /// DEBUG instrumentation for Trade History open / filter / pagination.
-enum TradeHistoryLoadProbe {
+nonisolated enum TradeHistoryLoadProbe {
     struct Operation: Sendable {
         var name: String
         var kind: Kind
@@ -17,18 +17,20 @@ enum TradeHistoryLoadProbe {
         case cache
     }
 
-    private static var sessionStartedAt: CFAbsoluteTime?
-    private static var operations: [Operation] = []
-    private static var firstUsefulRenderMs: Double?
-    private static var requestCount = 0
-    private static var cacheHits = 0
-    private static var cancelledRequests = 0
-    private static var lastPageSize = 0
-    private static var serverSideFilters: [String] = []
-    private static var localFilters: [String] = []
+    nonisolated(unsafe) private static var sessionStartedAt: CFAbsoluteTime?
+    nonisolated(unsafe) private static var loadStartedAt: CFAbsoluteTime?
+    nonisolated(unsafe) private static var operations: [Operation] = []
+    nonisolated(unsafe) private static var firstUsefulRenderMs: Double?
+    nonisolated(unsafe) private static var requestCount = 0
+    nonisolated(unsafe) private static var cacheHits = 0
+    nonisolated(unsafe) private static var cancelledRequests = 0
+    nonisolated(unsafe) private static var lastPageSize = 0
+    nonisolated(unsafe) private static var serverSideFilters: [String] = []
+    nonisolated(unsafe) private static var localFilters: [String] = []
 
     static func beginSession() {
         sessionStartedAt = CFAbsoluteTimeGetCurrent()
+        loadStartedAt = sessionStartedAt
         operations = []
         firstUsefulRenderMs = nil
         requestCount = 0
@@ -61,8 +63,13 @@ enum TradeHistoryLoadProbe {
         localFilters = local
     }
 
+    static func beginLoad() {
+        loadStartedAt = CFAbsoluteTimeGetCurrent()
+    }
+
     static func markFirstUsefulRender() {
-        guard firstUsefulRenderMs == nil, let start = sessionStartedAt else { return }
+        guard firstUsefulRenderMs == nil else { return }
+        let start = loadStartedAt ?? sessionStartedAt ?? CFAbsoluteTimeGetCurrent()
         firstUsefulRenderMs = (CFAbsoluteTimeGetCurrent() - start) * 1_000
         AppLog.networking.info(
             "TradeHistory first useful render ms=\(firstUsefulRenderMs ?? -1, privacy: .public) requests=\(requestCount, privacy: .public) pageSize=\(lastPageSize, privacy: .public)"
@@ -111,7 +118,16 @@ enum TradeHistoryLoadProbe {
     }
 
     static func resetForTesting() {
-        beginSession()
+        sessionStartedAt = nil
+        loadStartedAt = nil
+        operations = []
+        firstUsefulRenderMs = nil
+        requestCount = 0
+        cacheHits = 0
+        cancelledRequests = 0
+        lastPageSize = 0
+        serverSideFilters = []
+        localFilters = []
     }
 }
 #endif

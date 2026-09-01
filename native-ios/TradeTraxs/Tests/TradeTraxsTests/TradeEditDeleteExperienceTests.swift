@@ -8,6 +8,7 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
         SessionOwnerTradesStore.shared.invalidate()
         TradeHistorySessionStore.shared.invalidate()
         CalendarMonthSessionStore.shared.invalidate()
+        BackendV2BootstrapDiskCache.clearAll()
         super.tearDown()
     }
 
@@ -51,6 +52,8 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
         XCTAssertEqual(body.direction, "Short")
         XCTAssertEqual(body.contracts, 3)
         XCTAssertEqual(body.pnl, 250)
+        XCTAssertEqual(body.rr, 1.5)
+        XCTAssertEqual(body.points, 50)
         XCTAssertEqual(body.is_public, true)
         XCTAssertEqual(body.account_name, "Alpha 50K")
         XCTAssertEqual(body.notes, "Updated notes")
@@ -60,6 +63,7 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
 
     func testEditViewModelHydratesAndSavesViaUpdate() async {
         let cache = DetailPresentationCache()
+        TradeJournalMutationStore.shared.configure(detailCache: cache)
         // Non-dev user so save goes through repository.update (not fixture short-circuit).
         let owner = ProfileID("user.edit-test")
         let trade = sampleTrade(id: "edit-1", owner: owner.rawValue)
@@ -142,6 +146,7 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
 
     func testApplyUpdatedRefreshesTradeDetailWithoutReload() async {
         let environment = CompositionRoot.bootstrap()
+        TradeJournalMutationStore.shared.configure(detailCache: environment.data.detailCache)
         let owner = ProfileID("dev.detail-update")
         let trade = sampleTrade(id: "detail-upd-1", owner: owner.rawValue)
         let cache = environment.data.detailCache
@@ -169,7 +174,65 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.trade?.realizedPnL?.amount, 420)
     }
 
+    func testNoteUpdatedPropagatesOwnerTradesAndDetailCache() {
+        let owner = ProfileID("user.mutation-propagation")
+        let cache = DetailPresentationCache()
+        TradeJournalMutationStore.shared.configure(detailCache: cache)
+        var trade = sampleTrade(id: "prop-1", owner: owner.rawValue)
+        trade.riskReward = 3.5
+        trade.realizedPnL = Money(amount: 420)
+        SessionOwnerTradesStore.shared.seed([trade], for: owner, detailCache: cache)
+
+        var updated = trade
+        updated.riskReward = 4.25
+        updated.realizedPnL = Money(amount: 500)
+        TradeJournalMutationStore.shared.noteUpdated(updated)
+
+        XCTAssertEqual(cache.trade(id: trade.id)?.riskReward, 4.25)
+        XCTAssertEqual(cache.trade(id: trade.id)?.realizedPnL?.amount, 500)
+        XCTAssertEqual(
+            SessionOwnerTradesStore.shared.cached(for: owner)?.first(where: { $0.id == trade.id })?.riskReward,
+            4.25
+        )
+    }
+
+    func testParseOptionalRiskRewardAcceptsColonFormat() {
+        XCTAssertEqual(
+            AddTradeViewModel.parseOptionalRiskReward("1 : 2.35"),
+            Decimal(string: "2.35")
+        )
+        XCTAssertEqual(
+            AddTradeViewModel.parseOptionalRiskReward("1:3"),
+            Decimal(string: "3")
+        )
+    }
+
+    func testDashboardBootstrapDiskCachePatchesTradeRRAfterMutation() throws {
+        let owner = ProfileID("11111111-1111-1111-1111-111111111111")
+        let bootstrap: DashboardBootstrapV1 = try JSONDecoder().decode(
+            DashboardBootstrapV1.self,
+            from: Data(dashboardBootstrapFixtureWithRR2.utf8)
+        )
+        BackendV2BootstrapDiskCache.saveDashboard(bootstrap, viewerID: owner.rawValue)
+
+        var updated = sampleTrade(id: "trade-1", owner: owner.rawValue)
+        updated.riskReward = 9
+        updated.realizedPnL = Money(amount: 777)
+        TradePersistedCacheCoordinator.noteUpserted(updated)
+
+        let reloaded = BackendV2BootstrapDiskCache.loadDashboard(viewerID: owner.rawValue)
+        let row = reloaded?.bootstrap.data.trade_window.first { $0.id == "trade-1" }
+        XCTAssertEqual(row?.rr?.value, 9)
+        XCTAssertEqual(row?.pnl?.value, 777)
+    }
+
     // MARK: - Helpers
+
+    private var dashboardBootstrapFixtureWithRR2: String {
+        """
+        {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"accounts":[],"trade_window":[{"id":"trade-1","user_id":"11111111-1111-1111-1111-111111111111","ticker":"MNQ","direction":"Long","entry_time":"2026-08-01T12:00:00.000Z","created_at":"2026-08-01T12:00:00.000Z","pnl":100,"rr":2,"points":10,"mode":"live"}],"trade_window_meta":{"limit":500,"returned":1,"history_complete":true,"total_trade_count":1,"oldest_created_at":null,"next_cursor":null},"metrics":{},"equity_points":[],"payout_total":0,"recent_trades":[]}}
+        """
+    }
 
     private func sampleTrade(id: String, owner: String) -> Trade {
         Trade(
@@ -297,6 +360,16 @@ private final class EditTradeStubFeedRepository: FeedRepository, @unchecked Send
     func addComment(_ comment: Comment) async throws -> Comment { comment }
     func setReaction(on item: FeedItem, kind: ReactionKind, isActive: Bool) async throws {}
     func stories(for viewer: ProfileID) async throws -> [Story] { [] }
+    func createStory(userID: ProfileID, imageURL: String) async throws -> Story {
+        Story(
+            id: StoryID("stub-story"),
+            authorProfileID: userID,
+            media: MediaReference(id: imageURL, kind: .image, altText: nil),
+            expiresAt: Date().addingTimeInterval(ActiveStorySemantics.window),
+            createdAt: Date(),
+            viewerHasSeen: false
+        )
+    }
     func reel(id: ReelID) async throws -> Reel { throw AppError.unknown(message: "stub") }
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
         CursorPage(items: [], nextCursor: nil)

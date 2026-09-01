@@ -16,8 +16,17 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
     var name: String
     var slug: String
     var description: String?
-    var memberCount: Int
+    /// Active members from discovery RPC or batch hydration. Nil until loaded.
+    var memberCount: Int?
     var imageURL: String?
+
+    /// Web `resolveRoomAvatarUrl` parity — room image first, storage path or HTTPS preserved.
+    var imageReference: MediaReference? {
+        guard let raw = imageURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty
+        else { return nil }
+        return MediaReference(id: raw, kind: .image, altText: nil)
+    }
 }
 
 nonisolated struct ExploreSocialCounts: Hashable, Sendable {

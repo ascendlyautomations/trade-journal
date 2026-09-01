@@ -19,7 +19,8 @@ struct ExploreHomeView: View {
                 profiles: data.profiles,
                 session: data.session,
                 detailCache: data.detailCache,
-                navigationCoordinator: navigationCoordinator
+                navigationCoordinator: navigationCoordinator,
+                rpc: data.rpc
             )
         )
         self.imagePipeline = data.imagePipeline
@@ -161,7 +162,9 @@ struct ExploreHomeView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             ExploreSectionHeader(
                 title: "Suggested Traders",
-                subtitle: "Active public profiles worth following"
+                subtitle: "Active public profiles worth following",
+                trailingTitle: "View More",
+                onTrailing: { viewModel.openSuggestedTraders() }
             )
             .padding(.horizontal, ExperienceSpacing.md)
 
@@ -170,6 +173,7 @@ struct ExploreHomeView: View {
                     ForEach(viewModel.suggestedTraders) { trader in
                         ExploreTraderCard(
                             trader: trader,
+                            profile: viewModel.resolvedProfile(for: trader),
                             imagePipeline: imagePipeline,
                             isFollowing: viewModel.isFollowing(trader),
                             onOpen: { viewModel.openTrader(trader) },
@@ -199,7 +203,7 @@ struct ExploreHomeView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: ExperienceSpacing.sm) {
                     ForEach(viewModel.popularRooms) { room in
-                        ExploreRoomCard(room: room) {
+                        ExploreRoomCard(room: room, imagePipeline: imagePipeline) {
                             viewModel.openRoom(room)
                         }
                     }
@@ -237,8 +241,9 @@ struct ExploreHomeView: View {
                             Button {
                                 viewModel.openTrader(trader)
                             } label: {
-                                ExploreSearchPersonRow(
+                                ExploreTraderListRow(
                                     trader: trader,
+                                    profile: viewModel.resolvedProfile(for: trader),
                                     imagePipeline: imagePipeline,
                                     isFollowing: viewModel.isFollowing(trader),
                                     onToggleFollow: { viewModel.toggleFollow(trader) }
@@ -298,8 +303,10 @@ struct ExploreHomeView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(room.name)
                                         .experienceStyle(.body, color: colors.primaryText)
-                                    Text("\(ProfileDisplay.compactCount(room.memberCount)) members")
-                                        .experienceStyle(.caption, color: colors.secondaryText)
+                                    if let memberCount = room.memberCount {
+                                        Text("\(ProfileDisplay.compactCount(memberCount)) members")
+                                            .experienceStyle(.caption, color: colors.secondaryText)
+                                    }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
@@ -328,42 +335,5 @@ struct ExploreHomeView: View {
             .experienceStyle(.footnote, color: colors.secondaryText)
             .padding(.horizontal, ExperienceSpacing.md)
             .accessibilityIdentifier("explore.section.error")
-    }
-}
-
-private struct ExploreSearchPersonRow: View {
-    let trader: ExploreTraderSuggestion
-    let imagePipeline: any ImagePipeline
-    let isFollowing: Bool
-    let onToggleFollow: () -> Void
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        HStack(spacing: ExperienceSpacing.md) {
-            FollowListAvatarView(profile: trader.profile, imagePipeline: imagePipeline, size: 40)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(trader.profile.displayName)
-                    .experienceStyle(.subheadline, color: colors.primaryText)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                Text("@\(trader.profile.username)")
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: ExperienceSpacing.sm)
-            Button(action: onToggleFollow) {
-                Text(isFollowing ? "Following" : "Follow")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(isFollowing ? colors.primaryText : colors.onAccent)
-                    .padding(.horizontal, 12)
-                    .frame(height: 30)
-                    .background(
-                        Capsule().fill(isFollowing ? colors.fillSecondary : colors.accent)
-                    )
-            }
-            .buttonStyle(.plain)
-        }
-        .accessibilityIdentifier("explore.search.person.\(trader.id.rawValue)")
     }
 }

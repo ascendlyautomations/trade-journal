@@ -18,6 +18,10 @@ struct ProfileState: Equatable {
     var stats: ProfileStats?
     var isOwner = false
     var isFollowing = false
+    var isRequested = false
+    var followsYou = false
+    /// Mirrors RPC `viewer.can_view_trades` — false for private profiles the viewer cannot access.
+    var canViewTrades = true
     var ownedTradeRoom: TradeRoom?
     var didResolveTradeRoom = false
 
@@ -51,6 +55,9 @@ struct ProfileState: Equatable {
     }
 
     var payoutTotal: Decimal? { stats?.payoutTotal }
+
+    /// When false, section containers should not fetch trading/content payloads.
+    var isContentLocked: Bool { !canViewTrades && !isOwner }
 }
 
 extension ProfileState: ScreenStateModeling {

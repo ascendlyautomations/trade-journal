@@ -147,7 +147,10 @@ nonisolated struct DefaultLeaderboardRepository: LeaderboardRepository {
             rr: DecimalParser.parseFlexible(row.rr),
             createdAt: created,
             accountType: row.account_type,
-            mode: row.mode
+            mode: row.mode,
+            displayName: row.name,
+            username: row.username,
+            avatarURL: row.avatar_url
         )
     }
 }

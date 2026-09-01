@@ -107,6 +107,13 @@ struct ProfileHeaderView: View {
                     .lineLimit(1)
                     .accessibilityIdentifier("profile.username")
 
+                if store.followsYou, !store.isOwner {
+                    Text("Follows you")
+                        .font(.system(.caption, design: .default).weight(.medium))
+                        .foregroundStyle(colors.tertiaryText)
+                        .accessibilityIdentifier("profile.followsYou")
+                }
+
                 if let line = ProfileDisplay.metadataLine(for: profile) {
                     Text(line)
                         .experienceStyle(.footnote, color: colors.tertiaryText)

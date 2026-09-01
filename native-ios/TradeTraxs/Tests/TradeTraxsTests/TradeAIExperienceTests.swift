@@ -243,7 +243,7 @@ final class TradeAIExperienceTests: XCTestCase {
 
     func testMissingBFFConfigurationShowsFriendlyCopy() {
         let mapped = UserFacingError.map(
-            NetworkError.validation(message: "Base URL for bff is not configured")
+            NetworkError.validation(statusCode: nil, message: "Base URL for bff is not configured")
         )
         XCTAssertFalse(mapped.message.contains("NetworkError"))
         XCTAssertFalse(mapped.message.contains("error 3"))

@@ -10,7 +10,7 @@ protocol NotificationRouting: Sendable {
 /// Badge ownership stays outside this type (Activity vs Messages).
 /// Room channel / message highlight is seeded by ``NotificationRouterFacade`` via
 /// ``RoomNavigationFocusStore`` before ``open``.
-struct NotificationRouter: NotificationRouting {
+nonisolated struct NotificationRouter: NotificationRouting {
     func destination(for notification: NotificationDestination) -> AppDestination? {
         switch notification.category {
         case .directMessage:
@@ -113,7 +113,7 @@ struct NotificationRouter: NotificationRouting {
     }
 }
 
-private extension String {
+private nonisolated extension String {
     var nilIfEmpty: String? {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed

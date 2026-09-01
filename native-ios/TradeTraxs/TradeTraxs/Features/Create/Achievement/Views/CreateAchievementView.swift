@@ -201,17 +201,21 @@ struct CreateAchievementView: View {
                     }
                 )) {
                     Text("None").tag("")
-                    ForEach(viewModel.accounts) { account in
-                        Text(accountLabel(account)).tag(account.id.rawValue)
+                    ForEach(viewModel.accountsForPicker) { account in
+                        OwnerAccountDropdownPickerLabel(account: account)
+                            .tag(account.id.rawValue)
                     }
                 }
                 .accessibilityIdentifier("createAchievement.account")
+                .onAppear {
+                    OwnerAccountDropdownSupport.logBoundary(
+                        .achievement,
+                        accounts: viewModel.accountsForPicker,
+                        profileID: viewModel.ownerAccountsProfileID
+                    )
+                }
             }
         }
-    }
-
-    private func accountLabel(_ account: TradingAccount) -> String {
-        TradingAccountDisplay.title(for: account, audience: .owner)
     }
 
     private var imagePickerTitle: String {

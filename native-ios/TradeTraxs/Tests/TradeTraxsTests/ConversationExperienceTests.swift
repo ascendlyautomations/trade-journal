@@ -206,6 +206,38 @@ private struct ConversationStubMessageRepository: MessageRepository {
         )
     }
 
+    func findExistingDirectConversationID(
+        viewerID: ProfileID,
+        recipientID: ProfileID
+    ) async throws -> ConversationID? {
+        nil
+    }
+
+    func usersHaveActiveBlock(viewerID: ProfileID, otherID: ProfileID) async -> Bool {
+        false
+    }
+
+    func createDirectConversation(viewerID: ProfileID, recipient: Profile) async throws -> Conversation {
+        ConversationCreationSupport.buildDirectConversation(
+            id: ConversationID("created"),
+            viewerID: viewerID,
+            recipient: recipient
+        )
+    }
+
+    func createGroupConversation(
+        viewerID: ProfileID,
+        recipients: [Profile],
+        name: String?
+    ) async throws -> Conversation {
+        ConversationCreationSupport.buildGroupConversation(
+            id: ConversationID("group-created"),
+            viewerID: viewerID,
+            recipients: recipients,
+            name: name
+        )
+    }
+
     func deleteConversation(id: ConversationID) async throws {}
 }
 

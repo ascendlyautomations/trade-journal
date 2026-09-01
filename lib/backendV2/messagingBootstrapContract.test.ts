@@ -166,7 +166,7 @@ describe("Phase C — Messages client loading wiring", () => {
     assert.match(src, /needsMarkRead/)
   })
 
-  it("native-ios still references V1 RPC name only", () => {
+  it("native-ios references V2 messaging RPC", () => {
     const src = fs.readFileSync(
       path.join(
         __dirname,
@@ -174,8 +174,7 @@ describe("Phase C — Messages client loading wiring", () => {
       ),
       "utf8"
     )
-    assert.match(src, /rpc_v1_messaging_bootstrap/)
-    assert.doesNotMatch(src, /rpc_v2_messaging_bootstrap/)
+    assert.match(src, /rpc_v2_messaging_bootstrap/)
   })
 })
 export {}

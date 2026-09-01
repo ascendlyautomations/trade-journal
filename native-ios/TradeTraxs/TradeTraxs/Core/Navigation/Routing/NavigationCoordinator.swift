@@ -3,8 +3,8 @@ import OSLog
 
 /// Applies ``AppDestination`` intents to ``NavigationStore``.
 ///
-/// Constructed by CompositionRoot. Features call this (or emit destinations
-/// upward) — they never mutate tab paths ad hoc across features.
+/// Ordinary in-app navigation appends exactly one route to the active tab path.
+/// It does not switch tabs, replace paths, or insert hidden parent screens.
 @Observable
 final class NavigationCoordinator {
     private let store: NavigationStore
@@ -28,15 +28,19 @@ final class NavigationCoordinator {
         case .tab(let tab):
             selectTab(tab)
         case .home(let route):
+            selectTab(.home)
             pushHome(route)
         case .feed(let route):
+            selectTab(.feed)
             pushFeed(route)
         case .messages(let route):
+            selectTab(.messages)
             pushMessages(route)
         case .profile(let route):
+            selectTab(.profile)
             pushProfile(route)
         case .settingsStack(let routes):
-            openSettings(routes)
+            openSettingsDeepLink(routes)
         case .sheet(let sheet):
             present(sheet: sheet)
         case .fullScreen(let cover):
@@ -53,20 +57,28 @@ final class NavigationCoordinator {
     }
 
     /// Marks the session authenticated and applies any pending deep link.
-    func markAuthenticated() {
+    func markAuthenticated(applyingDeferred snapshot: NavigationState? = nil) {
+        if let snapshot {
+            store.selectedTab = snapshot.selectedTab == .create ? snapshot.previousContentTab : snapshot.selectedTab
+            store.previousContentTab = snapshot.previousContentTab
+            store.paths.home = snapshot.homePath
+            store.paths.feed = snapshot.feedPath
+            store.paths.messages = snapshot.messagesPath
+            store.paths.profile = snapshot.profilePath
+        }
         store.sessionPhase = .authenticated
         store.paths.resetAuth(to: .login)
         emit(.sessionPhaseChanged(.authenticated))
         if let pending = store.pendingAfterAuth {
             store.pendingAfterAuth = nil
             open(pending.asAppDestination)
-        } else if !store.restoresLastContentTab {
+        } else if snapshot == nil, !store.restoresLastContentTab {
             store.selectedTab = .home
         }
     }
 
-    /// Returns to the auth stack. Clears main presentations; keeps paths cleared.
-    func markUnauthenticated() {
+    /// Returns to the auth stack. Clears main presentations and all tab paths.
+    func markUnauthenticated(clearPersistedNavigation: Bool = false) {
         dismissPresentation()
         store.sessionPhase = .unauthenticated
         store.paths = NavigationPathStore()
@@ -75,6 +87,9 @@ final class NavigationCoordinator {
         store.previousContentTab = .home
         store.pendingAfterAuth = nil
         emit(.sessionPhaseChanged(.unauthenticated))
+        if clearPersistedNavigation {
+            // Caller clears restorer via NavigationEnvironment when appropriate.
+        }
     }
 
     func selectTab(_ tab: TabIdentifier) {
@@ -113,6 +128,7 @@ final class NavigationCoordinator {
         case .reel:
             present(fullScreen: .newReel)
         case .story:
+            guard store.presentedFullScreen != .newStory else { return }
             present(fullScreen: .newStory)
         }
     }
@@ -131,13 +147,21 @@ final class NavigationCoordinator {
         }
     }
 
-    // MARK: - Stack ops
+    // MARK: - Stack ops (append-only; no tab switch)
 
     func pushHome(_ route: HomeRoute) {
         ensureAuthenticatedOrStash(.home(route))
         guard store.sessionPhase == .authenticated else { return }
-        selectTab(.home)
+        let pathBefore = store.paths.home.count
         store.paths.home.append(route)
+        logNavigationEvent(
+            action: "push",
+            source: "pushHome",
+            destination: String(describing: route),
+            tab: .home,
+            pathBefore: pathBefore,
+            pathAfter: store.paths.home.count
+        )
         emit(.pushed(tab: .home, description: String(describing: route)))
     }
 
@@ -147,8 +171,16 @@ final class NavigationCoordinator {
         if case .room(let roomID) = route {
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
         }
-        selectTab(.feed)
+        let pathBefore = store.paths.feed.count
         store.paths.feed.append(route)
+        logNavigationEvent(
+            action: "push",
+            source: "pushFeed",
+            destination: String(describing: route),
+            tab: .feed,
+            pathBefore: pathBefore,
+            pathAfter: store.paths.feed.count
+        )
         emit(.pushed(tab: .feed, description: String(describing: route)))
     }
 
@@ -160,11 +192,19 @@ final class NavigationCoordinator {
             InboxMarkReadCoordinator.shared.prepareOpenConversation(conversationID)
         case .room(let roomID):
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
-        case .roomMembers, .roomInfo, .sharedTrade, .sharedPost, .sharedReel, .profile:
+        case .roomMembers, .roomInfo, .sharedTrade, .sharedPost, .sharedReel, .profile, .settings:
             break
         }
-        selectTab(.messages)
+        let pathBefore = store.paths.messages.count
         store.paths.messages.append(route)
+        logNavigationEvent(
+            action: "push",
+            source: "pushMessages",
+            destination: String(describing: route),
+            tab: .messages,
+            pathBefore: pathBefore,
+            pathAfter: store.paths.messages.count
+        )
         emit(.pushed(tab: .messages, description: String(describing: route)))
     }
 
@@ -174,46 +214,32 @@ final class NavigationCoordinator {
         if case .room(let roomID) = route {
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
         }
-        selectTab(.profile)
+        let pathBefore = store.paths.profile.count
         store.paths.profile.append(route)
+        logNavigationEvent(
+            action: "push",
+            source: "pushProfile",
+            destination: String(describing: route),
+            tab: .profile,
+            pathBefore: pathBefore,
+            pathAfter: store.paths.profile.count
+        )
         emit(.pushed(tab: .profile, description: String(describing: route)))
-    }
-
-    /// Opens Settings with a proper back stack (home → section → leaf).
-    ///
-    /// Replaces any existing Settings routes on the Profile path so repeated opens
-    /// do not stack duplicate Settings roots.
-    func openSettings(_ routes: [SettingsRoute]) {
-        var normalized = routes
-        if normalized.isEmpty {
-            normalized = [.home]
-        }
-        if normalized.first != .home {
-            normalized.insert(.home, at: 0)
-        }
-        // Deduplicate consecutive identical routes.
-        var unique: [SettingsRoute] = []
-        for route in normalized where unique.last != route {
-            unique.append(route)
-        }
-
-        ensureAuthenticatedOrStash(.settingsStack(unique))
-        guard store.sessionPhase == .authenticated else { return }
-        selectTab(.profile)
-        store.paths.profile.removeAll {
-            if case .settings = $0 { return true }
-            return false
-        }
-        for route in unique {
-            store.paths.profile.append(.settings(route))
-        }
-        emit(.pushed(tab: .profile, description: "settingsStack:\(unique.map(\.rawValue).joined(separator: "/"))"))
     }
 
     func pop() {
         let tab = store.selectedTab
         guard tab.storesNavigationStack else { return }
+        let pathBefore = pathCount(for: tab)
         store.paths.pop(tab)
+        logNavigationEvent(
+            action: "pop",
+            source: "pop",
+            destination: nil,
+            tab: tab,
+            pathBefore: pathBefore,
+            pathAfter: pathCount(for: tab)
+        )
         emit(.popped(tab: tab))
     }
 
@@ -268,10 +294,64 @@ final class NavigationCoordinator {
 
     // MARK: - Private
 
+    /// Cold deep link / external settings URL — intentional Profile tab + constructed stack.
+    private func openSettingsDeepLink(_ routes: [SettingsRoute]) {
+        ensureAuthenticatedOrStash(.settingsStack(routes))
+        guard store.sessionPhase == .authenticated else { return }
+        selectTab(.profile)
+        store.paths.profile.removeAll()
+        for route in routes {
+            store.paths.profile.append(.settings(route))
+        }
+        emit(.pushed(tab: .profile, description: "settingsDeepLink:\(routes.map(\.rawValue).joined(separator: "/"))"))
+    }
+
     private func ensureAuthenticatedOrStash(_ destination: AppDestination) {
         guard store.sessionPhase != .authenticated else { return }
         stashForAuthentication(destination)
     }
+
+    private func pathCount(for tab: TabIdentifier) -> Int {
+        switch tab {
+        case .home: return store.paths.home.count
+        case .feed: return store.paths.feed.count
+        case .messages: return store.paths.messages.count
+        case .profile: return store.paths.profile.count
+        case .create: return 0
+        }
+    }
+
+#if DEBUG
+    private func logNavigationEvent(
+        action: String,
+        source: String,
+        destination: String?,
+        tab: TabIdentifier,
+        pathBefore: Int,
+        pathAfter: Int
+    ) {
+        AppLog.navigation.debug(
+            """
+            navigation.event action=\(action, privacy: .public) \
+            source=\(source, privacy: .public) \
+            destination=\(destination ?? "-", privacy: .public) \
+            activeTab=\(self.store.selectedTab.rawValue, privacy: .public) \
+            stackTab=\(tab.rawValue, privacy: .public) \
+            pathBefore=\(pathBefore, privacy: .public) \
+            pathAfter=\(pathAfter, privacy: .public)
+            """
+        )
+    }
+#else
+    private func logNavigationEvent(
+        action: String,
+        source: String,
+        destination: String?,
+        tab: TabIdentifier,
+        pathBefore: Int,
+        pathAfter: Int
+    ) {}
+#endif
 
     private func emit(_ event: NavigationEvent) {
         switch event {

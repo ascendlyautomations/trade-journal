@@ -14,6 +14,8 @@ final class ExploreSessionStore {
     private(set) var tradersNextCursor: String?
     private(set) var tradersFailedMessage: String?
     private(set) var roomsFailedMessage: String?
+    /// Profiles batch/API confirmed to have no avatar — distinct from "not yet fetched".
+    private(set) var avatarConfirmedAbsentIDs: Set<ProfileID> = []
 
     private init() {}
 
@@ -44,6 +46,18 @@ final class ExploreSessionStore {
         let existing = Set(suggestedTraders.map(\.id))
         suggestedTraders.append(contentsOf: traders.filter { !existing.contains($0.id) })
         tradersNextCursor = nextCursor
+    }
+
+    func replaceTraders(_ traders: [ExploreTraderSuggestion]) {
+        suggestedTraders = traders
+    }
+
+    func replaceRooms(_ rooms: [ExploreRoomSuggestion]) {
+        popularRooms = rooms
+    }
+
+    func updateAvatarConfirmedAbsent(_ ids: Set<ProfileID>) {
+        avatarConfirmedAbsentIDs = ids
     }
 
     func setTradersFailed(_ message: String) {
@@ -88,5 +102,6 @@ final class ExploreSessionStore {
         tradersNextCursor = nil
         tradersFailedMessage = nil
         roomsFailedMessage = nil
+        avatarConfirmedAbsentIDs = []
     }
 }

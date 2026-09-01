@@ -103,7 +103,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             var name: String?
             var description: String?
             var slug: String?
-            var member_count: Int?
+            var member_count: PostgresFlexibleInt?
         }
 
         let capped = max(1, min(limit, 50))
@@ -116,7 +116,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             parametersJSON: body
         )
         let rows = try JSONDecoder().decode([Row].self, from: data)
-        return rows.compactMap { row in
+        var suggestions = rows.compactMap { row -> ExploreRoomSuggestion? in
             guard let id = row.id, let name = row.name else { return nil }
             let slug = (row.slug ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if slug.lowercased() == "tradetraxs-beta" { return nil }
@@ -125,10 +125,125 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
                 name: name,
                 slug: slug.isEmpty ? id : slug,
                 description: row.description,
-                memberCount: row.member_count ?? 0,
+                memberCount: row.member_count.map(\.value),
                 imageURL: nil
             )
         }
+        suggestions = try await attachRoomDisplayImages(to: suggestions)
+        if suggestions.contains(where: { $0.memberCount == nil }) {
+            suggestions = try await enrichRoomMemberCounts(suggestions)
+        }
+        return suggestions
+    }
+
+    private func enrichRoomMemberCounts(
+        _ suggestions: [ExploreRoomSuggestion]
+    ) async throws -> [ExploreRoomSuggestion] {
+        guard !suggestions.isEmpty else { return suggestions }
+        let counts = try await DefaultRoomRepository(supabase: supabase)
+            .activeMemberCounts(for: suggestions.map(\.id))
+        guard !counts.isEmpty else { return suggestions }
+        return suggestions.map { suggestion in
+            guard let count = counts[suggestion.id] else { return suggestion }
+            var copy = suggestion
+            copy.memberCount = count
+            return copy
+        }
+    }
+
+    /// Web `attachRoomImages` + `resolveRoomAvatarUrl`: room `image_url` first, owner avatar fallback.
+    private func attachRoomDisplayImages(
+        to suggestions: [ExploreRoomSuggestion]
+    ) async throws -> [ExploreRoomSuggestion] {
+        guard !suggestions.isEmpty else { return suggestions }
+
+        struct RoomImageRow: Decodable {
+            var id: String?
+            var image_url: String?
+            var owner_user_id: String?
+        }
+
+        let roomIDs = suggestions.map(\.id.rawValue)
+        let roomRows: [RoomImageRow] = try await supabase.database.select(
+            RoomImageRow.self,
+            from: "rooms",
+            query: [
+                SupabaseQuery.select("id,image_url,owner_user_id"),
+                SupabaseQuery.isIn("id", roomIDs),
+            ]
+        )
+
+        var roomImageByID: [String: String] = [:]
+        var ownerIDs = Set<String>()
+        for row in roomRows {
+            guard let id = row.id else { continue }
+            if let image = row.image_url?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !image.isEmpty {
+                roomImageByID[id] = image
+            }
+            if let owner = row.owner_user_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !owner.isEmpty {
+                ownerIDs.insert(owner)
+            }
+        }
+
+        var ownerAvatarByID: [String: String] = [:]
+        if !ownerIDs.isEmpty {
+            let profiles: [ProfileDTO.Profile] = try await supabase.database.select(
+                ProfileDTO.Profile.self,
+                from: "profiles",
+                query: [
+                    SupabaseQuery.select("id,avatar_url"),
+                    SupabaseQuery.isIn("id", Array(ownerIDs)),
+                ]
+            )
+            for profile in profiles {
+                guard let id = profile.id,
+                      let avatar = profile.avatar_url?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !avatar.isEmpty
+                else { continue }
+                ownerAvatarByID[id] = avatar
+            }
+        }
+
+        var ownerByRoomID: [String: String] = [:]
+        for row in roomRows {
+            guard let id = row.id,
+                  let owner = row.owner_user_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !owner.isEmpty
+            else { continue }
+            ownerByRoomID[id] = owner
+        }
+
+        var sourceCounts: [String: Int] = [:]
+        let resolved = suggestions.map { suggestion -> ExploreRoomSuggestion in
+            var copy = suggestion
+            if let roomImage = roomImageByID[suggestion.id.rawValue] {
+                copy.imageURL = roomImage
+                sourceCounts["roomImage", default: 0] += 1
+            } else if let existing = suggestion.imageURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !existing.isEmpty {
+                copy.imageURL = existing
+                sourceCounts["roomImage", default: 0] += 1
+            } else if let owner = ownerByRoomID[suggestion.id.rawValue],
+                      let ownerAvatar = ownerAvatarByID[owner] {
+                copy.imageURL = ownerAvatar
+                sourceCounts["ownerAvatar", default: 0] += 1
+            } else {
+                sourceCounts["missing", default: 0] += 1
+            }
+            return copy
+        }
+
+        #if DEBUG
+        ExploreHydrationDiagnostics.logRooms(
+            decoded: resolved.count,
+            withImage: resolved.filter { $0.imageReference != nil }.count,
+            sourceCounts: sourceCounts
+        )
+        #endif
+
+        return resolved
     }
 
     func searchRooms(query: String, limit: Int) async throws -> [ExploreRoomSuggestion] {
@@ -140,7 +255,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             var name: String?
             var description: String?
             var slug: String?
-            var member_count: Int?
+            var member_count: PostgresFlexibleInt?
             var image_url: String?
         }
 
@@ -157,7 +272,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             parametersJSON: body
         )
         let rows = try JSONDecoder().decode([Row].self, from: data)
-        return rows.compactMap { row in
+        let suggestions = rows.compactMap { row -> ExploreRoomSuggestion? in
             guard let id = row.id, let name = row.name else { return nil }
             let slug = (row.slug ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if slug.lowercased() == "tradetraxs-beta" { return nil }
@@ -167,9 +282,14 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
                 name: name,
                 slug: slug.isEmpty ? id : slug,
                 description: row.description,
-                memberCount: row.member_count ?? 0,
+                memberCount: row.member_count.map(\.value),
                 imageURL: (image?.isEmpty == false) ? image : nil
             )
         }
+        var resolved = try await attachRoomDisplayImages(to: suggestions)
+        if resolved.contains(where: { $0.memberCount == nil }) {
+            resolved = try await enrichRoomMemberCounts(resolved)
+        }
+        return resolved
     }
 }

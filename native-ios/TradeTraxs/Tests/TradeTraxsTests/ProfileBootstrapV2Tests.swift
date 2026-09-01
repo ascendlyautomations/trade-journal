@@ -15,6 +15,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
                 rooms: environment.data.rooms,
                 session: environment.data.session,
                 detailCache: environment.data.detailCache,
+                rpc: nil,
                 force: false
             )
         )
@@ -27,7 +28,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
         XCTAssertFalse(state.trades.isEmpty)
         XCTAssertFalse(state.posts.isEmpty)
         XCTAssertFalse(state.achievements.isEmpty)
-        XCTAssertNotNil(state.payoutTotal)
+        XCTAssertNotNil(state.stats?.profitFactor)
     }
 
     func testScreenViewModelBootstrapAppliesToSectionViewModelsWithoutAutonomousLoad() async {
@@ -74,7 +75,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
             return XCTFail("Expected stats section")
         }
         XCTAssertNotNil(stats.metrics)
-        XCTAssertEqual(stats.payoutTotal, screen.state.payoutTotal)
+        XCTAssertNotNil(screen.state.stats?.profitFactor)
 
         screen.shellViewModel?.select(.achievements)
         XCTAssertEqual(
@@ -99,6 +100,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
                 rooms: environment.data.rooms,
                 session: environment.data.session,
                 detailCache: environment.data.detailCache,
+                rpc: nil,
                 force: false
             )
         )

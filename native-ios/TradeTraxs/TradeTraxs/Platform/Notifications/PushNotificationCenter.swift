@@ -4,6 +4,15 @@ import OSLog
 import UIKit
 import UserNotifications
 
+/// Bridges non-Sendable APNs payloads into `@Sendable` task boundaries.
+private final class PushUserInfoBox: @unchecked Sendable {
+    nonisolated(unsafe) let userInfo: [AnyHashable: Any]
+
+    nonisolated init(_ userInfo: [AnyHashable: Any]) {
+        self.userInfo = userInfo
+    }
+}
+
 /// Centralized APNs ownership — features never register for remote notifications themselves.
 ///
 /// Responsibilities:
@@ -63,9 +72,9 @@ final class PushNotificationCenter: NSObject {
     init(
         tokenClient: any DevicePushTokenClienting,
         navigation: NavigationEnvironment,
-        activityInbox: ActivityInboxStore = .shared,
-        badgeController: AppIconBadgeController = .shared,
-        routerFacade: NotificationRouterFacade = NotificationRouterFacade()
+        activityInbox: ActivityInboxStore,
+        badgeController: AppIconBadgeController,
+        routerFacade: NotificationRouterFacade
     ) {
         self.tokenClient = tokenClient
         self.navigation = navigation
@@ -217,10 +226,10 @@ extension PushNotificationCenter: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        let userInfo = notification.request.content.userInfo
+        let userInfoBox = PushUserInfoBox(notification.request.content.userInfo)
         Task { @MainActor in
-            handleForegroundRemoteNotification(userInfo: userInfo)
-            let destination = PushNotificationPayloadParser.parse(userInfo: userInfo)
+            handleForegroundRemoteNotification(userInfo: userInfoBox.userInfo)
+            let destination = PushNotificationPayloadParser.parse(userInfo: userInfoBox.userInfo)
             let options = PushNotificationPresentationPolicy.foregroundOptions(
                 for: destination,
                 bannersEnabled: foregroundBannersEnabled

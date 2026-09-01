@@ -20,6 +20,7 @@ final class CalendarViewModel {
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator
     private let realtimeHub: RealtimeHub?
+    private let rpc: (any RPCClient)?
 
     private var profileID: ProfileID?
     private var allTrades: [Trade] = []
@@ -35,13 +36,15 @@ final class CalendarViewModel {
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
-        realtimeHub: RealtimeHub? = nil
+        realtimeHub: RealtimeHub? = nil,
+        rpc: (any RPCClient)? = nil
     ) {
         self.trades = trades
         self.session = session
         self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
         self.realtimeHub = realtimeHub
+        self.rpc = rpc
     }
 
     var accountFilterTitle: String {
@@ -49,7 +52,7 @@ final class CalendarViewModel {
         case .all: return "All Accounts"
         case .account(let id):
             if let account = accounts.first(where: { $0.id == id }) {
-                return TradingAccountDisplay.title(for: account, audience: .owner)
+                return TradingAccountDisplay.ownerDropdownLine(for: account)
             }
             return accountNames[id] ?? "Account"
         }
@@ -63,8 +66,22 @@ final class CalendarViewModel {
     }
 
     func accountMenuTitle(for account: TradingAccount) -> String {
-        TradingAccountDisplay.title(for: account, audience: .owner)
+        TradingAccountDisplay.ownerDropdownLine(for: account)
     }
+
+    var accountsForMenu: [TradingAccount] {
+        let selectedID: TradingAccountID? = {
+            if case .account(let id) = accountFilter { return id }
+            return nil
+        }()
+        return OwnerAccountDropdownSupport.menuAccounts(
+            profileID: profileID,
+            fallback: accounts,
+            preservingSelection: selectedID
+        )
+    }
+
+    var ownerAccountsProfileID: ProfileID? { profileID }
 
     func loadIfNeeded() {
         if phase == .loaded, month != nil {
@@ -130,8 +147,7 @@ final class CalendarViewModel {
 
     func openManageAccounts() {
         ExperienceHaptics.play(.selection)
-        // Preserve Calendar filter — Settings opens on Profile tab.
-        navigationCoordinator.openSettings([.tradingAccounts])
+        navigationCoordinator.pushHome(.settings(.tradingAccounts))
     }
 
     func selectDay(_ dayKey: String) {
@@ -182,12 +198,48 @@ final class CalendarViewModel {
         }
 
         do {
+            if let rpc,
+               let window = TradingCalendarDay.fetchWindow(
+                   year: visibleMonth.year,
+                   month: visibleMonth.month
+               ),
+               let applied = try? await CalendarBootstrapLoader.load(
+                   viewerID: profileID,
+                   rpc: rpc,
+                   detailCache: detailCache,
+                   year: visibleMonth.year,
+                   month: visibleMonth.month,
+                   accountID: calendarAccountFilterID(),
+                   entryFrom: window.start,
+                   entryTo: window.end
+               )
+            {
+                accounts = applied.accounts.sorted {
+                    $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
+                accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+                hasLoadedAccounts = true
+                let cacheKey = visibleMonth.cacheKey
+                monthTradeCache[cacheKey] = applied.trades
+                CalendarMonthSessionStore.shared.store(
+                    applied.trades,
+                    year: visibleMonth.year,
+                    month: visibleMonth.month
+                )
+                mergeTrades(applied.trades)
+                recompute()
+                phase = .loaded
+                await startRealtime(profileID: profileID)
+                return
+            }
+
             if !hasLoadedAccounts || forceNetwork {
                 let fetched = try await SessionAccountsStore.shared.accounts(
                     for: profileID,
                     detailCache: detailCache,
                     repository: trades,
-                    forceNetwork: forceNetwork
+                    forceNetwork: forceNetwork,
+                    requiresFullOwnerSnapshot: true
                 )
                 accounts = fetched.sorted {
                     $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
@@ -241,6 +293,33 @@ final class CalendarViewModel {
         }
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID ?? ProfileID("")) {
+            recompute()
+            return
+        }
+
+        if let profileID, let rpc,
+           let applied = try? await CalendarBootstrapLoader.load(
+               viewerID: profileID,
+               rpc: rpc,
+               detailCache: detailCache,
+               year: id.year,
+               month: id.month,
+               accountID: calendarAccountFilterID(),
+               entryFrom: window.start,
+               entryTo: window.end
+           )
+        {
+            SessionNetworkProbe.record(.networkFetch, resource: "calendar.month.rpc", detail: cacheKey)
+            if !hasLoadedAccounts {
+                accounts = applied.accounts.sorted {
+                    $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
+                accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+                hasLoadedAccounts = true
+            }
+            monthTradeCache[cacheKey] = applied.trades
+            CalendarMonthSessionStore.shared.store(applied.trades, year: id.year, month: id.month)
+            mergeTrades(applied.trades)
             recompute()
             return
         }
@@ -321,6 +400,11 @@ final class CalendarViewModel {
     }
 
     // MARK: - Incremental updates (for tests / future postgres_changes)
+
+    private func calendarAccountFilterID() -> TradingAccountID? {
+        if case .account(let id) = accountFilter { return id }
+        return nil
+    }
 
     func applyRealtimeUpsert(_ trade: Trade) {
         SessionNetworkProbe.record(.localMutation, resource: "calendar.trades", detail: trade.id.rawValue)

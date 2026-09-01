@@ -30,36 +30,37 @@ final class SettingsExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.model.selectedTheme, .tradeTraxs)
     }
 
-    func testOpenSettingsBuildsHierarchicalBackStack() {
+    func testProfileSettingsAppendSingleHomeRoute() {
         let store = NavigationStore()
         store.sessionPhase = .authenticated
+        store.selectedTab = .profile
         let coordinator = NavigationCoordinator(store: store)
 
-        coordinator.openSettings([.home, .notifications, .notificationsMessages])
-
+        coordinator.pushProfile(.settings(.home))
         XCTAssertEqual(store.selectedTab, .profile)
-        XCTAssertEqual(settingsRoutes(in: store), [.home, .notifications, .notificationsMessages])
+        XCTAssertEqual(profileSettingsRoutes(in: store), [.home])
     }
 
-    func testOpenSettingsReplacesExistingSettingsRoutes() {
+    func testRepeatedSettingsOpenAppendsWithoutReplacingActivity() {
         let store = NavigationStore()
         store.sessionPhase = .authenticated
+        store.selectedTab = .profile
+        store.paths.profile = [.activity]
         let coordinator = NavigationCoordinator(store: store)
 
-        coordinator.openSettings([.home, .account])
-        coordinator.openSettings([.home, .notifications, .notificationsMessages])
-
-        XCTAssertEqual(settingsRoutes(in: store), [.home, .notifications, .notificationsMessages])
-        XCTAssertFalse(settingsRoutes(in: store).contains(.account))
+        coordinator.pushProfile(.settings(.home))
+        XCTAssertEqual(store.paths.profile, [.activity, .settings(.home)])
     }
 
-    func testMessagesSettingsPathMatchesNotificationMessagesLeaf() {
-        // Messages gear uses openSettings([.home, .notifications, .notificationsMessages]).
+    func testMessagesSettingsAppendSingleHomeRoute() {
         let store = NavigationStore()
         store.sessionPhase = .authenticated
+        store.selectedTab = .messages
         let coordinator = NavigationCoordinator(store: store)
-        coordinator.openSettings([.home, .notifications, .notificationsMessages])
-        XCTAssertEqual(settingsRoutes(in: store), [.home, .notifications, .notificationsMessages])
+
+        coordinator.pushMessages(.settings(.home))
+        XCTAssertEqual(store.selectedTab, .messages)
+        XCTAssertEqual(messagesSettingsRoutes(in: store), [.home])
     }
 
     func testDeepLinkSettingsNotificationsMessages() {
@@ -108,7 +109,6 @@ final class SettingsExperienceTests: XCTestCase {
         repository.shouldFailUpdates = true
         viewModel.set(.directMessagesEnabled, enabled: true)
         await waitFor { viewModel.saveError != nil }
-        // Failed persistence must roll back the optimistic toggle.
         XCTAssertEqual(viewModel.binding(for: .directMessagesEnabled), false)
     }
 
@@ -150,22 +150,22 @@ final class SettingsExperienceTests: XCTestCase {
         }
     }
 
-    func testNestedSettingsPushPreservesBackHierarchy() {
+    func testStackNavigationAppendsToMessagesPath() {
         let store = NavigationStore()
-        store.sessionPhase = .authenticated
-        let coordinator = NavigationCoordinator(store: store)
-        coordinator.openSettings([.home])
-        coordinator.open(.profile(.settings(.notifications)))
-        coordinator.open(.profile(.settings(.notificationsMessages)))
-        XCTAssertEqual(settingsRoutes(in: store), [.home, .notifications, .notificationsMessages])
-        coordinator.pop()
-        XCTAssertEqual(settingsRoutes(in: store), [.home, .notifications])
-        coordinator.pop()
-        XCTAssertEqual(settingsRoutes(in: store), [.home])
+        let router = StackNavigation.messages(store: store)
+        router.pushSettings(.notifications)
+        XCTAssertEqual(messagesSettingsRoutes(in: store), [.notifications])
     }
 
-    private func settingsRoutes(in store: NavigationStore) -> [SettingsRoute] {
+    private func profileSettingsRoutes(in store: NavigationStore) -> [SettingsRoute] {
         store.paths.profile.compactMap { route in
+            if case .settings(let settings) = route { return settings }
+            return nil
+        }
+    }
+
+    private func messagesSettingsRoutes(in store: NavigationStore) -> [SettingsRoute] {
+        store.paths.messages.compactMap { route in
             if case .settings(let settings) = route { return settings }
             return nil
         }

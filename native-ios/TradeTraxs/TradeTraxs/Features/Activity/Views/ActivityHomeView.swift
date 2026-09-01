@@ -18,7 +18,10 @@ struct ActivityHomeView: View {
                 session: data.session,
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
-                realtimeHub: data.realtimeHub
+                realtimeHub: data.realtimeHub,
+                inboxStore: .shared,
+                router: NotificationRouter(),
+                rpc: data.rpc
             )
         )
         self.imagePipeline = data.imagePipeline

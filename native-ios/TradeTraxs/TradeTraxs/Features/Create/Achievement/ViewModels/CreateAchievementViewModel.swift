@@ -60,6 +60,18 @@ final class CreateAchievementViewModel {
         accounts.first(where: { $0.id == selectedAccountID })
     }
 
+    var accountsForPicker: [TradingAccount] {
+        let base = TradingAccountDropdownFilter.selectableForLinking(accounts)
+        let resolved = OwnerAccountDropdownSupport.resolvedAccounts(
+            profileID: viewerID,
+            fallback: accounts
+        )
+        let byID = Dictionary(uniqueKeysWithValues: resolved.map { ($0.id, $0) })
+        return base.map { byID[$0.id] ?? $0 }
+    }
+
+    var ownerAccountsProfileID: ProfileID? { viewerID }
+
     var isPayoutKind: Bool {
         switch kind {
         case .propFirmPayout, .liveTradingPayout: return true
@@ -190,7 +202,8 @@ final class CreateAchievementViewModel {
         do {
             accounts = try await SessionAccountsStore.shared.accounts(
                 for: viewerID,
-                repository: trades
+                repository: trades,
+                requiresFullOwnerSnapshot: true
             )
         } catch {
             accounts = SessionAccountsStore.shared.cached(for: viewerID) ?? []

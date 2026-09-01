@@ -6,8 +6,6 @@ import Observation
 final class StatsContainerViewModel {
     private(set) var state: ProfileSectionLoadState = .idle
     private(set) var metrics: ProfileStatisticsMetrics.Result?
-    /// Web overview `overviewPayoutTotal` — `sumPayoutAchievementTotals`.
-    private(set) var payoutTotal: Decimal?
     private(set) var isRefreshing = false
 
     var selectedMode: ProfileStatisticsMetrics.Mode = .all {
@@ -26,6 +24,7 @@ final class StatsContainerViewModel {
     private var tradeInputs: [ProfileStatisticsMetrics.TradeInput] = []
     private var loadTask: Task<Void, Never>?
     private var hasLoaded = false
+    private var canViewContent = true
     private var isScreenOwned = false
 
     init(
@@ -45,16 +44,22 @@ final class StatsContainerViewModel {
         return "No trades for this filter selection"
     }
 
-    /// Applies shared trades + achievements when Stage 2 has filled them; otherwise loads on demand.
+    /// Applies shared trades when Stage 2 has filled them; otherwise loads on demand.
     /// Prefers ``DetailPresentationCache`` when section data was mutated after bootstrap.
     func applyBootstrap(_ snapshot: ProfileState) {
         if snapshot.didBootstrap || snapshot.phase == .loaded {
             isScreenOwned = true
         }
+        if snapshot.isContentLocked {
+            canViewContent = false
+            hasLoaded = true
+            state = .empty
+            return
+        }
+        canViewContent = true
         let hasTrades = snapshot.didLoadTrades || !snapshot.trades.isEmpty
             || detailCache.publicTrades(for: profileID) != nil
-        let hasAchievements = snapshot.didLoadAchievements || !snapshot.achievements.isEmpty
-        guard hasTrades || hasAchievements || snapshot.payoutTotal != nil else {
+        guard hasTrades else {
             if (snapshot.phase == .loading || snapshot.didBootstrap), metrics == nil {
                 state = .loading
             }
@@ -77,16 +82,16 @@ final class StatsContainerViewModel {
                 accountType: trade.accountID.flatMap { accountTypes[$0] }
             )
         }
-        if let payout = snapshot.payoutTotal ?? detailCache.stats(for: profileID)?.payoutTotal {
-            applyPayoutTotal(payout)
-        } else {
-            applyPayoutTotal(ProfilePayoutTotals.sum(from: snapshot.achievements))
-        }
         recompute()
     }
 
     func loadIfNeeded() {
         guard !hasLoaded, loadTask == nil else { return }
+        guard canViewContent else {
+            hasLoaded = true
+            state = .empty
+            return
+        }
         loadTask = Task { await performLoad() }
     }
 
@@ -124,49 +129,14 @@ final class StatsContainerViewModel {
         state = metrics == nil ? .loading : state
         do {
             // Stats needs up to 500 rows — do not reuse the paginated Trades list cache.
-            async let tradesTask = trades.trades(
+            let page = try await trades.trades(
                 ownedBy: profileID,
                 accountID: nil,
                 page: PageRequest(limit: 500),
                 publicOnly: true
             )
-            // Web overview payouts: visible (public) achievements → sumPayoutAchievementTotals.
-            async let achievementsTask = achievements.achievements(
-                for: profileID,
-                page: PageRequest(limit: 500),
-                publicOnly: true
-            )
-
-            let page = try await tradesTask
             detailCache.seed(publicTrades: page.items, for: profileID)
 
-            if let achievementPage = try? await achievementsTask {
-                detailCache.seed(achievements: achievementPage.items)
-                applyPayoutTotal(ProfilePayoutTotals.sum(from: achievementPage.items))
-            } else if let cached = detailCache.stats(for: profileID)?.payoutTotal {
-                payoutTotal = cached
-            }
-
-            // Accounts are session-scoped — reuse SessionAccountsStore / Detail cache.
-            let accounts: [TradingAccount]
-            if let fetched = try? await SessionAccountsStore.shared.accounts(
-                for: profileID,
-                detailCache: detailCache,
-                repository: trades,
-                forceNetwork: forceNetwork
-            ) {
-                accounts = fetched
-            } else {
-                accounts = []
-            }
-
-            guard !Task.isCancelled else { return }
-
-            let accountTypes = Dictionary(
-                uniqueKeysWithValues: accounts.map {
-                    ($0.id, ProfileStatisticsMetrics.accountTypeString(for: $0.mode))
-                }
-            )
             tradeInputs = page.items.map { trade in
                 ProfileStatisticsMetrics.TradeInput(
                     pnl: trade.realizedPnL?.amount,
@@ -174,7 +144,7 @@ final class StatsContainerViewModel {
                     isLong: trade.side == .long,
                     session: trade.sessionLabel,
                     mode: trade.mode.rawValue,
-                    accountType: trade.accountID.flatMap { accountTypes[$0] }
+                    accountType: trade.mode.rawValue
                 )
             }
 
@@ -205,18 +175,7 @@ final class StatsContainerViewModel {
                 }
             )
         }
-        applyPayoutTotal(
-            ProfilePayoutTotals.sum(from: ProfileAchievementFixtures.samples(owner: profileID))
-        )
         recompute()
-    }
-
-    private func applyPayoutTotal(_ total: Decimal) {
-        payoutTotal = total
-        if var stats = detailCache.stats(for: profileID) {
-            stats.payoutTotal = total
-            detailCache.seed(stats: stats)
-        }
     }
 
     private func recompute() {

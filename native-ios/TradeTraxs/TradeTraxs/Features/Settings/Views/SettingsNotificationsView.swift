@@ -5,6 +5,7 @@ struct SettingsNotificationsView: View {
     @State private var viewModel: SettingsNotificationsViewModel
     var category: NotificationPreferenceCategory?
 
+    @Environment(\.stackNavigation) private var stackNavigation
     @Environment(\.themeColors) private var colors
 
     init(
@@ -112,12 +113,16 @@ struct SettingsNotificationsView: View {
                 id: \.self
             ) { category in
                 Button {
-                    viewModel.openCategory(category)
+                    ExperienceHaptics.play(.selection)
+                    if let route = category.settingsRoute {
+                        stackNavigation?.pushSettings(route)
+                    }
                 } label: {
                     SettingsNavigationRow(title: category.title, systemImage: icon(for: category))
                 }
                 .buttonStyle(.plain)
                 .disabled(!viewModel.masterEnabled)
+                .accessibilityIdentifier("settings.notifications.category.\(category.rawValue)")
             }
         } header: {
             Text("Categories")

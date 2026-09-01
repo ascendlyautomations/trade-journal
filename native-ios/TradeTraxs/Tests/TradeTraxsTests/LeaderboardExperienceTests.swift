@@ -5,6 +5,7 @@ import XCTest
 final class LeaderboardExperienceTests: XCTestCase {
     override func tearDown() async throws {
         LeaderboardSessionStore.shared.invalidate()
+        SessionProfileStore.shared.invalidate()
         await LeaderboardTradeRowsCache.shared.invalidate()
         try await super.tearDown()
     }
@@ -110,6 +111,101 @@ final class LeaderboardExperienceTests: XCTestCase {
         XCTAssertEqual(repo.lastForceNetwork, true)
     }
 
+    func testLeaderboardIdentityNeverSurfacesUUID() {
+        let profileID = ProfileID("11111111-1111-1111-1111-111111111111")
+        let entry = LeaderboardEntry(
+            rank: 1,
+            profileID: profileID,
+            username: "",
+            totalPnL: Money(amount: 1_000),
+            tradeCount: 3,
+            averageRiskReward: 1.2
+        )
+
+        let missingProfileState = LeaderboardPresentation.buildState(
+            entries: [entry],
+            profiles: [:],
+            verified: [],
+            followers: [:],
+            following: [],
+            friends: [],
+            viewerID: nil,
+            audience: .all,
+            category: .pnl,
+            nextCursor: nil
+        )
+        let missingRow = missingProfileState.rows.first
+        XCTAssertEqual(missingRow?.profile.displayName, "Trader")
+        XCTAssertEqual(missingRow?.profile.username, "")
+        XCTAssertFalse(LeaderboardRowView.showsUsername(missingRow?.profile.username ?? ""))
+
+        let poisonedProfile = Profile(
+            id: profileID,
+            userID: UserID(profileID.rawValue),
+            username: profileID.rawValue,
+            displayName: profileID.rawValue,
+            bio: nil,
+            avatar: nil,
+            traderType: nil,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        )
+        let hydratedState = LeaderboardPresentation.buildState(
+            entries: [entry],
+            profiles: [profileID: poisonedProfile],
+            verified: [],
+            followers: [:],
+            following: [],
+            friends: [],
+            viewerID: nil,
+            audience: .all,
+            category: .pnl,
+            nextCursor: nil
+        )
+        let hydratedRow = hydratedState.rows.first
+        XCTAssertEqual(hydratedRow?.profile.displayName, "Trader")
+        XCTAssertEqual(
+            ProfileDisplay.initials(
+                displayName: hydratedRow?.profile.displayName ?? "",
+                username: hydratedRow?.profile.username ?? ""
+            ),
+            "TR"
+        )
+
+        let namedProfile = Profile(
+            id: profileID,
+            userID: UserID(profileID.rawValue),
+            username: "",
+            displayName: "Ada Lovelace",
+            bio: nil,
+            avatar: nil,
+            traderType: nil,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        )
+        let namedState = LeaderboardPresentation.buildState(
+            entries: [entry],
+            profiles: [profileID: namedProfile],
+            verified: [],
+            followers: [:],
+            following: [],
+            friends: [],
+            viewerID: nil,
+            audience: .all,
+            category: .pnl,
+            nextCursor: nil
+        )
+        XCTAssertEqual(namedState.rows.first?.profile.displayName, "Ada Lovelace")
+    }
+
     func testPresentationBuildsPodiumAndPinnedViewer() {
         let viewer = ProfileID("viewer-low")
         let now = Date()
@@ -183,6 +279,91 @@ final class LeaderboardExperienceTests: XCTestCase {
         XCTAssertEqual(state.pinnedViewer?.profileID, viewer)
     }
 
+    func testTimeframeChangeBatchFetchesNewlyVisibleProfiles() async {
+        SessionProfileStore.shared.invalidate()
+        LeaderboardSessionStore.shared.invalidate()
+        let profiles = CountingBatchProfileRepository(includeAvatars: true)
+        let vm = LeaderboardScreenViewModel(
+            leaderboard: MockLeaderboardRepository(trades: sampleTrades()),
+            profiles: profiles,
+            explore: MockLeaderboardExploreRepository(),
+            session: MockLeaderboardSession(userID: UserID("viewer")),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        await vm.bootstrapIfNeeded()
+        let callsAfterBootstrap = profiles.profilesBatchCallCount
+
+        vm.setTimeframe(.allTime)
+        await vm.awaitPendingWork()
+
+        XCTAssertEqual(profiles.profilesBatchCallCount, callsAfterBootstrap + 1)
+        XCTAssertEqual(vm.rows.first?.profileID, ProfileID("u-old"))
+        XCTAssertNotNil(vm.rows.first?.profile.avatar)
+        XCTAssertNotNil(vm.podium.first?.profile.avatar)
+    }
+
+    func testBootstrapUsesOneProfileBatchNotPerRow() async {
+        SessionProfileStore.shared.invalidate()
+        let repo = MockLeaderboardRepository(trades: sampleTrades())
+        let profiles = CountingBatchProfileRepository()
+        let cache = DetailPresentationCache()
+        let vm = LeaderboardScreenViewModel(
+            leaderboard: repo,
+            profiles: profiles,
+            explore: MockLeaderboardExploreRepository(),
+            session: MockLeaderboardSession(userID: UserID("viewer")),
+            detailCache: cache,
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        await vm.bootstrapIfNeeded()
+        XCTAssertEqual(profiles.profilesBatchCallCount, 1)
+        XCTAssertEqual(profiles.profileSingleCallCount, 0)
+    }
+
+    func testBootstrapRefetchesWhenCacheHasIdentityWithoutAvatar() async {
+        SessionProfileStore.shared.invalidate()
+        LeaderboardSessionStore.shared.invalidate()
+        let cache = DetailPresentationCache()
+        let profileID = ProfileID("u-mia")
+        cache.seed(
+            Profile(
+                id: profileID,
+                userID: UserID(profileID.rawValue),
+                username: "mia",
+                displayName: "Mia",
+                bio: nil,
+                avatar: nil,
+                traderType: nil,
+                tradingStyle: nil,
+                primaryMarket: nil,
+                startedTradingAt: nil,
+                isPrivate: false,
+                isCreator: false,
+                createdAt: .now
+            )
+        )
+
+        let profiles = CountingBatchProfileRepository(includeAvatars: true)
+        let vm = LeaderboardScreenViewModel(
+            leaderboard: MockLeaderboardRepository(trades: sampleTrades()),
+            profiles: profiles,
+            explore: MockLeaderboardExploreRepository(),
+            session: MockLeaderboardSession(userID: UserID("viewer")),
+            detailCache: cache,
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        await vm.bootstrapIfNeeded()
+
+        XCTAssertEqual(profiles.profilesBatchCallCount, 1)
+        let row = vm.rows.first { $0.profileID == profileID }
+        XCTAssertNotNil(row?.profile.avatar)
+        XCTAssertEqual(
+            ProfileAvatarSourceKind.classify(reference: row?.profile.avatar),
+            .fullURL
+        )
+    }
+
     // MARK: - Helpers
 
     private func makeViewModel(leaderboard: MockLeaderboardRepository) -> LeaderboardScreenViewModel {
@@ -237,6 +418,94 @@ private final class MockLeaderboardRepository: LeaderboardRepository, @unchecked
             window: window,
             interval: interval,
             page: page
+        )
+    }
+}
+
+private final class CountingBatchProfileRepository: ProfileRepository, @unchecked Sendable {
+    private(set) var profilesBatchCallCount = 0
+    private(set) var profileSingleCallCount = 0
+    private let includeAvatars: Bool
+
+    init(includeAvatars: Bool = false) {
+        self.includeAvatars = includeAvatars
+    }
+
+    func currentUser() async throws -> User {
+        User(id: UserID("viewer"), email: nil, createdAt: .now)
+    }
+
+    func profile(id: ProfileID) async throws -> Profile {
+        profileSingleCallCount += 1
+        return makeProfile(id: id)
+    }
+
+    func profiles(ids: [ProfileID]) async throws -> [Profile] {
+        profilesBatchCallCount += 1
+        return ids.map { makeProfile(id: $0) }
+    }
+
+    func profile(username: String) async throws -> Profile {
+        try await profile(id: ProfileID(username))
+    }
+
+    func updateProfile(_ profile: Profile) async throws -> Profile { profile }
+
+    func stats(for profileID: ProfileID) async throws -> ProfileStats {
+        ProfileStats(
+            profileID: profileID,
+            followerCount: 0,
+            followingCount: 0,
+            postCount: 0,
+            tradeCount: 0,
+            publicTradeCount: 0
+        )
+    }
+
+    func wallPosts(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func wallPost(id: PostID) async throws -> Post {
+        throw AppError.notImplemented(feature: "wallPost")
+    }
+
+    func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState { .none }
+    func follow(from viewer: ProfileID, to target: ProfileID) async throws {}
+    func unfollow(from viewer: ProfileID, to target: ProfileID) async throws {}
+
+    func followers(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func following(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func creator(for profileID: ProfileID) async throws -> Creator? { nil }
+
+    private func makeProfile(id: ProfileID) -> Profile {
+        let avatar: MediaReference? = includeAvatars
+            ? MediaReference(
+                id: "https://cdn.example/avatars/\(id.rawValue).jpg",
+                kind: .image,
+                altText: nil
+            )
+            : nil
+        return Profile(
+            id: id,
+            userID: UserID(id.rawValue),
+            username: "trader_\(id.rawValue)",
+            displayName: "Trader \(id.rawValue)",
+            bio: nil,
+            avatar: avatar,
+            traderType: nil,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
         )
     }
 }

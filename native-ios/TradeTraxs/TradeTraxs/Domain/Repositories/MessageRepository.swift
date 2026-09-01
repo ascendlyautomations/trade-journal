@@ -27,6 +27,21 @@ nonisolated protocol MessageRepository: Sendable {
     func markUnread(conversationID: ConversationID) async throws
     /// Web `ensureDmConversation` — find existing 1:1 or create shell + participants.
     func createConversation(participantIDs: [ProfileID]) async throws -> Conversation
+    /// Targeted duplicate DM lookup — used by creation coordinator after local inbox scan.
+    func findExistingDirectConversationID(
+        viewerID: ProfileID,
+        recipientID: ProfileID
+    ) async throws -> ConversationID?
+    /// Block check for DM/group creation — `users_have_active_block`.
+    func usersHaveActiveBlock(viewerID: ProfileID, otherID: ProfileID) async -> Bool
+    /// Create 1:1 shell + participants; returns domain from known profile without refetch.
+    func createDirectConversation(viewerID: ProfileID, recipient: Profile) async throws -> Conversation
+    /// Create group shell + participants; returns domain from known profiles without refetch.
+    func createGroupConversation(
+        viewerID: ProfileID,
+        recipients: [Profile],
+        name: String?
+    ) async throws -> Conversation
     /// Web messages `handleDeleteConversation` — delete own `conversation_participants` row.
     func deleteConversation(id: ConversationID) async throws
 }

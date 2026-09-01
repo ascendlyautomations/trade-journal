@@ -26,6 +26,13 @@ struct DashboardFilterBar: View {
             ) {
                 viewModel.openReports()
             }
+            toolProfileBankButton(
+                accessibilityLabel: "Payouts",
+                accessibilityIdentifier: "dashboard.payouts"
+            ) {
+                ExperienceHaptics.play(.selection)
+                viewModel.openPayouts()
+            }
         }
         .accessibilityIdentifier("dashboard.filters")
     }
@@ -49,41 +56,46 @@ struct DashboardFilterBar: View {
         .accessibilityIdentifier(accessibilityIdentifier)
     }
 
+    private func toolProfileBankButton(
+        accessibilityLabel: String,
+        accessibilityIdentifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            ProfileBankIcon.image(color: colors.primaryText)
+                .frame(
+                    width: ExperienceAccessibility.minTouchTarget,
+                    height: ExperienceAccessibility.minTouchTarget
+                )
+                .background(colors.fillSecondary, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
     private var accountMenu: some View {
-        Menu {
-            Button {
-                viewModel.setAccountFilter(.all)
-            } label: {
-                if case .all = viewModel.accountFilter {
-                    Label("All Accounts", systemImage: "checkmark")
-                } else {
-                    Text("All Accounts")
-                }
-            }
-            ForEach(viewModel.accounts) { account in
-                Button {
-                    viewModel.setAccountFilter(.account(account.id))
-                } label: {
-                    let title = viewModel.accountMenuTitle(for: account)
-                    if case .account(let id) = viewModel.accountFilter, id == account.id {
-                        Label(title, systemImage: "checkmark")
-                    } else {
-                        Text(title)
-                    }
-                }
-            }
-            Divider()
-            Button {
-                viewModel.openManageAccounts()
-            } label: {
-                Label("Manage Accounts", systemImage: "slider.horizontal.3")
-            }
-        } label: {
+        OwnerAccountFilterDropdown(
+            accounts: viewModel.accountsForMenu,
+            isAllAccountsSelected: {
+                if case .all = viewModel.accountFilter { return true }
+                return false
+            }(),
+            selectedAccountID: {
+                if case .account(let id) = viewModel.accountFilter { return id }
+                return nil
+            }(),
+            onSelectAll: { viewModel.setAccountFilter(.all) },
+            onSelectAccount: { viewModel.setAccountFilter(.account($0)) },
+            onManageAccounts: { viewModel.openManageAccounts() },
+            accessibilityIdentifier: "dashboard.account",
+            boundary: .dashboard,
+            profileID: viewModel.ownerAccountsProfileID
+        ) {
             menuLabel(selectedAccountTitle)
         }
         .accessibilityLabel("Account")
         .accessibilityValue(selectedAccountTitle)
-        .accessibilityIdentifier("dashboard.account")
     }
 
     private var selectedAccountTitle: String {

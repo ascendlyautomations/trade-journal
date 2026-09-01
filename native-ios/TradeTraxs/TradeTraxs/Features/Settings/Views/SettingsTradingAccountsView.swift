@@ -159,13 +159,16 @@ struct SettingsTradingAccountsView: View {
                 case .edit(let account):
                     ManageAccountEditorView(
                         viewModel: viewModel,
-                        mode: .edit(account.id),
+                        mode: .edit(account),
                         draft: viewModel.draft(from: account)
                     )
                 }
             }
         }
         .onAppear { viewModel.loadIfNeeded() }
+        .onChange(of: AccountMutationStore.shared.revision) { _, _ in
+            Task { await viewModel.refresh() }
+        }
         .accessibilityIdentifier(propFirmOnly ? "settings.propFirm" : "settings.tradingAccounts")
     }
 }

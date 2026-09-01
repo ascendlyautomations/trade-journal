@@ -35,7 +35,11 @@ final class DetailPresentationCache {
     private var viewerFollowEdgeByProfile: [ProfileID: Bool] = [:]
 
     func seed(_ profile: Profile) {
-        profilesByID[profile.id] = profile
+        if let existing = profilesByID[profile.id] {
+            profilesByID[profile.id] = existing.mergingCachedPresentation(with: profile)
+        } else {
+            profilesByID[profile.id] = profile
+        }
     }
 
     func profile(id: ProfileID) -> Profile? {
@@ -43,7 +47,11 @@ final class DetailPresentationCache {
     }
 
     func seed(stats: ProfileStats) {
-        statsByProfile[stats.profileID] = stats
+        if let existing = statsByProfile[stats.profileID] {
+            statsByProfile[stats.profileID] = existing.mergingRicher(with: stats)
+        } else {
+            statsByProfile[stats.profileID] = stats
+        }
     }
 
     func stats(for profileID: ProfileID) -> ProfileStats? {
@@ -144,8 +152,49 @@ final class DetailPresentationCache {
         }
     }
 
-    /// Seeds name / mode / size / number from linked `accounts` rows (one cache write).
-    /// Names stay raw (no account number) so public surfaces never inherit owner titles.
+    /// Seeds public-safe account labels for profile/shared surfaces — never account numbers.
+    func seedPublicAccountMetadata(
+        names: [TradingAccountID: String],
+        modes: [TradingAccountID: TradingAccountMode],
+        sizes: [TradingAccountID: Decimal] = [:],
+        for profileID: ProfileID
+    ) {
+        let sanitizedNames = Dictionary(
+            uniqueKeysWithValues: names.map { id, name in
+                (
+                    id,
+                    PublicAccountPrivacy.publicSafeAccountName(
+                        rawName: name,
+                        accountNumber: nil,
+                        category: nil,
+                        mode: modes[id]
+                    )
+                )
+            }
+        )
+        seed(accountNames: sanitizedNames)
+        seed(accountModes: modes)
+        seed(accountSizes: sizes)
+        purgeAccountNumbers(for: Array(names.keys))
+    }
+
+    /// Owner-only full account rows — never use for visitor profiles or public caches.
+    func seedOwnerAccounts(_ accounts: [TradingAccount], for profileID: ProfileID) {
+        accountsByProfile[profileID] = accounts
+        seed(accounts: accounts)
+    }
+
+    func purgeAccountNumbers(for accountIDs: [TradingAccountID]) {
+        for id in accountIDs {
+            accountNumbers[id] = nil
+        }
+    }
+
+    func purgeAllAccountNumbers() {
+        accountNumbers = [:]
+    }
+
+    /// Seeds name / mode / size / number from linked `accounts` rows (owner contexts only).
     func seed(accounts: [TradingAccount]) {
         seed(accountNames: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) }))
         seed(accountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) }))
@@ -173,6 +222,27 @@ final class DetailPresentationCache {
     func seed(accounts: [TradingAccount], for profileID: ProfileID) {
         accountsByProfile[profileID] = accounts
         seed(accounts: accounts)
+    }
+
+    /// Public profile path — sanitized labels only; strips any prior owner numbers.
+    func seedPublicProfileAccounts(_ accounts: [TradingAccount], for profileID: ProfileID) {
+        accountsByProfile[profileID] = accounts.map { account in
+            var copy = account
+            copy.accountNumber = nil
+            copy.name = PublicAccountPrivacy.publicSafeAccountName(for: account)
+            return copy
+        }
+        seedPublicAccountMetadata(
+            names: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) }),
+            modes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) }),
+            sizes: Dictionary(
+                uniqueKeysWithValues: accounts.compactMap { account -> (TradingAccountID, Decimal)? in
+                    guard let amount = account.size?.amount else { return nil }
+                    return (account.id, amount)
+                }
+            ),
+            for: profileID
+        )
     }
 
     func accounts(for profileID: ProfileID) -> [TradingAccount]? {
@@ -252,6 +322,29 @@ final class DetailPresentationCache {
         achievements[id]
     }
 
+    // MARK: - Feed engagement overrides (detail opened from Home feed)
+
+    private var feedEngagementTargetByTradeID: [TradeID: InteractionTarget] = [:]
+    private var feedEngagementTargetByAchievementID: [AchievementID: InteractionTarget] = [:]
+
+    /// Web feed trade cards like/comment on `posts.id`, not `trades.id`.
+    func seedFeedEngagementTarget(_ target: InteractionTarget, forTrade tradeID: TradeID) {
+        feedEngagementTargetByTradeID[tradeID] = target
+    }
+
+    func feedEngagementTarget(forTrade tradeID: TradeID) -> InteractionTarget? {
+        feedEngagementTargetByTradeID[tradeID]
+    }
+
+    /// Feed achievement rows use `achievement_posts.id`; profile lists use `achievements.id`.
+    func seedFeedEngagementTarget(_ target: InteractionTarget, forAchievement achievementID: AchievementID) {
+        feedEngagementTargetByAchievementID[achievementID] = target
+    }
+
+    func feedEngagementTarget(forAchievement achievementID: AchievementID) -> InteractionTarget? {
+        feedEngagementTargetByAchievementID[achievementID]
+    }
+
     func accountName(for accountID: TradingAccountID) -> String? {
         accountNames[accountID]
     }
@@ -313,5 +406,7 @@ final class DetailPresentationCache {
         followingByProfile = [:]
         viewerFollowingIDSet = nil
         viewerFollowEdgeByProfile = [:]
+        feedEngagementTargetByTradeID = [:]
+        feedEngagementTargetByAchievementID = [:]
     }
 }

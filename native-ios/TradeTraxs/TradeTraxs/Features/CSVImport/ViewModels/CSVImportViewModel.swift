@@ -46,7 +46,17 @@ final class CSVImportViewModel {
     }
 
     var eligibleAccounts: [TradingAccount] {
-        accounts.filter { $0.isActive && $0.canAddTrades }
+        let base = TradingAccountDropdownFilter.selectableForNewTrades(accounts)
+        let resolved = OwnerAccountDropdownSupport.resolvedAccounts(
+            profileID: ownerProfileID,
+            fallback: accounts
+        )
+        let byID = Dictionary(uniqueKeysWithValues: resolved.map { ($0.id, $0) })
+        return base.map { byID[$0.id] ?? $0 }
+    }
+
+    var ownerProfileID: ProfileID? {
+        accounts.first?.ownerProfileID
     }
 
     var selectedAccount: TradingAccount? {
@@ -243,7 +253,8 @@ final class CSVImportViewModel {
                 accounts = try await SessionAccountsStore.shared.accounts(
                     for: profileID,
                     detailCache: detailCache,
-                    repository: trades
+                    repository: trades,
+                    requiresFullOwnerSnapshot: true
                 )
             } catch {
                 accounts = SessionAccountsStore.shared.cached(for: profileID)
@@ -332,6 +343,9 @@ final class CSVImportViewModel {
             accountSizeLabel: sizeLabel,
             accountModeLabel: modeLabel,
             accountCategoryLabel: categoryLabel,
+            ownerAccountNumber: account.accountNumber,
+            ownerAccountCategory: account.category,
+            ownerAccountMode: account.mode,
             symbol: Symbol(ticker: trade.symbol),
             side: trade.side,
             mode: account.mode == .sim ? .sim : .live,

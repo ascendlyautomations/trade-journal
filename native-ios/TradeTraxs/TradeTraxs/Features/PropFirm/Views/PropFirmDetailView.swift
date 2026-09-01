@@ -15,6 +15,7 @@ struct PropFirmDetailView: View {
                 trades: data.trades,
                 session: data.session,
                 detailCache: data.detailCache,
+                rpc: data.rpc,
                 realtimeHub: data.realtimeHub
             )
         )

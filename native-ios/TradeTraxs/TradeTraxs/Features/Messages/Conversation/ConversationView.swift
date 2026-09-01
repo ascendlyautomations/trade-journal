@@ -1,14 +1,21 @@
 import SwiftUI
+import UIKit
 
 /// Production conversation thread — replaces the Messages `thread` placeholder.
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
     @State private var contentRevealed = false
+    @State private var scrollPositionID: String?
+    @State private var bottomAnchorLaidOut = false
+    @State private var messageListLaidOut = false
+    @State private var appliedScrollCommandGeneration: UInt64 = 0
     private let imagePipeline: any ImagePipeline
     private let navigationCoordinator: NavigationCoordinator?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let bottomProximityThreshold: CGFloat = 80
 
     init(
         conversationID: ConversationID,
@@ -26,7 +33,8 @@ struct ConversationView: View {
                 detailCache: data.detailCache,
                 trades: data.trades,
                 notifications: data.notifications,
-                realtimeHub: data.realtimeHub
+                realtimeHub: data.realtimeHub,
+                rpc: data.rpc
             )
         )
         self.imagePipeline = data.imagePipeline
@@ -83,6 +91,17 @@ struct ConversationView: View {
         .onDisappear {
             viewModel.stopRealtime()
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
+            guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
+                return
+            }
+            let screenHeight = UIScreen.main.bounds.height
+            let isVisible = frame.minY < screenHeight
+            viewModel.scrollCoordinator.reportKeyboardVisible(
+                isVisible,
+                conversationID: viewModel.conversationID
+            )
+        }
     }
 
     #if DEBUG
@@ -134,71 +153,146 @@ struct ConversationView: View {
     }
 
     private var messageList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: ExperienceSpacing.xs) {
-                    if viewModel.hasMoreOlder {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, ExperienceSpacing.sm)
-                            .onAppear {
-                                Task { await viewModel.loadOlderIfNeeded() }
+        ScrollView {
+            LazyVStack(spacing: ExperienceSpacing.xs) {
+                if viewModel.hasMoreOlder {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, ExperienceSpacing.sm)
+                        .onAppear {
+                            if let anchor = viewModel.messages.first?.id {
+                                viewModel.beginPagination(anchorMessageID: anchor)
                             }
-                    }
-
-                    ForEach(viewModel.timeline) { item in
-                        switch item {
-                        case .daySeparator(_, let title):
-                            ConversationDaySeparatorView(title: title)
-                        case .message(let bubble):
-                            ConversationBubbleView(
-                                item: bubble,
-                                peerProfile: viewModel.peerProfile,
-                                imagePipeline: imagePipeline,
-                                sharedTrade: viewModel.sharedTrade(for: bubble.message),
-                                onRetry: {
-                                    Task { await viewModel.retry(bubble) }
-                                }
-                            )
-                            .id(bubble.id.rawValue)
+                            Task { await viewModel.loadOlderIfNeeded() }
                         }
-                    }
+                }
 
-                    Color.clear
-                        .frame(height: 1)
-                        .id(ConversationScrollAnchor.bottom)
+                ForEach(viewModel.timeline) { item in
+                    switch item {
+                    case .daySeparator(_, let title):
+                        ConversationDaySeparatorView(title: title)
+                    case .message(let bubble):
+                        ConversationBubbleView(
+                            item: bubble,
+                            peerProfile: viewModel.peerProfile,
+                            imagePipeline: imagePipeline,
+                            sharedTrade: viewModel.sharedTrade(for: bubble.message),
+                            onRetry: {
+                                Task { await viewModel.retry(bubble) }
+                            }
+                        )
+                        .id(bubble.id.rawValue)
+                    }
                 }
-                .padding(.vertical, ExperienceSpacing.sm)
+
+                Color.clear
+                    .frame(height: 1)
+                    .id(ConversationScrollAnchorID.bottom)
+                    .onAppear {
+                        bottomAnchorLaidOut = true
+                        reportLayoutReadyIfNeeded()
+                    }
             }
-            .scrollDismissesKeyboard(.interactively)
-            .onChange(of: viewModel.messages.count) { _, _ in
-                scrollToBottom(proxy: proxy, animated: !reduceMotion)
+            .padding(.vertical, ExperienceSpacing.sm)
+        }
+        .scrollPosition(id: $scrollPositionID, anchor: .bottom)
+        .scrollDismissesKeyboard(.interactively)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            let distanceFromBottom = geometry.contentSize.height
+                - geometry.contentOffset.y
+                - geometry.containerSize.height
+            return distanceFromBottom <= Self.bottomProximityThreshold
+        } action: { _, isNearBottom in
+            viewModel.scrollCoordinator.reportNearBottom(
+                isNearBottom,
+                conversationID: viewModel.conversationID
+            )
+        }
+        .onChange(of: viewModel.scrollCoordinator.scrollCommandGeneration) { _, _ in
+            applyScrollCommand()
+        }
+        .onChange(of: viewModel.messages.count) { _, _ in
+            reportLayoutReadyIfNeeded()
+        }
+        .overlay(alignment: .bottom) {
+            if viewModel.scrollCoordinator.showsNewMessagesIndicator {
+                newMessagesIndicator
             }
-            .onChange(of: viewModel.phase) { _, phase in
-                if phase == .loaded {
-                    scrollToBottom(proxy: proxy, animated: false)
-                }
-            }
-            .accessibilityIdentifier("conversation.messageList")
+        }
+        .accessibilityIdentifier("conversation.messageList")
+        .onAppear {
+            messageListLaidOut = true
+            reportLayoutReadyIfNeeded()
+            applyScrollCommand()
+        }
+        .onDisappear {
+            messageListLaidOut = false
+            bottomAnchorLaidOut = false
         }
     }
 
-    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
-        let action = {
-            proxy.scrollTo(ConversationScrollAnchor.bottom, anchor: .bottom)
+    private var newMessagesIndicator: some View {
+        Button {
+            viewModel.scrollCoordinator.jumpToLatest(conversationID: viewModel.conversationID)
+            applyScrollCommand()
+        } label: {
+            HStack(spacing: ExperienceSpacing.xs) {
+                Image(systemName: "chevron.down")
+                Text("New messages")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(colors.primaryText)
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.vertical, ExperienceSpacing.xs)
+            .background(
+                colors.navigationBackground.opacity(0.96),
+                in: Capsule(style: .continuous)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(colors.border, lineWidth: 1)
+            )
         }
-        if animated {
+        .buttonStyle(.plain)
+        .padding(.bottom, ExperienceSpacing.sm)
+        .accessibilityIdentifier("conversation.newMessagesIndicator")
+    }
+
+    private func reportLayoutReadyIfNeeded() {
+        guard messageListLaidOut else { return }
+        if viewModel.messages.isEmpty {
+            viewModel.scrollCoordinator.reportLayoutReady(
+                newestMessageID: nil,
+                isEmpty: true,
+                conversationID: viewModel.conversationID
+            )
+            return
+        }
+        viewModel.scrollCoordinator.reportLayoutReady(
+            newestMessageID: viewModel.newestMessageID,
+            isEmpty: false,
+            conversationID: viewModel.conversationID
+        )
+        applyScrollCommand()
+    }
+
+    private func applyScrollCommand() {
+        let coordinator = viewModel.scrollCoordinator
+        guard coordinator.scrollCommandGeneration != appliedScrollCommandGeneration else { return }
+        guard let target = coordinator.desiredScrollPositionID else { return }
+        appliedScrollCommandGeneration = coordinator.scrollCommandGeneration
+
+        let apply = {
+            scrollPositionID = target
+        }
+        if coordinator.desiredScrollAnimated {
             ExperienceMotion.withAnimation(
                 MotionCurve.easeOut.animation(duration: .fast),
                 reduceMotion: reduceMotion,
-                action
+                apply
             )
         } else {
-            action()
+            apply()
         }
     }
-}
-
-private enum ConversationScrollAnchor {
-    static let bottom = "conversation-scroll-bottom"
 }

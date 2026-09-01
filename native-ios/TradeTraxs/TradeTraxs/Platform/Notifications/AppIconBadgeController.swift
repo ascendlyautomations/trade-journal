@@ -42,6 +42,5 @@ final class AppIconBadgeController {
                 )
             }
         }
-        UIApplication.shared.applicationIconBadgeNumber = value
     }
 }

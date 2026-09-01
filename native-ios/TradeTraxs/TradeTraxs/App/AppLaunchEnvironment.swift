@@ -15,7 +15,7 @@ enum AppLaunchEnvironment {
         if let cached {
             return cached
         }
-        let environment = CompositionRoot.bootstrap()
+        let environment = MainActor.assumeIsolated { CompositionRoot.bootstrap() }
         cached = environment
         return environment
     }

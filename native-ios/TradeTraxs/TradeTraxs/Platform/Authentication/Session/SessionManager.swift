@@ -1,7 +1,7 @@
 import Foundation
 
 /// In-memory + durable session owner used by networking and auth flows.
-final class SessionManager: @unchecked Sendable {
+nonisolated final class SessionManager: @unchecked Sendable {
     private let lock = NSLock()
     private var current: AuthenticationSession?
     private let store: any SessionStoring

@@ -6,6 +6,8 @@ nonisolated protocol RoomRepository: Sendable {
     func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom>
     /// Member rooms — web Community `loadMemberRooms` (`room_members` + embed).
     func memberRooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom>
+    /// Active member counts for many rooms — one `room_members` SELECT (web `loadMemberStats` parity).
+    func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int]
     /// Web `get_room_unread_counts`.
     func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int]
     /// Web `mark_room_read` — advances `room_members.last_read_at` / `last_read_message_id`.
@@ -24,10 +26,21 @@ nonisolated protocol RoomRepository: Sendable {
         page: PageRequest
     ) async throws -> CursorPage<RoomMessage>
     func send(_ message: RoomMessage) async throws -> RoomMessage
+    func insertMessageReaction(
+        roomID: RoomID,
+        messageID: RoomMessageID,
+        userID: ProfileID,
+        reaction: String
+    ) async throws -> RoomMessageReaction
+    func deleteMessageReaction(id: String) async throws
     func moderate(
         roomID: RoomID,
         messageID: RoomMessageID?,
         targetProfileID: ProfileID?,
         action: RoomModerationAction
     ) async throws
+}
+
+extension RoomRepository {
+    func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] { [:] }
 }

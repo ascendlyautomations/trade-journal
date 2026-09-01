@@ -62,10 +62,20 @@ final class LoginViewModel {
         }
     }
 
-    func signInWithApple() async {
+    func signInWithApple(credential: AppleIDCredentialPayload) async {
         await runSignIn(label: "login.tap.apple") { [self] in
-            try await authenticationCoordinator.signInWithApple()
+            try await authenticationCoordinator.signInWithApple(credential: credential)
         }
+    }
+
+    func handleAppleSignInCancelled() {
+        errorMessage = nil
+        isSubmitting = false
+    }
+
+    func handleAppleSignInFailure(_ error: Error) {
+        isSubmitting = false
+        present(error)
     }
 
     func signInWithGoogle() async {

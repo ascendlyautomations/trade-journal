@@ -10,6 +10,8 @@ nonisolated enum AuthenticationError: Error, Sendable, Equatable {
     case sessionMissing
     case refreshFailed
     case providerUnavailable(AuthenticationProviderKind)
+    case providerMisconfigured(AuthenticationProviderKind)
+    case providerTokenInvalid(AuthenticationProviderKind)
     case cancelled
     case biometricUnavailable
     case biometricFailed

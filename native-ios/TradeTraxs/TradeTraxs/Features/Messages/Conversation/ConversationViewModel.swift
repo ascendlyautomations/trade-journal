@@ -31,6 +31,7 @@ final class ConversationViewModel {
     private(set) var tradePickerTrades: [Trade] = []
     private(set) var isLoadingTradePicker = false
     private(set) var sharedTrades: [TradeID: Trade] = [:]
+    let scrollCoordinator = ConversationScrollCoordinator()
 
     private let messagesRepo: any MessageRepository
     private let profiles: any ProfileRepository
@@ -42,12 +43,15 @@ final class ConversationViewModel {
     private let detailCache: DetailPresentationCache
     private let inboxStore: MessagesInboxStore
     private let realtimeHub: RealtimeHub?
+    private let rpc: (any RPCClient)?
 
     private var nextOlderCursor: String?
     private var realtimeTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
     private var isApplyingRealtime = false
     private var didMarkReadThisOpen = false
+    private var loadGeneration: UInt64 = 0
+    private var bootstrapMarkReadApplied = false
 
     init(
         conversationID: ConversationID,
@@ -60,7 +64,8 @@ final class ConversationViewModel {
         trades: (any TradeRepository)? = nil,
         notifications: (any NotificationRepository)? = nil,
         realtimeHub: RealtimeHub? = nil,
-        inboxStore: MessagesInboxStore? = nil
+        inboxStore: MessagesInboxStore? = nil,
+        rpc: (any RPCClient)? = nil
     ) {
         self.conversationID = conversationID
         self.messagesRepo = messages
@@ -73,6 +78,10 @@ final class ConversationViewModel {
         self.detailCache = detailCache
         self.realtimeHub = realtimeHub
         self.inboxStore = inboxStore ?? .shared
+        self.rpc = rpc
+#if DEBUG
+        SafeInboxLog.storeObserved(instance: self.inboxStore.debugInstance, source: "ConversationViewModel")
+#endif
     }
 
     var timeline: [ConversationTimelineItem] {
@@ -83,6 +92,10 @@ final class ConversationViewModel {
         phase == .loaded && messages.isEmpty
     }
 
+    var newestMessageID: MessageID? {
+        messages.last?.id
+    }
+
     func loadIfNeeded() {
         guard loadTask == nil, phase != .loaded else { return }
         loadTask = Task { await performInitialLoad() }
@@ -91,11 +104,18 @@ final class ConversationViewModel {
     func retryLoad() {
         guard loadTask == nil else { return }
         phase = .idle
-        loadTask = Task { await performInitialLoad() }
+        loadTask = Task { await performInitialLoad(forceNetwork: true) }
     }
 
     func refreshNewest() async {
         await fetchIncrementalUpdates()
+    }
+
+    func beginPagination(anchorMessageID: MessageID) {
+        scrollCoordinator.beginPagination(
+            anchorMessageID: anchorMessageID,
+            conversationID: conversationID
+        )
     }
 
     func loadOlderIfNeeded() async {
@@ -107,12 +127,32 @@ final class ConversationViewModel {
         isLoadingOlder = true
         defer { isLoadingOlder = false }
         do {
-            var page = PageRequest(limit: 40)
-            page.cursor = nextOlderCursor
-            let result = try await messagesRepo.messages(in: conversationID, page: page)
-            commitMessages(result.items)
-            nextOlderCursor = result.nextCursor
-            hasMoreOlder = result.nextCursor != nil
+            if BackendV2FeatureFlags.isEnabled(.messageThreads), let rpc {
+                let result = try await ConversationThreadBootstrapLoader.load(
+                    viewerID: viewerID,
+                    conversationID: conversationID,
+                    cursor: nextOlderCursor,
+                    markRead: false,
+                    intent: .pagination,
+                    rpc: rpc,
+                    detailCache: detailCache,
+                    inboxStore: inboxStore,
+                    loadGeneration: loadGeneration,
+                    currentGeneration: { self.loadGeneration },
+                    forceNetwork: true
+                )
+                applyBootstrapApplied(result.applied, isPagination: true)
+                nextOlderCursor = result.applied.nextCursor
+                hasMoreOlder = result.applied.hasMoreMessages
+                await hydrateSharedTrades(from: result.applied.messages)
+            } else {
+                var page = PageRequest(limit: 40)
+                page.cursor = nextOlderCursor
+                let result = try await messagesRepo.messages(in: conversationID, page: page)
+                commitMessages(result.items)
+                nextOlderCursor = result.nextCursor
+                hasMoreOlder = result.nextCursor != nil
+            }
         } catch {
             // Soft-fail older page.
         }
@@ -143,6 +183,9 @@ final class ConversationViewModel {
     func stopRealtime() {
         realtimeTask?.cancel()
         realtimeTask = nil
+        if inboxStore.activeConversationID == conversationID {
+            inboxStore.setActiveConversation(nil)
+        }
         Task { [conversationID, realtimeHub] in
             let channel = RealtimeChannelID(
                 kind: .conversation,
@@ -221,22 +264,36 @@ final class ConversationViewModel {
         )
         commitMessages([optimistic])
         sendStates[tempID] = .sending
+        scrollCoordinator.handle(
+            .outgoingMessageInserted(messageID: tempID),
+            conversationID: conversationID
+        )
 
         if ConversationThreadSupport.isLocalDevelopment(viewerID)
             || ConversationThreadSupport.isLocalConversation(conversationID)
         {
             sendStates[tempID] = .sent
-            patchInbox(with: optimistic)
+            patchInbox(with: optimistic, source: "devSend")
             return
         }
 
         do {
             let saved = try await messagesRepo.send(optimistic)
-            commitMessages([saved])
+            scrollCoordinator.handle(
+                .optimisticConfirmed(from: tempID, to: saved.id),
+                conversationID: conversationID
+            )
+            commitMessages([saved], recordScrollEvents: false)
             sendStates.removeValue(forKey: tempID)
             sendStates[saved.id] = .sent
             sharedTrades[trade.id] = trade
-            patchInbox(with: saved)
+            patchInbox(with: saved, source: "confirmedTradeSend")
+            SafeInboxLog.sendCompleted(
+                conversationID: saved.conversationID,
+                messageID: saved.id,
+                bodyChars: 0,
+                hasAttachment: true
+            )
             ExperienceHaptics.play(.messageSent)
         } catch {
             sendStates[tempID] = .failed
@@ -259,10 +316,18 @@ final class ConversationViewModel {
 
     // MARK: - Private
 
-    private func performInitialLoad() async {
+    private func performInitialLoad(forceNetwork: Bool = false) async {
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        bootstrapMarkReadApplied = false
+        scrollCoordinator.resetForConversation(conversationID)
+
+        let unreadBeforeOpen = inboxStore.conversations.first(where: { $0.id == conversationID })?
+            .unreadCount ?? 0
         phase = .loading
         // Web optimistic clear on open — badge drops before history finishes loading.
         inboxStore.markRead(conversationID: conversationID)
+        inboxStore.setActiveConversation(conversationID)
 
         let current = await session.currentUserID
         let viewer = current.map { ProfileID($0.rawValue) }
@@ -274,21 +339,50 @@ final class ConversationViewModel {
                 || ConversationThreadSupport.isLocalConversation(conversationID)
             {
                 await loadLocalFixtures(viewerID: viewer)
+            } else if BackendV2FeatureFlags.isEnabled(.messageThreads),
+                      let viewer
+            {
+                try await loadFromV2Bootstrap(
+                    viewerID: viewer,
+                    generation: generation,
+                    unreadBeforeOpen: unreadBeforeOpen,
+                    forceNetwork: forceNetwork
+                )
             } else {
                 try await loadFromRepository()
             }
             await markConversationSeenIfNeeded()
             phase = .loaded
             startRealtime()
+        } catch ConversationThreadBootstrapLoader.LoaderError.rpcUnavailable {
+            do {
+                try await loadFromRepository()
+                await markConversationSeenIfNeeded()
+                phase = .loaded
+                startRealtime()
+            } catch {
+                await markConversationSeenIfNeeded()
+                phase = .failed(ConversationThreadSupport.message(for: error))
+            }
+        } catch ConversationThreadBootstrapLoader.LoaderError.staleResponse {
+            // Navigation away — keep cached state if already painted.
+            if phase == .loading, conversation != nil {
+                phase = .loaded
+            }
         } catch {
-            // Still persist read intent when the thread fails to load (web open path).
-            await markConversationSeenIfNeeded()
-            phase = .failed(ConversationThreadSupport.message(for: error))
+            if conversation != nil, !messages.isEmpty, phase == .loading {
+                phase = .loaded
+                startRealtime()
+            } else {
+                await markConversationSeenIfNeeded()
+                phase = .failed(ConversationThreadSupport.message(for: error))
+            }
         }
         loadTask = nil
     }
 
-    /// Web `markConversationMessagesSeen` + `markMessageNotificationsRead` on conversation open.
+    /// Web `markMessageNotificationsRead` on conversation open — `mark_conversation_read` is owned by
+    /// ``InboxMarkReadCoordinator`` (legacy) or thread bootstrap RPC (V2).
     private func markConversationSeenIfNeeded() async {
         inboxStore.markRead(conversationID: conversationID)
         guard !didMarkReadThisOpen else { return }
@@ -299,9 +393,11 @@ final class ConversationViewModel {
               !ConversationThreadSupport.isLocalConversation(conversationID)
         else { return }
 
-        try? await messagesRepo.markRead(conversationID: conversationID)
+        if BackendV2FeatureFlags.isEnabled(.messageThreads), bootstrapMarkReadApplied {
+            return
+        }
+
         await markMessageNotificationsRead()
-        // Keep local badge cleared even if a concurrent inbox patch raced in.
         inboxStore.markRead(conversationID: conversationID)
     }
 
@@ -380,12 +476,115 @@ final class ConversationViewModel {
         await hydrateSharedTrades(from: messages)
     }
 
+    private func loadFromV2Bootstrap(
+        viewerID: ProfileID,
+        generation: UInt64,
+        unreadBeforeOpen: Int,
+        forceNetwork: Bool
+    ) async throws {
+        guard let rpc else { throw ConversationThreadBootstrapLoader.LoaderError.flagOff }
+
+        let cacheKey = ConversationThreadSessionStore.cacheKey(
+            viewerID: viewerID,
+            conversationID: conversationID
+        )
+        let cached = ConversationThreadSessionStore.shared.restore(key: cacheKey)
+
+        if let cached, !forceNetwork {
+            applyBootstrapApplied(
+                ConversationThreadBootstrapApplier.Applied(
+                    conversation: cached.conversation,
+                    messages: cached.messages,
+                    nextCursor: cached.nextCursor,
+                    hasMoreMessages: cached.hasMoreMessages,
+                    markReadApplied: false,
+                    notificationsMarkedRead: 0,
+                    skippedMessages: 0
+                )
+            )
+            phase = .loaded
+            startRealtime()
+            if !cached.isSoftStale, unreadBeforeOpen == 0 {
+                return
+            }
+        }
+
+        let intent: ConversationThreadBootstrapLoader.LoadIntent = {
+            if forceNetwork { return .cacheRevalidation }
+            if cached == nil { return .coldOpen }
+            if cached?.isSoftStale == true {
+                return unreadBeforeOpen > 0 ? .coldOpen : .cacheRevalidation
+            }
+            return unreadBeforeOpen > 0 ? .coldOpen : .cacheRevalidation
+        }()
+        let markRead = intent == .coldOpen && !forceNetwork
+
+        let result = try await ConversationThreadBootstrapLoader.load(
+            viewerID: viewerID,
+            conversationID: conversationID,
+            cursor: nil,
+            markRead: markRead,
+            intent: intent,
+            rpc: rpc,
+            detailCache: detailCache,
+            inboxStore: inboxStore,
+            loadGeneration: generation,
+            currentGeneration: { self.loadGeneration },
+            forceNetwork: forceNetwork
+        )
+
+        guard generation == loadGeneration else {
+            throw ConversationThreadBootstrapLoader.LoaderError.staleResponse
+        }
+
+        if result.cacheHit {
+            applyBootstrapApplied(result.applied)
+            await hydrateSharedTrades(from: result.applied.messages)
+            return
+        }
+
+        applyBootstrapApplied(result.applied)
+        bootstrapMarkReadApplied = result.applied.markReadApplied
+        await hydrateSharedTrades(from: result.applied.messages)
+    }
+
+    private func applyBootstrapApplied(
+        _ applied: ConversationThreadBootstrapApplier.Applied,
+        isPagination: Bool = false
+    ) {
+        conversation = applied.conversation
+        if let viewerID {
+            let peerID = MessagesInboxSupport.peerID(in: applied.conversation, viewerID: viewerID)
+            if let peerID, let profile = detailCache.profile(id: peerID) {
+                peerProfile = profile
+            }
+        }
+        applyHeader(from: applied.conversation)
+        if isPagination {
+            commitMessages(applied.messages, recordScrollEvents: false)
+            scrollCoordinator.handle(
+                .paginationApplied,
+                conversationID: conversationID
+            )
+        } else {
+            applyBootstrapMessages(applied.messages)
+            notifyScrollContentApplied(source: .bootstrapApplied)
+        }
+        nextOlderCursor = applied.nextCursor
+        hasMoreOlder = applied.hasMoreMessages
+    }
+
+    /// Web `mergeMessageLists(wire, existing)` — bootstrap must not wipe newer local rows.
+    private func applyBootstrapMessages(_ incoming: [Message]) {
+        messages = ConversationMessageMerge.mergeMessageLists(existing: messages, incoming: incoming)
+    }
+
     /// Pull-to-refresh / explicit refresh — not used on a timer.
     private func fetchIncrementalUpdates() async {
         await applyRealtimeSignal(MessageRealtimeSignal(kind: .insert, messageID: nil))
     }
 
-    /// Incremental apply from Realtime — never reloads the whole conversation.
+    /// Incremental apply from Realtime — never reloads the whole conversation on V2.
     private func applyRealtimeSignal(_ signal: MessageRealtimeSignal) async {
         guard let viewerID,
               !ConversationThreadSupport.isLocalDevelopment(viewerID),
@@ -398,6 +597,11 @@ final class ConversationViewModel {
             return
         }
 
+        if BackendV2FeatureFlags.isEnabled(.messageThreads) {
+            await applyRealtimeSignalV2(signal)
+            return
+        }
+
         isApplyingRealtime = true
         defer { isApplyingRealtime = false }
         do {
@@ -405,19 +609,70 @@ final class ConversationViewModel {
                 in: conversationID,
                 page: PageRequest(limit: 30)
             )
-            // Commit merge immediately — hydrate afterward (no await before write).
             commitMessages(page.items)
             await hydrateSharedTrades(from: page.items)
-            if let last = messages.last {
-                patchInbox(with: last)
+            if let newest = ConversationMessageMerge.sortByCreatedAt(messages).last {
+                patchInbox(with: newest, source: "legacyRealtime")
             }
         } catch {
             // Soft-fail event-driven hydrate.
         }
     }
 
+    /// V2 — dedupe local confirmed sends; never run legacy inbox refresh waterfall.
+    private func applyRealtimeSignalV2(_ signal: MessageRealtimeSignal) async {
+        guard signal.kind == .insert || signal.kind == .update else { return }
+
+        if let rawID = signal.messageID {
+            let messageID = MessageID(rawID)
+            if messages.contains(where: { $0.id == messageID }) {
+                if let newest = ConversationMessageMerge.sortByCreatedAt(messages).last {
+                    patchInbox(with: newest, source: "realtimeDedupe")
+                }
+                return
+            }
+        }
+
+        // Incoming from another device — merge first page only when thread is open.
+        isApplyingRealtime = true
+        defer { isApplyingRealtime = false }
+        guard let rpc else { return }
+        let generation = loadGeneration
+        do {
+            let result = try await ConversationThreadBootstrapLoader.load(
+                viewerID: viewerID!,
+                conversationID: conversationID,
+                cursor: nil,
+                markRead: false,
+                intent: .cacheRevalidation,
+                rpc: rpc,
+                detailCache: detailCache,
+                inboxStore: inboxStore,
+                loadGeneration: generation,
+                currentGeneration: { self.loadGeneration },
+                forceNetwork: false
+            )
+            guard generation == self.loadGeneration else { return }
+            applyBootstrapApplied(result.applied)
+            await hydrateSharedTrades(from: result.applied.messages)
+            if let newest = ConversationMessageMerge.sortByCreatedAt(messages).last {
+                inboxStore.patchFromMessage(
+                    newest,
+                    viewerID: viewerID!,
+                    conversationOpen: true,
+                    policy: .canonical,
+                    fallbackConversation: conversation,
+                    source: "realtimeV2"
+                )
+            }
+        } catch {
+            // Soft-fail — local confirmed-send patch remains authoritative.
+        }
+    }
+
     /// Sole write path for thread rows — web `mergeMessages` semantics.
-    private func commitMessages(_ incoming: [Message]) {
+    private func commitMessages(_ incoming: [Message], recordScrollEvents: Bool = true) {
+        let previousIDs = Set(messages.map(\.id))
         let previousTempIDs = Set(
             messages
                 .map(\.id)
@@ -432,6 +687,48 @@ final class ConversationViewModel {
         for tempID in previousTempIDs where !remainingIDs.contains(tempID) {
             sendStates.removeValue(forKey: tempID)
         }
+        patchThreadSessionCache(with: incoming)
+        guard recordScrollEvents else { return }
+        recordIncomingScrollEvents(incoming: incoming, previousIDs: previousIDs)
+    }
+
+    private func recordIncomingScrollEvents(incoming: [Message], previousIDs: Set<MessageID>) {
+        for message in incoming {
+            guard !previousIDs.contains(message.id) else { continue }
+            guard !ConversationMessageMerge.isOptimisticMessageID(message.id) else { continue }
+            guard message.senderProfileID != viewerID else { continue }
+            scrollCoordinator.handle(
+                .incomingMessageInserted(messageID: message.id),
+                conversationID: conversationID
+            )
+        }
+    }
+
+    private enum ScrollContentSource {
+        case bootstrapApplied
+        case cacheApplied
+    }
+
+    private func notifyScrollContentApplied(source: ScrollContentSource) {
+        let event: ConversationScrollCoordinator.Event = switch source {
+        case .bootstrapApplied:
+            .bootstrapApplied(newestMessageID: newestMessageID, isEmpty: messages.isEmpty)
+        case .cacheApplied:
+            .cacheApplied(newestMessageID: newestMessageID, isEmpty: messages.isEmpty)
+        }
+        scrollCoordinator.handle(event, conversationID: conversationID)
+    }
+
+    private func patchThreadSessionCache(with incoming: [Message]) {
+        guard BackendV2FeatureFlags.isEnabled(.messageThreads),
+              let viewerID
+        else { return }
+        ConversationThreadSessionStore.shared.patchMessages(
+            viewerID: viewerID,
+            conversationID: conversationID,
+            incoming: incoming,
+            conversation: conversation
+        )
     }
 
     private func replaceMessages(_ incoming: [Message]) {
@@ -440,6 +737,7 @@ final class ConversationViewModel {
             incoming: incoming,
             viewerID: viewerID
         )
+        notifyScrollContentApplied(source: .cacheApplied)
     }
 
     private func removeMessage(id: MessageID) {
@@ -502,12 +800,16 @@ final class ConversationViewModel {
         )
         commitMessages([optimistic])
         sendStates[tempID] = .sending
+        scrollCoordinator.handle(
+            .outgoingMessageInserted(messageID: tempID),
+            conversationID: conversationID
+        )
 
         if ConversationThreadSupport.isLocalDevelopment(viewerID)
             || ConversationThreadSupport.isLocalConversation(conversationID)
         {
             sendStates[tempID] = .sent
-            patchInbox(with: optimistic)
+            patchInbox(with: optimistic, source: "devSend")
             return
         }
 
@@ -542,7 +844,7 @@ final class ConversationViewModel {
                         ),
                     ]
                     updated.kind = .media
-                    commitMessages([updated])
+                    commitMessages([updated], recordScrollEvents: false)
                 }
             }
 
@@ -568,24 +870,33 @@ final class ConversationViewModel {
             AppLog.networking.info(
                 """
                 conversation.send invoking MessageRepository.send \
-                conversation=\(self.conversationID.rawValue, privacy: .public) \
-                sender=\(viewerID.rawValue, privacy: .public) \
+                convo=\(SafeInboxLog.hash(self.conversationID.rawValue), privacy: .public) \
                 bodyChars=\(body.count, privacy: .public) \
                 hasImage=\(resolvedImageURL != nil, privacy: .public)
                 """
             )
             let saved = try await messagesRepo.send(payload)
-            commitMessages([saved])
+            scrollCoordinator.handle(
+                .optimisticConfirmed(from: tempID, to: saved.id),
+                conversationID: conversationID
+            )
+            commitMessages([saved], recordScrollEvents: false)
             sendStates.removeValue(forKey: tempID)
             sendStates[saved.id] = .sent
-            patchInbox(with: saved)
+            patchInbox(with: saved, source: "confirmedSend")
+            SafeInboxLog.sendCompleted(
+                conversationID: saved.conversationID,
+                messageID: saved.id,
+                bodyChars: body.count,
+                hasAttachment: resolvedImageURL != nil
+            )
             ExperienceHaptics.play(.messageSent)
         } catch {
             AppLog.networking.error(
                 """
                 conversation.send failed \
-                conversation=\(self.conversationID.rawValue, privacy: .public) \
-                sender=\(viewerID.rawValue, privacy: .public) \
+                convo=\(SafeInboxLog.hash(self.conversationID.rawValue), privacy: .public) \
+                bodyChars=\(body.count, privacy: .public) \
                 error=\(String(describing: error), privacy: .public)
                 """
             )
@@ -610,24 +921,19 @@ final class ConversationViewModel {
         }
     }
 
-    private func patchInbox(with message: Message) {
-        guard var convo = inboxStore.conversations.first(where: { $0.id == conversationID })
-            ?? conversation
-        else { return }
-        let preview: String
-        if message.attachments.isEmpty {
-            preview = message.body ?? ""
-        } else if let body = message.body, !body.isEmpty {
-            preview = body
-        } else {
-            preview = "Photo"
+    private func patchInbox(with message: Message, source: String = "unknown") {
+        guard let viewerID else { return }
+        inboxStore.patchFromMessage(
+            message,
+            viewerID: viewerID,
+            conversationOpen: true,
+            policy: .confirmedOutgoing,
+            fallbackConversation: conversation,
+            source: source
+        )
+        if let updated = inboxStore.conversations.first(where: { $0.id == conversationID }) {
+            conversation = updated
         }
-        convo.lastMessagePreview = preview
-        convo.lastMessageAt = message.createdAt
-        convo.updatedAt = message.createdAt
-        convo.unreadCount = 0
-        inboxStore.upsertConversation(convo)
-        conversation = convo
     }
 
     private func buildTimeline(from messages: [Message]) -> [ConversationTimelineItem] {

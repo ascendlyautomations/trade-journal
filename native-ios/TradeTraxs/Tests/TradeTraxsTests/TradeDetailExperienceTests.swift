@@ -118,6 +118,28 @@ final class TradeDetailExperienceTests: XCTestCase {
         )
     }
 
+    func testPointsTextUsesAuthoritativeField() {
+        XCTAssertEqual(TradeDisplay.pointsText(Decimal(string: "16.5")), "+16.5")
+        XCTAssertEqual(TradeDisplay.pointsText(Decimal(string: "-4")), "-4")
+        XCTAssertNil(TradeDisplay.pointsText(nil))
+    }
+
+    func testHoldDurationPrefersStoredDurationText() {
+        var trade = ProfileTradeFixtures.samples(owner: ProfileID("dev.points"))[0]
+        trade.durationText = "2h 15m"
+        trade.durationSeconds = nil
+        XCTAssertEqual(TradeDisplay.holdDuration(for: trade), "2h 15m")
+    }
+
+    func testHoldDurationFallsBackToEntryExit() {
+        var trade = ProfileTradeFixtures.samples(owner: ProfileID("dev.points"))[0]
+        trade.durationText = nil
+        trade.durationSeconds = nil
+        trade.entryAt = Date(timeIntervalSince1970: 0)
+        trade.exitAt = Date(timeIntervalSince1970: 3_700)
+        XCTAssertEqual(TradeDisplay.holdDuration(for: trade), "1h 1m")
+    }
+
     func testPriceTextUsesCurrencyGroupingAndDecimals() {
         XCTAssertEqual(TradeDisplay.priceText(Decimal(string: "20153.25")), "$20,153.25")
         XCTAssertEqual(TradeDisplay.priceText(Decimal(18_420)), "$18,420")

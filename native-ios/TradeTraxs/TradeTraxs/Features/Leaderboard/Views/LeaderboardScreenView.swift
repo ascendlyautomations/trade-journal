@@ -106,6 +106,7 @@ struct LeaderboardScreenView: View {
                     if !viewModel.podium.isEmpty {
                         LeaderboardPodiumView(
                             podium: viewModel.podium,
+                            profileFor: { viewModel.resolvedProfile(for: $0) },
                             imagePipeline: imagePipeline,
                             animateEntrance: !viewModel.state.didPlayPodiumEntrance,
                             onOpen: { viewModel.openProfile($0) },
@@ -116,6 +117,7 @@ struct LeaderboardScreenView: View {
                     ForEach(viewModel.listRows) { row in
                         LeaderboardRowView(
                             row: row,
+                            profile: viewModel.resolvedProfile(for: row.profileID),
                             imagePipeline: imagePipeline,
                             showsFollowButton: !row.isCurrentUser,
                             onOpen: { viewModel.openProfile(row) },

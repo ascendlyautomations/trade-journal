@@ -22,6 +22,7 @@ nonisolated protocol FeedRepository: Sendable {
     func addComment(_ comment: Comment) async throws -> Comment
     func setReaction(on item: FeedItem, kind: ReactionKind, isActive: Bool) async throws
     func stories(for viewer: ProfileID) async throws -> [Story]
+    func createStory(userID: ProfileID, imageURL: String) async throws -> Story
     func reel(id: ReelID) async throws -> Reel
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel>
     /// Web `fetchUserProfileReels` — Profile Clips tab (trade-linked visibility filter).

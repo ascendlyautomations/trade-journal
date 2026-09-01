@@ -132,6 +132,8 @@ export type DashboardAccountV1 = {
   category?: string | null
   is_active?: boolean | null
   can_add_trades?: boolean | null
+  show_in_account_dropdowns?: boolean | null
+  custom_public_status?: string | null
   note?: string | null
   consistency?: number | null
   max_drawdown?: number | null
@@ -225,6 +227,34 @@ export type FeedBootstrapV1 = {
 
 // —— Profile ——
 
+export type ProfileAccountPayoutEntryV1 = {
+  id: string
+  amount: number
+  payout_date: string
+  note: string | null
+}
+
+export type ProfileAccountInsightV1 = {
+  id: string
+  name: string
+  category: string | null
+  type: string | null
+  custom_status: string | null
+  payout_total: number
+  payouts: ProfileAccountPayoutEntryV1[]
+}
+
+export type ProfileAccountInsightsV1 = {
+  meta: BootstrapMetaV1 & {
+    found?: boolean
+    can_view?: boolean
+    is_own?: boolean
+  }
+  data: {
+    accounts: ProfileAccountInsightV1[]
+  }
+}
+
 export type ProfileBootstrapV1 = {
   meta: BootstrapMetaV1
   data: {
@@ -270,6 +300,12 @@ export type MessagingConversationV1 = {
   is_pinned: boolean
   name: string | null
   avatar_url: string | null
+  /** Canonical newest message id from public.messages (V2 canonical inbox repair). */
+  last_message_id?: string | null
+  /** Canonical newest message sender (nullable for system/anonymized rows). */
+  last_message_sender_id?: string | null
+  /** Canonical message type/kind when present. */
+  last_message_type?: string | null
   last_message: string | null
   last_message_at: string | null
   unread_count: number

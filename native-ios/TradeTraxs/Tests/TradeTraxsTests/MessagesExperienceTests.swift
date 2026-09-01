@@ -206,6 +206,7 @@ final class MessagesExperienceTests: XCTestCase {
             messages: MessagesStubMessageRepository(),
             search: MessagesStubSearchRepository(),
             profiles: MessagesStubProfileRepository(),
+            explore: MessagesStubExploreRepository(),
             session: MessagesStubSession(userID: MessagesInboxFixtures.viewerID.rawValue),
             detailCache: cache,
             inboxStore: .shared
@@ -481,6 +482,38 @@ private struct MessagesStubMessageRepository: MessageRepository {
         )
     }
 
+    func findExistingDirectConversationID(
+        viewerID: ProfileID,
+        recipientID: ProfileID
+    ) async throws -> ConversationID? {
+        nil
+    }
+
+    func usersHaveActiveBlock(viewerID: ProfileID, otherID: ProfileID) async -> Bool {
+        false
+    }
+
+    func createDirectConversation(viewerID: ProfileID, recipient: Profile) async throws -> Conversation {
+        ConversationCreationSupport.buildDirectConversation(
+            id: ConversationID("created"),
+            viewerID: viewerID,
+            recipient: recipient
+        )
+    }
+
+    func createGroupConversation(
+        viewerID: ProfileID,
+        recipients: [Profile],
+        name: String?
+    ) async throws -> Conversation {
+        ConversationCreationSupport.buildGroupConversation(
+            id: ConversationID("group-created"),
+            viewerID: viewerID,
+            recipients: recipients,
+            name: name
+        )
+    }
+
     func deleteConversation(id: ConversationID) async throws {
         await MainActor.run {
             MessagesInboxStore.shared.removeConversation(id: id)
@@ -540,6 +573,10 @@ private struct MessagesStubRoomRepository: RoomRepository {
     }
 
     func send(_ message: RoomMessage) async throws -> RoomMessage { message }
+    func insertMessageReaction(roomID: RoomID, messageID: RoomMessageID, userID: ProfileID, reaction: String) async throws -> RoomMessageReaction {
+        RoomMessageReaction(id: "stub", messageID: messageID, userID: userID, reaction: reaction, createdAt: nil)
+    }
+    func deleteMessageReaction(id: String) async throws {}
 
     func moderate(
         roomID: RoomID,
@@ -616,11 +653,28 @@ private struct MessagesStubProfileRepository: ProfileRepository {
     func creator(for profileID: ProfileID) async throws -> Creator? { nil }
 }
 
+private struct MessagesStubExploreRepository: ExploreRepository {
+    func discoverableProfiles(page: PageRequest) async throws -> CursorPage<Profile> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func socialCounts(for profileIDs: [ProfileID]) async throws -> ExploreSocialCounts { .empty }
+
+    func tradeActivitySummaries(limit: Int) async throws -> [ProfileID: ExploreTraderRanking.TradeSummary] {
+        [:]
+    }
+
+    func popularRooms(limit: Int) async throws -> [ExploreRoomSuggestion] { [] }
+
+    func searchRooms(query: String, limit: Int) async throws -> [ExploreRoomSuggestion] { [] }
+}
+
 private struct MessagesStubSearchRepository: SearchRepository {
     func search(
         query: String,
         kinds: Set<SearchResultKind>,
-        page: PageRequest
+        page: PageRequest,
+        excludingProfileID: ProfileID?
     ) async throws -> CursorPage<SearchResult> {
         CursorPage(items: [], nextCursor: nil)
     }

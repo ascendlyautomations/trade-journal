@@ -34,35 +34,23 @@ struct TradeHistoryFilterBar: View {
     }
 
     private var accountMenu: some View {
-        Menu {
-            Button {
-                viewModel.setAccountFilter(.all)
-            } label: {
-                if case .all = viewModel.filters.account {
-                    Label("All Accounts", systemImage: "checkmark")
-                } else {
-                    Text("All Accounts")
-                }
-            }
-            ForEach(viewModel.accounts) { account in
-                Button {
-                    viewModel.setAccountFilter(.account(account.id))
-                } label: {
-                    let title = TradingAccountDisplay.title(for: account, audience: .owner)
-                    if case .account(let id) = viewModel.filters.account, id == account.id {
-                        Label(title, systemImage: "checkmark")
-                    } else {
-                        Text(title)
-                    }
-                }
-            }
-            Divider()
-            Button {
-                viewModel.openManageAccounts()
-            } label: {
-                Label("Manage Accounts", systemImage: "slider.horizontal.3")
-            }
-        } label: {
+        OwnerAccountFilterDropdown(
+            accounts: viewModel.accountsForMenu,
+            isAllAccountsSelected: {
+                if case .all = viewModel.filters.account { return true }
+                return false
+            }(),
+            selectedAccountID: {
+                if case .account(let id) = viewModel.filters.account { return id }
+                return nil
+            }(),
+            onSelectAll: { viewModel.setAccountFilter(.all) },
+            onSelectAccount: { viewModel.setAccountFilter(.account($0)) },
+            onManageAccounts: { viewModel.openManageAccounts() },
+            accessibilityIdentifier: "trades.account",
+            boundary: .trades,
+            profileID: viewModel.ownerAccountsProfileID
+        ) {
             HStack(spacing: 4) {
                 Text(viewModel.accountMenuTitle)
                     .experienceStyle(.footnote, color: colors.primaryText)
@@ -75,6 +63,5 @@ struct TradeHistoryFilterBar: View {
         }
         .accessibilityLabel("Account")
         .accessibilityValue(viewModel.accountMenuTitle)
-        .accessibilityIdentifier("trades.account")
     }
 }

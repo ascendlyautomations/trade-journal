@@ -6,6 +6,7 @@ struct ConversationBubbleView: View {
     let peerProfile: Profile?
     let imagePipeline: any ImagePipeline
     var sharedTrade: Trade? = nil
+    var reactionConfiguration: MessageReactionConfiguration? = nil
     var onRetry: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
@@ -80,57 +81,151 @@ struct ConversationBubbleView: View {
             if item.message.kind == .tradeShare,
                let tradeID = item.message.attachments.first?.tradeID
             {
-                SharedTradeMessageCard(
-                    trade: sharedTrade,
-                    tradeID: tradeID,
-                    isOutgoing: item.isOutgoing
-                )
+                tradeShareBubble(tradeID: tradeID)
             } else if let reference = item.imageReference, item.message.kind != .tradeShare {
-                AspectFitMediaView(
-                    reference: reference,
-                    purpose: .tradeScreenshot,
-                    imagePipeline: imagePipeline,
-                    accessibilityIdentifier: "conversation.bubble.image",
-                    emptyIcon: .photo,
-                    allowsFullResolutionViewer: true
-                )
-                .frame(maxWidth: 240)
-                .clipShape(
-                    RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
-                )
-            }
-
-            if item.message.kind != .tradeShare, let text = item.text {
-                Text(text)
-                    .experienceStyle(
-                        .body,
-                        color: item.isOutgoing ? colors.onAccent : colors.primaryText
-                    )
-                    .padding(.horizontal, ExperienceSpacing.sm + 2)
-                    .padding(.vertical, ExperienceSpacing.sm)
-                    .background(
-                        item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
-                        in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
-                    )
+                imageBubble(reference: reference)
+            } else if let text = item.text {
+                textBubble(text: text)
+            } else if showsInlineReactions {
+                reactionsOnlyBubble
             }
         }
         .opacity(item.sendState == .sending ? 0.72 : 1)
         .contextMenu {
-            if let text = item.text, !text.isEmpty, item.message.kind != .tradeShare {
-                Button {
-                    UIPasteboard.general.string = text
-                    ExperienceHaptics.play(.success)
-                } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
-                }
+            bubbleContextMenu
+        }
+    }
+
+    @ViewBuilder
+    private var bubbleContextMenu: some View {
+        if let text = item.text, !text.isEmpty, item.message.kind != .tradeShare {
+            Button {
+                UIPasteboard.general.string = text
+                ExperienceHaptics.play(.success)
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
             }
-            if item.sendState == .failed, let onRetry {
-                Button(action: onRetry) {
-                    Label("Retry", systemImage: "arrow.clockwise")
+        }
+        if let reactionConfiguration, reactionConfiguration.isEnabled {
+            Menu("React") {
+                ForEach(reactionConfiguration.supportedEmojis, id: \.self) { emoji in
+                    Button(emoji) {
+                        reactionConfiguration.onToggle(emoji)
+                    }
                 }
             }
         }
+        if item.sendState == .failed, let onRetry {
+            Button(action: onRetry) {
+                Label("Retry", systemImage: "arrow.clockwise")
+            }
+        }
     }
+
+    private var showsInlineReactions: Bool {
+        reactionConfiguration?.showsStrip == true
+    }
+
+    private func textBubble(text: String) -> some View {
+        VStack(alignment: item.isOutgoing ? .trailing : .leading, spacing: 0) {
+            Text(text)
+                .experienceStyle(
+                    .body,
+                    color: item.isOutgoing ? colors.onAccent : colors.primaryText
+                )
+                .multilineTextAlignment(item.isOutgoing ? .trailing : .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            inlineReactionStrip(topPadding: 6)
+        }
+        .padding(.horizontal, ExperienceSpacing.sm + 2)
+        .padding(.top, ExperienceSpacing.sm)
+        .padding(.bottom, reactionBottomPadding)
+        .frame(maxWidth: bubbleMaxWidth, alignment: item.isOutgoing ? .trailing : .leading)
+        .background(
+            item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
+            in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+        )
+    }
+
+    private func imageBubble(reference: MediaReference) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            AspectFitMediaView(
+                reference: reference,
+                purpose: .tradeScreenshot,
+                imagePipeline: imagePipeline,
+                accessibilityIdentifier: "conversation.bubble.image",
+                emptyIcon: .photo,
+                allowsFullResolutionViewer: true
+            )
+            .frame(maxWidth: 240)
+
+            if showsInlineReactions {
+                inlineReactionStrip(topPadding: 0)
+                    .padding(6)
+                    .background(
+                        .ultraThinMaterial,
+                        in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                    )
+                    .padding(6)
+            }
+        }
+        .frame(maxWidth: 240, alignment: item.isOutgoing ? .trailing : .leading)
+        .clipShape(
+            RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+        )
+    }
+
+    private func tradeShareBubble(tradeID: TradeID) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SharedTradeMessageCard(
+                trade: sharedTrade,
+                tradeID: tradeID,
+                isOutgoing: item.isOutgoing,
+                includesBackground: false
+            )
+            inlineReactionStrip(topPadding: 6)
+        }
+        .padding(.horizontal, ExperienceSpacing.sm + 2)
+        .padding(.top, ExperienceSpacing.sm)
+        .padding(.bottom, reactionBottomPadding)
+        .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
+        .background(
+            item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
+            in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+        )
+        .accessibilityIdentifier("conversation.bubble.trade")
+    }
+
+    private var reactionsOnlyBubble: some View {
+        inlineReactionStrip(topPadding: 0)
+            .padding(.horizontal, ExperienceSpacing.sm + 2)
+            .padding(.vertical, ExperienceSpacing.xs)
+            .frame(maxWidth: bubbleMaxWidth, alignment: item.isOutgoing ? .trailing : .leading)
+            .background(
+                item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
+                in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+            )
+    }
+
+    @ViewBuilder
+    private func inlineReactionStrip(topPadding: CGFloat) -> some View {
+        if let reactionConfiguration, reactionConfiguration.showsStrip {
+            MessageReactionStrip(
+                summaries: reactionConfiguration.summaries,
+                supportedEmojis: reactionConfiguration.supportedEmojis,
+                isOutgoing: item.isOutgoing,
+                isEnabled: reactionConfiguration.isEnabled,
+                onToggle: reactionConfiguration.onToggle
+            )
+            .padding(.top, topPadding)
+        }
+    }
+
+    private var reactionBottomPadding: CGFloat {
+        showsInlineReactions ? ExperienceSpacing.xs + 2 : ExperienceSpacing.sm
+    }
+
+    private var bubbleMaxWidth: CGFloat { 260 }
 }
 
 private struct ConversationPeerAvatarView: View {

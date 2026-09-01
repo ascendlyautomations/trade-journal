@@ -19,6 +19,10 @@ enum SessionScopedCaches {
         LeaderboardSessionStore.shared.invalidate()
         Task { await LeaderboardTradeRowsCache.shared.invalidate() }
         TradeHistorySessionStore.shared.invalidate()
+        FeedSessionStore.shared.invalidate()
+        ConversationThreadSessionStore.shared.invalidate()
+        DirectConversationPairIndex.shared.invalidate()
+        ConversationCreationCoordinator.shared.invalidate()
         CalendarMonthSessionStore.shared.invalidate()
         SessionAccountsStore.shared.invalidate()
         SessionProfileStore.shared.invalidate()
@@ -29,6 +33,11 @@ enum SessionScopedCaches {
         RepositoryRequestFlight.shared.invalidate()
         Task { await SessionFollowingStore.shared.invalidate() }
         SessionBootstrapStore.shared.clear()
+        BackendV2BootstrapDiskCache.clearAll()
+        Task {
+            await BackendV2SingleFlight.shared.clear()
+            await BackendV2RpcAvailability.shared.clear()
+        }
         SessionDiskCache.clearAll()
         TradeJournalMutationStore.shared.invalidate()
         AccountMutationStore.shared.invalidate()

@@ -4,7 +4,7 @@ import Foundation
 nonisolated protocol NetworkClient: Sendable {
     func send(_ request: HTTPRequest) async throws -> HTTPResponse
 
-    func send<T: Decodable>(
+    func send<T: Decodable & Sendable>(
         _ request: HTTPRequest,
         decodeAs type: T.Type
     ) async throws -> T
@@ -139,7 +139,7 @@ actor URLSessionNetworkClient: NetworkClient {
         }
     }
 
-    func send<T: Decodable>(
+    func send<T: Decodable & Sendable>(
         _ request: HTTPRequest,
         decodeAs type: T.Type
     ) async throws -> T {

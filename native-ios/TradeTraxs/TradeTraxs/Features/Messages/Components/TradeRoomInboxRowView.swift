@@ -52,9 +52,11 @@ struct TradeRoomInboxRowView: View {
                             .experienceStyle(.caption, color: colors.secondaryText)
                             .lineLimit(1)
                     }
-                    Text("· \(ProfileDisplay.compactCount(item.room.memberCount)) members")
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .lineLimit(1)
+                    if let memberCount = item.room.memberCount {
+                        Text("· \(ProfileDisplay.compactCount(memberCount)) members")
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                            .lineLimit(1)
+                    }
                 }
                 Text(item.preview)
                     .experienceStyle(

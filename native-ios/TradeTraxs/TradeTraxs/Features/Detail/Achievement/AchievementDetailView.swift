@@ -47,7 +47,7 @@ struct AchievementDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .task {
             viewModel.loadIfNeeded()
-            data.engagementStore.prefetch([.achievement(viewModel.achievementID)])
+            data.engagementStore.prefetch([engagementTarget(forRouteID: viewModel.achievementID)])
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {
@@ -92,7 +92,11 @@ struct AchievementDetailView: View {
                             allowsFullResolutionViewer: true,
                             onDoubleTapLike: {
                                 Task {
-                                    await data.engagementStore.ensureLiked(on: .achievement(achievement.id))
+                                    if let achievement = viewModel.achievement {
+                                        await data.engagementStore.ensureLiked(
+                                            on: engagementTarget(for: achievement)
+                                        )
+                                    }
                                 }
                             }
                         )
@@ -113,7 +117,7 @@ struct AchievementDetailView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
             EngagementBar(
-                target: .achievement(achievement.id),
+                target: engagementTarget(for: achievement),
                 store: data.engagementStore,
                 onCommentTap: {
                     withAnimation(
@@ -156,10 +160,24 @@ struct AchievementDetailView: View {
                 }
             }
 
-            CommentsSectionView(target: .achievement(achievement.id), data: data)
+            CommentsSectionView(
+                target: engagementTarget(for: achievement),
+                contentOwnerUserID: achievement.ownerProfileID.rawValue,
+                data: data
+            )
                 .id(Self.commentsAnchorID)
         }
     }
 
     private static let commentsAnchorID = "detail.achievement.comments"
+
+    private func engagementTarget(forRouteID achievementID: AchievementID) -> InteractionTarget {
+        data.detailCache.feedEngagementTarget(forAchievement: achievementID)
+            ?? .achievement(achievementID)
+    }
+
+    private func engagementTarget(for achievement: Achievement) -> InteractionTarget {
+        data.detailCache.feedEngagementTarget(forAchievement: achievement.id)
+            ?? .achievement(achievement.id)
+    }
 }

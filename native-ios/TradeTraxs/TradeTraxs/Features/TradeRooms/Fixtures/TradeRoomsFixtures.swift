@@ -69,7 +69,16 @@ enum TradeRoomsFixtures {
                 parentMessageID: nil,
                 channelID: general,
                 isPinned: false,
-                createdAt: now.addingTimeInterval(-3_600)
+                createdAt: now.addingTimeInterval(-3_600),
+                reactions: [
+                    RoomMessageReaction(
+                        id: "dev-react-1",
+                        messageID: RoomMessageID("\(roomID.rawValue)-m1"),
+                        userID: peer,
+                        reaction: "👍",
+                        createdAt: now.addingTimeInterval(-3_500)
+                    ),
+                ]
             ),
             RoomMessage(
                 id: RoomMessageID("\(roomID.rawValue)-m2"),
@@ -181,6 +190,35 @@ enum TradeRoomsFixtures {
             isCreator: true,
             createdAt: Date(timeIntervalSince1970: 1_700_000_000)
         )
+    }
+
+    /// Fixture active presence for DEBUG trade rooms (web demo parity).
+    static func activePresenceWireUsers(viewerID: ProfileID?) -> [RoomPresenceWireUser] {
+        let now = ISO8601DateFormatter().string(from: Date())
+        var users: [RoomPresenceWireUser] = []
+        if let viewerID {
+            let viewer = FollowListFixtures.profile(id: viewerID)
+                ?? makeViewerProfile(id: viewerID, name: "You", username: "you")
+            users.append(
+                RoomPresenceWireUser(
+                    userID: viewerID.rawValue,
+                    username: viewer.username,
+                    avatarURL: viewer.avatar?.id,
+                    enteredAt: now
+                )
+            )
+        }
+        if let ada = FollowListFixtures.profile(id: ProfileID("dev.follower.ada")) {
+            users.append(
+                RoomPresenceWireUser(
+                    userID: ada.id.rawValue,
+                    username: ada.username,
+                    avatarURL: ada.avatar?.id,
+                    enteredAt: now
+                )
+            )
+        }
+        return users
     }
 
     static func seedInbox(_ store: MessagesInboxStore, viewerID: ProfileID = viewerID) {

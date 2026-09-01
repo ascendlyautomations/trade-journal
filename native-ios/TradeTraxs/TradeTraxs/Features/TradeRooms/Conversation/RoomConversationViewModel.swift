@@ -37,6 +37,8 @@ final class RoomConversationViewModel {
     private(set) var tradePickerTrades: [Trade] = []
     private(set) var isLoadingTradePicker = false
     private(set) var sharedTrades: [TradeID: Trade] = [:]
+    private(set) var activePresenceMembers: [RoomActivePresenceMember] = []
+    var showsActivePresenceSheet = false
 
     /// Prefer resolved UUID after slug deep-link lookup.
     private var resolvedRoomID: RoomID { room?.id ?? roomID }
@@ -46,6 +48,7 @@ final class RoomConversationViewModel {
     private let profiles: any ProfileRepository
     private let notifications: (any NotificationRepository)?
     private let tradesRepo: (any TradeRepository)?
+    private let rpc: (any RPCClient)?
     private let session: any SessionProviding
     private let uploadService: any UploadService
     private let objectStorage: any ObjectStorageProviding
@@ -63,6 +66,10 @@ final class RoomConversationViewModel {
     private var channelMetadataCached = false
     private var isApplyingRealtime = false
     private var didMarkReadThisOpen = false
+    private var reactionBusyKeys: Set<String> = []
+    private let presenceSessionKey = "presence-\(UUID().uuidString)"
+    private var presenceRoomID: RoomID?
+    private var presenceProfileHydrateTask: Task<Void, Never>?
 
     init(
         roomID: RoomID,
@@ -74,6 +81,7 @@ final class RoomConversationViewModel {
         detailCache: DetailPresentationCache,
         trades: (any TradeRepository)? = nil,
         notifications: (any NotificationRepository)? = nil,
+        rpc: (any RPCClient)? = nil,
         navigationCoordinator: NavigationCoordinator? = nil,
         navigationHost: TradeRoomNavigationHost = .messages,
         realtimeHub: RealtimeHub? = nil,
@@ -84,6 +92,7 @@ final class RoomConversationViewModel {
         self.profiles = profiles
         self.notifications = notifications
         self.tradesRepo = trades
+        self.rpc = rpc
         self.session = session
         self.uploadService = uploadService
         self.objectStorage = objectStorage
@@ -130,7 +139,7 @@ final class RoomConversationViewModel {
     }
 
     var memberCountLabel: String {
-        let count = room?.memberCount ?? 0
+        guard let count = room?.memberCount else { return "" }
         return "\(ProfileDisplay.compactCount(count)) members"
     }
 
@@ -147,6 +156,99 @@ final class RoomConversationViewModel {
         guard selectedChannel != nil else { return false }
         if isOwner || isMember { return true }
         return false
+    }
+
+    var canReact: Bool {
+        canCompose && viewerID != nil
+    }
+
+    var showsActivePresence: Bool {
+        BackendV2FeatureFlags.isEnabled(.roomPresence)
+            && (isMember || isOwner)
+            && showsRoomChrome
+    }
+
+    func openActivePresence() {
+        ExperienceHaptics.play(.selection)
+        showsActivePresenceSheet = true
+    }
+
+    func closeActivePresence() {
+        showsActivePresenceSheet = false
+    }
+
+    func reactionSummaries(for message: Message) -> [RoomMessageReactionSummary] {
+        RoomMessageReactionSemantics.aggregate(message.roomReactions, viewerID: viewerID)
+    }
+
+    func reactionConfiguration(for message: Message) -> MessageReactionConfiguration? {
+        guard canReact || !message.roomReactions.isEmpty else { return nil }
+        let summaries = reactionSummaries(for: message).map(MessageReactionSummary.init)
+        return MessageReactionConfiguration(
+            summaries: summaries,
+            supportedEmojis: RoomMessageReactionSemantics.supportedEmojis,
+            isEnabled: canReact,
+            onToggle: { [weak self] emoji in
+                Task { await self?.toggleReaction(messageID: message.id, emoji: emoji) }
+            }
+        )
+    }
+
+    func toggleReaction(messageID: MessageID, emoji: String) async {
+        guard canReact, let viewerID else { return }
+        guard RoomMessageReactionSemantics.supportedEmojis.contains(emoji) else { return }
+
+        let busyKey = "\(messageID.rawValue)::\(emoji)"
+        guard !reactionBusyKeys.contains(busyKey) else { return }
+        reactionBusyKeys.insert(busyKey)
+        defer { reactionBusyKeys.remove(busyKey) }
+
+        let existing = findReaction(messageID: messageID, viewerID: viewerID, emoji: emoji)
+
+        if let existing {
+            patchMessageReaction(messageID: messageID, row: existing, mode: .delete)
+            if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
+                ExperienceHaptics.play(.selection)
+                return
+            }
+            do {
+                try await rooms.deleteMessageReaction(id: existing.id)
+                ExperienceHaptics.play(.selection)
+            } catch {
+                patchMessageReaction(messageID: messageID, row: existing, mode: .insert)
+                ExperienceHaptics.play(.error)
+            }
+            return
+        }
+
+        let optimistic = RoomMessageReaction(
+            id: "optimistic-\(messageID.rawValue)-\(emoji)",
+            messageID: RoomMessageID(messageID.rawValue),
+            userID: viewerID,
+            reaction: emoji,
+            createdAt: nil
+        )
+        patchMessageReaction(messageID: messageID, row: optimistic, mode: .insert)
+
+        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
+            ExperienceHaptics.play(.selection)
+            return
+        }
+
+        do {
+            let saved = try await rooms.insertMessageReaction(
+                roomID: resolvedRoomID,
+                messageID: RoomMessageID(messageID.rawValue),
+                userID: viewerID,
+                reaction: emoji
+            )
+            patchMessageReaction(messageID: messageID, row: optimistic, mode: .delete)
+            patchMessageReaction(messageID: messageID, row: saved, mode: .insert)
+            ExperienceHaptics.play(.selection)
+        } catch {
+            patchMessageReaction(messageID: messageID, row: optimistic, mode: .delete)
+            ExperienceHaptics.play(.error)
+        }
     }
 
     var joinButtonTitle: String {
@@ -223,19 +325,54 @@ final class RoomConversationViewModel {
         realtimeTask?.cancel()
         realtimeTask = Task { [weak self] in
             guard let self else { return }
-            // Register topic + join web-equivalent room postgres_changes. Remain idle — no polling.
             let channel = RealtimeChannelID(kind: .room, topic: roomID.rawValue)
             try? await realtimeHub?.subscriptions.subscribe(channel)
             let token = await session.accessToken
             guard let realtimeHub else { return }
-            for await signal in realtimeHub.watchRoomMessages(roomID: roomID, accessToken: token) {
-                guard !Task.isCancelled else { break }
-                await applyRealtimeSignal(signal)
+
+            let presenceTrack = await makePresenceTrackConfig(accessToken: token)
+            if presenceTrack != nil || shouldUseDevPresenceFixtures {
+                presenceRoomID = roomID
+            }
+
+            if shouldUseDevPresenceFixtures {
+                await applyPresenceWireUsers(
+                    TradeRoomsFixtures.activePresenceWireUsers(viewerID: viewerID)
+                )
+            }
+
+            let streams = realtimeHub.watchRoomLive(
+                roomID: roomID,
+                accessToken: token,
+                presenceTrack: presenceTrack
+            )
+
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { [weak self] in
+                    guard let self else { return }
+                    for await signal in streams.messages {
+                        guard !Task.isCancelled else { break }
+                        await applyRealtimeSignal(signal)
+                    }
+                }
+                if presenceTrack != nil {
+                    group.addTask { [weak self] in
+                        guard let self else { return }
+                        for await users in streams.presence {
+                            guard !Task.isCancelled else { break }
+                            await applyPresenceWireUsers(users)
+                        }
+                    }
+                }
             }
         }
     }
 
     func stopRealtime() {
+        presenceRoomID = nil
+        presenceProfileHydrateTask?.cancel()
+        presenceProfileHydrateTask = nil
+        activePresenceMembers = []
         if inboxStore.activeRoomID == roomID {
             inboxStore.setActiveRoom(nil)
         }
@@ -244,7 +381,7 @@ final class RoomConversationViewModel {
         Task { [roomID, realtimeHub] in
             let channel = RealtimeChannelID(kind: .room, topic: roomID.rawValue)
             try? await realtimeHub?.subscriptions.unsubscribe(channel)
-            await realtimeHub?.stopWatchingRoomMessages(roomID: roomID)
+            await realtimeHub?.stopWatchingRoomLive(roomID: roomID)
         }
         persistActiveChannelCache(scrollAnchor: messages.last?.id)
     }
@@ -400,15 +537,17 @@ final class RoomConversationViewModel {
             if membership == nil {
                 membership = try await rooms.join(roomID: roomID, profileID: viewerID)
                 if var room {
-                    room.memberCount += 1
+                    room.memberCount = (room.memberCount ?? 0) + 1
                     self.room = room
+                    inboxStore.updateRoomMemberCount(roomID: roomID, count: room.memberCount)
                 }
             } else {
                 try await rooms.leave(roomID: roomID, profileID: viewerID)
                 membership = nil
                 if var room {
-                    room.memberCount = max(0, room.memberCount - 1)
+                    room.memberCount = max(0, (room.memberCount ?? 1) - 1)
                     self.room = room
+                    inboxStore.updateRoomMemberCount(roomID: roomID, count: room.memberCount)
                 }
             }
             ExperienceHaptics.play(.success)
@@ -462,6 +601,8 @@ final class RoomConversationViewModel {
                 || roomID.rawValue.hasPrefix("dev-")
             {
                 await loadLocalFixtures(viewerID: viewer)
+            } else if let viewer, let rpc, await loadFromRoomBootstrap(rpc: rpc, viewerID: viewer) {
+                // RPC bootstrap applied — skip fragmented REST shell load.
             } else {
                 try await loadFromRepository()
             }
@@ -591,6 +732,58 @@ final class RoomConversationViewModel {
             selectChannel(trades.id)
         }
         #endif
+    }
+
+    private func loadFromRoomBootstrap(rpc: any RPCClient, viewerID: ProfileID) async -> Bool {
+        do {
+            let applied = try await RoomBootstrapLoader.load(
+                roomID: roomID,
+                viewerID: viewerID,
+                rpc: rpc,
+                detailCache: detailCache
+            )
+            room = applied.room
+            membership = applied.membership
+            if let cached = detailCache.profile(id: applied.room.ownerProfileID) {
+                ownerProfile = cached
+                senderProfiles[cached.id] = cached
+            } else if let owner = try? await SessionProfileStore.shared.profiles(
+                ids: [applied.room.ownerProfileID],
+                detailCache: detailCache,
+                repository: profiles
+            ).first {
+                ownerProfile = owner
+                senderProfiles[owner.id] = owner
+            }
+            channels = applied.channels
+            channelMetadataCached = true
+            selectedChannelID = applied.selectedChannelID
+            applyPendingDeepLinkFocusSelectingChannel()
+            let cache = ChannelThreadCache(
+                messages: applied.channelCache.messages,
+                nextOlderCursor: applied.channelCache.nextOlderCursor,
+                hasMoreOlder: applied.channelCache.hasMoreOlder,
+                scrollAnchorMessageID: applied.channelCache.scrollAnchorMessageID,
+                isLoaded: applied.channelCache.isLoaded
+            )
+            channelCaches[applied.selectedChannelID] = cache
+            apply(cache: cache)
+            if applied.markReadApplied {
+                didMarkReadThisOpen = true
+            }
+            await hydrateSenders(for: cache.messages)
+            await hydrateSharedTrades(from: cache.messages)
+            applyPendingDeepLinkFocusHighlight()
+            if let last = cache.messages.last {
+                patchInboxPreview(with: last)
+            }
+            return true
+        } catch RoomBootstrapLoader.LoaderError.flagOff,
+                RoomBootstrapLoader.LoaderError.rpcUnavailable {
+            return false
+        } catch {
+            return false
+        }
     }
 
     private func loadFromRepository() async throws {
@@ -786,6 +979,11 @@ final class RoomConversationViewModel {
 
     /// Incremental apply from Realtime — never reloads the whole room.
     private func applyRealtimeSignal(_ signal: MessageRealtimeSignal) async {
+        if let reaction = signal.reactionEvent {
+            applyReactionRealtime(reaction, kind: signal.kind)
+            return
+        }
+
         guard let viewerID,
               !MessagesInboxSupport.isLocalDevelopmentProfile(viewerID),
               !roomID.rawValue.hasPrefix("dev-"),
@@ -1017,6 +1215,185 @@ final class RoomConversationViewModel {
                 : (room.map { inboxStore.rooms + [$0] } ?? inboxStore.rooms),
             previews: [roomID: preview],
             unread: [roomID: 0]
+        )
+    }
+
+    private func findReaction(
+        messageID: MessageID,
+        viewerID: ProfileID,
+        emoji: String
+    ) -> RoomMessageReaction? {
+        messages.first(where: { $0.id == messageID })?
+            .roomReactions
+            .first(where: { $0.userID == viewerID && $0.reaction == emoji })
+    }
+
+    private func isMessageVisible(_ messageID: String) -> Bool {
+        if messages.contains(where: { $0.id.rawValue == messageID }) {
+            return true
+        }
+        return channelCaches.values.contains { cache in
+            cache.messages.contains(where: { $0.id.rawValue == messageID })
+        }
+    }
+
+    private func applyReactionRealtime(
+        _ event: MessageRealtimeSignal.ReactionEvent,
+        kind: MessageRealtimeSignal.Kind
+    ) {
+        guard isMessageVisible(event.messageID) else { return }
+        let messageID = MessageID(event.messageID)
+        let row = RoomMessageReaction(
+            id: event.reactionID,
+            messageID: RoomMessageID(event.messageID),
+            userID: ProfileID(event.userID),
+            reaction: event.emoji,
+            createdAt: nil
+        )
+        switch kind {
+        case .insert, .update:
+            patchMessageReaction(messageID: messageID, row: row, mode: .insert)
+        case .delete:
+            patchMessageReaction(messageID: messageID, row: row, mode: .delete)
+        }
+    }
+
+    private func patchMessageReaction(
+        messageID: MessageID,
+        row: RoomMessageReaction,
+        mode: RoomMessageReactionSemantics.PatchMode
+    ) {
+        func patchList(_ list: [Message]) -> [Message] {
+            list.map { message in
+                guard message.id == messageID else { return message }
+                var updated = message
+                updated.roomReactions = RoomMessageReactionSemantics.patch(
+                    message.roomReactions,
+                    next: row,
+                    mode: mode
+                )
+                return updated
+            }
+        }
+
+        messages = patchList(messages)
+        if let selectedChannelID {
+            if var cache = channelCaches[selectedChannelID] {
+                cache.messages = patchList(cache.messages)
+                channelCaches[selectedChannelID] = cache
+            }
+        }
+        for (channelID, cache) in channelCaches where channelID != selectedChannelID {
+            guard cache.messages.contains(where: { $0.id == messageID }) else { continue }
+            var updated = cache
+            updated.messages = patchList(cache.messages)
+            channelCaches[channelID] = updated
+        }
+    }
+
+    private var shouldUseDevPresenceFixtures: Bool {
+        guard BackendV2FeatureFlags.isEnabled(.roomPresence) else { return false }
+        guard isMember || isOwner, let viewerID else { return false }
+        return MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
+            || roomID.rawValue.hasPrefix("dev-")
+    }
+
+    private func makePresenceTrackConfig(accessToken: String?) async -> RoomPresenceTrackConfig? {
+        guard BackendV2FeatureFlags.isEnabled(.roomPresence) else { return nil }
+        guard isMember || isOwner, let viewerID else { return nil }
+        guard !shouldUseDevPresenceFixtures else { return nil }
+        guard accessToken != nil else { return nil }
+
+        let profile = await resolveViewerProfileForPresence()
+        let username = ProfileIdentitySanitizer.sanitizedPublicField(profile?.username)
+            ?? ProfileIdentitySanitizer.neutralFallbackName
+        return RoomPresenceTrackConfig(
+            presenceKey: presenceSessionKey,
+            userID: viewerID.rawValue,
+            username: username,
+            avatarURL: profile?.avatar?.id
+        )
+    }
+
+    private func resolveViewerProfileForPresence() async -> Profile? {
+        guard let viewerID else { return nil }
+        if let cached = detailCache.profile(id: viewerID) { return cached }
+        if viewerID.rawValue.hasPrefix("dev."),
+           let fixture = FollowListFixtures.profile(id: viewerID)
+        {
+            return fixture
+        }
+        let fetched = try? await SessionProfileStore.shared.profiles(
+            ids: [viewerID],
+            detailCache: detailCache,
+            repository: profiles
+        )
+        return fetched?.first
+    }
+
+    private func applyPresenceWireUsers(_ users: [RoomPresenceWireUser]) async {
+        guard showsActivePresence else { return }
+        guard presenceRoomID == roomID else { return }
+
+        let scopedRoom = roomID
+        presenceProfileHydrateTask?.cancel()
+        presenceProfileHydrateTask = Task {
+            let ids = users.map { ProfileID($0.userID) }
+            var resolved: [ProfileID: Profile] = [:]
+            for id in ids {
+                if let cached = detailCache.profile(id: id) {
+                    resolved[id] = cached
+                } else if id.rawValue.hasPrefix("dev."),
+                          let fixture = FollowListFixtures.profile(id: id)
+                {
+                    detailCache.seed(fixture)
+                    resolved[id] = fixture
+                }
+            }
+            let missing = ids.filter { resolved[$0] == nil }
+            if !missing.isEmpty {
+                let fetched = (try? await SessionProfileStore.shared.profiles(
+                    ids: missing,
+                    detailCache: detailCache,
+                    repository: profiles
+                )) ?? []
+                for profile in fetched {
+                    resolved[profile.id] = profile
+                }
+            }
+            guard !Task.isCancelled, presenceRoomID == scopedRoom else { return }
+            activePresenceMembers = users.map { wire in
+                let id = ProfileID(wire.userID)
+                let profile = resolved[id] ?? profileFromPresenceWire(wire)
+                return RoomActivePresenceMember(profileID: id, profile: profile)
+            }
+            .sorted {
+                $0.profile.username.localizedCaseInsensitiveCompare($1.profile.username)
+                    == .orderedAscending
+            }
+        }
+    }
+
+    private func profileFromPresenceWire(_ wire: RoomPresenceWireUser) -> Profile {
+        let username = ProfileIdentitySanitizer.sanitizedPublicField(wire.username)
+            ?? ProfileIdentitySanitizer.neutralFallbackName
+        let avatar = wire.avatarURL.flatMap { url in
+            MediaReference(id: url, kind: .image, altText: nil)
+        }
+        return Profile(
+            id: ProfileID(wire.userID),
+            userID: UserID(wire.userID),
+            username: username,
+            displayName: username,
+            bio: nil,
+            avatar: avatar,
+            traderType: nil,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: Date()
         )
     }
 

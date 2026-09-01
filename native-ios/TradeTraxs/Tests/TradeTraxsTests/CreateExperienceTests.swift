@@ -130,6 +130,26 @@ final class CreateExperienceTests: XCTestCase {
         XCTAssertEqual(ContentMutationStore.shared.latestReelID?.rawValue, "dev-reel-created")
     }
 
+    func testStoryUploadValidationMatchesWebLimits() {
+        XCTAssertEqual(StoryUploadValidation.maxBytes, 15 * 1024 * 1024)
+        XCTAssertEqual(
+            StoryUploadValidation.validate(data: Data(), contentType: "image/jpeg", fileName: "a.jpg"),
+            "File is empty."
+        )
+        let oversized = Data(repeating: 0, count: StoryUploadValidation.maxBytes + 1)
+        XCTAssertEqual(
+            StoryUploadValidation.validate(data: oversized, contentType: "image/jpeg", fileName: "big.jpg"),
+            "Image must be 15 MB or smaller."
+        )
+        XCTAssertEqual(
+            StoryUploadValidation.validate(data: Data([0xFF]), contentType: "video/mp4", fileName: "clip.mp4"),
+            "File must be an image (JPEG, PNG, WebP, or GIF)."
+        )
+        XCTAssertNil(
+            StoryUploadValidation.validate(data: Data([0xFF]), contentType: "image/jpeg", fileName: "story.jpg")
+        )
+    }
+
     func testCreateReelDuplicatePublishPrevention() async {
         let feed = CreateCountingFeedRepository()
         var dismissed = false
@@ -328,6 +348,16 @@ private struct CreateStubFeedRepository: FeedRepository {
     func addComment(_ comment: Comment) async throws -> Comment { comment }
     func setReaction(on item: FeedItem, kind: ReactionKind, isActive: Bool) async throws {}
     func stories(for viewer: ProfileID) async throws -> [Story] { [] }
+    func createStory(userID: ProfileID, imageURL: String) async throws -> Story {
+        Story(
+            id: StoryID("stub-story"),
+            authorProfileID: userID,
+            media: MediaReference(id: imageURL, kind: .image, altText: nil),
+            expiresAt: Date().addingTimeInterval(ActiveStorySemantics.window),
+            createdAt: Date(),
+            viewerHasSeen: false
+        )
+    }
     func reel(id: ReelID) async throws -> Reel { throw AppError.unknown(message: "stub") }
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
         CursorPage(items: [], nextCursor: nil)
@@ -357,6 +387,16 @@ private final class CreateCountingFeedRepository: FeedRepository, @unchecked Sen
     func addComment(_ comment: Comment) async throws -> Comment { comment }
     func setReaction(on item: FeedItem, kind: ReactionKind, isActive: Bool) async throws {}
     func stories(for viewer: ProfileID) async throws -> [Story] { [] }
+    func createStory(userID: ProfileID, imageURL: String) async throws -> Story {
+        Story(
+            id: StoryID("stub-story"),
+            authorProfileID: userID,
+            media: MediaReference(id: imageURL, kind: .image, altText: nil),
+            expiresAt: Date().addingTimeInterval(ActiveStorySemantics.window),
+            createdAt: Date(),
+            viewerHasSeen: false
+        )
+    }
     func reel(id: ReelID) async throws -> Reel { throw AppError.unknown(message: "stub") }
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
         CursorPage(items: [], nextCursor: nil)

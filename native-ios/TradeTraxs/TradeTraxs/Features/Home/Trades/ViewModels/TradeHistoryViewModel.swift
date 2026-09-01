@@ -16,6 +16,7 @@ final class TradeHistoryViewModel {
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator
+    private let rpc: (any RPCClient)?
 
     private(set) var phase: Phase = .idle
     private(set) var items: [Trade] = []
@@ -48,17 +49,24 @@ final class TradeHistoryViewModel {
     private var searchTask: Task<Void, Never>?
     private var hasLoaded = false
     private var lastQueryKey: String?
+    private var loadGeneration: UInt64 = 0
+    private var coldLoadFinished = false
+    #if DEBUG
+    private var stageCorrelation: String?
+    #endif
 
     init(
         trades: any TradeRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        rpc: (any RPCClient)? = nil
     ) {
         self.trades = trades
         self.session = session
         self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
+        self.rpc = rpc
     }
 
     var summary: TradeHistorySummary {
@@ -74,9 +82,26 @@ final class TradeHistoryViewModel {
         case .all:
             return "All Accounts"
         case .account(let id):
+            if let account = accounts.first(where: { $0.id == id }) {
+                return TradingAccountDisplay.ownerDropdownLine(for: account)
+            }
             return displayAccountTitle(for: id) ?? "Account"
         }
     }
+
+    var accountsForMenu: [TradingAccount] {
+        let selectedID: TradingAccountID? = {
+            if case .account(let id) = filters.account { return id }
+            return nil
+        }()
+        return OwnerAccountDropdownSupport.menuAccounts(
+            profileID: profileID,
+            fallback: accounts,
+            preservingSelection: selectedID
+        )
+    }
+
+    var ownerAccountsProfileID: ProfileID? { profileID }
 
     /// Owner journal / filter labels — `Name • Number`.
     func displayAccountTitle(for accountID: TradingAccountID?) -> String? {
@@ -107,22 +132,36 @@ final class TradeHistoryViewModel {
             || filters.hasActiveConstraints
     }
 
+    private var hasLocalBrowseConstraints: Bool {
+        localWeekday != nil || localHour != nil
+            || localSessionLabel != nil || localHoldRange != nil
+    }
+
     var canLoadMore: Bool { nextCursor != nil && !isLoadingMore }
 
     func loadIfNeeded() {
         if hasLoaded, loadTask == nil {
             #if DEBUG
+            TradeHistoryLoadProbe.beginLoad()
             TradeHistoryLoadProbe.markCacheHit()
+            TradeHistoryLoadProbe.markFirstUsefulRender()
             #endif
             SessionNetworkProbe.record(.cacheHit, resource: "trades.history.vm")
             return
         }
+        if coldLoadFinished, !hasLoaded {
+            return
+        }
         guard loadTask == nil else { return }
-        loadTask = Task { await reload(reason: "open") }
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        loadTask = Task { await performLoad(reason: "open", preserveScroll: false, generation: generation) }
     }
 
     func refresh() async {
-        await reload(reason: "refresh")
+        coldLoadFinished = false
+        loadGeneration &+= 1
+        await reload(reason: "refresh", preserveScroll: false, generation: loadGeneration)
     }
 
     func searchChanged() {
@@ -146,7 +185,7 @@ final class TradeHistoryViewModel {
 
     func openManageAccounts() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.openSettings([.tradingAccounts])
+        navigationCoordinator.pushHome(.settings(.tradingAccounts))
     }
 
     func openFilters() {
@@ -236,6 +275,27 @@ final class TradeHistoryViewModel {
             #if DEBUG
             TradeHistoryLoadProbe.markRequest()
             #endif
+
+            if !hasLocalBrowseConstraints,
+               let rpc,
+               let applied = try? await TradesListBootstrapLoader.load(
+                   viewerID: profileID,
+                   rpc: rpc,
+                   detailCache: detailCache,
+                   query: currentQuery,
+                   limit: 40,
+                   cursor: cursor
+               )
+            {
+                appendUnique(applied.trades.filter(matchesLocalBrowseConstraints))
+                nextCursor = applied.nextCursor
+                paginationErrorMessage = nil
+                #if DEBUG
+                TradeHistoryLoadProbe.markPageSize(applied.trades.count)
+                #endif
+                return
+            }
+
             let page = try await trades.tradeHistory(
                 ownedBy: profileID,
                 query: currentQuery,
@@ -333,14 +393,18 @@ final class TradeHistoryViewModel {
         TradeHistoryQuery(filters: filters, searchText: searchText)
     }
 
-    private func reload(reason: String, preserveScroll: Bool = false) async {
+    private func reload(reason: String, preserveScroll: Bool = false, generation: UInt64? = nil) async {
         loadTask?.cancel()
-        let task = Task { await performLoad(reason: reason, preserveScroll: preserveScroll) }
+        let activeGeneration = generation ?? {
+            loadGeneration &+= 1
+            return loadGeneration
+        }()
+        let task = Task { await performLoad(reason: reason, preserveScroll: preserveScroll, generation: activeGeneration) }
         loadTask = task
         await task.value
     }
 
-    private func performLoad(reason: String, preserveScroll: Bool) async {
+    private func performLoad(reason: String, preserveScroll: Bool, generation: UInt64) async {
         // Dashboard chart taps seed filters before the first history load.
         if reason == "open" {
             applyLaunchSeedIfNeeded()
@@ -356,8 +420,27 @@ final class TradeHistoryViewModel {
                 ],
                 local: ["dev fixtures only", "dashboard browse seed"]
             )
+        } else {
+            TradeHistoryLoadProbe.beginLoad()
         }
+        stageCorrelation = DataLoadStageProbe.begin("trades.history")
+        DataLoadStageProbe.trace(correlation: stageCorrelation!, stage: "cache.lookup.started")
         #endif
+
+        defer {
+            loadTask = nil
+            if reason == "open" {
+                coldLoadFinished = true
+            }
+            #if DEBUG
+            if let stageCorrelation {
+                DataLoadStageProbe.end(
+                    correlation: stageCorrelation,
+                    terminal: phase == .loaded ? "trades.history.loaded" : "trades.history.terminal"
+                )
+            }
+            #endif
+        }
 
         let userID = await session.currentUserID
         let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
@@ -366,8 +449,7 @@ final class TradeHistoryViewModel {
         // Session store survives ViewModel recreation on push/pop (profile-scoped key).
         // Snapshot only holds trades/filters — accounts live in SessionAccountsStore (Dashboard).
         // Skip restore when local browse constraints are active (seeded from charts).
-        let hasLocalBrowse = localWeekday != nil || localHour != nil
-            || localSessionLabel != nil || localHoldRange != nil
+        let hasLocalBrowse = hasLocalBrowseConstraints
         if reason == "open",
            !hasLocalBrowse,
            let snap = TradeHistorySessionStore.shared.restore(
@@ -376,16 +458,57 @@ final class TradeHistoryViewModel {
                searchText: searchText
            )
         {
+            #if DEBUG
+            DataLoadStageProbe.trace(correlation: stageCorrelation!, stage: "cache.hit", detail: "sessionStore")
+            #endif
             applySnapshot(snap)
             await hydrateAccountsFromSession(for: profileID)
             return
         }
 
+        let query = currentQuery
         let queryKey = TradeHistorySessionStore.queryKey(
             profileID: profileID,
             filters: filters,
             searchText: searchText
         )
+        if reason == "open",
+           TradeHistoryOwnerSeed.canSeed(
+               query: query,
+               hasLocalBrowseConstraints: hasLocalBrowse
+           ),
+           let ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID),
+           SessionOwnerTradesStore.shared.isFresh(for: profileID),
+           let seeded = TradeHistoryOwnerSeed.page(from: ownerTrades, query: query, limit: 40)
+        {
+            #if DEBUG
+            DataLoadStageProbe.trace(
+                correlation: stageCorrelation!,
+                stage: "cache.hit",
+                detail: "ownerTrades count=\(seeded.items.count) partial=\(seeded.isPartial)"
+            )
+            #endif
+            async let accountsTask = hydrateAccountsFromSession(for: profileID)
+            items = seeded.items.filter(matchesLocalBrowseConstraints)
+            nextCursor = seeded.nextCursor
+            detailCache.seed(trades: items)
+            hasLoaded = true
+            lastQueryKey = queryKey
+            phase = .loaded
+            await accountsTask
+            persistSnapshot()
+            SessionNetworkProbe.record(
+                .cacheHit,
+                resource: "trades.history",
+                detail: "ownerTradesSeed partial=\(seeded.isPartial)"
+            )
+            #if DEBUG
+            TradeHistoryLoadProbe.markPageSize(items.count)
+            TradeHistoryLoadProbe.markFirstUsefulRender()
+            #endif
+            return
+        }
+
         if !preserveScroll, queryKey == lastQueryKey, hasLoaded, !items.isEmpty, reason == "open" {
             #if DEBUG
             TradeHistoryLoadProbe.markCacheHit()
@@ -402,9 +525,46 @@ final class TradeHistoryViewModel {
         }
 
         do {
-            await loadAccounts(for: profileID)
+            #if DEBUG
+            TradeHistoryLoadProbe.markRequest()
+            #endif
+
+            if !hasLocalBrowseConstraints,
+               let rpc,
+               let applied = try? await TradesListBootstrapLoader.load(
+                   viewerID: profileID,
+                   rpc: rpc,
+                   detailCache: detailCache,
+                   query: query,
+                   limit: 40,
+                   cursor: nil
+               )
+            {
+                applyAccountList(applied.accounts)
+                items = applied.trades.filter(matchesLocalBrowseConstraints)
+                nextCursor = applied.nextCursor
+                hasLoaded = true
+                lastQueryKey = queryKey
+                phase = .loaded
+                paginationErrorMessage = nil
+                persistSnapshot()
+                SessionNetworkProbe.record(
+                    .networkFetch,
+                    resource: "trades.history.rpc",
+                    detail: "reason=\(reason) count=\(applied.trades.count)"
+                )
+                #if DEBUG
+                TradeHistoryLoadProbe.markPageSize(items.count)
+                TradeHistoryLoadProbe.markFirstUsefulRender()
+                #endif
+                isRefreshing = false
+                return
+            }
+
+            async let accountsTask = hydrateAccountsFromSession(for: profileID)
 
             if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+                await loadAccounts(for: profileID)
                 applyFixtures(profileID: profileID)
                 hasLoaded = true
                 lastQueryKey = queryKey
@@ -418,13 +578,19 @@ final class TradeHistoryViewModel {
             }
 
             #if DEBUG
-            TradeHistoryLoadProbe.markRequest()
+            DataLoadStageProbe.trace(correlation: stageCorrelation!, stage: "request.started")
             #endif
-            let page = try await trades.tradeHistory(
+            async let tradesTask = trades.tradeHistory(
                 ownedBy: profileID,
-                query: currentQuery,
+                query: query,
                 page: PageRequest(limit: 40)
             )
+            let page = try await tradesTask
+            guard generation == loadGeneration, !Task.isCancelled else { return }
+            await accountsTask
+            if accounts.isEmpty {
+                await loadAccounts(for: profileID)
+            }
 
             items = page.items.filter(matchesLocalBrowseConstraints)
             nextCursor = page.nextCursor
@@ -466,7 +632,8 @@ final class TradeHistoryViewModel {
                 for: profileID,
                 detailCache: detailCache,
                 repository: trades,
-                forceNetwork: false
+                forceNetwork: false,
+                requiresFullOwnerSnapshot: true
             )
             applyAccountList(loaded)
         } catch {
@@ -484,7 +651,8 @@ final class TradeHistoryViewModel {
                 for: profileID,
                 detailCache: detailCache,
                 repository: trades,
-                forceNetwork: true
+                forceNetwork: true,
+                requiresFullOwnerSnapshot: true
             )
             applyAccountList(loaded)
         } catch {

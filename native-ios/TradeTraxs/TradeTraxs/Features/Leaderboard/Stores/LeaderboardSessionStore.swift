@@ -44,7 +44,7 @@ final class LeaderboardSessionStore {
     ) {
         rawTrades = trades
         rawEntries = entries
-        profilesByID = profiles
+        mergeProfiles(profiles, verified: verified, followers: followers)
         verifiedIDs = verified
         followerCounts = followers
         followingIDs = following
@@ -71,9 +71,19 @@ final class LeaderboardSessionStore {
         verified: Set<ProfileID>,
         followers: [ProfileID: Int]
     ) {
-        for (id, profile) in profiles { profilesByID[id] = profile }
+        for (id, profile) in profiles {
+            profilesByID[id] = LeaderboardTradeIdentity.mergeLeaderboardProfile(
+                existing: profilesByID[id],
+                fetched: profile
+            )
+        }
         verifiedIDs.formUnion(verified)
         for (id, count) in followers { followerCounts[id] = count }
+    }
+
+    func mergeFriends(_ friends: Set<ProfileID>) {
+        friendIDs = friends
+        lastUpdated = Date()
     }
 
     func appendEntries(

@@ -15,6 +15,8 @@ final class NavigationEnvironment {
     let stateRestorer: any NavigationStateRestoring
     let sceneRestoration: any SceneRestoring
     let splitSupport: any SplitNavigationSupporting
+    /// Paths/tab snapshot deferred until session validation succeeds.
+    private(set) var deferredAuthenticatedSnapshot: NavigationState?
 
     init(
         store: NavigationStore,
@@ -44,5 +46,19 @@ final class NavigationEnvironment {
 
     func clearPersistedState() {
         stateRestorer.clear()
+    }
+
+    func deferAuthenticatedSnapshot(_ snapshot: NavigationState) {
+        deferredAuthenticatedSnapshot = snapshot
+    }
+
+    func consumeDeferredAuthenticatedSnapshot() -> NavigationState? {
+        let snapshot = deferredAuthenticatedSnapshot
+        deferredAuthenticatedSnapshot = nil
+        return snapshot
+    }
+
+    func clearDeferredAuthenticatedSnapshot() {
+        deferredAuthenticatedSnapshot = nil
     }
 }

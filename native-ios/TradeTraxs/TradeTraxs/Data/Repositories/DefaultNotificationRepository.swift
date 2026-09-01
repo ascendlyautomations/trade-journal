@@ -79,15 +79,15 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
             throw AppError.domain(.permission(.notAuthenticated))
         }
         struct Body: Encodable { var read: Bool }
-        _ = try await supabase.database.update(
+        // Bulk update — must not use single-row `Accept: application/vnd.pgrst.object+json`.
+        try await supabase.database.update(
             Body(read: true),
             table: "notifications",
             query: [
                 SupabaseQuery.eq("user_id", userID.rawValue),
                 URLQueryItem(name: "read", value: "eq.false"),
                 SupabaseQuery.isIn("type", NotificationInboxType.all),
-            ],
-            returning: NotificationDTO.Item.self
+            ]
         )
     }
 

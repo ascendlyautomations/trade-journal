@@ -66,8 +66,18 @@ final class SessionMemberRoomsStore {
                 for: viewerID,
                 page: PageRequest(limit: 50)
             ).items
-            let unread = (try? await repository.unreadCounts(for: rooms.map(\.id))) ?? [:]
-            return (rooms, unread)
+            async let unreadTask = repository.unreadCounts(for: rooms.map(\.id))
+            async let countsTask = repository.activeMemberCounts(for: rooms.map(\.id))
+            let unread = (try? await unreadTask) ?? [:]
+            let counts = (try? await countsTask) ?? [:]
+            let enriched = rooms.map { room -> TradeRoom in
+                var copy = room
+                if let count = counts[room.id] {
+                    copy.memberCount = count
+                }
+                return copy
+            }
+            return (enriched, unread)
         }
         inFlight[viewerID] = task
         defer { inFlight[viewerID] = nil }
@@ -85,6 +95,17 @@ final class SessionMemberRoomsStore {
         roomsByViewer[viewerID] = rooms
         unreadByViewer[viewerID] = unread
         loadedAt[viewerID] = Date()
+    }
+
+    func applyMemberCounts(_ counts: [RoomID: Int], for viewerID: ProfileID) {
+        guard var rooms = roomsByViewer[viewerID], !counts.isEmpty else { return }
+        rooms = rooms.map { room in
+            guard let count = counts[room.id] else { return room }
+            var copy = room
+            copy.memberCount = count
+            return copy
+        }
+        roomsByViewer[viewerID] = rooms
     }
 
     func invalidate(viewerID: ProfileID? = nil) {

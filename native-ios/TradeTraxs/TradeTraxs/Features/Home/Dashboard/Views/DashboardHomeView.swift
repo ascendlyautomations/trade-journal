@@ -23,7 +23,8 @@ struct DashboardHomeView: View {
                 session: data.session,
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
-                realtimeHub: data.realtimeHub
+                realtimeHub: data.realtimeHub,
+                rpc: data.rpc
             )
         )
         self.navigationCoordinator = navigationCoordinator
@@ -86,7 +87,8 @@ struct DashboardHomeView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     ExperienceHaptics.play(.selection)
-                    navigationCoordinator.open(.profile(.activity))
+                    navigationCoordinator.selectTab(.profile)
+                    navigationCoordinator.pushProfile(.activity)
                 } label: {
                     ZStack(alignment: .topTrailing) {
                         Image(systemName: "bell")
@@ -113,7 +115,9 @@ struct DashboardHomeView: View {
                 activityStore.ensureUnreadBootstrap(
                     notifications: data.notifications,
                     session: data.session,
-                    realtimeHub: data.realtimeHub
+                    realtimeHub: data.realtimeHub,
+                    detailCache: data.detailCache,
+                    rpc: data.rpc
                 )
             }
             #if DEBUG

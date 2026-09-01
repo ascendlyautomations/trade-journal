@@ -713,15 +713,15 @@ nonisolated enum CSVTradeBuilder {
     }
 }
 
-private extension String {
+private nonisolated extension String {
     var nilIfEmpty: String? {
         let t = trimmingCharacters(in: .whitespacesAndNewlines)
         return t.isEmpty ? nil : t
     }
 }
 
-private extension DateFormatter {
-    static let csvFlexible: DateFormatter = {
+private nonisolated extension DateFormatter {
+    nonisolated static let csvFlexible: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
@@ -729,35 +729,35 @@ private extension DateFormatter {
     }()
 
     /// Matches JS Date parsing for `2026-02-01 09:30:00` style EnteredAt/ExitedAt cells.
-    static let csvSpaceDateTime: DateFormatter = {
+    nonisolated static let csvSpaceDateTime: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd HH:mm:ss"
         return f
     }()
 
-    static let csvFlexibleAlt: DateFormatter = {
+    nonisolated static let csvFlexibleAlt: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "M/d/yyyy h:mm:ss a"
         return f
     }()
 
-    static let csvDateOnly: DateFormatter = {
+    nonisolated static let csvDateOnly: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
 
-    static let csvDateOnlyAlt: DateFormatter = {
+    nonisolated static let csvDateOnlyAlt: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "M/d/yyyy"
         return f
     }()
 
-    static let csvTimeOnly: DateFormatter = {
+    nonisolated static let csvTimeOnly: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "h:mm:ss a"

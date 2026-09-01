@@ -5,7 +5,7 @@ import OSLog
 ///
 /// Records a request/operation waterfall for cold Dashboard loads.
 /// No-ops in Release. Tests may call ``beginSession`` / ``snapshot`` directly.
-enum DashboardLoadProbe {
+nonisolated enum DashboardLoadProbe {
     struct Operation: Sendable, Equatable {
         var name: String
         var kind: Kind
@@ -34,13 +34,14 @@ enum DashboardLoadProbe {
     }
 
     private static let lock = NSLock()
-    private static var sessionStart: Date?
-    private static var operations: [Operation] = []
-    private static var firstUsefulRenderMs: Int?
-    private static var fullHydrationMs: Int?
-    private static var notificationRowsLoaded = 0
+    nonisolated(unsafe) private static var sessionStart: Date?
+    nonisolated(unsafe) private static var operations: [Operation] = []
+    nonisolated(unsafe) private static var firstUsefulRenderMs: Int?
+    nonisolated(unsafe) private static var fullHydrationMs: Int?
+    nonisolated(unsafe) private static var notificationRowsLoaded = 0
+    nonisolated(unsafe) private static var coldAttemptCount = 0
     private static let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "TradeTraxs",
+        subsystem: AppLog.subsystem,
         category: "DashboardLoad"
     )
 
@@ -52,6 +53,7 @@ enum DashboardLoadProbe {
         firstUsefulRenderMs = nil
         fullHydrationMs = nil
         notificationRowsLoaded = 0
+        coldAttemptCount = 0
         lock.unlock()
         logger.debug("BEGIN \(label, privacy: .public)")
         #else
@@ -77,6 +79,22 @@ enum DashboardLoadProbe {
         fullHydrationMs = Int(Date().timeIntervalSince(start) * 1_000)
         logger.debug("FULL_HYDRATION \(self.fullHydrationMs ?? -1)ms")
         #endif
+    }
+
+    static func recordColdAttempt() {
+        #if DEBUG
+        lock.lock()
+        coldAttemptCount += 1
+        let count = coldAttemptCount
+        lock.unlock()
+        logger.debug("dashboard cold attempt=\(count, privacy: .public)")
+        #endif
+    }
+
+    static func coldAttemptCountForTests() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return coldAttemptCount
     }
 
     static func recordNotificationRows(_ count: Int) {
@@ -151,6 +169,7 @@ enum DashboardLoadProbe {
         firstUsefulRenderMs = nil
         fullHydrationMs = nil
         notificationRowsLoaded = 0
+        coldAttemptCount = 0
         lock.unlock()
     }
 

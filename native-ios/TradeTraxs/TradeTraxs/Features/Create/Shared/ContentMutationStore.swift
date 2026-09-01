@@ -15,6 +15,7 @@ final class ContentMutationStore {
         case achievement(AchievementID)
         case reel(Reel)
         case reelLinked(ReelID)
+        case story(Story)
     }
 
     private(set) var revision: Int = 0
@@ -22,6 +23,7 @@ final class ContentMutationStore {
     private(set) var latestPostID: PostID?
     private(set) var latestAchievementID: AchievementID?
     private(set) var latestReelID: ReelID?
+    private(set) var latestStoryID: StoryID?
 
     private init() {}
 
@@ -49,11 +51,18 @@ final class ContentMutationStore {
         revision += 1
     }
 
+    func noteStoryCreated(_ story: Story) {
+        latest = .story(story)
+        latestStoryID = story.id
+        revision += 1
+    }
+
     func invalidate() {
         latest = nil
         latestPostID = nil
         latestAchievementID = nil
         latestReelID = nil
+        latestStoryID = nil
         revision = 0
     }
 }

@@ -40,6 +40,36 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
         try await base.profile(username: username)
     }
 
+    func ensureProfileExists(for profileID: ProfileID) async throws -> Profile {
+        if Self.isDevelopmentID(profileID) {
+            return Self.fixtureProfile(id: profileID)
+        }
+        return try await base.ensureProfileExists(for: profileID)
+    }
+
+    func onboardingSnapshot(for profileID: ProfileID) async throws -> ProfileOnboardingSnapshot {
+        if Self.isDevelopmentID(profileID) {
+            return ProfileOnboardingSnapshot(
+                profileID: profileID,
+                username: "dev_user",
+                displayName: "Developer",
+                onboardingCompleted: true
+            )
+        }
+        return try await base.onboardingSnapshot(for: profileID)
+    }
+
+    func isUsernameTaken(_ username: String, excluding profileID: ProfileID) async throws -> Bool {
+        try await base.isUsernameTaken(username, excluding: profileID)
+    }
+
+    func completeProfileOnboarding(_ submission: ProfileOnboardingSubmission) async throws -> Profile {
+        if Self.isDevelopmentID(submission.profileID) {
+            return Self.fixtureProfile(id: submission.profileID)
+        }
+        return try await base.completeProfileOnboarding(submission)
+    }
+
     func updateProfile(_ profile: Profile) async throws -> Profile {
         if Self.isDevelopmentID(profile.id) {
             return profile

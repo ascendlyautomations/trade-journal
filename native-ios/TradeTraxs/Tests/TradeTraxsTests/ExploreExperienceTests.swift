@@ -312,14 +312,19 @@ private struct ExplorePartialFailRepository: ExploreRepository {
 
 private final class ExploreStubSearchRepository: SearchRepository, @unchecked Sendable {
     private(set) var calls = 0
+    private(set) var lastQuery: String?
+    private(set) var lastExcluding: ProfileID?
 
     func search(
         query: String,
         kinds: Set<SearchResultKind>,
-        page: PageRequest
+        page: PageRequest,
+        excludingProfileID: ProfileID?
     ) async throws -> CursorPage<SearchResult> {
         try await Task.sleep(nanoseconds: 50_000_000)
         calls += 1
+        lastQuery = query
+        lastExcluding = excludingProfileID
         let trader = ExploreFixtures.traders()[0]
         return CursorPage(
             items: [

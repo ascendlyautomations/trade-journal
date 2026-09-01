@@ -6,9 +6,10 @@ struct AppRootView: View {
     @Bindable var themeManager: ThemeManager
     @Bindable var authenticationManager: AuthenticationManager
     let authenticationCoordinator: AuthenticationCoordinator
-    let authenticationLifecycle: AuthenticationLifecycle
+    @Bindable var authenticationLifecycle: AuthenticationLifecycle
     @Bindable var currentUserProfile: CurrentUserProfileStore
     @Bindable var appBootstrapState: AppBootstrapState
+    @Bindable var profileOnboardingGate: ProfileOnboardingGateStore
     let allowsDevelopmentBypass: Bool
 
     @Environment(\.scenePhase) private var scenePhase
@@ -19,48 +20,7 @@ struct AppRootView: View {
 
     var body: some View {
         Group {
-            if isLaunchBootstrapping {
-                SplashView()
-            } else {
-                switch navigation.store.sessionPhase {
-                case .unauthenticated:
-                    AuthInfrastructureView(
-                        store: navigation.store,
-                        coordinator: navigation.coordinator,
-                        authenticationCoordinator: authenticationCoordinator,
-                        authenticationManager: authenticationManager,
-                        allowsDevelopmentBypass: allowsDevelopmentBypass
-                    )
-                case .authenticated:
-                    MainTabShellView(
-                        store: navigation.store,
-                        coordinator: navigation.coordinator,
-                        authenticationCoordinator: authenticationCoordinator,
-                        currentUserProfile: currentUserProfile
-                    )
-                    .task {
-                        appBootstrapState.beginLoading()
-                        AuthFlowTracer.trace("bootstrap.started", phase: .bootstrapLoading)
-                        currentUserProfile.loadIfNeeded()
-                    }
-                    .onChange(of: currentUserProfile.phase) { _, phase in
-                        switch phase {
-                        case .loaded:
-                            appBootstrapState.markReady()
-                            AuthFlowTracer.trace("bootstrap.completed", phase: .authenticated)
-                        case .failed:
-                            appBootstrapState.markFailedRecoverable(
-                                message: currentUserProfile.errorMessage
-                            )
-                            AuthFlowTracer.trace("bootstrap.failed", phase: .bootstrapFailed)
-                        case .loading:
-                            appBootstrapState.beginLoading()
-                        case .idle:
-                            break
-                        }
-                    }
-                }
-            }
+            authRootContent
         }
         .applyThemeEnvironment(themeManager.themeEnvironment)
         // Root fill only — do not also apply bar chrome here (owned by MainTabShellView)
@@ -89,14 +49,9 @@ struct AppRootView: View {
         .onAppear {
             themeManager.updateInterfaceStyle(colorScheme)
             NavigationCoordinatorProxy.openManageAccounts = {
-                navigation.coordinator.openSettings([.tradingAccounts])
+                navigation.coordinator.pushHome(.settings(.tradingAccounts))
             }
-            // CompositionRoot already restored Keychain + aligned navigation synchronously.
-            // Never block first paint on network token refresh.
-            ExperienceMotion.withAnimation(
-                ExperienceMotion.navigation,
-                reduceMotion: reduceMotion
-            ) {
+            if authenticationLifecycle.initialRestoreCompleted {
                 isLaunchBootstrapping = false
             }
             Task {
@@ -105,6 +60,16 @@ struct AppRootView: View {
         }
         .onChange(of: authenticationManager.state) { _, newState in
             authenticationCoordinator.syncNavigation(with: newState)
+        }
+        .onChange(of: authenticationLifecycle.initialRestoreCompleted) { _, completed in
+            if completed {
+                ExperienceMotion.withAnimation(
+                    ExperienceMotion.navigation,
+                    reduceMotion: reduceMotion
+                ) {
+                    isLaunchBootstrapping = false
+                }
+            }
         }
         .onChange(of: colorScheme) { _, newStyle in
             themeManager.updateInterfaceStyle(newStyle)
@@ -130,7 +95,151 @@ struct AppRootView: View {
                 store: navigation.store
             )
         }
+        .ownerAccountFilterDropdownOverlay()
+        .onChange(of: navigation.store.selectedTab) { _, _ in
+            OwnerAccountFilterDropdownController.shared.dismiss()
+        }
         .environment(themeManager)
+    }
+
+    @ViewBuilder
+    private var authRootContent: some View {
+        switch authenticationManager.state {
+        case .unknown, .refreshing:
+            if authenticationManager.isValidationRetryInFlight {
+                sessionValidationSurface(isRetrying: true)
+            } else {
+                SplashView()
+            }
+
+        case .sessionValidationFailed:
+            sessionValidationSurface(isRetrying: false)
+
+        case .authenticated, .locked:
+            if navigation.store.sessionPhase == .authenticated, authenticationManager.state.isSessionReady {
+                authenticatedShell
+            } else {
+                SplashView()
+            }
+
+        case .unauthenticated, .failure:
+            if isLaunchBootstrapping {
+                SplashView()
+            } else {
+                AuthInfrastructureView(
+                    store: navigation.store,
+                    coordinator: navigation.coordinator,
+                    authenticationCoordinator: authenticationCoordinator,
+                    authenticationManager: authenticationManager,
+                    allowsDevelopmentBypass: allowsDevelopmentBypass
+                )
+            }
+
+        case .authenticating:
+            AuthInfrastructureView(
+                store: navigation.store,
+                coordinator: navigation.coordinator,
+                authenticationCoordinator: authenticationCoordinator,
+                authenticationManager: authenticationManager,
+                allowsDevelopmentBypass: allowsDevelopmentBypass
+            )
+        }
+    }
+
+    private var authenticatedShell: some View {
+        Group {
+            switch profileOnboardingGate.phase {
+            case .idle, .resolving:
+                SplashView()
+                    .task(id: authenticationManager.restorationGeneration) {
+                        guard authenticationManager.state.isSessionReady else { return }
+                        profileOnboardingGate.resolveIfNeeded()
+                    }
+
+            case .required(let snapshot):
+                ProfileOnboardingView(
+                    viewModel: ProfileOnboardingViewModel(
+                        snapshot: snapshot,
+                        profiles: appEnvironment.data.profiles,
+                        gateStore: profileOnboardingGate
+                    )
+                )
+
+            case .complete:
+                mainAuthenticatedShell
+
+            case .failed(let message):
+                SessionValidationView(
+                    message: message,
+                    isRetrying: false,
+                    onRetry: {
+                        profileOnboardingGate.resolveIfNeeded(forceNetwork: true)
+                    },
+                    onSignIn: {
+                        Task { await authenticationCoordinator.logout() }
+                    }
+                )
+            }
+        }
+    }
+
+    private var mainAuthenticatedShell: some View {
+        MainTabShellView(
+            store: navigation.store,
+            coordinator: navigation.coordinator,
+            authenticationCoordinator: authenticationCoordinator,
+            currentUserProfile: currentUserProfile
+        )
+        .task(id: authenticationManager.restorationGeneration) {
+            guard authenticationManager.state.isSessionReady else { return }
+            await authenticationManager.awaitNetworkReady()
+            guard authenticationManager.state.isSessionReady else { return }
+            appBootstrapState.markReady()
+            AuthFlowTracer.trace("bootstrap.shell.ready", phase: .authenticated)
+            if !currentUserProfile.hasLoadedContent {
+                currentUserProfile.loadIfNeeded()
+            }
+        }
+        .onChange(of: currentUserProfile.phase) { _, phase in
+            switch phase {
+            case .loaded:
+                AuthFlowTracer.trace("bootstrap.profile.completed", phase: .authenticated)
+            case .failed:
+                AuthFlowTracer.trace("bootstrap.profile.failed", phase: .bootstrapFailed)
+            case .loading, .idle:
+                break
+            }
+        }
+    }
+
+    private func sessionValidationSurface(isRetrying: Bool) -> some View {
+        SessionValidationView(
+            message: sessionValidationMessage,
+            isRetrying: isRetrying,
+            onRetry: {
+                Task { await authenticationCoordinator.retrySessionValidation() }
+            },
+            onSignIn: {
+                Task { await authenticationCoordinator.logout() }
+            }
+        )
+    }
+
+    private var sessionValidationMessage: String {
+        guard let error = authenticationManager.lastSessionValidationError else {
+            return "Check your connection and try again, or sign in again."
+        }
+        if error.isTransientRefreshFailure {
+            switch error {
+            case .unknown(let reason) where reason == "networkUnavailable":
+                return "You're offline. Connect to the internet and try again."
+            case .unknown(let reason) where reason == "serverUnavailable":
+                return "Our servers are temporarily unavailable. Try again shortly."
+            default:
+                return "We couldn't reach the server. Try again or sign in again."
+            }
+        }
+        return "Your session could not be restored. Sign in again to continue."
     }
 
     private var sheetBinding: Binding<SheetDestination?> {
@@ -173,6 +282,11 @@ struct AppRootView: View {
                             ExperienceHaptics.play(.selection)
                             navigation.coordinator.dismissSheet()
                             navigation.coordinator.openCompose(.achievement)
+                        },
+                        onCreateStory: {
+                            ExperienceHaptics.play(.selection)
+                            navigation.coordinator.dismissSheet()
+                            navigation.coordinator.openCompose(.story)
                         },
                         onImportCSV: {
                             ExperienceHaptics.play(.selection)
@@ -240,6 +354,15 @@ struct AppRootView: View {
                 case .newReel:
                     CreateReelView(
                         data: appEnvironment.data,
+                        onDismiss: { navigation.coordinator.dismissFullScreen() }
+                    )
+                case .newStory:
+                    CreateStoryView(
+                        data: appEnvironment.data,
+                        onPublished: { story in
+                            navigation.coordinator.dismissFullScreen()
+                            navigation.coordinator.present(fullScreen: .storyViewer(story.id))
+                        },
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
                 case .importCSV:

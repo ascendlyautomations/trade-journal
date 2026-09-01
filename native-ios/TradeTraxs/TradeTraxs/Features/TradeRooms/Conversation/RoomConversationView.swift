@@ -29,6 +29,7 @@ struct RoomConversationView: View {
                 detailCache: data.detailCache,
                 trades: data.trades,
                 notifications: data.notifications,
+                rpc: data.rpc,
                 navigationCoordinator: navigationCoordinator,
                 navigationHost: navigationHost,
                 realtimeHub: data.realtimeHub
@@ -52,6 +53,13 @@ struct RoomConversationView: View {
         VStack(spacing: 0) {
             if let room = viewModel.room, viewModel.showsRoomChrome {
                 header(for: room)
+                if viewModel.showsActivePresence {
+                    RoomActivePresenceBar(
+                        members: viewModel.activePresenceMembers,
+                        imagePipeline: imagePipeline,
+                        onTap: { viewModel.openActivePresence() }
+                    )
+                }
                 if !viewModel.channels.isEmpty {
                     RoomChannelSwitcherView(
                         channels: viewModel.channels,
@@ -118,6 +126,17 @@ struct RoomConversationView: View {
                 onClose: { viewModel.showsTradePicker = false }
             )
             .task { await viewModel.loadTradePickerIfNeeded() }
+        }
+        .sheet(isPresented: $viewModel.showsActivePresenceSheet) {
+            RoomActivePresenceSheet(
+                members: viewModel.activePresenceMembers,
+                imagePipeline: imagePipeline,
+                onSelectProfile: { profileID in
+                    viewModel.closeActivePresence()
+                    viewModel.openProfile(profileID)
+                },
+                onClose: { viewModel.closeActivePresence() }
+            )
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {
@@ -226,6 +245,7 @@ struct RoomConversationView: View {
                                 peerProfile: bubble.authorProfile,
                                 imagePipeline: imagePipeline,
                                 sharedTrade: viewModel.sharedTrade(for: bubble.message),
+                                reactionConfiguration: viewModel.reactionConfiguration(for: bubble.message),
                                 onRetry: {
                                     Task { await viewModel.retry(bubble) }
                                 }

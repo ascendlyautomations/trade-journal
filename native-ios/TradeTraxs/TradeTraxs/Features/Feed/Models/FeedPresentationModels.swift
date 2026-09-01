@@ -1,7 +1,7 @@
 import Foundation
 
 /// Web `FeedContentFilter` — All / Trades / Posts / Clips / Achievements.
-enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
+nonisolated enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
     case all
     case trades
     case posts
@@ -31,7 +31,7 @@ enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
 }
 
 /// Hydrated feed row — wraps domain models already used by Profile cards / Detail.
-enum FeedTimelineEntry: Identifiable, Hashable, Sendable {
+nonisolated enum FeedTimelineEntry: Identifiable, Hashable, Sendable {
     case trade(FeedItem, Trade)
     case post(FeedItem, Post)
     case clip(FeedItem, Reel)
@@ -70,6 +70,39 @@ enum FeedTimelineEntry: Identifiable, Hashable, Sendable {
         filter == .all || matches == filter
     }
 
+    /// Web-parity engagement target — always keyed by the feed row id (`FeedItem.id`).
+    ///
+    /// | Feed row | Likes / comments tables |
+    /// |----------|-------------------------|
+    /// | trade card (`posts`) | `likes` / `comments` via ``InteractionContentKind/feedPost`` |
+    /// | profile post | `profile_post_*` |
+    /// | reel | `reel_*` |
+    /// | achievement post | `achievement_post_*` |
+    var interactionTarget: InteractionTarget {
+        switch self {
+        case .trade(let item, _):
+            return .feedPost(PostID(item.id))
+        case .post(let item, _):
+            return .profilePost(PostID(item.id))
+        case .clip(let item, _):
+            return .reel(ReelID(item.id))
+        case .achievement(let item, _):
+            return .achievement(AchievementID(item.id))
+        }
+    }
+
+    /// Whether ``open(_:)`` should seed feed-post engagement on trade detail (web `posts` thread).
+    var feedTradeEngagementPostID: PostID? {
+        if case .trade(let item, _) = self { return PostID(item.id) }
+        return nil
+    }
+
+    /// Whether ``open(_:)`` should pass an achievement post id to detail routing.
+    var feedAchievementPostID: AchievementID? {
+        if case .achievement(let item, _) = self { return AchievementID(item.id) }
+        return nil
+    }
+
     /// Whether the row should use Layout A (media). False → Layout B (text-first, no placeholder).
     var hasDisplayMedia: Bool {
         switch self {
@@ -89,7 +122,7 @@ enum FeedTimelineEntry: Identifiable, Hashable, Sendable {
     }
 }
 
-enum FeedSupport {
+nonisolated enum FeedSupport {
     static func isLocalDevelopmentProfile(_ id: ProfileID) -> Bool {
         id.rawValue.hasPrefix("dev.")
     }

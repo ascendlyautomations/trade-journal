@@ -50,13 +50,24 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
         struct Body: Encodable {
             var refresh_token: String
         }
-        return try await tokenRequest(
-            path: "/auth/v1/token",
-            query: [URLQueryItem(name: "grant_type", value: "refresh_token")],
-            body: Body(refresh_token: refreshToken),
-            provider: .email,
-            requiresAuthentication: false
-        )
+        do {
+            return try await tokenRequest(
+                path: "/auth/v1/token",
+                query: [URLQueryItem(name: "grant_type", value: "refresh_token")],
+                body: Body(refresh_token: refreshToken),
+                provider: .email,
+                requiresAuthentication: false
+            )
+        } catch let error as AuthenticationError {
+            if error.isTerminalRefreshFailure || error == .invalidCredentials {
+                throw AuthenticationError.refreshFailed
+            }
+            throw error
+        } catch let error as AppError {
+            throw AuthenticationError.fromRefreshFailure(error)
+        } catch {
+            throw AuthenticationError.fromRefreshFailure(error)
+        }
     }
 
     func requestPasswordReset(email: String) async throws {
@@ -68,6 +79,21 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
             path: "/auth/v1/recover",
             method: .post,
             body: try transport.encodeJSON(Body(email: email)),
+            requiresAuthentication: false
+        )
+    }
+
+    func updateUserMetadata(accessToken: String, metadata: [String: String]) async throws {
+        struct Body: Encodable {
+            var data: [String: String]
+        }
+        guard transport.isConfigured else { throw AuthenticationError.notConfigured }
+        _ = try await transport.send(
+            host: .supabase,
+            path: "/auth/v1/user",
+            method: .put,
+            headers: ["Authorization": "Bearer \(accessToken)"],
+            body: try transport.encodeJSON(Body(data: metadata)),
             requiresAuthentication: false
         )
     }
@@ -119,23 +145,67 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
             let payload = try transport.decoder.decode(GoTrueTokenResponse.self, from: response)
             return try payload.makeSession(provider: provider)
         } catch let error as AppError {
-            if case .transport(let network) = error {
-                if case .server(let code, _) = network {
-                    // Best-effort body is not on NetworkError — map by status.
-                    if code == 400 || code == 401 {
-                        throw AuthenticationError.invalidCredentials
-                    }
-                }
-            }
-            if case .authentication(let auth) = error {
-                throw auth
-            }
-            throw AuthenticationError.unknown(String(describing: error))
+            throw mapTokenRequestError(error, provider: provider)
         } catch let error as AuthenticationError {
             throw error
         } catch {
             throw AuthenticationError.unknown(error.localizedDescription)
         }
+    }
+
+    private func mapTokenRequestError(
+        _ error: AppError,
+        provider: AuthenticationProviderKind
+    ) -> AuthenticationError {
+        if case .transport(let network) = error {
+            switch network {
+            case .connectivity, .timeout:
+                return .unknown("Network connection failed. Check your connection and try again.")
+            case .cancelled:
+                return .cancelled
+            case .server(let code, let message):
+                return mapProviderServerFailure(
+                    statusCode: code,
+                    message: message,
+                    provider: provider
+                )
+            case .unauthorized:
+                if provider == .email {
+                    return .invalidCredentials
+                }
+                return .providerTokenInvalid(provider)
+            case .forbidden, .rateLimited, .decoding, .validation, .unknown:
+                break
+            }
+        }
+        if case .authentication(let auth) = error {
+            return auth
+        }
+        return .unknown(String(describing: error))
+    }
+
+    private func mapProviderServerFailure(
+        statusCode: Int,
+        message: String?,
+        provider: AuthenticationProviderKind
+    ) -> AuthenticationError {
+        let body = message?.lowercased() ?? ""
+        if provider == .email {
+            if statusCode == 400 || statusCode == 401 {
+                return .invalidCredentials
+            }
+        } else {
+            if body.contains("provider") && (body.contains("not enabled") || body.contains("disabled")) {
+                return .providerMisconfigured(provider)
+            }
+            if statusCode == 400 || statusCode == 401 || statusCode == 422 {
+                return .providerTokenInvalid(provider)
+            }
+        }
+        if statusCode == 400 || statusCode == 401 {
+            return provider == .email ? .invalidCredentials : .providerTokenInvalid(provider)
+        }
+        return .unknown(message ?? "Authentication failed.")
     }
 }
 
@@ -177,6 +247,13 @@ extension AuthenticationBackend {
     ) async throws -> AuthenticationSession {
         if let supabase = self as? SupabaseAuthenticationBackend {
             return try await supabase.signInWithIDToken(
+                provider: provider,
+                idToken: idToken,
+                nonce: nonce
+            )
+        }
+        if let memory = self as? InMemoryAuthenticationBackend {
+            return try await memory.signInWithIDToken(
                 provider: provider,
                 idToken: idToken,
                 nonce: nonce

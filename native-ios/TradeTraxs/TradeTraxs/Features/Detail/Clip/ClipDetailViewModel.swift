@@ -181,7 +181,7 @@ final class ClipDetailViewModel {
             object: item,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.didReachEnd = true
             }
         }

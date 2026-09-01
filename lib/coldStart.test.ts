@@ -39,6 +39,22 @@ describe("Cold start — ownership wiring", () => {
     assert.match(src, /authEvent === "SIGNED_IN"/)
   })
 
+  it("UserProfileProvider uses one idempotent profile Realtime subscription", () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, "UserProfileProvider.tsx"),
+      "utf8"
+    )
+    assert.match(src, /ensureProfileRealtimeSubscription/)
+    assert.match(src, /profileRealtimeUserIdRef/)
+    assert.doesNotMatch(src, /async function subscribeProfileRealtime/)
+    const subscribeCalls = src.match(/ch\.subscribe\(\)/g) ?? []
+    assert.equal(
+      subscribeCalls.length,
+      1,
+      "expected exactly one profile channel subscribe()"
+    )
+  })
+
   it("dashboard defers copy trading until request or saved copy-group filter", () => {
     const src = fs.readFileSync(
       path.join(__dirname, "../app/(app)/dashboard/page.tsx"),

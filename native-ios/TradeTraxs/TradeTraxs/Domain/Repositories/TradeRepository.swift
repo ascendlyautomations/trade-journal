@@ -45,6 +45,26 @@ nonisolated protocol TradeRepository: Sendable {
     func setAccountActive(id: TradingAccountID, isActive: Bool) async throws
     /// Web `updateTradingAccountNote`.
     func updateAccountNote(id: TradingAccountID, note: String?) async throws
+    /// Dropdown visibility + optional public status label (`accounts` columns).
+    func updateAccountInsightsSettings(
+        id: TradingAccountID,
+        ownerID: ProfileID,
+        showInAccountDropdowns: Bool,
+        customPublicStatus: String?
+    ) async throws -> TradingAccount
+    func payoutEntries(for accountID: TradingAccountID) async throws -> [AccountPayoutEntry]
+    func createPayoutEntry(
+        ownerID: ProfileID,
+        accountID: TradingAccountID,
+        draft: AccountPayoutEntryDraft
+    ) async throws -> AccountPayoutEntry
+    func updatePayoutEntry(
+        id: AccountPayoutEntryID,
+        draft: AccountPayoutEntryDraft
+    ) async throws -> AccountPayoutEntry
+    func deletePayoutEntry(id: AccountPayoutEntryID) async throws
+    /// Whitelisted public profile account cards — `rpc_v1_profile_account_insights`.
+    func profileAccountInsights(for profileID: ProfileID) async throws -> [ProfileAccountInsight]
     /// Web `insertCsvTradesWithAccount` — one bulk `trades` insert (not per-row).
     func importCSVTrades(
         _ drafts: [TradeDraft],
@@ -110,6 +130,42 @@ extension TradeRepository {
 
     func updateAccountNote(id: TradingAccountID, note: String?) async throws {
         throw AppError.notImplemented(feature: "updateAccountNote")
+    }
+
+    func updateAccountInsightsSettings(
+        id: TradingAccountID,
+        ownerID: ProfileID,
+        showInAccountDropdowns: Bool,
+        customPublicStatus: String?
+    ) async throws -> TradingAccount {
+        throw AppError.notImplemented(feature: "updateAccountInsightsSettings")
+    }
+
+    func payoutEntries(for accountID: TradingAccountID) async throws -> [AccountPayoutEntry] {
+        throw AppError.notImplemented(feature: "payoutEntries")
+    }
+
+    func createPayoutEntry(
+        ownerID: ProfileID,
+        accountID: TradingAccountID,
+        draft: AccountPayoutEntryDraft
+    ) async throws -> AccountPayoutEntry {
+        throw AppError.notImplemented(feature: "createPayoutEntry")
+    }
+
+    func updatePayoutEntry(
+        id: AccountPayoutEntryID,
+        draft: AccountPayoutEntryDraft
+    ) async throws -> AccountPayoutEntry {
+        throw AppError.notImplemented(feature: "updatePayoutEntry")
+    }
+
+    func deletePayoutEntry(id: AccountPayoutEntryID) async throws {
+        throw AppError.notImplemented(feature: "deletePayoutEntry")
+    }
+
+    func profileAccountInsights(for profileID: ProfileID) async throws -> [ProfileAccountInsight] {
+        throw AppError.notImplemented(feature: "profileAccountInsights")
     }
 
     func importCSVTrades(

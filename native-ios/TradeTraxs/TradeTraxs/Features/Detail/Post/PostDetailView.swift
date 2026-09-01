@@ -141,7 +141,11 @@ struct PostDetailView: View {
 
             caption(post)
 
-            CommentsSectionView(target: .profilePost(post.id), data: data)
+            CommentsSectionView(
+                target: .profilePost(post.id),
+                contentOwnerUserID: post.authorProfileID.rawValue,
+                data: data
+            )
                 .id(Self.commentsAnchorID)
         }
     }

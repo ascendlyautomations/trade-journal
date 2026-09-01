@@ -1,6 +1,6 @@
-import AuthenticationServices
-import CryptoKit
+@preconcurrency import AuthenticationServices
 import Foundation
+import Synchronization
 import UIKit
 
 /// Apple Sign In → Supabase `id_token` exchange.
@@ -18,11 +18,27 @@ nonisolated struct AppleSignInProvider: OAuthProviding {
     }
 
     func signIn() async throws -> AuthenticationSession {
+        try await signInWithResult().session
+    }
+
+    func signInWithResult() async throws -> AppleSignInResult {
         let credential = try await credentialSource.requestCredential()
-        return try await backend.signInWithIDToken(
+        return try await signIn(credential: credential)
+    }
+
+    func signIn(credential: AppleIDCredentialPayload) async throws -> AppleSignInResult {
+        let session = try await backend.signInWithIDToken(
             provider: .apple,
             idToken: credential.idToken,
             nonce: credential.nonce
+        )
+        let hint = OAuthFirstLoginHint.normalized(
+            fullName: credential.fullName,
+            email: credential.email
+        )
+        return AppleSignInResult(
+            session: session,
+            firstLoginHint: hint.hasContent ? hint : nil
         )
     }
 
@@ -31,35 +47,63 @@ nonisolated struct AppleSignInProvider: OAuthProviding {
     }
 }
 
-nonisolated struct AppleIDCredentialPayload: Sendable {
+nonisolated struct AppleSignInResult: Sendable {
+    var session: AuthenticationSession
+    var firstLoginHint: OAuthFirstLoginHint?
+}
+
+nonisolated struct AppleIDCredentialPayload: Sendable, Equatable {
     var idToken: String
     var nonce: String?
+    /// Only present on the user's first Apple authorization for this app.
+    var fullName: String?
+    /// Only present on the user's first Apple authorization when Apple shares it.
+    var email: String?
 }
 
 nonisolated protocol AppleCredentialProviding: Sendable {
     func requestCredential() async throws -> AppleIDCredentialPayload
 }
 
-/// Uses AuthenticationServices. Presentation anchor resolves the key window when available.
-final class SystemAppleCredentialSource: NSObject, AppleCredentialProviding, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding, @unchecked Sendable {
-    private var continuation: CheckedContinuation<AppleIDCredentialPayload, Error>?
-    private var currentNonce: String?
+/// Test double — inject Apple credentials without AuthenticationServices UI.
+nonisolated struct StaticAppleCredentialSource: AppleCredentialProviding {
+    let payload: AppleIDCredentialPayload
 
     func requestCredential() async throws -> AppleIDCredentialPayload {
-        let nonce = Self.randomNonce()
-        currentNonce = nonce
+        payload
+    }
+}
+
+/// Uses AuthenticationServices. Presentation anchor resolves the key window when available.
+nonisolated final class SystemAppleCredentialSource: NSObject, AppleCredentialProviding, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding, @unchecked Sendable {
+    private struct CredentialState {
+        var continuation: CheckedContinuation<AppleIDCredentialPayload, Error>?
+        var currentNonce: String?
+    }
+
+    private let state = Mutex(CredentialState())
+    private nonisolated(unsafe) var retainedAuthorizationController: ASAuthorizationController?
+
+    func requestCredential() async throws -> AppleIDCredentialPayload {
+        let nonce = AppleSignInNonce.generate()
+        state.withLock { credentialState in
+            credentialState.currentNonce = nonce
+        }
         return try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
+            state.withLock { credentialState in
+                credentialState.continuation = continuation
+            }
             let provider = ASAuthorizationAppleIDProvider()
             let request = provider.createRequest()
             request.requestedScopes = [.fullName, .email]
-            request.nonce = Self.sha256(nonce)
+            request.nonce = AppleSignInNonce.sha256Hex(nonce)
 
             let controller = ASAuthorizationController(authorizationRequests: [request])
             controller.delegate = self
             controller.presentationContextProvider = self
-            DispatchQueue.main.async {
-                controller.performRequests()
+            retainedAuthorizationController = controller
+            Task { @MainActor [weak self] in
+                self?.retainedAuthorizationController?.performRequests()
             }
         }
     }
@@ -79,50 +123,46 @@ final class SystemAppleCredentialSource: NSObject, AppleCredentialProviding, ASA
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
+        let resumeState = state.withLock { credentialState -> (CheckedContinuation<AppleIDCredentialPayload, Error>?, String?) in
+            let resume = credentialState.continuation
+            let nonce = credentialState.currentNonce
+            credentialState.continuation = nil
+            return (resume, nonce)
+        }
+        retainedAuthorizationController = nil
+
         guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
               let tokenData = credential.identityToken,
               let idToken = String(data: tokenData, encoding: .utf8)
         else {
-            continuation?.resume(throwing: AuthenticationError.providerUnavailable(.apple))
-            continuation = nil
+            resumeState.0?.resume(throwing: AuthenticationError.providerTokenInvalid(.apple))
             return
         }
-        continuation?.resume(
-            returning: AppleIDCredentialPayload(idToken: idToken, nonce: currentNonce)
+        resumeState.0?.resume(
+            returning: AppleIDCredentialPayload(
+                idToken: idToken,
+                nonce: resumeState.1,
+                fullName: credential.fullName?.formattedDisplayName(),
+                email: ProfileDisplayNamePolicy.normalized(credential.email)
+            )
         )
-        continuation = nil
     }
 
     func authorizationController(
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
+        let resume = state.withLock { credentialState -> CheckedContinuation<AppleIDCredentialPayload, Error>? in
+            let resume = credentialState.continuation
+            credentialState.continuation = nil
+            return resume
+        }
+        retainedAuthorizationController = nil
+
         if let authError = error as? ASAuthorizationError, authError.code == .canceled {
-            continuation?.resume(throwing: AuthenticationError.cancelled)
+            resume?.resume(throwing: AuthenticationError.cancelled)
         } else {
-            continuation?.resume(throwing: AuthenticationError.providerUnavailable(.apple))
+            resume?.resume(throwing: AuthenticationError.providerUnavailable(.apple))
         }
-        continuation = nil
-    }
-
-    private static func randomNonce(length: Int = 32) -> String {
-        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
-        var result = ""
-        var remaining = length
-        while remaining > 0 {
-            var random: UInt8 = 0
-            let status = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
-            if status != errSecSuccess { continue }
-            if Int(random) < charset.count {
-                result.append(charset[Int(random)])
-                remaining -= 1
-            }
-        }
-        return result
-    }
-
-    private static func sha256(_ input: String) -> String {
-        let digest = SHA256.hash(data: Data(input.utf8))
-        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }

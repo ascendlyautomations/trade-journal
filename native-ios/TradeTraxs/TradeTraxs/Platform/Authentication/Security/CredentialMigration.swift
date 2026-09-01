@@ -5,7 +5,7 @@ nonisolated protocol CredentialMigrating: Sendable {
     func migrateIfNeeded() throws
 }
 
-nonisolated struct CredentialMigration: CredentialMigrating {
+nonisolated struct CredentialMigration: CredentialMigrating, @unchecked Sendable {
     private let configuration: AuthenticationConfiguration
     private let defaults: UserDefaults
     private let versionKey = "auth.credentialStoreVersion"

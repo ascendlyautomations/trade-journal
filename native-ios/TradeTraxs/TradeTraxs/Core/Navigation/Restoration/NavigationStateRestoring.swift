@@ -12,7 +12,7 @@ struct UserDefaultsNavigationStateRestorer: NavigationStateRestoring {
     private let key: String
     private let defaults: UserDefaults
 
-    init(key: String = "tt.navigation.state.v1", defaults: UserDefaults = .standard) {
+    init(key: String = "tt.navigation.state.v2", defaults: UserDefaults = .standard) {
         self.key = key
         self.defaults = defaults
     }
@@ -34,22 +34,31 @@ struct UserDefaultsNavigationStateRestorer: NavigationStateRestoring {
 
 /// Applies restoration policy when bootstrapping navigation.
 enum NavigationRestorationPolicy {
-    /// Cold start: prefer restored authenticated state; always safe-fallback.
+    struct BootstrapResult: Sendable {
+        var shellState: NavigationState
+        var deferredAuthenticatedPaths: NavigationState?
+    }
+
+    /// Cold start: load tab preference only — paths restore after auth succeeds.
     static func bootstrapState(
         restorer: any NavigationStateRestoring,
         preferRestoredSession: Bool = true
-    ) -> NavigationState {
+    ) -> BootstrapResult {
         guard preferRestoredSession, let restored = restorer.load() else {
-            return .initial
+            return BootstrapResult(shellState: .initial, deferredAuthenticatedPaths: nil)
         }
-        // Never restore into Create tab.
-        var state = restored
-        if state.selectedTab == .create {
-            state.selectedTab = state.previousContentTab
+        var shell = restored
+        if shell.selectedTab == .create {
+            shell.selectedTab = shell.previousContentTab
         }
-        // Do not restore ephemeral presentations.
-        state.presentedSheet = nil
-        state.presentedFullScreen = nil
-        return state
+        shell.presentedSheet = nil
+        shell.presentedFullScreen = nil
+        shell.sessionPhase = .unauthenticated
+
+        shell.homePath = []
+        shell.feedPath = []
+        shell.messagesPath = []
+        shell.profilePath = []
+        return BootstrapResult(shellState: shell, deferredAuthenticatedPaths: restored)
     }
 }

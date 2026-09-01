@@ -235,6 +235,10 @@ private final class CountingMemberRoomsRepository: RoomRepository, @unchecked Se
     }
 
     func send(_ message: RoomMessage) async throws -> RoomMessage { message }
+    func insertMessageReaction(roomID: RoomID, messageID: RoomMessageID, userID: ProfileID, reaction: String) async throws -> RoomMessageReaction {
+        RoomMessageReaction(id: "stub", messageID: messageID, userID: userID, reaction: reaction, createdAt: nil)
+    }
+    func deleteMessageReaction(id: String) async throws {}
 
     func moderate(
         roomID: RoomID,

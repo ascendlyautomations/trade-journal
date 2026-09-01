@@ -5,7 +5,7 @@ import Foundation
 /// Every conversation thread mutation (DM + Trade Room) must go through
 /// ``mergeMessages(existing:incoming:viewerID:)`` so each `MessageID` exists
 /// at most once in memory.
-enum ConversationMessageMerge {
+nonisolated enum ConversationMessageMerge {
     private static let optimisticMatchWindow: TimeInterval = 15
 
     static func isOptimisticMessageID(_ id: MessageID) -> Bool {
@@ -63,9 +63,6 @@ enum ConversationMessageMerge {
             return next
         }
 
-        let incomingContent = contentKey(for: incoming)
-        let incomingSender = incoming.senderProfileID
-
         if let tempIndex = prev.firstIndex(where: { candidate in
             matchesOptimistic(candidate, server: incoming, viewerID: viewerID)
         }) {
@@ -107,12 +104,7 @@ enum ConversationMessageMerge {
     }
 
     static func sortByCreatedAt(_ messages: [Message]) -> [Message] {
-        messages.sorted { lhs, rhs in
-            if lhs.createdAt != rhs.createdAt {
-                return lhs.createdAt < rhs.createdAt
-            }
-            return lhs.id.rawValue < rhs.id.rawValue
-        }
+        MessageChronology.sortAscending(messages)
     }
 
     static func uniqueByID(_ messages: [Message]) -> [Message] {

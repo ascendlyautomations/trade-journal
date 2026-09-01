@@ -3,6 +3,7 @@ import SwiftUI
 /// Single ranked trader row — render-only.
 struct LeaderboardRowView: View {
     let row: LeaderboardRow
+    let profile: Profile
     let imagePipeline: any ImagePipeline
     let showsFollowButton: Bool
     let onOpen: () -> Void
@@ -18,11 +19,11 @@ struct LeaderboardRowView: View {
                     .frame(width: 36, alignment: .leading)
                     .monospacedDigit()
 
-                FollowListAvatarView(profile: row.profile, imagePipeline: imagePipeline, size: 44)
+                FollowListAvatarView(profile: profile, imagePipeline: imagePipeline, size: 44)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
-                        Text(row.profile.displayName)
+                        Text(profile.displayName)
                             .experienceStyle(.subheadline, color: colors.primaryText)
                             .fontWeight(.semibold)
                             .lineLimit(1)
@@ -32,9 +33,11 @@ struct LeaderboardRowView: View {
                                 .foregroundStyle(colors.accent)
                         }
                     }
-                    Text("@\(row.profile.username)")
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .lineLimit(1)
+                    if LeaderboardRowView.showsUsername(profile.username) {
+                        Text("@\(profile.username)")
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer(minLength: ExperienceSpacing.xs)
@@ -102,5 +105,9 @@ struct LeaderboardRowView: View {
         if row.primaryMetricText.hasPrefix("+") { return colors.success }
         if row.primaryMetricText.hasPrefix("-") { return colors.error }
         return colors.primaryText
+    }
+
+    static func showsUsername(_ username: String) -> Bool {
+        ProfileIdentitySanitizer.leaderboardUsername(username) != nil
     }
 }

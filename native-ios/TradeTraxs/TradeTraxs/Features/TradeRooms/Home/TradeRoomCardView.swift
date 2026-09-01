@@ -41,11 +41,15 @@ struct TradeRoomCardView: View {
                                 .experienceStyle(.caption, color: colors.secondaryText)
                                 .lineLimit(1)
                         }
-                        Text("·")
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                        Text("\(ProfileDisplay.compactCount(item.room.memberCount)) members")
-                            .experienceStyle(.caption, color: colors.secondaryText)
-                            .lineLimit(1)
+                        if let memberCount = item.room.memberCount {
+                            if item.ownerName?.isEmpty == false {
+                                Text("·")
+                                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                            }
+                            Text("\(ProfileDisplay.compactCount(memberCount)) members")
+                                .experienceStyle(.caption, color: colors.secondaryText)
+                                .lineLimit(1)
+                        }
                     }
 
                     Text(item.preview)

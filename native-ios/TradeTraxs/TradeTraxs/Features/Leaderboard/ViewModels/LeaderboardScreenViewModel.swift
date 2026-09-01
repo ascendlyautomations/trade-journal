@@ -19,6 +19,8 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
 
     private var bootstrapTask: Task<Void, Never>?
     private var filterGeneration: UInt64 = 0
+    /// Bumps when ``LeaderboardSessionStore/profilesByID`` changes so views re-resolve avatars.
+    private(set) var profileRevision: UInt64 = 0
     private var inFlightFollow: Set<ProfileID> = []
 
     init(
@@ -63,6 +65,11 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
             state.timeframe = store.timeframe
             state.category = store.category
             applyStoreToState(didPlayPodiumEntrance: true)
+            filterGeneration &+= 1
+            let generation = filterGeneration
+            bootstrapTask?.cancel()
+            bootstrapTask = Task { await hydrateVisibleProfiles(generation: generation) }
+            await bootstrapTask?.value
             return
         }
         guard bootstrapTask == nil, !state.didBootstrap else { return }
@@ -84,10 +91,12 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         defer { state.isLoadingMore = false }
 
         do {
+            let generation = filterGeneration
             var context = makeContext(cursor: cursor, forceNetwork: false)
             context.cachedTrades = store.rawTrades
             context.timeframe = state.timeframe
             let result = try await LeaderboardBootstrap.loadPage(context)
+            guard generation == filterGeneration, !Task.isCancelled else { return }
             store.appendEntries(
                 result.entries,
                 profiles: result.profiles,
@@ -96,9 +105,16 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
                 nextCursor: result.nextCursor
             )
             applyStoreToState(didPlayPodiumEntrance: state.didPlayPodiumEntrance)
+            await hydrateVisibleProfiles(generation: generation)
         } catch {
             // Keep existing rows; pagination errors are non-fatal.
         }
+    }
+
+    /// Current profile for a visible row — always reads the shared session dictionary.
+    func resolvedProfile(for profileID: ProfileID) -> Profile {
+        _ = profileRevision
+        return LeaderboardPresentation.resolveProfile(profileID, from: store.profilesByID)
     }
 
     func loadMoreIfNeeded(currentID: ProfileID) async {
@@ -116,7 +132,18 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         ExperienceHaptics.play(.selection)
         state.audience = next
         store.updateFilters(audience: next, timeframe: state.timeframe, category: state.category)
-        applyResolvedPresentationFromCache()
+        filterGeneration &+= 1
+        let generation = filterGeneration
+        if next == .friends, store.friendIDs.isEmpty {
+            bootstrapTask?.cancel()
+            bootstrapTask = Task {
+                await loadFriendsFilterIfNeeded(generation: generation)
+            }
+            return
+        }
+        reapplyPresentationFromStore()
+        bootstrapTask?.cancel()
+        bootstrapTask = Task { await hydrateVisibleProfiles(generation: generation) }
     }
 
     func setTimeframe(_ next: LeaderboardTimeframe) {
@@ -139,7 +166,11 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         ExperienceHaptics.play(.selection)
         state.category = next
         store.updateFilters(audience: state.audience, timeframe: state.timeframe, category: next)
-        applyStoreToState(didPlayPodiumEntrance: true)
+        filterGeneration &+= 1
+        let generation = filterGeneration
+        reapplyPresentationFromStore()
+        bootstrapTask?.cancel()
+        bootstrapTask = Task { await hydrateVisibleProfiles(generation: generation) }
     }
 
     func markPodiumEntrancePlayed() {
@@ -154,7 +185,8 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
 
     func openProfile(_ row: LeaderboardRow) {
         ExperienceHaptics.play(.selection)
-        detailCache.seed(row.profile)
+        let profile = resolvedProfile(for: row.profileID)
+        detailCache.seed(profile)
         if row.profileID == state.viewerID {
             navigationCoordinator.open(.tab(.profile))
             navigationCoordinator.open(.popToRoot(.profile))
@@ -202,6 +234,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     // MARK: - Private
 
     private func performBootstrap(forceNetwork: Bool, resetting: Bool) async {
+        let startedGeneration = filterGeneration
         if resetting, !state.isRefreshing, !store.hasBootstrapped {
             state.phase = .loading
         } else if resetting, !state.isRefreshing {
@@ -212,42 +245,28 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
             var context = makeContext(cursor: nil, forceNetwork: forceNetwork)
             context.timeframe = state.requestedTimeframe
             let result = try await LeaderboardBootstrap.loadPage(context)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, startedGeneration == filterGeneration else { return }
 
-            let windowResolved = LeaderboardTimeframeFallback.resolveWindow(
-                trades: result.trades,
-                requested: state.requestedTimeframe
-            )
-            applyResolvedTimeframe(windowResolved.resolution)
-
-            let presentationResult: LeaderboardBootstrap.Result
-            if windowResolved.resolution.effective == state.requestedTimeframe {
-                presentationResult = result
-            } else {
-                var hydratedContext = makeContext(cursor: nil, forceNetwork: false)
-                hydratedContext.timeframe = state.timeframe
-                hydratedContext.cachedTrades = result.trades
-                presentationResult = try await LeaderboardBootstrap.loadPage(hydratedContext)
-                guard !Task.isCancelled else { return }
-            }
+            applyResolvedTimeframe(result.timeframeResolution)
 
             store.applyBootstrap(
                 trades: result.trades,
-                entries: presentationResult.entries,
-                profiles: presentationResult.profiles,
-                verified: presentationResult.verified,
-                followers: presentationResult.followers,
-                following: presentationResult.following,
-                friends: presentationResult.friends,
-                viewerID: presentationResult.viewerID,
-                nextCursor: presentationResult.nextCursor,
+                entries: result.entries,
+                profiles: result.profiles,
+                verified: result.verified,
+                followers: result.followers,
+                following: result.following,
+                friends: result.friends,
+                viewerID: result.viewerID,
+                nextCursor: result.nextCursor,
                 audience: state.audience,
                 timeframe: state.timeframe,
                 category: state.category
             )
-            applyStoreToState(didPlayPodiumEntrance: !resetting && state.didPlayPodiumEntrance)
+            reapplyPresentationFromStore(didPlayPodiumEntrance: !resetting && state.didPlayPodiumEntrance)
+            await hydrateVisibleProfiles(generation: startedGeneration)
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, startedGeneration == filterGeneration else { return }
             if state.rows.isEmpty {
                 state.phase = .failed(Self.userFacingMessage(for: error))
                 state.didBootstrap = true
@@ -256,7 +275,31 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         bootstrapTask = nil
     }
 
+    private func loadFriendsFilterIfNeeded(generation: UInt64) async {
+        defer { bootstrapTask = nil }
+        guard store.audience == .friends, store.friendIDs.isEmpty else {
+            reapplyPresentationFromStore()
+            await hydrateVisibleProfiles(generation: generation)
+            return
+        }
+        guard let viewer = store.viewerID, !store.followingIDs.isEmpty else {
+            reapplyPresentationFromStore()
+            await hydrateVisibleProfiles(generation: generation)
+            return
+        }
+        let friends = await LeaderboardBootstrap.loadFriends(
+            viewer: viewer,
+            following: store.followingIDs,
+            context: makeContext(cursor: nil, forceNetwork: false)
+        )
+        guard generation == filterGeneration, !Task.isCancelled else { return }
+        store.mergeFriends(friends)
+        reapplyPresentationFromStore(didPlayPodiumEntrance: true)
+        await hydrateVisibleProfiles(generation: generation)
+    }
+
     private func refilterFromCachedTrades(generation: UInt64) async {
+        defer { bootstrapTask = nil }
         guard !store.rawTrades.isEmpty else {
             await performBootstrap(forceNetwork: false, resetting: true)
             return
@@ -266,18 +309,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
             state.phase = .loading
         }
 
-        let resolved = LeaderboardTimeframeFallback.resolvePage(
-            trades: store.rawTrades,
-            requested: state.requestedTimeframe,
-            audience: state.audience,
-            category: state.category,
-            profiles: store.profilesByID,
-            verified: store.verifiedIDs,
-            followers: store.followerCounts,
-            following: store.followingIDs,
-            friends: store.friendIDs,
-            viewerID: store.viewerID
-        )
+        let resolved = resolvedPageForCurrentFilters()
         guard generation == filterGeneration, !Task.isCancelled else { return }
 
         applyResolvedTimeframe(resolved.resolution)
@@ -287,15 +319,43 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
             timeframe: state.timeframe
         )
         applyStoreToState(didPlayPodiumEntrance: true)
-        bootstrapTask = nil
+        await hydrateVisibleProfiles(generation: generation)
     }
 
-    private func applyResolvedPresentationFromCache() {
+    private func hydrateVisibleProfiles(generation: UInt64) async {
+        let visibleIDs = visibleProfileIDsForCurrentFilters()
+        guard !visibleIDs.isEmpty else { return }
+
+        let hydrated = await LeaderboardBootstrap.hydrateMissingProfiles(
+            ids: visibleIDs,
+            trades: store.rawTrades,
+            existing: store.profilesByID,
+            context: makeContext(cursor: nil, forceNetwork: false)
+        )
+        guard generation == filterGeneration, !Task.isCancelled else { return }
+
+        store.mergeProfiles(hydrated, verified: [], followers: [:])
+        profileRevision &+= 1
+        reapplyPresentationFromStore(didPlayPodiumEntrance: state.didPlayPodiumEntrance)
+    }
+
+    private func reapplyPresentationFromStore(didPlayPodiumEntrance: Bool = true) {
         guard !store.rawTrades.isEmpty else {
-            applyStoreToState(didPlayPodiumEntrance: true)
+            applyStoreToState(didPlayPodiumEntrance: didPlayPodiumEntrance)
             return
         }
-        let resolved = LeaderboardTimeframeFallback.resolvePage(
+        let resolved = resolvedPageForCurrentFilters()
+        applyResolvedTimeframe(resolved.resolution)
+        store.replaceEntries(
+            resolved.entries,
+            nextCursor: resolved.nextCursor,
+            timeframe: state.timeframe
+        )
+        applyStoreToState(didPlayPodiumEntrance: didPlayPodiumEntrance)
+    }
+
+    private func resolvedPageForCurrentFilters() -> LeaderboardTimeframeFallback.ResolvedPage {
+        LeaderboardTimeframeFallback.resolvePage(
             trades: store.rawTrades,
             requested: state.requestedTimeframe,
             audience: state.audience,
@@ -307,13 +367,24 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
             friends: store.friendIDs,
             viewerID: store.viewerID
         )
-        applyResolvedTimeframe(resolved.resolution)
-        store.replaceEntries(
-            resolved.entries,
-            nextCursor: resolved.nextCursor,
-            timeframe: state.timeframe
+    }
+
+    private func visibleProfileIDsForCurrentFilters() -> [ProfileID] {
+        Array(
+            Set(
+                LeaderboardPresentation.rankedRows(
+                    entries: store.rawEntries,
+                    profiles: store.profilesByID,
+                    verified: store.verifiedIDs,
+                    followers: store.followerCounts,
+                    following: store.followingIDs,
+                    viewerID: store.viewerID,
+                    audience: state.audience,
+                    friends: store.friendIDs,
+                    category: state.category
+                ).map(\.profileID)
+            )
         )
-        applyStoreToState(didPlayPodiumEntrance: true)
     }
 
     private func applyResolvedTimeframe(_ resolution: LeaderboardTimeframeFallback.Resolution) {
@@ -344,6 +415,13 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         next.isRefreshing = state.isRefreshing
         next.isLoadingMore = state.isLoadingMore
         state = next
+        #if DEBUG
+        LeaderboardHydrationDiagnostics.log(
+            filter: "\(state.audience.rawValue)/\(state.timeframe.rawValue)/\(state.category.rawValue)",
+            rows: next.rows,
+            profiles: store.profilesByID
+        )
+        #endif
     }
 
     private func makeContext(cursor: String?, forceNetwork: Bool) -> LeaderboardBootstrap.Context {

@@ -1,6 +1,6 @@
 import Foundation
 
-enum ConversationThreadSupport {
+nonisolated enum ConversationThreadSupport {
     static func isLocalDevelopment(_ id: ProfileID) -> Bool {
         id.rawValue.hasPrefix("dev.")
     }

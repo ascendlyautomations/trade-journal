@@ -46,7 +46,7 @@ nonisolated struct MultipartFormData: Sendable {
     }
 }
 
-private extension Data {
+private nonisolated extension Data {
     mutating func append(_ string: String) {
         if let data = string.data(using: .utf8) {
             append(data)

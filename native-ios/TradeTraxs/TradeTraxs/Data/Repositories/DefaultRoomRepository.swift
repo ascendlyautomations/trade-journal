@@ -11,6 +11,12 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
     id,name,description,slug,image_url,owner_user_id,show_on_profile)
     """
 
+    /// Web `lib/roomMessageSelect.ts` — explicit embed hint avoids PGRST201.
+    private static let messageSelect = """
+    id,room_id,user_id,seen_by,pinned,section_id,parent_message_id,type,trade_id,content,image_url,created_at,\
+    room_message_reactions!room_message_reactions_message_room_fkey(id,message_id,user_id,reaction)
+    """
+
     init(supabase: SupabaseInfrastructure, cache: CacheStack = .placeholder()) {
         self.supabase = supabase
         self.cache = cache
@@ -95,6 +101,36 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
         )
     }
 
+    func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] {
+        let unique = Array(Set(roomIDs.map(\.rawValue))).filter { !$0.isEmpty }
+        guard !unique.isEmpty else { return [:] }
+
+        struct Row: Decodable, Sendable {
+            var room_id: String?
+        }
+
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "room_members",
+            query: [
+                SupabaseQuery.select("room_id"),
+                SupabaseQuery.isIn("room_id", unique),
+                URLQueryItem(name: "left_at", value: "is.null"),
+            ]
+        )
+
+        var counts: [RoomID: Int] = [:]
+        for row in rows {
+            guard let raw = row.room_id else { continue }
+            let roomID = RoomID(raw)
+            counts[roomID, default: 0] += 1
+        }
+        for roomID in roomIDs {
+            counts[roomID] = counts[roomID, default: 0]
+        }
+        return counts
+    }
+
     func membership(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership? {
         let rows: [RoomDTO.Membership] = try await supabase.database.select(
             RoomDTO.Membership.self,
@@ -167,7 +203,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
     ) async throws -> CursorPage<RoomMessage> {
         // Web `applySectionFiltersToQuery` / `sectionMessageFilter`.
         var query = SupabaseQuery.page(page) + [
-            SupabaseQuery.select("*"),
+            SupabaseQuery.select(Self.messageSelect),
             SupabaseQuery.eq("room_id", roomID.rawValue),
         ]
         if let channel {
@@ -246,6 +282,41 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
         return mapped
     }
 
+    func insertMessageReaction(
+        roomID: RoomID,
+        messageID: RoomMessageID,
+        userID: ProfileID,
+        reaction: String
+    ) async throws -> RoomMessageReaction {
+        struct Body: Encodable {
+            var message_id: String
+            var user_id: String
+            var reaction: String
+            var room_id: String
+        }
+        let row: RoomDTO.ReactionRow = try await supabase.database.insert(
+            Body(
+                message_id: messageID.rawValue,
+                user_id: userID.rawValue,
+                reaction: reaction,
+                room_id: roomID.rawValue
+            ),
+            into: "room_message_reactions",
+            returning: RoomDTO.ReactionRow.self
+        )
+        guard let mapped = mapReaction(row, fallbackMessageID: messageID) else {
+            throw AppError.unknown(message: "Could not update reaction.")
+        }
+        return mapped
+    }
+
+    func deleteMessageReaction(id: String) async throws {
+        try await supabase.database.delete(
+            from: "room_message_reactions",
+            query: [SupabaseQuery.eq("id", id)]
+        )
+    }
+
     func moderate(
         roomID: RoomID,
         messageID: RoomMessageID?,
@@ -294,7 +365,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
             slug: dto.slug ?? id,
             description: dto.description,
             image: dto.image_url.map { MediaReference(id: $0, kind: .image, altText: nil) },
-            memberCount: dto.member_count ?? 0,
+            memberCount: dto.member_count,
             showsOnProfile: dto.show_on_profile ?? true,
             createdAt: ISO8601.date(from: dto.created_at) ?? Date()
         )
@@ -365,10 +436,37 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
             body: dto.body ?? dto.content,
             attachedTradeID: tradeID,
             media: media,
-            parentMessageID: nil,
+            parentMessageID: dto.parent_message_id.map { RoomMessageID($0) },
             channelID: dto.section_id.map { RoomChannelID($0) },
             isPinned: dto.is_pinned ?? false,
-            createdAt: ISO8601.date(from: dto.created_at) ?? Date()
+            createdAt: ISO8601.date(from: dto.created_at) ?? Date(),
+            reactions: (dto.room_message_reactions ?? []).compactMap {
+                mapReaction($0, fallbackMessageID: RoomMessageID(id))
+            }
+        )
+    }
+
+    private func mapReaction(
+        _ dto: RoomDTO.ReactionRow,
+        fallbackMessageID: RoomMessageID
+    ) -> RoomMessageReaction? {
+        guard let id = dto.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
+              let reaction = dto.reaction?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !reaction.isEmpty,
+              RoomMessageReactionSemantics.supportedEmojis.contains(reaction)
+        else { return nil }
+        let messageRaw = dto.message_id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageID = messageRaw.flatMap { raw -> RoomMessageID? in
+            raw.isEmpty ? nil : RoomMessageID(raw)
+        } ?? fallbackMessageID
+        guard let userRaw = dto.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !userRaw.isEmpty
+        else { return nil }
+        return RoomMessageReaction(
+            id: id,
+            messageID: messageID,
+            userID: ProfileID(userRaw),
+            reaction: reaction,
+            createdAt: ISO8601.date(from: dto.created_at)
         )
     }
 

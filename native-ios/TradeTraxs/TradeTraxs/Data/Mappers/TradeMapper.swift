@@ -8,8 +8,10 @@ nonisolated enum TradeMapper: DTOMapper {
         guard let id = dto.id, !id.isEmpty else { throw MappingError.missingField("id") }
         guard let owner = dto.user_id, !owner.isEmpty else { throw MappingError.missingField("user_id") }
 
-        let ticker = dto.ticker?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !ticker.isEmpty else { throw MappingError.missingField("ticker") }
+        let tickerRaw = dto.ticker?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if tickerRaw.isEmpty {
+            TradeMappingTelemetry.recordMissingTicker()
+        }
 
         let entryAt =
             ISO8601.date(from: dto.entry_time)
@@ -19,7 +21,7 @@ nonisolated enum TradeMapper: DTOMapper {
         guard let entryAt else { throw MappingError.missingField("entry_time") }
 
         let side = mapSide(dto.direction)
-        let mode = mapMode(dto.mode ?? dto.account_type)
+        let mode = mapMode(dto.trade_mode ?? dto.mode ?? dto.account_type)
         let quantity = DecimalParser.parseFlexible(dto.contracts) ?? 0
         let visibility: ContentVisibility = (dto.is_public == true) ? .public : .private
         let createdAt = ISO8601.date(from: dto.created_at) ?? entryAt
@@ -28,12 +30,21 @@ nonisolated enum TradeMapper: DTOMapper {
         let note = dto.notes?.trimmingCharacters(in: .whitespacesAndNewlines)
         let imageURL = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
         let strategy = dto.strategy?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let durationText = dto.duration_text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let durationSeconds = DecimalParser.parseFlexible(dto.duration_seconds).map {
+            Int(truncating: NSDecimalNumber(decimal: $0))
+        }
+        let publicBadge = PublicTradeAccountBadge.label(
+            tradeMode: dto.mode,
+            accountType: dto.account_type
+        )
 
+        TradeMappingTelemetry.recordDecoded()
         return Trade(
             id: TradeID(id),
             ownerProfileID: ProfileID(owner),
             accountID: dto.account_id.map { TradingAccountID($0) },
-            symbol: Symbol(ticker: ticker),
+            symbol: Symbol(ticker: tickerRaw),
             side: side,
             mode: mode,
             quantity: quantity,
@@ -51,6 +62,9 @@ nonisolated enum TradeMapper: DTOMapper {
             // Longer preview for journal cards (Profile still line-limits).
             notePreview: note.flatMap { $0.isEmpty ? nil : String($0.prefix(360)) },
             strategy: strategy.flatMap { $0.isEmpty ? nil : $0 },
+            durationText: durationText.flatMap { $0.isEmpty ? nil : $0 },
+            durationSeconds: durationSeconds.flatMap { $0 > 0 ? $0 : nil },
+            publicAccountBadge: publicBadge,
             createdAt: createdAt,
             updatedAt: createdAt
         )
@@ -83,7 +97,10 @@ nonisolated enum TradeMapper: DTOMapper {
             date: ISO8601.string(from: domain.createdAt),
             trade_date: nil,
             account_name: nil,
-            strategy: domain.strategy
+            strategy: domain.strategy,
+            duration_seconds: domain.durationSeconds.map { FlexibleNumber(Decimal($0)) },
+            duration_text: domain.durationText,
+            trade_mode: domain.mode == .copyTraded ? "copy_traded" : domain.mode.rawValue
         )
     }
 
@@ -94,11 +111,20 @@ nonisolated enum TradeMapper: DTOMapper {
             ?? TradingSessionLabel.session(from: draft.entryAt)
             ?? "NY"
         let modeLabel = draft.accountModeLabel ?? draft.mode.rawValue
+        let isPublic = draft.visibility == .public
+        let accountFields = PublicAccountPrivacy.sanitizedTradeAccountFieldsForSave(
+            accountName: draft.accountName,
+            accountSize: draft.accountSizeLabel,
+            accountNumber: draft.ownerAccountNumber,
+            category: draft.ownerAccountCategory,
+            mode: draft.ownerAccountMode,
+            isPublic: isPublic
+        )
         return TradeDTO.InsertBody(
             user_id: userID.rawValue,
             account_id: draft.accountID?.rawValue,
-            account_name: draft.accountName,
-            account_size: draft.accountSizeLabel,
+            account_name: accountFields.accountName,
+            account_size: accountFields.accountSize,
             account_type: modeLabel,
             account_category: draft.accountCategoryLabel,
             ticker: draft.symbol.ticker.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
@@ -131,10 +157,19 @@ nonisolated enum TradeMapper: DTOMapper {
             ?? TradingSessionLabel.session(from: draft.entryAt)
             ?? "NY"
         let modeLabel = draft.accountModeLabel ?? draft.mode.rawValue
+        let isPublic = draft.visibility == .public
+        let accountFields = PublicAccountPrivacy.sanitizedTradeAccountFieldsForSave(
+            accountName: draft.accountName,
+            accountSize: draft.accountSizeLabel,
+            accountNumber: draft.ownerAccountNumber,
+            category: draft.ownerAccountCategory,
+            mode: draft.ownerAccountMode,
+            isPublic: isPublic
+        )
         return TradeDTO.UpdateBody(
             account_id: draft.accountID?.rawValue,
-            account_name: draft.accountName,
-            account_size: draft.accountSizeLabel,
+            account_name: accountFields.accountName,
+            account_size: accountFields.accountSize,
             account_type: modeLabel,
             account_category: draft.accountCategoryLabel,
             ticker: draft.symbol.ticker.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
@@ -197,12 +232,13 @@ nonisolated enum ProfileMapper: DTOMapper {
     static func mapToDomain(_ dto: DTO) throws -> Profile {
         guard let id = dto.id else { throw MappingError.missingField("id") }
         let username = dto.username ?? id
+        let displayName = dto.name ?? username
 
         return Profile(
             id: ProfileID(id),
             userID: UserID(id),
             username: username,
-            displayName: dto.name ?? username,
+            displayName: displayName,
             bio: dto.bio,
             avatar: dto.avatar_url.flatMap { url in
                 let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -436,6 +472,8 @@ nonisolated enum TradingAccountMapper {
             size: sizeValue.map { Money(amount: $0) },
             isActive: dto.is_active ?? true,
             canAddTrades: dto.can_add_trades ?? true,
+            showInAccountDropdowns: dto.show_in_account_dropdowns ?? true,
+            customPublicStatus: normalizedOptionalText(dto.custom_public_status),
             accountNumber: (number?.isEmpty == false) ? number : nil,
             note: (note?.isEmpty == false) ? note : nil,
             propFirmRules: rules
@@ -531,6 +569,188 @@ nonisolated enum TradingAccountMapper {
             return .backtest
         default:
             return .personal
+        }
+    }
+
+    private static func normalizedOptionalText(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+nonisolated enum AccountPayoutEntryMapper {
+    static func mapToDomain(_ dto: TradeDTO.AccountPayoutEntryRow) throws -> AccountPayoutEntry {
+        guard let id = dto.id else { throw MappingError.missingField("id") }
+        guard let accountID = dto.account_id else { throw MappingError.missingField("account_id") }
+        guard let amount = DecimalParser.parseFlexible(dto.amount) else {
+            throw MappingError.missingField("amount")
+        }
+        guard let payoutDateRaw = dto.payout_date,
+              let payoutDate = ISO8601.date(from: payoutDateRaw)
+                ?? ISO8601.date(from: "\(payoutDateRaw)T00:00:00Z") else {
+            throw MappingError.missingField("payout_date")
+        }
+        let note = dto.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return AccountPayoutEntry(
+            id: AccountPayoutEntryID(id),
+            accountID: TradingAccountID(accountID),
+            amount: Money(amount: amount, currencyCode: "USD"),
+            payoutDate: payoutDate,
+            note: (note?.isEmpty == false) ? note : nil
+        )
+    }
+
+    static func writeBody(
+        ownerID: ProfileID,
+        accountID: TradingAccountID,
+        draft: AccountPayoutEntryDraft
+    ) throws -> TradeDTO.AccountPayoutEntryWriteBody {
+        let amountDigits = draft.amountDigits.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let amount = Decimal(string: amountDigits), amount > 0 else {
+            throw AppError.unknown(message: "Enter a payout amount greater than zero.")
+        }
+        let note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return TradeDTO.AccountPayoutEntryWriteBody(
+            account_id: accountID.rawValue,
+            user_id: ownerID.rawValue,
+            amount: NSDecimalNumber(decimal: amount).doubleValue,
+            payout_date: formatter.string(from: draft.payoutDate),
+            note: note.isEmpty ? nil : note
+        )
+    }
+
+    static func updateBody(from draft: AccountPayoutEntryDraft) throws -> TradeDTO.AccountPayoutEntryUpdateBody {
+        let amountDigits = draft.amountDigits.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let amount = Decimal(string: amountDigits), amount > 0 else {
+            throw AppError.unknown(message: "Enter a payout amount greater than zero.")
+        }
+        let note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return TradeDTO.AccountPayoutEntryUpdateBody(
+            amount: NSDecimalNumber(decimal: amount).doubleValue,
+            payout_date: formatter.string(from: draft.payoutDate),
+            note: note.isEmpty ? nil : note
+        )
+    }
+}
+
+nonisolated enum ProfileAccountInsightMapper {
+    struct WireAccount: Decodable, Sendable {
+        var id: String
+        var name: String?
+        var category: String?
+        var type: String?
+        var custom_status: String?
+        var payout_total: FlexibleNumber?
+        var payouts: [WirePayout]?
+    }
+
+    struct WirePayout: Decodable, Sendable {
+        var id: String
+        var amount: FlexibleNumber?
+        var payout_date: String?
+        var note: String?
+    }
+
+    struct WireEnvelope: Decodable, Sendable {
+        struct Meta: Decodable, Sendable {
+            var contract_version: Int?
+            var found: Bool?
+            var can_view: Bool?
+            var is_own: Bool?
+        }
+
+        struct DataBlock: Decodable, Sendable {
+            var accounts: [WireAccount]?
+        }
+
+        var meta: Meta?
+        var data: DataBlock?
+    }
+
+    static func mapAccounts(from data: Data) throws -> [ProfileAccountInsight] {
+        let envelope = try JSONDecoder().decode(WireEnvelope.self, from: data)
+        guard envelope.meta?.found != false else { return [] }
+        guard envelope.meta?.can_view != false else { return [] }
+        let rows = envelope.data?.accounts ?? []
+        return rows.compactMap { row in
+            guard !row.id.isEmpty else { return nil }
+            let name = row.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let category = mapCategory(row.category)
+            let mode = mapMode(row.type)
+            let safeName = PublicAccountPrivacy.publicSafeAccountName(
+                rawName: name,
+                accountNumber: nil,
+                category: category,
+                mode: mode
+            )
+            guard !safeName.isEmpty else { return nil }
+            let payouts: [AccountPayoutEntry] = (row.payouts ?? []).compactMap { payout in
+                guard let amount = DecimalParser.parseFlexible(payout.amount) else { return nil }
+                guard let dateRaw = payout.payout_date,
+                      let date = ISO8601.date(from: dateRaw)
+                        ?? ISO8601.date(from: "\(dateRaw)T00:00:00Z") else { return nil }
+                let note = payout.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return AccountPayoutEntry(
+                    id: AccountPayoutEntryID(payout.id),
+                    accountID: TradingAccountID(row.id),
+                    amount: Money(amount: amount, currencyCode: "USD"),
+                    payoutDate: date,
+                    note: (note?.isEmpty == false) ? note : nil
+                )
+            }
+            let total = DecimalParser.parseFlexible(row.payout_total)
+                ?? payouts.reduce(Decimal.zero) { $0 + $1.amount.amount }
+            return ProfileAccountInsight(
+                id: TradingAccountID(row.id),
+                name: safeName,
+                category: category,
+                mode: mode,
+                customStatus: normalizedOptionalText(row.custom_status),
+                payoutTotal: Money(amount: total, currencyCode: "USD"),
+                payouts: payouts
+            )
+        }
+    }
+
+    private static func normalizedOptionalText(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func mapCategory(_ raw: String?) -> TradingAccountCategory {
+        let normalized = (raw ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "-", with: "")
+        switch normalized {
+        case "propfirm", "prop": return .propFirm
+        case "broker": return .broker
+        case "backtest": return .backtest
+        default: return .personal
+        }
+    }
+
+    private static func mapMode(_ raw: String?) -> TradingAccountMode {
+        switch (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "eval", "evaluation": return .evaluation
+        case "funded": return .funded
+        case "sim": return .sim
+        case "backtest": return .backtest
+        default: return .live
         }
     }
 }

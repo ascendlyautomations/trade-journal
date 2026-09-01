@@ -40,6 +40,12 @@ nonisolated struct TradingAccountID: Hashable, Codable, Sendable, RawRepresentab
     init(_ rawValue: String) { self.rawValue = rawValue }
 }
 
+nonisolated struct AccountPayoutEntryID: Hashable, Codable, Sendable, RawRepresentable {
+    let rawValue: String
+    init(rawValue: String) { self.rawValue = rawValue }
+    init(_ rawValue: String) { self.rawValue = rawValue }
+}
+
 nonisolated struct JournalID: Hashable, Codable, Sendable, RawRepresentable {
     let rawValue: String
     init(rawValue: String) { self.rawValue = rawValue }

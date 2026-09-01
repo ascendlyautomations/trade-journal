@@ -31,11 +31,13 @@ final class ExploreViewModel {
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator
     private let store: ExploreSessionStore
+    private let rpc: (any RPCClient)?
 
     private var viewerID: ProfileID?
     private var bootstrapTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var enrichTask: Task<Void, Never>?
+    private var hydrateTask: Task<Void, Never>?
     private var inFlightFollow: Set<ProfileID> = []
 
     #if DEBUG
@@ -49,7 +51,8 @@ final class ExploreViewModel {
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
-        store: ExploreSessionStore? = nil
+        store: ExploreSessionStore? = nil,
+        rpc: (any RPCClient)? = nil
     ) {
         self.explore = explore
         self.search = search
@@ -58,6 +61,7 @@ final class ExploreViewModel {
         self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
         self.store = store ?? .shared
+        self.rpc = rpc
     }
 
     var suggestedTraders: [ExploreTraderSuggestion] { store.suggestedTraders }
@@ -88,10 +92,16 @@ final class ExploreViewModel {
     func loadIfNeeded() {
         if store.hasBootstrapped {
             phase = .loaded
+            hydrateTask?.cancel()
+            hydrateTask = Task { await rehydrateStoredTradersIfNeeded() }
             return
         }
         guard bootstrapTask == nil else { return }
         bootstrapTask = Task { await bootstrap() }
+    }
+
+    func resolvedProfile(for trader: ExploreTraderSuggestion) -> Profile {
+        detailCache.profile(id: trader.id)?.mergingCachedPresentation(with: trader.profile) ?? trader.profile
     }
 
     func refresh() async {
@@ -235,6 +245,11 @@ final class ExploreViewModel {
         navigationCoordinator.open(.feed(.leaderboard))
     }
 
+    func openSuggestedTraders() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.open(.feed(.suggestedTraders))
+    }
+
     // MARK: - Private
 
     private func bootstrap() async {
@@ -266,6 +281,36 @@ final class ExploreViewModel {
             return
         }
 
+        if let viewerID, let rpc,
+           let applied = try? await ExploreBootstrapLoader.load(
+               viewerID: viewerID,
+               rpc: rpc,
+               detailCache: detailCache
+           )
+        {
+            #if DEBUG
+            ExploreLoadProbe.noteRequest("rpc_v1_explore_bootstrap", blocking: true)
+            #endif
+            for trader in applied.traders { detailCache.seed(trader.profile) }
+            store.applyBootstrap(
+                traders: applied.traders,
+                rooms: applied.rooms,
+                following: applied.followingIDs,
+                tradersNextCursor: applied.tradersNextCursor
+            )
+            phase = .loaded
+            #if DEBUG
+            lastProbe = ExploreLoadProbe.firstUsefulRender(
+                sections: [
+                    applied.traders.isEmpty ? nil : "suggestedTraders",
+                    applied.rooms.isEmpty ? nil : "popularRooms",
+                ].compactMap { $0 }
+            )
+            #endif
+            bootstrapTask = nil
+            return
+        }
+
         // First useful paint: 2 parallel discovery calls. Following IDs hydrate after.
         async let profilesPage = fetchProfilesPage(cursor: nil)
         async let roomsResult = fetchRooms()
@@ -284,13 +329,23 @@ final class ExploreViewModel {
             exclude.formUnion(cachedFollowing)
         }
 
+        let apiProfiles = Dictionary(uniqueKeysWithValues: (page?.items ?? []).map { ($0.id, $0) })
         let ranked = ExploreTraderRanking.rank(
             profiles: page?.items ?? [],
             excluding: exclude,
             limit: 16,
             minScore: 3
         )
-        for trader in ranked { detailCache.seed(trader.profile) }
+        var confirmedAbsent = store.avatarConfirmedAbsentIDs
+        let (hydrated, _) = await ExploreProfileHydration.hydrateTraders(
+            ranked,
+            authoritativeProfiles: apiProfiles,
+            detailCache: detailCache,
+            repository: profiles,
+            confirmedAbsent: &confirmedAbsent
+        )
+        store.updateAvatarConfirmedAbsent(confirmedAbsent)
+        for trader in hydrated { detailCache.seed(trader.profile) }
 
         if page == nil && rooms == nil {
             phase = .failed("Couldn't load Explore")
@@ -299,7 +354,7 @@ final class ExploreViewModel {
         }
 
         store.applyBootstrap(
-            traders: ranked,
+            traders: hydrated,
             rooms: rooms ?? [],
             following: detailCache.viewerFollowingIDs() ?? [],
             tradersNextCursor: page?.nextCursor
@@ -315,7 +370,7 @@ final class ExploreViewModel {
         #if DEBUG
         lastProbe = ExploreLoadProbe.firstUsefulRender(
             sections: [
-                ranked.isEmpty ? nil : "suggestedTraders",
+                hydrated.isEmpty ? nil : "suggestedTraders",
                 (rooms?.isEmpty == false) ? "popularRooms" : nil,
             ].compactMap { $0 }
         )
@@ -346,19 +401,28 @@ final class ExploreViewModel {
         let counts = (try? await explore.socialCounts(for: ids)) ?? .empty
         guard !Task.isCancelled, !store.suggestedTraders.isEmpty else { return }
 
-        let profiles = store.suggestedTraders.map(\.profile)
+        let traderProfiles = store.suggestedTraders.map(\.profile)
         var exclude = store.viewerFollowingIDs
         if let viewerID { exclude.insert(viewerID) }
         let reranked = ExploreTraderRanking.rank(
-            profiles: profiles,
+            profiles: traderProfiles,
             tradeSummaries: summaries,
             followerCounts: counts.followers,
             excluding: exclude,
             limit: max(16, store.suggestedTraders.count),
             minScore: 1
         )
+        var confirmedAbsent = store.avatarConfirmedAbsentIDs
+        let (hydrated, _) = await ExploreProfileHydration.hydrateTraders(
+            reranked,
+            authoritativeProfiles: [:],
+            detailCache: detailCache,
+            repository: profiles,
+            confirmedAbsent: &confirmedAbsent
+        )
+        store.updateAvatarConfirmedAbsent(confirmedAbsent)
         store.applyBootstrap(
-            traders: reranked,
+            traders: hydrated,
             rooms: store.popularRooms,
             following: store.viewerFollowingIDs,
             tradersNextCursor: store.tradersNextCursor,
@@ -368,6 +432,30 @@ final class ExploreViewModel {
 
     private func loadMoreTraders() async {
         guard let cursor = store.tradersNextCursor else { return }
+
+        if let viewerID, let rpc,
+           let offset = Int(cursor),
+           let applied = try? await ExploreBootstrapLoader.load(
+               viewerID: viewerID,
+               rpc: rpc,
+               detailCache: detailCache,
+               traderOffset: offset
+           )
+        {
+            var confirmedAbsent = store.avatarConfirmedAbsentIDs
+            let (hydrated, _) = await ExploreProfileHydration.hydrateTraders(
+                applied.traders,
+                authoritativeProfiles: [:],
+                detailCache: detailCache,
+                repository: profiles,
+                confirmedAbsent: &confirmedAbsent
+            )
+            store.updateAvatarConfirmedAbsent(confirmedAbsent)
+            for trader in hydrated { detailCache.seed(trader.profile) }
+            store.appendTraders(hydrated, nextCursor: applied.tradersNextCursor)
+            return
+        }
+
         guard let page = await fetchProfilesPage(cursor: cursor) else { return }
         var exclude = store.viewerFollowingIDs
         if let viewerID { exclude.insert(viewerID) }
@@ -378,8 +466,34 @@ final class ExploreViewModel {
             limit: page.items.count,
             minScore: 2
         )
-        for trader in ranked { detailCache.seed(trader.profile) }
-        store.appendTraders(ranked, nextCursor: page.nextCursor)
+        var confirmedAbsent = store.avatarConfirmedAbsentIDs
+        let apiProfiles = Dictionary(uniqueKeysWithValues: page.items.map { ($0.id, $0) })
+        let (hydrated, _) = await ExploreProfileHydration.hydrateTraders(
+            ranked,
+            authoritativeProfiles: apiProfiles,
+            detailCache: detailCache,
+            repository: profiles,
+            confirmedAbsent: &confirmedAbsent
+        )
+        store.updateAvatarConfirmedAbsent(confirmedAbsent)
+        for trader in hydrated { detailCache.seed(trader.profile) }
+        store.appendTraders(hydrated, nextCursor: page.nextCursor)
+    }
+
+    private func rehydrateStoredTradersIfNeeded() async {
+        guard !store.suggestedTraders.isEmpty else { return }
+        var confirmedAbsent = store.avatarConfirmedAbsentIDs
+        let (hydrated, _) = await ExploreProfileHydration.hydrateTraders(
+            store.suggestedTraders,
+            authoritativeProfiles: [:],
+            detailCache: detailCache,
+            repository: profiles,
+            confirmedAbsent: &confirmedAbsent
+        )
+        guard !Task.isCancelled else { return }
+        store.updateAvatarConfirmedAbsent(confirmedAbsent)
+        store.replaceTraders(hydrated)
+        hydrateTask = nil
     }
 
     private func performSearch(query: String) async {
@@ -387,7 +501,8 @@ final class ExploreViewModel {
             async let peoplePage = search.search(
                 query: query,
                 kinds: [.profile],
-                page: PageRequest(limit: 12)
+                page: PageRequest(limit: 12),
+                excludingProfileID: viewerID
             )
             async let rooms = explore.searchRooms(query: query, limit: 12)
             let page = try await peoplePage
@@ -398,31 +513,57 @@ final class ExploreViewModel {
                 guard item.kind == .profile, let id = item.profileID, id != viewerID else { return nil }
                 return id
             }
+            var confirmedAbsent = store.avatarConfirmedAbsentIDs
             let fetchedProfiles = (try? await SessionProfileStore.shared.profiles(
                 ids: profileIDs,
                 detailCache: detailCache,
-                repository: profiles
+                repository: profiles,
+                acceptCached: { ExploreProfileHydration.isAvatarResolved($0, confirmedAbsent: confirmedAbsent) }
             )) ?? []
-            let byID = Dictionary(uniqueKeysWithValues: fetchedProfiles.map { ($0.id, $0) })
+            let authoritative = Dictionary(uniqueKeysWithValues: fetchedProfiles.map { ($0.id, $0) })
+            for profile in fetchedProfiles {
+                if profile.avatar == nil {
+                    confirmedAbsent.insert(profile.id)
+                } else {
+                    confirmedAbsent.remove(profile.id)
+                }
+            }
+            store.updateAvatarConfirmedAbsent(confirmedAbsent)
 
             var people: [ExploreTraderSuggestion] = []
             for result in page.items where result.kind == .profile {
                 guard let id = result.profileID, id != viewerID else { continue }
-                let profile = byID[id] ?? detailCache.profile(id: id) ?? Profile(
-                    id: id,
-                    userID: UserID(id.rawValue),
-                    username: result.title,
-                    displayName: result.subtitle ?? result.title,
-                    bio: nil,
-                    avatar: nil,
-                    traderType: nil,
-                    tradingStyle: nil,
-                    primaryMarket: nil,
-                    startedTradingAt: nil,
-                    isPrivate: false,
-                    isCreator: false,
-                    createdAt: .now
-                )
+                let profile = authoritative[id]
+                    ?? detailCache.profile(id: id)?.mergingCachedPresentation(with: Profile(
+                        id: id,
+                        userID: UserID(id.rawValue),
+                        username: result.title,
+                        displayName: result.subtitle ?? result.title,
+                        bio: nil,
+                        avatar: nil,
+                        traderType: nil,
+                        tradingStyle: nil,
+                        primaryMarket: nil,
+                        startedTradingAt: nil,
+                        isPrivate: false,
+                        isCreator: false,
+                        createdAt: .now
+                    ))
+                    ?? Profile(
+                        id: id,
+                        userID: UserID(id.rawValue),
+                        username: result.title,
+                        displayName: result.subtitle ?? result.title,
+                        bio: nil,
+                        avatar: nil,
+                        traderType: nil,
+                        tradingStyle: nil,
+                        primaryMarket: nil,
+                        startedTradingAt: nil,
+                        isPrivate: false,
+                        isCreator: false,
+                        createdAt: .now
+                    )
                 people.append(
                     ExploreTraderSuggestion(
                         profile: profile,
@@ -432,7 +573,16 @@ final class ExploreViewModel {
                     )
                 )
             }
-            searchPeople = people
+            var searchConfirmedAbsent = store.avatarConfirmedAbsentIDs
+            let (hydratedPeople, _) = await ExploreProfileHydration.hydrateTraders(
+                people,
+                authoritativeProfiles: authoritative,
+                detailCache: detailCache,
+                repository: profiles,
+                confirmedAbsent: &searchConfirmedAbsent
+            )
+            store.updateAvatarConfirmedAbsent(searchConfirmedAbsent)
+            searchPeople = hydratedPeople
             searchRooms = roomHits
             searchPhase = .idle
         } catch {

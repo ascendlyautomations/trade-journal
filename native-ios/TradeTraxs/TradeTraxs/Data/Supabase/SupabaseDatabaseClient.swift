@@ -37,6 +37,13 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
         returning type: T.Type
     ) async throws -> T
 
+    /// Bulk-safe PostgREST patch — `return=minimal` (no single-row Accept header).
+    func update<Body: Encodable>(
+        _ body: Body,
+        table: String,
+        query: [URLQueryItem]
+    ) async throws
+
     /// PostgREST upsert (`Prefer: resolution=merge-duplicates`).
     func upsert<Body: Encodable, T: Decodable>(
         _ body: Body,
@@ -227,6 +234,25 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
         }
     }
 
+    func update<Body: Encodable>(
+        _ body: Body,
+        table: String,
+        query: [URLQueryItem]
+    ) async throws {
+        let data = try transport.encodeJSON(body)
+        _ = try await transport.send(
+            host: .supabase,
+            path: "/rest/v1/\(table)",
+            method: .patch,
+            queryItems: query,
+            headers: [
+                "Prefer": "return=minimal",
+                "Accept": "application/json",
+            ],
+            body: data
+        )
+    }
+
     func upsert<Body: Encodable, T: Decodable>(
         _ body: Body,
         into table: String,
@@ -271,11 +297,19 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
     }
 
     func rpcData(functionName: String, parametersJSON: Data?) async throws -> Data {
+        let correlation = BackendV2RpcStageTracer.begin(functionName)
+        BackendV2RpcStageTracer.trace(functionName, stage: "urlsession.task.started", correlation: correlation)
         let response = try await transport.send(
             host: .supabase,
             path: "/rest/v1/rpc/\(functionName)",
             method: .post,
             body: parametersJSON ?? Data("{}".utf8)
+        )
+        BackendV2RpcStageTracer.trace(
+            functionName,
+            stage: "http.response.received",
+            correlation: correlation,
+            detail: "status=\(response.statusCode) bytes=\(response.data.count)"
         )
         return response.data
     }
@@ -331,6 +365,15 @@ nonisolated struct UnconfiguredSupabaseDatabaseClient: SupabaseDatabaseExecuting
         returning type: T.Type
     ) async throws -> T {
         _ = (body, table, query, type)
+        throw AppError.authentication(.notConfigured)
+    }
+
+    func update<Body: Encodable>(
+        _ body: Body,
+        table: String,
+        query: [URLQueryItem]
+    ) async throws {
+        _ = (body, table, query)
         throw AppError.authentication(.notConfigured)
     }
 

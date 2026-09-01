@@ -5,7 +5,7 @@ struct ProfileActionRow: View {
     enum Mode: Equatable {
         case owner(hasTradeRoom: Bool)
         /// `showsTradeRoom` mirrors web `canShowVisitorRoomCta` (View Trade Room only).
-        case visitor(isFollowing: Bool, showsTradeRoom: Bool)
+        case visitor(isFollowing: Bool, isRequested: Bool, showsTradeRoom: Bool)
     }
 
     let mode: Mode
@@ -32,8 +32,12 @@ struct ProfileActionRow: View {
                         : "profile.createTradeRoom",
                     action: hasTradeRoom ? onViewTradeRoom : onCreateTradeRoom
                 )
-            case .visitor(let isFollowing, let showsTradeRoom):
-                visitorRow(isFollowing: isFollowing, showsTradeRoom: showsTradeRoom)
+            case .visitor(let isFollowing, let isRequested, let showsTradeRoom):
+                visitorRow(
+                    isFollowing: isFollowing,
+                    isRequested: isRequested,
+                    showsTradeRoom: showsTradeRoom
+                )
             }
         }
         .padding(.top, ExperienceSpacing.xxs)
@@ -59,12 +63,14 @@ struct ProfileActionRow: View {
         }
     }
 
-    private func visitorRow(isFollowing: Bool, showsTradeRoom: Bool) -> some View {
+    private func visitorRow(isFollowing: Bool, isRequested: Bool, showsTradeRoom: Bool) -> some View {
         HStack(spacing: ExperienceSpacing.xs) {
             actionChip(
-                title: isFollowing ? "Following" : "Follow",
-                style: isFollowing ? .outline : .filled,
-                accessibilityIdentifier: isFollowing ? "profile.followingButton" : "profile.follow",
+                title: isFollowing ? "Following" : (isRequested ? "Requested" : "Follow"),
+                style: (isFollowing || isRequested) ? .outline : .filled,
+                accessibilityIdentifier: isFollowing
+                    ? "profile.followingButton"
+                    : (isRequested ? "profile.requestedButton" : "profile.follow"),
                 action: onFollow
             )
             actionChip(

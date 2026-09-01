@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsAccountView: View {
     @State private var viewModel: SettingsAccountViewModel
 
+    @Environment(\.stackNavigation) private var stackNavigation
     @Environment(\.themeColors) private var colors
 
     init(
@@ -51,7 +52,8 @@ struct SettingsAccountView: View {
 
             Section("Security") {
                 Button {
-                    viewModel.openSecurity()
+                    ExperienceHaptics.play(.selection)
+                    stackNavigation?.pushSettings(.security)
                 } label: {
                     SettingsNavigationRow(title: "Password & Security", systemImage: "lock.shield")
                 }

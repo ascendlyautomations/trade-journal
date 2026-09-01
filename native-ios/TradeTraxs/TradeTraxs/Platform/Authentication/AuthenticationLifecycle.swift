@@ -2,9 +2,11 @@ import Foundation
 import OSLog
 
 /// App lifecycle hooks for authentication (background / foreground).
+@Observable
 final class AuthenticationLifecycle {
     private let authenticationManager: AuthenticationManager
     private let authenticationCoordinator: AuthenticationCoordinator
+    private(set) var initialRestoreCompleted = false
 
     init(
         authenticationManager: AuthenticationManager,
@@ -15,18 +17,19 @@ final class AuthenticationLifecycle {
     }
 
     func applicationDidLaunch() async {
-        AppLog.authentication.info("AuthenticationLifecycle — deferred session refresh")
+        AppLog.authentication.debug("AuthenticationLifecycle — initial session restore")
         await authenticationCoordinator.bootstrapSession()
+        initialRestoreCompleted = true
     }
 
     func applicationDidEnterBackground() {
-        // Tokens remain in Keychain; in-memory session retained for quick resume.
         AppLog.authentication.debug("AuthenticationLifecycle — background")
     }
 
     func applicationWillEnterForeground() async {
-        guard let session = authenticationManager.state.session else { return }
-        if session.isExpired {
+        guard initialRestoreCompleted else { return }
+        guard authenticationManager.state.session != nil else { return }
+        if authenticationManager.sessionNeedsRefresh() {
             await authenticationCoordinator.bootstrapSession()
         }
     }

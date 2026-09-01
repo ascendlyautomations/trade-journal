@@ -10,6 +10,7 @@ final class ProfileHeaderViewModel {
     private let messages: any MessageRepository
     private let session: any SessionProviding
     private let navigationCoordinator: NavigationCoordinator
+    private let detailCache: DetailPresentationCache
 
     var isSharePresented: Bool = false
     var pendingUnfollowConfirm = false
@@ -19,12 +20,14 @@ final class ProfileHeaderViewModel {
         store: ProfileContentStore,
         messages: any MessageRepository,
         session: any SessionProviding,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        detailCache: DetailPresentationCache
     ) {
         self.store = store
         self.messages = messages
         self.session = session
         self.navigationCoordinator = navigationCoordinator
+        self.detailCache = detailCache
     }
 
     var phase: ProfileContentStore.Phase { store.phase }
@@ -45,6 +48,7 @@ final class ProfileHeaderViewModel {
         }
         return .visitor(
             isFollowing: store.isFollowing,
+            isRequested: store.isRequested,
             showsTradeRoom: store.canShowVisitorTradeRoomCTA
         )
     }
@@ -76,12 +80,12 @@ final class ProfileHeaderViewModel {
 
     func openSettings() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.openSettings([.home])
+        navigationCoordinator.pushProfile(.settings(.home))
     }
 
     func openEditProfile() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.openSettings([.home, .profile])
+        navigationCoordinator.pushProfile(.settings(.profile))
     }
 
     func presentShare() {
@@ -137,6 +141,7 @@ final class ProfileHeaderViewModel {
 
     private func openOrCreateConversation() async {
         guard let targetID = store.resolvedProfileID ?? store.profile?.id else { return }
+        guard let profile = store.profile else { return }
         guard let viewerRaw = await session.currentUserID?.rawValue else { return }
         let viewerID = ProfileID(viewerRaw)
 
@@ -144,24 +149,20 @@ final class ProfileHeaderViewModel {
         defer { isOpeningMessage = false }
 
         if targetID.rawValue.hasPrefix("dev.") || viewerID.rawValue.hasPrefix("dev.") {
-            let conversationID = ConversationID("dev-dm-\(viewerID.rawValue)-\(targetID.rawValue)")
-            navigationCoordinator.open(.messages(.thread(conversationID)))
+            let suffix = targetID.rawValue.replacingOccurrences(of: "dev.follower.", with: "")
+            navigationCoordinator.open(.messages(.thread(ConversationID("dev-dm-\(suffix)"))))
             return
         }
 
         do {
-            let result = try await messages.conversations(page: PageRequest(limit: 100))
-            let participants = Set([viewerID, targetID])
-            if let existing = result.items.first(where: {
-                Set($0.participantProfileIDs) == participants
-            }) {
-                navigationCoordinator.open(.messages(.thread(existing.id)))
-                return
-            }
-            let created = try await messages.createConversation(
-                participantIDs: [viewerID, targetID]
+            let result = try await ConversationCreationCoordinator.shared.openDirectConversation(
+                viewerID: viewerID,
+                recipient: profile,
+                messages: messages,
+                detailCache: detailCache,
+                inboxStore: MessagesInboxStore.shared
             )
-            navigationCoordinator.open(.messages(.thread(created.id)))
+            navigationCoordinator.open(.messages(.thread(result.conversation.id)))
         } catch {
             ExperienceHaptics.play(.warning)
         }

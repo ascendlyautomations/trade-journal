@@ -13,8 +13,9 @@ nonisolated enum BackendV2Versioning {
         case profileTabPosts = "rpc_v1_profile_tab_posts"
         case profileTabReels = "rpc_v1_profile_tab_reels"
         case profileTabAchievements = "rpc_v1_profile_tab_achievements"
-        case messaging = "rpc_v1_messaging_bootstrap"
+        case messaging = "rpc_v2_messaging_bootstrap"
         case conversation = "rpc_v1_conversation_bootstrap"
+        case conversationThread = "rpc_v1_conversation_thread_bootstrap"
         case room = "rpc_v1_room_bootstrap"
         case activity = "rpc_v1_activity_bootstrap"
         case explore = "rpc_v1_explore_bootstrap"
@@ -24,6 +25,7 @@ nonisolated enum BackendV2Versioning {
         case tradeDetail = "rpc_v1_trade_detail_bootstrap"
         case postDetail = "rpc_v1_post_detail_bootstrap"
         case settings = "rpc_v1_settings_bootstrap"
+        case propFirm = "rpc_v1_prop_firm_bootstrap"
     }
 
     static func isKnownRPCName(_ name: String) -> Bool {

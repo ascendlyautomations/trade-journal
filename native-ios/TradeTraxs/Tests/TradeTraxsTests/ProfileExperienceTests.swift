@@ -37,7 +37,7 @@ final class ProfileExperienceTests: XCTestCase {
         let metrics = ProfileDisplay.headerMetrics(from: stats)
         XCTAssertEqual(
             metrics.map(\.id),
-            ["posts", "publicTrades", "payouts", "winRate", "profitFactor"]
+            ["publicTrades", "posts", "payouts", "winRate", "profitFactor"]
         )
         XCTAssertEqual(metrics.first(where: { $0.id == "posts" })?.value, "4")
         // Must use publicTradeCount (8), never private-inclusive tradeCount (12).
@@ -104,7 +104,8 @@ final class ProfileExperienceTests: XCTestCase {
             store: content,
             messages: environment.data.messages,
             session: environment.data.session,
-            navigationCoordinator: environment.navigation.coordinator
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: environment.data.detailCache
         )
         viewModel.openFollowers()
         viewModel.openFollowing()
@@ -173,11 +174,12 @@ final class ProfileExperienceTests: XCTestCase {
             store: store,
             messages: environment.data.messages,
             session: environment.data.session,
-            navigationCoordinator: environment.navigation.coordinator
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: environment.data.detailCache
         )
         XCTAssertEqual(
             viewModel.actionMode,
-            .visitor(isFollowing: store.isFollowing, showsTradeRoom: false)
+            .visitor(isFollowing: store.isFollowing, isRequested: store.isRequested, showsTradeRoom: false)
         )
     }
 
@@ -203,11 +205,12 @@ final class ProfileExperienceTests: XCTestCase {
             store: store,
             messages: environment.data.messages,
             session: environment.data.session,
-            navigationCoordinator: environment.navigation.coordinator
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: environment.data.detailCache
         )
         XCTAssertEqual(
             viewModel.actionMode,
-            .visitor(isFollowing: store.isFollowing, showsTradeRoom: true)
+            .visitor(isFollowing: store.isFollowing, isRequested: store.isRequested, showsTradeRoom: true)
         )
     }
 
@@ -456,8 +459,6 @@ final class ProfileExperienceTests: XCTestCase {
         }
         XCTAssertNotNil(viewModel.metrics)
         XCTAssertGreaterThan(viewModel.metrics?.filteredTradeCount ?? 0, 0)
-        // Web `sumPayoutAchievementTotals` over fixture payout achievements.
-        XCTAssertEqual(viewModel.payoutTotal, 2_500)
 
         let allCount = viewModel.metrics?.filteredTradeCount ?? 0
         viewModel.setMode(.eval)
@@ -486,6 +487,7 @@ final class ProfileExperienceTests: XCTestCase {
     func testProfileSectionSystemImages() {
         XCTAssertEqual(ProfileSection.trades.systemImage, "chart.line.uptrend.xyaxis")
         XCTAssertEqual(ProfileSection.posts.systemImage, "square.grid.2x2")
+        XCTAssertEqual(AppIcon.payouts.systemName, "building.columns")
         XCTAssertEqual(ProfileSection.clips.systemImage, "play.square")
         XCTAssertEqual(ProfileSection.stats.systemImage, "chart.bar.xaxis")
         XCTAssertEqual(ProfileSection.achievements.systemImage, "trophy")

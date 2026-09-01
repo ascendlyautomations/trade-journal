@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Web: `nowMs - created < STORY_WINDOW_MS` and `Number.isNaN(created) → false`.
 /// Native must not substitute `Date.distantPast` for unparseable timestamps.
-enum ActiveStorySemantics {
+nonisolated enum ActiveStorySemantics {
     static let window: TimeInterval = 24 * 60 * 60
 
     static func isActive(createdAt: Date, now: Date = Date()) -> Bool {
@@ -30,7 +30,7 @@ enum ActiveStorySemantics {
             }
         }
 
-        var others = newestByAuthor.values
+        let others = newestByAuthor.values
             .filter { $0.authorProfileID != viewerID }
             .sorted { $0.createdAt > $1.createdAt }
 

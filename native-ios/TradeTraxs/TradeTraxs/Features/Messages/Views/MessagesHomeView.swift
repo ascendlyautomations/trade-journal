@@ -3,6 +3,7 @@ import SwiftUI
 /// Permanent Messages home — Direct Messages + Trade Rooms foundation.
 struct MessagesHomeView: View {
     @State private var viewModel: MessagesHomeViewModel
+    @Bindable private var inboxStore = MessagesInboxStore.shared
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment
 
@@ -21,7 +22,8 @@ struct MessagesHomeView: View {
                 session: data.session,
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
-                realtimeHub: data.realtimeHub
+                realtimeHub: data.realtimeHub,
+                rpc: data.rpc
             )
         )
         self.imagePipeline = data.imagePipeline
@@ -32,13 +34,13 @@ struct MessagesHomeView: View {
         Group {
             switch viewModel.phase {
             case .idle, .loading:
-                if MessagesInboxStore.shared.hasLoaded {
+                if inboxStore.hasLoaded {
                     inboxList
                 } else {
                     MessagesInboxSkeleton()
                 }
             case .failed(let message):
-                if MessagesInboxStore.shared.hasLoaded {
+                if inboxStore.hasLoaded {
                     inboxList
                 } else {
                     ExperienceErrorState(
@@ -90,7 +92,12 @@ struct MessagesHomeView: View {
             await viewModel.refresh()
         }
         .task {
-            viewModel.loadIfNeeded()
+#if DEBUG
+            SafeInboxLog.storeObserved(instance: inboxStore.debugInstance, source: "MessagesHomeView")
+#endif
+            viewModel.setHomeScreenVisible(true)
+            defer { viewModel.setHomeScreenVisible(false) }
+            await viewModel.bootstrapIfNeeded()
         }
         .sheet(isPresented: $viewModel.showsNewChat) {
             NewChatPickerView(data: data) { conversation in
@@ -146,10 +153,11 @@ struct MessagesHomeView: View {
     }
 
     private var inboxList: some View {
-        // Observe shared inbox so send/realtime/read patches refresh rows without a full reload.
-        // Track DM + Trade Room unread — unread-only mutations previously left badges sticky.
-        let _ = MessagesInboxStore.shared.conversations.map { ($0.unreadCount, $0.lastMessageAt) }
-        let _ = MessagesInboxStore.shared.roomUnread
+        // Observe canonical inbox activity — preview text, sort order, and unread.
+        let _ = inboxStore.activityRevision
+        let orderSignature = inboxStore.visibleConversations.map {
+            "\($0.id.rawValue)|\($0.lastMessageAt?.timeIntervalSince1970 ?? 0)|\($0.lastMessagePreview ?? "")|\($0.lastMessageID?.rawValue ?? "")"
+        }
         return List {
             if viewModel.showsFilteredEmpty {
                 Section {
@@ -230,7 +238,8 @@ struct MessagesHomeView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.searchText)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.directMessageItems.count)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: orderSignature)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: inboxStore.activityRevision)
     }
 
     private func conversationButton(_ item: DirectMessageInboxItem) -> some View {

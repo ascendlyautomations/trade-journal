@@ -180,7 +180,7 @@ final class ReportsScreenViewModel: ScreenLifecycle {
                 return "You're offline. Reconnect to load your trading reports."
             case .timeout:
                 return "The request timed out. Please try again."
-            case .validation(let message) where message.lowercased().contains("base url"):
+            case .validation(_, let message) where message.lowercased().contains("base url"):
                 return "Reports aren't available in this build. Check API configuration."
             default:
                 return UserFacingError.map(network).message

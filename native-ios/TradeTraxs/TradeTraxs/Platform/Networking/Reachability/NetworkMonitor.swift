@@ -2,6 +2,7 @@ import Foundation
 import Observation
 
 /// Higher-level network posture used by repositories / UI feedback later.
+@MainActor
 @Observable
 final class NetworkMonitor {
     private let reachability: ReachabilityMonitor
@@ -14,9 +15,9 @@ final class NetworkMonitor {
 
     /// Call once after construction to subscribe to path updates on the main actor.
     func start() {
-        reachability.setStatusHandler { [weak self] status in
+        reachability.setStatusHandler { status in
             Task { @MainActor in
-                self?.status = status
+                self.status = status
             }
         }
     }

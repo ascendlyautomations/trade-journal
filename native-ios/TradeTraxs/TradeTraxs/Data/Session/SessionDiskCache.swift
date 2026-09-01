@@ -5,7 +5,7 @@ import Foundation
 /// GRDB is not yet a project dependency — this fills the persistence seam for
 /// cold-launch reuse of accounts / following IDs / recent owner trades without
 /// storing secrets. Cleared on logout.
-enum SessionDiskCache {
+nonisolated enum SessionDiskCache {
     private static let folderName = "SessionDiskCache"
 
     struct AccountsBlob: Codable, Sendable {

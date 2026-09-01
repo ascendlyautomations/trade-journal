@@ -3,9 +3,9 @@ import Foundation
 // DTOs exist ONLY in Data. Snake_case Codable shapes mirror Supabase transport, not Domain.
 
 nonisolated enum TradeDTO {
-    /// Mirrors web `PUBLIC_TRADE_SELECT` / owner list fields used by Profile.
+    /// Mirrors web `PUBLIC_TRADE_SELECT` / owner list fields used by Profile + Trade Detail.
     static let profileListSelect =
-        "id,user_id,account_id,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode"
+        "id,user_id,account_id,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,duration_seconds,duration_text,trade_mode"
 
     /// Owner Trade History — includes denormalized account_name for search.
     static let historyListSelect =
@@ -41,6 +41,9 @@ nonisolated enum TradeDTO {
         var trade_date: String?
         var account_name: String?
         var strategy: String?
+        var duration_seconds: FlexibleNumber?
+        var duration_text: String?
+        var trade_mode: String?
     }
 
     /// Lightweight overview row — web `fetchSummaryTrades`.
@@ -86,6 +89,8 @@ nonisolated enum TradeDTO {
         var note: String?
         var is_active: Bool?
         var can_add_trades: Bool?
+        var show_in_account_dropdowns: Bool?
+        var custom_public_status: String?
         /// Prop Firm Mode rule columns (web propfirm page select).
         var consistency: FlexibleNumber?
         var max_drawdown: FlexibleNumber?
@@ -112,6 +117,36 @@ nonisolated enum TradeDTO {
         var profit_target: Double?
         var winning_days: Double?
         var winning_day_threshold: Double?
+    }
+
+    struct AccountSettingsBody: Encodable, Sendable {
+        var show_in_account_dropdowns: Bool?
+        var custom_public_status: String?
+    }
+
+    struct AccountPayoutEntryRow: Codable, Sendable {
+        var id: String?
+        var account_id: String?
+        var user_id: String?
+        var amount: FlexibleNumber?
+        var payout_date: String?
+        var note: String?
+        var created_at: String?
+        var updated_at: String?
+    }
+
+    struct AccountPayoutEntryWriteBody: Encodable, Sendable {
+        var account_id: String
+        var user_id: String
+        var amount: Double
+        var payout_date: String
+        var note: String?
+    }
+
+    struct AccountPayoutEntryUpdateBody: Encodable, Sendable {
+        var amount: Double?
+        var payout_date: String?
+        var note: String?
     }
 
     struct InsertBody: Encodable, Sendable {
@@ -206,10 +241,18 @@ nonisolated enum TradeDTO {
             try container.encodeIfPresent(entry_price, forKey: .entry_price)
             try container.encodeIfPresent(exit_price, forKey: .exit_price)
             try container.encodeIfPresent(entry_time, forKey: .entry_time)
-            try container.encodeIfPresent(exit_time, forKey: .exit_time)
+            if let exit_time {
+                try container.encode(exit_time, forKey: .exit_time)
+            } else {
+                try container.encodeNil(forKey: .exit_time)
+            }
             try container.encodeIfPresent(trade_date, forKey: .trade_date)
             try container.encodeIfPresent(pnl, forKey: .pnl)
-            try container.encodeIfPresent(rr, forKey: .rr)
+            if let rr {
+                try container.encode(rr, forKey: .rr)
+            } else {
+                try container.encodeNil(forKey: .rr)
+            }
             try container.encodeIfPresent(points, forKey: .points)
             try container.encodeIfPresent(session, forKey: .session)
             try container.encodeIfPresent(strategy, forKey: .strategy)
@@ -255,7 +298,52 @@ nonisolated enum ProfileDTO {
         var trader_type: String?
         var trading_style: String?
         var primary_market: String?
+        var started_trading: String?
         var is_private: Bool?
+    }
+
+    struct OnboardingFields: Codable, Sendable {
+        var id: String?
+        var username: String?
+        var name: String?
+        var onboarding_completed: Bool?
+        var trader_type: String?
+        var trading_style: String?
+        var started_trading: String?
+        var bio: String?
+        var avatar_url: String?
+    }
+
+    struct OnboardingCompletionBody: Encodable, Sendable {
+        var username: String
+        var name: String?
+        var bio: String?
+        var trading_style: String
+        var trader_type: String
+        var primary_market: String?
+        var started_trading: String
+        var avatar_url: String?
+        var onboarding_completed: Bool
+    }
+
+    struct AccountSettingsOnboardingMirrorBody: Codable, Sendable {
+        var id: String
+        var onboarding_completed: Bool
+    }
+
+    struct UsernameAvailabilityParams: Encodable, Sendable {
+        var check_username: String
+    }
+
+    struct UsernameAvailabilityResult: Decodable, Sendable {
+        var result: Bool?
+    }
+
+    /// Idempotent profile shell when the auth trigger has not run yet.
+    struct InsertBody: Encodable, Sendable {
+        var id: String
+        var username: String
+        var name: String?
     }
 }
 
@@ -566,8 +654,18 @@ nonisolated enum RoomDTO {
         var image_url: String?
         var trade_id: String?
         var section_id: String?
+        var parent_message_id: String?
         var created_at: String?
         var is_pinned: Bool?
+        var room_message_reactions: [ReactionRow]?
+    }
+
+    struct ReactionRow: Codable, Sendable {
+        var id: String?
+        var message_id: String?
+        var user_id: String?
+        var reaction: String?
+        var created_at: String?
     }
 
     /// Web `room_sections` — Trade Room channels.
@@ -815,6 +913,10 @@ nonisolated enum LeaderboardDTO {
         var created_at: String?
         var account_type: String?
         var mode: String?
+        /// Not present on current BFF/RPC payloads — decoded when backend adds profile embed.
+        var username: String?
+        var name: String?
+        var avatar_url: String?
     }
 }
 

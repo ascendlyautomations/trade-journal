@@ -17,7 +17,7 @@ final class NetworkingFoundationTests: XCTestCase {
         let rlsBody = Data(#"{"code":"42501","message":"new row violates row-level security policy for table \"messages\""}"#.utf8)
         XCTAssertEqual(
             mapper.map(data: rlsBody, response: HTTPURLResponse(url: url, statusCode: 403, httpVersion: nil, headerFields: nil), error: nil),
-            .validation(message: String(data: rlsBody, encoding: .utf8)!)
+            .validation(statusCode: 403, message: String(data: rlsBody, encoding: .utf8)!)
         )
         XCTAssertEqual(
             mapper.map(data: nil, response: HTTPURLResponse(url: url, statusCode: 429, httpVersion: nil, headerFields: ["Retry-After": "2"]), error: nil),
@@ -71,7 +71,7 @@ final class NetworkingFoundationTests: XCTestCase {
             guard let networkError = error as? NetworkError else {
                 return XCTFail("Expected NetworkError")
             }
-            XCTAssertEqual(networkError, .validation(message: "Base URL for bff is not configured"))
+            XCTAssertEqual(networkError, .validation(statusCode: nil, message: "Base URL for bff is not configured"))
         }
     }
 

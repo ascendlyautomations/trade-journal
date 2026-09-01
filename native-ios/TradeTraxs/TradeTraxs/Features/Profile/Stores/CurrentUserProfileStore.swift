@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Observation
 import SwiftUI
 import UIKit
@@ -36,6 +37,7 @@ final class CurrentUserProfileStore {
     private var loadTask: Task<Void, Never>?
     private var loadedProfileID: ProfileID?
     private var loadedAvatarKey: String?
+    private let loadGenerationCounter = LoadGenerationCounter()
 
     init(
         profiles: any ProfileRepository,
@@ -62,7 +64,7 @@ final class CurrentUserProfileStore {
 
     /// Loads once per authenticated session unless `force` is true.
     func loadIfNeeded(force: Bool = false) {
-        if let loadTask, !force {
+        if loadTask != nil, !force {
             return
         }
         if !force, phase == .loaded, profile != nil {
@@ -70,13 +72,19 @@ final class CurrentUserProfileStore {
         }
 
         loadTask?.cancel()
+        let generation = loadGenerationCounter.increment()
         loadTask = Task { [weak self] in
-            await self?.performLoad(force: force)
+            await self?.performLoad(force: force, generation: generation)
         }
     }
 
     func refresh() {
         loadIfNeeded(force: true)
+    }
+
+    /// Seeds profile header from session bootstrap without a duplicate fetch.
+    func applyBootstrapResult(profile: Profile, stats: ProfileStats?) {
+        profileStoreSeed(profile: profile, stats: stats)
     }
 
     func clear() {
@@ -109,52 +117,87 @@ final class CurrentUserProfileStore {
         detailCache?.seed(stats: stats)
     }
 
-    private func performLoad(force: Bool) async {
+    private func profileStoreSeed(profile: Profile, stats: ProfileStats?) {
+        self.profile = profile
+        if let stats {
+            self.stats = stats
+            detailCache?.seed(profile)
+            detailCache?.seed(stats: stats)
+        } else {
+            detailCache?.seed(profile)
+        }
+        loadedProfileID = profile.id
+        phase = .loaded
+    }
+
+    private func performLoad(force: Bool, generation: UInt64) async {
         phase = profile == nil ? .loading : phase
         errorMessage = nil
+        defer { loadTask = nil }
+
+        await SessionNetworkGate.shared.awaitReady()
 
         guard let userID = await session.currentUserID else {
             phase = .failed
             errorMessage = UserFacingError.map(AppError.domain(.permission(.notAuthenticated))).message
-            loadTask = nil
             return
         }
 
         let profileID = ProfileID(userID.rawValue)
 
         do {
-            // backendV2.session default OFF — existing profile/stats REST unchanged.
-            // When ON: Session RPC seeds following IDs; profile/stats still load via
-            // existing repos until Profile screen migration (session ≠ profile content).
-            if let rpc {
-                _ = try? await SessionBootstrapLoader.loadIfEnabled(rpc: rpc)
+            let result: SessionBootstrapLoadResult
+            if BackendV2FeatureFlags.isEnabled(.session), let rpc {
+                let profilesRepo = profiles
+                let cache = detailCache
+                let generationSnapshot = generation
+                let generationCounter = loadGenerationCounter
+                result = try await BootstrapTransportTimeout.run {
+                    try await SessionBootstrapLoader.load(
+                        viewerID: profileID,
+                        rpc: rpc,
+                        profiles: profilesRepo,
+                        detailCache: cache,
+                        forceNetwork: force,
+                        loadGeneration: generationSnapshot,
+                        currentGeneration: { generationCounter.current() }
+                    )
+                }
+            } else {
+                async let profileTask = profiles.profile(id: profileID)
+                async let statsTask = profiles.stats(for: profileID)
+                let (loadedProfile, loadedStats) = try await (profileTask, statsTask)
+                detailCache?.seed(loadedProfile)
+                detailCache?.seed(stats: loadedStats)
+                result = SessionBootstrapLoadResult(
+                    profile: loadedProfile,
+                    stats: loadedStats,
+                    onboardingSnapshot: try await profiles.onboardingSnapshot(for: profileID),
+                    path: .legacy_flag_off,
+                    rpcRequestCount: 0,
+                    usedLegacyREST: true
+                )
             }
 
-            async let profileTask = profiles.profile(id: profileID)
-            async let statsTask = profiles.stats(for: profileID)
-            let (loadedProfile, loadedStats) = try await (profileTask, statsTask)
+            guard generation == loadGenerationCounter.current(), !Task.isCancelled else {
+                if profile == nil { phase = .idle }
+                return
+            }
 
-            guard !Task.isCancelled else { return }
-
-            profile = loadedProfile
-            stats = loadedStats
+            profile = result.profile
+            stats = result.stats
             loadedProfileID = profileID
             phase = .loaded
-            // Seed shared detail cache so Profile screen can skip a second profile/stats fan-out.
-            detailCache?.seed(loadedProfile)
-            detailCache?.seed(stats: loadedStats)
 
-            await loadAvatarIfNeeded(for: loadedProfile, force: force)
+            await loadAvatarIfNeeded(for: result.profile, force: force)
         } catch is CancellationError {
-            // Keep prior content.
+            if profile == nil { phase = .idle }
         } catch {
             if profile == nil {
                 phase = .failed
             }
             errorMessage = UserFacingError.map(error as? AppError ?? AppError.unknown(message: error.localizedDescription)).message
         }
-
-        loadTask = nil
     }
 
     private func loadAvatarIfNeeded(for profile: Profile, force: Bool) async {
@@ -220,7 +263,10 @@ final class CurrentUserProfileStore {
 
 enum ProfileDisplay {
     static func initials(displayName: String, username: String) -> String {
-        let source = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        var source = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if ProfileIdentitySanitizer.isUUIDLike(source) {
+            source = ProfileIdentitySanitizer.neutralFallbackName
+        }
         let parts = source.split(separator: " ").filter { !$0.isEmpty }
         if parts.count >= 2 {
             return String(parts[0].prefix(1) + parts[1].prefix(1)).uppercased()
@@ -229,6 +275,9 @@ enum ProfileDisplay {
             return String(first.prefix(2)).uppercased()
         }
         let handle = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        if ProfileIdentitySanitizer.isUUIDLike(handle) {
+            return String(ProfileIdentitySanitizer.neutralFallbackName.prefix(2)).uppercased()
+        }
         return String(handle.prefix(2)).uppercased()
     }
 
@@ -293,24 +342,23 @@ enum ProfileDisplay {
     /// Header statistics row built from cached ``ProfileStats``.
     ///
     /// Trades uses ``ProfileStats/publicTradeCount`` exclusively.
-    /// Payouts uses ``ProfileStats/payoutTotal`` (web overview payout achievement sum).
-    /// Win % / Profit Factor / Payouts show placeholders until those fields are cached.
+    /// Payouts uses ``ProfileStats/payoutTotal`` (public payout achievements aggregate).
     static func headerMetrics(from stats: ProfileStats?) -> [ProfileHeaderMetric] {
         [
-            ProfileHeaderMetric(
-                id: "posts",
-                label: "Posts",
-                value: compactCount(stats?.postCount ?? 0)
-            ),
             ProfileHeaderMetric(
                 id: "publicTrades",
                 label: "Trades",
                 value: compactCount(stats?.publicTradeCount ?? 0)
             ),
             ProfileHeaderMetric(
+                id: "posts",
+                label: "Posts",
+                value: compactCount(stats?.postCount ?? 0)
+            ),
+            ProfileHeaderMetric(
                 id: "payouts",
                 label: "Payouts",
-                value: formatMoney(stats?.payoutTotal)
+                value: formatPayoutTotal(stats)
             ),
             ProfileHeaderMetric(
                 id: "winRate",
@@ -323,6 +371,14 @@ enum ProfileDisplay {
                 value: formatProfitFactor(stats?.profitFactor)
             ),
         ]
+    }
+
+    static func formatPayoutTotal(_ stats: ProfileStats?) -> String {
+        // Web ProfileOverviewStats shows payout when achievements are ready, independent of trade visibility.
+        guard let payout = stats?.payoutTotal else {
+            return ProfileHeaderMetric.placeholderValue
+        }
+        return formatMoney(payout)
     }
 
     static func formatWinRate(_ rate: Decimal?) -> String {
@@ -363,5 +419,21 @@ enum ProfileDisplay {
         let whole = tenths / 10
         let fraction = tenths % 10
         return fraction == 0 ? "\(whole)" : "\(whole).\(fraction)"
+    }
+}
+
+/// Thread-safe bootstrap generation — readable from transport timeout closures.
+private final class LoadGenerationCounter: @unchecked Sendable {
+    private let value = Mutex(UInt64(0))
+
+    nonisolated func increment() -> UInt64 {
+        value.withLock { current in
+            current &+= 1
+            return current
+        }
+    }
+
+    nonisolated func current() -> UInt64 {
+        value.withLock { $0 }
     }
 }

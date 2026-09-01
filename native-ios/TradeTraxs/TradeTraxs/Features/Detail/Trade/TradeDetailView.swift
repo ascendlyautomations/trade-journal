@@ -21,10 +21,6 @@ struct TradeDetailView: View {
         GridItem(.flexible(), spacing: ExperienceSpacing.md),
     ]
 
-    private let badgeColumns = [
-        GridItem(.adaptive(minimum: 52), spacing: ExperienceSpacing.xs, alignment: .leading),
-    ]
-
     private static let commentsAnchorID = "trade.detail.comments"
 
     init(
@@ -41,7 +37,8 @@ struct TradeDetailView: View {
                 session: data.session,
                 imagePipeline: data.imagePipeline,
                 cache: data.detailCache,
-                navigationCoordinator: navigationCoordinator
+                navigationCoordinator: navigationCoordinator,
+                experience: experience
             )
         )
         if experience == .journal {
@@ -78,7 +75,7 @@ struct TradeDetailView: View {
         .task {
             viewModel.loadIfNeeded()
             if experience == .social {
-                data.engagementStore.prefetch([.trade(viewModel.tradeID)])
+                data.engagementStore.prefetch([socialEngagementTarget(for: viewModel.tradeID)])
             }
             if let tradeAI {
                 tradeAI.updateContext(trade: viewModel.trade, notes: viewModel.notes)
@@ -204,25 +201,40 @@ struct TradeDetailView: View {
 
     private func tradeBody(_ trade: Trade, scrollProxy: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(trade.symbol.ticker)
-                    .experienceStyle(.title, color: colors.primaryText)
-                Spacer(minLength: ExperienceSpacing.sm)
-                Text(TradeDisplay.pnlText(trade.realizedPnL))
-                    .experienceStyle(
-                        .metricLarge,
-                        color: theme.metricColor(
-                            for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
-                        )
-                    )
-            }
-            .accessibilityIdentifier("detail.trade.headline")
+            if experience == .social {
+                PublicTradeHeadlineRow(
+                    ticker: trade.symbol.ticker,
+                    realizedPnL: trade.realizedPnL
+                )
+                .accessibilityIdentifier("detail.trade.headline")
 
-            badgeRow(trade)
+                PublicTradeMetaChipRow(trade: trade)
+                    .accessibilityIdentifier("detail.trade.badges")
+            } else {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(trade.symbol.ticker)
+                        .experienceStyle(.title, color: colors.primaryText)
+                    Spacer(minLength: ExperienceSpacing.sm)
+                    Text(TradeDisplay.pnlText(trade.realizedPnL))
+                        .experienceStyle(
+                            .metricLarge,
+                            color: theme.metricColor(
+                                for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
+                            )
+                        )
+                }
+                .accessibilityIdentifier("detail.trade.headline")
+
+                badgeRow(trade)
+            }
 
             descriptionSection(trade)
 
             entryExitInformation(trade)
+
+            if experience == .journal {
+                journalDetailSections(trade)
+            }
 
             switch experience {
             case .journal:
@@ -232,7 +244,7 @@ struct TradeDetailView: View {
                 }
             case .social:
                 EngagementBar(
-                    target: .trade(trade.id),
+                    target: socialEngagementTarget(for: trade.id),
                     store: data.engagementStore,
                     onCommentTap: {
                         withAnimation(
@@ -245,7 +257,11 @@ struct TradeDetailView: View {
                         }
                     }
                 )
-                CommentsSectionView(target: .trade(trade.id), data: data)
+                CommentsSectionView(
+                    target: socialEngagementTarget(for: trade.id),
+                    contentOwnerUserID: trade.ownerProfileID.rawValue,
+                    data: data
+                )
                     .id(Self.commentsAnchorID)
             }
         }
@@ -277,23 +293,8 @@ struct TradeDetailView: View {
     }
 
     private func badgeRow(_ trade: Trade) -> some View {
-        LazyVGrid(columns: badgeColumns, alignment: .leading, spacing: ExperienceSpacing.xs) {
-            ExperienceTag(
-                title: TradeDisplay.sideTitle(trade.side),
-                tone: trade.side == .long ? .success : .error
-            )
-            if trade.riskReward != nil {
-                ExperienceTag(title: TradeDisplay.rrText(trade.riskReward), tone: .info)
-            }
-            ExperienceTag(title: TradeDisplay.quantityBadgeText(trade.quantity), tone: .info)
-            if let session = trade.sessionLabel?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-                !session.isEmpty
-            {
-                ExperienceTag(title: session, tone: .info)
-            }
-        }
-        .accessibilityIdentifier("detail.trade.badges")
+        PublicTradeMetaChipRow(trade: trade)
+            .accessibilityIdentifier("detail.trade.badges")
     }
 
     @ViewBuilder
@@ -311,16 +312,55 @@ struct TradeDetailView: View {
     }
 
     private func entryExitInformation(_ trade: Trade) -> some View {
-        LazyVGrid(columns: entryExitColumns, alignment: .leading, spacing: ExperienceSpacing.md) {
-            infoCell(title: "Entry Price", value: TradeDisplay.priceText(trade.entryPrice))
-            infoCell(title: "Exit Price", value: TradeDisplay.priceText(trade.exitPrice))
-            infoCell(title: "Entry Time", value: TradeDisplay.dateTimeText(trade.entryAt))
-            infoCell(
-                title: "Exit Time",
-                value: trade.exitAt.map(TradeDisplay.dateTimeText) ?? "—"
-            )
+        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+            LazyVGrid(columns: entryExitColumns, alignment: .leading, spacing: ExperienceSpacing.md) {
+                infoCell(title: "Entry Price", value: TradeDisplay.priceText(trade.entryPrice))
+                infoCell(title: "Exit Price", value: TradeDisplay.priceText(trade.exitPrice))
+                infoCell(title: "Entry Time", value: TradeDisplay.dateTimeText(trade.entryAt))
+                infoCell(
+                    title: "Exit Time",
+                    value: trade.exitAt.map(TradeDisplay.dateTimeText) ?? "—"
+                )
+            }
+            if let duration = TradeDisplay.holdDuration(for: trade) {
+                infoCell(title: "Duration", value: duration)
+                    .accessibilityIdentifier("detail.trade.duration")
+            }
         }
         .accessibilityIdentifier("detail.trade.entryExit")
+    }
+
+    @ViewBuilder
+    private func journalDetailSections(_ trade: Trade) -> some View {
+        if let strategy = trade.strategy?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !strategy.isEmpty
+        {
+            labeledSection(title: "Setup", value: strategy)
+                .accessibilityIdentifier("detail.trade.strategy")
+        }
+
+        if viewModel.isOwner {
+            HStack(spacing: 4) {
+                Image(systemName: trade.visibility == .public ? "globe" : "lock.fill")
+                    .font(.caption2)
+                Text(trade.visibility == .public ? "Public" : "Private")
+                    .experienceStyle(.caption, color: colors.tertiaryText)
+            }
+            .foregroundStyle(colors.tertiaryText)
+            .accessibilityIdentifier("detail.trade.visibility")
+        }
+    }
+
+    private func labeledSection(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            Text(title.uppercased())
+                .experienceStyle(.caption2, color: colors.tertiaryText)
+                .tracking(0.4)
+            Text(value)
+                .experienceStyle(.body, color: colors.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func infoCell(title: String, value: String) -> some View {
@@ -335,5 +375,9 @@ struct TradeDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(ExperienceSpacing.md)
         .background(colors.fillPrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+    }
+
+    private func socialEngagementTarget(for tradeID: TradeID) -> InteractionTarget {
+        data.detailCache.feedEngagementTarget(forTrade: tradeID) ?? .trade(tradeID)
     }
 }
