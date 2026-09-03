@@ -27,6 +27,7 @@ final class ManageAccountsExperienceTests: XCTestCase {
             home: ManageAccountsStubHomeRepository(),
             trades: ManageAccountsStubTradeRepository(),
             achievements: ManageAccountsStubAchievementRepository(),
+            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
             session: ManageAccountsStubSession(userID: "dev.manage.accounts"),
             detailCache: DetailPresentationCache(),
             navigationCoordinator: coordinator

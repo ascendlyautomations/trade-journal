@@ -85,6 +85,29 @@ struct SettingsDestinationView: View {
                 SettingsTradingAccountsView(data: data, propFirmOnly: true)
             case .privacy:
                 SettingsPrivacyView(data: data, profileStore: currentUserProfile)
+            case .privacyBlockedAccounts:
+                SettingsBlockedAccountsView(
+                    messages: data.messages,
+                    navigationCoordinator: navigationCoordinator
+                )
+            case .privacyMutedAccounts:
+                SettingsMutedAccountsView(
+                    messages: data.messages,
+                    navigationCoordinator: navigationCoordinator
+                )
+            case .privacyMessageAudience:
+                SettingsDmPrivacyPickerView(
+                    viewModel: SettingsPrivacyViewModel(
+                        profiles: data.profiles,
+                        messages: data.messages,
+                        session: data.session,
+                        profilePrivacy: SettingsProfileViewModel(
+                            profiles: data.profiles,
+                            session: data.session,
+                            profileStore: currentUserProfile
+                        )
+                    )
+                )
             case .affiliate:
                 SettingsAffiliateView(data: data)
             case .support:

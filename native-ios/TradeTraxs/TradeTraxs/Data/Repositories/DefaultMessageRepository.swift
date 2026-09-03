@@ -136,7 +136,10 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
                 SupabaseQuery.eq("conversation_id", conversationID.rawValue),
             ]
         )
-        let items = try rows.map(MessageMapper.mapToDomain)
+        let items = try rows.compactMap { row -> Message? in
+            if row.deleted_for_everyone == true { return nil }
+            return try MessageMapper.mapToDomain(row)
+        }
         return CursorPage(
             items: items,
             nextCursor: SupabaseQuery.nextCursor(items: rows, limit: page.limit) { $0.created_at }
@@ -149,6 +152,12 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
            let tradeID = message.attachments.first?.tradeID ?? message.attachments.compactMap(\.tradeID).first
         {
             return try await sendTradeShare(message, tradeID: tradeID)
+        }
+
+        if message.kind == .voice,
+           let audioURL = message.attachments.first?.media.id
+        {
+            return try await sendVoiceMessage(message, audioURL: audioURL)
         }
 
         // Exact web `sendMessage` insert shape from `app/messages/[id]/page.tsx`:
@@ -384,12 +393,259 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
-        try await supabase.database.delete(
-            from: "conversation_participants",
+        AppLog.networking.info(
+            """
+            conversations.delete begin \
+            id=\(SafeInboxLog.hash(id.rawValue), privacy: .public)
+            """
+        )
+        do {
+            try await supabase.database.delete(
+                from: "conversation_participants",
+                query: [
+                    SupabaseQuery.eq("conversation_id", id.rawValue),
+                    SupabaseQuery.eq("user_id", userID.rawValue),
+                ]
+            )
+            AppLog.networking.info(
+                """
+                conversations.delete ok \
+                id=\(SafeInboxLog.hash(id.rawValue), privacy: .public) \
+                status=204
+                """
+            )
+        } catch {
+            AppLog.networking.error(
+                """
+                conversations.delete failed \
+                convo=\(SafeInboxLog.hash(id.rawValue), privacy: .public) \
+                error=\(String(describing: error), privacy: .public)
+                """
+            )
+            throw error
+        }
+    }
+
+    func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let body = DMDeleteForEveryoneBody(deleted_for_everyone: true)
+        AppLog.networking.info(
+            """
+            messages.delete begin \
+            message=\(SafeInboxLog.hash(messageID.rawValue), privacy: .public) \
+            convo=\(SafeInboxLog.hash(conversationID.rawValue), privacy: .public)
+            """
+        )
+        do {
+            try await supabase.database.update(
+                body,
+                table: "messages",
+                query: [
+                    SupabaseQuery.eq("id", messageID.rawValue),
+                    SupabaseQuery.eq("conversation_id", conversationID.rawValue),
+                    SupabaseQuery.eq("sender_id", userID.rawValue),
+                ]
+            )
+            AppLog.networking.info(
+                """
+                messages.delete ok \
+                message=\(SafeInboxLog.hash(messageID.rawValue), privacy: .public) \
+                status=204
+                """
+            )
+        } catch {
+            AppLog.networking.error(
+                """
+                messages.delete failed \
+                message=\(SafeInboxLog.hash(messageID.rawValue), privacy: .public) \
+                error=\(String(describing: error), privacy: .public)
+                """
+            )
+            throw error
+        }
+    }
+
+    func setConversationNotificationsEnabled(
+        conversationID: ConversationID,
+        enabled: Bool
+    ) async throws {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let payload = ConversationMemberPreferencesUpsertBody(
+            user_id: userID.rawValue,
+            conversation_id: conversationID.rawValue,
+            notifications_enabled: enabled
+        )
+        _ = try await supabase.database.upsert(
+            payload,
+            into: "conversation_member_preferences",
+            onConflict: "user_id,conversation_id",
+            returning: MessageDTO.MutedPreferenceRow.self,
+            select: "conversation_id"
+        )
+    }
+
+    func fetchDmBlockStatus(conversationID: ConversationID) async throws -> DmBlockStatus {
+        try await fetchBlockStatus(
+            rpcName: "get_dm_block_status",
+            parameters: MessageRPCParams.ConversationID(p_conversation_id: conversationID.rawValue)
+        )
+    }
+
+    func fetchUserBlockStatus(otherID: ProfileID) async throws -> DmBlockStatus {
+        try await fetchBlockStatus(
+            rpcName: "get_user_block_status",
+            parameters: MessageRPCParams.OtherUserID(p_other_user_id: otherID.rawValue)
+        )
+    }
+
+    func setDmUserBlock(conversationID: ConversationID, blocked: Bool) async throws -> DmBlockStatus {
+        try await mutateBlock(
+            rpcName: "set_dm_user_block",
+            parameters: MessageRPCParams.SetDmBlock(
+                p_conversation_id: conversationID.rawValue,
+                p_blocked: blocked
+            )
+        )
+    }
+
+    func setUserBlock(otherID: ProfileID, blocked: Bool) async throws -> DmBlockStatus {
+        try await mutateBlock(
+            rpcName: "set_user_block",
+            parameters: MessageRPCParams.SetUserBlock(
+                p_blocked_id: otherID.rawValue,
+                p_blocked: blocked
+            )
+        )
+    }
+
+    func fetchBlockedAccounts() async throws -> [BlockedAccount] {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let rows: [MessageDTO.UserBlockRow] = try await supabase.database.select(
+            MessageDTO.UserBlockRow.self,
+            from: "user_blocks",
             query: [
-                SupabaseQuery.eq("conversation_id", id.rawValue),
-                SupabaseQuery.eq("user_id", userID.rawValue),
+                SupabaseQuery.select(
+                    "blocked_id,created_at,profiles:profiles!user_blocks_blocked_id_fkey(id,username,name,avatar_url)"
+                ),
+                SupabaseQuery.eq("blocker_id", userID.rawValue),
+                URLQueryItem(name: "order", value: "created_at.desc"),
             ]
+        )
+        return rows.compactMap { row in
+            guard let blockedID = row.blocked_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !blockedID.isEmpty
+            else { return nil }
+            let embedded = row.profiles
+            let profile = Profile(
+                id: ProfileID(blockedID),
+                userID: UserID(blockedID),
+                username: embedded?.username ?? "user",
+                displayName: embedded?.name?.nilIfEmpty ?? embedded?.username ?? "User",
+                bio: nil,
+                avatar: embedded?.avatar_url.flatMap { url in
+                    let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return trimmed.isEmpty ? nil : MediaReference(id: trimmed, kind: .image, altText: nil)
+                },
+                traderType: nil,
+                tradingStyle: nil,
+                primaryMarket: nil,
+                startedTradingAt: nil,
+                isPrivate: false,
+                isCreator: false,
+                createdAt: ISO8601.date(from: row.created_at ?? "") ?? .distantPast
+            )
+            return BlockedAccount(
+                profile: profile,
+                blockedAt: ISO8601.date(from: row.created_at ?? "")
+            )
+        }
+    }
+
+    func fetchMutedDirectMessagePeers() async throws -> [MutedDirectMessagePeer] {
+        let data = try await supabase.database.rpcData(
+            functionName: "list_muted_dm_peers",
+            parametersJSON: Data("{}".utf8)
+        )
+        let rows = try JSONDecoder().decode([MessageDTO.MutedPeerRow].self, from: data)
+        return rows.compactMap { row in
+            guard let peerRaw = row.peer_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !peerRaw.isEmpty,
+                  let conversationRaw = row.conversation_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !conversationRaw.isEmpty
+            else { return nil }
+            let profile = Profile(
+                id: ProfileID(peerRaw),
+                userID: UserID(peerRaw),
+                username: row.username ?? "user",
+                displayName: row.name?.nilIfEmpty ?? row.username ?? "User",
+                bio: nil,
+                avatar: row.avatar_url.flatMap { url in
+                    let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return trimmed.isEmpty ? nil : MediaReference(id: trimmed, kind: .image, altText: nil)
+                },
+                traderType: nil,
+                tradingStyle: nil,
+                primaryMarket: nil,
+                startedTradingAt: nil,
+                isPrivate: false,
+                isCreator: false,
+                createdAt: .distantPast
+            )
+            return MutedDirectMessagePeer(
+                profile: profile,
+                conversationID: ConversationID(conversationRaw)
+            )
+        }
+    }
+
+    private func fetchBlockStatus<P: Encodable>(
+        rpcName: String,
+        parameters: P
+    ) async throws -> DmBlockStatus {
+        let data = try await supabase.database.rpcData(
+            functionName: rpcName,
+            parametersJSON: try JSONEncoder().encode(parameters)
+        )
+        guard let status = try decodeBlockStatus(from: data) else {
+            throw AppError.unknown(message: "Could not determine block status.")
+        }
+        return status
+    }
+
+    private func mutateBlock<P: Encodable>(rpcName: String, parameters: P) async throws -> DmBlockStatus {
+        let data = try await supabase.database.rpcData(
+            functionName: rpcName,
+            parametersJSON: try JSONEncoder().encode(parameters)
+        )
+        guard let status = try decodeBlockStatus(from: data) else {
+            throw AppError.unknown(message: "Could not update block status.")
+        }
+        return status
+    }
+
+    private func decodeBlockStatus(from data: Data) throws -> DmBlockStatus? {
+        let row: MessageDTO.BlockStatusRow
+        if let single = try? JSONDecoder().decode(MessageDTO.BlockStatusRow.self, from: data) {
+            row = single
+        } else if let rows = try? JSONDecoder().decode([MessageDTO.BlockStatusRow].self, from: data),
+                  let first = rows.first {
+            row = first
+        } else {
+            return nil
+        }
+        guard let otherRaw = row.other_user_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !otherRaw.isEmpty
+        else { return nil }
+        return DmBlockStatus(
+            otherUserID: ProfileID(otherRaw),
+            blockedByMe: row.blocked_by_me == true,
+            blockedByOther: row.blocked_by_other == true
         )
     }
 
@@ -547,7 +803,10 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             },
             isGroup: isGroup,
             isPinned: dto.is_pinned == true,
-            lastMessagePreview: dto.last_message,
+            lastMessagePreview: StoryReplyMessageSupport.sanitizeInboxPreview(
+                type: nil,
+                content: dto.last_message
+            ),
             lastMessageAt: lastAt,
             unreadCount: unreadCount,
             isMuted: isMuted,
@@ -636,6 +895,42 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         )
     }
 
+    private func sendVoiceMessage(_ message: Message, audioURL: String) async throws -> Message {
+        let durationMs = message.attachments.first?.durationSeconds.map {
+            Int(($0 * 1_000).rounded())
+        }
+        let body = DMVoiceSendBody(
+            conversation_id: message.conversationID.rawValue,
+            sender_id: message.senderProfileID.rawValue,
+            type: "voice",
+            content: "",
+            audio_url: audioURL,
+            audio_duration_ms: durationMs,
+            parent_message_id: message.replyToMessageID?.rawValue
+        )
+        let inserted: DMInsertRow = try await supabase.database.insert(
+            body,
+            into: "messages",
+            query: [SupabaseQuery.select("id,created_at")],
+            returning: DMInsertRow.self
+        )
+        guard let id = inserted.id, !id.isEmpty else {
+            throw AppError.unknown(message: "Voice message insert returned no id")
+        }
+        scheduleDirectMessagePush(messageID: id)
+        return Message(
+            id: MessageID(id),
+            conversationID: message.conversationID,
+            senderProfileID: message.senderProfileID,
+            kind: .voice,
+            body: nil,
+            attachments: message.attachments,
+            replyToMessageID: message.replyToMessageID,
+            createdAt: ISO8601.date(from: inserted.created_at) ?? message.createdAt,
+            isReadByViewer: true
+        )
+    }
+
     /// Web `void createDirectMessagePush(...)` — start the BFF pipeline without blocking send.
     private func scheduleDirectMessagePush(messageID: String) {
         let transport = supabase.transport
@@ -674,6 +969,20 @@ private nonisolated enum MessageRPCParams {
     struct UserPair: Encodable, Sendable {
         var p_user_a: String
         var p_user_b: String
+    }
+
+    struct OtherUserID: Encodable, Sendable {
+        var p_other_user_id: String
+    }
+
+    struct SetDmBlock: Encodable, Sendable {
+        var p_conversation_id: String
+        var p_blocked: Bool
+    }
+
+    struct SetUserBlock: Encodable, Sendable {
+        var p_blocked_id: String
+        var p_blocked: Bool
     }
 }
 
@@ -726,13 +1035,59 @@ private nonisolated struct DMSendBody: Encodable, Sendable {
         try container.encode(conversation_id, forKey: .conversation_id)
         try container.encode(sender_id, forKey: .sender_id)
         try container.encode(content, forKey: .content)
-        // Explicit nulls match web `image_url: imageUrl` / `channel: null`.
         try container.encode(image_url, forKey: .image_url)
         try container.encodeNil(forKey: .channel)
         if let parent_message_id {
             try container.encode(parent_message_id, forKey: .parent_message_id)
         }
     }
+}
+
+private nonisolated struct DMVoiceSendBody: Encodable, Sendable {
+    var conversation_id: String
+    var sender_id: String
+    var type: String
+    var content: String
+    var audio_url: String
+    var audio_duration_ms: Int?
+    var parent_message_id: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case conversation_id
+        case sender_id
+        case type
+        case content
+        case audio_url
+        case audio_duration_ms
+        case channel
+        case parent_message_id
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(conversation_id, forKey: .conversation_id)
+        try container.encode(sender_id, forKey: .sender_id)
+        try container.encode(type, forKey: .type)
+        try container.encode(content, forKey: .content)
+        try container.encode(audio_url, forKey: .audio_url)
+        if let audio_duration_ms {
+            try container.encode(audio_duration_ms, forKey: .audio_duration_ms)
+        }
+        try container.encodeNil(forKey: .channel)
+        if let parent_message_id {
+            try container.encode(parent_message_id, forKey: .parent_message_id)
+        }
+    }
+}
+
+private nonisolated struct DMDeleteForEveryoneBody: Encodable, Sendable {
+    var deleted_for_everyone: Bool
+}
+
+private nonisolated struct ConversationMemberPreferencesUpsertBody: Encodable, Sendable {
+    var user_id: String
+    var conversation_id: String
+    var notifications_enabled: Bool
 }
 
 private nonisolated struct DMInsertRow: Decodable, Sendable {

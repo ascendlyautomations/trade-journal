@@ -21,7 +21,10 @@ import {
   SkeletonLeaderboardRow,
   SkeletonMessage,
 } from "../components/ui/skeletons"
-import DmStyleComposer from "../components/DmStyleComposer"
+import DmStyleComposer, {
+  type VoiceSendPayload,
+} from "../components/DmStyleComposer"
+import VoiceMessageBubble from "@/app/components/messages/VoiceMessageBubble"
 import { supabase } from "../../lib/supabaseClient"
 import { stableIdKey } from "@/lib/realtimeFilters"
 import { compressImage, compressScreenshot } from "@/lib/compressImage"
@@ -134,6 +137,8 @@ import {
   ROOM_MESSAGE_SELECT_SHAPE,
 } from "@/lib/roomMessageSelect"
 import { asJsonObject } from "@/lib/supabaseProjectedQuery"
+import { isVoiceMessage, uploadVoiceMessageBlob } from "@/lib/voiceMessage"
+import { stopVoicePlayback } from "@/lib/voiceMessagePlayback"
 import { logRoomMessagePostgrestError } from "@/lib/roomMessagePostgrest"
 import {
   buildPendingSendContentKey,
@@ -183,6 +188,8 @@ type RoomMessage = {
   trade_id?: string | null
   content: string
   image_url?: string | null
+  audio_url?: string | null
+  audio_duration_ms?: number | null
   created_at: string
   /** Client-only optimistic send state */
   send_status?: "sending" | "sent" | "failed" | null
@@ -500,6 +507,7 @@ function CommunityContent() {
 
   useEffect(() => {
     selectedRoomIdRef.current = selectedRoomId
+    stopVoicePlayback()
   }, [selectedRoomId])
 
   useEffect(() => {
@@ -3537,6 +3545,149 @@ function CommunityContent() {
     }
   }
 
+  async function sendVoiceMessage(payload: VoiceSendPayload) {
+    if (isDemoModeActive()) {
+      requestDemoSignup("room")
+      return
+    }
+    if (sendingMessageRef.current || sendingMessage) return
+    if (!user?.id || !selectedRoomId || !canPostInRoom) return
+    if (!payload.blob?.size) {
+      showPopup({
+        type: "error",
+        message: "Recording was empty. Please try again.",
+      })
+      return
+    }
+
+    const tempId = `temp-voice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const { sectionId: insertSectionId, source: sectionIdSource } =
+      resolveInsertSectionId()
+    const durationMs = Math.round(payload.durationMs)
+    const prevReply = replyTarget
+    const parentId = roomMessageParentId() || null
+
+    setReplyTarget(null)
+
+    const optimisticRow = {
+      id: tempId,
+      room_id: selectedRoomId,
+      user_id: user.id,
+      content: "",
+      section_id: insertSectionId,
+      created_at: new Date().toISOString(),
+      pinned: false,
+      type: "voice",
+      audio_url: null,
+      audio_duration_ms: durationMs,
+      send_status: "sending",
+      parent_message_id: parentId,
+      profiles: {
+        id: user.id,
+        username: profile?.username ?? null,
+        name: profile?.name ?? null,
+        avatar_url: profile?.avatar_url ?? null,
+      },
+    } as unknown as RoomMessage
+
+    appendRoomMessageToState(optimisticRow)
+
+    const pendingSend = getRoomMessageReconciliation(user.id).beginPendingSend({
+      tempId,
+      roomId: selectedRoomId,
+      userId: user.id,
+      sectionId: insertSectionId,
+      type: "voice",
+      contentKey: buildPendingSendContentKey({ type: "voice", content: tempId }),
+    })
+
+    sendingMessageRef.current = true
+    setSendingMessage(true)
+
+    try {
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[room_messages voice insert]", {
+          selectedRoomId,
+          insertSectionId,
+          sectionIdSource,
+          durationMs,
+        })
+      }
+
+      const audioUrl = await uploadVoiceMessageBlob(
+        supabase,
+        user.id,
+        payload.blob,
+        payload.format
+      )
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId ? { ...m, audio_url: audioUrl } : m
+        )
+      )
+
+      const { data: insertedRow, error } = await supabase
+        .from("room_messages")
+        .insert({
+          room_id: selectedRoomId,
+          user_id: user.id,
+          type: "voice" as const,
+          content: "",
+          audio_url: audioUrl,
+          audio_duration_ms: durationMs,
+          section_id: insertSectionId,
+          ...(parentId ? { parent_message_id: parentId } : {}),
+        })
+        .select(ROOM_MESSAGE_REALTIME_SELECT)
+        .single()
+        .overrideTypes<Record<string, unknown> | null, { merge: false }>()
+
+      if (error) {
+        pendingSend.fail()
+        logRoomMessagePostgrestError("insert", error)
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId ? { ...m, send_status: "failed" as const } : m
+          )
+        )
+        setReplyTarget(prevReply)
+        showPopup({
+          type: "error",
+          message: "Could not send this voice message. Please try again.",
+        })
+        return
+      }
+
+      const insertedMessage = asJsonObject(insertedRow)
+      if (insertedMessage) {
+        pendingSend.complete(insertedMessage)
+        appendRoomMessageToState(insertedMessage as unknown as RoomMessage)
+        void createRoomMessageNotifications(
+          supabase,
+          String(insertedMessage.id)
+        )
+      } else {
+        pendingSend.fail()
+      }
+    } catch {
+      pendingSend.fail()
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId ? { ...m, send_status: "failed" as const } : m
+        )
+      )
+      setReplyTarget(prevReply)
+      showPopup({
+        type: "error",
+        message: "Could not send this voice message. Please try again.",
+      })
+    } finally {
+      sendingMessageRef.current = false
+      setSendingMessage(false)
+    }
+  }
+
   async function retryFailedRoomMessage(msg: RoomMessage) {
     if (!user?.id || !selectedRoomId || !canPostInRoom) return
     if (sendingMessageRef.current || sendingMessage) return
@@ -4519,6 +4670,19 @@ function CommunityContent() {
                                     </p>
                                   ) : null}
                                 </>
+                              ) : msg.type === "voice" || isVoiceMessage(msg) ? (
+                                msg.audio_url ? (
+                                  <VoiceMessageBubble
+                                    messageId={String(msg.id)}
+                                    audioUrl={msg.audio_url}
+                                    durationMs={msg.audio_duration_ms}
+                                    isOutgoing={msg.user_id === user?.id}
+                                  />
+                                ) : (
+                                  <p className="text-xs text-gray-400">
+                                    Sending voice message…
+                                  </p>
+                                )
                               ) : msg.type === "trade" ? (
                                 <SharedTradeMessageCard
                                   tradeId={msg.trade_id ?? msg.trades?.id}
@@ -4688,6 +4852,19 @@ function CommunityContent() {
                               </p>
                             ) : null}
                           </>
+                        ) : msg.type === "voice" || isVoiceMessage(msg) ? (
+                          msg.audio_url ? (
+                            <VoiceMessageBubble
+                              messageId={String(msg.id)}
+                              audioUrl={msg.audio_url}
+                              durationMs={msg.audio_duration_ms}
+                              isOutgoing={msg.user_id === user?.id}
+                            />
+                          ) : (
+                            <p className="text-xs text-gray-400">
+                              Sending voice message…
+                            </p>
+                          )
                         ) : msg.type === "trade" ? (
                           <SharedTradeMessageCard
                             tradeId={msg.trade_id ?? msg.trades?.id}
@@ -4810,6 +4987,8 @@ function CommunityContent() {
                       sendTyping()
                     }}
                     onSend={() => void sendMessage()}
+                    onSendVoice={(payload) => void sendVoiceMessage(payload)}
+                    voiceDisabled={!canPostInRoom || sendingMessage}
                     placeholder={
                       !selectedRoomId
                         ? "Select a room first"

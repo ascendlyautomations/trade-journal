@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 @Observable
 @MainActor
@@ -11,20 +12,36 @@ final class ProfileOnboardingViewModel {
     var bio = ""
     var isSubmitting = false
     var errorMessage: String?
+    var usernameError: String?
+    var avatarPreview: UIImage?
+    var avatarUploadError: String?
 
     private(set) var displayName: String = ""
+
+    private var pendingAvatarData: Data?
+    private var existingAvatarURL: String?
+
     private let snapshot: ProfileOnboardingSnapshot
     private let profiles: any ProfileRepository
     private let gateStore: ProfileOnboardingGateStore
+    private let uploadService: UploadService
+    private let objectStorage: any ObjectStorageProviding
+    private let appConfiguration: AppConfiguration
 
     init(
         snapshot: ProfileOnboardingSnapshot,
         profiles: any ProfileRepository,
-        gateStore: ProfileOnboardingGateStore
+        gateStore: ProfileOnboardingGateStore,
+        uploadService: UploadService,
+        objectStorage: any ObjectStorageProviding,
+        appConfiguration: AppConfiguration
     ) {
         self.snapshot = snapshot
         self.profiles = profiles
         self.gateStore = gateStore
+        self.uploadService = uploadService
+        self.objectStorage = objectStorage
+        self.appConfiguration = appConfiguration
         self.displayName = ProfileDisplayNamePolicy.normalized(snapshot.displayName) ?? ""
         self.username = ProfileUsernamePolicy.onboardingPrefillUsername(
             current: snapshot.username,
@@ -40,6 +57,7 @@ final class ProfileOnboardingViewModel {
             self.startedTrading = String(started.prefix(10))
         }
         self.bio = snapshot.bio?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.existingAvatarURL = snapshot.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmptyOrNil
     }
 
     var canSubmit: Bool {
@@ -51,12 +69,44 @@ final class ProfileOnboardingViewModel {
             && !StartedTradingDatePolicy.isFuture(startedTrading)
     }
 
-    func submit() async {
-        guard canSubmit else { return }
-        errorMessage = nil
+    func clearUsernameError() {
+        usernameError = nil
+    }
 
-        if let usernameError = ProfileUsernamePolicy.validateNotEmpty(username) {
-            errorMessage = usernameError
+    func setAvatarImage(_ image: UIImage?) {
+        avatarUploadError = nil
+        guard let image else {
+            avatarPreview = nil
+            pendingAvatarData = nil
+            return
+        }
+        avatarPreview = image
+        pendingAvatarData = MediaImagePreparation.jpegData(
+            from: image,
+            maxDimension: 1200,
+            quality: 0.92
+        )
+        if pendingAvatarData == nil {
+            avatarUploadError = "Couldn't prepare that photo. Try a different image."
+            avatarPreview = nil
+        }
+    }
+
+    func clearAvatarSelection() {
+        setAvatarImage(nil)
+        avatarUploadError = nil
+    }
+
+    func submit() async {
+        guard !isSubmitting else { return }
+        guard canSubmit else { return }
+
+        errorMessage = nil
+        usernameError = nil
+        avatarUploadError = nil
+
+        if let usernameValidationError = ProfileUsernamePolicy.validateNotEmpty(username) {
+            usernameError = usernameValidationError
             return
         }
         if StartedTradingDatePolicy.isFuture(startedTrading) {
@@ -72,11 +122,18 @@ final class ProfileOnboardingViewModel {
         defer { isSubmitting = false }
 
         let normalizedUsername = ProfileUsernamePolicy.normalize(username)
+
         do {
-            if try await profiles.isUsernameTaken(normalizedUsername, excluding: snapshot.profileID) {
-                errorMessage = "Username already in use"
-                ExperienceHaptics.play(.warning)
-                return
+            var avatarURL = existingAvatarURL
+            if let pendingAvatarData {
+                do {
+                    avatarURL = try await uploadAvatar(pendingAvatarData)
+                } catch {
+                    ProfileOnboardingErrorMapping.debugStage("avatar.upload", error: error)
+                    avatarUploadError = ProfileOnboardingErrorMapping.avatarUploadMessage(for: error)
+                    ExperienceHaptics.play(.warning)
+                    return
+                }
             }
 
             let submission = ProfileOnboardingSubmission(
@@ -87,7 +144,7 @@ final class ProfileOnboardingViewModel {
                 tradingStyle: tradingStyle.trimmingCharacters(in: .whitespacesAndNewlines),
                 traderType: traderType,
                 startedTrading: String(startedTrading.prefix(10)),
-                avatarURL: snapshot.avatarURL,
+                avatarURL: avatarURL,
                 primaryMarket: nil
             )
 
@@ -101,18 +158,42 @@ final class ProfileOnboardingViewModel {
                 tradingStyle: profile.tradingStyle,
                 startedTrading: submission.startedTrading,
                 bio: profile.bio,
-                avatarURL: snapshot.avatarURL
+                avatarURL: avatarURL
             )
             gateStore.markCompleted(with: profile, snapshot: completedSnapshot)
             ExperienceHaptics.play(.success)
         } catch {
+            ProfileOnboardingErrorMapping.debugStage("completeProfileOnboarding", error: error)
             if ProfileUsernamePolicy.isProfilesUsernameConflict(error) {
-                errorMessage = "Username already in use"
+                usernameError = ProfileOnboardingErrorMapping.usernameConflictMessage
             } else {
-                errorMessage = UserFacingError.message(for: error)
+                errorMessage = ProfileOnboardingErrorMapping.submitMessage(for: error)
             }
             ExperienceHaptics.play(.warning)
         }
+    }
+
+    private func uploadAvatar(_ data: Data) async throws -> String {
+        let path = "\(snapshot.profileID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+        let reference = try await uploadService.upload(
+            UploadRequest(
+                bucket: StorageBucket.avatars.rawValue,
+                path: path,
+                data: data,
+                contentType: "image/jpeg",
+                purpose: .profileAvatar
+            )
+        )
+        if let url = objectStorage.publicURL(
+            bucket: StorageBucket.avatars.rawValue,
+            path: reference.id
+        )?.absoluteString {
+            return url
+        }
+        if let base = appConfiguration.supabaseURL?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
+            return "\(base)/storage/v1/object/public/avatars/\(reference.id)"
+        }
+        return reference.id
     }
 }
 

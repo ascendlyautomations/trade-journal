@@ -9,25 +9,28 @@ struct AddTradeView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var clipVideoItem: PhotosPickerItem?
     @State private var showsDiscardConfirm = false
-    @State private var showsReview = false
-    @State private var showsNotes = false
     @State private var showsClipMenu = false
     @State private var showsNewClipComposer = false
     @State private var showsReelPicker = false
     @State private var showsClipCamera = false
     @State private var showsClipPreview = false
     @State private var showsInstrumentPicker = false
+    @State private var showsPsychologySheet = false
     @State private var didApplyScreenshotPrefill = false
     @State private var screenshotPickerShowsPreview = false
     @FocusState private var focusedField: AddTradeViewModel.Field?
 
     @Environment(\.themeColors) private var colors
 
+    private let embeddedInTradeEntryHub: Bool
+
     init(
         data: DataEnvironment,
         mode: AddTradeViewModel.Mode = .create,
+        embeddedInTradeEntryHub: Bool = false,
         onDismiss: @escaping () -> Void
     ) {
+        self.embeddedInTradeEntryHub = embeddedInTradeEntryHub
         _viewModel = State(
             initialValue: AddTradeViewModel(
                 trades: data.trades,
@@ -43,7 +46,8 @@ struct AddTradeView: View {
         )
     }
 
-    init(viewModel: AddTradeViewModel) {
+    init(viewModel: AddTradeViewModel, embeddedInTradeEntryHub: Bool = false) {
+        self.embeddedInTradeEntryHub = embeddedInTradeEntryHub
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -64,12 +68,11 @@ struct AddTradeView: View {
             }
         }
         .experienceScreenBackground()
-        .experienceNavigationTitle(viewModel.navigationTitle)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { requestDismiss() }
-            }
-        }
+        .modifier(AddTradeChromeModifier(
+            embeddedInTradeEntryHub: embeddedInTradeEntryHub,
+            navigationTitle: viewModel.navigationTitle,
+            onCancel: requestDismiss
+        ))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if viewModel.phase == .ready || viewModel.phase == .saving {
                 saveBar
@@ -94,18 +97,6 @@ struct AddTradeView: View {
                     },
                     onClose: { showsInstrumentPicker = false }
                 )
-            }
-            .experienceSheetChrome()
-        }
-        .sheet(isPresented: $showsReview) {
-            NavigationStack {
-                AddTradeReviewView(viewModel: viewModel)
-            }
-            .experienceSheetChrome()
-        }
-        .sheet(isPresented: $showsNotes) {
-            NavigationStack {
-                AddTradeNotesView(viewModel: viewModel)
             }
             .experienceSheetChrome()
         }
@@ -156,6 +147,12 @@ struct AddTradeView: View {
             }
             .experienceSheetChrome()
             .onAppear { viewModel.loadUnattachedReelsIfNeeded() }
+        }
+        .sheet(isPresented: $showsPsychologySheet) {
+            AddTradePsychologySheet(viewModel: viewModel) {
+                showsPsychologySheet = false
+            }
+            .experienceSheetChrome()
         }
         .fullScreenCover(isPresented: $showsClipCamera) {
             CameraVideoPicker(
@@ -213,6 +210,35 @@ struct AddTradeView: View {
         }
         .experienceKeyboardDoneToolbar()
         .accessibilityIdentifier("addTrade.root")
+        .sheet(isPresented: Binding(
+            get: { viewModel.pendingPostTradeReflection != nil },
+            set: { isPresented in
+                if !isPresented { viewModel.skipPostTradeReflection() }
+            }
+        )) {
+            if let trade = viewModel.pendingPostTradeReflection {
+                PostTradeReflectionSheet(
+                    trade: trade,
+                    onSave: { exitEmotion, executionRating in
+                        await viewModel.savePostTradeReflection(
+                            exitEmotion: exitEmotion,
+                            executionRating: executionRating
+                        )
+                    },
+                    onSkip: { viewModel.skipPostTradeReflection() }
+                )
+            }
+        }
+    }
+
+    private var preTradePsychologyNotice: some View {
+        AddTradePreTradePsychologyNotice(
+            focusLevel: TraderDailyCheckInStore.shared.todayCheckIn?.focusLevel,
+            message: AddTradePreTradePsychologyPolicy.noticeMessage(
+                facts: PsychologyCoachSessionStore.shared.facts,
+                focusLevel: TraderDailyCheckInStore.shared.todayCheckIn?.focusLevel
+            )
+        )
     }
 
     private var formContent: some View {
@@ -227,6 +253,15 @@ struct AddTradeView: View {
                 clipDraftScreenshotSection
             }
             #endif
+
+            if AddTradePreTradePsychologyPolicy.noticeMessage(
+                facts: PsychologyCoachSessionStore.shared.facts,
+                focusLevel: TraderDailyCheckInStore.shared.todayCheckIn?.focusLevel
+            ) != nil {
+                Section {
+                    preTradePsychologyNotice
+                }
+            }
 
             Section {
                 accountPicker
@@ -324,32 +359,20 @@ struct AddTradeView: View {
                 Toggle("Include exit time", isOn: $viewModel.includeExitTime)
                 if viewModel.includeExitTime {
                     DatePicker("Exit", selection: $viewModel.exitAt)
+                    if let duration = viewModel.computedHoldDurationLabel {
+                        HStack {
+                            Text("Duration")
+                                .experienceStyle(.body, color: colors.primaryText)
+                            Spacer()
+                            Text(duration)
+                                .experienceStyle(.body, color: colors.secondaryText)
+                                .accessibilityIdentifier("addTrade.duration")
+                        }
+                    }
                 }
             }
 
-            Section("Trade Review") {
-                Button {
-                    showsReview = true
-                } label: {
-                    SettingsNavigationRow(
-                        title: "Strategy & details",
-                        subtitle: viewModel.reviewSummary,
-                        systemImage: "list.bullet.rectangle"
-                    )
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    showsNotes = true
-                } label: {
-                    SettingsNavigationRow(
-                        title: "Notes",
-                        subtitle: viewModel.notesText.isEmpty ? "Add notes" : viewModel.notesText,
-                        systemImage: "note.text"
-                    )
-                }
-                .buttonStyle(.plain)
-            }
+            tradeReviewSection
 
             #if DEBUG
             if !ProcessInfo.processInfo.arguments.contains("-uitesting-addtrade-media") {
@@ -362,7 +385,19 @@ struct AddTradeView: View {
             Section("Sharing") {
                 Toggle("Share to Profile", isOn: $viewModel.shareToProfile)
                 if viewModel.shareToProfile {
-                    TextField("Caption (optional)", text: $viewModel.publicCaptionText)
+                    HStack {
+                        Spacer(minLength: 0)
+                        Button("Use Notes") {
+                            viewModel.copyNotesToCaption()
+                        }
+                        .font(ExperienceTypography.subheadline.weight(.semibold))
+                        .foregroundStyle(colors.accent)
+                        .disabled(
+                            viewModel.notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        )
+                    }
+                    TextField("Caption (optional)", text: $viewModel.publicCaptionText, axis: .vertical)
+                        .lineLimit(1...4)
                 }
             }
 
@@ -379,6 +414,94 @@ struct AddTradeView: View {
         .scrollContentBackground(.hidden)
         .disabled(viewModel.phase == .saving)
         .listSectionSpacing(ExperienceSpacing.sm)
+    }
+
+    private var tradeReviewSection: some View {
+        Section("Trade Review") {
+            TextField("Strategy / setup", text: $viewModel.strategyText)
+                .textInputAutocapitalization(.sentences)
+                .accessibilityIdentifier("addTrade.strategy")
+
+            inlineNotesEditor(
+                text: $viewModel.notesText,
+                placeholder: "Top confluences, context, what you saw…",
+                minHeight: 72,
+                accessibilityIdentifier: "addTrade.notes"
+            )
+
+            Picker("Timeframe", selection: $viewModel.timeframeSelection) {
+                Text("Not set").tag("")
+                ForEach(TradeReviewCatalog.timeframeOptions, id: \.self) { option in
+                    Text(option).tag(option)
+                }
+            }
+            .accessibilityIdentifier("addTrade.timeframe")
+
+            if viewModel.timeframeSelection == TradeReviewCatalog.customTimeframeToken {
+                TextField("Custom timeframe", text: $viewModel.customTimeframeText)
+                    .textInputAutocapitalization(.never)
+                    .accessibilityIdentifier("addTrade.timeframe.custom")
+            }
+
+            Toggle("News event", isOn: $viewModel.newsEvent)
+                .accessibilityIdentifier("addTrade.newsEvent")
+
+            psychologyRow
+        }
+    }
+
+    private var psychologyRow: some View {
+        Button {
+            showsPsychologySheet = true
+        } label: {
+            HStack(spacing: ExperienceSpacing.sm) {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                    Text("Psychology")
+                        .experienceStyle(.body, color: colors.primaryText)
+                    Text(viewModel.psychologySummary)
+                        .experienceStyle(
+                            .footnote,
+                            color: viewModel.hasPsychologyDetails
+                                ? colors.secondaryText
+                                : colors.tertiaryText
+                        )
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: ExperienceSpacing.xs)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(colors.tertiaryText)
+            }
+            .padding(.vertical, ExperienceSpacing.xxs)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("addTrade.psychologyRow")
+    }
+
+    private func inlineNotesEditor(
+        text: Binding<String>,
+        placeholder: String,
+        minHeight: CGFloat,
+        accessibilityIdentifier: String
+    ) -> some View {
+        ZStack(alignment: .topLeading) {
+            if text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(placeholder)
+                    .experienceStyle(.body, color: colors.tertiaryText)
+                    .padding(.top, 8)
+                    .padding(.leading, 5)
+                    .allowsHitTesting(false)
+            }
+            TextEditor(text: text)
+                .font(ExperienceTypography.body)
+                .foregroundStyle(colors.primaryText)
+                .frame(minHeight: minHeight, alignment: .top)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
+                .accessibilityIdentifier(accessibilityIdentifier)
+        }
     }
 
     private var pnlFieldColor: Color {
@@ -552,7 +675,6 @@ struct AddTradeView: View {
     #endif
 
     private var screenshotSection: some View {
-        // DEBUG media screenshot launch arg — keep screenshot block near top.
         Section("Screenshot") {
             if let preview = viewModel.screenshotPreview {
                 Image(uiImage: preview)
@@ -569,6 +691,14 @@ struct AddTradeView: View {
                 hasPreview: screenshotPickerShowsPreview,
                 photoItem: $photoItem
             )
+            if viewModel.hasScreenshotAttached {
+                Picker("Display", selection: $viewModel.screenshotDisplayMode) {
+                    Text("Fit").tag(TradeScreenshotDisplayMode.fit)
+                    Text("Fill").tag(TradeScreenshotDisplayMode.fill)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("addTrade.screenshotDisplayMode")
+            }
         }
     }
 
@@ -658,7 +788,16 @@ struct AddTradeView: View {
             viewModel.save()
         }
         if args.contains("-uitesting-addtrade-review") {
-            showsReview = true
+            viewModel.strategyText = "Breakout retest"
+            viewModel.notesText = "UI test trade notes"
+            viewModel.timeframeSelection = "5m"
+            viewModel.newsEvent = true
+            viewModel.confidenceLevel = 4
+            viewModel.emotionSelection = "Confident"
+            viewModel.followedPlan = true
+            viewModel.marketConditionSelection = "Trending"
+            viewModel.psychologyNotesText = "UI test psychology notes"
+            showsPsychologySheet = true
         }
         if args.contains("-uitesting-addtrade-custom") {
             showsInstrumentPicker = true
@@ -854,51 +993,7 @@ struct AddTradeInstrumentPickerView: View {
     }
 }
 
-struct AddTradeReviewView: View {
-    @Bindable var viewModel: AddTradeViewModel
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        Form {
-            Section("Strategy") {
-                TextField("Strategy / setup", text: $viewModel.strategyText)
-            }
-        }
-        .experienceNavigationTitle("Trade Review")
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { dismiss() }
-            }
-        }
-        .accessibilityIdentifier("addTrade.review")
-    }
-}
-
-struct AddTradeNotesView: View {
-    @Bindable var viewModel: AddTradeViewModel
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        Form {
-            Section {
-                TextEditor(text: $viewModel.notesText)
-                    .frame(minHeight: 180)
-                    .accessibilityLabel("Trade notes")
-            } footer: {
-                Text("Private journal notes (Top Confluences on web).")
-            }
-        }
-        .experienceNavigationTitle("Notes")
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { dismiss() }
-            }
-        }
-        .accessibilityIdentifier("addTrade.notes")
-    }
-}
-
-/// Compact create-new-clip sheet used from Add Trade (local draft only).
+/// Legacy sheet views removed — Trade Review is inline on ``AddTradeView``.
 struct AddTradeNewClipComposerView: View {
     var isPreparing: Bool
     var draft: ReelDraft?
@@ -993,6 +1088,26 @@ private struct AddTradeScreenshotPicker: View {
     var body: some View {
         PhotosPicker(selection: $photoItem, matching: .images) {
             ScreenshotPickerLabel(hasPreview: hasPreview)
+        }
+    }
+}
+
+private struct AddTradeChromeModifier: ViewModifier {
+    let embeddedInTradeEntryHub: Bool
+    let navigationTitle: String
+    let onCancel: () -> Void
+
+    func body(content: Content) -> some View {
+        if embeddedInTradeEntryHub {
+            content
+        } else {
+            content
+                .experienceNavigationTitle(navigationTitle)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel", action: onCancel)
+                    }
+                }
         }
     }
 }

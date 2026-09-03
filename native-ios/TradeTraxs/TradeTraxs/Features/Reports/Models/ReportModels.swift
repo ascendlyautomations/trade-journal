@@ -26,3 +26,18 @@ enum ReportAvailability: Hashable, Codable, Sendable {
         }
     }
 }
+
+/// Catalog card for a psychology report template or period.
+struct PsychologyReportCardModel: Hashable, Identifiable, Sendable {
+    var id: String { template.rawValue }
+    var template: PsychologyReportTemplate
+    var title: String
+    var subtitle: String
+    var systemImage: String
+    var actionTitle: String
+    var availability: ReportAvailability
+    /// When set, opens this specific report directly.
+    var periodRef: PsychologyReportPeriodRef?
+    /// Available historical periods for weekly/monthly pickers.
+    var availablePeriods: [PsychologyReportPeriodRef]
+}

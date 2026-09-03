@@ -60,6 +60,10 @@ nonisolated enum NavigationPathProbeFormatter {
         case .reports: return "reports"
         case .payouts: return "payouts"
         case .report: return "report"
+        case .psychologyAnalytics: return "psychologyAnalytics"
+        case .psychologyCoach: return "psychologyCoach"
+        case .checkInHistory: return "checkInHistory"
+        case .checkInDay: return "checkInDay"
         case .settings(let settings): return "settings(\(settings.rawValue))"
         }
     }

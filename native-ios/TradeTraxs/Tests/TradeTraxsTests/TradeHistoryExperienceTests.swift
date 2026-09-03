@@ -25,6 +25,7 @@ final class TradeHistoryExperienceTests: XCTestCase {
             home: TradeHistoryStubHomeRepository(),
             trades: TradeHistoryStubTradeRepository(),
             achievements: TradeHistoryStubAchievementRepository(),
+            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
             session: TradeHistoryStubSession(userID: "dev.trades.nav"),
             detailCache: DetailPresentationCache(),
             navigationCoordinator: coordinator

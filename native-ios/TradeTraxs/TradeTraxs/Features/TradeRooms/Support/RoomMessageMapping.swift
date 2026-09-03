@@ -32,7 +32,10 @@ enum RoomMessageMapping {
             MessageAttachment(
                 id: media.id.isEmpty ? "\(roomMessage.id.rawValue)-\(index)" : media.id,
                 media: media,
-                tradeID: nil
+                tradeID: nil,
+                durationSeconds: media.kind == .audio
+                    ? media.altText.flatMap(Double.init)
+                    : nil
             )
         }
         let body = roomMessage.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -45,11 +48,12 @@ enum RoomMessageMapping {
                 ),
             ]
         }
+        let isVoice = roomMessage.media.contains { $0.kind == .audio }
         return Message(
             id: MessageID(roomMessage.id.rawValue),
             conversationID: conversationID,
             senderProfileID: roomMessage.senderProfileID,
-            kind: attachments.isEmpty ? .text : .media,
+            kind: isVoice ? .voice : (attachments.isEmpty ? .text : .media),
             body: attachments.isEmpty ? roomMessage.body : (body.isEmpty || looksLikeImageURL(body) ? nil : body),
             attachments: attachments,
             replyToMessageID: roomMessage.parentMessageID.map { MessageID($0.rawValue) },

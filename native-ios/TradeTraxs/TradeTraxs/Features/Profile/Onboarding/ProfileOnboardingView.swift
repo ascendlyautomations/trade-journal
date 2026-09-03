@@ -1,7 +1,10 @@
+import PhotosUI
 import SwiftUI
 
 struct ProfileOnboardingView: View {
     @State private var viewModel: ProfileOnboardingViewModel
+    @State private var photoItem: PhotosPickerItem?
+    @FocusState private var usernameFieldFocused: Bool
     @Environment(\.themeColors) private var colors
 
     init(viewModel: ProfileOnboardingViewModel) {
@@ -12,6 +15,7 @@ struct ProfileOnboardingView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
                 header
+                avatarPicker
                 usernameField
                 tradingStyleField
                 traderTypeField
@@ -37,6 +41,14 @@ struct ProfileOnboardingView: View {
         }
         .experienceScreenBackground()
         .interactiveDismissDisabled(true)
+        .onChange(of: viewModel.usernameError) { _, error in
+            if error != nil {
+                usernameFieldFocused = true
+            }
+        }
+        .onChange(of: photoItem) { _, item in
+            Task { await loadPhoto(item) }
+        }
     }
 
     private var header: some View {
@@ -53,11 +65,62 @@ struct ProfileOnboardingView: View {
         .padding(.top, ExperienceSpacing.xxl)
     }
 
+    private var avatarPicker: some View {
+        VStack(spacing: ExperienceSpacing.sm) {
+            Group {
+                if let preview = viewModel.avatarPreview {
+                    Image(uiImage: preview)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 56))
+                        .foregroundStyle(colors.secondaryText.opacity(0.55))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .frame(width: 96, height: 96)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(colors.secondaryText.opacity(0.25), lineWidth: 1))
+
+            PhotosPicker(selection: $photoItem, matching: .images) {
+                Text(viewModel.avatarPreview == nil ? "Add Profile Picture" : "Change Profile Picture")
+                    .experienceStyle(.footnote, color: colors.primaryText)
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.vertical, ExperienceSpacing.sm)
+                    .background(colors.surfacePrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous))
+            }
+
+            if viewModel.avatarPreview != nil {
+                Button {
+                    photoItem = nil
+                    viewModel.clearAvatarSelection()
+                } label: {
+                    Text("Remove photo")
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                }
+            }
+
+            Text("Optional")
+                .experienceStyle(.caption, color: colors.secondaryText)
+
+            if let avatarUploadError = viewModel.avatarUploadError {
+                Text(avatarUploadError)
+                    .experienceStyle(.caption, color: colors.error)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, ExperienceSpacing.sm)
+    }
+
     private var usernameField: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             Text("Username")
                 .experienceStyle(.footnote, color: colors.secondaryText)
             TextField("username", text: $viewModel.username)
+                .focused($usernameFieldFocused)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.asciiCapable)
@@ -67,10 +130,15 @@ struct ProfileOnboardingView: View {
                     if sanitized != newValue {
                         viewModel.username = sanitized
                     }
+                    viewModel.clearUsernameError()
                 }
                 .padding(ExperienceSpacing.md)
                 .background(colors.surfacePrimary)
                 .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous))
+            if let usernameError = viewModel.usernameError {
+                Text(usernameError)
+                    .experienceStyle(.caption, color: colors.error)
+            }
             Text(ProfileUsernamePolicy.formatHint)
                 .experienceStyle(.caption, color: colors.secondaryText)
         }
@@ -152,5 +220,20 @@ struct ProfileOnboardingView: View {
                 viewModel.startedTrading = formatter.string(from: newDate)
             }
         )
+    }
+
+    private func loadPhoto(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data)
+            else {
+                viewModel.avatarUploadError = "Couldn't load that photo. Try another image."
+                return
+            }
+            viewModel.setAvatarImage(image)
+        } catch {
+            viewModel.avatarUploadError = "Couldn't load that photo. Try another image."
+        }
     }
 }

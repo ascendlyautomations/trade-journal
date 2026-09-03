@@ -105,13 +105,19 @@ extension TradeRepository {
         trade.strategy = draft.strategy
         trade.visibility = draft.visibility
         trade.publicCaption = draft.publicCaption
-        trade.notePreview = draft.noteBody
-        if let imageURL = draft.imageURL, !imageURL.isEmpty {
-            trade.thumbnail = MediaReference(id: imageURL, kind: .image, altText: nil)
-        } else {
-            // nil / empty clears screenshot (web `removeScreenshot`).
-            trade.thumbnail = nil
-        }
+        trade.thumbnail = draft.imageURL.map { MediaReference(id: $0, kind: .image, altText: nil) }
+        trade.notePreview = draft.noteBody.map { String($0.prefix(140)) }
+        trade.notes = draft.noteBody
+        trade.timeframe = draft.timeframe
+        trade.newsEvent = draft.newsEvent
+        trade.confidence = draft.confidence
+        trade.emotion = draft.emotion
+        trade.followedPlan = draft.followedPlan
+        trade.marketCondition = draft.marketCondition
+        trade.psychologyNotes = draft.psychologyNotes
+        trade.durationText = draft.durationText
+        trade.durationSeconds = draft.durationSeconds
+        trade.imageDisplayMode = draft.imageDisplayMode
         trade.updatedAt = Date()
         return try await update(trade)
     }

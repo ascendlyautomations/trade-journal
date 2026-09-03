@@ -15,6 +15,7 @@ final class CreatePostViewModel {
     private(set) var phase: Phase = .idle
     private(set) var formError: String?
     private(set) var isUploadingMedia = false
+    private(set) var viewerProfile: Profile?
 
     var bodyText = ""
     var imageData: Data?
@@ -51,6 +52,11 @@ final class CreatePostViewModel {
 
     var canPublish: Bool {
         phase != .publishing && phase != .idle
+    }
+
+    /// True when the draft has text or an image — used to enable the Publish button.
+    var hasValidDraft: Bool {
+        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || imageData != nil
     }
 
     func loadIfNeeded() {
@@ -94,10 +100,11 @@ final class CreatePostViewModel {
         if let raw = await session.currentUserID?.rawValue {
             viewerID = ProfileID(raw)
         }
-        guard viewerID != nil else {
+        guard let viewerID else {
             phase = .failed("Sign in to create a post.")
             return
         }
+        viewerProfile = try? await profiles.profile(id: viewerID)
         phase = .ready
     }
 

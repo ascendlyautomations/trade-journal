@@ -3,6 +3,7 @@ import SwiftUI
 /// Presents the viewer's trades for sharing into a DM or Trade Room (web trade picker).
 struct TradeSharePickerSheet: View {
     let trades: [Trade]
+    let imagePipeline: any ImagePipeline
     var isLoading: Bool
     var onSelect: (Trade) -> Void
     var onClose: () -> Void
@@ -26,21 +27,7 @@ struct TradeSharePickerSheet: View {
                         Button {
                             onSelect(trade)
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("\(trade.symbol.ticker) · \(trade.side.rawValue.capitalized)")
-                                    .experienceStyle(.headline, color: colors.primaryText)
-                                HStack(spacing: ExperienceSpacing.sm) {
-                                    if let pnl = trade.realizedPnL {
-                                        Text(TradeDisplay.pnlText(pnl))
-                                            .experienceStyle(.subheadline, color: colors.secondaryText)
-                                    }
-                                    if let rr = trade.riskReward {
-                                        Text(TradeDisplay.rrText(rr))
-                                            .experienceStyle(.caption, color: colors.tertiaryText)
-                                    }
-                                }
-                            }
-                            .padding(.vertical, 2)
+                            TradeSharePickerRow(trade: trade, imagePipeline: imagePipeline)
                         }
                         .accessibilityIdentifier("conversation.tradePicker.\(trade.id.rawValue)")
                     }
@@ -58,5 +45,50 @@ struct TradeSharePickerSheet: View {
         }
         .experienceSheetChrome()
         .accessibilityIdentifier("conversation.tradePicker")
+    }
+}
+
+private struct TradeSharePickerRow: View {
+    let trade: Trade
+    let imagePipeline: any ImagePipeline
+
+    @Environment(\.themeColors) private var colors
+
+    private let thumbnailSize: CGFloat = 60
+
+    var body: some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+            TradeImageView(
+                reference: ProfileCardMediaPresence.tradeMedia(in: trade),
+                imagePipeline: imagePipeline,
+                contentMode: .fill,
+                side: thumbnailSize
+            )
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(trade.symbol.ticker) · \(TradeDisplay.sideTitle(trade.side))")
+                    .experienceStyle(.headline, color: colors.primaryText)
+                    .lineLimit(1)
+
+                HStack(spacing: ExperienceSpacing.sm) {
+                    Text(TradeDisplay.pnlText(trade.realizedPnL))
+                        .experienceStyle(.subheadline, color: colors.secondaryText)
+                        .lineLimit(1)
+                    if trade.riskReward != nil {
+                        Text(TradeDisplay.rrText(trade.riskReward))
+                            .experienceStyle(.caption, color: colors.tertiaryText)
+                            .lineLimit(1)
+                    }
+                }
+
+                Text(TradeDisplay.dateTimeText(trade.entryAt))
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 }

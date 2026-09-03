@@ -4,6 +4,8 @@ nonisolated enum MessageKind: String, Hashable, Codable, Sendable {
     case text
     case tradeShare
     case media
+    case voice
+    case storyReply = "story_reply"
     case system
 }
 
@@ -31,6 +33,8 @@ nonisolated struct MessageAttachment: Hashable, Codable, Sendable, Identifiable 
     var id: String
     var media: MediaReference
     var tradeID: TradeID?
+    /// Voice message duration in seconds — persisted server-side as `audio_duration_ms`.
+    var durationSeconds: Double? = nil
 }
 
 nonisolated struct Message: Hashable, Codable, Sendable, Identifiable {

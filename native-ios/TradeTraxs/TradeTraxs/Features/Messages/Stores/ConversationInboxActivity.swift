@@ -9,11 +9,21 @@ nonisolated enum ConversationInboxActivity {
     static func preview(for message: Message) -> String {
         if message.kind == .system { return "System message" }
         if message.kind == .tradeShare { return "Shared a trade" }
+        if message.kind == .voice { return "Voice message" }
+        if message.kind == .storyReply {
+            return StoryReplyMessageSupport.previewText(from: message.body)
+        }
         if let body = message.body?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty {
+            if StoryReplyMessageSupport.decode(from: body) != nil {
+                return StoryReplyMessageSupport.previewText(from: body)
+            }
             return body
         }
         if !message.attachments.isEmpty {
             if message.attachments.first?.tradeID != nil { return "Shared a trade" }
+            if message.kind == .voice || message.attachments.first?.media.kind == .audio {
+                return "Voice message"
+            }
             return "Photo"
         }
         return "New message"

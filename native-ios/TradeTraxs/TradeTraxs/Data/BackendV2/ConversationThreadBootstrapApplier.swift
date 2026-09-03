@@ -10,6 +10,7 @@ nonisolated enum ConversationThreadBootstrapApplier {
         var markReadApplied: Bool
         var notificationsMarkedRead: Int
         var skippedMessages: Int
+        var blockStatus: DmBlockStatus?
     }
 
     @MainActor
@@ -55,6 +56,10 @@ nonisolated enum ConversationThreadBootstrapApplier {
         var skipped = 0
         messages.reserveCapacity(bootstrap.data.messages.count)
         for row in bootstrap.data.messages {
+            if row.deleted_for_everyone.value == true {
+                skipped += 1
+                continue
+            }
             do {
                 messages.append(try mapMessage(row, viewerID: viewerID, conversationID: conversationID))
             } catch {
@@ -86,6 +91,17 @@ nonisolated enum ConversationThreadBootstrapApplier {
             updatedAt: latestMessage?.createdAt ?? .distantPast
         )
 
+        let blockStatus: DmBlockStatus? = {
+            guard let block = bootstrap.data.block_status else { return nil }
+            let otherRaw = block.other_user_id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !otherRaw.isEmpty else { return nil }
+            return DmBlockStatus(
+                otherUserID: ProfileID(otherRaw),
+                blockedByMe: block.blocked_by_me.value == true,
+                blockedByOther: block.blocked_by_other.value == true
+            )
+        }()
+
         return Applied(
             conversation: conversation,
             messages: messages,
@@ -93,7 +109,8 @@ nonisolated enum ConversationThreadBootstrapApplier {
             hasMoreMessages: bootstrap.data.has_more_messages.value ?? false,
             markReadApplied: bootstrap.data.mark_read.applied.value ?? false,
             notificationsMarkedRead: Int(bootstrap.data.notifications_marked_read.value ?? 0),
-            skippedMessages: skipped
+            skippedMessages: skipped,
+            blockStatus: blockStatus
         )
     }
 
@@ -124,6 +141,9 @@ nonisolated enum ConversationThreadBootstrapApplier {
         }
         let isTrade = (row.type?.lowercased() == "trade") || tradeID != nil
         let imageURL = row.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let audioURL = row.audio_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isVoice = row.type?.lowercased() == "voice" || !(audioURL?.isEmpty ?? true)
+        let voiceDuration = row.audio_duration_ms.map { Double($0) / 1_000.0 }
 
         let attachments: [MessageAttachment] = {
             if let tradeID {
@@ -132,6 +152,16 @@ nonisolated enum ConversationThreadBootstrapApplier {
                         id: tradeID.rawValue,
                         media: MediaReference(id: tradeID.rawValue, kind: .file, altText: "Shared trade"),
                         tradeID: tradeID
+                    ),
+                ]
+            }
+            if let audioURL, !audioURL.isEmpty {
+                return [
+                    MessageAttachment(
+                        id: audioURL,
+                        media: MediaReference(id: audioURL, kind: .audio, altText: nil),
+                        tradeID: nil,
+                        durationSeconds: voiceDuration
                     ),
                 ]
             }
@@ -149,6 +179,10 @@ nonisolated enum ConversationThreadBootstrapApplier {
             if row.is_system.value == true { return .system }
             if isTrade { return .tradeShare }
             if let raw = row.type?.lowercased(), raw == "system" { return .system }
+            if isVoice { return .voice }
+            if StoryReplyMessageSupport.isStoryReply(type: row.type, content: row.content) {
+                return .storyReply
+            }
             return attachments.isEmpty ? .text : .media
         }()
 

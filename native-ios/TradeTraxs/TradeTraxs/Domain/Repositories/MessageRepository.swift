@@ -44,4 +44,49 @@ nonisolated protocol MessageRepository: Sendable {
     ) async throws -> Conversation
     /// Web messages `handleDeleteConversation` — delete own `conversation_participants` row.
     func deleteConversation(id: ConversationID) async throws
+    /// Web `deleteForEveryone` — soft-delete own DM (`messages.deleted_for_everyone = true`).
+    func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws
+    /// Web `setConversationNotificationsEnabled` — per-user mute via `conversation_member_preferences`.
+    func setConversationNotificationsEnabled(
+        conversationID: ConversationID,
+        enabled: Bool
+    ) async throws
+    /// Web `get_dm_block_status`.
+    func fetchDmBlockStatus(conversationID: ConversationID) async throws -> DmBlockStatus
+    /// Web `get_user_block_status`.
+    func fetchUserBlockStatus(otherID: ProfileID) async throws -> DmBlockStatus
+    /// Web `set_dm_user_block`.
+    func setDmUserBlock(conversationID: ConversationID, blocked: Bool) async throws -> DmBlockStatus
+    /// Profile-level block without an existing conversation — `set_user_block`.
+    func setUserBlock(otherID: ProfileID, blocked: Bool) async throws -> DmBlockStatus
+    /// Blocked accounts list — `user_blocks` + embedded profiles (RLS: own rows).
+    func fetchBlockedAccounts() async throws -> [BlockedAccount]
+    /// Muted 1:1 peers — `list_muted_dm_peers`.
+    func fetchMutedDirectMessagePeers() async throws -> [MutedDirectMessagePeer]
+}
+
+extension MessageRepository {
+    func fetchDmBlockStatus(conversationID: ConversationID) async throws -> DmBlockStatus {
+        throw AppError.notImplemented(feature: "fetchDmBlockStatus")
+    }
+
+    func fetchUserBlockStatus(otherID: ProfileID) async throws -> DmBlockStatus {
+        throw AppError.notImplemented(feature: "fetchUserBlockStatus")
+    }
+
+    func setDmUserBlock(conversationID: ConversationID, blocked: Bool) async throws -> DmBlockStatus {
+        throw AppError.notImplemented(feature: "setDmUserBlock")
+    }
+
+    func setUserBlock(otherID: ProfileID, blocked: Bool) async throws -> DmBlockStatus {
+        throw AppError.notImplemented(feature: "setUserBlock")
+    }
+
+    func fetchBlockedAccounts() async throws -> [BlockedAccount] {
+        throw AppError.notImplemented(feature: "fetchBlockedAccounts")
+    }
+
+    func fetchMutedDirectMessagePeers() async throws -> [MutedDirectMessagePeer] {
+        throw AppError.notImplemented(feature: "fetchMutedDirectMessagePeers")
+    }
 }

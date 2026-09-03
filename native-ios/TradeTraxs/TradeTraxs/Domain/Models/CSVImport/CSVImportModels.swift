@@ -6,6 +6,7 @@ nonisolated enum CSVFileFormat: String, Hashable, Codable, Sendable, CaseIterabl
     case tradezella
     case enteredExited = "entered_exited"
     case flexible
+    case screenshot
 
     var displayName: String {
         switch self {
@@ -13,6 +14,7 @@ nonisolated enum CSVFileFormat: String, Hashable, Codable, Sendable, CaseIterabl
         case .tradezella: return "TradeZella"
         case .enteredExited: return "Entered/Exited"
         case .flexible: return "Generic CSV"
+        case .screenshot: return "Screenshot"
         }
     }
 }

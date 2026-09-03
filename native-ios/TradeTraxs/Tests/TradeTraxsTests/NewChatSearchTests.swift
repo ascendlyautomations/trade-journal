@@ -220,6 +220,13 @@ private final class CountingNewChatMessageRepository: MessageRepository, @unchec
 
     func deleteConversation(id: ConversationID) async throws {}
 
+    func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws {}
+
+    func setConversationNotificationsEnabled(
+        conversationID: ConversationID,
+        enabled: Bool
+    ) async throws {}
+
     func createConversation(participantIDs: [ProfileID]) async throws -> Conversation {
         let key = Set(participantIDs)
         if let existing = created[key] { return existing }

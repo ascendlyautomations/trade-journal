@@ -1624,6 +1624,8 @@ export type Database = {
       messages: {
         Row: {
           achievement_post_id: string | null
+          audio_duration_ms: number | null
+          audio_url: string | null
           channel: string | null
           content: string | null
           conversation_id: string | null
@@ -1645,6 +1647,8 @@ export type Database = {
         }
         Insert: {
           achievement_post_id?: string | null
+          audio_duration_ms?: number | null
+          audio_url?: string | null
           channel?: string | null
           content?: string | null
           conversation_id?: string | null
@@ -1666,6 +1670,8 @@ export type Database = {
         }
         Update: {
           achievement_post_id?: string | null
+          audio_duration_ms?: number | null
+          audio_url?: string | null
           channel?: string | null
           content?: string | null
           conversation_id?: string | null
@@ -2880,6 +2886,8 @@ export type Database = {
           created_at: string | null
           id: string
           image_url: string | null
+          audio_duration_ms: number | null
+          audio_url: string | null
           parent_message_id: string | null
           pinned: boolean | null
           pinned_trade_id: string | null
@@ -2895,6 +2903,8 @@ export type Database = {
           created_at?: string | null
           id?: string
           image_url?: string | null
+          audio_duration_ms?: number | null
+          audio_url?: string | null
           parent_message_id?: string | null
           pinned?: boolean | null
           pinned_trade_id?: string | null
@@ -2910,6 +2920,8 @@ export type Database = {
           created_at?: string | null
           id?: string
           image_url?: string | null
+          audio_duration_ms?: number | null
+          audio_url?: string | null
           parent_message_id?: string | null
           pinned?: boolean | null
           pinned_trade_id?: string | null
@@ -3430,6 +3442,8 @@ export type Database = {
           trade_mode: string | null
           trade_type: string | null
           user_id: string | null
+          import_source: string | null
+          import_fingerprint: string | null
         }
         Insert: {
           account_category?: string | null
@@ -3482,6 +3496,8 @@ export type Database = {
           trade_mode?: string | null
           trade_type?: string | null
           user_id?: string | null
+          import_source?: string | null
+          import_fingerprint?: string | null
         }
         Update: {
           account_category?: string | null
@@ -3534,6 +3550,8 @@ export type Database = {
           trade_mode?: string | null
           trade_type?: string | null
           user_id?: string | null
+          import_source?: string | null
+          import_fingerprint?: string | null
         }
         Relationships: [
           {

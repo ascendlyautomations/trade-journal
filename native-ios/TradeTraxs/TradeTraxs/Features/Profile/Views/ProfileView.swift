@@ -106,6 +106,26 @@ struct ProfileView: View {
                     }
                     .accessibilityIdentifier("profile.toolbar.settings")
                 }
+            } else if !contentStore.isOwner {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("Share Profile", systemImage: "square.and.arrow.up") {
+                            headerViewModel.presentShare()
+                        }
+                        Button(
+                            headerViewModel.blockedByMe ? "Unblock User" : "Block User",
+                            systemImage: headerViewModel.blockedByMe ? "person.crop.circle.badge.checkmark" : "hand.raised",
+                            role: headerViewModel.blockedByMe ? nil : .destructive
+                        ) {
+                            headerViewModel.requestBlockToggle()
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.body.weight(.semibold))
+                    }
+                    .accessibilityLabel("Profile actions")
+                    .accessibilityIdentifier("profile.actions.menu")
+                }
             }
         }
         .refreshable {
@@ -113,6 +133,7 @@ struct ProfileView: View {
         }
         .onAppear {
             headerViewModel.onRetryBootstrap = { screen.retryBootstrap() }
+            headerViewModel.onAppear()
             screen.onAppear(currentUserProfile: currentUserProfile)
         }
         .onChange(of: screen.state.profileID) { _, _ in

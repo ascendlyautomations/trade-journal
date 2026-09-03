@@ -37,4 +37,12 @@ enum TradeRoomNavigationHost: Hashable, Sendable {
         case .profile: return .profile(.otherProfile(id))
         }
     }
+
+    func sharedTrade(_ id: TradeID) -> AppDestination {
+        switch self {
+        case .messages: return .messages(.sharedTrade(id))
+        case .feed: return .feed(.trade(id))
+        case .profile: return .profile(.trade(id))
+        }
+    }
 }

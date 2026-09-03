@@ -5,6 +5,7 @@ import XCTest
 final class ConversationExperienceTests: XCTestCase {
     override func setUp() async throws {
         MessagesInboxStore.shared.resetForTesting()
+        BackendV2FeatureFlags.resetFlagsForTests()
     }
 
     func testDaySeparatorLabels() {
@@ -13,6 +14,25 @@ final class ConversationExperienceTests: XCTestCase {
         XCTAssertEqual(ConversationThreadSupport.daySeparator(today, calendar: calendar), "Today")
         let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
         XCTAssertEqual(ConversationThreadSupport.daySeparator(yesterday, calendar: calendar), "Yesterday")
+    }
+
+    func testMessageTextLayoutWidthsIncreaseWithContentLength() {
+        let maxWidth: CGFloat = 300
+        let yo = ConversationMessageTextLayout.referenceTextWidth("yo", maxWidth: maxWidth)
+        let hello = ConversationMessageTextLayout.referenceTextWidth("hello there", maxWidth: maxWidth)
+        let medium = ConversationMessageTextLayout.referenceTextWidth(
+            "A medium sentence for bubble sizing.",
+            maxWidth: maxWidth
+        )
+        let long = ConversationMessageTextLayout.referenceTextWidth(
+            String(repeating: "word ", count: 40),
+            maxWidth: maxWidth
+        )
+
+        XCTAssertLessThan(yo, hello)
+        XCTAssertLessThan(hello, medium)
+        XCTAssertLessThan(yo, maxWidth / 2)
+        XCTAssertGreaterThan(long, medium)
     }
 
     func testLocalConversationLoadsFixtureTimeline() async {
@@ -113,6 +133,149 @@ final class ConversationExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.phase, .loaded)
         let after = MessagesInboxStore.shared.conversations.first { $0.id == id }!
         XCTAssertEqual(MessagesInboxStore.shared.unreadCount(for: after), 0)
+    }
+
+    func testCanDeleteMessageOnlyOwnSentMessages() async {
+        MessagesInboxFixtures.seedStore(MessagesInboxStore.shared)
+        let viewModel = makeViewModel(
+            conversationID: ConversationID("dev-dm-ada"),
+            sessionUserID: MessagesInboxFixtures.viewerID.rawValue
+        )
+        viewModel.loadIfNeeded()
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        let bubbles = viewModel.timeline.compactMap { item -> ConversationBubbleItem? in
+            if case .message(let bubble) = item { return bubble }
+            return nil
+        }
+        let incoming = bubbles.first { !$0.isOutgoing }!
+        let outgoing = bubbles.first { $0.isOutgoing && $0.sendState == .sent }!
+
+        XCTAssertFalse(viewModel.canDeleteMessage(incoming))
+        XCTAssertTrue(viewModel.canDeleteMessage(outgoing))
+    }
+
+    func testDeleteMessageRemovesOutgoingFromLocalTimeline() async {
+        MessagesInboxFixtures.seedStore(MessagesInboxStore.shared)
+        let viewModel = makeViewModel(
+            conversationID: ConversationID("dev-dm-ada"),
+            sessionUserID: MessagesInboxFixtures.viewerID.rawValue
+        )
+        viewModel.loadIfNeeded()
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        guard let outgoing = viewModel.timeline.compactMap({ item -> ConversationBubbleItem? in
+            if case .message(let bubble) = item, bubble.isOutgoing, bubble.sendState == .sent {
+                return bubble
+            }
+            return nil
+        }).first else {
+            XCTFail("Expected an outgoing sent message")
+            return
+        }
+
+        let messageID = outgoing.id
+        let countBefore = viewModel.messages.count
+        await viewModel.deleteMessage(outgoing)
+
+        XCTAssertFalse(viewModel.messages.contains { $0.id == messageID })
+        XCTAssertEqual(viewModel.messages.count, countBefore - 1)
+        XCTAssertNil(viewModel.deleteErrorMessage)
+    }
+
+    func testLoadOlderIfNeededBlockedUntilInitialScrollConfirmed() async {
+        MessagesInboxFixtures.seedStore(MessagesInboxStore.shared)
+        let viewModel = makeViewModel(
+            conversationID: ConversationID("dev-dm-ada"),
+            sessionUserID: MessagesInboxFixtures.viewerID.rawValue
+        )
+        viewModel.loadIfNeeded()
+        try? await Task.sleep(nanoseconds: 80_000_000)
+        XCTAssertEqual(viewModel.phase, .loaded)
+        XCTAssertFalse(viewModel.messages.isEmpty)
+
+        await viewModel.loadOlderIfNeeded()
+
+        XCTAssertEqual(viewModel.initialScrollPhase, .pending)
+    }
+
+    func testSettlingPhaseBlocksPaginationUntilConfirmed() async {
+        MessagesInboxFixtures.seedStore(MessagesInboxStore.shared)
+        let viewModel = makeViewModel(
+            conversationID: ConversationID("dev-dm-ada"),
+            sessionUserID: MessagesInboxFixtures.viewerID.rawValue
+        )
+        viewModel.loadIfNeeded()
+        try? await Task.sleep(nanoseconds: 80_000_000)
+        viewModel.beginInitialScrollPositioning()
+        viewModel.beginInitialScrollSettling()
+
+        XCTAssertEqual(viewModel.initialScrollPhase, .settling)
+        XCTAssertFalse(viewModel.isInitialScrollConfirmed)
+
+        viewModel.beginPagination(anchorMessageID: MessageID("any"))
+        XCTAssertEqual(viewModel.scrollCoordinator.mode, .initialPositionPending)
+    }
+
+    func testDeleteMessageRestoresOnRepositoryFailure() async {
+        BackendV2FeatureFlags.setFlagForTests(.messageThreads, enabled: false)
+
+        let viewerID = ProfileID("user-viewer-1")
+        let peerID = ProfileID("user-peer-1")
+        let conversationID = ConversationID("remote-convo-1")
+        let repo = FailingDeleteMessageRepository(
+            viewerID: viewerID,
+            peerID: peerID,
+            conversationID: conversationID
+        )
+
+        MessagesInboxStore.shared.upsertConversation(
+            Conversation(
+                id: conversationID,
+                participantProfileIDs: [viewerID, peerID],
+                title: "Peer",
+                peerUsername: "peer",
+                avatar: nil,
+                isGroup: false,
+                isPinned: false,
+                lastMessagePreview: "Yes — clean displacement off the FVG.",
+                lastMessageAt: .now,
+                unreadCount: 0,
+                isMuted: false,
+                updatedAt: .now
+            )
+        )
+
+        let viewModel = ConversationViewModel(
+            conversationID: conversationID,
+            messages: repo,
+            profiles: ConversationStubProfileRepository(),
+            session: ConversationStubSession(userID: viewerID.rawValue),
+            uploadService: ConversationStubUploadService(),
+            objectStorage: ConversationStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: .shared
+        )
+        viewModel.loadIfNeeded()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        guard let outgoing = viewModel.timeline.compactMap({ item -> ConversationBubbleItem? in
+            if case .message(let bubble) = item, bubble.isOutgoing, bubble.sendState == .sent {
+                return bubble
+            }
+            return nil
+        }).first else {
+            XCTFail("Expected an outgoing sent message")
+            return
+        }
+
+        let messageID = outgoing.id
+        let countBefore = viewModel.messages.count
+        await viewModel.deleteMessage(outgoing)
+
+        XCTAssertTrue(viewModel.messages.contains { $0.id == messageID })
+        XCTAssertEqual(viewModel.messages.count, countBefore)
+        XCTAssertNotNil(viewModel.deleteErrorMessage)
     }
 
     // MARK: - Helpers
@@ -239,6 +402,94 @@ private struct ConversationStubMessageRepository: MessageRepository {
     }
 
     func deleteConversation(id: ConversationID) async throws {}
+
+    func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws {}
+
+    func setConversationNotificationsEnabled(
+        conversationID: ConversationID,
+        enabled: Bool
+    ) async throws {}
+}
+
+private struct FailingDeleteMessageRepository: MessageRepository {
+    let viewerID: ProfileID
+    let peerID: ProfileID
+    let conversationID: ConversationID
+
+    func conversations(page: PageRequest) async throws -> ConversationListResult {
+        ConversationListResult(items: [], nextCursor: nil, embeddedProfiles: [])
+    }
+
+    func conversation(id: ConversationID) async throws -> Conversation {
+        Conversation(
+            id: conversationID,
+            participantProfileIDs: [viewerID, peerID],
+            title: "Peer",
+            peerUsername: "peer",
+            avatar: nil,
+            isGroup: false,
+            isPinned: false,
+            lastMessagePreview: nil,
+            lastMessageAt: nil,
+            unreadCount: 0,
+            isMuted: false,
+            updatedAt: .now
+        )
+    }
+
+    func messages(in conversationID: ConversationID, page: PageRequest) async throws -> CursorPage<Message> {
+        CursorPage(
+            items: ConversationThreadFixtures.messages(
+                conversationID: self.conversationID,
+                viewerID: viewerID,
+                peerID: peerID
+            ),
+            nextCursor: nil
+        )
+    }
+
+    func send(_ message: Message) async throws -> Message { message }
+
+    func markRead(conversationID: ConversationID) async throws {}
+    func markUnread(conversationID: ConversationID) async throws {}
+
+    func createConversation(participantIDs: [ProfileID]) async throws -> Conversation {
+        throw AppError.notImplemented(feature: "createConversation")
+    }
+
+    func findExistingDirectConversationID(
+        viewerID: ProfileID,
+        recipientID: ProfileID
+    ) async throws -> ConversationID? {
+        nil
+    }
+
+    func usersHaveActiveBlock(viewerID: ProfileID, otherID: ProfileID) async -> Bool {
+        false
+    }
+
+    func createDirectConversation(viewerID: ProfileID, recipient: Profile) async throws -> Conversation {
+        throw AppError.notImplemented(feature: "createDirectConversation")
+    }
+
+    func createGroupConversation(
+        viewerID: ProfileID,
+        recipients: [Profile],
+        name: String?
+    ) async throws -> Conversation {
+        throw AppError.notImplemented(feature: "createGroupConversation")
+    }
+
+    func deleteConversation(id: ConversationID) async throws {}
+
+    func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws {
+        throw AppError.transport(.connectivity)
+    }
+
+    func setConversationNotificationsEnabled(
+        conversationID: ConversationID,
+        enabled: Bool
+    ) async throws {}
 }
 
 private struct ConversationStubProfileRepository: ProfileRepository {

@@ -49,17 +49,16 @@ struct CreateStoryView: View {
             }
         }
         .experienceScreenBackground()
-        .experienceNavigationTitle("Create Story")
+        .experienceNavigationTitle("New Story")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { requestDismiss() }
+                    .font(.body.weight(.regular))
                     .disabled(viewModel.phase == .publishing)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if viewModel.imagePreview != nil {
-                publishBar
-            }
+            publishBar
         }
         .confirmationDialog(
             "Discard this story?",
@@ -78,36 +77,80 @@ struct CreateStoryView: View {
         .accessibilityIdentifier("createStory.root")
     }
 
+    @ViewBuilder
     private var composeContent: some View {
+        if viewModel.imagePreview == nil {
+            emptyComposer
+        } else {
+            storyPreviewComposer
+        }
+    }
+
+    private var emptyComposer: some View {
+        VStack(spacing: ExperienceSpacing.lg) {
+            Spacer(minLength: ExperienceSpacing.xl)
+
+            VStack(spacing: ExperienceSpacing.sm) {
+                Image(systemName: "camera.aperture")
+                    .font(.system(size: 40, weight: .light))
+                    .foregroundStyle(colors.accent)
+
+                Text("Add a photo to your story")
+                    .experienceStyle(.headline, color: colors.primaryText)
+
+                Text("Stories are visible for 24 hours.")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, ExperienceSpacing.lg)
+
+            PhotosPicker(selection: $photoItem, matching: .images) {
+                CreateComposerAttachmentAction(
+                    systemImage: "photo",
+                    title: "Choose Photo"
+                )
+            }
+            .disabled(viewModel.phase == .publishing)
+            .accessibilityIdentifier("createStory.media.picker")
+
+            if let formError = viewModel.formError {
+                Text(formError)
+                    .experienceStyle(.footnote, color: colors.loss)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .accessibilityIdentifier("createStory.formError")
+            }
+
+            Spacer(minLength: ExperienceSpacing.xl)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, ExperienceSpacing.md)
+    }
+
+    private var storyPreviewComposer: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                Text("Preview how your story will appear before posting.")
-                    .experienceStyle(.body, color: colors.secondaryText)
-
+            VStack(spacing: ExperienceSpacing.md) {
                 if let preview = viewModel.imagePreview, let profile = viewModel.viewerProfile {
-                    StoryComposePreviewFrame(profile: profile, image: preview)
-                        .frame(maxWidth: 274)
-                        .frame(maxWidth: .infinity)
-                } else {
-                    pickerPrompt
-                }
-
-                if viewModel.imagePreview != nil {
-                    PhotosPicker(selection: $photoItem, matching: .images) {
-                        Label("Change image", systemImage: "photo.on.rectangle")
+                    ZStack(alignment: .topTrailing) {
+                        StoryComposePreviewFrame(profile: profile, image: preview)
+                            .frame(maxWidth: 300)
                             .frame(maxWidth: .infinity)
+
+                        CreateComposerPreviewDismissButton(accessibilityLabel: "Remove story photo") {
+                            viewModel.clearImage()
+                            photoItem = nil
+                        }
+                        .padding(ExperienceSpacing.sm)
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(viewModel.phase == .publishing)
-                    .accessibilityIdentifier("createStory.changeImage")
                 }
 
-                if let formError = viewModel.formError {
-                    Text(formError)
-                        .foregroundStyle(colors.loss)
-                        .font(.footnote)
-                        .accessibilityIdentifier("createStory.formError")
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    Text("Change photo")
+                        .font(ExperienceTypography.subheadline.weight(.semibold))
+                        .foregroundStyle(colors.accent)
                 }
+                .disabled(viewModel.phase == .publishing)
+                .accessibilityIdentifier("createStory.changeImage")
 
                 if viewModel.phase == .publishing {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
@@ -115,46 +158,36 @@ struct CreateStoryView: View {
                         Text(viewModel.uploadStage)
                             .experienceStyle(.caption, color: colors.secondaryText)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("createStory.progress")
                 }
+
+                if let formError = viewModel.formError {
+                    Text(formError)
+                        .experienceStyle(.footnote, color: colors.loss)
+                        .accessibilityIdentifier("createStory.formError")
+                }
             }
-            .padding(ExperienceSpacing.md)
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.top, ExperienceSpacing.sm)
+            .padding(.bottom, ExperienceSpacing.md)
         }
         .scrollDismissesKeyboard(.interactively)
     }
 
-    private var pickerPrompt: some View {
-        VStack(spacing: ExperienceSpacing.md) {
-            ExperienceEmptyState(
-                icon: .photo,
-                title: "Add a photo",
-                message: "Stories use a single image, visible for 24 hours."
-            )
-            PhotosPicker(selection: $photoItem, matching: .images) {
-                Label("Choose Photo", systemImage: "photo.on.rectangle.angled")
-            }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("createStory.media.picker")
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, ExperienceSpacing.lg)
-    }
-
+    @ViewBuilder
     private var publishBar: some View {
-        VStack(spacing: 0) {
-            Divider()
-            ExperienceButton(
-                title: viewModel.phase == .publishing ? "Posting Story…" : "Post Story",
-                kind: .primary,
-                isEnabled: viewModel.canPublish && viewModel.phase != .publishing,
+        if viewModel.imagePreview != nil || viewModel.phase == .publishing {
+            CreateComposerPublishBar(
+                title: "Post Story",
+                loadingTitle: "Posting Story…",
+                progress: viewModel.phase == .publishing ? viewModel.uploadProgress : nil,
+                isEnabled: viewModel.canPublish,
                 isLoading: viewModel.phase == .publishing,
                 accessibilityIdentifier: "createStory.publish"
             ) {
                 viewModel.publish()
             }
-            .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.vertical, ExperienceSpacing.sm)
-            .background(colors.backgroundPrimary.opacity(0.96))
         }
     }
 

@@ -1,27 +1,37 @@
 import SwiftUI
 
 struct SettingsPrivacyView: View {
-    @State private var viewModel: SettingsProfileViewModel
+    @State private var profilePrivacy: SettingsProfileViewModel
+    @State private var viewModel: SettingsPrivacyViewModel
 
+    @Environment(\.stackNavigation) private var stackNavigation
     @Environment(\.themeColors) private var colors
 
     init(data: DataEnvironment, profileStore: CurrentUserProfileStore?) {
+        let profileVM = SettingsProfileViewModel(
+            profiles: data.profiles,
+            session: data.session,
+            profileStore: profileStore
+        )
+        _profilePrivacy = State(initialValue: profileVM)
         _viewModel = State(
-            initialValue: SettingsProfileViewModel(
+            initialValue: SettingsPrivacyViewModel(
                 profiles: data.profiles,
+                messages: data.messages,
                 session: data.session,
-                profileStore: profileStore
+                profilePrivacy: profileVM
             )
         )
     }
 
-    init(viewModel: SettingsProfileViewModel) {
+    init(viewModel: SettingsPrivacyViewModel, profilePrivacy: SettingsProfileViewModel) {
+        _profilePrivacy = State(initialValue: profilePrivacy)
         _viewModel = State(initialValue: viewModel)
     }
 
     var body: some View {
         List {
-            if let error = viewModel.errorMessage {
+            if let error = viewModel.errorMessage ?? viewModel.profileErrorMessage {
                 Section {
                     SettingsInlineError(message: error) {
                         Task { await viewModel.refresh() }
@@ -35,7 +45,7 @@ struct SettingsPrivacyView: View {
                     subtitle: "Only approved followers can see your profile content",
                     isOn: Binding(
                         get: { viewModel.draftIsPrivate },
-                        set: { viewModel.setPrivate($0) }
+                        set: { viewModel.draftIsPrivate = $0 }
                     )
                 )
             } header: {
@@ -45,13 +55,25 @@ struct SettingsPrivacyView: View {
             }
 
             Section {
-                SettingsInfoRow(title: "Blocked accounts", value: "Coming soon")
-                SettingsInfoRow(title: "Muted accounts", value: "Coming soon")
-                SettingsInfoRow(title: "Who can message me", value: "Coming soon")
+                privacyNavigationRow(
+                    title: "Blocked accounts",
+                    value: summaryCount(viewModel.blockedCount),
+                    route: .privacyBlockedAccounts
+                )
+                privacyNavigationRow(
+                    title: "Muted accounts",
+                    value: summaryCount(viewModel.mutedCount),
+                    route: .privacyMutedAccounts
+                )
+                privacyNavigationRow(
+                    title: "Who can message me",
+                    value: viewModel.dmPrivacy.settingsTitle,
+                    route: .privacyMessageAudience
+                )
             } header: {
                 Text("Safety")
             } footer: {
-                Text("More privacy controls are on the way.")
+                Text("Block users to stop messaging and hide their content where applicable. Mute turns off notifications for a conversation.")
             }
         }
         .listStyle(.insetGrouped)
@@ -59,11 +81,46 @@ struct SettingsPrivacyView: View {
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Privacy")
         .overlay {
-            if viewModel.isLoading {
+            if viewModel.isProfileLoading || viewModel.isLoadingLists {
                 ProgressView()
             }
         }
-        .onAppear { viewModel.loadIfNeeded() }
+        .onAppear {
+            viewModel.loadIfNeeded()
+            Task { await viewModel.refreshSummary() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .userBlockListDidChange)) { _ in
+            Task { await viewModel.refreshSummary() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mutedAccountsListDidChange)) { _ in
+            Task { await viewModel.refreshSummary() }
+        }
         .accessibilityIdentifier("settings.privacy")
+    }
+
+    private func privacyNavigationRow(title: String, value: String, route: SettingsRoute) -> some View {
+        Button {
+            ExperienceHaptics.play(.selection)
+            stackNavigation?.pushSettings(route)
+        } label: {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .experienceStyle(.body, color: colors.primaryText)
+                Spacer(minLength: ExperienceSpacing.sm)
+                Text(value)
+                    .experienceStyle(.body, color: colors.secondaryText)
+                    .multilineTextAlignment(.trailing)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(colors.tertiaryText)
+            }
+            .padding(.vertical, ExperienceSpacing.xxs)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("settings.privacy.row.\(route.rawValue)")
+    }
+
+    private func summaryCount(_ count: Int) -> String {
+        count == 0 ? "None" : "\(count)"
     }
 }

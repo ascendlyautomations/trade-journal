@@ -65,11 +65,13 @@ struct RoomConversationHeaderView: View {
                                         .caption,
                                         color: isJoinEnabled ? colors.primaryBackground : colors.secondaryText
                                     )
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
                             }
                         }
                         .padding(.horizontal, ExperienceSpacing.sm)
                         .padding(.vertical, 5)
-                        .frame(minWidth: 56)
+                        .frame(minWidth: 64)
                         .background(
                             Capsule(style: .continuous)
                                 .fill(isJoinEnabled ? colors.accent : colors.fillSecondary)

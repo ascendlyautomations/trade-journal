@@ -139,6 +139,16 @@ nonisolated enum DashboardChartMetrics {
         )
     }
 
+    /// Filtered trades for the active dashboard scope — shared with psychology analytics.
+    static func filteredTrades(
+        from inputs: [Input],
+        accountFilter: DashboardAccountFilter,
+        dateRange: DashboardDateRange,
+        now: Date = Date()
+    ) -> [Trade] {
+        filter(inputs, accountFilter: accountFilter, dateRange: dateRange, now: now).map(\.trade)
+    }
+
     // MARK: - Filter (web time + account)
 
     private static func filter(

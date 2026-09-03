@@ -631,6 +631,29 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         await stopWatch(routeKey: "viewer-profile:\(userID)")
     }
 
+    /// Daily psychology check-in — postgres_changes for the signed-in user.
+    func watchTraderDailyCheckIns(userID: String, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        watch(
+            WatchSpec(
+                topic: "realtime:trader-daily-check-ins-\(userID)",
+                routeKey: "trader-daily-check-ins:\(userID)",
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "trader_daily_check_ins",
+                        filter: "user_id=eq.\(userID)",
+                        routeColumn: "user_id",
+                        emitsReactionEvents: false
+                    ),
+                ]
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingTraderDailyCheckIns(userID: String) async {
+        await stopWatch(routeKey: "trader-daily-check-ins:\(userID)")
+    }
+
     /// Web `useCommentLikes` — `comment_likes` postgres_changes for visible comment ids.
     func watchCommentLikes(
         source: CommentLikeSource,
@@ -1274,7 +1297,8 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                 signal = MessageRealtimeSignal(
                     kind: kind,
                     messageID: messageID,
-                    conversationID: scope
+                    conversationID: scope,
+                    deletedForEveryone: Self.parseDeletedForEveryone(from: record)
                 )
             }
             for continuation in allContinuations[spec.routeKey] ?? [] {
@@ -1340,6 +1364,17 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         }
     }
 
+    private static func parseDeletedForEveryone(from record: [String: Any]?) -> Bool {
+        guard let record else { return false }
+        if let value = record["deleted_for_everyone"] as? Bool { return value }
+        if let value = record["deleted_for_everyone"] as? NSNumber { return value.boolValue }
+        if let value = record["deleted_for_everyone"] as? String {
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return normalized == "true" || normalized == "t" || normalized == "1"
+        }
+        return false
+    }
+
     private func sendJSON(_ object: [String: Any]) async {
         guard JSONSerialization.isValidJSONObject(object),
               let data = try? JSONSerialization.data(withJSONObject: object, options: []),
@@ -1369,6 +1404,8 @@ nonisolated struct MessageRealtimeSignal: Sendable {
     var messageID: String?
     /// Populated from the postgres_changes filter column (e.g. `conversation_id`).
     var conversationID: String? = nil
+    /// Soft-delete flag from `messages.deleted_for_everyone` on UPDATE payloads.
+    var deletedForEveryone: Bool = false
     /// Present when the event originated from `room_message_reactions`.
     var reactionEvent: ReactionEvent? = nil
 }

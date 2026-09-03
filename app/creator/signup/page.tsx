@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { GoogleSignInButton, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { GoogleSignInButton, AppleSignInButton, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { supabase } from "@/lib/supabaseClient"
 import {
@@ -19,8 +19,13 @@ import {
   enterCreatorFlow,
   normalizeCreatorAccessCode,
 } from "@/lib/creatorAccess"
-import { isNativeIos } from "@/lib/nativePlatform"
-import { startNativeIosGoogleOAuth } from "@/lib/nativeIosOAuth"
+import {
+  mapWebSocialOAuthError,
+  resolveWebSocialOAuthRedirectPath,
+  startWebSocialOAuth,
+  validateWebSocialOAuthSignup,
+  type WebSocialOAuthProvider,
+} from "@/lib/webSocialOAuth"
 
 function CreatorSignupInner() {
   const router = useRouter()
@@ -38,6 +43,7 @@ function CreatorSignupInner() {
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [appleLoading, setAppleLoading] = useState(false)
   const [showReset, setShowReset] = useState(false)
   const [resetEmail, setResetEmail] = useState("")
   const [resetMessage, setResetMessage] = useState("")
@@ -165,38 +171,57 @@ function CreatorSignupInner() {
     setLoading(false)
   }
 
-  async function handleGoogleLogin() {
-    if (googleLoading || loading || !redeemPath) return
+  async function handleSocialOAuth(provider: WebSocialOAuthProvider) {
+    if (googleLoading || appleLoading || loading || !redeemPath) return
 
-    if (!isLogin && !agreedToTerms) {
-      showPopup({
-        type: "error",
-        message:
-          "You must agree to the Terms of Service and Privacy Policy before creating an account.",
-      })
+    const signupError = validateWebSocialOAuthSignup({
+      isLogin,
+      agreedToTerms,
+      earlyAccessPromotionEnabled: false,
+      signupPlanIntent: null,
+      requireSignupPlanIntent: false,
+    })
+    if (signupError) {
+      showPopup({ type: "error", message: signupError })
       return
     }
 
-    setGoogleLoading(true)
+    const setLoadingState = provider === "google" ? setGoogleLoading : setAppleLoading
+    setLoadingState(true)
     try {
-      if (!redeemPath) return
-
-      // Capacitor iOS: in-app browser + custom-scheme callback.
-      // Web keeps the existing origin redirect flow unchanged.
-      if (isNativeIos()) {
-        await startNativeIosGoogleOAuth(redeemPath)
-        return
-      }
-
-      await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${location.origin}${redeemPath}`,
-        },
+      const redirectPath = resolveWebSocialOAuthRedirectPath({
+        isLogin,
+        agreedToTerms,
+        earlyAccessPromotionEnabled: false,
+        signupPlanIntent: null,
+        requireSignupPlanIntent: false,
+        safeNextPath: redeemPath,
+        shouldStartCheckout: false,
+        signupRedirectPath: redeemPath,
       })
+
+      const result = await startWebSocialOAuth({
+        supabase,
+        provider,
+        redirectPath,
+        allowNativeIosGoogleBridge: provider === "google",
+      })
+      if (!result.ok) {
+        showPopup({ type: "error", message: result.message })
+      }
+    } catch (err) {
+      showPopup({ type: "error", message: mapWebSocialOAuthError(err) })
     } finally {
-      setGoogleLoading(false)
+      setLoadingState(false)
     }
+  }
+
+  function handleGoogleLogin() {
+    void handleSocialOAuth("google")
+  }
+
+  function handleAppleLogin() {
+    void handleSocialOAuth("apple")
   }
 
   async function handleReset() {
@@ -333,9 +358,17 @@ function CreatorSignupInner() {
 
           <GoogleSignInButton
             label={isLogin ? "sign-in" : "sign-up"}
-            onClick={() => void handleGoogleLogin()}
-            disabled={loading || (!isLogin && !agreedToTerms)}
+            onClick={handleGoogleLogin}
+            disabled={loading || appleLoading || (!isLogin && !agreedToTerms)}
             loading={googleLoading}
+            className="mb-3 md:mb-2.5"
+          />
+
+          <AppleSignInButton
+            label="continue"
+            onClick={handleAppleLogin}
+            disabled={loading || googleLoading || (!isLogin && !agreedToTerms)}
+            loading={appleLoading}
             className="mb-4 md:mb-3"
           />
 

@@ -26,6 +26,9 @@ nonisolated enum BackendV2Versioning {
         case postDetail = "rpc_v1_post_detail_bootstrap"
         case settings = "rpc_v1_settings_bootstrap"
         case propFirm = "rpc_v1_prop_firm_bootstrap"
+        case gettingStarted = "rpc_v1_getting_started_signals"
+        case psychologyCheckInWindow = "rpc_v1_psychology_check_in_window"
+        case checkInHistoryBootstrap = "rpc_v1_check_in_history_bootstrap"
     }
 
     static func isKnownRPCName(_ name: String) -> Bool {

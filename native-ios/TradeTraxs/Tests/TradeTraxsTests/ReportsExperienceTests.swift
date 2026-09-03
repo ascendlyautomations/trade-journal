@@ -55,8 +55,10 @@ final class ReportsExperienceTests: XCTestCase {
         store.sessionPhase = .authenticated
         let coordinator = NavigationCoordinator(store: store)
         let repository = StubTradingReportRepository()
+        let psychologyRepository = StubPsychologyReportRepository()
         let viewModel = ReportsScreenViewModel(
             tradingReports: repository,
+            psychologyReports: psychologyRepository,
             navigationCoordinator: coordinator
         )
 
@@ -64,6 +66,7 @@ final class ReportsExperienceTests: XCTestCase {
 
         XCTAssertEqual(viewModel.phase, .loaded)
         XCTAssertEqual(viewModel.cards.count, 4)
+        XCTAssertEqual(viewModel.psychologyCards.count, PsychologyReportTemplate.allCases.count)
         XCTAssertEqual(
             viewModel.cards.map(\.periodKey),
             TradingReportPeriodKey.allCases
@@ -80,13 +83,15 @@ final class ReportsExperienceTests: XCTestCase {
         let repository = StubTradingReportRepository()
         let viewModel = ReportsScreenViewModel(
             tradingReports: repository,
+            psychologyReports: StubPsychologyReportRepository(),
             navigationCoordinator: coordinator
         )
 
         await viewModel.bootstrapIfNeeded()
         let before = await repository.reportCallCount()
         let card = try XCTUnwrap(viewModel.cards.first)
-        await viewModel.openReport(for: card.periodKey)
+        viewModel.primaryAction(for: card)
+        try await Task.sleep(nanoseconds: 200_000_000)
 
         let after = await repository.reportCallCount()
         XCTAssertEqual(after, before)
@@ -227,6 +232,29 @@ private actor StubTradingReportRepository: TradingReportRepository {
         let snapshot = try await ensureSnapshot(forceNetwork: forceNetwork)
         guard let report = snapshot.report(for: periodKey) else {
             throw AppError.unknown(message: "Missing report")
+        }
+        return report
+    }
+}
+
+private actor StubPsychologyReportRepository: PsychologyReportRepository {
+    private var snapshot: PsychologyReportsSnapshot?
+
+    func ensureSnapshot(forceNetwork: Bool) async throws -> PsychologyReportsSnapshot {
+        if let snapshot, !forceNetwork { return snapshot }
+        let trades = ProfileTradeFixtures.samples(owner: ProfileID("dev.reports.stub"))
+        let next = PsychologyReportGenerator.generateAll(trades: trades, checkIns: [])
+        snapshot = next
+        await MainActor.run {
+            PsychologyReportSessionStore.shared.update(next)
+        }
+        return next
+    }
+
+    func report(for reportID: ReportID, forceNetwork: Bool) async throws -> PsychologyReport {
+        let snap = try await ensureSnapshot(forceNetwork: forceNetwork)
+        guard let report = snap.report(for: reportID) else {
+            throw AppError.unknown(message: "Missing psychology report")
         }
         return report
     }

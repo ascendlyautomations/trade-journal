@@ -82,6 +82,7 @@ final class PropFirmExperienceTests: XCTestCase {
             home: PropFirmStubHomeRepository(),
             trades: PropFirmStubTradeRepository(),
             achievements: PropFirmStubAchievementRepository(),
+            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
             session: PropFirmStubSession(userID: "dev.propfirm.user"),
             detailCache: cache,
             navigationCoordinator: coordinator

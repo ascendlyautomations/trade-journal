@@ -57,6 +57,7 @@ struct CreateReelView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { requestDismiss() }
+                    .font(.body.weight(.regular))
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -132,131 +133,146 @@ struct CreateReelView: View {
     private var composer: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                videoBlock
-
-                if viewModel.draft != nil {
+                if viewModel.draft == nil {
+                    videoPickerPrompt
+                } else {
+                    selectedVideoPreview
                     captionBlock
                     linkedTradeBlock
                 }
 
                 if let formError = viewModel.formError {
                     Text(formError)
-                        .foregroundStyle(colors.loss)
-                        .font(.footnote)
+                        .experienceStyle(.footnote, color: colors.loss)
                         .accessibilityIdentifier("createReel.formError")
                 }
             }
             .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.vertical, ExperienceSpacing.sm)
+            .padding(.top, ExperienceSpacing.sm)
+            .padding(.bottom, ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollDismissesKeyboard(.interactively)
         .disabled(viewModel.phase == .publishing)
     }
 
-    private var videoBlock: some View {
+    private var videoPickerPrompt: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("VIDEO")
-                .experienceStyle(.caption, color: colors.secondaryText)
+            if viewModel.isPreparingVideo {
+                HStack(spacing: ExperienceSpacing.sm) {
+                    ProgressView()
+                    Text("Preparing video…")
+                        .experienceStyle(.body, color: colors.secondaryText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, ExperienceSpacing.sm)
+            } else {
+                HStack(spacing: ExperienceSpacing.sm) {
+                    PhotosPicker(selection: $videoItem, matching: .videos) {
+                        CreateComposerAttachmentAction(
+                            systemImage: "video",
+                            title: "Choose Video"
+                        )
+                    }
+                    .disabled(viewModel.phase == .publishing)
+                    .accessibilityIdentifier("createReel.chooseVideo")
 
-            if let draft = viewModel.draft, let thumb = draft.thumbnailPreview {
-                ZStack(alignment: .bottomLeading) {
+                    Spacer(minLength: 0)
+
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                        Button {
+                            showsCamera = true
+                        } label: {
+                            Text("Record")
+                                .font(ExperienceTypography.subheadline.weight(.semibold))
+                                .foregroundStyle(colors.secondaryText)
+                        }
+                        .accessibilityIdentifier("createReel.record")
+                    }
+                }
+                .padding(.top, ExperienceSpacing.xxs)
+
+                Text("MP4 or MOV · max 90s · 100 MB")
+                    .experienceStyle(.caption, color: colors.tertiaryText)
+                    .padding(.leading, 2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var selectedVideoPreview: some View {
+        if let draft = viewModel.draft, let thumb = draft.thumbnailPreview {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                ZStack(alignment: .topTrailing) {
                     Button {
                         showsPreview = true
                     } label: {
-                        Image(uiImage: thumb)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 360)
-                            .clipped()
-                            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
-                            .overlay {
-                                Image(systemName: "play.circle.fill")
-                                    .font(.system(size: 52))
-                                    .foregroundStyle(.white.opacity(0.92))
-                                    .shadow(radius: 4)
-                            }
+                        ZStack(alignment: .bottomLeading) {
+                            Image(uiImage: thumb)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(maxWidth: .infinity)
+                                .frame(maxHeight: 240)
+                                .clipped()
+                                .clipShape(
+                                    RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+                                )
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+                                        .stroke(
+                                            colors.border.opacity(ExperienceOpacity.subtle),
+                                            lineWidth: ExperienceBorder.hairline
+                                        )
+                                }
+                                .overlay {
+                                    Image(systemName: "play.circle.fill")
+                                        .font(.system(size: 44))
+                                        .foregroundStyle(.white.opacity(0.92))
+                                        .shadow(radius: 4)
+                                }
+
+                            Text(draft.formattedDuration)
+                                .experienceStyle(.caption, color: .white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.black.opacity(0.55), in: Capsule())
+                                .padding(ExperienceSpacing.sm)
+                        }
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Play clip preview")
 
-                    Text(draft.formattedDuration)
-                        .experienceStyle(.caption, color: .white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.black.opacity(0.55), in: Capsule())
-                        .padding(ExperienceSpacing.sm)
+                    CreateComposerPreviewDismissButton(accessibilityLabel: "Remove video") {
+                        viewModel.clearVideo()
+                        videoItem = nil
+                    }
+                    .padding(ExperienceSpacing.sm)
                 }
 
                 HStack(spacing: ExperienceSpacing.md) {
                     PhotosPicker(selection: $videoItem, matching: .videos) {
-                        Label("Replace", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    Button("Remove", role: .destructive) {
-                        viewModel.clearVideo()
-                        videoItem = nil
-                    }
-                }
-                .font(.subheadline.weight(.semibold))
-            } else {
-                VStack(spacing: ExperienceSpacing.md) {
-                    if viewModel.isPreparingVideo {
-                        ProgressView("Preparing video…")
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 220)
-                    } else {
-                        Image(systemName: "video.badge.plus")
-                            .font(.system(size: 44))
+                        Text("Change")
+                            .font(ExperienceTypography.subheadline.weight(.semibold))
                             .foregroundStyle(colors.accent)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 120)
-
-                        PhotosPicker(selection: $videoItem, matching: .videos) {
-                            Text("Choose Video")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("createReel.chooseVideo")
-
-                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                            Button {
-                                showsCamera = true
-                            } label: {
-                                Text("Record")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                            }
-                            .buttonStyle(.bordered)
-                            .accessibilityIdentifier("createReel.record")
-                        }
                     }
+                    Spacer(minLength: 0)
                 }
-                .padding(ExperienceSpacing.md)
-                .frame(maxWidth: .infinity)
-                .background(
-                    colors.backgroundSecondary,
-                    in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
-                )
             }
-
-            Text("MP4 or MOV · max 90s · 100 MB")
-                .experienceStyle(.caption, color: colors.tertiaryText)
         }
     }
 
     private var captionBlock: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("CAPTION")
-                .experienceStyle(.caption, color: colors.secondaryText)
+            CreateComposerSectionLabel(title: "Caption")
+
             if viewModel.captionEnabled {
-                TextField(
-                    "Write something about this clip…",
+                CreateComposerMultilineField(
                     text: $viewModel.captionText,
-                    axis: .vertical
+                    placeholder: "Write something about this clip…",
+                    minHeight: 72,
+                    accessibilityIdentifier: "createReel.caption",
+                    accessibilityLabel: "Clip caption"
                 )
-                .lineLimit(3...8)
-                .accessibilityIdentifier("createReel.caption")
                 Text("\(viewModel.captionText.count)/\(MediaVideoPreparation.maxCaptionLength)")
                     .experienceStyle(.caption, color: colors.tertiaryText)
             } else {
@@ -268,23 +284,26 @@ struct CreateReelView: View {
 
     private var linkedTradeBlock: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("LINKED TRADE")
-                .experienceStyle(.caption, color: colors.secondaryText)
+            CreateComposerSectionLabel(title: "Linked trade")
+
             if let summary = viewModel.linkedTradeSummary {
-                HStack {
+                HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(summary)
                             .experienceStyle(.body, color: colors.primaryText)
                         Text("Clip description uses this trade")
                             .experienceStyle(.caption, color: colors.secondaryText)
                     }
-                    Spacer()
-                    Button("Remove") { viewModel.clearLinkedTrade() }
-                        .font(.subheadline)
+                    Spacer(minLength: ExperienceSpacing.xs)
+                    Button("Remove") {
+                        viewModel.clearLinkedTrade()
+                    }
+                    .font(ExperienceTypography.subheadline.weight(.semibold))
+                    .foregroundStyle(colors.loss)
                 }
                 .padding(ExperienceSpacing.sm)
                 .background(
-                    colors.backgroundSecondary,
+                    colors.surfaceSecondary,
                     in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
                 )
                 .accessibilityIdentifier("createReel.linkedTrade")
@@ -292,33 +311,36 @@ struct CreateReelView: View {
                 Button {
                     showsTradePicker = true
                 } label: {
-                    Label("Link Trade", systemImage: "plus.circle")
+                    HStack(spacing: ExperienceSpacing.sm) {
+                        Image(systemName: "link")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(colors.accent)
+                        Text("Link trade")
+                            .experienceStyle(.body, color: colors.primaryText)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(colors.tertiaryText)
+                    }
+                    .padding(.vertical, ExperienceSpacing.xs)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityIdentifier("createReel.linkTrade")
             }
         }
     }
 
     private var publishBar: some View {
-        VStack(spacing: 0) {
-            Divider()
-            if viewModel.phase == .publishing {
-                ProgressView(value: viewModel.uploadProgress)
-                    .padding(.horizontal, ExperienceSpacing.md)
-                    .padding(.top, ExperienceSpacing.xs)
-            }
-            ExperienceButton(
-                title: viewModel.phase == .publishing ? "Publishing…" : "Post Clip",
-                kind: .primary,
-                isEnabled: viewModel.canPublish && viewModel.draft != nil && viewModel.phase != .publishing,
-                isLoading: viewModel.phase == .publishing,
-                accessibilityIdentifier: "createReel.publish"
-            ) {
-                viewModel.publish()
-            }
-            .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.vertical, ExperienceSpacing.sm)
-            .background(colors.backgroundPrimary.opacity(0.96))
+        CreateComposerPublishBar(
+            title: "Post Clip",
+            loadingTitle: "Publishing…",
+            progress: viewModel.phase == .publishing ? viewModel.uploadProgress : nil,
+            isEnabled: viewModel.canPublish && viewModel.draft != nil,
+            isLoading: viewModel.phase == .publishing,
+            accessibilityIdentifier: "createReel.publish"
+        ) {
+            viewModel.publish()
         }
     }
 

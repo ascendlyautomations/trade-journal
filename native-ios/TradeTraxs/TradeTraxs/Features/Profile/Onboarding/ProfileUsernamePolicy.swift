@@ -19,8 +19,36 @@ nonisolated enum ProfileUsernamePolicy {
     }
 
     static func isProfilesUsernameConflict(_ error: Error) -> Bool {
+        if let network = error as? NetworkError,
+           case .validation(_, let message) = network {
+            return postgrestUsernameConflict(in: message)
+        }
+        if let network = error as? NetworkError,
+           case .server(_, let message) = network {
+            return postgrestUsernameConflict(in: message)
+        }
         let description = String(describing: error).lowercased()
-        return description.contains("23505") && description.contains("username")
+        return postgrestUsernameConflict(in: description)
+    }
+
+    private static func postgrestUsernameConflict(in raw: String?) -> Bool {
+        guard let raw else { return false }
+        let lower = raw.lowercased()
+        return lower.contains("23505") && lower.contains("username")
+    }
+
+    /// True when the normalized value is already on this profile (including shell username).
+    static func isSameAsCurrentProfileUsername(
+        _ normalized: String,
+        currentUsername: String?,
+        profileID: ProfileID
+    ) -> Bool {
+        guard let currentUsername else { return false }
+        let currentNormalized = normalize(currentUsername)
+        if currentNormalized.isEmpty { return false }
+        if normalized == currentNormalized { return true }
+        return isGeneratedShellUsername(currentUsername, profileID: profileID)
+            && normalized == normalize(currentUsername)
     }
 
     /// Native profile-shell fallback — not a user-chosen username.

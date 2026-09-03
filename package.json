@@ -19,7 +19,7 @@
     "test:affiliate": "node --experimental-strip-types --test lib/affiliateEarnings.test.ts lib/affiliateStripeDiscount.test.ts",
     "test:referral-attribution": "node --experimental-strip-types --test lib/referralAttribution.test.ts lib/referralPersistence.test.ts",
     "test:leaderboard": "node --experimental-strip-types --test lib/leaderboardTimeframeFallback.test.ts",
-    "test:lib-units": "node --experimental-strip-types --test lib/validateQuickTradeForm.test.ts lib/zoomPanCrop.test.ts lib/tradeScreenshotDisplay.test.ts lib/tradeRr.test.ts lib/resolveTradePoints.test.ts lib/renderTradeImageCrop.test.ts lib/pageHeadingStyles.test.ts lib/optimizedStorageImage.test.ts lib/authPasswordManagement.test.ts lib/analyzeTradeProgress.test.ts",
+    "test:lib-units": "node --experimental-strip-types --test lib/validateQuickTradeForm.test.ts lib/zoomPanCrop.test.ts lib/tradeScreenshotDisplay.test.ts lib/tradeRr.test.ts lib/resolveTradePoints.test.ts lib/renderTradeImageCrop.test.ts lib/pageHeadingStyles.test.ts lib/optimizedStorageImage.test.ts lib/authPasswordManagement.test.ts lib/analyzeTradeProgress.test.ts lib/webSocialOAuthPolicy.test.ts lib/voiceMessage.test.ts",
     "types:supabase": "supabase gen types typescript --project-id \"${SUPABASE_PROJECT_ID}\" --schema public > lib/database.types.ts",
     "migrate:affiliate-promos": "node scripts/migrate-affiliate-promos-to-once.mjs",
     "generate:og-image": "node scripts/generate-og-image.mjs",

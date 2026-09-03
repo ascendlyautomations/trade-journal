@@ -17,6 +17,8 @@ import Observation
 final class DashboardViewModel {
     private(set) var phase: DashboardLoadPhase = .idle
     private(set) var summary: DashboardChartMetrics.Summary?
+    private(set) var psychologyReport: PsychologyAnalyticsReport?
+    private(set) var psychologyGuardrailNotices: [PsychologyGuardrailNotice] = []
     private(set) var accounts: [TradingAccount] = []
     private(set) var accountNames: [TradingAccountID: String] = [:]
     private(set) var isRefreshing = false
@@ -26,6 +28,7 @@ final class DashboardViewModel {
 
     private let trades: any TradeRepository
     private let achievements: any AchievementRepository
+    private let dailyCheckIns: any TraderDailyCheckInRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator
@@ -48,6 +51,7 @@ final class DashboardViewModel {
         home: any HomeRepository,
         trades: any TradeRepository,
         achievements: any AchievementRepository,
+        dailyCheckIns: any TraderDailyCheckInRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
@@ -57,11 +61,30 @@ final class DashboardViewModel {
         _ = home
         self.trades = trades
         self.achievements = achievements
+        self.dailyCheckIns = dailyCheckIns
         self.session = session
         self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
         self.realtimeHub = realtimeHub
         self.rpc = rpc
+    }
+
+    func openPsychologyAnalytics(highlightSection: String? = nil) {
+        PsychologyAnalyticsSessionStore.shared.focusSection(highlightSection)
+        navigationCoordinator.pushHome(.psychologyAnalytics)
+    }
+
+    func psychologySectionID(for category: PsychologyInsightCategory) -> String {
+        switch category {
+        case .sleep: return "sleep"
+        case .mentalState: return "mentalState"
+        case .conviction: return "conviction"
+        case .discipline: return "discipline"
+        case .emotion: return "emotion"
+        case .afterLosses: return "afterLosses"
+        case .tradeFrequency: return "tradeFrequency"
+        case .combined: return "combined"
+        }
     }
 
     var accountFilterTitle: String {
@@ -266,6 +289,10 @@ final class DashboardViewModel {
 
     func handleAccountMutation() {
         Task { await reloadAccountsOnly() }
+    }
+
+    func handleCheckInMutation() {
+        recomputePsychology()
     }
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
@@ -486,10 +513,15 @@ final class DashboardViewModel {
                     DashboardLoadProbe.markFirstUsefulRender()
                     if v2.payoutTotal != nil {
                         DashboardLoadProbe.markFullHydration()
-                    } else {
-                        secondaryTask?.cancel()
-                        secondaryTask = Task { [weak self] in
-                            await self?.hydratePayouts(profileID: profileID, forceNetwork: forceNetwork)
+                    }
+                    secondaryTask?.cancel()
+                    secondaryTask = Task { [weak self] in
+                        await self?.runSecondaryHydration(
+                            profileID: profileID,
+                            forceNetwork: forceNetwork,
+                            skipPayouts: v2.payoutTotal != nil
+                        )
+                        if v2.payoutTotal == nil {
                             DashboardLoadProbe.markFullHydration()
                         }
                     }
@@ -548,7 +580,11 @@ final class DashboardViewModel {
             // Deferred: achievements only feed the Payouts chip — never block first useful render.
             secondaryTask?.cancel()
             secondaryTask = Task { [weak self] in
-                await self?.hydratePayouts(profileID: profileID, forceNetwork: forceNetwork)
+                await self?.runSecondaryHydration(
+                    profileID: profileID,
+                    forceNetwork: forceNetwork,
+                    skipPayouts: false
+                )
                 DashboardLoadProbe.markFullHydration()
             }
         } catch is CancellationError {
@@ -805,6 +841,147 @@ final class DashboardViewModel {
             payoutTotal: payoutTotal
         )
         summary = result
+        recomputePsychology()
+    }
+
+    private func recomputePsychology() {
+        let trades = DashboardChartMetrics.filteredTrades(
+            from: tradeInputs,
+            accountFilter: accountFilter,
+            dateRange: dateRange
+        )
+        let report = TraderPsychologyAnalyticsEngine.buildReport(
+            trades: trades,
+            checkIns: SessionDailyCheckInsStore.shared.checkIns
+        )
+        psychologyReport = report
+        PsychologyAnalyticsSessionStore.shared.update(report)
+
+        let facts = PsychologyCoachFactsBuilder.build(
+            report: report,
+            trades: trades,
+            checkIns: SessionDailyCheckInsStore.shared.checkIns
+        )
+        let summary = PsychologyCoachDeterministicCoach.buildSummary(from: facts)
+        PsychologyCoachSessionStore.shared.update(facts: facts, summary: summary)
+
+        let todayKey = TraderPsychologyAnalyticsFoundation.todayCheckInDateKey()
+        let todayCheckIn = SessionDailyCheckInsStore.shared.checkIns.first { $0.checkInDate == todayKey }
+            ?? TraderDailyCheckInStore.shared.todayCheckIn
+        let todayTrades = enrichedTodayTrades(from: trades, checkIns: SessionDailyCheckInsStore.shared.checkIns)
+        let dismissed = Set(PsychologyGuardrailDismissStore.shared.dismissedKeysForToday(tradingDay: todayKey))
+        psychologyGuardrailNotices = PsychologyGuardrailEngine.activeNotices(
+            facts: facts,
+            todayCheckIn: todayCheckIn,
+            enrichedTradesToday: todayTrades,
+            dismissedKeys: dismissed,
+            tradingDay: todayKey
+        )
+    }
+
+    private func enrichedTodayTrades(
+        from trades: [Trade],
+        checkIns: [TraderDailyCheckIn]
+    ) -> [PsychologyEnrichedTrade] {
+        let todayKey = TraderPsychologyAnalyticsFoundation.todayCheckInDateKey()
+        let todayOnly = trades.filter {
+            TraderPsychologyAnalyticsFoundation.tradeDateKey(for: $0) == todayKey
+        }
+        return TraderPsychologyAnalyticsEngine.enrich(trades: todayOnly, checkIns: checkIns)
+    }
+
+    func dismissPsychologyGuardrail(_ notice: PsychologyGuardrailNotice) {
+        let todayKey = TraderPsychologyAnalyticsFoundation.todayCheckInDateKey()
+        PsychologyGuardrailDismissStore.shared.dismiss(
+            PsychologyGuardrailEngine.dedupeKey(for: notice, tradingDay: todayKey)
+        )
+        psychologyGuardrailNotices.removeAll { $0.id == notice.id }
+    }
+
+    private func runSecondaryHydration(
+        profileID: ProfileID,
+        forceNetwork: Bool,
+        skipPayouts: Bool
+    ) async {
+        async let payouts: Void = {
+            if skipPayouts { return }
+            await hydratePayouts(profileID: profileID, forceNetwork: forceNetwork)
+        }()
+        async let checkIns: Void = hydrateCheckIns(profileID: profileID, forceNetwork: forceNetwork)
+        _ = await (payouts, checkIns)
+    }
+
+    private func hydrateCheckIns(profileID: ProfileID, forceNetwork: Bool) async {
+        guard let range = checkInDateRange(from: tradeInputs) else {
+            recomputePsychology()
+            return
+        }
+        if !forceNetwork,
+           !SessionDailyCheckInsStore.shared.needsLoad(
+               for: profileID,
+               startDate: range.start,
+               endDate: range.end
+           )
+        {
+            recomputePsychology()
+            return
+        }
+        do {
+            let items: [TraderDailyCheckIn]
+            if BackendV2FeatureFlags.isEnabled(.dashboard), let rpc {
+                let accountID: TradingAccountID? = {
+                    if case .account(let id) = accountFilter { return id }
+                    return nil
+                }()
+                items = try await DashboardLoadProbe.measure(
+                    "dashboard.checkIns.rpc",
+                    kind: .network,
+                    blocksFirstUsefulRender: false,
+                    note: "psychology check-in window RPC"
+                ) {
+                    try await PsychologyCheckInBootstrapLoader.load(
+                        rpc: rpc,
+                        accountID: accountID
+                    )
+                }
+            } else {
+                items = try await DashboardLoadProbe.measure(
+                    "dashboard.checkIns",
+                    kind: .network,
+                    blocksFirstUsefulRender: false,
+                    note: "daily check-ins for psychology analytics"
+                ) {
+                    try await dailyCheckIns.checkIns(
+                        for: profileID,
+                        from: range.start,
+                        to: range.end
+                    )
+                }
+            }
+            guard !Task.isCancelled else { return }
+            let seededRange: (start: String, end: String)
+            if items.isEmpty {
+                seededRange = range
+            } else {
+                let dates = items.map(\.checkInDate)
+                seededRange = (dates.min() ?? range.start, dates.max() ?? range.end)
+            }
+            SessionDailyCheckInsStore.shared.seed(items, for: profileID, range: seededRange)
+            recomputePsychology()
+        } catch {
+            recomputePsychology()
+        }
+    }
+
+    private func checkInDateRange(
+        from inputs: [DashboardChartMetrics.Input]
+    ) -> (start: String, end: String)? {
+        guard !inputs.isEmpty else { return nil }
+        let keys = inputs.map {
+            TraderPsychologyAnalyticsFoundation.tradeDateKey(for: $0.trade)
+        }
+        guard let start = keys.min(), let end = keys.max() else { return nil }
+        return (start, end)
     }
 
     // MARK: - Realtime (idle subscribe — no polling)

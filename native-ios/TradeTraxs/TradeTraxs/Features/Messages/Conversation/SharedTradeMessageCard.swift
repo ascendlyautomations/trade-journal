@@ -1,40 +1,75 @@
 import SwiftUI
+import UIKit
 
 /// Rich trade-share card for DM and Trade Room bubbles (web trade message card).
 struct SharedTradeMessageCard: View {
     let trade: Trade?
     let tradeID: TradeID
+    let imagePipeline: any ImagePipeline
     var isOutgoing: Bool
     var includesBackground: Bool = true
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: "chart.line.uptrend.xyaxis")
-                    .font(.caption.weight(.semibold))
-                Text("Shared trade")
-                    .experienceStyle(.caption, color: isOutgoing ? colors.onAccent.opacity(0.85) : colors.tertiaryText)
-            }
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             if let trade {
+                if let reference = ProfileCardMediaPresence.tradeMedia(in: trade) {
+                    SharedTradeMessageScreenshotView(
+                        reference: reference,
+                        imagePipeline: imagePipeline
+                    )
+                    .modifier(SharedTradeMediaBleedModifier(enabled: !includesBackground))
+                }
+
+                sharedTradeHeader
                 sharedTradeHeadline(trade)
-                sharedTradeChips(trade)
+                sharedTradeMetaRow(trade)
+                sharedTradePricesRow(trade)
+                sharedTradeDateRow(trade)
+                if let note = displayNote(for: trade) {
+                    Text(note)
+                        .experienceStyle(.caption, color: secondaryTextColor)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else {
-                Text("Trade \(tradeID.rawValue.prefix(8))…")
-                    .experienceStyle(.subheadline, color: isOutgoing ? colors.onAccent : colors.secondaryText)
+                sharedTradeHeader
+                Text("Loading trade…")
+                    .experienceStyle(.subheadline, color: secondaryTextColor)
             }
         }
         .padding(.horizontal, includesBackground ? ExperienceSpacing.sm + 2 : 0)
         .padding(.vertical, includesBackground ? ExperienceSpacing.sm : 0)
-        .frame(maxWidth: 260, alignment: .leading)
+        .frame(maxWidth: 280, alignment: .leading)
         .background {
             if includesBackground {
                 RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
                     .fill(isOutgoing ? colors.accent : colors.incomingMessageBubble)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Opens trade detail")
         .accessibilityIdentifier("conversation.bubble.trade")
+    }
+
+    private var secondaryTextColor: Color {
+        isOutgoing ? colors.onAccent.opacity(0.88) : colors.secondaryText
+    }
+
+    private var tertiaryTextColor: Color {
+        isOutgoing ? colors.onAccent.opacity(0.78) : colors.tertiaryText
+    }
+
+    private var sharedTradeHeader: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .font(.caption.weight(.semibold))
+            Text("Shared trade")
+                .experienceStyle(.caption, color: tertiaryTextColor)
+        }
     }
 
     @ViewBuilder
@@ -62,28 +97,169 @@ struct SharedTradeMessageCard: View {
         }
     }
 
-    @ViewBuilder
-    private func sharedTradeChips(_ trade: Trade) -> some View {
-        HStack(spacing: ExperienceSpacing.xs) {
-            Text(TradeDisplay.sideTitle(trade.side))
-                .experienceStyle(
-                    .caption2,
-                    color: isOutgoing ? colors.onAccent.opacity(0.9) : colors.secondaryText
+    private func sharedTradeMetaRow(_ trade: Trade) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: ExperienceSpacing.xxs) {
+                metaChip(TradeDisplay.sideTitle(trade.side), emphasized: true)
+                if let mode = modeLabel(for: trade) {
+                    metaChip(mode)
+                }
+                if trade.riskReward != nil {
+                    metaChip(TradeDisplay.rrText(trade.riskReward))
+                }
+                metaChip(TradeDisplay.quantityBadgeText(trade.quantity))
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+    }
+
+    private func sharedTradePricesRow(_ trade: Trade) -> some View {
+        HStack(spacing: ExperienceSpacing.md) {
+            priceColumn(title: "Entry", value: TradeDisplay.priceText(trade.entryPrice))
+            Spacer(minLength: 0)
+            priceColumn(title: "Exit", value: TradeDisplay.priceText(trade.exitPrice))
+        }
+    }
+
+    private func sharedTradeDateRow(_ trade: Trade) -> some View {
+        Text(TradeDisplay.dateTimeText(trade.entryAt))
+            .experienceStyle(.caption2, color: tertiaryTextColor)
+            .lineLimit(1)
+    }
+
+    private func metaChip(_ title: String, emphasized: Bool = false) -> some View {
+        Text(title)
+            .experienceStyle(
+                .caption2,
+                color: emphasized ? secondaryTextColor : tertiaryTextColor
+            )
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(
+                (isOutgoing ? colors.onAccent : colors.primaryText)
+                    .opacity(emphasized ? 0.14 : 0.08)
+            )
+            .clipShape(Capsule())
+    }
+
+    private func priceColumn(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .experienceStyle(.caption2, color: tertiaryTextColor)
+            Text(value)
+                .experienceStyle(.caption, color: secondaryTextColor)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+    }
+
+    private func modeLabel(for trade: Trade) -> String? {
+        if let badge = trade.publicAccountBadge?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !badge.isEmpty
+        {
+            return badge
+        }
+        return TradeDisplay.tradeModeFallbackTitle(trade.mode)
+    }
+
+    private func displayNote(for trade: Trade) -> String? {
+        let caption = trade.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preview = trade.notePreview?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw: String?
+        if let caption, !caption.isEmpty {
+            raw = caption
+        } else if let preview, !preview.isEmpty {
+            raw = preview
+        } else {
+            raw = nil
+        }
+        guard let raw else { return nil }
+        guard raw.count > 120 else { return raw }
+        return String(raw.prefix(120)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    }
+
+    private var accessibilityLabel: String {
+        guard let trade else {
+            return "Shared trade loading"
+        }
+        var parts = [
+            "Shared trade",
+            trade.symbol.ticker,
+            TradeDisplay.pnlText(trade.realizedPnL),
+            TradeDisplay.sideTitle(trade.side),
+        ]
+        if let mode = modeLabel(for: trade) {
+            parts.append(mode)
+        }
+        parts.append(TradeDisplay.dateTimeText(trade.entryAt))
+        return parts.joined(separator: ", ")
+    }
+}
+
+/// Loads a trade screenshot via ``ImagePipeline`` and renders only when bytes decode.
+/// No placeholder or skeleton — the layout collapses when absent or failed.
+private struct SharedTradeMessageScreenshotView: View {
+    let reference: MediaReference
+    let imagePipeline: any ImagePipeline
+    var maxHeight: CGFloat = 168
+
+    @State private var image: Image?
+
+    var body: some View {
+        Group {
+            if let image {
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .frame(maxHeight: maxHeight)
+                    .accessibilityHidden(true)
+            }
+        }
+        .task(id: "\(reference.id)|\(Int(maxHeight))") {
+            await load()
+        }
+    }
+
+    private func load() async {
+        let pixelBudget = max(256, Int(maxHeight * UIScreen.main.scale * 2))
+        do {
+            let data = try await imagePipeline.data(
+                for: ImageRequest(
+                    reference: reference,
+                    purpose: .tradeScreenshot,
+                    maxPixelSize: pixelBudget
                 )
-            if let accountBadge = trade.publicAccountBadge {
-                Text(accountBadge)
-                    .experienceStyle(
-                        .caption2,
-                        color: isOutgoing ? colors.onAccent.opacity(0.9) : colors.secondaryText
-                    )
+            )
+            let decoded = await Task.detached(priority: .utility) {
+                UIImage(data: data)
+            }.value
+            guard let decoded else {
+                image = nil
+                return
             }
-            if let rr = trade.riskReward {
-                Text(TradeDisplay.rrText(rr))
-                    .experienceStyle(
-                        .caption,
-                        color: isOutgoing ? colors.onAccent.opacity(0.85) : colors.tertiaryText
-                    )
-            }
+            image = Image(uiImage: decoded)
+        } catch {
+            image = nil
+        }
+    }
+}
+
+private struct SharedTradeMediaBleedModifier: ViewModifier {
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .padding(.horizontal, -(ExperienceSpacing.sm + 2))
+                .padding(.top, -ExperienceSpacing.sm)
+                .padding(.bottom, ExperienceSpacing.xxs)
+        } else {
+            content
         }
     }
 }

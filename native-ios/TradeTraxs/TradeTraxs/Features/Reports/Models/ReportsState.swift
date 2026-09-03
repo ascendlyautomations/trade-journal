@@ -11,8 +11,11 @@ struct ReportsState: Equatable {
 
     var phase: Phase = .idle
     var cards: [ReportTypeCardModel] = []
+    var psychologyCards: [PsychologyReportCardModel] = []
     var snapshot: TradingReportsSnapshot?
+    var psychologySnapshot: PsychologyReportsSnapshot?
     var generatingPeriod: TradingReportPeriodKey?
+    var generatingPsychologyTemplate: PsychologyReportTemplate?
     var isRefreshing = false
     var didBootstrap = false
     var lastUpdated: Date?

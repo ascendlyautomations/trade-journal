@@ -22,7 +22,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             TradeDTO.Trade.self,
             from: "trades",
             query: [
-                SupabaseQuery.select(TradeDTO.profileListSelect),
+                SupabaseQuery.select(TradeDTO.ownerJournalSelect),
                 SupabaseQuery.eq("id", id.rawValue),
             ]
         )
@@ -39,7 +39,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 TradeDTO.Trade.self,
                 from: "trades",
                 query: [
-                    SupabaseQuery.select(TradeDTO.profileListSelect),
+                    SupabaseQuery.select(TradeDTO.ownerJournalSelect),
                     SupabaseQuery.isIn("id", chunk),
                 ]
             )
@@ -271,6 +271,9 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             var body = TradeMapper.insertBody(from: draft, userID: userID)
             body.is_public = false
             body.is_initial_import = isInitialImport
+            if body.import_source == nil, isInitialImport {
+                body.import_source = TradeImportSource.csv.rawValue
+            }
             return body
         }
         try await supabase.database.insert(rows, into: "trades")
@@ -327,7 +330,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
-        let body = TradeMapper.updateBody(from: draft, createdAt: previous.createdAt)
+        let body = TradeMapper.updateBody(from: draft, createdAt: previous.createdAt, previous: previous)
         #if DEBUG
         TradeUpdateDiagnostics.logUpdateAttempt(tradeID: id, body: body)
         #endif
@@ -335,7 +338,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             body,
             table: "trades",
             query: [
-                SupabaseQuery.select(TradeDTO.profileListSelect),
+                SupabaseQuery.select(TradeDTO.ownerJournalSelect),
                 SupabaseQuery.eq("id", id.rawValue),
                 SupabaseQuery.eq("user_id", userID.rawValue),
             ],

@@ -24,7 +24,7 @@ final class MessagesInboxStore {
     private(set) var hasLoadedRooms = false
     private(set) var lastLoadedAt: Date?
 
-    /// Local-only overrides (backend mute/pin APIs are not fully exposed on MessageRepository).
+    /// Optimistic mute overrides until the next inbox bootstrap; server state via `conversation_member_preferences`.
     private var mutedConversationIDs: Set<ConversationID> = []
     private var pinnedConversationIDs: Set<ConversationID> = []
     private var mutedRoomIDs: Set<RoomID> = []
@@ -34,6 +34,7 @@ final class MessagesInboxStore {
     /// Optimistic room unread clears that must survive bootstrap until the server agrees.
     private var roomUnreadOverrides: [RoomID: Int] = [:]
     private var hiddenConversationIDs: Set<ConversationID> = []
+    private var pendingDeleteConversationIDs: Set<ConversationID> = []
 
     /// Monotonic publish token — SwiftUI observes this for preview/order updates.
     private(set) var activityRevision: UInt64 = 0
@@ -62,6 +63,10 @@ final class MessagesInboxStore {
         conversations.filter { !hiddenConversationIDs.contains($0.id) }
     }
 
+    var hasPendingConversationDeletes: Bool {
+        !pendingDeleteConversationIDs.isEmpty
+    }
+
     /// Sum of effective DM unread counts — used by Messages inbox UI (not app-icon badge).
     var totalDirectMessageUnread: Int {
         visibleConversations.reduce(0) { partial, conversation in
@@ -70,6 +75,8 @@ final class MessagesInboxStore {
     }
 
     func replaceConversations(_ items: [Conversation]) {
+        let unhideIDs = Set(items.map(\.id)).subtracting(pendingDeleteConversationIDs)
+        hiddenConversationIDs.subtract(unhideIDs)
         // Seed pin/mute from repository (web prefs / is_pinned) — local toggles may still override.
         pinnedConversationIDs = Set(items.filter(\.isPinned).map(\.id))
         mutedConversationIDs = Set(items.filter(\.isMuted).map(\.id))
@@ -103,6 +110,8 @@ final class MessagesInboxStore {
 
     /// Merge bootstrap rows without clobbering newer local send/realtime activity.
     func mergeConversationsFromBootstrap(_ incoming: [Conversation]) {
+        let unhideIDs = Set(incoming.map(\.id)).subtracting(pendingDeleteConversationIDs)
+        hiddenConversationIDs.subtract(unhideIDs)
         pinnedConversationIDs.formUnion(incoming.filter(\.isPinned).map(\.id))
         mutedConversationIDs.formUnion(incoming.filter(\.isMuted).map(\.id))
 
@@ -324,6 +333,7 @@ final class MessagesInboxStore {
     }
 
     func applyConversationUpdate(_ conversation: Conversation) {
+        guard !hiddenConversationIDs.contains(conversation.id) else { return }
         var conversation = conversation
         if let override = unreadOverrides[conversation.id] {
             if conversation.unreadCount == override {
@@ -340,7 +350,6 @@ final class MessagesInboxStore {
         if conversation.isPinned {
             pinnedConversationIDs.insert(conversation.id)
         }
-        hiddenConversationIDs.remove(conversation.id)
         // Web inbox patches re-run `sortConversationsDesc` so the row jumps to the top.
         // Full array reassignment so Observation invalidates inbox rows (unread + sort).
         conversations = Self.sortConversationsDesc(conversations, pinned: pinnedConversationIDs)
@@ -357,12 +366,43 @@ final class MessagesInboxStore {
         applyConversationUpdate(conversation)
     }
 
-    func removeConversation(id: ConversationID) {
+    func removeConversation(id: ConversationID, pendingRemoteDelete: Bool = false) {
         hiddenConversationIDs.insert(id)
+        if pendingRemoteDelete {
+            pendingDeleteConversationIDs.insert(id)
+        }
         conversations.removeAll { $0.id == id }
         pinnedConversationIDs.remove(id)
         mutedConversationIDs.remove(id)
         unreadOverrides.removeValue(forKey: id)
+        DirectConversationPairIndex.shared.rebuild(from: conversations)
+        bumpActivityRevision()
+    }
+
+    /// Hide 1:1 threads with a blocked peer — mirrors web hidden blocked DM inbox behavior.
+    func removeDirectConversations(with peerID: ProfileID) {
+        let ids = conversations.filter { conversation in
+            !conversation.isGroup && conversation.participantProfileIDs.contains(peerID)
+        }.map(\.id)
+        for id in ids {
+            removeConversation(id: id)
+        }
+    }
+
+    func finalizeConversationDelete(id: ConversationID) {
+        pendingDeleteConversationIDs.remove(id)
+    }
+
+    func cancelPendingConversationDelete(id: ConversationID) {
+        pendingDeleteConversationIDs.remove(id)
+        hiddenConversationIDs.remove(id)
+    }
+
+    /// Restore a conversation after a failed optimistic delete.
+    func restoreRemovedConversation(_ conversation: Conversation) {
+        hiddenConversationIDs.remove(conversation.id)
+        pendingDeleteConversationIDs.remove(conversation.id)
+        upsertConversation(conversation)
     }
 
     func removeRoom(id: RoomID) {
@@ -398,11 +438,26 @@ final class MessagesInboxStore {
     }
 
     func toggleMute(conversationID: ConversationID) {
-        if mutedConversationIDs.contains(conversationID) {
-            mutedConversationIDs.remove(conversationID)
-        } else {
+        let nextMuted = !isMuted(conversationID)
+        applyConversationMute(conversationID: conversationID, isMuted: nextMuted)
+    }
+
+    func applyConversationMute(conversationID: ConversationID, isMuted: Bool) {
+        if isMuted {
             mutedConversationIDs.insert(conversationID)
+        } else {
+            mutedConversationIDs.remove(conversationID)
         }
+        guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else {
+            return
+        }
+        var updated = conversations
+        updated[index].isMuted = isMuted
+        if isMuted {
+            updated[index].unreadCount = 0
+            unreadOverrides[conversationID] = 0
+        }
+        conversations = updated
     }
 
     func togglePin(conversationID: ConversationID) {
@@ -546,6 +601,7 @@ final class MessagesInboxStore {
         unreadOverrides = [:]
         roomUnreadOverrides = [:]
         hiddenConversationIDs = []
+        pendingDeleteConversationIDs = []
         activityRevision = 0
         DirectConversationPairIndex.shared.invalidate()
     }

@@ -31,6 +31,24 @@ nonisolated enum ConversationMessageMerge {
         return sortByCreatedAt(uniqueByID(result))
     }
 
+    /// Server first-page refresh — upsert incoming rows and drop in-window rows the server omitted
+    /// (soft-deleted / filtered). Older paginated rows below the window are preserved.
+    static func reconcileServerFirstPage(existing: [Message], incoming: [Message]) -> [Message] {
+        guard !incoming.isEmpty else {
+            return sortByCreatedAt(uniqueByID(existing))
+        }
+        let incomingIDs = Set(incoming.map(\.id))
+        let windowStart = incoming.map(\.createdAt).min()!
+        let windowEnd = incoming.map(\.createdAt).max()!
+        let preserved = existing.filter { message in
+            if incomingIDs.contains(message.id) { return true }
+            if message.createdAt < windowStart { return true }
+            if message.createdAt > windowEnd { return true }
+            return false
+        }
+        return mergeMessageLists(existing: preserved, incoming: incoming)
+    }
+
     /// Web `mergeMessageLists` — Map-by-id upsert without optimistic matching.
     static func mergeMessageLists(existing: [Message], incoming: [Message]) -> [Message] {
         var byID: [MessageID: Message] = [:]
@@ -160,6 +178,11 @@ nonisolated enum ConversationMessageMerge {
         }
         if let tradeID = message.attachments.first?.tradeID {
             return "trade:\(tradeID.rawValue)"
+        }
+        if message.kind == .voice,
+           let duration = message.attachments.first?.durationSeconds
+        {
+            return "voice:\(Int(duration * 1_000))"
         }
         if let mediaID = message.attachments.first?.media.id,
            !mediaID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

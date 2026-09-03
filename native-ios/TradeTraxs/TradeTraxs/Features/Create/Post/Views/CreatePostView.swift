@@ -9,12 +9,16 @@ struct CreatePostView: View {
     @State private var showsDiscardConfirm = false
     @State private var didApplyScreenshotPrefill = false
 
+    private let imagePipeline: (any ImagePipeline)?
+
     @Environment(\.themeColors) private var colors
+    @FocusState private var isComposerFocused: Bool
 
     init(
         data: DataEnvironment,
         onDismiss: @escaping () -> Void
     ) {
+        imagePipeline = data.imagePipeline
         _viewModel = State(
             initialValue: CreatePostViewModel(
                 profiles: data.profiles,
@@ -27,6 +31,7 @@ struct CreatePostView: View {
     }
 
     init(viewModel: CreatePostViewModel) {
+        imagePipeline = nil
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -43,7 +48,7 @@ struct CreatePostView: View {
                     onRetry: { viewModel.retryLoad() }
                 )
             case .ready, .publishing:
-                formContent
+                composerContent
             }
         }
         .experienceScreenBackground()
@@ -51,6 +56,7 @@ struct CreatePostView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { requestDismiss() }
+                    .font(.body.weight(.regular))
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -80,70 +86,171 @@ struct CreatePostView: View {
         .accessibilityIdentifier("createPost.root")
     }
 
-    private var formContent: some View {
-        Form {
-            Section("Post") {
-                TextEditor(text: $viewModel.bodyText)
-                    .frame(minHeight: 140)
-                    .accessibilityLabel("Post text")
-                    .accessibilityIdentifier("createPost.body")
-            }
+    private var composerContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                composerHeader
 
-            Section("Image") {
                 if let preview = viewModel.imagePreview {
-                    Image(uiImage: preview)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxHeight: 220)
-                        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-                        .accessibilityLabel("Post image preview")
-                    Button("Remove Image", role: .destructive) {
-                        viewModel.clearImage()
-                        photoItem = nil
-                    }
+                    attachedImagePreview(preview)
                 }
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    Label(imagePickerTitle, systemImage: "photo.on.rectangle")
-                }
-                .accessibilityIdentifier("createPost.media.picker")
-            }
 
-            if let formError = viewModel.formError {
-                Section {
+                if viewModel.imagePreview == nil {
+                    attachmentToolbar
+                }
+
+                if let formError = viewModel.formError {
                     Text(formError)
-                        .foregroundStyle(colors.loss)
-                        .font(.footnote)
+                        .experienceStyle(.footnote, color: colors.loss)
                         .accessibilityIdentifier("createPost.formError")
                 }
             }
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.top, ExperienceSpacing.sm)
+            .padding(.bottom, ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollDismissesKeyboard(.interactively)
-        .scrollContentBackground(.hidden)
         .disabled(viewModel.phase == .publishing)
     }
 
-    private var imagePickerTitle: String {
-        viewModel.imagePreview == nil ? "Add Image" : "Replace Image"
+    private var composerHeader: some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+            composerAvatar
+
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(composerDisplayName)
+                        .experienceStyle(.headline, color: colors.primaryText)
+                        .lineLimit(1)
+                    if !composerUsername.isEmpty {
+                        Text("@\(composerUsername)")
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                            .lineLimit(1)
+                    }
+                }
+
+                ZStack(alignment: .topLeading) {
+                    if viewModel.bodyText.isEmpty {
+                        Text("What's on your mind?")
+                            .experienceStyle(.body, color: colors.tertiaryText)
+                            .padding(.top, 8)
+                            .padding(.leading, 5)
+                            .allowsHitTesting(false)
+                    }
+
+                    TextEditor(text: $viewModel.bodyText)
+                        .focused($isComposerFocused)
+                        .font(ExperienceTypography.body)
+                        .foregroundStyle(colors.primaryText)
+                        .frame(minHeight: composerTextMinHeight, alignment: .top)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.clear)
+                        .accessibilityLabel("Post text")
+                        .accessibilityIdentifier("createPost.body")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var composerAvatar: some View {
+        if let profile = viewModel.viewerProfile, let imagePipeline {
+            FollowListAvatarView(
+                profile: profile,
+                imagePipeline: imagePipeline,
+                size: 36
+            )
+        } else {
+            ExperienceAvatar(
+                initials: ProfileDisplay.initials(
+                    displayName: composerDisplayName,
+                    username: composerUsername
+                ),
+                size: 36
+            )
+        }
+    }
+
+    private func attachedImagePreview(_ preview: UIImage) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(uiImage: preview)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity)
+                .frame(maxHeight: 240)
+                .clipped()
+                .clipShape(
+                    RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+                        .stroke(colors.border.opacity(ExperienceOpacity.subtle), lineWidth: ExperienceBorder.hairline)
+                }
+                .accessibilityLabel("Post image preview")
+
+            CreateComposerPreviewDismissButton(accessibilityLabel: "Remove image") {
+                viewModel.clearImage()
+                photoItem = nil
+            }
+            .padding(ExperienceSpacing.sm)
+        }
+        .padding(.leading, 36 + ExperienceSpacing.sm)
+    }
+
+    private var attachmentToolbar: some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            PhotosPicker(selection: $photoItem, matching: .images) {
+                CreateComposerAttachmentAction(
+                    systemImage: "photo",
+                    title: "Add photo"
+                )
+            }
+            .disabled(viewModel.phase == .publishing)
+            .accessibilityIdentifier("createPost.media.picker")
+
+            Spacer(minLength: 0)
+        }
+        .padding(.top, ExperienceSpacing.xxs)
+        .padding(.leading, 36 + ExperienceSpacing.sm)
+        .overlay(alignment: .top) {
+            ExperienceDivider()
+                .offset(y: -ExperienceSpacing.sm)
+        }
     }
 
     private var publishBar: some View {
-        VStack(spacing: 0) {
-            Divider()
-            ExperienceButton(
-                title: viewModel.phase == .publishing
-                    ? (viewModel.isUploadingMedia ? "Uploading…" : "Publishing…")
-                    : "Publish",
-                kind: .primary,
-                isEnabled: viewModel.canPublish && viewModel.phase != .publishing,
-                isLoading: viewModel.phase == .publishing,
-                accessibilityIdentifier: "createPost.publish"
-            ) {
-                viewModel.publish()
-            }
-            .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.vertical, ExperienceSpacing.sm)
-            .background(colors.backgroundPrimary.opacity(0.96))
+        CreateComposerPublishBar(
+            title: "Publish",
+            loadingTitle: viewModel.isUploadingMedia ? "Uploading…" : "Publishing…",
+            isEnabled: viewModel.hasValidDraft && viewModel.phase == .ready,
+            isLoading: viewModel.phase == .publishing,
+            accessibilityIdentifier: "createPost.publish"
+        ) {
+            viewModel.publish()
         }
+    }
+
+    private var composerDisplayName: String {
+        let name = viewModel.viewerProfile?.displayName
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !name.isEmpty { return name }
+        let username = composerUsername
+        return username.isEmpty ? "You" : username
+    }
+
+    private var composerUsername: String {
+        viewModel.viewerProfile?.username
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private var composerTextMinHeight: CGFloat {
+        let text = viewModel.bodyText
+        if text.isEmpty { return 28 }
+        let newlineCount = max(1, text.components(separatedBy: .newlines).count)
+        let wrappedLines = max(1, Int(ceil(Double(text.count) / 36.0)))
+        let lineCount = max(newlineCount, wrappedLines)
+        return min(max(28, CGFloat(lineCount) * 22 + 8), 280)
     }
 
     private func requestDismiss() {

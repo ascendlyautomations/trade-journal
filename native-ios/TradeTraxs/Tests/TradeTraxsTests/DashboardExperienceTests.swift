@@ -163,6 +163,7 @@ final class DashboardExperienceTests: XCTestCase {
             home: DashboardStubHomeRepository(),
             trades: DashboardStubTradeRepository(),
             achievements: DashboardStubAchievementRepository(),
+            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
             session: DashboardStubSession(userID: "dev.dashboard.user"),
             detailCache: cache,
             navigationCoordinator: coordinator
@@ -202,6 +203,7 @@ final class DashboardExperienceTests: XCTestCase {
             home: homeRepo,
             trades: tradesRepo,
             achievements: achievementsRepo,
+            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
             session: DashboardStubSession(userID: "00000000-0000-4000-8000-000000000099"),
             detailCache: cache,
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())

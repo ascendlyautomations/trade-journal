@@ -39,6 +39,7 @@ nonisolated struct DashboardTradeWireV1: Codable, Sendable, Equatable {
     var strategy: String?
     var duration_seconds: PostgresFlexibleDouble?
     var duration_text: String?
+    var image_display_mode: String?
     var is_public: PostgresFlexibleBool?
     var account_category: String?
     var top_confluences: String?
@@ -76,7 +77,20 @@ nonisolated struct DashboardTradeWireV1: Codable, Sendable, Equatable {
             date: date,
             trade_date: trade_date,
             account_name: account_name,
-            strategy: strategy
+            strategy: strategy,
+            duration_seconds: flex(duration_seconds),
+            duration_text: duration_text,
+            trade_mode: trade_mode,
+            confidence: flex(confidence),
+            emotion: emotion,
+            followed_plan: followed_plan?.value,
+            market_condition: market_condition,
+            timeframe: timeframe,
+            news_event: news_event?.value,
+            psychology_notes: psychology_notes,
+            image_display_mode: image_display_mode,
+            reviewed: reviewed?.value,
+            is_initial_import: is_initial_import?.value
         )
     }
 
@@ -102,7 +116,7 @@ extension DashboardTradeWireV1 {
         points = PostgresFlexibleDouble(trade.points.map { NSDecimalNumber(decimal: $0).doubleValue })
         session = trade.sessionLabel
         strategy = trade.strategy
-        notes = trade.notePreview
+        notes = trade.notes ?? trade.notePreview
         image_url = trade.thumbnail?.id
         public_description = trade.publicCaption
         is_public = PostgresFlexibleBool(trade.visibility == .public)
@@ -113,6 +127,16 @@ extension DashboardTradeWireV1 {
         date = ISO8601.string(from: trade.createdAt)
         duration_text = trade.durationText
         duration_seconds = PostgresFlexibleDouble(trade.durationSeconds.map { Double($0) })
+        confidence = PostgresFlexibleDouble(trade.confidence.map { Double($0) })
+        emotion = trade.emotion
+        followed_plan = PostgresFlexibleBool(trade.followedPlan)
+        market_condition = trade.marketCondition
+        timeframe = trade.timeframe
+        news_event = PostgresFlexibleBool(trade.newsEvent)
+        psychology_notes = trade.psychologyNotes
+        image_display_mode = trade.imageDisplayMode.rawValue
+        reviewed = PostgresFlexibleBool(trade.reviewed)
+        is_initial_import = PostgresFlexibleBool(trade.isInitialImport)
     }
 }
 

@@ -85,6 +85,23 @@ final class CurrentUserProfileStore {
     /// Seeds profile header from session bootstrap without a duplicate fetch.
     func applyBootstrapResult(profile: Profile, stats: ProfileStats?) {
         profileStoreSeed(profile: profile, stats: stats)
+        ensureTabAvatarLoaded()
+    }
+
+    /// Loads tab/header avatar from cached profile data (no profile network fetch).
+    func ensureTabAvatarLoaded() {
+        guard let profile else {
+            clearAvatarImages()
+            return
+        }
+        guard profile.avatar != nil else {
+            clearAvatarImages()
+            return
+        }
+        if loadedAvatarKey == profile.avatar?.id, avatarUIImage != nil {
+            return
+        }
+        Task { await loadAvatarIfNeeded(for: profile, force: loadedAvatarKey != profile.avatar?.id) }
     }
 
     func clear() {

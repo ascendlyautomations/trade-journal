@@ -5,6 +5,8 @@ struct DashboardHomeView: View {
     @State private var viewModel: DashboardViewModel
     @State private var activityStore = ActivityInboxStore.shared
     @State private var contentRevealed = false
+    @State private var gettingStartedStore = GettingStartedStore.shared
+    @State private var dailyCheckInStore = TraderDailyCheckInStore.shared
     private let navigationCoordinator: NavigationCoordinator
     private let data: DataEnvironment?
 
@@ -20,6 +22,7 @@ struct DashboardHomeView: View {
                 home: data.home,
                 trades: data.trades,
                 achievements: data.achievements,
+                dailyCheckIns: data.dailyCheckIns,
                 session: data.session,
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
@@ -62,11 +65,7 @@ struct DashboardHomeView: View {
                 }
             case .loaded:
                 if viewModel.summary == nil {
-                    ExperienceEmptyState(
-                        icon: .chart,
-                        title: "No trades yet",
-                        message: "Log your first trade to unlock the equity curve and analytics."
-                    )
+                    emptyDashboardContent
                 } else {
                     scrollContent
                 }
@@ -111,6 +110,8 @@ struct DashboardHomeView: View {
         }
         .task {
             viewModel.loadIfNeeded()
+            gettingStartedStore.loadIfNeeded()
+            dailyCheckInStore.loadIfNeeded()
             if let data {
                 activityStore.ensureUnreadBootstrap(
                     notifications: data.notifications,
@@ -129,6 +130,19 @@ struct DashboardHomeView: View {
         }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
             viewModel.handleJournalMutation()
+            GettingStartedRefreshCenter.noteEligibleUserAction()
+        }
+        .onChange(of: FollowMutationCoordinator.shared.revision) { _, _ in
+            GettingStartedRefreshCenter.noteEligibleUserAction()
+        }
+        .onChange(of: ContentMutationStore.shared.revision) { _, _ in
+            GettingStartedRefreshCenter.noteEligibleUserAction()
+        }
+        .onChange(of: TraderDailyCheckInStore.shared.todayCheckIn?.updatedAt) { _, _ in
+            if let checkIn = TraderDailyCheckInStore.shared.todayCheckIn {
+                SessionDailyCheckInsStore.shared.upsert(checkIn)
+                viewModel.handleCheckInMutation()
+            }
         }
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
             viewModel.handleAccountMutation()
@@ -142,6 +156,31 @@ struct DashboardHomeView: View {
         .accessibilityIdentifier("dashboard.home")
     }
 
+    private var emptyDashboardContent: some View {
+        ScrollView {
+            VStack(spacing: ExperienceSpacing.lg) {
+                if gettingStartedStore.shouldShowDashboardCard {
+                    GettingStartedCard(
+                        store: gettingStartedStore,
+                        navigationCoordinator: navigationCoordinator
+                    )
+                    .padding(.horizontal, ExperienceSpacing.md)
+                }
+                DailyCheckInCard(store: dailyCheckInStore) {
+                    ExperienceHaptics.play(.selection)
+                    navigationCoordinator.present(sheet: .dailyCheckIn)
+                }
+                .padding(.horizontal, ExperienceSpacing.md)
+                ExperienceEmptyState(
+                    icon: .chart,
+                    title: "No trades yet",
+                    message: "Log your first trade to unlock the equity curve and analytics."
+                )
+            }
+            .padding(.top, ExperienceSpacing.sm)
+        }
+    }
+
     private var scrollContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -151,6 +190,22 @@ struct DashboardHomeView: View {
                     .padding(.bottom, ExperienceSpacing.sm)
 
                 if let summary = viewModel.summary {
+                    if gettingStartedStore.shouldShowDashboardCard {
+                        GettingStartedCard(
+                            store: gettingStartedStore,
+                            navigationCoordinator: navigationCoordinator
+                        )
+                        .padding(.horizontal, ExperienceSpacing.md)
+                        .padding(.bottom, ExperienceSpacing.lg)
+                    }
+
+                    DailyCheckInCard(store: dailyCheckInStore) {
+                        ExperienceHaptics.play(.selection)
+                        navigationCoordinator.present(sheet: .dailyCheckIn)
+                    }
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.bottom, ExperienceSpacing.lg)
+
                     DashboardEquityHero(
                         summary: summary,
                         periodTitle: viewModel.dateRange.title,
@@ -190,6 +245,34 @@ struct DashboardHomeView: View {
                         onBrowseHoldBucket: { viewModel.browseHoldBucket(label: $0) }
                     )
                     .padding(.bottom, ExperienceSpacing.xxl)
+
+                    sectionHeader(
+                        "Psychology Insights",
+                        subtitle: "Patterns from your trades and daily check-ins"
+                    )
+                    if !viewModel.psychologyGuardrailNotices.isEmpty {
+                        VStack(spacing: ExperienceSpacing.sm) {
+                            ForEach(viewModel.psychologyGuardrailNotices) { notice in
+                                PsychologyGuardrailBanner(notice: notice) {
+                                    viewModel.dismissPsychologyGuardrail(notice)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, ExperienceSpacing.md)
+                        .padding(.bottom, ExperienceSpacing.sm)
+                    }
+                    PsychologyInsightsSection(
+                        cards: viewModel.psychologyReport?.dashboardCards ?? [],
+                        onSelect: { card in
+                            viewModel.openPsychologyAnalytics(
+                                highlightSection: viewModel.psychologySectionID(for: card.category)
+                            )
+                        },
+                        onViewAll: {
+                            viewModel.openPsychologyAnalytics()
+                        }
+                    )
+                    .padding(.bottom, ExperienceSpacing.xl)
 
                     sectionHeader(
                         "Insights",

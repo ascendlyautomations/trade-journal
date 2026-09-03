@@ -26,6 +26,19 @@ nonisolated protocol ProfileRepository: Sendable {
     func followers(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile>
     func following(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile>
     func creator(for profileID: ProfileID) async throws -> Creator?
+    /// Owner `profiles.dm_privacy` for Settings → Privacy.
+    func ownerDmPrivacy() async throws -> DmPrivacy
+    func updateDmPrivacy(_ privacy: DmPrivacy) async throws -> DmPrivacy
+}
+
+extension ProfileRepository {
+    func ownerDmPrivacy() async throws -> DmPrivacy {
+        throw AppError.notImplemented(feature: "ownerDmPrivacy")
+    }
+
+    func updateDmPrivacy(_ privacy: DmPrivacy) async throws -> DmPrivacy {
+        throw AppError.notImplemented(feature: "updateDmPrivacy")
+    }
 }
 
 extension ProfileRepository {

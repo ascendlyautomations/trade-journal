@@ -153,6 +153,81 @@ final class ConversationThreadReloadPersistenceTests: XCTestCase {
         XCTAssertEqual(reopened?.contentGeneration, 2)
     }
 
+    func testSyncOpenThreadStatePreservesPaginatedHistoryAfterBatchDelete() {
+        let key = ConversationThreadSessionStore.cacheKey(viewerID: viewer, conversationID: conversationID)
+        let convo = makeConversation()
+        var paginated: [Message] = (1...60).map { index in
+            makeMessage(
+                id: "msg-\(index)",
+                body: "body-\(index)",
+                sender: index.isMultiple(of: 2) ? peer : viewer,
+                at: TimeInterval(index)
+            )
+        }
+        paginated = ConversationMessageMerge.sortByCreatedAt(paginated)
+
+        ConversationThreadSessionStore.shared.syncOpenThreadState(
+            viewerID: viewer,
+            conversationID: conversationID,
+            conversation: convo,
+            messages: paginated,
+            nextCursor: "older-cursor",
+            hasMoreMessages: true
+        )
+
+        let deleteIDs: Set<String> = ["msg-10", "msg-25", "msg-55"]
+        let afterDelete = paginated.filter { !deleteIDs.contains($0.id.rawValue) }
+        ConversationThreadSessionStore.shared.syncOpenThreadState(
+            viewerID: viewer,
+            conversationID: conversationID,
+            conversation: convo,
+            messages: afterDelete,
+            nextCursor: "older-cursor",
+            hasMoreMessages: true
+        )
+
+        let reopened = ConversationThreadSessionStore.shared.restore(key: key)
+        XCTAssertEqual(reopened?.messages.count, 57)
+        XCTAssertEqual(reopened?.nextCursor, "older-cursor")
+        XCTAssertTrue(reopened?.hasMoreMessages == true)
+        for id in deleteIDs {
+            XCTAssertFalse(reopened?.messages.contains { $0.id.rawValue == id } == true)
+        }
+    }
+
+    func testSaveMergedFirstPageDoesNotTruncateExtendedThread() {
+        let key = ConversationThreadSessionStore.cacheKey(viewerID: viewer, conversationID: conversationID)
+        let convo = makeConversation()
+        let extended = (1...80).map { index in
+            makeMessage(id: "msg-\(index)", body: "x", sender: peer, at: TimeInterval(index))
+        }
+
+        ConversationThreadSessionStore.shared.syncOpenThreadState(
+            viewerID: viewer,
+            conversationID: conversationID,
+            conversation: convo,
+            messages: extended,
+            nextCursor: "cursor-80",
+            hasMoreMessages: true
+        )
+
+        let serverFirstPage = (31...80).map { index in
+            makeMessage(id: "msg-\(index)", body: "x", sender: peer, at: TimeInterval(index))
+        }
+        ConversationThreadSessionStore.shared.saveMergedFirstPage(
+            cacheKey: key,
+            conversation: convo,
+            incoming: serverFirstPage,
+            nextCursor: "cursor-80",
+            hasMoreMessages: true
+        )
+
+        let restored = ConversationThreadSessionStore.shared.restore(key: key)
+        XCTAssertEqual(restored?.messages.count, 80)
+        XCTAssertTrue(restored?.messages.contains { $0.id.rawValue == "msg-1" } == true)
+        XCTAssertTrue(restored?.messages.contains { $0.id.rawValue == "msg-30" } == true)
+    }
+
     func testPaginationCannotRemoveNewestMessage() {
         let newest = makeMessage(id: "newest", body: "latest", sender: viewer, at: 900)
         let olderPage = [

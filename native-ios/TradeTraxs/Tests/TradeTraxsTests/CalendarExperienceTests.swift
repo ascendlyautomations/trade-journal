@@ -234,6 +234,7 @@ final class CalendarExperienceTests: XCTestCase {
             home: CalendarStubHomeRepository(),
             trades: CalendarStubTradeRepository(),
             achievements: CalendarStubAchievementRepository(),
+            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
             session: CalendarStubSession(userID: "dev.calendar.user"),
             detailCache: DetailPresentationCache(),
             navigationCoordinator: coordinator

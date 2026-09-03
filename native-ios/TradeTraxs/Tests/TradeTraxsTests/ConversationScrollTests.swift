@@ -23,17 +23,14 @@ final class ConversationScrollTests: XCTestCase {
             .bootstrapApplied(newestMessageID: messageNew, isEmpty: false),
             conversationID: conversationA
         )
-        XCTAssertEqual(coordinator.mode, .initialPositionPending)
 
-        coordinator.reportLayoutReady(
-            newestMessageID: messageNew,
-            isEmpty: false,
-            conversationID: conversationA
-        )
+        XCTAssertEqual(coordinator.mode, .initialPositionPending)
+        XCTAssertNil(coordinator.desiredScrollPositionID)
+
+        coordinator.completeInitialScrollPosition(conversationID: conversationA)
 
         XCTAssertEqual(coordinator.mode, .bottomPinned)
-        XCTAssertEqual(coordinator.desiredScrollPositionID, ConversationScrollAnchorID.bottom)
-        XCTAssertFalse(coordinator.desiredScrollAnimated)
+        XCTAssertNil(coordinator.desiredScrollPositionID)
     }
 
     func testWarmCachedThreadOpenScrollsToNewestMessage() {
@@ -42,14 +39,13 @@ final class ConversationScrollTests: XCTestCase {
             .cacheApplied(newestMessageID: messageNew, isEmpty: false),
             conversationID: conversationA
         )
-        coordinator.reportLayoutReady(
-            newestMessageID: messageNew,
-            isEmpty: false,
-            conversationID: conversationA
-        )
+
+        XCTAssertEqual(coordinator.mode, .initialPositionPending)
+        XCTAssertNil(coordinator.desiredScrollPositionID)
+
+        coordinator.completeInitialScrollPosition(conversationID: conversationA)
 
         XCTAssertEqual(coordinator.mode, .bottomPinned)
-        XCTAssertEqual(coordinator.desiredScrollPositionID, ConversationScrollAnchorID.bottom)
     }
 
     func testDirectConversationOpensAtNewest() {
@@ -63,12 +59,9 @@ final class ConversationScrollTests: XCTestCase {
             .bootstrapApplied(newestMessageID: messageNew, isEmpty: false),
             conversationID: groupID
         )
-        coordinator.reportLayoutReady(
-            newestMessageID: messageNew,
-            isEmpty: false,
-            conversationID: groupID
-        )
-        XCTAssertEqual(coordinator.desiredScrollPositionID, ConversationScrollAnchorID.bottom)
+        XCTAssertEqual(coordinator.mode, .initialPositionPending)
+        coordinator.completeInitialScrollPosition(conversationID: groupID)
+        XCTAssertEqual(coordinator.mode, .bottomPinned)
     }
 
     func testEmptyConversationDoesNotAttemptInvalidScroll() {
@@ -173,6 +166,7 @@ final class ConversationScrollTests: XCTestCase {
 
     func testManuallyReturningToBottomRestoresBottomPinnedState() {
         let coordinator = makeCoordinator(for: conversationA)
+        coordinator.completeInitialScrollPosition(conversationID: conversationA)
         coordinator.testing_setMode(.readingHistory)
         coordinator.reportNearBottom(true, conversationID: conversationA)
 
@@ -182,6 +176,7 @@ final class ConversationScrollTests: XCTestCase {
 
     func testPaginationPreservesVisibleAnchor() {
         let coordinator = makeCoordinator(for: conversationA)
+        coordinator.completeInitialScrollPosition(conversationID: conversationA)
         coordinator.testing_setMode(.readingHistory)
         coordinator.beginPagination(anchorMessageID: messageMid, conversationID: conversationA)
 
@@ -196,6 +191,7 @@ final class ConversationScrollTests: XCTestCase {
 
     func testPaginationNeverJumpsToNewest() {
         let coordinator = makeCoordinator(for: conversationA)
+        coordinator.completeInitialScrollPosition(conversationID: conversationA)
         coordinator.beginPagination(anchorMessageID: messageOld, conversationID: conversationA)
         coordinator.handle(.paginationApplied, conversationID: conversationA)
 
@@ -218,12 +214,16 @@ final class ConversationScrollTests: XCTestCase {
 
     func testKeyboardOpeningPreservesBottomPosition() {
         let coordinator = makeCoordinator(for: conversationA)
-        coordinator.testing_setMode(.bottomPinned)
+        coordinator.handle(
+            .bootstrapApplied(newestMessageID: messageNew, isEmpty: false),
+            conversationID: conversationA
+        )
+        coordinator.completeInitialScrollPosition(conversationID: conversationA)
         let generation = coordinator.scrollCommandGeneration
         coordinator.reportKeyboardVisible(true, conversationID: conversationA)
 
         XCTAssertEqual(coordinator.scrollCommandGeneration, generation + 1)
-        XCTAssertEqual(coordinator.desiredScrollPositionID, ConversationScrollAnchorID.bottom)
+        XCTAssertEqual(coordinator.desiredScrollPositionID, messageNew.rawValue)
         XCTAssertFalse(coordinator.desiredScrollAnimated)
     }
 
@@ -266,14 +266,21 @@ final class ConversationScrollTests: XCTestCase {
             .bootstrapApplied(newestMessageID: messageNew, isEmpty: false),
             conversationID: conversationA
         )
-        coordinator.reportLayoutReady(
-            newestMessageID: messageNew,
-            isEmpty: false,
+
+        XCTAssertEqual(coordinator.mode, .initialPositionPending)
+        coordinator.completeInitialScrollPosition(conversationID: conversationA)
+        XCTAssertEqual(coordinator.mode, .bottomPinned)
+    }
+
+    func testBootstrapDoesNotIssueInitialScrollCommand() {
+        let coordinator = makeCoordinator(for: conversationA)
+        coordinator.handle(
+            .bootstrapApplied(newestMessageID: messageNew, isEmpty: false),
             conversationID: conversationA
         )
 
-        XCTAssertEqual(coordinator.mode, .bottomPinned)
-        XCTAssertEqual(coordinator.desiredScrollPositionID, ConversationScrollAnchorID.bottom)
+        XCTAssertNil(coordinator.desiredScrollPositionID)
+        XCTAssertTrue(coordinator.awaitsInitialScrollPosition)
     }
 
     func testLayoutReadyIgnoredAfterInitialScrollCompleted() {
@@ -282,11 +289,7 @@ final class ConversationScrollTests: XCTestCase {
             .bootstrapApplied(newestMessageID: messageMid, isEmpty: false),
             conversationID: conversationA
         )
-        coordinator.reportLayoutReady(
-            newestMessageID: messageMid,
-            isEmpty: false,
-            conversationID: conversationA
-        )
+        coordinator.completeInitialScrollPosition(conversationID: conversationA)
         let generation = coordinator.scrollCommandGeneration
 
         coordinator.reportLayoutReady(
@@ -315,9 +318,30 @@ final class ConversationScrollTests: XCTestCase {
             .bootstrapApplied(newestMessageID: messageNew, isEmpty: false),
             conversationID: conversationA
         )
+        coordinator.completeInitialScrollPosition(conversationID: conversationA)
         coordinator.testing_setMode(.readingHistory)
         coordinator.jumpToLatest(conversationID: conversationA)
 
+        XCTAssertEqual(coordinator.desiredScrollPositionID, messageNew.rawValue)
+    }
+
+    func testLayoutReadyCanCompleteInitialScrollWhenBootstrapDeferred() {
+        let coordinator = makeCoordinator(for: conversationA)
+
+        coordinator.reportLayoutReady(
+            newestMessageID: nil,
+            isEmpty: false,
+            conversationID: conversationA
+        )
+        XCTAssertTrue(coordinator.awaitsInitialScrollPosition)
+        XCTAssertNil(coordinator.desiredScrollPositionID)
+
+        coordinator.reportLayoutReady(
+            newestMessageID: messageNew,
+            isEmpty: false,
+            conversationID: conversationA
+        )
+        XCTAssertFalse(coordinator.awaitsInitialScrollPosition)
         XCTAssertEqual(coordinator.desiredScrollPositionID, messageNew.rawValue)
     }
 }

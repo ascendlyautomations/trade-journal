@@ -9,4 +9,8 @@ enum ReportsNavigation {
     static func openDetail(_ reportID: ReportID, using coordinator: NavigationCoordinator) {
         coordinator.open(.home(.report(reportID)))
     }
+
+    static func openPsychologyDetail(_ reportID: ReportID, using coordinator: NavigationCoordinator) {
+        coordinator.open(.home(.report(reportID)))
+    }
 }

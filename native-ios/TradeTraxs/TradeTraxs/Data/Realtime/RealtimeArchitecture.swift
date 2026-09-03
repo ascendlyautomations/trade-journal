@@ -360,6 +360,18 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         await live.stopWatchingViewerProfile(userID: userID)
     }
 
+    func watchTraderDailyCheckIns(userID: String, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchTraderDailyCheckIns(userID: userID, accessToken: accessToken)
+    }
+
+    func stopWatchingTraderDailyCheckIns(userID: String) async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingTraderDailyCheckIns(userID: userID)
+    }
+
     /// Detail comments — `comment_likes` postgres_changes for visible ids.
     func watchCommentLikes(
         source: CommentLikeSource,

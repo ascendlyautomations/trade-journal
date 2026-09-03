@@ -155,6 +155,14 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
         return try await base.creator(for: profileID)
     }
 
+    func ownerDmPrivacy() async throws -> DmPrivacy {
+        try await base.ownerDmPrivacy()
+    }
+
+    func updateDmPrivacy(_ privacy: DmPrivacy) async throws -> DmPrivacy {
+        try await base.updateDmPrivacy(privacy)
+    }
+
     private static func isDevelopmentID(_ id: ProfileID) -> Bool {
         id.rawValue.hasPrefix("dev.")
     }

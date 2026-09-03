@@ -28,6 +28,7 @@ nonisolated struct DefaultUploadService: UploadService {
         )
         let kind: MediaKind = request.contentType.hasPrefix("video") ? .video
             : request.contentType.hasPrefix("image") ? .image
+            : request.contentType.hasPrefix("audio") ? .audio
             : .file
         return MediaReference(id: path, kind: kind, altText: nil)
     }

@@ -16,6 +16,8 @@ const DM_MESSAGE_CORE_COLUMNS = [
   "parent_message_id",
   "deleted_for_everyone",
   "image_url",
+  "audio_url",
+  "audio_duration_ms",
   "is_system",
 ] as const
 

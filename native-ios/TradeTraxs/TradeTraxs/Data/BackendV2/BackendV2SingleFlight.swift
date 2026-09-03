@@ -171,4 +171,8 @@ nonisolated enum BackendV2FlightKeys {
         let c = cursor ?? "-"
         return "\(viewerID)|\(BackendV2Versioning.RPCName.tradesList.rawValue)|\(queryKey)|\(c)"
     }
+
+    static func gettingStarted(viewerID: String) -> String {
+        "\(viewerID)|\(BackendV2Versioning.RPCName.gettingStarted.rawValue)"
+    }
 }

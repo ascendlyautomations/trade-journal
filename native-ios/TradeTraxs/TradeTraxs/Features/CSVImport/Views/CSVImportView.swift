@@ -7,7 +7,14 @@ struct CSVImportView: View {
     @State private var showsFileImporter = false
     @Environment(\.themeColors) private var colors
 
-    init(data: DataEnvironment, onDismiss: @escaping () -> Void) {
+    private let embeddedInTradeEntryHub: Bool
+
+    init(
+        data: DataEnvironment,
+        embeddedInTradeEntryHub: Bool = false,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.embeddedInTradeEntryHub = embeddedInTradeEntryHub
         _viewModel = State(
             initialValue: CSVImportViewModel(
                 trades: data.trades,
@@ -18,7 +25,8 @@ struct CSVImportView: View {
         )
     }
 
-    init(viewModel: CSVImportViewModel) {
+    init(viewModel: CSVImportViewModel, embeddedInTradeEntryHub: Bool = false) {
+        self.embeddedInTradeEntryHub = embeddedInTradeEntryHub
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -49,12 +57,10 @@ struct CSVImportView: View {
             }
         }
         .experienceScreenBackground()
-        .experienceNavigationTitle("Import Trades")
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Close") { viewModel.dismiss() }
-            }
-        }
+        .modifier(CSVImportChromeModifier(
+            embeddedInTradeEntryHub: embeddedInTradeEntryHub,
+            onClose: { viewModel.dismiss() }
+        ))
         .fileImporter(
             isPresented: $showsFileImporter,
             allowedContentTypes: viewModel.acceptedContentTypes,
@@ -97,6 +103,25 @@ struct CSVImportView: View {
             .padding(.horizontal, ExperienceSpacing.lg)
 
             Spacer()
+        }
+    }
+}
+
+private struct CSVImportChromeModifier: ViewModifier {
+    let embeddedInTradeEntryHub: Bool
+    let onClose: () -> Void
+
+    func body(content: Content) -> some View {
+        if embeddedInTradeEntryHub {
+            content
+        } else {
+            content
+                .experienceNavigationTitle("Import Trades")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close", action: onClose)
+                    }
+                }
         }
     }
 }

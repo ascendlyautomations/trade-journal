@@ -18,6 +18,7 @@ final class TradeHistoryScreenshotTests: XCTestCase {
             home: TradeHistoryScreenshotHomeRepository(),
             trades: TradeHistoryScreenshotTradeRepository(),
             achievements: TradeHistoryScreenshotAchievementRepository(),
+            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
             session: TradeHistoryScreenshotSession(userID: "dev.trades.shots"),
             detailCache: DetailPresentationCache(),
             navigationCoordinator: dashCoordinator

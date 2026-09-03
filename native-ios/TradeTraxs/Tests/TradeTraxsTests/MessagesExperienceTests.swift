@@ -307,7 +307,7 @@ final class MessagesExperienceTests: XCTestCase {
         let id = ConversationID("dev-dm-ada")
         viewModel.requestDeleteConversation(id: id)
         XCTAssertTrue(viewModel.showsDeleteConfirmation)
-        await viewModel.confirmDeleteConversation()
+        await viewModel.confirmDeleteConversation(id: id)
         XCTAssertFalse(MessagesInboxStore.shared.visibleConversations.contains { $0.id == id })
         XCTAssertFalse(viewModel.showsDeleteConfirmation)
     }
@@ -514,11 +514,18 @@ private struct MessagesStubMessageRepository: MessageRepository {
         )
     }
 
+    func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws {}
+
     func deleteConversation(id: ConversationID) async throws {
         await MainActor.run {
             MessagesInboxStore.shared.removeConversation(id: id)
         }
     }
+
+    func setConversationNotificationsEnabled(
+        conversationID: ConversationID,
+        enabled: Bool
+    ) async throws {}
 }
 
 private struct MessagesStubRoomRepository: RoomRepository {

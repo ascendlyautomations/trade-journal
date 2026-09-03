@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from "react"
-import { GoogleSignInButton, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { GoogleSignInButton, AppleSignInButton, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { supabase } from "@/lib/supabaseClient"
 import {
   clearStoredReferralCode,
@@ -34,8 +34,15 @@ import { enrollCurrentUserEarlyAccess } from "@/lib/earlyAccessClient"
 import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
 import { markEarlyAccessOAuthSignupPending } from "@/lib/earlyAccess"
 import NativeIosLoginShell from "@/app/components/NativeIosLoginShell"
-import { isNativeIos } from "@/lib/nativePlatform"
-import { startNativeIosGoogleOAuth } from "@/lib/nativeIosOAuth"
+import {
+  clearWebSocialOAuthCallbackParams,
+  mapWebSocialOAuthError,
+  readWebSocialOAuthCallbackError,
+  resolveWebSocialOAuthRedirectPath,
+  startWebSocialOAuth,
+  validateWebSocialOAuthSignup,
+  type WebSocialOAuthProvider,
+} from "@/lib/webSocialOAuth"
 
 function getSafeNextPath(): string | null {
   if (typeof window === "undefined") return null
@@ -68,6 +75,7 @@ export default function LoginPageClient({
   const [resetMessage, setResetMessage] = useState("")
   const [loadingReset, setLoadingReset] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [appleLoading, setAppleLoading] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const checkoutInFlightRef = useRef(false)
   const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
@@ -126,7 +134,13 @@ export default function LoginPageClient({
     if (params.get("tab") === "signup") {
       setIsLogin(false)
     }
-  }, [])
+
+    const oauthError = readWebSocialOAuthCallbackError()
+    if (oauthError) {
+      showPopup({ type: "error", message: oauthError })
+      clearWebSocialOAuthCallbackParams()
+    }
+  }, [showPopup])
 
   // Creator invites must never stay on the trial/billing login page.
   useEffect(() => {
@@ -424,15 +438,20 @@ export default function LoginPageClient({
     setLoading(false)
   }
 
-  const handleGoogleLogin = async () => {
-    if (googleLoading || loading) return
+  async function handleSocialOAuth(provider: WebSocialOAuthProvider) {
+    const isGoogle = provider === "google"
+    const setLoadingState = isGoogle ? setGoogleLoading : setAppleLoading
+    if (googleLoading || appleLoading || loading) return
 
-    if (!isLogin && !agreedToTerms) {
-      showPopup({
-        type: "error",
-        message:
-          "You must agree to the Terms of Service and Privacy Policy before creating an account.",
-      })
+    const signupError = validateWebSocialOAuthSignup({
+      isLogin,
+      agreedToTerms,
+      earlyAccessPromotionEnabled,
+      signupPlanIntent,
+      requireSignupPlanIntent: true,
+    })
+    if (signupError) {
+      showPopup({ type: "error", message: signupError })
       return
     }
 
@@ -445,7 +464,7 @@ export default function LoginPageClient({
           showPopup({
             type: "error",
             message:
-              "Choose Start Free Trial or Continue Free below before signing up with Google.",
+              "Choose Start Free Trial or Continue Free below before signing up.",
           })
           return
         }
@@ -453,43 +472,49 @@ export default function LoginPageClient({
       }
     }
 
-    setGoogleLoading(true)
+    setLoadingState(true)
 
     try {
-    if (!isLogin) {
-      enterSignupFlow()
-      if (earlyAccessPromotionEnabled) {
-        markEarlyAccessOAuthSignupPending()
+      if (!isLogin) {
+        enterSignupFlow()
+        if (earlyAccessPromotionEnabled) {
+          markEarlyAccessOAuthSignupPending()
+        }
       }
-    }
-    let redirectPath = isLogin
-      ? "/dashboard"
-      : earlyAccessPromotionEnabled
-        ? "/early-access/welcome"
-        : "/onboarding"
-    if (isLogin && shouldStartCheckout()) {
-      redirectPath = "/login?next=checkout"
-    } else if (isLogin) {
-      const next = getSafeNextPath()
-      if (next) redirectPath = next
-    }
 
-    // Capacitor iOS: in-app browser + custom-scheme callback (never leave to Safari).
-    // Web (desktop + mobile Safari) keeps the existing origin redirect flow.
-    if (isNativeIos()) {
-      await startNativeIosGoogleOAuth(redirectPath)
-      return
-    }
+      const redirectPath = resolveWebSocialOAuthRedirectPath({
+        isLogin,
+        agreedToTerms,
+        earlyAccessPromotionEnabled,
+        signupPlanIntent,
+        requireSignupPlanIntent: true,
+        safeNextPath: getSafeNextPath(),
+        shouldStartCheckout: shouldStartCheckout(),
+      })
 
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${location.origin}${redirectPath}`,
-      },
-    })
+      const result = await startWebSocialOAuth({
+        supabase,
+        provider,
+        redirectPath,
+        allowNativeIosGoogleBridge: isGoogle,
+      })
+
+      if (!result.ok) {
+        showPopup({ type: "error", message: result.message })
+      }
+    } catch (err) {
+      showPopup({ type: "error", message: mapWebSocialOAuthError(err) })
     } finally {
-      setGoogleLoading(false)
+      setLoadingState(false)
     }
+  }
+
+  const handleGoogleLogin = () => {
+    void handleSocialOAuth("google")
+  }
+
+  const handleAppleLogin = () => {
+    void handleSocialOAuth("apple")
   }
 
   const handleReset = async () => {
@@ -691,10 +716,20 @@ export default function LoginPageClient({
         <GoogleSignInButton
           label={isLogin ? "sign-in" : "sign-up"}
           onClick={handleGoogleLogin}
-          disabled={loading || (!isLogin && !agreedToTerms)}
+          disabled={loading || appleLoading || (!isLogin && !agreedToTerms)}
           loading={googleLoading}
-          className="mb-4 md:mb-3"
+          className="mb-3 md:mb-2.5"
         />
+
+        {!nativeIos ? (
+          <AppleSignInButton
+            label="continue"
+            onClick={handleAppleLogin}
+            disabled={loading || googleLoading || (!isLogin && !agreedToTerms)}
+            loading={appleLoading}
+            className="mb-4 md:mb-3"
+          />
+        ) : null}
 
         <div className="mb-4 text-center text-sm text-gray-400 md:mb-3">or</div>
 

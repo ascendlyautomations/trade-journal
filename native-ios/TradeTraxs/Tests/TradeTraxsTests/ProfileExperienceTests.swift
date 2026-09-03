@@ -90,6 +90,49 @@ final class ProfileExperienceTests: XCTestCase {
         XCTAssertEqual(tab.size.height, side, accuracy: 0.5)
     }
 
+    func testApplyBootstrapResultLoadsTabAvatar() async throws {
+        let fixture = makeFixture(avatarURL: "https://example.com/avatar.jpg")
+        let store = CurrentUserProfileStore(
+            profiles: fixture.repository,
+            session: fixture.session,
+            imagePipeline: fixture.imagePipeline
+        )
+
+        let profile = try await fixture.repository.profile(id: ProfileID("11111111-1111-1111-1111-111111111111"))
+        store.applyBootstrapResult(profile: profile, stats: try await fixture.repository.stats(for: profile.id))
+
+        for _ in 0..<40 {
+            if store.avatarImage != nil { break }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+
+        XCTAssertNotNil(store.avatarImage)
+        XCTAssertNotNil(store.tabBarAvatarUIImage)
+    }
+
+    func testEnsureTabAvatarLoadedClearsWhenAvatarRemoved() async throws {
+        let fixture = makeFixture(avatarURL: "https://example.com/avatar.jpg")
+        let store = CurrentUserProfileStore(
+            profiles: fixture.repository,
+            session: fixture.session,
+            imagePipeline: fixture.imagePipeline
+        )
+        let profileID = ProfileID("11111111-1111-1111-1111-111111111111")
+        let profile = try await fixture.repository.profile(id: profileID)
+        store.applyBootstrapResult(profile: profile, stats: try await fixture.repository.stats(for: profileID))
+        for _ in 0..<40 {
+            if store.avatarImage != nil { break }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+
+        var withoutAvatar = profile
+        withoutAvatar.avatar = nil
+        store.applyBootstrapResult(profile: withoutAvatar, stats: store.stats)
+
+        XCTAssertNil(store.avatarImage)
+        XCTAssertNil(store.tabBarAvatarUIImage)
+    }
+
     func testHeaderViewModelFollowRoutesNoOpWithoutProfile() {
         let environment = CompositionRoot.bootstrap()
         let content = ProfileContentStore(

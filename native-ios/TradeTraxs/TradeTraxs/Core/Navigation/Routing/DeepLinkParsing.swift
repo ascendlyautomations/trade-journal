@@ -95,9 +95,10 @@ struct DeepLinkParser: DeepLinkParsing {
             return parseRooms(Array(parts.dropFirst()), query: query)
         case "room":
             if let id = parts[safe: 1] {
-                return .feed(.room(RoomID(id)))
+                // Web `/room/{id}` redirects to `/community?room={id}` — open Messages tab.
+                return .messages(.room(RoomID(id)))
             }
-            return .feed(.rooms)
+            return .tab(.messages)
         case "post":
             if let id = parts[safe: 1] {
                 return .feed(.post(PostID(id)))

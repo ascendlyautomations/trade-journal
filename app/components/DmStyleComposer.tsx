@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -12,6 +13,14 @@ import {
 } from "react"
 import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
 import { applyTextareaNewlineInsert } from "@/lib/insertTextareaNewline"
+import { useVoiceRecorder } from "@/lib/useVoiceRecorder"
+import { formatVoiceDuration, type VoiceRecordingFormat } from "@/lib/voiceMessage"
+
+export type VoiceSendPayload = {
+  blob: Blob
+  durationMs: number
+  format: VoiceRecordingFormat
+}
 
 export type DmStyleComposerProps = {
   value: string
@@ -24,6 +33,8 @@ export type DmStyleComposerProps = {
   imageDisabled?: boolean
   onTradeClick?: () => void
   tradeDisabled?: boolean
+  onSendVoice?: (payload: VoiceSendPayload) => void
+  voiceDisabled?: boolean
   /** Shown above the input row (e.g. typing indicator) */
   beforeRow?: ReactNode
   /** Shown below the input row (e.g. “Seen”, file name) */
@@ -66,10 +77,6 @@ function SharePlusIcon({ className }: { className?: string }) {
 
 /**
  * Shared bottom composer matching the Messages / DM layout.
- * Auto-growing textarea (max ~3 lines, then internal scroll).
- * Enter sends; Ctrl+Enter inserts a newline.
- * Mobile: [textarea] [Share] [Send] with attach sheet for photo/trade.
- * Desktop (md+): [textarea] [📷] [📊] [Send] unchanged.
  */
 export default function DmStyleComposer({
   value,
@@ -82,6 +89,8 @@ export default function DmStyleComposer({
   imageDisabled = false,
   onTradeClick,
   tradeDisabled = false,
+  onSendVoice,
+  voiceDisabled = false,
   beforeRow,
   afterRow,
   fileInputRef,
@@ -95,6 +104,11 @@ export default function DmStyleComposer({
   const resolvedFileInputRef = fileInputRef ?? internalFileInputRef
   const pendingCaretRef = useRef<number | null>(null)
   const showShare = hasShareActions(imageDisabled, onTradeClick)
+  const voiceRecorder = useVoiceRecorder()
+  const canSendText = value.trim().length > 0
+  const voiceEnabled = Boolean(onSendVoice) && !voiceDisabled
+  const showMic =
+    voiceEnabled && !canSendText && voiceRecorder.phase !== "recording"
 
   useLayoutEffect(() => {
     const el = textareaRef.current
@@ -102,18 +116,19 @@ export default function DmStyleComposer({
     if (!el || caret == null) return
     pendingCaretRef.current = null
     el.setSelectionRange(caret, caret)
-  }, [value])
+  }, [value, textareaRef])
+
+  useEffect(() => {
+    if (!voiceRecorder.completedTake || !onSendVoice) return
+    onSendVoice(voiceRecorder.completedTake)
+    voiceRecorder.consumeCompletedTake()
+  }, [
+    voiceRecorder.completedTake,
+    onSendVoice,
+    voiceRecorder.consumeCompletedTake,
+  ])
 
   function handleTextareaKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (process.env.NODE_ENV === "development") {
-      console.log({
-        key: e.key,
-        ctrl: e.ctrlKey,
-        shift: e.shiftKey,
-        meta: e.metaKey,
-      })
-    }
-
     if (e.key !== "Enter") return
 
     if (e.ctrlKey || e.metaKey) {
@@ -127,7 +142,7 @@ export default function DmStyleComposer({
     }
 
     e.preventDefault()
-    if (!sendDisabled) onSend()
+    if (!sendDisabled && canSendText) onSend()
   }
 
   function openPhotoPicker() {
@@ -142,6 +157,10 @@ export default function DmStyleComposer({
     onTradeClick()
   }
 
+  async function handleVoiceSend() {
+    await voiceRecorder.finish()
+  }
+
   return (
     <div className="relative mt-auto shrink-0 border-t border-white/10 bg-[#0B1220] p-2 md:bg-[#020617] md:p-4">
       {beforeRow ? <div className="mb-1">{beforeRow}</div> : null}
@@ -154,55 +173,99 @@ export default function DmStyleComposer({
         disabled={imageDisabled}
         onChange={onImageChange}
       />
-      <div className="flex w-full items-end gap-1.5">
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          placeholder={placeholder}
-          value={value}
-          disabled={textDisabled}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleTextareaKeyDown}
-          className={messageFieldClass}
-        />
-        {showShare ? (
+      {voiceRecorder.phase === "recording" ? (
+        <div className="flex w-full items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-red-500" />
+            <span className="font-mono text-sm text-white">
+              {formatVoiceDuration(voiceRecorder.elapsedMs / 1000)}
+            </span>
+          </div>
           <button
             type="button"
-            aria-label="Share photo or trade"
-            title="Share photo or trade"
-            onClick={() => setMobileAttachOpen(true)}
-            className="flex h-10 w-10 min-h-[40px] min-w-[40px] shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-md transition active:scale-95 md:hidden hover:bg-blue-600"
+            aria-label="Cancel recording"
+            onClick={voiceRecorder.cancel}
+            className="shrink-0 rounded px-3 py-2 text-sm text-gray-300 hover:bg-white/10 hover:text-white"
           >
-            <SharePlusIcon className="h-5 w-5" />
+            Cancel
           </button>
-        ) : null}
-        <label
-          htmlFor={fileInputId}
-          className={`${desktopActionBtnClass} hidden cursor-pointer md:flex`}
-        >
-          <span aria-hidden>📷</span>
-        </label>
-        {onTradeClick ? (
           <button
             type="button"
-            onClick={onTradeClick}
-            disabled={tradeDisabled}
-            aria-label="Send a trade"
-            title="Send a trade"
-            className={`${desktopActionBtnClass} hidden md:flex`}
+            aria-label="Send voice message"
+            onClick={() => void handleVoiceSend()}
+            className="shrink-0 rounded bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600"
           >
-            <span aria-hidden>📊</span>
+            Send
           </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={onSend}
-          disabled={sendDisabled}
-          className="shrink-0 whitespace-nowrap rounded bg-blue-500 px-3 py-2 text-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Send
-        </button>
-      </div>
+        </div>
+      ) : (
+        <div className="flex w-full items-end gap-1.5">
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            placeholder={placeholder}
+            value={value}
+            disabled={textDisabled}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleTextareaKeyDown}
+            className={messageFieldClass}
+          />
+          {showShare ? (
+            <button
+              type="button"
+              aria-label="Share photo or trade"
+              title="Share photo or trade"
+              onClick={() => setMobileAttachOpen(true)}
+              className="flex h-10 w-10 min-h-[40px] min-w-[40px] shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-md transition active:scale-95 md:hidden hover:bg-blue-600"
+            >
+              <SharePlusIcon className="h-5 w-5" />
+            </button>
+          ) : null}
+          <label
+            htmlFor={fileInputId}
+            className={`${desktopActionBtnClass} hidden cursor-pointer md:flex`}
+          >
+            <span aria-hidden>📷</span>
+          </label>
+          {onTradeClick ? (
+            <button
+              type="button"
+              onClick={onTradeClick}
+              disabled={tradeDisabled}
+              aria-label="Send a trade"
+              title="Send a trade"
+              className={`${desktopActionBtnClass} hidden md:flex`}
+            >
+              <span aria-hidden>📊</span>
+            </button>
+          ) : null}
+          {showMic ? (
+            <button
+              type="button"
+              aria-label="Record voice message"
+              title="Record voice message"
+              disabled={voiceDisabled}
+              onClick={() => void voiceRecorder.start()}
+              className={`${desktopActionBtnClass} flex`}
+            >
+              <span aria-hidden>🎤</span>
+            </button>
+          ) : null}
+          {canSendText ? (
+            <button
+              type="button"
+              onClick={onSend}
+              disabled={sendDisabled}
+              className="shrink-0 whitespace-nowrap rounded bg-blue-500 px-3 py-2 text-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Send
+            </button>
+          ) : null}
+        </div>
+      )}
+      {voiceRecorder.lastError ? (
+        <p className="mt-2 text-xs text-red-400">{voiceRecorder.lastError}</p>
+      ) : null}
       {afterRow ? <div className="mt-2">{afterRow}</div> : null}
 
       {mobileAttachOpen ? (
@@ -236,6 +299,21 @@ export default function DmStyleComposer({
                 >
                   <span aria-hidden>📊</span>
                   <span>Send Trade</span>
+                </button>
+              ) : null}
+              {voiceEnabled ? (
+                <button
+                  type="button"
+                  disabled={voiceDisabled}
+                  onClick={() => {
+                    void voiceRecorder.start().then((started) => {
+                      if (started) setMobileAttachOpen(false)
+                    })
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span aria-hidden>🎤</span>
+                  <span>Voice Message</span>
                 </button>
               ) : null}
             </div>

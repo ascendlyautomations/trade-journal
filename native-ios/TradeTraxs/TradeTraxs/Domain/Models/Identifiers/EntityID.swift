@@ -154,3 +154,9 @@ nonisolated struct ReportID: Hashable, Codable, Sendable, RawRepresentable {
     init(rawValue: String) { self.rawValue = rawValue }
     init(_ rawValue: String) { self.rawValue = rawValue }
 }
+
+nonisolated struct TraderDailyCheckInID: Hashable, Codable, Sendable, RawRepresentable {
+    let rawValue: String
+    init(rawValue: String) { self.rawValue = rawValue }
+    init(_ rawValue: String) { self.rawValue = rawValue }
+}

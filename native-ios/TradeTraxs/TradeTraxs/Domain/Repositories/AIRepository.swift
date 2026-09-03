@@ -10,4 +10,10 @@ nonisolated protocol AIRepository: Sendable {
 
     /// Appends completed turns to Supabase. Soft-fails if persistence is unavailable.
     func persistMessages(_ messages: [TradeAIMessage], tradeID: TradeID) async throws
+
+    /// Posts structured psychology facts to `/api/psychology-coach` — AI explains, never calculates stats.
+    func explainPsychologyCoach(_ request: PsychologyCoachAIRequest) async throws -> PsychologyCoachAIResponse
+
+    /// Phase 3 — multimodal screenshot extraction via authenticated BFF fallback.
+    func extractScreenshotTrades(_ request: ScreenshotAIExtractRequest) async throws -> ScreenshotAIExtractResponse
 }

@@ -23,6 +23,14 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case payouts
     /// Single report detail (generated or notification deep-link).
     case report(ReportID)
+    /// Owner-only psychology analytics detail.
+    case psychologyAnalytics
+    /// Owner-only psychology coach (AI explains deterministic facts).
+    case psychologyCoach
+    /// Owner-only check-in history list.
+    case checkInHistory
+    /// Owner-only check-in + trades for one Eastern trading day.
+    case checkInDay(String)
     /// Hierarchical Settings — owned by the Home tab stack that opened Settings.
     case settings(SettingsRoute)
 }
@@ -104,6 +112,9 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case tradingAccounts = "trading-accounts"
     case propFirm = "prop-firm"
     case privacy
+    case privacyBlockedAccounts = "privacy-blocked-accounts"
+    case privacyMutedAccounts = "privacy-muted-accounts"
+    case privacyMessageAudience = "privacy-message-audience"
     case affiliate
     case support
     case about
@@ -129,6 +140,9 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .tradingAccounts: return "Manage Accounts"
         case .propFirm: return "Prop Firm"
         case .privacy: return "Privacy"
+        case .privacyBlockedAccounts: return "Blocked Accounts"
+        case .privacyMutedAccounts: return "Muted Accounts"
+        case .privacyMessageAudience: return "Who Can Message Me"
         case .affiliate: return "Referrals"
         case .support: return "Help & Support"
         case .about: return "About TradeTraxs"

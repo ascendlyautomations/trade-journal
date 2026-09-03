@@ -51,6 +51,7 @@ export function mergeConversationInboxFields<
 export function previewFromMessage(row: {
   content?: string | null
   image_url?: string | null
+  audio_url?: string | null
   type?: string | null
   deleted_for_everyone?: boolean | null
   is_system?: boolean | null
@@ -59,6 +60,8 @@ export function previewFromMessage(row: {
   if (row.type === "story_reply") {
     return storyReplyPreviewText(row.content)
   }
+  if (row.type?.toLowerCase() === "voice") return "Voice message"
+  if (row.audio_url?.trim()) return "Voice message"
   if (row.content?.trim()) return row.content.trim()
   if (row.image_url) return "Image"
   if (row.type === "trade") return "Shared a trade"

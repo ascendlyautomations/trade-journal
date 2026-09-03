@@ -30,6 +30,8 @@ export type RoomMessageV1 = {
   trade_id: string | null
   content: string | null
   image_url: string | null
+  audio_url: string | null
+  audio_duration_ms: number | null
   created_at: string | null
   trades?: { id: string } | null
   profiles?: { username: string | null; avatar_url: string | null } | null
@@ -127,6 +129,9 @@ export function decodeRoomMessageV1(raw: unknown): RoomMessageV1 {
     trade_id: asString(r.trade_id),
     content: asString(r.content),
     image_url: asString(r.image_url),
+    audio_url: asString(r.audio_url),
+    audio_duration_ms:
+      r.audio_duration_ms == null ? null : asNumber(r.audio_duration_ms, 0),
     created_at: asString(r.created_at),
     trades: trades?.id ? { id: String(trades.id) } : null,
     profiles: profiles

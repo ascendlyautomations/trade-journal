@@ -29,6 +29,8 @@ export type ConversationThreadMessageV1 = {
   parent_message_id: string | null
   deleted_for_everyone: boolean
   image_url: string | null
+  audio_url: string | null
+  audio_duration_ms: number | null
   is_system: boolean
   profiles: { username: string | null; avatar_url: string | null } | null
 }
@@ -144,6 +146,9 @@ export function decodeConversationThreadMessageV1(
     parent_message_id: asString(row.parent_message_id),
     deleted_for_everyone: asBool(row.deleted_for_everyone),
     image_url: asString(row.image_url),
+    audio_url: asString(row.audio_url),
+    audio_duration_ms:
+      row.audio_duration_ms == null ? null : asNumber(row.audio_duration_ms, 0),
     is_system: asBool(row.is_system),
     profiles: profileRaw
       ? {
@@ -255,6 +260,8 @@ export function mapThreadBootstrapMessagesToWire(
     parent_message_id: m.parent_message_id,
     deleted_for_everyone: m.deleted_for_everyone,
     image_url: m.image_url,
+    audio_url: m.audio_url,
+    audio_duration_ms: m.audio_duration_ms,
     is_system: m.is_system,
     profiles: m.profiles,
   }))

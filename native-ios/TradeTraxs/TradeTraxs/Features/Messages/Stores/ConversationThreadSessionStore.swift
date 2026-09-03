@@ -49,7 +49,7 @@ final class ConversationThreadSessionStore {
         guard !incoming.isEmpty else { return }
         let key = Self.cacheKey(viewerID: viewerID, conversationID: conversationID)
         if var snapshot = snapshots[key] {
-            let merged = ConversationMessageMerge.mergeMessageLists(
+            let merged = ConversationMessageMerge.reconcileServerFirstPage(
                 existing: snapshot.messages,
                 incoming: incoming
             )
@@ -83,13 +83,16 @@ final class ConversationThreadSessionStore {
         hasMoreMessages: Bool
     ) {
         let existing = snapshots[cacheKey]?.messages ?? []
-        let merged = ConversationMessageMerge.mergeMessageLists(existing: existing, incoming: incoming)
+        let merged = ConversationMessageMerge.reconcileServerFirstPage(
+            existing: existing,
+            incoming: incoming
+        )
         let priorGeneration = snapshots[cacheKey]?.contentGeneration ?? 0
         save(
             Snapshot(
                 cacheKey: cacheKey,
                 conversation: conversation,
-                messages: Self.newestPage(from: merged, limit: Self.messageLimit),
+                messages: Self.cacheMessages(from: merged, existingCount: existing.count),
                 nextCursor: nextCursor,
                 hasMoreMessages: hasMoreMessages,
                 loadedAt: Date(),
@@ -98,13 +101,62 @@ final class ConversationThreadSessionStore {
         )
     }
 
+    /// Persist the full in-memory thread (including paginated history) for warm reopen.
+    func syncOpenThreadState(
+        viewerID: ProfileID,
+        conversationID: ConversationID,
+        conversation: Conversation,
+        messages: [Message],
+        nextCursor: String?,
+        hasMoreMessages: Bool
+    ) {
+        let key = Self.cacheKey(viewerID: viewerID, conversationID: conversationID)
+        let priorGeneration = snapshots[key]?.contentGeneration ?? 0
+        save(
+            Snapshot(
+                cacheKey: key,
+                conversation: conversation,
+                messages: ConversationMessageMerge.sortByCreatedAt(messages),
+                nextCursor: nextCursor,
+                hasMoreMessages: hasMoreMessages,
+                loadedAt: Date(),
+                contentGeneration: priorGeneration &+ 1
+            )
+        )
+    }
+
+    /// Keep paginated open-thread history; only truncate cold bootstrap pages.
+    static func cacheMessages(from merged: [Message], existingCount: Int) -> [Message] {
+        let sorted = ConversationMessageMerge.sortByCreatedAt(merged)
+        if existingCount > messageLimit || sorted.count > messageLimit {
+            return sorted
+        }
+        return newestPage(from: sorted, limit: messageLimit)
+    }
+
     static func newestPage(from messages: [Message], limit: Int) -> [Message] {
         let sorted = ConversationMessageMerge.sortByCreatedAt(messages)
         guard sorted.count > limit else { return sorted }
         return Array(sorted.suffix(limit))
     }
 
-    func invalidate(viewerID: ProfileID? = nil) {
+    func removeMessage(
+        viewerID: ProfileID,
+        conversationID: ConversationID,
+        messageID: MessageID
+    ) {
+        let key = Self.cacheKey(viewerID: viewerID, conversationID: conversationID)
+        guard var snapshot = snapshots[key] else { return }
+        snapshot.messages.removeAll { $0.id == messageID }
+        snapshot.contentGeneration &+= 1
+        snapshots[key] = snapshot
+    }
+
+    func invalidate(viewerID: ProfileID? = nil, conversationID: ConversationID? = nil) {
+        if let viewerID, let conversationID {
+            snapshots.removeValue(forKey: Self.cacheKey(viewerID: viewerID, conversationID: conversationID))
+            return
+        }
         if let viewerID {
             let prefix = viewerID.rawValue + "|"
             snapshots = snapshots.filter { !$0.key.hasPrefix(prefix) }

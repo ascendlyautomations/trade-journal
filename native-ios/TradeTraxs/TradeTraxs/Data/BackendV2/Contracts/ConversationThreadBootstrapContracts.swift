@@ -82,6 +82,8 @@ nonisolated struct ConversationThreadMessageV1: Codable, Sendable, Equatable {
     var parent_message_id: String?
     var deleted_for_everyone: PostgresFlexibleBool
     var image_url: String?
+    var audio_url: String?
+    var audio_duration_ms: Int?
     var is_system: PostgresFlexibleBool
     var profiles: ConversationThreadMessageProfileV1?
 }

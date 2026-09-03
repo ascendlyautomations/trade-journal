@@ -28,10 +28,44 @@ final class ConversationViewModel {
     var draft = ""
     var isSending = false
     var showsTradePicker = false
+    var deleteErrorMessage: String?
+    var isSelectionMode = false
+    var selectedMessageIDs: Set<MessageID> = []
+    var showsBatchDeleteConfirmation = false
+    var showsDeleteConversationConfirmation = false
+    var isDeletingConversation = false
+    var deleteConversationErrorMessage: String?
+    private(set) var shouldDismissAfterConversationDelete = false
+    private(set) var blockStatus: DmBlockStatus?
+    private(set) var isUpdatingBlock = false
+    var showsBlockConfirmation = false
+    var pendingBlockAction: Bool?
     private(set) var tradePickerTrades: [Trade] = []
     private(set) var isLoadingTradePicker = false
     private(set) var sharedTrades: [TradeID: Trade] = [:]
     let scrollCoordinator = ConversationScrollCoordinator()
+
+    enum InitialScrollPhase: Equatable {
+        case pending
+        case positioning
+        case settling
+        case confirmed
+    }
+
+    private(set) var initialScrollPhase: InitialScrollPhase = .pending
+    private(set) var richContentHydrationCount = 0
+
+    var isInitialScrollConfirmed: Bool { initialScrollPhase == .confirmed }
+
+    /// True while the one-time open bottom pin is active (positioning or layout settling).
+    var isInitialScrollPinningBottom: Bool {
+        initialScrollPhase == .positioning || initialScrollPhase == .settling
+    }
+
+    /// Trade shares still awaiting hydration can resize the newest bubble after first layout.
+    var hasPendingRichContentLayout: Bool {
+        richContentHydrationCount > 0 || messages.contains(where: hasUnhydratedTradeShare)
+    }
 
     private let messagesRepo: any MessageRepository
     private let profiles: any ProfileRepository
@@ -52,6 +86,8 @@ final class ConversationViewModel {
     private var didMarkReadThisOpen = false
     private var loadGeneration: UInt64 = 0
     private var bootstrapMarkReadApplied = false
+    /// Soft-deleted / locally removed rows — excluded from merge/realtime reconciliation.
+    private var suppressedMessageIDs: Set<MessageID> = []
 
     init(
         conversationID: ConversationID,
@@ -92,9 +128,76 @@ final class ConversationViewModel {
         phase == .loaded && messages.isEmpty
     }
 
+    var showsDirectMessageActions: Bool {
+        guard let conversation else { return false }
+        return !conversation.isGroup
+    }
+
+    var isMuted: Bool {
+        inboxStore.isMuted(conversationID)
+    }
+
+    var isMessagingBlocked: Bool {
+        blockStatus?.isMessagingBlocked == true
+    }
+
+    var blockedByMe: Bool {
+        blockStatus?.blockedByMe == true
+    }
+
+    var blockConfirmationTitle: String {
+        let username = peerProfile?.username ?? conversation?.peerUsername ?? "this user"
+        if pendingBlockAction == false {
+            return "Unblock @\(username)?"
+        }
+        return "Block @\(username)?"
+    }
+
+    var blockConfirmationMessage: String {
+        if pendingBlockAction == false {
+            return "They'll be able to message you again and their content will reappear where applicable."
+        }
+        return "They won't be able to message or interact with you and their content will be hidden where applicable."
+    }
+
+    var selectionToolbarTitle: String {
+        let count = selectedMessageIDs.count
+        return count == 0 ? "Select Messages" : "\(count) Selected"
+    }
+
+    var selectedDeletableMessages: [ConversationBubbleItem] {
+        selectedMessageBubbles.filter(canDeleteMessage)
+    }
+
+    var batchDeleteConfirmationTitle: String {
+        let count = selectedDeletableMessages.count
+        return "Delete \(count) Message\(count == 1 ? "" : "s")?"
+    }
+
+    var peerProfileID: ProfileID? {
+        if let peerProfile { return peerProfile.id }
+        guard let viewerID, let conversation else { return nil }
+        return MessagesInboxSupport.peerID(in: conversation, viewerID: viewerID)
+    }
+
     var newestMessageID: MessageID? {
         messages.last?.id
     }
+
+#if DEBUG
+    func testing_seedOpenThread(
+        messages: [Message],
+        viewerID: ProfileID = ProfileID("viewer"),
+        hasMoreOlder: Bool = true,
+        cursor: String? = "cursor"
+    ) {
+        self.viewerID = viewerID
+        self.messages = messages
+        phase = .loaded
+        self.hasMoreOlder = hasMoreOlder
+        nextOlderCursor = cursor
+    }
+#endif
 
     func loadIfNeeded() {
         guard loadTask == nil, phase != .loaded else { return }
@@ -112,17 +215,79 @@ final class ConversationViewModel {
     }
 
     func beginPagination(anchorMessageID: MessageID) {
+        guard isInitialScrollConfirmed else { return }
         scrollCoordinator.beginPagination(
             anchorMessageID: anchorMessageID,
             conversationID: conversationID
         )
     }
 
+    func resetInitialScrollPhase() {
+        initialScrollPhase = .pending
+    }
+
+    func beginInitialScrollPositioning() {
+        guard initialScrollPhase == .pending, !messages.isEmpty else { return }
+        initialScrollPhase = .positioning
+#if DEBUG
+        ConversationScrollDiagnostics.logInitialScrollPhase(
+            "positioning",
+            conversationID: conversationID,
+            messageCount: messages.count,
+            newestMessageID: newestMessageID
+        )
+#endif
+    }
+
+    func beginInitialScrollSettling() {
+        guard initialScrollPhase == .positioning else { return }
+        initialScrollPhase = .settling
+#if DEBUG
+        ConversationScrollDiagnostics.logInitialScrollPhase(
+            "settling",
+            conversationID: conversationID,
+            messageCount: messages.count,
+            newestMessageID: newestMessageID,
+            pendingRichLayout: hasPendingRichContentLayout
+        )
+#endif
+    }
+
+    func confirmInitialScrollPosition(userInitiatedRelease: Bool = false) {
+        guard initialScrollPhase == .positioning || initialScrollPhase == .settling else { return }
+        initialScrollPhase = .confirmed
+        scrollCoordinator.completeInitialScrollPosition(conversationID: conversationID)
+#if DEBUG
+        ConversationScrollDiagnostics.logInitialScrollPhase(
+            userInitiatedRelease ? "confirmed-user-release" : "confirmed",
+            conversationID: conversationID,
+            messageCount: messages.count,
+            newestMessageID: newestMessageID,
+            pendingRichLayout: hasPendingRichContentLayout
+        )
+#endif
+    }
+
+    func confirmInitialScrollPositionForEmptyThread() {
+        guard messages.isEmpty, phase == .loaded else { return }
+        initialScrollPhase = .confirmed
+        scrollCoordinator.completeInitialScrollPosition(conversationID: conversationID)
+    }
+
     func loadOlderIfNeeded() async {
+        guard isInitialScrollConfirmed else {
+#if DEBUG
+            ConversationScrollDiagnostics.logPaginationBlocked(reason: "initial-scroll-not-confirmed")
+#endif
+            return
+        }
         guard hasMoreOlder, !isLoadingOlder, phase == .loaded else { return }
         guard let viewerID, !ConversationThreadSupport.isLocalDevelopment(viewerID) else {
             hasMoreOlder = false
             return
+        }
+        if let anchor = messages.first?.id {
+            beginPagination(anchorMessageID: anchor)
         }
         isLoadingOlder = true
         defer { isLoadingOlder = false }
@@ -181,6 +346,8 @@ final class ConversationViewModel {
     }
 
     func stopRealtime() {
+        syncThreadSessionCache(context: "leave")
+        VoiceMessagePlaybackController.shared.stopAll()
         realtimeTask?.cancel()
         realtimeTask = nil
         if inboxStore.activeConversationID == conversationID {
@@ -208,6 +375,13 @@ final class ConversationViewModel {
         guard let data = image.jpegData(compressionQuality: 0.82) else { return }
         await send(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), imageURL: nil, localImageData: data)
         draft = ""
+    }
+
+    func sendVoice(localFileURL: URL, duration: TimeInterval) async {
+        guard !isSending else { return }
+        defer { try? FileManager.default.removeItem(at: localFileURL) }
+        guard let data = try? Data(contentsOf: localFileURL) else { return }
+        await sendVoice(data: data, duration: duration)
     }
 
     func presentTradePicker() {
@@ -314,13 +488,263 @@ final class ConversationViewModel {
         await send(body: item.text ?? "", imageURL: imageURL, localImageData: nil)
     }
 
+    func canDeleteMessage(_ item: ConversationBubbleItem) -> Bool {
+        guard item.isOutgoing else { return false }
+        guard item.message.kind != .system else { return false }
+        if item.sendState == .failed { return true }
+        guard item.sendState == .sent else { return false }
+        guard !ConversationMessageMerge.isOptimisticMessageID(item.message.id) else { return false }
+        return true
+    }
+
+    func deleteMessage(_ item: ConversationBubbleItem) async {
+        await deleteMessages([item])
+    }
+
+    func enterSelectionMode() {
+        isSelectionMode = true
+        selectedMessageIDs = []
+    }
+
+    func cancelSelectionMode() {
+        isSelectionMode = false
+        selectedMessageIDs = []
+        showsBatchDeleteConfirmation = false
+    }
+
+    func toggleMessageSelection(_ messageID: MessageID) {
+        if selectedMessageIDs.contains(messageID) {
+            selectedMessageIDs.remove(messageID)
+        } else {
+            selectedMessageIDs.insert(messageID)
+        }
+    }
+
+    func isMessageSelected(_ messageID: MessageID) -> Bool {
+        selectedMessageIDs.contains(messageID)
+    }
+
+    func requestDeleteSelectedMessages() {
+        guard !selectedDeletableMessages.isEmpty else { return }
+        ExperienceHaptics.play(.warning)
+        showsBatchDeleteConfirmation = true
+    }
+
+    func confirmDeleteSelectedMessages() async {
+        showsBatchDeleteConfirmation = false
+        let items = selectedDeletableMessages
+        guard !items.isEmpty else { return }
+        await deleteMessages(items)
+        cancelSelectionMode()
+    }
+
+    func toggleMute() {
+        ExperienceHaptics.play(.selection)
+        Task { await setConversationMuted(muted: !isMuted) }
+    }
+
+    func requestBlockToggle() {
+        pendingBlockAction = !blockedByMe
+        showsBlockConfirmation = true
+    }
+
+    func confirmBlockToggle() async {
+        showsBlockConfirmation = false
+        guard let shouldBlock = pendingBlockAction,
+              let peerID = peerProfileID
+        else { return }
+        pendingBlockAction = nil
+        guard !isUpdatingBlock else { return }
+        isUpdatingBlock = true
+        defer { isUpdatingBlock = false }
+        do {
+            let status = try await UserBlockCoordinator.shared.setBlocked(
+                otherID: peerID,
+                conversationID: conversationID,
+                blocked: shouldBlock,
+                messages: messagesRepo,
+                inboxStore: inboxStore
+            )
+            blockStatus = status
+            if shouldBlock {
+                shouldDismissAfterConversationDelete = true
+            }
+            ExperienceHaptics.play(.success)
+        } catch {
+            deleteErrorMessage = UserFacingError.message(for: error)
+            ExperienceHaptics.play(.warning)
+        }
+    }
+
+    func setConversationMuted(muted: Bool) async {
+        let previous = isMuted
+        guard previous != muted else { return }
+        inboxStore.applyConversationMute(conversationID: conversationID, isMuted: muted)
+        if var conversation {
+            conversation.isMuted = muted
+            self.conversation = conversation
+        }
+
+        if let viewerID,
+           ConversationThreadSupport.isLocalDevelopment(viewerID)
+            || ConversationThreadSupport.isLocalConversation(conversationID)
+        {
+            return
+        }
+
+        do {
+            try await messagesRepo.setConversationNotificationsEnabled(
+                conversationID: conversationID,
+                enabled: !muted
+            )
+        } catch {
+            inboxStore.applyConversationMute(conversationID: conversationID, isMuted: previous)
+            if var conversation {
+                conversation.isMuted = previous
+                self.conversation = conversation
+            }
+        }
+    }
+
+    func requestDeleteConversation() {
+        guard !isDeletingConversation else { return }
+        ExperienceHaptics.play(.warning)
+        showsDeleteConversationConfirmation = true
+    }
+
+    func confirmDeleteConversation() async {
+        guard !isDeletingConversation else { return }
+        isDeletingConversation = true
+        deleteConversationErrorMessage = nil
+        showsDeleteConversationConfirmation = false
+        defer { isDeletingConversation = false }
+
+        if let viewerID,
+           ConversationThreadSupport.isLocalDevelopment(viewerID)
+            || ConversationThreadSupport.isLocalConversation(conversationID)
+        {
+            inboxStore.removeConversation(id: conversationID)
+            shouldDismissAfterConversationDelete = true
+            return
+        }
+
+        let snapshot = inboxStore.conversations.first { $0.id == conversationID }
+        inboxStore.removeConversation(id: conversationID, pendingRemoteDelete: true)
+
+        do {
+            try await messagesRepo.deleteConversation(id: conversationID)
+            inboxStore.finalizeConversationDelete(id: conversationID)
+            if let viewerID {
+                ConversationThreadSessionStore.shared.invalidate(
+                    viewerID: viewerID,
+                    conversationID: conversationID
+                )
+            }
+            shouldDismissAfterConversationDelete = true
+            ExperienceHaptics.play(.success)
+        } catch {
+            if let snapshot {
+                inboxStore.restoreRemovedConversation(snapshot)
+            } else {
+                inboxStore.cancelPendingConversationDelete(id: conversationID)
+            }
+            deleteConversationErrorMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.warning)
+        }
+    }
+
+    private var selectedMessageBubbles: [ConversationBubbleItem] {
+        timeline.compactMap { item in
+            guard case .message(let bubble) = item else { return nil }
+            guard selectedMessageIDs.contains(bubble.id) else { return nil }
+            return bubble
+        }
+    }
+
+    private func deleteMessages(_ items: [ConversationBubbleItem]) async {
+        guard !items.isEmpty else { return }
+        deleteErrorMessage = nil
+
+        var remoteSnapshots: [Message] = []
+        for item in items {
+            guard canDeleteMessage(item) else { continue }
+            if item.sendState == .failed {
+                removeMessage(id: item.id)
+                continue
+            }
+            if let viewerID,
+               ConversationThreadSupport.isLocalDevelopment(viewerID)
+                || ConversationThreadSupport.isLocalConversation(conversationID)
+            {
+                removeMessage(id: item.id)
+                continue
+            }
+            remoteSnapshots.append(item.message)
+            removeMessage(id: item.id)
+        }
+
+        guard !remoteSnapshots.isEmpty else {
+            syncThreadSessionCache(context: "delete.local")
+            refreshInboxPreviewAfterDelete()
+            return
+        }
+
+        var failed: [Message] = []
+        await withTaskGroup(of: (Message, Bool).self) { group in
+            for message in remoteSnapshots {
+                group.addTask { [conversationID, messagesRepo] in
+                    do {
+                        try await messagesRepo.deleteMessageForEveryone(
+                            message.id,
+                            in: conversationID
+                        )
+                        return (message, true)
+                    } catch {
+                        return (message, false)
+                    }
+                }
+            }
+            for await (message, succeeded) in group where !succeeded {
+                failed.append(message)
+            }
+        }
+
+        for message in failed {
+            suppressedMessageIDs.remove(message.id)
+            commitMessages([message], recordScrollEvents: false)
+        }
+
+        if failed.isEmpty {
+            ExperienceHaptics.play(.success)
+        } else {
+            deleteErrorMessage = failed.count == remoteSnapshots.count
+                ? ConversationThreadSupport.message(for: AppError.unknown(message: "Could not delete messages."))
+                : "Some messages couldn't be deleted."
+            ExperienceHaptics.play(.warning)
+        }
+
+        syncThreadSessionCache(context: "delete.batch")
+#if DEBUG
+        ConversationThreadDiagnostics.logBatchDelete(
+            requested: remoteSnapshots.count,
+            succeeded: remoteSnapshots.count - failed.count
+        )
+#endif
+        if failed.count < remoteSnapshots.count {
+            await revalidateNewestWindowIfNeededAfterDelete()
+        }
+        refreshInboxPreviewAfterDelete()
+    }
+
     // MARK: - Private
 
     private func performInitialLoad(forceNetwork: Bool = false) async {
         loadGeneration &+= 1
         let generation = loadGeneration
+        suppressedMessageIDs.removeAll()
         bootstrapMarkReadApplied = false
         scrollCoordinator.resetForConversation(conversationID)
+        initialScrollPhase = .pending
 
         let unreadBeforeOpen = inboxStore.conversations.first(where: { $0.id == conversationID })?
             .unreadCount ?? 0
@@ -491,6 +915,12 @@ final class ConversationViewModel {
         let cached = ConversationThreadSessionStore.shared.restore(key: cacheKey)
 
         if let cached, !forceNetwork {
+#if DEBUG
+            ConversationThreadDiagnostics.logCacheReopen(
+                messages: cached.messages.count,
+                cursor: cached.nextCursor
+            )
+#endif
             applyBootstrapApplied(
                 ConversationThreadBootstrapApplier.Applied(
                     conversation: cached.conversation,
@@ -499,12 +929,16 @@ final class ConversationViewModel {
                     hasMoreMessages: cached.hasMoreMessages,
                     markReadApplied: false,
                     notificationsMarkedRead: 0,
-                    skippedMessages: 0
+                    skippedMessages: 0,
+                    blockStatus: nil
                 )
             )
             phase = .loaded
             startRealtime()
-            if !cached.isSoftStale, unreadBeforeOpen == 0 {
+            let needsWindowBackfill = cached.messages.count < ConversationThreadSessionStore.messageLimit
+                && cached.hasMoreMessages
+            if !cached.isSoftStale, unreadBeforeOpen == 0, !needsWindowBackfill {
+                logThreadStateDiagnostics(context: "cache.reopen.skip-network")
                 return
             }
         }
@@ -560,6 +994,12 @@ final class ConversationViewModel {
             }
         }
         applyHeader(from: applied.conversation)
+        if let status = applied.blockStatus {
+            blockStatus = status
+            if let peerID = peerProfileID {
+                UserBlockCoordinator.shared.cacheStatus(status)
+            }
+        }
         if isPagination {
             commitMessages(applied.messages, recordScrollEvents: false)
             scrollCoordinator.handle(
@@ -576,7 +1016,11 @@ final class ConversationViewModel {
 
     /// Web `mergeMessageLists(wire, existing)` — bootstrap must not wipe newer local rows.
     private func applyBootstrapMessages(_ incoming: [Message]) {
-        messages = ConversationMessageMerge.mergeMessageLists(existing: messages, incoming: incoming)
+        let reconciled = ConversationMessageMerge.reconcileServerFirstPage(
+            existing: messages,
+            incoming: incoming
+        )
+        messages = filterSuppressed(reconciled)
     }
 
     /// Pull-to-refresh / explicit refresh — not used on a timer.
@@ -594,6 +1038,15 @@ final class ConversationViewModel {
 
         if signal.kind == .delete, let rawID = signal.messageID {
             removeMessage(id: MessageID(rawID))
+            syncThreadSessionCache(context: "realtime.delete")
+            refreshInboxPreviewAfterDelete()
+            return
+        }
+
+        if signal.kind == .update, signal.deletedForEveryone, let rawID = signal.messageID {
+            removeMessage(id: MessageID(rawID))
+            syncThreadSessionCache(context: "realtime.soft-delete")
+            refreshInboxPreviewAfterDelete()
             return
         }
 
@@ -609,7 +1062,7 @@ final class ConversationViewModel {
                 in: conversationID,
                 page: PageRequest(limit: 30)
             )
-            commitMessages(page.items)
+            commitReconciledPage(page.items)
             await hydrateSharedTrades(from: page.items)
             if let newest = ConversationMessageMerge.sortByCreatedAt(messages).last {
                 patchInbox(with: newest, source: "legacyRealtime")
@@ -621,9 +1074,14 @@ final class ConversationViewModel {
 
     /// V2 — dedupe local confirmed sends; never run legacy inbox refresh waterfall.
     private func applyRealtimeSignalV2(_ signal: MessageRealtimeSignal) async {
-        guard signal.kind == .insert || signal.kind == .update else { return }
+        if signal.kind == .update, signal.deletedForEveryone, let rawID = signal.messageID {
+            removeMessage(id: MessageID(rawID))
+            syncThreadSessionCache(context: "realtimeV2.soft-delete")
+            refreshInboxPreviewAfterDelete()
+            return
+        }
 
-        if let rawID = signal.messageID {
+        if signal.kind == .insert, let rawID = signal.messageID {
             let messageID = MessageID(rawID)
             if messages.contains(where: { $0.id == messageID }) {
                 if let newest = ConversationMessageMerge.sortByCreatedAt(messages).last {
@@ -632,6 +1090,8 @@ final class ConversationViewModel {
                 return
             }
         }
+
+        guard signal.kind == .insert || signal.kind == .update else { return }
 
         // Incoming from another device — merge first page only when thread is open.
         isApplyingRealtime = true
@@ -683,11 +1143,12 @@ final class ConversationViewModel {
             incoming: incoming,
             viewerID: viewerID
         )
+        messages = filterSuppressed(messages)
         let remainingIDs = Set(messages.map(\.id))
         for tempID in previousTempIDs where !remainingIDs.contains(tempID) {
             sendStates.removeValue(forKey: tempID)
         }
-        patchThreadSessionCache(with: incoming)
+        syncThreadSessionCache(context: "commit")
         guard recordScrollEvents else { return }
         recordIncomingScrollEvents(incoming: incoming, previousIDs: previousIDs)
     }
@@ -719,16 +1180,69 @@ final class ConversationViewModel {
         scrollCoordinator.handle(event, conversationID: conversationID)
     }
 
-    private func patchThreadSessionCache(with incoming: [Message]) {
+    private func syncThreadSessionCache(context: String) {
         guard BackendV2FeatureFlags.isEnabled(.messageThreads),
-              let viewerID
+              let viewerID,
+              let conversation
         else { return }
-        ConversationThreadSessionStore.shared.patchMessages(
+        ConversationThreadSessionStore.shared.syncOpenThreadState(
             viewerID: viewerID,
             conversationID: conversationID,
-            incoming: incoming,
-            conversation: conversation
+            conversation: conversation,
+            messages: messages,
+            nextCursor: nextOlderCursor,
+            hasMoreMessages: hasMoreOlder
         )
+        logThreadStateDiagnostics(context: context)
+    }
+
+    private func logThreadStateDiagnostics(context: String) {
+#if DEBUG
+        let oldest = ConversationMessageMerge.sortByCreatedAt(messages).first?.id.rawValue
+        ConversationThreadDiagnostics.logThreadState(
+            messages: messages.count,
+            oldestID: oldest,
+            hasMore: hasMoreOlder,
+            context: context
+        )
+#endif
+    }
+
+    private var needsNewestWindowBackfill: Bool {
+        messages.count < ConversationThreadSessionStore.messageLimit && hasMoreOlder
+    }
+
+    /// Backfill the newest server window when deletes shrink the loaded page.
+    private func revalidateNewestWindowIfNeededAfterDelete() async {
+        guard needsNewestWindowBackfill,
+              BackendV2FeatureFlags.isEnabled(.messageThreads),
+              let viewerID,
+              let rpc
+        else { return }
+        let generation = loadGeneration
+        do {
+            let result = try await ConversationThreadBootstrapLoader.load(
+                viewerID: viewerID,
+                conversationID: conversationID,
+                cursor: nil,
+                markRead: false,
+                intent: .cacheRevalidation,
+                rpc: rpc,
+                detailCache: detailCache,
+                inboxStore: inboxStore,
+                loadGeneration: generation,
+                currentGeneration: { self.loadGeneration },
+                forceNetwork: true
+            )
+            guard generation == loadGeneration else { return }
+            applyBootstrapMessages(result.applied.messages)
+            nextOlderCursor = result.applied.nextCursor
+            hasMoreOlder = result.applied.hasMoreMessages
+            syncThreadSessionCache(context: "delete.backfill")
+            await hydrateSharedTrades(from: result.applied.messages)
+        } catch {
+            // Soft-fail — synced local state remains authoritative for non-deleted rows.
+        }
     }
 
     private func replaceMessages(_ incoming: [Message]) {
@@ -740,13 +1254,55 @@ final class ConversationViewModel {
         notifyScrollContentApplied(source: .cacheApplied)
     }
 
+    private func commitReconciledPage(_ incoming: [Message], recordScrollEvents: Bool = true) {
+        let reconciled = ConversationMessageMerge.reconcileServerFirstPage(
+            existing: messages,
+            incoming: incoming
+        )
+        let filtered = filterSuppressed(reconciled)
+        let previousIDs = Set(messages.map(\.id))
+        let previousTempIDs = Set(
+            messages
+                .map(\.id)
+                .filter(ConversationMessageMerge.isOptimisticMessageID)
+        )
+        messages = filtered
+        let remainingIDs = Set(messages.map(\.id))
+        for tempID in previousTempIDs where !remainingIDs.contains(tempID) {
+            sendStates.removeValue(forKey: tempID)
+        }
+        syncThreadSessionCache(context: "reconcile-page")
+        guard recordScrollEvents else { return }
+        recordIncomingScrollEvents(incoming: incoming, previousIDs: previousIDs)
+    }
+
     private func removeMessage(id: MessageID) {
+        suppressedMessageIDs.insert(id)
         messages = ConversationMessageMerge.mergeMessages(
             existing: messages.filter { $0.id != id },
             incoming: [],
             viewerID: viewerID
         )
         sendStates.removeValue(forKey: id)
+    }
+
+    private func filterSuppressed(_ messages: [Message]) -> [Message] {
+        guard !suppressedMessageIDs.isEmpty else { return messages }
+        return messages.filter { !suppressedMessageIDs.contains($0.id) }
+    }
+
+    private func refreshInboxPreviewAfterDelete() {
+        if let newest = MessageChronology.newest(in: messages) {
+            patchInbox(with: newest, source: "deleteMessage")
+            return
+        }
+        if var conversation {
+            conversation.lastMessagePreview = nil
+            conversation.lastMessageAt = nil
+            conversation.lastMessageID = nil
+            self.conversation = conversation
+            inboxStore.upsertConversation(conversation)
+        }
     }
 
     private func hydrateSharedTrades(from messages: [Message]) async {
@@ -760,6 +1316,8 @@ final class ConversationViewModel {
             )
         )
         guard !ids.isEmpty else { return }
+        richContentHydrationCount += 1
+        defer { richContentHydrationCount -= 1 }
         let fetched = (try? await SessionTradeEntityStore.shared.trades(
             ids: ids,
             detailCache: detailCache,
@@ -770,8 +1328,101 @@ final class ConversationViewModel {
         }
     }
 
-    private func send(body: String, imageURL: String?, localImageData: Data?) async {
+    private func sendVoice(data: Data, duration: TimeInterval) async {
         guard let viewerID else { return }
+        isSending = true
+        defer { isSending = false }
+
+        let tempID = MessageID("temp-\(UUID().uuidString)")
+        let optimistic = Message(
+            id: tempID,
+            conversationID: conversationID,
+            senderProfileID: viewerID,
+            kind: .voice,
+            body: nil,
+            attachments: [
+                MessageAttachment(
+                    id: "local-voice",
+                    media: MediaReference(id: "local-voice", kind: .audio, altText: nil),
+                    tradeID: nil,
+                    durationSeconds: duration
+                ),
+            ],
+            replyToMessageID: nil,
+            createdAt: .now,
+            isReadByViewer: true
+        )
+        commitMessages([optimistic])
+        sendStates[tempID] = .sending
+        scrollCoordinator.handle(
+            .outgoingMessageInserted(messageID: tempID),
+            conversationID: conversationID
+        )
+
+        if ConversationThreadSupport.isLocalDevelopment(viewerID)
+            || ConversationThreadSupport.isLocalConversation(conversationID)
+        {
+            sendStates[tempID] = .sent
+            patchInbox(with: optimistic, source: "devVoiceSend")
+            return
+        }
+
+        do {
+            let path = "\(viewerID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).m4a"
+            let reference = try await uploadService.upload(
+                UploadRequest(
+                    bucket: StorageBucket.messageAudio.rawValue,
+                    path: path,
+                    data: data,
+                    contentType: "audio/mp4"
+                )
+            )
+            let resolvedURL: String
+            if let publicURL = objectStorage.publicURL(
+                bucket: StorageBucket.messageAudio.rawValue,
+                path: reference.id
+            ) {
+                resolvedURL = publicURL.absoluteString
+            } else {
+                resolvedURL = reference.id
+            }
+
+            var updated = optimistic
+            updated.attachments = [
+                MessageAttachment(
+                    id: resolvedURL,
+                    media: MediaReference(id: resolvedURL, kind: .audio, altText: nil),
+                    tradeID: nil,
+                    durationSeconds: duration
+                ),
+            ]
+            commitMessages([updated], recordScrollEvents: false)
+
+            let payload = Message(
+                id: tempID,
+                conversationID: conversationID,
+                senderProfileID: viewerID,
+                kind: .voice,
+                body: nil,
+                attachments: updated.attachments,
+                replyToMessageID: nil,
+                createdAt: .now,
+                isReadByViewer: true
+            )
+            let saved = try await messagesRepo.send(payload)
+            commitMessages([saved])
+            sendStates.removeValue(forKey: tempID)
+            sendStates[saved.id] = .sent
+            patchInbox(with: saved, source: "confirmedVoiceSend")
+            ExperienceHaptics.play(.messageSent)
+        } catch {
+            sendStates[tempID] = .failed
+            ExperienceHaptics.play(.error)
+        }
+    }
+
+    private func send(body: String, imageURL: String?, localImageData: Data?) async {
+        guard let viewerID, !isMessagingBlocked else { return }
         isSending = true
         defer { isSending = false }
 
@@ -975,5 +1626,10 @@ final class ConversationViewModel {
             )
         }
         return items
+    }
+
+    private func hasUnhydratedTradeShare(_ message: Message) -> Bool {
+        guard let tradeID = message.attachments.first?.tradeID else { return false }
+        return sharedTrades[tradeID] == nil
     }
 }

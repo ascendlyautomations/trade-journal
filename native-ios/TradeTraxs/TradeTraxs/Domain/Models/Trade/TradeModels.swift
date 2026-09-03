@@ -13,6 +13,18 @@ nonisolated enum TradeMode: String, Hashable, Codable, Sendable {
     case copyTraded
 }
 
+/// Screenshot rendering — `trades.image_display_mode` (`fit` | `fill`).
+nonisolated enum TradeScreenshotDisplayMode: String, Hashable, Codable, Sendable {
+    case fit
+    case fill
+
+    static func resolve(_ raw: String?) -> TradeScreenshotDisplayMode {
+        String(raw ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() == "fill" ? .fill : .fit
+    }
+}
+
 nonisolated enum TradingAccountCategory: String, Hashable, Codable, Sendable {
     case personal
     case broker
@@ -121,13 +133,36 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var publicCaption: String?
     /// Primary screenshot from the trade row (`image_url`) when present.
     var thumbnail: MediaReference?
+    /// `trades.image_display_mode` — defaults to `.fit` when unset.
+    var imageDisplayMode: TradeScreenshotDisplayMode = .fit
     /// Note preview from the trade row (`notes`) when present.
     var notePreview: String?
+    /// Full journal notes from `trades.notes` (owner reads / edit hydration).
+    var notes: String? = nil
     /// Optional setup/strategy label from `trades.strategy` when present.
     var strategy: String? = nil
+    var timeframe: String? = nil
+    var newsEvent: Bool? = nil
+    var confidence: Int? = nil
+    var emotion: String? = nil
+    var followedPlan: Bool? = nil
+    var marketCondition: String? = nil
+    var psychologyNotes: String? = nil
+    /// Owner-only emotion after exit — `trades.exit_emotion`.
+    var exitEmotion: String? = nil
+    /// Owner-only execution/discipline rating 1–5 — `trades.execution_rating`.
+    var executionRating: Int? = nil
     /// Authoritative hold duration from `duration_text` / `duration_seconds` when present.
     var durationText: String? = nil
     var durationSeconds: Int? = nil
+    /// CSV import review flag — `trades.reviewed`.
+    var reviewed: Bool? = nil
+    /// Bulk CSV import marker — `trades.is_initial_import`.
+    var isInitialImport: Bool? = nil
+    /// Import origin — `trades.import_source` (`manual` | `csv` | `screenshot`).
+    var importSource: TradeImportSource? = nil
+    /// Deterministic import fingerprint — `trades.import_fingerprint`.
+    var importFingerprint: String? = nil
     /// Compact public account badge (Eval / Funded / Live / …) from denormalized trade mode fields.
     var publicAccountBadge: String? = nil
     var createdAt: Date
@@ -206,6 +241,22 @@ nonisolated struct TradeDraft: Hashable, Codable, Sendable {
     var visibility: ContentVisibility
     var publicCaption: String?
     var noteBody: String?
+    var timeframe: String? = nil
+    var newsEvent: Bool = false
+    var confidence: Int? = nil
+    var emotion: String? = nil
+    var followedPlan: Bool = false
+    var marketCondition: String? = nil
+    var psychologyNotes: String? = nil
+    var exitEmotion: String? = nil
+    var executionRating: Int? = nil
+    var imageDisplayMode: TradeScreenshotDisplayMode = .fit
+    var durationSeconds: Int? = nil
+    var durationText: String? = nil
     /// Public screenshot URL after upload (storage path or absolute URL).
     var imageURL: String? = nil
+    /// Import origin when created via bulk import.
+    var importSource: TradeImportSource? = nil
+    /// Deterministic import fingerprint for idempotent re-import.
+    var importFingerprint: String? = nil
 }

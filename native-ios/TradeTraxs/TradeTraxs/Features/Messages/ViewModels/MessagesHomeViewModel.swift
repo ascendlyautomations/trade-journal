@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 
 /// Messages inbox screen owner — presentation + navigation over ``MessagingDomain``.
 ///
@@ -18,6 +19,7 @@ final class MessagesHomeViewModel {
     /// Web `useDeleteChatConfirmation` pending id.
     var pendingDeleteConversationID: ConversationID?
     var showsDeleteConfirmation = false
+    var deleteConversationErrorMessage: String?
     /// Pending Trade Room leave confirmation.
     var pendingLeaveRoomID: RoomID?
     var showsLeaveRoomConfirmation = false
@@ -165,7 +167,29 @@ final class MessagesHomeViewModel {
 
     func toggleMute(conversationID: ConversationID) {
         ExperienceHaptics.play(.selection)
-        inboxStore.toggleMute(conversationID: conversationID)
+        Task { await setConversationMuted(conversationID: conversationID, muted: !inboxStore.isMuted(conversationID)) }
+    }
+
+    func setConversationMuted(conversationID: ConversationID, muted: Bool) async {
+        let previous = inboxStore.isMuted(conversationID)
+        guard previous != muted else { return }
+        inboxStore.applyConversationMute(conversationID: conversationID, isMuted: muted)
+
+        if let viewerID,
+           MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
+            || conversationID.rawValue.hasPrefix("dev-")
+        {
+            return
+        }
+
+        do {
+            try await messages.setConversationNotificationsEnabled(
+                conversationID: conversationID,
+                enabled: !muted
+            )
+        } catch {
+            inboxStore.applyConversationMute(conversationID: conversationID, isMuted: previous)
+        }
     }
 
     func togglePin(conversationID: ConversationID) {
@@ -205,6 +229,9 @@ final class MessagesHomeViewModel {
         ExperienceHaptics.play(.warning)
         pendingDeleteConversationID = id
         showsDeleteConfirmation = true
+        AppLog.networking.debug(
+            "conversations.delete.uiRequested id=\(SafeInboxLog.hash(id.rawValue), privacy: .public)"
+        )
     }
 
     func cancelDeleteConversation() {
@@ -215,12 +242,22 @@ final class MessagesHomeViewModel {
 
     /// Web `handleDeleteConversation` — remove participant row, then drop from inbox.
     func confirmDeleteConversation() async {
-        guard let id = pendingDeleteConversationID, !isDeletingConversation else { return }
+        guard let id = pendingDeleteConversationID else { return }
+        await confirmDeleteConversation(id: id)
+    }
+
+    func confirmDeleteConversation(id: ConversationID) async {
+        guard !isDeletingConversation else { return }
         isDeletingConversation = true
+        deleteConversationErrorMessage = nil
+        showsDeleteConfirmation = false
+        let snapshot = inboxStore.conversations.first { $0.id == id }
+        AppLog.networking.debug(
+            "conversations.delete.confirmed id=\(SafeInboxLog.hash(id.rawValue), privacy: .public)"
+        )
         defer {
             isDeletingConversation = false
             pendingDeleteConversationID = nil
-            showsDeleteConfirmation = false
         }
 
         if let viewerID,
@@ -231,11 +268,27 @@ final class MessagesHomeViewModel {
             return
         }
 
+        inboxStore.removeConversation(id: id, pendingRemoteDelete: true)
+
         do {
             try await messages.deleteConversation(id: id)
-            inboxStore.removeConversation(id: id)
+            inboxStore.finalizeConversationDelete(id: id)
+            if let viewerID {
+                ConversationThreadSessionStore.shared.invalidate(
+                    viewerID: viewerID,
+                    conversationID: id
+                )
+            }
             ExperienceHaptics.play(.success)
         } catch {
+            if let snapshot {
+                inboxStore.restoreRemovedConversation(snapshot)
+            } else {
+                inboxStore.cancelPendingConversationDelete(id: id)
+            }
+            deleteConversationErrorMessage = UserFacingError.map(
+                error as? AppError ?? AppError.unknown(message: error.localizedDescription)
+            ).message
             ExperienceHaptics.play(.error)
         }
     }

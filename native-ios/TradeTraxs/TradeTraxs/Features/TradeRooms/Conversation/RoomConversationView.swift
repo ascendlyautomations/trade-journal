@@ -4,6 +4,7 @@ import SwiftUI
 struct RoomConversationView: View {
     @State private var viewModel: RoomConversationViewModel
     @State private var contentRevealed = false
+    @State private var didApplyInitialScrollToLatest = false
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
@@ -80,6 +81,9 @@ struct RoomConversationView: View {
                     onSendImage: { image in
                         Task { await viewModel.sendImage(image) }
                     },
+                    onSendVoice: { url, duration in
+                        Task { await viewModel.sendVoice(localFileURL: url, duration: duration) }
+                    },
                     onSendTrade: {
                         viewModel.presentTradePicker()
                     }
@@ -119,6 +123,7 @@ struct RoomConversationView: View {
         .sheet(isPresented: $viewModel.showsTradePicker) {
             TradeSharePickerSheet(
                 trades: viewModel.tradePickerTrades,
+                imagePipeline: imagePipeline,
                 isLoading: viewModel.isLoadingTradePicker,
                 onSelect: { trade in
                     Task { await viewModel.sendTrade(trade) }
@@ -149,6 +154,7 @@ struct RoomConversationView: View {
             }
         }
         .task {
+            didApplyInitialScrollToLatest = false
             viewModel.loadIfNeeded()
         }
         .onDisappear {
@@ -248,6 +254,10 @@ struct RoomConversationView: View {
                                 reactionConfiguration: viewModel.reactionConfiguration(for: bubble.message),
                                 onRetry: {
                                     Task { await viewModel.retry(bubble) }
+                                },
+                                onSharedTradeTap: { tradeID in
+                                    guard let navigationCoordinator else { return }
+                                    navigationCoordinator.open(navigationHost.sharedTrade(tradeID))
                                 }
                             )
                             .padding(.vertical, 2)
@@ -264,6 +274,12 @@ struct RoomConversationView: View {
                                 value: viewModel.highlightedMessageID
                             )
                             .id(bubble.id.rawValue)
+                            .onAppear {
+                                if bubble.id == viewModel.newestMessageID, !didApplyInitialScrollToLatest {
+                                    didApplyInitialScrollToLatest = true
+                                    scrollToLatest(proxy: proxy, animated: false)
+                                }
+                            }
                         }
                     }
 
@@ -274,9 +290,16 @@ struct RoomConversationView: View {
                 .padding(.vertical, ExperienceSpacing.sm)
             }
             .scrollDismissesKeyboard(.interactively)
+            .onChange(of: viewModel.phase) { _, phase in
+                guard phase == .loaded, !didApplyInitialScrollToLatest else { return }
+                // Non-empty threads wait for the newest bubble's onAppear before scrolling.
+                guard viewModel.showsEmpty else { return }
+                didApplyInitialScrollToLatest = true
+                scrollToLatest(proxy: proxy, animated: false)
+            }
             .onChange(of: viewModel.messages.count) { _, _ in
-                if viewModel.pendingScrollMessageID == nil {
-                    scrollToBottom(proxy: proxy, animated: !reduceMotion)
+                if viewModel.pendingScrollMessageID == nil, didApplyInitialScrollToLatest {
+                    scrollToLatest(proxy: proxy, animated: !reduceMotion)
                 }
             }
             .onChange(of: viewModel.selectedChannelID) { _, _ in
@@ -296,13 +319,17 @@ struct RoomConversationView: View {
                 viewModel.clearPendingScroll()
             }
         } else {
-            scrollToBottom(proxy: proxy, animated: false)
+            scrollToLatest(proxy: proxy, animated: false)
         }
     }
 
-    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+    private func scrollToLatest(proxy: ScrollViewProxy, animated: Bool) {
         let action = {
-            proxy.scrollTo(RoomConversationScrollAnchor.bottom, anchor: .bottom)
+            if let newest = viewModel.newestMessageID?.rawValue {
+                proxy.scrollTo(newest, anchor: .bottom)
+            } else {
+                proxy.scrollTo(RoomConversationScrollAnchor.bottom, anchor: .bottom)
+            }
         }
         if animated {
             ExperienceMotion.withAnimation(
@@ -313,6 +340,10 @@ struct RoomConversationView: View {
         } else {
             action()
         }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        scrollToLatest(proxy: proxy, animated: animated)
     }
 }
 

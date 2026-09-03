@@ -72,6 +72,8 @@ nonisolated enum CSVTradeBuilder {
                 } else {
                     result = parseFlexible(fields: fields, rowNumber: rowNumber)
                 }
+            case .screenshot:
+                result = .failure(RowError(message: "Screenshot imports use the screenshot pipeline, not CSV parsing."))
             }
 
             switch result {

@@ -5,6 +5,11 @@ export type {
   GoogleSignInButtonLabel,
   GoogleSignInButtonProps,
 } from "./GoogleSignInButton"
+export { default as AppleSignInButton, APPLE_SIGN_IN_BUTTON_CLASS } from "./AppleSignInButton"
+export type {
+  AppleSignInButtonLabel,
+  AppleSignInButtonProps,
+} from "./AppleSignInButton"
 export { default as GoogleGIcon } from "./GoogleGIcon"
 export { default as Card } from "./Card"
 export type { CardProps, CardVariant } from "./Card"

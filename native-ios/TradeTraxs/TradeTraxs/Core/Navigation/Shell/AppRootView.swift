@@ -83,17 +83,18 @@ struct AppRootView: View {
                 Task {
                     await authenticationLifecycle.applicationWillEnterForeground()
                     appEnvironment.data.realtimeHub.resumeIfNeeded()
+                    GettingStartedStore.shared.onForeground()
                 }
             }
         }
         // Session-scoped caches (profile, Messages inbox, engagement, detail seeds)
         // are invalidated by ``AuthenticationCoordinator`` — not here.
         .onOpenURL { url in
-            _ = navigation.deepLinkRouter.route(
-                url: url,
-                using: navigation.coordinator,
-                store: navigation.store
-            )
+            handleIncomingURL(url)
+        }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            guard let url = activity.webpageURL else { return }
+            handleIncomingURL(url)
         }
         .ownerAccountFilterDropdownOverlay()
         .onChange(of: navigation.store.selectedTab) { _, _ in
@@ -161,7 +162,10 @@ struct AppRootView: View {
                     viewModel: ProfileOnboardingViewModel(
                         snapshot: snapshot,
                         profiles: appEnvironment.data.profiles,
-                        gateStore: profileOnboardingGate
+                        gateStore: profileOnboardingGate,
+                        uploadService: appEnvironment.data.uploadService,
+                        objectStorage: appEnvironment.data.objectStorage,
+                        appConfiguration: appEnvironment.configuration
                     )
                 )
 
@@ -198,6 +202,8 @@ struct AppRootView: View {
             AuthFlowTracer.trace("bootstrap.shell.ready", phase: .authenticated)
             if !currentUserProfile.hasLoadedContent {
                 currentUserProfile.loadIfNeeded()
+            } else {
+                currentUserProfile.ensureTabAvatarLoaded()
             }
         }
         .onChange(of: currentUserProfile.phase) { _, phase in
@@ -288,14 +294,18 @@ struct AppRootView: View {
                             navigation.coordinator.dismissSheet()
                             navigation.coordinator.openCompose(.story)
                         },
-                        onImportCSV: {
-                            ExperienceHaptics.play(.selection)
-                            navigation.coordinator.dismissSheet()
-                            navigation.coordinator.openCompose(.importCSV)
-                        },
                         onClose: {
                             ExperienceHaptics.play(.selection)
                             navigation.coordinator.dismissSheet()
+                        }
+                    )
+                case .dailyCheckIn:
+                    DailyCheckInView(
+                        data: appEnvironment.data,
+                        onClose: { navigation.coordinator.dismissSheet() },
+                        onOpenHistory: {
+                            navigation.coordinator.dismissSheet()
+                            navigation.coordinator.open(.home(.checkInHistory))
                         }
                     )
                 default:
@@ -330,9 +340,9 @@ struct AppRootView: View {
                         onClose: { navigation.coordinator.dismissFullScreen() }
                     )
                 case .addTrade:
-                    AddTradeView(
+                    TradeEntryHubView(
                         data: appEnvironment.data,
-                        mode: .create,
+                        initialTab: .manual,
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
                 case .editTrade(let tradeID):
@@ -366,8 +376,10 @@ struct AppRootView: View {
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
                 case .importCSV:
-                    CSVImportView(
+                    TradeEntryHubView(
                         data: appEnvironment.data,
+                        initialTab: .importTrades,
+                        initialImportChannel: .csv,
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
                 default:
@@ -391,11 +403,19 @@ struct AppRootView: View {
 
     private func detents(for destination: SheetDestination) -> Set<PresentationDetent> {
         switch destination {
-        case .composeChooser, .quickTrade, .accountSwitcher:
+        case .composeChooser, .quickTrade, .accountSwitcher, .dailyCheckIn:
             return [.medium, .large]
         default:
             return [.medium, .large]
         }
+    }
+
+    private func handleIncomingURL(_ url: URL) {
+        _ = navigation.deepLinkRouter.route(
+            url: url,
+            using: navigation.coordinator,
+            store: navigation.store
+        )
     }
 
     private func sheetTitle(_ destination: SheetDestination) -> String {
@@ -408,6 +428,7 @@ struct AppRootView: View {
         case .shareToMessages: return "Share"
         case .accountSwitcher: return "Accounts"
         case .notificationPermission: return "Notifications"
+        case .dailyCheckIn: return "Daily Check-In"
         }
     }
 

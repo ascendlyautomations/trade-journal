@@ -104,6 +104,82 @@ nonisolated struct DefaultAIRepository: AIRepository {
         }
     }
 
+    func explainPsychologyCoach(_ request: PsychologyCoachAIRequest) async throws -> PsychologyCoachAIResponse {
+        guard let transport = supabase.transport else {
+            throw AppError.unknown(message: "Network transport unavailable")
+        }
+
+        let body = PsychologyCoachBFFBody(
+            facts: request.facts,
+            mode: request.mode.rawValue,
+            messages: request.messages.map {
+                PsychologyCoachBFFMessage(role: $0.role, content: $0.content)
+            }
+        )
+        let data = try transport.encodeJSON(body)
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/psychology-coach",
+            method: .post,
+            body: data,
+            requiresAuthentication: true
+        )
+
+        let decoded = try? JSONDecoder().decode(PsychologyCoachBFFResponse.self, from: response.data)
+        let reply = decoded?.reply?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch response.statusCode {
+        case 200 ... 299:
+            guard let reply, !reply.isEmpty else {
+                throw AppError.unknown(message: "No response generated")
+            }
+            return PsychologyCoachAIResponse(reply: reply)
+        case 401:
+            throw AppError.domain(.permission(.notAuthenticated))
+        case 429:
+            throw AppError.unknown(message: decoded?.error ?? "Slow down — try again in a moment.")
+        default:
+            throw AppError.unknown(
+                message: decoded?.error ?? "Psychology coach unavailable. Your analytics still work offline."
+            )
+        }
+    }
+
+    func extractScreenshotTrades(_ request: ScreenshotAIExtractRequest) async throws -> ScreenshotAIExtractResponse {
+        guard let transport = supabase.transport else {
+            throw AppError.unknown(message: "Network transport unavailable")
+        }
+
+        let data = try transport.encodeJSON(request)
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/trade-import/screenshot-extract",
+            method: .post,
+            body: data,
+            requiresAuthentication: true
+        )
+
+        let decoded = try? JSONDecoder().decode(ScreenshotAIExtractResponse.self, from: response.data)
+
+        switch response.statusCode {
+        case 200 ... 299:
+            guard let extraction = decoded?.extraction else {
+                throw AppError.unknown(message: decoded?.error ?? "No extraction result")
+            }
+            return ScreenshotAIExtractResponse(extraction: extraction, error: nil)
+        case 401:
+            throw AppError.domain(.permission(.notAuthenticated))
+        case 429:
+            throw AppError.unknown(message: decoded?.error ?? "Slow down — try again in a moment.")
+        case 400:
+            throw AppError.unknown(message: decoded?.error ?? "Unsupported screenshot")
+        default:
+            throw AppError.unknown(
+                message: decoded?.error ?? "Screenshot extraction failed. Please try again."
+            )
+        }
+    }
+
     private static func isMissingTableError(_ error: Error) -> Bool {
         let text = String(describing: error).lowercased()
         return text.contains("trade_ai_messages")
@@ -129,6 +205,22 @@ private nonisolated struct AnalyzeTradeBFFMessage: Encodable {
 private nonisolated struct AnalyzeTradeBFFResponse: Decodable {
     var reply: String?
     var result: String?
+    var error: String?
+}
+
+private nonisolated struct PsychologyCoachBFFBody: Encodable {
+    var facts: PsychologyCoachFacts
+    var mode: String
+    var messages: [PsychologyCoachBFFMessage]
+}
+
+private nonisolated struct PsychologyCoachBFFMessage: Encodable {
+    var role: String
+    var content: String
+}
+
+private nonisolated struct PsychologyCoachBFFResponse: Decodable {
+    var reply: String?
     var error: String?
 }
 

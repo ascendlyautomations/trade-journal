@@ -323,4 +323,12 @@ private final class MockAIRepository: AIRepository, @unchecked Sendable {
     func persistMessages(_ messages: [TradeAIMessage], tradeID: TradeID) async throws {
         persistedBatches.append(messages)
     }
+
+    func explainPsychologyCoach(_ request: PsychologyCoachAIRequest) async throws -> PsychologyCoachAIResponse {
+        PsychologyCoachAIResponse(reply: reply)
+    }
+
+    func extractScreenshotTrades(_ request: ScreenshotAIExtractRequest) async throws -> ScreenshotAIExtractResponse {
+        throw AppError.notImplemented(feature: "extractScreenshotTrades")
+    }
 }

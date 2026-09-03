@@ -117,7 +117,8 @@ enum ConversationThreadBootstrapLoader {
                     hasMoreMessages: cached.hasMoreMessages,
                     markReadApplied: false,
                     notificationsMarkedRead: 0,
-                    skippedMessages: 0
+                    skippedMessages: 0,
+                    blockStatus: nil
                 ),
                 cacheHit: true
             )

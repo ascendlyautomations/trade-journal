@@ -105,31 +105,35 @@ struct MessagesHomeView: View {
             }
             .experienceSheetChrome()
         }
-        .alert(
-            "Delete Chat",
-            isPresented: Binding(
-                get: { viewModel.showsDeleteConfirmation },
-                set: { presented in
-                    if presented {
-                        viewModel.showsDeleteConfirmation = true
-                    } else {
-                        viewModel.cancelDeleteConversation()
-                    }
-                }
-            )
-        ) {
+        .alert("Delete Conversation?", isPresented: $viewModel.showsDeleteConfirmation) {
             Button("Cancel", role: .cancel) {
                 viewModel.cancelDeleteConversation()
             }
             Button(
-                viewModel.isDeletingConversation ? "Deleting…" : "Delete Chat",
+                viewModel.isDeletingConversation ? "Deleting…" : "Delete",
                 role: .destructive
             ) {
-                Task { await viewModel.confirmDeleteConversation() }
+                guard let id = viewModel.pendingDeleteConversationID else { return }
+                Task { await viewModel.confirmDeleteConversation(id: id) }
             }
             .disabled(viewModel.isDeletingConversation)
         } message: {
-            Text("Are you sure you want to permanently delete this conversation? This action cannot be undone.")
+            Text("This will remove this conversation from your messages.")
+        }
+        .alert(
+            "Couldn't Delete Conversation",
+            isPresented: Binding(
+                get: { viewModel.deleteConversationErrorMessage != nil },
+                set: { presented in
+                    if !presented { viewModel.deleteConversationErrorMessage = nil }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                viewModel.deleteConversationErrorMessage = nil
+            }
+        } message: {
+            Text(viewModel.deleteConversationErrorMessage ?? "")
         }
         .confirmationDialog(
             "Leave this Trade Room?",
@@ -326,7 +330,7 @@ struct MessagesHomeView: View {
         Button(role: .destructive) {
             viewModel.requestDeleteConversation(id: item.id)
         } label: {
-            Label("Delete Chat", systemImage: "trash")
+            Label("Delete", systemImage: "trash")
         }
     }
 

@@ -46,6 +46,8 @@ final class DataEnvironment {
     let ai: any AIRepository
     /// Dashboard Trading Reports — web-parity deterministic generator + notify.
     let tradingReports: any TradingReportRepository
+    let psychologyReports: any PsychologyReportRepository
+    let dailyCheckIns: any TraderDailyCheckInRepository
 
     init(
         configuration: DataConfiguration,
@@ -82,7 +84,9 @@ final class DataEnvironment {
         interactions: any InteractionRepository,
         engagementStore: EngagementStore,
         ai: any AIRepository,
-        tradingReports: any TradingReportRepository
+        tradingReports: any TradingReportRepository,
+        psychologyReports: any PsychologyReportRepository,
+        dailyCheckIns: any TraderDailyCheckInRepository
     ) {
         self.configuration = configuration
         self.supabase = supabase
@@ -119,6 +123,8 @@ final class DataEnvironment {
         self.engagementStore = engagementStore
         self.ai = ai
         self.tradingReports = tradingReports
+        self.psychologyReports = psychologyReports
+        self.dailyCheckIns = dailyCheckIns
     }
 
     static func make(
@@ -183,6 +189,20 @@ final class DataEnvironment {
         )
         let detailCache = DetailPresentationCache()
         TradeJournalMutationStore.shared.configure(detailCache: detailCache)
+        GettingStartedStore.shared.configure(
+            rpc: rpc,
+            session: session,
+            realtimeHub: realtimeHub
+        )
+        let dailyCheckInRepository: any TraderDailyCheckInRepository = DefaultTraderDailyCheckInRepository(
+            supabase: supabase,
+            cache: cache
+        )
+        TraderDailyCheckInStore.shared.configure(
+            repository: dailyCheckInRepository,
+            session: session,
+            realtimeHub: realtimeHub
+        )
 
         return DataEnvironment(
             configuration: configuration,
@@ -234,7 +254,14 @@ final class DataEnvironment {
                 session: session,
                 detailCache: detailCache,
                 supabase: supabase
-            )
+            ),
+            psychologyReports: DefaultPsychologyReportRepository(
+                trades: tradesRepository,
+                dailyCheckIns: dailyCheckInRepository,
+                session: session,
+                detailCache: detailCache
+            ),
+            dailyCheckIns: dailyCheckInRepository
         )
     }
 }

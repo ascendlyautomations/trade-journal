@@ -18,6 +18,8 @@ nonisolated enum StorageBucket: String, Sendable {
     case posts = "post-media"
     /// Profile wall images (`profile_posts` table / web create-post flow).
     case profilePosts = "profile_posts"
+    /// DM / Trade Room voice messages (AAC m4a).
+    case messageAudio = "message-audio"
 }
 
 nonisolated struct SupabaseObjectStorageProvider: ObjectStorageProviding {

@@ -49,11 +49,30 @@ final class AddTradeViewModel {
     var includeExitTime = true
     var strategyText = ""
     var notesText = ""
+    var timeframeSelection = ""
+    var customTimeframeText = ""
+    var newsEvent = false
+    var confidenceLevel = 0
+    var emotionSelection = ""
+    var followedPlan = false
+    var marketConditionSelection = ""
+    var psychologyNotesText = ""
+    var screenshotDisplayMode: TradeScreenshotDisplayMode = .fit
     var publicCaptionText = ""
     var shareToProfile = false
     var screenshotData: Data?
     var screenshotPreview: UIImage?
     var hasScreenshotPreview: Bool { screenshotPreview != nil }
+
+    var hasScreenshotAttached: Bool {
+        screenshotPreview != nil || (existingImageURL != nil && !removeExistingScreenshot)
+    }
+
+    var computedHoldDurationLabel: String? {
+        guard includeExitTime else { return nil }
+        return TradeHoldDuration.compute(entryAt: entryAt, exitAt: exitAt)?.text
+    }
+
     /// Local new-clip draft — uploaded + inserted with `trade_id` after trade save.
     var reelDraft: ReelDraft?
     private(set) var isPreparingClipVideo = false
@@ -63,6 +82,8 @@ final class AddTradeViewModel {
     private(set) var isLoadingReels = false
     /// Trade saved but clip create/link failed — retry clip only (no duplicate trade).
     private(set) var tradeAwaitingClip: TradeID?
+    /// After create save — optional post-trade reflection before dismiss.
+    private(set) var pendingPostTradeReflection: Trade?
     /// Back-compat alias used by older tests / UI identifiers.
     var tradeAwaitingReelLink: TradeID? { tradeAwaitingClip }
 
@@ -180,6 +201,13 @@ final class AddTradeViewModel {
             || !exitPriceText.isEmpty
             || !notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !strategyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !psychologyNotesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !timeframeSelection.isEmpty
+            || newsEvent
+            || confidenceLevel > 0
+            || !emotionSelection.isEmpty
+            || followedPlan
+            || !marketConditionSelection.isEmpty
             || !rrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || screenshotData != nil
             || reelDraft != nil
@@ -205,10 +233,30 @@ final class AddTradeViewModel {
         phase != .saving && phase != .loadingAccounts
     }
 
-    var reviewSummary: String {
-        let strategy = strategyText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if strategy.isEmpty { return "Strategy / setup" }
-        return strategy
+    var hasPsychologyDetails: Bool {
+        TradeReviewCatalog.hasPsychologyDetails(
+            confidence: confidenceLevel,
+            emotion: emotionSelection,
+            followedPlan: followedPlan,
+            marketCondition: marketConditionSelection,
+            psychologyNotes: psychologyNotesText
+        )
+    }
+
+    var psychologySummary: String {
+        TradeReviewCatalog.psychologySummary(
+            confidence: confidenceLevel,
+            emotion: emotionSelection,
+            followedPlan: followedPlan,
+            marketCondition: marketConditionSelection,
+            psychologyNotes: psychologyNotesText
+        )
+    }
+
+    func copyNotesToCaption() {
+        let notes = notesText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !notes.isEmpty else { return }
+        publicCaptionText = notesText
     }
 
     /// Web stores `trades.rr` as a decimal ratio (e.g. `2.35`); UI shows `1 : 2.35`.
@@ -523,7 +571,17 @@ final class AddTradeViewModel {
             includeExitTime = false
         }
         strategyText = trade.strategy ?? ""
-        notesText = trade.notePreview ?? ""
+        notesText = trade.notes ?? trade.notePreview ?? ""
+        let timeframeParts = TradeReviewCatalog.timeframeSelection(for: trade.timeframe)
+        timeframeSelection = timeframeParts.selection
+        customTimeframeText = timeframeParts.custom
+        newsEvent = trade.newsEvent ?? false
+        confidenceLevel = trade.confidence ?? 0
+        emotionSelection = trade.emotion ?? ""
+        followedPlan = trade.followedPlan ?? false
+        marketConditionSelection = trade.marketCondition ?? ""
+        psychologyNotesText = trade.psychologyNotes ?? ""
+        screenshotDisplayMode = trade.imageDisplayMode
         publicCaptionText = trade.publicCaption ?? ""
         shareToProfile = trade.visibility == .public
         existingImageURL = trade.thumbnail?.id
@@ -531,6 +589,12 @@ final class AddTradeViewModel {
         screenshotData = nil
         hydratedFingerprint = formFingerprint
     }
+
+    #if DEBUG
+    func applyTradeForTesting(_ trade: Trade) {
+        apply(trade: trade)
+    }
+    #endif
 
     private func loadExistingScreenshotPreviewIfNeeded() async {
         guard let urlString = existingImageURL, !urlString.isEmpty else { return }
@@ -566,6 +630,15 @@ final class AddTradeViewModel {
             includeExitTime ? String(exitAt.timeIntervalSince1970) : "nil",
             strategyText,
             notesText,
+            timeframeSelection,
+            customTimeframeText,
+            newsEvent ? "1" : "0",
+            String(confidenceLevel),
+            emotionSelection,
+            followedPlan ? "1" : "0",
+            marketConditionSelection,
+            psychologyNotesText,
+            screenshotDisplayMode.rawValue,
             publicCaptionText,
             shareToProfile ? "1" : "0",
         ].joined(separator: "|")
@@ -631,6 +704,13 @@ final class AddTradeViewModel {
             let quantity = Self.parseDecimal(contractsText) ?? 1
             let pnl = Self.parseDecimal(pnlText) ?? 0
             let sessionLabel = TradingSessionLabel.session(from: entryAt) ?? "NY"
+            let resolvedTimeframe = TradeReviewCatalog.resolvedTimeframe(
+                selection: timeframeSelection,
+                custom: customTimeframeText
+            )
+            let holdDuration = includeExitTime
+                ? TradeHoldDuration.compute(entryAt: entryAt, exitAt: exitAt)
+                : nil
             let draft = TradeDraft(
                 accountID: account.id,
                 accountName: account.name,
@@ -656,6 +736,16 @@ final class AddTradeViewModel {
                 visibility: shareToProfile ? .public : .private,
                 publicCaption: Self.nilIfEmpty(publicCaptionText),
                 noteBody: Self.nilIfEmpty(notesText),
+                timeframe: resolvedTimeframe,
+                newsEvent: newsEvent,
+                confidence: confidenceLevel > 0 ? confidenceLevel : nil,
+                emotion: Self.nilIfEmpty(emotionSelection),
+                followedPlan: followedPlan,
+                marketCondition: Self.nilIfEmpty(marketConditionSelection),
+                psychologyNotes: Self.nilIfEmpty(psychologyNotesText),
+                imageDisplayMode: screenshotDisplayMode,
+                durationSeconds: holdDuration?.seconds,
+                durationText: holdDuration?.text,
                 imageURL: imageURL
             )
 
@@ -692,7 +782,11 @@ final class AddTradeViewModel {
 
             ExperienceHaptics.play(.tradeSaved)
             phase = .ready
-            onDismiss()
+            if isEditing {
+                onDismiss()
+            } else {
+                pendingPostTradeReflection = trade
+            }
         } catch {
             isUploadingMedia = false
             if let path = uploadedStoragePath {
@@ -705,6 +799,71 @@ final class AddTradeViewModel {
             formError = Self.userMessage(for: error)
         }
         saveTask = nil
+    }
+
+    func skipPostTradeReflection() {
+        pendingPostTradeReflection = nil
+        onDismiss()
+    }
+
+    func savePostTradeReflection(exitEmotion: String?, executionRating: Int?) async {
+        guard let trade = pendingPostTradeReflection else {
+            onDismiss()
+            return
+        }
+        guard exitEmotion != nil || executionRating != nil else {
+            skipPostTradeReflection()
+            return
+        }
+
+        var draft = tradeDraft(from: trade)
+        draft.exitEmotion = exitEmotion
+        draft.executionRating = executionRating
+
+        do {
+            let updated = try await trades.update(id: trade.id, draft: draft, previous: trade)
+            detailCache.seed(updated)
+            TradeJournalMutationStore.shared.noteUpdated(updated)
+        } catch {
+            formError = "Reflection didn't save. Your trade was still recorded."
+        }
+        pendingPostTradeReflection = nil
+        onDismiss()
+    }
+
+    private func tradeDraft(from trade: Trade) -> TradeDraft {
+        TradeDraft(
+            accountID: trade.accountID,
+            symbol: trade.symbol,
+            side: trade.side,
+            mode: trade.mode,
+            quantity: trade.quantity,
+            entryPrice: trade.entryPrice,
+            exitPrice: trade.exitPrice,
+            entryAt: trade.entryAt,
+            exitAt: trade.exitAt,
+            realizedPnL: trade.realizedPnL,
+            riskReward: trade.riskReward,
+            points: trade.points,
+            sessionLabel: trade.sessionLabel,
+            strategy: trade.strategy,
+            visibility: trade.visibility,
+            publicCaption: trade.publicCaption,
+            noteBody: trade.notes,
+            timeframe: trade.timeframe,
+            newsEvent: trade.newsEvent ?? false,
+            confidence: trade.confidence,
+            emotion: trade.emotion,
+            followedPlan: trade.followedPlan ?? false,
+            marketCondition: trade.marketCondition,
+            psychologyNotes: trade.psychologyNotes,
+            exitEmotion: trade.exitEmotion,
+            executionRating: trade.executionRating,
+            imageDisplayMode: trade.imageDisplayMode,
+            durationSeconds: trade.durationSeconds,
+            durationText: trade.durationText,
+            imageURL: trade.thumbnail?.id
+        )
     }
 
     private func loadUnattachedReels() async {
@@ -922,8 +1081,19 @@ final class AddTradeViewModel {
             visibility: draft.visibility,
             publicCaption: draft.publicCaption,
             thumbnail: draft.imageURL.map { MediaReference(id: $0, kind: .image, altText: nil) },
+            imageDisplayMode: draft.imageDisplayMode,
             notePreview: draft.noteBody.map { String($0.prefix(140)) },
+            notes: draft.noteBody,
             strategy: draft.strategy,
+            timeframe: draft.timeframe,
+            newsEvent: draft.newsEvent,
+            confidence: draft.confidence,
+            emotion: draft.emotion,
+            followedPlan: draft.followedPlan,
+            marketCondition: draft.marketCondition,
+            psychologyNotes: draft.psychologyNotes,
+            durationText: draft.durationText,
+            durationSeconds: draft.durationSeconds,
             createdAt: .now,
             updatedAt: .now
         )
@@ -948,7 +1118,21 @@ final class AddTradeViewModel {
         trade.publicCaption = draft.publicCaption
         trade.thumbnail = draft.imageURL.map { MediaReference(id: $0, kind: .image, altText: nil) }
         trade.notePreview = draft.noteBody.map { String($0.prefix(140)) }
+        trade.notes = draft.noteBody
         trade.strategy = draft.strategy
+        trade.timeframe = draft.timeframe
+        trade.newsEvent = draft.newsEvent
+        trade.confidence = draft.confidence
+        trade.emotion = draft.emotion
+        trade.followedPlan = draft.followedPlan
+        trade.marketCondition = draft.marketCondition
+        trade.psychologyNotes = draft.psychologyNotes
+        trade.durationText = draft.durationText
+        trade.durationSeconds = draft.durationSeconds
+        trade.imageDisplayMode = draft.imageDisplayMode
+        if previous.isInitialImport == true, previous.reviewed != true {
+            trade.reviewed = true
+        }
         trade.updatedAt = .now
         return trade
     }

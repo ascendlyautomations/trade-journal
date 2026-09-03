@@ -80,6 +80,7 @@ final class ProfileOnboardingGateStore {
             profile: profile,
             snapshot: snapshot
         )
+        GettingStartedRefreshCenter.noteEligibleUserAction()
     }
 
     private func performResolve(forceNetwork: Bool, generation: UInt64) async {

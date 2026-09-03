@@ -693,6 +693,13 @@ private final class CountingMessageRepository: MessageRepository, @unchecked Sen
     }
 
     func deleteConversation(id: ConversationID) async throws {}
+
+    func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws {}
+
+    func setConversationNotificationsEnabled(
+        conversationID: ConversationID,
+        enabled: Bool
+    ) async throws {}
 }
 
 private struct N3StubRoomRepository: RoomRepository {

@@ -14,7 +14,10 @@ final class ProfileHeaderViewModel {
 
     var isSharePresented: Bool = false
     var pendingUnfollowConfirm = false
+    var showsBlockConfirmation = false
     private(set) var isOpeningMessage = false
+    private(set) var blockStatus: DmBlockStatus?
+    private(set) var isUpdatingBlock = false
 
     init(
         store: ProfileContentStore,
@@ -63,8 +66,35 @@ final class ProfileHeaderViewModel {
         return "\(profile.displayName) (@\(profile.username)) on TradeTraxs"
     }
 
+    var blockedByMe: Bool {
+        blockStatus?.blockedByMe == true
+    }
+
+    var isMessagingBlocked: Bool {
+        blockStatus?.isMessagingBlocked == true
+    }
+
+    var canMessage: Bool {
+        !store.isOwner && !isMessagingBlocked
+    }
+
+    var blockConfirmationTitle: String {
+        let username = profile?.username ?? "this user"
+        return blockedByMe ? "Unblock @\(username)?" : "Block @\(username)?"
+    }
+
+    var blockConfirmationMessage: String {
+        if blockedByMe {
+            return "They'll be able to message you again and their content will reappear where applicable."
+        }
+        return "They won't be able to message or interact with you and their content will be hidden where applicable."
+    }
+
     /// Screen owns bootstrap — kept for API compatibility; no independent load.
-    func onAppear() {}
+    func onAppear() {
+        guard !store.isOwner else { return }
+        Task { await refreshBlockStatus() }
+    }
 
     /// Header retry is wired by ``ProfileScreenViewModel/retryBootstrap`` via the view.
     var onRetryBootstrap: (() -> Void)?
@@ -121,8 +151,42 @@ final class ProfileHeaderViewModel {
     }
 
     func openMessage() {
-        guard !store.isOwner, !isOpeningMessage else { return }
+        guard canMessage, !isOpeningMessage else { return }
         Task { await openOrCreateConversation() }
+    }
+
+    func requestBlockToggle() {
+        showsBlockConfirmation = true
+    }
+
+    func confirmBlockToggle() async {
+        showsBlockConfirmation = false
+        guard let targetID = store.resolvedProfileID ?? store.profile?.id else { return }
+        guard !isUpdatingBlock else { return }
+        isUpdatingBlock = true
+        defer { isUpdatingBlock = false }
+        do {
+            let status = try await UserBlockCoordinator.shared.setBlocked(
+                otherID: targetID,
+                conversationID: nil,
+                blocked: !blockedByMe,
+                messages: messages
+            )
+            blockStatus = status
+            ExperienceHaptics.play(.success)
+        } catch {
+            ExperienceHaptics.play(.warning)
+        }
+    }
+
+    func refreshBlockStatus() async {
+        guard !store.isOwner,
+              let targetID = store.resolvedProfileID ?? store.profile?.id
+        else { return }
+        blockStatus = await UserBlockCoordinator.shared.loadStatus(
+            otherID: targetID,
+            messages: messages
+        )
     }
 
     func openTradeRoom() {

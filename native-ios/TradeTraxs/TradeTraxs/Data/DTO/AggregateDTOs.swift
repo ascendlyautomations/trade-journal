@@ -7,9 +7,14 @@ nonisolated enum TradeDTO {
     static let profileListSelect =
         "id,user_id,account_id,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,duration_seconds,duration_text,trade_mode"
 
+    /// Owner Trade Detail / Add Trade edit — includes psychology + journal review columns.
+    static let ownerJournalSelect =
+        profileListSelect
+        + ",confidence,emotion,followed_plan,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint"
+
     /// Owner Trade History — includes denormalized account_name for search.
     static let historyListSelect =
-        "id,user_id,account_id,account_name,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy"
+        "id,user_id,account_id,account_name,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,confidence,emotion,followed_plan,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,duration_seconds,duration_text,trade_mode,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint"
 
     /// Mirrors web `PROFILE_SUMMARY_TRADE_SELECT`.
     static let profileSummarySelect = "id,created_at,pnl,rr,mode,account_type"
@@ -44,6 +49,20 @@ nonisolated enum TradeDTO {
         var duration_seconds: FlexibleNumber?
         var duration_text: String?
         var trade_mode: String?
+        var confidence: FlexibleNumber?
+        var emotion: String?
+        var followed_plan: Bool?
+        var market_condition: String?
+        var timeframe: String?
+        var news_event: Bool?
+        var psychology_notes: String?
+        var exit_emotion: String?
+        var execution_rating: FlexibleNumber?
+        var image_display_mode: String?
+        var reviewed: Bool?
+        var is_initial_import: Bool?
+        var import_source: String?
+        var import_fingerprint: String?
     }
 
     /// Lightweight overview row — web `fetchSummaryTrades`.
@@ -174,10 +193,24 @@ nonisolated enum TradeDTO {
         var image_url: String?
         var is_public: Bool
         var public_description: String?
+        var confidence: Double?
+        var emotion: String?
+        var followed_plan: Bool?
+        var market_condition: String?
+        var timeframe: String?
+        var news_event: Bool?
+        var psychology_notes: String?
+        var exit_emotion: String?
+        var execution_rating: Int?
+        var duration_seconds: Int?
+        var duration_text: String?
+        var image_display_mode: String?
         var created_at: String
         var date: String
         /// Web CSV imports set `is_initial_import` on bulk rows.
         var is_initial_import: Bool? = nil
+        var import_source: String? = nil
+        var import_fingerprint: String? = nil
     }
 
     /// Feed post created when a trade is shared publicly (web `posts` insert).
@@ -190,8 +223,7 @@ nonisolated enum TradeDTO {
         var caption: String
     }
 
-    /// Partial update body — mirrors web `InputTradeForm` edit `updateRow` core journal columns.
-    /// Psychology / review-only columns are omitted so native edit does not wipe web-only fields.
+    /// Mirrors web `InputTradeForm` save/update journal + psychology columns.
     struct UpdateBody: Encodable, Sendable {
         var account_id: String?
         var account_name: String?
@@ -217,6 +249,19 @@ nonisolated enum TradeDTO {
         var image_url: String?
         var is_public: Bool
         var public_description: String?
+        var confidence: Double?
+        var emotion: String?
+        var followed_plan: Bool
+        var market_condition: String?
+        var timeframe: String?
+        var news_event: Bool
+        var psychology_notes: String?
+        var exit_emotion: String?
+        var execution_rating: Int?
+        var duration_seconds: Int?
+        var duration_text: String?
+        var image_display_mode: String?
+        var reviewed: Bool?
         var created_at: String
 
         enum CodingKeys: String, CodingKey {
@@ -225,6 +270,8 @@ nonisolated enum TradeDTO {
             case entry_price, exit_price, entry_time, exit_time, trade_date
             case pnl, rr, points, session, strategy, notes, image_url
             case is_public, public_description, created_at
+            case confidence, emotion, followed_plan, market_condition, timeframe, news_event
+            case psychology_notes, exit_emotion, execution_rating, duration_seconds, duration_text, image_display_mode, reviewed
         }
 
         func encode(to encoder: Encoder) throws {
@@ -260,6 +307,37 @@ nonisolated enum TradeDTO {
             try container.encode(image_url, forKey: .image_url)
             try container.encode(is_public, forKey: .is_public)
             try container.encodeIfPresent(public_description, forKey: .public_description)
+            if let confidence {
+                try container.encode(confidence, forKey: .confidence)
+            } else {
+                try container.encodeNil(forKey: .confidence)
+            }
+            try container.encodeIfPresent(emotion, forKey: .emotion)
+            try container.encode(followed_plan, forKey: .followed_plan)
+            try container.encodeIfPresent(market_condition, forKey: .market_condition)
+            try container.encodeIfPresent(timeframe, forKey: .timeframe)
+            try container.encode(news_event, forKey: .news_event)
+            try container.encodeIfPresent(psychology_notes, forKey: .psychology_notes)
+            try container.encodeIfPresent(exit_emotion, forKey: .exit_emotion)
+            if let execution_rating {
+                try container.encode(execution_rating, forKey: .execution_rating)
+            } else {
+                try container.encodeNil(forKey: .execution_rating)
+            }
+            if let duration_seconds {
+                try container.encode(duration_seconds, forKey: .duration_seconds)
+            } else {
+                try container.encodeNil(forKey: .duration_seconds)
+            }
+            if let duration_text {
+                try container.encode(duration_text, forKey: .duration_text)
+            } else {
+                try container.encodeNil(forKey: .duration_text)
+            }
+            try container.encode(image_display_mode ?? TradeScreenshotDisplayMode.fit.rawValue, forKey: .image_display_mode)
+            if let reviewed {
+                try container.encode(reviewed, forKey: .reviewed)
+            }
             try container.encode(created_at, forKey: .created_at)
         }
     }
@@ -300,6 +378,14 @@ nonisolated enum ProfileDTO {
         var primary_market: String?
         var started_trading: String?
         var is_private: Bool?
+    }
+
+    struct DmPrivacyRow: Codable, Sendable {
+        var dm_privacy: String?
+    }
+
+    struct DmPrivacyUpdateBody: Encodable, Sendable {
+        var dm_privacy: String
     }
 
     struct OnboardingFields: Codable, Sendable {
@@ -609,6 +695,26 @@ nonisolated enum MessageDTO {
         var conversation_id: String?
     }
 
+    struct UserBlockRow: Codable, Sendable {
+        var blocked_id: String?
+        var created_at: String?
+        var profiles: EmbeddedProfile?
+    }
+
+    struct BlockStatusRow: Codable, Sendable {
+        var other_user_id: String?
+        var blocked_by_me: Bool?
+        var blocked_by_other: Bool?
+    }
+
+    struct MutedPeerRow: Codable, Sendable {
+        var conversation_id: String?
+        var peer_id: String?
+        var username: String?
+        var name: String?
+        var avatar_url: String?
+    }
+
     struct Message: Codable, Sendable {
         var id: String?
         var conversation_id: String?
@@ -621,9 +727,12 @@ nonisolated enum MessageDTO {
         var content: String?
         /// Web DM image column (`messages.image_url`).
         var image_url: String?
+        var audio_url: String?
+        var audio_duration_ms: Int?
         var trade_id: String?
         var created_at: String?
         var is_read: Bool?
+        var deleted_for_everyone: Bool?
     }
 }
 
@@ -652,6 +761,8 @@ nonisolated enum RoomDTO {
         var body: String?
         var content: String?
         var image_url: String?
+        var audio_url: String?
+        var audio_duration_ms: Int?
         var trade_id: String?
         var section_id: String?
         var parent_message_id: String?

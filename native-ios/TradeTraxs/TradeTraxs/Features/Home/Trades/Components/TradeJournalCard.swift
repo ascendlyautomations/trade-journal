@@ -149,7 +149,7 @@ struct TradeJournalCard: View {
             TradeImageView(
                 reference: trade.thumbnail,
                 imagePipeline: imagePipeline,
-                contentMode: .fill,
+                contentMode: trade.imageDisplayMode == .fill ? .fill : .fit,
                 side: 132,
                 width: geo.size.width,
                 height: 132
@@ -160,7 +160,7 @@ struct TradeJournalCard: View {
     }
 
     private var executionGrid: some View {
-        let duration = TradeDisplay.durationText(entryAt: trade.entryAt, exitAt: trade.exitAt)
+        let duration = TradeDisplay.holdDuration(for: trade)
         return VStack(spacing: ExperienceSpacing.sm) {
             HStack(alignment: .top, spacing: ExperienceSpacing.md) {
                 metricCell(title: "Entry", value: TradeDisplay.priceText(trade.entryPrice))
@@ -218,7 +218,7 @@ struct TradeJournalCard: View {
                 items.append(("Points", points))
             }
             items.append(("Contracts", TradeDisplay.contractsText(trade.quantity)))
-            if let duration = TradeDisplay.durationText(entryAt: trade.entryAt, exitAt: trade.exitAt) {
+            if let duration = TradeDisplay.holdDuration(for: trade) {
                 items.append(("Dur", duration))
             }
         } else if trade.entryPrice == nil && trade.exitPrice == nil {

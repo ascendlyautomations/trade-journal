@@ -1,5 +1,8 @@
 import Foundation
 import OSLog
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Entry façade for universal links and custom schemes.
 ///
@@ -14,13 +17,18 @@ struct DeepLinkRouter: Sendable {
     @MainActor
     func route(url: URL, using coordinator: NavigationCoordinator, store: NavigationStore) -> Bool {
         guard let destination = parser.parse(url: url) else {
-            AppLog.navigation.error("Deep link parse failed: \(url.absoluteString, privacy: .public)")
+            AppLog.navigation.error(
+                "Deep link parse failed: \(url.absoluteString, privacy: .public)"
+            )
+            openUnhandledTradeTraxsURLInBrowserIfNeeded(url)
             return false
         }
 
         seedRoomFocus(from: url, destination: destination)
 
-        AppLog.navigation.info("Deep link resolved: \(String(describing: destination), privacy: .public)")
+        AppLog.navigation.info(
+            "Deep link resolved: \(String(describing: destination), privacy: .public)"
+        )
 
         if store.sessionPhase != .authenticated {
             switch destination {
@@ -34,6 +42,15 @@ struct DeepLinkRouter: Sendable {
 
         coordinator.open(destination)
         return true
+    }
+
+    /// When a claimed Universal Link has no native route, fall back to Safari.
+    @MainActor
+    func openUnhandledTradeTraxsURLInBrowserIfNeeded(_ url: URL) {
+        guard UniversalLinkPolicy.isSupportedHTTPSHost(url) else { return }
+        #if canImport(UIKit)
+        UIApplication.shared.open(url)
+        #endif
     }
 
     @MainActor

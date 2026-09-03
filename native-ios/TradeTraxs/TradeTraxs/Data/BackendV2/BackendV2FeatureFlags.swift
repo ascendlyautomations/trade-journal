@@ -26,6 +26,7 @@ nonisolated enum BackendV2FeatureFlag: String, CaseIterable, Sendable {
     case settings
     case propFirm
     case tradesList
+    case gettingStarted
 
     var dottedName: String { "backendV2.\(rawValue)" }
 

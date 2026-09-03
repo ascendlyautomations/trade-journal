@@ -45,6 +45,9 @@ function normalizeContentKey(input: {
   if (type === "image") {
     return `image:${String(input.content ?? "").trim()}`
   }
+  if (type === "voice") {
+    return `voice:${String(input.content ?? "").trim()}`
+  }
   return `text:${String(input.content ?? "").trim()}`
 }
 

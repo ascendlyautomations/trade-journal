@@ -8,5 +8,10 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:www.tradetraxs.com</string>
+		<string>applinks:tradetraxs.com</string>
+	</array>
 </dict>
 </plist>

@@ -45,6 +45,11 @@ final class ConversationScrollCoordinator {
 
     var newestMessageIDForLayout: MessageID? { newestMessageID }
 
+    /// True while the thread still needs its one-time open/reopen positioning pass.
+    var awaitsInitialScrollPosition: Bool {
+        pendingInitialScroll && (mode == .initialPositionPending || mode == .jumpToLatestRequested)
+    }
+
     func resetForConversation(_ conversationID: ConversationID) {
         boundConversationID = conversationID
         mode = .initialPositionPending
@@ -69,7 +74,9 @@ final class ConversationScrollCoordinator {
             handleContentApplied(newestMessageID: newest, isEmpty: isEmpty)
 
         case .layoutReady(let newest, let isEmpty):
-            newestMessageID = newest
+            if let newest {
+                self.newestMessageID = newest
+            }
             guard pendingInitialScroll else { return }
             guard mode == .initialPositionPending || mode == .jumpToLatestRequested else { return }
             if isEmpty {
@@ -77,8 +84,10 @@ final class ConversationScrollCoordinator {
                 mode = .bottomPinned
                 return
             }
+            // Wait until the newest message row is laid out before the one-time open scroll.
+            guard let targetID = newest else { return }
             pendingInitialScroll = false
-            issueScroll(to: .bottom, animated: false)
+            issueScroll(to: .message(targetID), animated: false)
             mode = .bottomPinned
             showsNewMessagesIndicator = false
 
@@ -123,15 +132,18 @@ final class ConversationScrollCoordinator {
             }
 
         case .paginationStarted(let anchorMessageID):
+            guard !pendingInitialScroll else { return }
             mode = .paginationAnchorPending(anchorMessageID: anchorMessageID)
             showsNewMessagesIndicator = false
 
         case .paginationApplied:
+            guard !pendingInitialScroll else { return }
             guard case .paginationAnchorPending(let anchor) = mode else { return }
             issueScroll(to: .message(anchor), animated: false)
             mode = .readingHistory
 
         case .userNearBottom(let isNearBottom):
+            guard !pendingInitialScroll else { return }
             if isNearBottom {
                 mode = .bottomPinned
                 showsNewMessagesIndicator = false
@@ -140,8 +152,13 @@ final class ConversationScrollCoordinator {
             }
 
         case .keyboardChanged(let isVisible):
+            guard !pendingInitialScroll else { return }
             guard isVisible, mode == .bottomPinned else { return }
-            issueScroll(to: .bottom, animated: false)
+            if let newestMessageID {
+                issueScroll(to: .message(newestMessageID), animated: false)
+            } else {
+                issueScroll(to: .bottom, animated: false)
+            }
 
         case .jumpToLatestTapped:
             mode = .jumpToLatestRequested
@@ -181,6 +198,16 @@ final class ConversationScrollCoordinator {
 
     func reportKeyboardVisible(_ isVisible: Bool, conversationID: ConversationID) {
         handle(.keyboardChanged(isVisible: isVisible), conversationID: conversationID)
+    }
+
+    /// Called by the view after Trade Room-style initial `scrollTo` completes.
+    func completeInitialScrollPosition(conversationID: ConversationID) {
+        guard boundConversationID == conversationID else { return }
+        pendingInitialScroll = false
+        if mode == .initialPositionPending {
+            mode = .bottomPinned
+        }
+        showsNewMessagesIndicator = false
     }
 
     // MARK: - Private

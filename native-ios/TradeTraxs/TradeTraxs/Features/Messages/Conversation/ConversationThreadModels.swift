@@ -64,10 +64,27 @@ struct ConversationBubbleItem: Identifiable, Hashable {
     }
 
     var imageReference: MediaReference? {
-        message.attachments.first?.media
+        guard message.kind != .voice, message.kind != .storyReply else { return nil }
+        return message.attachments.first?.media
+    }
+
+    var voiceReference: MediaReference? {
+        guard message.kind == .voice else { return nil }
+        return message.attachments.first?.media
+    }
+
+    var voiceDuration: TimeInterval? {
+        message.attachments.first?.durationSeconds
     }
 
     var text: String? {
+        if message.kind == .storyReply {
+            return StoryReplyMessageSupport.decode(from: message.body)
+                .flatMap { StoryReplyMessageSupport.replyText(from: $0) }
+        }
+        if let payload = StoryReplyMessageSupport.decode(from: message.body) {
+            return StoryReplyMessageSupport.replyText(from: payload)
+        }
         let body = message.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return body.isEmpty ? nil : body
     }

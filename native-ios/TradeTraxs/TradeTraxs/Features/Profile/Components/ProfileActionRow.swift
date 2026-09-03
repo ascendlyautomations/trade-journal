@@ -17,6 +17,7 @@ struct ProfileActionRow: View {
     var onMessage: () -> Void = {}
     var onTradeRoom: () -> Void = {}
     var isMessaging: Bool = false
+    var canMessage: Bool = true
 
     @Environment(\.themeColors) private var colors
 
@@ -77,7 +78,7 @@ struct ProfileActionRow: View {
                 title: isMessaging ? "Opening…" : "Message",
                 style: .outline,
                 accessibilityIdentifier: "profile.message",
-                isEnabled: !isMessaging,
+                isEnabled: canMessage && !isMessaging,
                 action: onMessage
             )
             if showsTradeRoom {

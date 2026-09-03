@@ -7,7 +7,6 @@ struct ComposeChooserView: View {
     let onCreateReel: () -> Void
     let onCreateAchievement: () -> Void
     let onCreateStory: () -> Void
-    let onImportCSV: () -> Void
     let onClose: () -> Void
 
     @Environment(\.themeColors) private var colors
@@ -64,18 +63,6 @@ struct ComposeChooserView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("compose.story")
-            }
-
-            Section {
-                Button(action: onImportCSV) {
-                    SettingsNavigationRow(
-                        title: "Import CSV",
-                        subtitle: "Import trades from a broker export",
-                        systemImage: "doc.text"
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("compose.importCSV")
             }
         }
         .listStyle(.insetGrouped)

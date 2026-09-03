@@ -35,6 +35,7 @@ final class MessagingDomain {
     private var isConfigured = false
     private var loadGeneration: UInt64 = 0
     private var homeScreenVisible = false
+    private var lastHomeRevalidationAt: Date?
 
     private init() {}
 
@@ -332,11 +333,18 @@ final class MessagingDomain {
 
     private func scheduleSoftRevalidationIfNeeded() {
         guard homeScreenVisible else { return }
+        guard !inboxStore.hasPendingConversationDeletes else { return }
         guard MessagingInboxFreshness.isSoftStale(lastLoadedAt: inboxStore.lastLoadedAt) else { return }
         guard revalidationTask == nil, bootstrapTask == nil else { return }
+        if let lastHomeRevalidationAt,
+           Date().timeIntervalSince(lastHomeRevalidationAt) < MessagingInboxFreshness.softStaleSeconds
+        {
+            return
+        }
         let generation = loadGeneration
         revalidationTask = Task { [generation] in
             await performHomeBootstrap(forceNetwork: true, generation: generation, owner: "MessagingDomain.revalidate")
+            lastHomeRevalidationAt = Date()
             revalidationTask = nil
         }
     }

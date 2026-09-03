@@ -120,6 +120,10 @@ final class RoomConversationViewModel {
         buildTimeline(from: messages)
     }
 
+    var newestMessageID: MessageID? {
+        messages.last?.id
+    }
+
     var showsEmpty: Bool {
         phase == .loaded
             && selectedChannelID != nil
@@ -369,6 +373,7 @@ final class RoomConversationViewModel {
     }
 
     func stopRealtime() {
+        VoiceMessagePlaybackController.shared.stopAll()
         presenceRoomID = nil
         presenceProfileHydrateTask?.cancel()
         presenceProfileHydrateTask = nil
@@ -402,6 +407,13 @@ final class RoomConversationViewModel {
             localImageData: data
         )
         draft = ""
+    }
+
+    func sendVoice(localFileURL: URL, duration: TimeInterval) async {
+        guard !isSending else { return }
+        defer { try? FileManager.default.removeItem(at: localFileURL) }
+        guard let data = try? Data(contentsOf: localFileURL) else { return }
+        await sendVoice(data: data, duration: duration)
     }
 
     func presentTradePicker() {
@@ -536,6 +548,7 @@ final class RoomConversationViewModel {
         do {
             if membership == nil {
                 membership = try await rooms.join(roomID: roomID, profileID: viewerID)
+                GettingStartedRefreshCenter.noteEligibleUserAction()
                 if var room {
                     room.memberCount = (room.memberCount ?? 0) + 1
                     self.room = room
@@ -1062,6 +1075,86 @@ final class RoomConversationViewModel {
         sendStates.removeValue(forKey: id)
     }
 
+    private func sendVoice(data: Data, duration: TimeInterval) async {
+        guard let viewerID, let channelID = selectedChannelID else { return }
+        isSending = true
+        defer { isSending = false }
+
+        let tempID = MessageID("temp-\(UUID().uuidString)")
+        let optimistic = Message(
+            id: tempID,
+            conversationID: conversationID,
+            senderProfileID: viewerID,
+            kind: .voice,
+            body: nil,
+            attachments: [
+                MessageAttachment(
+                    id: "local-voice",
+                    media: MediaReference(id: "local-voice", kind: .audio, altText: nil),
+                    tradeID: nil,
+                    durationSeconds: duration
+                ),
+            ],
+            replyToMessageID: nil,
+            createdAt: .now,
+            isReadByViewer: true
+        )
+        commitMessages([optimistic])
+        sendStates[tempID] = .sending
+
+        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
+            sendStates[tempID] = .sent
+            persistActiveChannelCache(scrollAnchor: tempID)
+            patchInboxPreview(with: optimistic)
+            return
+        }
+
+        do {
+            let path = "\(viewerID.rawValue)/rooms/\(Int(Date().timeIntervalSince1970 * 1000)).m4a"
+            let reference = try await uploadService.upload(
+                UploadRequest(
+                    bucket: StorageBucket.messageAudio.rawValue,
+                    path: path,
+                    data: data,
+                    contentType: "audio/mp4"
+                )
+            )
+            let resolvedURL: String
+            if let publicURL = objectStorage.publicURL(
+                bucket: StorageBucket.messageAudio.rawValue,
+                path: reference.id
+            ) {
+                resolvedURL = publicURL.absoluteString
+            } else {
+                resolvedURL = reference.id
+            }
+
+            let payload = RoomMessage(
+                id: RoomMessageID(tempID.rawValue),
+                roomID: roomID,
+                senderProfileID: viewerID,
+                body: nil,
+                attachedTradeID: nil,
+                media: [MediaReference(id: resolvedURL, kind: .audio, altText: String(duration))],
+                parentMessageID: nil,
+                channelID: channelID,
+                isPinned: false,
+                createdAt: .now
+            )
+            let savedRoom = try await rooms.send(payload)
+            let saved = RoomMessageMapping.displayMessage(from: savedRoom)
+            commitMessages([saved])
+            sendStates.removeValue(forKey: tempID)
+            sendStates[saved.id] = .sent
+            persistActiveChannelCache(scrollAnchor: saved.id)
+            patchInboxPreview(with: saved)
+            ExperienceHaptics.play(.messageSent)
+        } catch {
+            sendStates[tempID] = .failed
+            ExperienceHaptics.play(.error)
+        }
+    }
+
     private func send(body: String, imageURL: String?, localImageData: Data?) async {
         guard let viewerID, let channelID = selectedChannelID else { return }
         isSending = true
@@ -1202,9 +1295,18 @@ final class RoomConversationViewModel {
             if message.kind == .tradeShare {
                 return "Shared a trade"
             }
+            if message.kind == .voice {
+                return "Voice message"
+            }
+            if message.attachments.first?.media.kind == .audio {
+                return "Voice message"
+            }
             if message.attachments.isEmpty {
                 return message.body?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                     ?? "New message"
+            }
+            if message.attachments.first?.media.kind == .audio {
+                return "Sent a voice message"
             }
             return message.body?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                 ?? "Sent a photo"

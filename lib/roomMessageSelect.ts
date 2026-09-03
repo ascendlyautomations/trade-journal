@@ -21,6 +21,8 @@ export const ROOM_MESSAGE_SELECT_SHAPE = `
   trade_id,
   content,
   image_url,
+  audio_url,
+  audio_duration_ms,
   created_at,
   trades!room_messages_trade_id_fkey (
     id
@@ -50,6 +52,8 @@ export const ROOM_MESSAGE_SELECT_COMPACT = `
   trade_id,
   content,
   image_url,
+  audio_url,
+  audio_duration_ms,
   created_at,
   trades!room_messages_trade_id_fkey ( id ),
   profiles ( username, avatar_url ),

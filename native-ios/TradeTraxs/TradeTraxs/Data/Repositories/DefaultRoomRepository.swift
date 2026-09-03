@@ -259,6 +259,37 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
             return mapped
         }
 
+        if let audio = message.media.first(where: { $0.kind == .audio }) {
+            struct VoiceBody: Encodable {
+                var room_id: String
+                var user_id: String
+                var type: String
+                var content: String
+                var audio_url: String
+                var audio_duration_ms: Int?
+                var section_id: String?
+            }
+            let durationMs = message.media.first?.altText.flatMap { Double($0) }.map {
+                Int(($0 * 1_000).rounded())
+            }
+            let body = VoiceBody(
+                room_id: message.roomID.rawValue,
+                user_id: message.senderProfileID.rawValue,
+                type: "voice",
+                content: "",
+                audio_url: audio.id,
+                audio_duration_ms: durationMs,
+                section_id: message.channelID?.rawValue
+            )
+            let dto: RoomDTO.Message = try await supabase.database.insert(
+                body,
+                into: "room_messages",
+                returning: RoomDTO.Message.self
+            )
+            guard let mapped = mapMessage(dto) else { return message }
+            return mapped
+        }
+
         struct Body: Encodable {
             var room_id: String
             var user_id: String
@@ -425,7 +456,13 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
             return trimmed.isEmpty ? nil : TradeID(trimmed)
         }
         let imageURL = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let audioURL = dto.audio_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let voiceDuration = dto.audio_duration_ms.map { Double($0) / 1_000.0 }
+        let isVoice = dto.type?.lowercased() == "voice" || !(audioURL?.isEmpty ?? true)
         let media: [MediaReference] = {
+            if let audioURL, !audioURL.isEmpty {
+                return [MediaReference(id: audioURL, kind: .audio, altText: voiceDuration.map { String($0) })]
+            }
             guard let imageURL, !imageURL.isEmpty else { return [] }
             return [MediaReference(id: imageURL, kind: .image, altText: nil)]
         }()
@@ -433,7 +470,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
             id: RoomMessageID(id),
             roomID: RoomID(roomID),
             senderProfileID: ProfileID(sender),
-            body: dto.body ?? dto.content,
+            body: isVoice ? nil : (dto.body ?? dto.content),
             attachedTradeID: tradeID,
             media: media,
             parentMessageID: dto.parent_message_id.map { RoomMessageID($0) },

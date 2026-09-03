@@ -46,6 +46,7 @@ nonisolated enum ContentVisibility: String, Hashable, Codable, Sendable {
 nonisolated enum MediaKind: String, Hashable, Codable, Sendable {
     case image
     case video
+    case audio
     case file
 }
 

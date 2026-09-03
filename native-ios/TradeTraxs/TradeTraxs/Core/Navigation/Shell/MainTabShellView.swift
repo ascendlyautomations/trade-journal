@@ -62,8 +62,7 @@ struct MainTabShellView: View {
                 )
             }
 
-            // Profile tab uses a Label so we can swap in the session avatar UIImage
-            // (alwaysOriginal + pre-clipped). Falls back to the SF Symbol when unset.
+            // Profile tab — circular session avatar when available; SF Symbol fallback.
             Tab(value: TabIdentifier.profile) {
                 ProfileNavigationStack(
                     store: store,
@@ -75,11 +74,10 @@ struct MainTabShellView: View {
                 Label {
                     Text(TabIdentifier.profile.displayName)
                 } icon: {
-                    if let avatar = currentUserProfile.tabBarAvatarUIImage {
-                        Image(uiImage: avatar)
-                    } else {
-                        Image(systemName: TabIdentifier.profile.systemImage)
-                    }
+                    ProfileTabBarIcon(
+                        tabAvatar: currentUserProfile.tabBarAvatarUIImage,
+                        isSelected: store.selectedTab == .profile
+                    )
                 }
             }
         }
@@ -162,11 +160,52 @@ struct HomeNavigationStack: View {
         case .payouts:
             PayoutsScreenView(data: appEnvironment.data)
         case .report(let reportID):
-            ReportDetailView(
-                reportID: reportID,
+            if PsychologyReportPeriodRef.parse(reportID: reportID) != nil {
+                PsychologyReportDetailView(reportID: reportID, data: appEnvironment.data)
+            } else {
+                ReportDetailView(
+                    reportID: reportID,
+                    data: appEnvironment.data,
+                    navigationCoordinator: coordinator
+                )
+            }
+        case .checkInHistory:
+            CheckInHistoryView(data: appEnvironment.data, navigationCoordinator: coordinator)
+        case .checkInDay(let dateKey):
+            CheckInDayDetailView(
+                dateKey: dateKey,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .psychologyAnalytics:
+            if let report = PsychologyAnalyticsSessionStore.shared.report {
+                PsychologyAnalyticsDetailView(
+                    report: report,
+                    highlightedSectionID: PsychologyAnalyticsSessionStore.shared.highlightedSectionID,
+                    onOpenCoach: {
+                        coordinator.pushHome(.psychologyCoach)
+                    },
+                    onOpenCheckInHistory: {
+                        coordinator.pushHome(.checkInHistory)
+                    }
+                )
+            } else {
+                ExperienceEmptyState(
+                    icon: .chart,
+                    title: "No analytics yet",
+                    message: "Return to Dashboard after logging more trades and check-ins."
+                )
+            }
+        case .psychologyCoach:
+            if let facts = PsychologyCoachSessionStore.shared.facts {
+                PsychologyCoachView(facts: facts, ai: appEnvironment.data.ai)
+            } else {
+                ExperienceEmptyState(
+                    icon: .chart,
+                    title: "Coach unavailable",
+                    message: "Open Psychology Analytics from Dashboard first."
+                )
+            }
         case .settings(let settingsRoute):
             SettingsDestinationView(
                 route: settingsRoute,
@@ -201,6 +240,10 @@ struct HomeNavigationStack: View {
         case .reports: return "Reports"
         case .payouts: return "Payouts"
         case .report: return "Report"
+        case .psychologyAnalytics: return "Psychology Analytics"
+        case .psychologyCoach: return "Psychology Coach"
+        case .checkInHistory: return "Check-In History"
+        case .checkInDay: return "Daily Check-In"
         case .settings(let route): return route.title
         }
     }
@@ -606,5 +649,39 @@ private struct CreateTabPlaceholder: View {
         Color.clear
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityHidden(true)
+    }
+}
+
+/// Bottom-tab profile glyph — reuses the session avatar cache from ``CurrentUserProfileStore``.
+///
+/// Tab labels propose a very large size to custom icon views. A bare `Image.resizable()`
+/// expands to fill that proposal (giant rectangle). Hard-cap the layout at 28×28 and use the
+/// pre-clipped `tabBarAvatarUIImage` bitmap so the icon has a fixed intrinsic size.
+private struct ProfileTabBarIcon: View {
+    let tabAvatar: UIImage?
+    let isSelected: Bool
+
+    @Environment(\.themeColors) private var colors
+
+    private let size: CGFloat = 28
+
+    var body: some View {
+        ZStack {
+            if let tabAvatar {
+                Image(uiImage: tabAvatar)
+            } else {
+                Image(systemName: TabIdentifier.profile.systemImage)
+            }
+        }
+        .frame(width: size, height: size)
+        .fixedSize()
+        .overlay {
+            if tabAvatar != nil, isSelected {
+                Circle()
+                    .strokeBorder(colors.accent, lineWidth: 1.5)
+                    .frame(width: size, height: size)
+            }
+        }
+        .accessibilityHidden(true)
     }
 }

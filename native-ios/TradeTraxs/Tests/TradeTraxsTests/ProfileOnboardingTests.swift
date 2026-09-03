@@ -98,14 +98,20 @@ final class ProfileOnboardingTests: XCTestCase {
         XCTAssertTrue(repo.storedSnapshot?.onboardingCompleted == true)
     }
 
-    func testUsernameConflictSurfacesError() async throws {
-        let repo = RecordingOnboardingProfileRepository()
-        repo.usernameTaken = true
-        let profileID = ProfileID(UUID().uuidString)
-        repo.storedSnapshot = ProfileOnboardingSnapshot(profileID: profileID, onboardingCompleted: false)
+    func testUsernameConflictDetectsPostgRESTValidation() {
+        let error = NetworkError.validation(
+            statusCode: 409,
+            message: #"{"code":"23505","details":"Key (username)=(alex) already exists."}"#
+        )
+        XCTAssertTrue(ProfileUsernamePolicy.isProfilesUsernameConflict(error))
+        XCTAssertTrue(ProfileUsernamePolicy.isProfilesUsernameConflict(AppError.transport(error)))
+    }
 
-        let taken = try await repo.isUsernameTaken("alex_m", excluding: profileID)
-        XCTAssertTrue(taken)
+    func testUsernameConflictMessage() {
+        XCTAssertEqual(
+            ProfileOnboardingErrorMapping.usernameConflictMessage,
+            "That username is already taken. Try another one."
+        )
     }
 
     @MainActor
@@ -130,11 +136,7 @@ final class ProfileOnboardingTests: XCTestCase {
             )
         )
 
-        let vm = ProfileOnboardingViewModel(
-            snapshot: repo.storedSnapshot!,
-            profiles: repo,
-            gateStore: gate
-        )
+        let vm = makeOnboardingViewModel(snapshot: repo.storedSnapshot!, profiles: repo, gateStore: gate)
         vm.username = "jamie_t"
         vm.tradingStyle = "Swing"
         vm.traderType = .options
@@ -171,11 +173,7 @@ final class ProfileOnboardingTests: XCTestCase {
             )
         )
 
-        let vm = ProfileOnboardingViewModel(
-            snapshot: repo.storedSnapshot!,
-            profiles: repo,
-            gateStore: gate
-        )
+        let vm = makeOnboardingViewModel(snapshot: repo.storedSnapshot!, profiles: repo, gateStore: gate)
         vm.username = "jamie_t"
         vm.tradingStyle = "Swing"
         vm.traderType = .options
@@ -188,6 +186,49 @@ final class ProfileOnboardingTests: XCTestCase {
         } else {
             XCTAssertNotNil(vm.errorMessage)
         }
+    }
+
+    @MainActor
+    func testUsernameConflictPreservesFormAndShowsFieldError() async {
+        let profileID = ProfileID(UUID().uuidString)
+        let repo = RecordingOnboardingProfileRepository()
+        repo.shouldFailWithUsernameConflict = true
+        repo.storedSnapshot = ProfileOnboardingSnapshot(
+            profileID: profileID,
+            onboardingCompleted: false
+        )
+        let gate = ProfileOnboardingGateStore(
+            profiles: repo,
+            session: FixedSessionProvider(userID: UserID(profileID.rawValue)),
+            rpc: nil,
+            detailCache: nil,
+            realtimeHub: nil,
+            profileStore: CurrentUserProfileStore(
+                profiles: repo,
+                session: FixedSessionProvider(userID: UserID(profileID.rawValue)),
+                imagePipeline: PlaceholderImagePipeline()
+            )
+        )
+
+        let vm = makeOnboardingViewModel(snapshot: repo.storedSnapshot!, profiles: repo, gateStore: gate)
+        vm.username = "taken_name"
+        vm.tradingStyle = "Swing"
+        vm.traderType = .options
+        vm.startedTrading = "2019-01-01"
+        vm.bio = "Still here"
+
+        await vm.submit()
+
+        if case .complete = gate.phase {
+            XCTFail("Gate should remain incomplete after username conflict")
+        }
+        XCTAssertEqual(vm.usernameError, ProfileOnboardingErrorMapping.usernameConflictMessage)
+        XCTAssertNil(vm.errorMessage)
+        XCTAssertEqual(vm.tradingStyle, "Swing")
+        XCTAssertEqual(vm.traderType, .options)
+        XCTAssertEqual(vm.startedTrading, "2019-01-01")
+        XCTAssertEqual(vm.bio, "Still here")
+        XCTAssertFalse(repo.storedSnapshot?.onboardingCompleted == true)
     }
 
     func testWebCompletedUserBypassesGate() {
@@ -205,8 +246,8 @@ final class ProfileOnboardingTests: XCTestCase {
 
 private final class RecordingOnboardingProfileRepository: ProfileRepository, @unchecked Sendable {
     var storedSnapshot: ProfileOnboardingSnapshot?
-    var usernameTaken = false
     var shouldFailCompletion = false
+    var shouldFailWithUsernameConflict = false
     var lastCompletedUsername: String?
 
     func currentUser() async throws -> User { throw AppError.notImplemented(feature: "currentUser") }
@@ -235,10 +276,18 @@ private final class RecordingOnboardingProfileRepository: ProfileRepository, @un
     }
 
     func isUsernameTaken(_ username: String, excluding profileID: ProfileID) async throws -> Bool {
-        usernameTaken
+        false
     }
 
     func completeProfileOnboarding(_ submission: ProfileOnboardingSubmission) async throws -> Profile {
+        if shouldFailWithUsernameConflict {
+            throw AppError.transport(
+                .validation(
+                    statusCode: 409,
+                    message: #"{"code":"23505","details":"Key (username)=(taken_name) already exists."}"#
+                )
+            )
+        }
         if shouldFailCompletion {
             throw AppError.unknown(message: "Write failed")
         }
@@ -273,4 +322,38 @@ private struct FixedSessionProvider: SessionProviding {
     let userID: UserID
     var currentUserID: UserID? { get async { userID } }
     var accessToken: String? { get async { "token" } }
+}
+
+@MainActor
+private func makeOnboardingViewModel(
+    snapshot: ProfileOnboardingSnapshot,
+    profiles: any ProfileRepository,
+    gateStore: ProfileOnboardingGateStore
+) -> ProfileOnboardingViewModel {
+    ProfileOnboardingViewModel(
+        snapshot: snapshot,
+        profiles: profiles,
+        gateStore: gateStore,
+        uploadService: OnboardingStubUploadService(),
+        objectStorage: OnboardingStubObjectStorage(),
+        appConfiguration: AppConfiguration.make(for: .debug)
+    )
+}
+
+private struct OnboardingStubUploadService: UploadService {
+    func upload(_ request: UploadRequest) async throws -> MediaReference {
+        MediaReference(id: request.path, kind: .image, altText: nil)
+    }
+}
+
+private struct OnboardingStubObjectStorage: ObjectStorageProviding {
+    func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String {
+        path
+    }
+
+    func download(bucket: String, path: String) async throws -> Data { Data() }
+    func delete(bucket: String, path: String) async throws {}
+    func publicURL(bucket: String, path: String) -> URL? {
+        URL(string: "https://example.test/storage/v1/object/public/\(bucket)/\(path)")
+    }
 }

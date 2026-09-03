@@ -25,6 +25,7 @@ export function truncatePushPreview(
 export function buildDirectMessagePushPreview(message: {
   content?: string | null
   image_url?: string | null
+  audio_url?: string | null
   type?: string | null
   deleted_for_everyone?: boolean | null
   is_system?: boolean | null
@@ -35,6 +36,8 @@ export function buildDirectMessagePushPreview(message: {
   const type = String(message.type ?? "").trim()
 
   if (type === "trade") return "Shared a trade"
+
+  if (type === "voice" || message.audio_url?.trim()) return "Voice message"
 
   if (type === "story_reply") {
     const text = storyReplyPreviewText(message.content, "").trim()

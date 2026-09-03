@@ -145,28 +145,38 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
     func isUsernameTaken(_ username: String, excluding profileID: ProfileID) async throws -> Bool {
         let normalized = ProfileUsernamePolicy.normalize(username)
         guard !normalized.isEmpty else { return false }
+
         guard let transport = supabase.transport else {
             throw AppError.unknown(message: "Network transport unavailable")
         }
-        let params = ProfileDTO.UsernameAvailabilityParams(check_username: normalized)
-        let data = try await supabase.database.rpcData(
-            functionName: "profile_username_is_taken",
-            parametersJSON: try transport.encodeJSON(params)
+
+        let body = try transport.encodeJSON(
+            ProfileDTO.UsernameAvailabilityParams(check_username: normalized)
         )
-        if let taken = try? JSONDecoder().decode(Bool.self, from: data) {
-            if !taken { return false }
-            // RPC says taken — still verify it is not the current profile.
+
+        let response = try await transport.send(
+            host: .supabase,
+            path: "/rest/v1/rpc/profile_username_is_taken",
+            method: .post,
+            body: body
+        )
+
+        return try parseUsernameAvailabilityRPC(response.data)
+    }
+
+    private func parseUsernameAvailabilityRPC(_ data: Data) throws -> Bool {
+        if data.isEmpty {
+            throw AppError.unknown(message: "Empty username availability RPC response")
         }
-        let rows: [ProfileDTO.OnboardingFields] = try await supabase.database.select(
-            ProfileDTO.OnboardingFields.self,
-            from: "profiles",
-            query: [
-                SupabaseQuery.select("id,username"),
-                SupabaseQuery.eq("username", normalized),
-            ]
-        )
-        guard let match = rows.first, let ownerID = match.id else { return false }
-        return ProfileID(ownerID) != profileID
+        if let taken = try? JSONDecoder().decode(Bool.self, from: data) {
+            return taken
+        }
+        let raw = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if raw == "true" { return true }
+        if raw == "false" { return false }
+        let preview = raw.count > 120 ? String(raw.prefix(120)) + "…" : raw
+        throw AppError.unknown(message: "Unexpected username availability response: \(preview)")
     }
 
     func completeProfileOnboarding(_ submission: ProfileOnboardingSubmission) async throws -> Profile {
@@ -181,13 +191,18 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             avatar_url: submission.avatarURL,
             onboarding_completed: true
         )
-        let dto: ProfileDTO.Profile = try await supabase.database.update(
-            body,
-            table: "profiles",
-            query: [SupabaseQuery.eq("id", submission.profileID.rawValue)],
-            returning: ProfileDTO.Profile.self
-        )
-        let profile = try ProfileMapper.mapToDomain(dto)
+        do {
+            try await supabase.database.update(
+                body,
+                table: "profiles",
+                query: [SupabaseQuery.eq("id", submission.profileID.rawValue)]
+            )
+        } catch {
+            ProfileOnboardingErrorMapping.debugStage("profiles.update", error: error)
+            throw error
+        }
+
+        let profile = try await profile(id: submission.profileID)
         cache.memory.set(profile, forKey: "profile:\(profile.id.rawValue)")
         cache.memory.remove(forKey: "profile-stats:\(profile.id.rawValue)")
         Task {
@@ -220,6 +235,35 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         cache.memory.set(updated, forKey: "profile:\(updated.id.rawValue)")
         cache.memory.remove(forKey: "profile-stats:\(updated.id.rawValue)")
         return updated
+    }
+
+    func ownerDmPrivacy() async throws -> DmPrivacy {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let dto: ProfileDTO.DmPrivacyRow = try await supabase.database.selectOne(
+            ProfileDTO.DmPrivacyRow.self,
+            from: "profiles",
+            query: [
+                SupabaseQuery.select("dm_privacy"),
+                SupabaseQuery.eq("id", userID.rawValue),
+            ]
+        )
+        return DmPrivacy.parse(dto.dm_privacy)
+    }
+
+    func updateDmPrivacy(_ privacy: DmPrivacy) async throws -> DmPrivacy {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let body = ProfileDTO.DmPrivacyUpdateBody(dm_privacy: privacy.rawValue)
+        let dto: ProfileDTO.DmPrivacyRow = try await supabase.database.update(
+            body,
+            table: "profiles",
+            query: [SupabaseQuery.eq("id", userID.rawValue)],
+            returning: ProfileDTO.DmPrivacyRow.self
+        )
+        return DmPrivacy.parse(dto.dm_privacy)
     }
 
     func stats(for profileID: ProfileID) async throws -> ProfileStats {

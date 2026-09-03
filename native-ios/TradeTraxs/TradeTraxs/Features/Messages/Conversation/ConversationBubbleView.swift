@@ -5,14 +5,24 @@ struct ConversationBubbleView: View {
     let item: ConversationBubbleItem
     let peerProfile: Profile?
     let imagePipeline: any ImagePipeline
+    var viewerProfileID: ProfileID? = nil
     var sharedTrade: Trade? = nil
     var reactionConfiguration: MessageReactionConfiguration? = nil
+    var canDelete: Bool = false
     var onRetry: (() -> Void)?
+    var onDelete: (() -> Void)?
+    var onSharedTradeTap: ((TradeID) -> Void)? = nil
+    var isSelectionMode: Bool = false
+    var isSelected: Bool = false
+    var onToggleSelection: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
         HStack(alignment: .bottom, spacing: ExperienceSpacing.xs) {
+            if isSelectionMode {
+                selectionCheckbox
+            }
             if item.isOutgoing {
                 Spacer(minLength: 48)
                 bubbleColumn(alignment: .trailing)
@@ -23,6 +33,11 @@ struct ConversationBubbleView: View {
             }
         }
         .padding(.horizontal, ExperienceSpacing.md)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard isSelectionMode else { return }
+            onToggleSelection?()
+        }
         .accessibilityIdentifier(
             item.isOutgoing ? "conversation.bubble.outgoing" : "conversation.bubble.incoming"
         )
@@ -54,34 +69,46 @@ struct ConversationBubbleView: View {
             }
             bubbleContent
             if item.showsTimestamp || item.sendState != .sent {
-                HStack(spacing: 6) {
-                    if item.sendState == .sending {
-                        Text("Sending…")
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                    } else if item.sendState == .failed {
-                        Button {
-                            onRetry?()
-                        } label: {
-                            Text("Failed · Tap to retry")
-                                .experienceStyle(.caption2, color: colors.warning)
-                        }
-                        .buttonStyle(.plain)
-                    } else if item.showsTimestamp {
-                        Text(ConversationThreadSupport.timeLabel(item.message.createdAt))
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                    }
+                timestampRow
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var timestampRow: some View {
+        HStack(spacing: 6) {
+            if item.sendState == .sending {
+                Text("Sending…")
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+            } else if item.sendState == .failed {
+                Button {
+                    onRetry?()
+                } label: {
+                    Text("Failed · Tap to retry")
+                        .experienceStyle(.caption2, color: colors.warning)
                 }
+                .buttonStyle(.plain)
+            } else if item.showsTimestamp {
+                Text(ConversationThreadSupport.timeLabel(item.message.createdAt))
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
             }
         }
     }
 
     @ViewBuilder
     private var bubbleContent: some View {
-        VStack(alignment: item.isOutgoing ? .trailing : .leading, spacing: ExperienceSpacing.xs) {
+        Group {
             if item.message.kind == .tradeShare,
                let tradeID = item.message.attachments.first?.tradeID
             {
                 tradeShareBubble(tradeID: tradeID)
+            } else if item.message.kind == .storyReply,
+                      let payload = StoryReplyMessageSupport.decode(from: item.message.body)
+            {
+                storyReplyBubble(payload: payload)
+            } else if let reference = item.voiceReference {
+                voiceBubble(reference: reference, duration: item.voiceDuration)
             } else if let reference = item.imageReference, item.message.kind != .tradeShare {
                 imageBubble(reference: reference)
             } else if let text = item.text {
@@ -92,7 +119,9 @@ struct ConversationBubbleView: View {
         }
         .opacity(item.sendState == .sending ? 0.72 : 1)
         .contextMenu {
-            bubbleContextMenu
+            if !isSelectionMode {
+                bubbleContextMenu
+            }
         }
     }
 
@@ -120,6 +149,13 @@ struct ConversationBubbleView: View {
                 Label("Retry", systemImage: "arrow.clockwise")
             }
         }
+        if canDelete {
+            Button(role: .destructive) {
+                onDelete?()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 
     private var showsInlineReactions: Bool {
@@ -127,23 +163,52 @@ struct ConversationBubbleView: View {
     }
 
     private func textBubble(text: String) -> some View {
-        VStack(alignment: item.isOutgoing ? .trailing : .leading, spacing: 0) {
-            Text(text)
-                .experienceStyle(
-                    .body,
-                    color: item.isOutgoing ? colors.onAccent : colors.primaryText
-                )
-                .multilineTextAlignment(item.isOutgoing ? .trailing : .leading)
-                .fixedSize(horizontal: false, vertical: true)
-            inlineReactionStrip(topPadding: 6)
+        let alignment: HorizontalAlignment = item.isOutgoing ? .trailing : .leading
+        return VStack(alignment: alignment, spacing: 0) {
+            ConversationMessageTextLayout(
+                maxWidth: bubbleMaxWidth,
+                horizontalAlignment: alignment
+            ) {
+                Text(text)
+                    .experienceStyle(
+                        .body,
+                        color: item.isOutgoing ? colors.onAccent : colors.primaryText
+                    )
+                    .multilineTextAlignment(item.isOutgoing ? .trailing : .leading)
+            }
+            if showsInlineReactions {
+                inlineReactionStrip(topPadding: 6)
+                    .frame(
+                        maxWidth: bubbleMaxWidth,
+                        alignment: Alignment(horizontal: alignment, vertical: .top)
+                    )
+            }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, ExperienceSpacing.sm + 2)
         .padding(.top, ExperienceSpacing.sm)
         .padding(.bottom, reactionBottomPadding)
-        .frame(maxWidth: bubbleMaxWidth, alignment: item.isOutgoing ? .trailing : .leading)
         .background(
             item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
             in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+        )
+    }
+
+    private func voiceBubble(reference: MediaReference, duration: TimeInterval?) -> some View {
+        VoiceMessageBubbleView(
+            messageID: item.id,
+            audioReference: reference,
+            durationSeconds: duration,
+            isOutgoing: item.isOutgoing
+        )
+    }
+
+    private func storyReplyBubble(payload: StoryReplyMessageSupport.Payload) -> some View {
+        StoryReplyMessageBubbleView(
+            payload: payload,
+            viewerProfileID: viewerProfileID,
+            isOutgoing: item.isOutgoing,
+            imagePipeline: imagePipeline
         )
     }
 
@@ -176,10 +241,28 @@ struct ConversationBubbleView: View {
     }
 
     private func tradeShareBubble(tradeID: TradeID) -> some View {
+        Group {
+            if isSelectionMode {
+                tradeShareBubbleContent(tradeID: tradeID)
+            } else {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    onSharedTradeTap?(tradeID)
+                } label: {
+                    tradeShareBubbleContent(tradeID: tradeID)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .accessibilityIdentifier("conversation.bubble.trade")
+    }
+
+    private func tradeShareBubbleContent(tradeID: TradeID) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             SharedTradeMessageCard(
                 trade: sharedTrade,
                 tradeID: tradeID,
+                imagePipeline: imagePipeline,
                 isOutgoing: item.isOutgoing,
                 includesBackground: false
             )
@@ -188,19 +271,17 @@ struct ConversationBubbleView: View {
         .padding(.horizontal, ExperienceSpacing.sm + 2)
         .padding(.top, ExperienceSpacing.sm)
         .padding(.bottom, reactionBottomPadding)
-        .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
+        .frame(maxWidth: tradeBubbleMaxWidth, alignment: .leading)
         .background(
             item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
             in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
         )
-        .accessibilityIdentifier("conversation.bubble.trade")
     }
 
     private var reactionsOnlyBubble: some View {
         inlineReactionStrip(topPadding: 0)
             .padding(.horizontal, ExperienceSpacing.sm + 2)
             .padding(.vertical, ExperienceSpacing.xs)
-            .frame(maxWidth: bubbleMaxWidth, alignment: item.isOutgoing ? .trailing : .leading)
             .background(
                 item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
                 in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
@@ -225,7 +306,25 @@ struct ConversationBubbleView: View {
         showsInlineReactions ? ExperienceSpacing.xs + 2 : ExperienceSpacing.sm
     }
 
-    private var bubbleMaxWidth: CGFloat { 260 }
+    /// Maximum bubble width (~72% of screen). Short messages stay intrinsic; long text wraps at this cap.
+    private var bubbleMaxWidth: CGFloat {
+        UIScreen.main.bounds.width * 0.72
+    }
+    private var tradeBubbleMaxWidth: CGFloat { min(280, UIScreen.main.bounds.width * 0.82) }
+
+    private var selectionCheckbox: some View {
+        Button {
+            onToggleSelection?()
+        } label: {
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.title3)
+                .foregroundStyle(isSelected ? colors.accent : colors.tertiaryText)
+                .frame(width: 28, height: 28)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isSelected ? "Selected" : "Not selected")
+        .accessibilityIdentifier("conversation.bubble.selection")
+    }
 }
 
 private struct ConversationPeerAvatarView: View {

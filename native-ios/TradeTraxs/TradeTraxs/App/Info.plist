@@ -29,7 +29,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>TradeTraxs needs the camera to record trading clips.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>TradeTraxs needs the microphone when recording trading clips.</string>
+	<string>TradeTraxs needs the microphone to record voice messages and trading clips.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

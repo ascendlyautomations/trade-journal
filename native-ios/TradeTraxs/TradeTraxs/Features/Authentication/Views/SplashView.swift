@@ -1,64 +1,28 @@
 import SwiftUI
 
-/// Branded cold-launch surface shown while session restore completes.
+/// Full-screen launch image shown while session restore / bootstrap resolves.
+///
+/// Matches ``LaunchScreen.storyboard`` — same `LaunchScreen` asset, `scaleAspectFill`,
+/// edge-to-edge (including safe areas). No spinner or overlaid branding.
 struct SplashView: View {
-    @Environment(\.themeColors) private var colors
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var appeared = false
+    /// Storyboard launch background — visible only if the image fails to load.
+    private static let launchBackground = Color(
+        red: 0.043137254901960784,
+        green: 0.12156862745098039,
+        blue: 0.22745098039215686
+    )
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    colors.backgroundPrimary,
-                    colors.backgroundSecondary,
-                    colors.accentMuted.opacity(0.35),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+        Self.launchBackground
             .ignoresSafeArea()
-
-            VStack(spacing: ExperienceSpacing.lg) {
-                ZStack {
-                    Circle()
-                        .fill(colors.accent.opacity(0.16))
-                        .frame(width: 108, height: 108)
-                        .scaleEffect(appeared ? 1 : 0.86)
-
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.system(size: 42, weight: .semibold))
-                        .foregroundStyle(colors.accent)
-                        .opacity(appeared ? 1 : 0.7)
-                }
-                .accessibilityHidden(true)
-
-                VStack(spacing: ExperienceSpacing.xs) {
-                    Text("TradeTraxs")
-                        .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                        .foregroundStyle(colors.primaryText)
-
-                    Text("Your trading journal")
-                        .experienceStyle(.subheadline, color: colors.secondaryText)
-                }
-                .opacity(appeared ? 1 : 0)
-                .offset(y: appeared ? 0 : 8)
-
-                ProgressView()
-                    .tint(colors.accent)
-                    .padding(.top, ExperienceSpacing.xl)
-                    .accessibilityLabel("Restoring session")
+            .overlay {
+                Image("LaunchScreen")
+                    .resizable()
+                    .scaledToFill()
+                    .accessibilityHidden(true)
             }
-        }
-        .onAppear {
-            ExperienceMotion.withAnimation(
-                ExperienceMotion.navigation,
-                reduceMotion: reduceMotion
-            ) {
-                appeared = true
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("TradeTraxs is launching")
+            .clipped()
+            .ignoresSafeArea()
+            .accessibilityLabel("TradeTraxs is launching")
     }
 }

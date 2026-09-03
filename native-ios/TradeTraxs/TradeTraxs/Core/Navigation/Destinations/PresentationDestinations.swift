@@ -10,6 +10,7 @@ enum SheetDestination: String, Identifiable, Hashable, Codable, Sendable {
     case shareToMessages
     case accountSwitcher
     case notificationPermission
+    case dailyCheckIn
 
     var id: String { rawValue }
 }

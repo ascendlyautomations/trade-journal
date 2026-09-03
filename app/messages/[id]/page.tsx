@@ -1,6 +1,9 @@
 "use client"
 
-import DmStyleComposer from "../../components/DmStyleComposer"
+import DmStyleComposer, {
+  type VoiceSendPayload,
+} from "../../components/DmStyleComposer"
+import VoiceMessageBubble from "@/app/components/messages/VoiceMessageBubble"
 import SharedTradeMessageCard from "@/app/components/SharedTradeMessageCard"
 import FeedPostScreenshot from "@/app/components/feed/FeedPostScreenshot"
 import {
@@ -94,6 +97,11 @@ import {
   type ReplyParentMessageLike,
   type ReplyTarget,
 } from "@/lib/replyReference"
+import {
+  isVoiceMessage,
+  uploadVoiceMessageBlob,
+} from "@/lib/voiceMessage"
+import { stopVoicePlayback } from "@/lib/voiceMessagePlayback"
 import {
   decodeStoryReplyContent,
   STORY_REPLY_MESSAGE_TYPE,
@@ -1369,6 +1377,7 @@ export default function DMPage() {
         content: message.content,
         type: message.type,
         image_url: message.image_url,
+        audio_url: message.audio_url,
         deleted_for_everyone: message.deleted_for_everyone,
         profiles: message.profiles,
       })
@@ -1492,9 +1501,16 @@ export default function DMPage() {
     return () => {
       messagesChannelRef.current = null
       setTypingUsers([])
+      stopVoicePlayback()
       supabase.removeChannel(channel)
     }
   }, [activeConversationId, pageAccess, setMessagesWithCache])
+
+  useEffect(() => {
+    return () => {
+      stopVoicePlayback()
+    }
+  }, [])
 
   useEffect(() => {
     const participantIds = new Set(participants.map((p: any) => p.user_id))
@@ -2718,6 +2734,159 @@ export default function DMPage() {
     }
   }
 
+  async function sendVoiceMessage(payload: VoiceSendPayload) {
+    if (isDemoModeActive()) {
+      requestDemoSignup("comment")
+      return
+    }
+    if (sendingMessageRef.current || sendingMessage) return
+    if (!user || pageAccess !== "allowed" || !activeConversationId) return
+    if (dmBlockStatus?.blockedByMe || dmBlockStatus?.blockedByOther) {
+      showPopup({
+        type: "error",
+        message: "Direct messaging is unavailable while this user is blocked.",
+      })
+      return
+    }
+    if (!payload.blob?.size) {
+      showPopup({
+        type: "error",
+        message: "Recording was empty. Please try again.",
+      })
+      return
+    }
+
+    const tempId = createOptimisticTempId("temp-voice")
+    const parentId = replyTargetRef.current?.id ?? null
+    const createdAt = new Date().toISOString()
+    const durationMs = Math.round(payload.durationMs)
+    const prevReply = replyTarget
+
+    setReplyTarget(null)
+    setIsTyping(false)
+
+    const optimisticRow: any = {
+      id: tempId,
+      conversation_id: activeConversationId,
+      sender_id: user.id,
+      content: "",
+      image_url: null,
+      audio_url: null,
+      audio_duration_ms: durationMs,
+      channel: null,
+      type: "voice",
+      created_at: createdAt,
+      parent_message_id: parentId,
+      client_temp_id: tempId,
+      send_status: "sending",
+      profiles: {
+        id: user.id,
+        username: null,
+        name: null,
+        avatar_url: null,
+      },
+    }
+
+    setMessagesWithCache((prev) => [...prev, optimisticRow])
+    requestScrollAfterLocalSend()
+
+    sendingMessageRef.current = true
+    setSendingMessage(true)
+
+    try {
+      const audioUrl = await uploadVoiceMessageBlob(
+        supabase,
+        user.id,
+        payload.blob,
+        payload.format
+      )
+
+      setMessagesWithCache((prev) =>
+        prev.map((m) =>
+          String(m.id) === tempId ? { ...m, audio_url: audioUrl } : m
+        )
+      )
+
+      const sendPayload = {
+        conversation_id: activeConversationId,
+        sender_id: user.id,
+        type: "voice" as const,
+        content: "",
+        audio_url: audioUrl,
+        audio_duration_ms: durationMs,
+        channel: null,
+        ...(parentId ? { parent_message_id: parentId } : {}),
+      }
+
+      const { data: insertedMessage, error: sendErr } = await supabase
+        .from("messages")
+        .insert(sendPayload)
+        .select("id")
+        .single()
+
+      if (sendErr) {
+        logSupabaseError("sendVoiceMessage insert", sendErr, {
+          table: "messages",
+          query: "insert",
+          payload: sendPayload,
+          userId: user.id,
+        })
+        setMessagesWithCache((prev) =>
+          markOptimisticMessageFailed(prev, tempId)
+        )
+        setReplyTarget(prevReply)
+        showPopup(dmSendFeedback(sendErr))
+        return
+      }
+
+      if (insertedMessage?.id) {
+        setMessagesWithCache((prev) =>
+          replaceOptimisticMessage(prev, tempId, {
+            ...optimisticRow,
+            id: insertedMessage.id,
+            audio_url: audioUrl,
+            send_status: "sent",
+            client_temp_id: undefined,
+          })
+        )
+        void createDirectMessagePush(supabase, String(insertedMessage.id))
+      }
+
+      const preview = previewFromMessage({
+        type: "voice",
+        audio_url: audioUrl,
+      })
+      const lastMessageAt = await updateConversationPreview(
+        supabase,
+        activeConversationId,
+        preview
+      )
+
+      dispatchConversationInboxPatch({
+        conversationId: activeConversationId,
+        last_message: preview,
+        last_message_at: lastMessageAt,
+      })
+    } catch (error) {
+      logSupabaseError(
+        "sendVoiceMessage upload",
+        error instanceof Error ? error : null,
+        {
+          userId: user.id,
+        }
+      )
+      setMessagesWithCache((prev) => markOptimisticMessageFailed(prev, tempId))
+      setReplyTarget(prevReply)
+      showPopup({
+        type: "error",
+        message: "Could not send this voice message. Please try again.",
+      })
+    } finally {
+      sendingMessageRef.current = false
+      setSendingMessage(false)
+    }
+  }
+
   async function handleSendTrade(trade: any) {
     if (isDemoModeActive()) {
       requestDemoSignup("comment")
@@ -3492,6 +3661,8 @@ export default function DMPage() {
               }
 
               const menuOpen = activeMenuId === message.id
+              const isVoice =
+                isVoiceMessage(message) && !message.deleted_for_everyone
 
               return (
                 <Fragment key={message.id}>
@@ -3523,9 +3694,14 @@ export default function DMPage() {
                         />
 
                         <div
-                          className={`p-3 rounded-xl overflow-visible ${
-                            isMe ? "bg-blue-500" : "bg-gray-700"
+                          className={`overflow-visible ${
+                            isVoice
+                              ? ""
+                              : `p-3 rounded-xl ${
+                                  isMe ? "bg-blue-500" : "bg-gray-700"
+                                }`
                           } ${
+                            !isVoice &&
                             isMe &&
                             (message.send_status === "sending" ||
                               message.send_status === "failed")
@@ -3545,7 +3721,24 @@ export default function DMPage() {
                                 onJumpToParent={scrollToDmMessage}
                                 onUnavailable={notifyReplyUnavailable}
                               />
-                              {message.image_url ? (
+                              {isVoice ? (
+                                message.audio_url ? (
+                                  <VoiceMessageBubble
+                                    messageId={String(message.id)}
+                                    audioUrl={message.audio_url}
+                                    durationMs={message.audio_duration_ms}
+                                    isOutgoing={isMe}
+                                  />
+                                ) : (
+                                  <div
+                                    className={`inline-flex min-w-[180px] items-center gap-2 rounded-xl px-3 py-2 text-xs opacity-80 ${
+                                      isMe ? "bg-blue-500" : "bg-gray-700"
+                                    }`}
+                                  >
+                                    Sending voice message…
+                                  </div>
+                                )
+                              ) : message.image_url ? (
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -3664,6 +3857,8 @@ export default function DMPage() {
                   }
                 }}
                 onSend={() => void sendMessage()}
+                onSendVoice={(payload) => void sendVoiceMessage(payload)}
+                voiceDisabled={sendingMessage || dmMessagingBlocked}
                 placeholder={
                   dmMessagingBlocked
                     ? "Direct messaging is unavailable"
@@ -3713,6 +3908,8 @@ export default function DMPage() {
                 }
               }}
               onSend={() => void sendMessage()}
+              onSendVoice={(payload) => void sendVoiceMessage(payload)}
+              voiceDisabled={sendingMessage || dmMessagingBlocked}
               placeholder={
                 dmMessagingBlocked
                   ? "Direct messaging is unavailable"

@@ -34,6 +34,17 @@ nonisolated enum TradeMapper: DTOMapper {
         let durationSeconds = DecimalParser.parseFlexible(dto.duration_seconds).map {
             Int(truncating: NSDecimalNumber(decimal: $0))
         }
+        let psychologyNotes = dto.psychology_notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let exitEmotion = dto.exit_emotion?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let emotion = dto.emotion?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let marketCondition = dto.market_condition?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let timeframe = dto.timeframe?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let confidence = DecimalParser.parseFlexible(dto.confidence).map {
+            Int(truncating: NSDecimalNumber(decimal: $0))
+        }
+        let executionRating = DecimalParser.parseFlexible(dto.execution_rating).map {
+            Int(truncating: NSDecimalNumber(decimal: $0))
+        }
         let publicBadge = PublicTradeAccountBadge.label(
             tradeMode: dto.mode,
             accountType: dto.account_type
@@ -59,11 +70,25 @@ nonisolated enum TradeMapper: DTOMapper {
             visibility: visibility,
             publicCaption: dto.public_description,
             thumbnail: imageURL.flatMap { $0.isEmpty ? nil : MediaReference(id: $0, kind: .image, altText: nil) },
-            // Longer preview for journal cards (Profile still line-limits).
+            imageDisplayMode: TradeScreenshotDisplayMode.resolve(dto.image_display_mode),
             notePreview: note.flatMap { $0.isEmpty ? nil : String($0.prefix(360)) },
+            notes: note.flatMap { $0.isEmpty ? nil : $0 },
             strategy: strategy.flatMap { $0.isEmpty ? nil : $0 },
+            timeframe: timeframe.flatMap { $0.isEmpty ? nil : $0 },
+            newsEvent: dto.news_event,
+            confidence: confidence.flatMap { $0 > 0 ? $0 : nil },
+            emotion: emotion.flatMap { $0.isEmpty ? nil : $0 },
+            followedPlan: dto.followed_plan,
+            marketCondition: marketCondition.flatMap { $0.isEmpty ? nil : $0 },
+            psychologyNotes: psychologyNotes.flatMap { $0.isEmpty ? nil : $0 },
+            exitEmotion: exitEmotion.flatMap { $0.isEmpty ? nil : $0 },
+            executionRating: executionRating.flatMap { $0 > 0 ? $0 : nil },
             durationText: durationText.flatMap { $0.isEmpty ? nil : $0 },
             durationSeconds: durationSeconds.flatMap { $0 > 0 ? $0 : nil },
+            reviewed: dto.reviewed,
+            isInitialImport: dto.is_initial_import,
+            importSource: mapImportSource(dto.import_source),
+            importFingerprint: dto.import_fingerprint,
             publicAccountBadge: publicBadge,
             createdAt: createdAt,
             updatedAt: createdAt
@@ -92,7 +117,7 @@ nonisolated enum TradeMapper: DTOMapper {
             is_pinned: nil,
             public_description: domain.publicCaption,
             image_url: domain.thumbnail?.id,
-            notes: domain.notePreview,
+            notes: domain.notes ?? domain.notePreview,
             created_at: ISO8601.string(from: domain.createdAt),
             date: ISO8601.string(from: domain.createdAt),
             trade_date: nil,
@@ -100,7 +125,70 @@ nonisolated enum TradeMapper: DTOMapper {
             strategy: domain.strategy,
             duration_seconds: domain.durationSeconds.map { FlexibleNumber(Decimal($0)) },
             duration_text: domain.durationText,
-            trade_mode: domain.mode == .copyTraded ? "copy_traded" : domain.mode.rawValue
+            trade_mode: domain.mode == .copyTraded ? "copy_traded" : domain.mode.rawValue,
+            confidence: domain.confidence.map { FlexibleNumber(Decimal($0)) },
+            emotion: domain.emotion,
+            followed_plan: domain.followedPlan,
+            market_condition: domain.marketCondition,
+            timeframe: domain.timeframe,
+            news_event: domain.newsEvent,
+            psychology_notes: domain.psychologyNotes,
+            exit_emotion: domain.exitEmotion,
+            execution_rating: domain.executionRating.map { FlexibleNumber(Decimal($0)) },
+            image_display_mode: domain.imageDisplayMode.rawValue,
+            reviewed: domain.reviewed,
+            is_initial_import: domain.isInitialImport,
+            import_source: domain.importSource?.rawValue,
+            import_fingerprint: domain.importFingerprint
+        )
+    }
+
+    private static func mapImportSource(_ raw: String?) -> TradeImportSource? {
+        guard let raw else { return nil }
+        return TradeImportSource(rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+
+    private static func durationFields(from draft: TradeDraft) -> (seconds: Int?, text: String?) {
+        if let seconds = draft.durationSeconds, let text = draft.durationText {
+            return (seconds, text)
+        }
+        if let computed = TradeHoldDuration.compute(entryAt: draft.entryAt, exitAt: draft.exitAt) {
+            return (computed.seconds, computed.text)
+        }
+        return (nil, nil)
+    }
+
+    private static func shouldMarkReviewed(previous: Trade?) -> Bool {
+        guard let previous else { return false }
+        return previous.isInitialImport == true && previous.reviewed != true
+    }
+
+    private static func psychologyDouble(from confidence: Int?) -> Double? {
+        guard let confidence, confidence > 0 else { return nil }
+        return Double(confidence)
+    }
+
+    private static func psychologyFields(from draft: TradeDraft) -> (
+        confidence: Double?,
+        emotion: String?,
+        followedPlan: Bool,
+        marketCondition: String?,
+        timeframe: String?,
+        newsEvent: Bool,
+        psychologyNotes: String?,
+        exitEmotion: String?,
+        executionRating: Int?
+    ) {
+        (
+            confidence: psychologyDouble(from: draft.confidence),
+            emotion: nilIfEmpty(draft.emotion),
+            followedPlan: draft.followedPlan,
+            marketCondition: nilIfEmpty(draft.marketCondition),
+            timeframe: nilIfEmpty(draft.timeframe),
+            newsEvent: draft.newsEvent,
+            psychologyNotes: nilIfEmpty(draft.psychologyNotes),
+            exitEmotion: nilIfEmpty(draft.exitEmotion),
+            executionRating: draft.executionRating.flatMap { $0 > 0 ? $0 : nil }
         )
     }
 
@@ -120,6 +208,8 @@ nonisolated enum TradeMapper: DTOMapper {
             mode: draft.ownerAccountMode,
             isPublic: isPublic
         )
+        let psychology = psychologyFields(from: draft)
+        let duration = durationFields(from: draft)
         return TradeDTO.InsertBody(
             user_id: userID.rawValue,
             account_id: draft.accountID?.rawValue,
@@ -145,13 +235,28 @@ nonisolated enum TradeMapper: DTOMapper {
             image_url: Self.nilIfEmpty(draft.imageURL),
             is_public: draft.visibility == .public,
             public_description: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            confidence: psychology.confidence,
+            emotion: psychology.emotion,
+            followed_plan: psychology.followedPlan,
+            market_condition: psychology.marketCondition,
+            timeframe: psychology.timeframe,
+            news_event: psychology.newsEvent,
+            psychology_notes: psychology.psychologyNotes,
+            exit_emotion: psychology.exitEmotion,
+            execution_rating: psychology.executionRating,
+            duration_seconds: duration.seconds,
+            duration_text: duration.text,
+            image_display_mode: draft.imageDisplayMode.rawValue,
             created_at: now,
-            date: now
+            date: now,
+            is_initial_import: nil,
+            import_source: draft.importSource?.rawValue,
+            import_fingerprint: draft.importFingerprint
         )
     }
 
     /// Web edit save — preserve `created_at`; write denormalized account columns like insert.
-    static func updateBody(from draft: TradeDraft, createdAt: Date) -> TradeDTO.UpdateBody {
+    static func updateBody(from draft: TradeDraft, createdAt: Date, previous: Trade? = nil) -> TradeDTO.UpdateBody {
         let tradeDate = TradingSessionLabel.easternTradeDateString(from: draft.entryAt)
         let session = draft.sessionLabel
             ?? TradingSessionLabel.session(from: draft.entryAt)
@@ -166,6 +271,9 @@ nonisolated enum TradeMapper: DTOMapper {
             mode: draft.ownerAccountMode,
             isPublic: isPublic
         )
+        let psychology = psychologyFields(from: draft)
+        let duration = durationFields(from: draft)
+        let markReviewed = shouldMarkReviewed(previous: previous)
         return TradeDTO.UpdateBody(
             account_id: draft.accountID?.rawValue,
             account_name: accountFields.accountName,
@@ -190,6 +298,19 @@ nonisolated enum TradeMapper: DTOMapper {
             image_url: draft.imageURL,
             is_public: draft.visibility == .public,
             public_description: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            confidence: psychology.confidence,
+            emotion: psychology.emotion,
+            followed_plan: psychology.followedPlan,
+            market_condition: psychology.marketCondition,
+            timeframe: psychology.timeframe,
+            news_event: psychology.newsEvent,
+            psychology_notes: psychology.psychologyNotes,
+            exit_emotion: psychology.exitEmotion,
+            execution_rating: psychology.executionRating,
+            duration_seconds: duration.seconds,
+            duration_text: duration.text,
+            image_display_mode: draft.imageDisplayMode.rawValue,
+            reviewed: markReviewed ? true : nil,
             created_at: ISO8601.string(from: createdAt)
         )
     }
@@ -297,6 +418,9 @@ nonisolated enum MessageMapper: DTOMapper {
         }
         let isTrade = (dto.type?.lowercased() == "trade") || tradeID != nil
         let imageURL = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let audioURL = dto.audio_url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isVoice = dto.type?.lowercased() == "voice" || !(audioURL?.isEmpty ?? true)
+        let voiceDuration = dto.audio_duration_ms.map { Double($0) / 1_000.0 }
         let attachments: [MessageAttachment] = {
             if let tradeID {
                 return [
@@ -304,6 +428,16 @@ nonisolated enum MessageMapper: DTOMapper {
                         id: tradeID.rawValue,
                         media: MediaReference(id: tradeID.rawValue, kind: .file, altText: "Shared trade"),
                         tradeID: tradeID
+                    ),
+                ]
+            }
+            if let audioURL, !audioURL.isEmpty {
+                return [
+                    MessageAttachment(
+                        id: audioURL,
+                        media: MediaReference(id: audioURL, kind: .audio, altText: nil),
+                        tradeID: nil,
+                        durationSeconds: voiceDuration
                     ),
                 ]
             }
@@ -318,6 +452,13 @@ nonisolated enum MessageMapper: DTOMapper {
         }()
         let kind: MessageKind = {
             if isTrade { return .tradeShare }
+            if isVoice { return .voice }
+            if StoryReplyMessageSupport.isStoryReply(
+                type: dto.type,
+                content: dto.body ?? dto.content
+            ) {
+                return .storyReply
+            }
             if let raw = dto.kind, let parsed = MessageKind(rawValue: raw) { return parsed }
             return attachments.isEmpty ? .text : .media
         }()

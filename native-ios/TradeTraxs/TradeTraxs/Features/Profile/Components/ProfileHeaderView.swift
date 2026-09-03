@@ -24,6 +24,18 @@ struct ProfileHeaderView: View {
             value: store.phase
         )
         .confirmationDialog(
+            viewModel.blockConfirmationTitle,
+            isPresented: $viewModel.showsBlockConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(viewModel.blockedByMe ? "Unblock" : "Block", role: viewModel.blockedByMe ? nil : .destructive) {
+                Task { await viewModel.confirmBlockToggle() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(viewModel.blockConfirmationMessage)
+        }
+        .confirmationDialog(
             "Unfollow @\(store.profile?.username ?? "")?",
             isPresented: $viewModel.pendingUnfollowConfirm,
             titleVisibility: .visible
@@ -64,7 +76,8 @@ struct ProfileHeaderView: View {
                 onFollow: viewModel.followAction,
                 onMessage: viewModel.openMessage,
                 onTradeRoom: viewModel.openTradeRoom,
-                isMessaging: viewModel.isOpeningMessage
+                isMessaging: viewModel.isOpeningMessage,
+                canMessage: viewModel.canMessage
             )
         }
         .sheet(isPresented: $viewModel.isSharePresented) {

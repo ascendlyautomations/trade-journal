@@ -14,6 +14,7 @@ export type ReplyParentMessageLike = {
   content?: string | null
   type?: string | null
   image_url?: string | null
+  audio_url?: string | null
   deleted_for_everyone?: boolean | null
   profiles?: ReplyParentProfile | ReplyParentProfile[] | null
 }
@@ -64,7 +65,7 @@ export function replyAuthorLabel(
 export function previewTextFromMessage(
   message: Pick<
     ReplyParentMessageLike,
-    "content" | "type" | "image_url" | "deleted_for_everyone"
+    "content" | "type" | "image_url" | "audio_url" | "deleted_for_everyone"
   >
 ): string {
   if (message.deleted_for_everyone) return "Message deleted"
@@ -74,6 +75,7 @@ export function previewTextFromMessage(
   }
   if (type === "trade") return "Shared a trade"
   if (type === "post" || type === "profile_post") return "Shared a post"
+  if (type === "voice" || message.audio_url?.trim()) return "Voice message"
   if (message.image_url?.trim()) {
     const caption = message.content?.trim()
     if (caption) return truncateReplyPreview(caption)

@@ -82,6 +82,31 @@ final class ConversationMessageMergeTests: XCTestCase {
         XCTAssertEqual(merged.last?.body, "new-updated")
     }
 
+    func testReconcileServerFirstPagePreservesLocallyNewerRows() {
+        let staleBootstrap = makeMessage(id: "peer-old", body: "Hello", sender: peer, at: 100, read: true)
+        let localSend = makeMessage(id: "server-msg", body: "unique-dm", sender: viewer, at: 500, read: true)
+
+        let reconciled = ConversationMessageMerge.reconcileServerFirstPage(
+            existing: [localSend],
+            incoming: [staleBootstrap]
+        )
+
+        XCTAssertEqual(reconciled.map(\.id.rawValue), ["peer-old", "server-msg"])
+    }
+
+    func testReconcileServerFirstPageDropsSoftDeletedRowsInWindow() {
+        let older = makeMessage(id: "old", body: "old", sender: peer, at: 50, read: true)
+        let deleted = makeMessage(id: "gone", body: "deleted", sender: viewer, at: 150, read: true)
+        let kept = makeMessage(id: "kept", body: "still here", sender: peer, at: 160, read: true)
+
+        let reconciled = ConversationMessageMerge.reconcileServerFirstPage(
+            existing: [older, deleted, kept],
+            incoming: [older, kept]
+        )
+
+        XCTAssertEqual(reconciled.map(\.id.rawValue), ["old", "kept"])
+    }
+
     func testPreservesAttachmentsWhenIncomingIsThin() {
         let rich = Message(
             id: MessageID("m1"),

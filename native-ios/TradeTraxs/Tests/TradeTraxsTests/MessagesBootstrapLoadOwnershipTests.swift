@@ -332,6 +332,14 @@ private struct StubMessageRepository: MessageRepository {
     func markRead(conversationID: ConversationID) async throws {}
     func markUnread(conversationID: ConversationID) async throws {}
     func deleteConversation(id: ConversationID) async throws {}
+
+    func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws {}
+
+    func setConversationNotificationsEnabled(
+        conversationID: ConversationID,
+        enabled: Bool
+    ) async throws {}
+
     func createConversation(participantIDs: [ProfileID]) async throws -> Conversation {
         throw AppError.notImplemented(feature: "create")
     }
