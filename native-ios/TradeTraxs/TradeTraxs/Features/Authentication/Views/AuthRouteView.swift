@@ -19,17 +19,11 @@ struct AuthRouteView: View {
             ResetPasswordView(authenticationCoordinator: authenticationCoordinator)
         case .onboarding:
             OnboardingView(navigationCoordinator: navigationCoordinator)
-        case .choosePlan:
-            AuthPlanPlaceholderView(
-                title: "Choose your plan",
-                message: "Plan selection arrives with Billing. Continue to sign in for now.",
-                navigationCoordinator: navigationCoordinator
-            )
-        case .finishTrial:
-            AuthPlanPlaceholderView(
-                title: "Finish your trial",
-                message: "Trial checkout arrives with Billing. Continue to sign in for now.",
-                navigationCoordinator: navigationCoordinator
+        case .choosePlan, .finishTrial:
+            LoginView(
+                authenticationCoordinator: authenticationCoordinator,
+                navigationCoordinator: navigationCoordinator,
+                allowsDevelopmentBypass: allowsDevelopmentBypass
             )
         }
     }

@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import UIKit
 
 @Observable
 @MainActor
@@ -24,27 +23,34 @@ final class SettingsSubscriptionViewModel {
 
     var planTitle: String {
         guard let status else { return "—" }
-        switch status.lifecycle {
-        case .trialing: return "TraxPro Trial"
-        case .active where status.plan == .pro: return "TraxPro"
-        case .pastDue: return "TraxPro (Past Due)"
-        case .canceled: return "Canceled"
-        case .expired: return "Expired"
-        default: return status.plan == .pro ? "TraxPro" : "Free"
-        }
+        return status.hasTraxProAccess ? "TraxPro" : "Free"
     }
 
-    var statusTitle: String {
-        guard let status else { return "—" }
-        switch status.lifecycle {
-        case .trialing: return "Trialing"
-        case .active: return "Active"
-        case .pastDue: return "Past due"
-        case .canceled: return "Canceled"
-        case .expired: return "Expired"
-        case .none: return status.isProEntitled ? "Active" : "Free"
-        }
+    var showsProMembership: Bool {
+        status?.hasTraxProAccess == true
     }
+
+    var showsFreePlanDetails: Bool {
+        guard let status else { return false }
+        return !status.hasTraxProAccess
+    }
+
+    var membershipSummaryFooter: String {
+        guard let status else {
+            return "Your plan details appear here when you're signed in."
+        }
+        if status.hasTraxProAccess {
+            return "Your account has access to TraxPro features."
+        }
+        return "Your account is currently on the Free plan."
+    }
+
+    let traxProFeatureHighlights: [String] = [
+        "Trade AI analysis on your trades",
+        "Higher daily trade, post, and message limits",
+        "More active trading accounts",
+        "Advanced psychology and analytics tools",
+    ]
 
     func loadIfNeeded() {
         guard !hasLoaded else { return }
@@ -55,7 +61,7 @@ final class SettingsSubscriptionViewModel {
     func refresh() async {
         isLoading = status == nil
         guard let userID = await session.currentUserID else {
-            errorMessage = "Sign in to view your subscription."
+            errorMessage = "Sign in to view your plan."
             isLoading = false
             return
         }
@@ -81,13 +87,5 @@ final class SettingsSubscriptionViewModel {
             }
         }
         isLoading = false
-    }
-
-    func openUpgrade() {
-        ExperienceHaptics.play(.selection)
-        // Native StoreKit upgrade is not shipped yet — open web pricing (same as web upsell).
-        if let url = URL(string: "https://www.tradetraxs.com/pricing") {
-            UIApplication.shared.open(url)
-        }
     }
 }

@@ -64,7 +64,7 @@ struct CalendarHomeView: View {
 
     private var content: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 header
                 if let month = viewModel.month {
                     CalendarMonthGrid(month: month, selectedDayKey: nil) { dayKey in
@@ -84,7 +84,7 @@ struct CalendarHomeView: View {
                 }
             }
             .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.bottom, ExperienceSpacing.xl)
+            .padding(.bottom, ExperienceSpacing.lg)
         }
     }
 
@@ -95,6 +95,7 @@ struct CalendarHomeView: View {
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.body.weight(.semibold))
+                    .foregroundStyle(colors.primaryText)
                     .frame(width: 36, height: 36)
                     .background(colors.fillSecondary, in: Circle())
             }
@@ -110,7 +111,7 @@ struct CalendarHomeView: View {
                 Button("Today") {
                     viewModel.goToCurrentMonth()
                 }
-                .font(.caption.weight(.semibold))
+                .font(.system(.caption, design: .default).weight(.semibold))
                 .foregroundStyle(colors.accent)
             }
 
@@ -121,6 +122,7 @@ struct CalendarHomeView: View {
             } label: {
                 Image(systemName: "chevron.right")
                     .font(.body.weight(.semibold))
+                    .foregroundStyle(colors.primaryText)
                     .frame(width: 36, height: 36)
                     .background(colors.fillSecondary, in: Circle())
             }
@@ -128,6 +130,7 @@ struct CalendarHomeView: View {
             .experienceTouchTarget()
             .accessibilityLabel("Next month")
         }
+        .padding(.bottom, ExperienceSpacing.xxs)
         .accessibilityIdentifier("calendar.header")
     }
 
@@ -151,13 +154,11 @@ struct CalendarHomeView: View {
         ) {
             HStack(spacing: 4) {
                 Text(viewModel.accountFilterToolbarTitle)
-                    .font(.subheadline.weight(.semibold))
+                    .experienceStyle(.footnote, color: colors.accent)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
+                ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.accent)
             }
-            .foregroundStyle(colors.accent)
         }
         .accessibilityLabel("Account")
         .accessibilityValue(viewModel.accountFilterTitle)

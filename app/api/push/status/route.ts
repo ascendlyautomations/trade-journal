@@ -1,5 +1,6 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { getApnsRuntimeInfo } from "@/lib/server/push/apns"
+import { redactDeviceToken } from "@/lib/server/push/deviceTokenRedaction"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -33,13 +34,13 @@ export async function GET(req: Request) {
     appVersion: row.app_version ?? null,
   }))
 
-  // TEMPORARY [tt-push-debug]
-  console.info("[tt-push-debug] push status", {
+  console.info("[api/push/status]", {
     userId: user.id,
     tokenCount: tokens.length,
-    deviceTokens: tokens.map((t) => t.deviceToken),
+    deviceTokenPrefixes: tokens.map((t) => redactDeviceToken(t.deviceToken)),
     apnsEnvironment: apns.production ? "production" : "sandbox",
     bundleId: apns.bundleId,
+    apnsConfigured: apns.configured,
   })
 
   return Response.json({
@@ -52,10 +53,5 @@ export async function GET(req: Request) {
     },
     deviceTokenCount: tokens.length,
     readyToDeliver: apns.configured && tokens.length > 0,
-    // TEMPORARY [tt-push-debug] — full tokens for phone↔DB comparison.
-    debug: {
-      userId: user.id,
-      tokens,
-    },
   })
 }

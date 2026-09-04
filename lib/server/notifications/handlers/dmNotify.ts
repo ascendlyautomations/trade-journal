@@ -155,6 +155,7 @@ export async function notifyDmMessage(
   if (messageType === "story_reply") {
     preferenceKey = "story_replies_enabled"
   } else if (
+    messageType === "story_share" ||
     messageType === "trade" ||
     messageType === "post" ||
     messageType === "profile_post" ||

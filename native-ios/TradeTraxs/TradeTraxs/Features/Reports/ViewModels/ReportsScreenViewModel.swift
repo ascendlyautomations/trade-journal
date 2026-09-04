@@ -9,7 +9,9 @@ final class ReportsScreenViewModel: ScreenLifecycle {
 
     private(set) var state = ReportsState()
     var periodPickerPeriods: [PsychologyReportPeriodRef] = []
+    var availableYears: [Int] = []
     var showsPeriodPicker = false
+    var showsYearPicker = false
 
     private let tradingReports: any TradingReportRepository
     private let psychologyReports: any PsychologyReportRepository
@@ -30,6 +32,7 @@ final class ReportsScreenViewModel: ScreenLifecycle {
 
     var phase: ReportsState.Phase { state.phase }
     var cards: [ReportTypeCardModel] { state.cards }
+    var yearlyCard: YearlyReportCardModel? { state.yearlyCard }
     var psychologyCards: [PsychologyReportCardModel] { state.psychologyCards }
     var isRefreshing: Bool { state.isRefreshing }
     var generatingPeriod: TradingReportPeriodKey? { state.generatingPeriod }
@@ -60,15 +63,39 @@ final class ReportsScreenViewModel: ScreenLifecycle {
         Task { await openPerformanceReport(for: card.periodKey) }
     }
 
-    func primaryAction(for card: PsychologyReportCardModel) {
+    func primaryAction(for yearlyCard: YearlyReportCardModel) {
         ExperienceHaptics.play(.selection)
-        if card.template.isPeriodic, card.availablePeriods.count > 1 {
-            periodPickerPeriods = card.availablePeriods
-            showsPeriodPicker = true
-            return
+        if yearlyCard.availableYears.count > 1 {
+            availableYears = yearlyCard.availableYears
+            showsYearPicker = true
+        } else if let year = yearlyCard.availableYears.first {
+            openYearlyReport(year: year)
         }
+    }
+
+    func openYearlyReport(year: Int) {
+        showsYearPicker = false
+        ReportsNavigation.openYearlyDetail(year: year, using: navigationCoordinator)
+    }
+
+    func primaryAction(for card: PsychologyReportCardModel) {
+        if card.template.isPeriodic, card.availablePeriods.count > 1 {
+            showPsychologyPeriodPicker(for: card)
+        } else {
+            openPsychologyReport(for: card)
+        }
+    }
+
+    func openPsychologyReport(for card: PsychologyReportCardModel) {
+        ExperienceHaptics.play(.selection)
         guard let ref = card.periodRef else { return }
         ReportsNavigation.openPsychologyDetail(ref.reportID, using: navigationCoordinator)
+    }
+
+    func showPsychologyPeriodPicker(for card: PsychologyReportCardModel) {
+        ExperienceHaptics.play(.selection)
+        periodPickerPeriods = card.availablePeriods
+        showsPeriodPicker = true
     }
 
     func openPsychologyPeriod(_ ref: PsychologyReportPeriodRef) {
@@ -127,6 +154,8 @@ final class ReportsScreenViewModel: ScreenLifecycle {
             var next = state
             next.snapshot = perfResult.snapshot
             next.cards = perfResult.cards
+            next.yearlyCard = perfResult.yearlyCard
+            availableYears = perfResult.availableYears
             next.psychologySnapshot = psychResult.snapshot
             next.psychologyCards = psychResult.cards
             next.lastUpdated = max(perfResult.loadedAt, psychResult.loadedAt)

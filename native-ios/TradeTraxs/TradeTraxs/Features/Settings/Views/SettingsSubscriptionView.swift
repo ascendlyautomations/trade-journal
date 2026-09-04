@@ -5,8 +5,6 @@ struct SettingsSubscriptionView: View {
 
     @Environment(\.themeColors) private var colors
 
-    private static let dateStyle = Date.FormatStyle(date: .abbreviated, time: .omitted)
-
     init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
         _viewModel = State(
             initialValue: SettingsSubscriptionViewModel(
@@ -33,39 +31,11 @@ struct SettingsSubscriptionView: View {
 
             Section {
                 SettingsInfoRow(title: "Plan", value: viewModel.planTitle)
-                SettingsInfoRow(title: "Status", value: viewModel.statusTitle)
-                if let interval = viewModel.status?.billingInterval {
-                    SettingsInfoRow(title: "Billing", value: intervalLabel(interval))
-                }
-                if let trial = viewModel.status?.trialEndsAt {
-                    SettingsInfoRow(title: "Trial ends", value: trial.formatted(Self.dateStyle))
-                }
-                if let renews = viewModel.status?.currentPeriodEndsAt {
-                    SettingsInfoRow(
-                        title: viewModel.status?.cancelAtPeriodEnd == true ? "Ends" : "Renews",
-                        value: renews.formatted(Self.dateStyle)
-                    )
-                }
-            } header: {
-                Text("Current Plan")
             } footer: {
-                Text("Manage your current membership.")
+                Text(viewModel.membershipSummaryFooter)
             }
 
-            if let status = viewModel.status, !status.isProEntitled || status.lifecycle == .trialing {
-                Section {
-                    Button {
-                        viewModel.openUpgrade()
-                    } label: {
-                        SettingsPrimaryActionLabel(title: "Upgrade to TraxPro", systemImage: "sparkles")
-                    }
-                    .buttonStyle(.plain)
-                } footer: {
-                    Text("Unlock higher limits and TraxPro features.")
-                }
-            }
-
-            if let status = viewModel.status, !status.isProEntitled {
+            if viewModel.showsFreePlanDetails, let status = viewModel.status {
                 Section {
                     if let trades = status.dailyTradeLimit {
                         SettingsInfoRow(title: "Daily trades", value: "\(trades)")
@@ -80,16 +50,33 @@ struct SettingsSubscriptionView: View {
                         SettingsInfoRow(title: "Active accounts", value: "\(accounts)")
                     }
                 } header: {
-                    Text("Free Plan Limits")
+                    Text("Included on Free")
                 } footer: {
-                    Text("These are your daily limits on the free plan.")
+                    Text("These limits apply to your current Free membership.")
+                }
+
+                Section {
+                    ForEach(viewModel.traxProFeatureHighlights, id: \.self) { feature in
+                        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                            Image(systemName: "sparkles")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(colors.accent)
+                                .frame(width: 20, alignment: .center)
+                                .padding(.top, 2)
+                            Text(feature)
+                                .experienceStyle(.body, color: colors.primaryText)
+                        }
+                        .padding(.vertical, ExperienceSpacing.xxs)
+                    }
+                } header: {
+                    Text("TraxPro Includes")
                 }
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .experienceNavigationTitle("Subscription")
+        .experienceNavigationTitle("Plan")
         .overlay {
             if viewModel.isLoading {
                 ProgressView()
@@ -97,13 +84,5 @@ struct SettingsSubscriptionView: View {
         }
         .onAppear { viewModel.loadIfNeeded() }
         .accessibilityIdentifier("settings.subscription")
-    }
-
-    private func intervalLabel(_ interval: BillingInterval) -> String {
-        switch interval {
-        case .monthly: return "Monthly"
-        case .sixMonth: return "6 months"
-        case .yearly: return "Yearly"
-        }
     }
 }

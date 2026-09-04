@@ -90,6 +90,7 @@ struct PostDetailView: View {
                             dateText: TradeDisplay.dateText(post.createdAt),
                             isOwner: viewModel.isOwner,
                             contentLink: .post(post.id),
+                            ownerProfileID: post.authorProfileID,
                             shareText: {
                                 let body = post.body.trimmingCharacters(in: .whitespacesAndNewlines)
                                 if body.isEmpty { return "Post on TradeTraxs" }

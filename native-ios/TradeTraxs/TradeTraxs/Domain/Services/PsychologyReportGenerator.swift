@@ -391,7 +391,12 @@ nonisolated enum PsychologyReportGenerator {
             metrics.append(PsychologyReportMetricRow(label: "Avg Focus", value: String(format: "%.1f/5", v)))
         }
         if let v = summary.averageStress {
-            metrics.append(PsychologyReportMetricRow(label: "Avg Stress", value: String(format: "%.1f/5", v)))
+            metrics.append(
+                PsychologyReportMetricRow(
+                    label: "Avg Stress",
+                    value: TraderDailyCheckInStressScale.averageDisplayText(for: v)
+                )
+            )
         }
         return PsychologyReportSection(
             id: "checkIn",

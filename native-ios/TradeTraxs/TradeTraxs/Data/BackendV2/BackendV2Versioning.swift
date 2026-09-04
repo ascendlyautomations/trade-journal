@@ -23,6 +23,7 @@ nonisolated enum BackendV2Versioning {
         case calendar = "rpc_v1_calendar_bootstrap"
         case tradesList = "rpc_v1_trades_list_bootstrap"
         case tradeDetail = "rpc_v1_trade_detail_bootstrap"
+        case tradeDetailOwnerComparison = "rpc_v1_trade_detail_owner_comparison"
         case postDetail = "rpc_v1_post_detail_bootstrap"
         case settings = "rpc_v1_settings_bootstrap"
         case propFirm = "rpc_v1_prop_firm_bootstrap"

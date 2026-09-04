@@ -19,6 +19,10 @@ final class ManageAccountsViewModel {
     private(set) var isLoadingPayouts = false
     private(set) var payoutError: String?
 
+    var propFirmFilter: ManageAccountsFiltering.PropFirmFilter = .all
+    var modeFilter: ManageAccountsFiltering.ModeFilter = .all
+    var sort: ManageAccountsFiltering.Sort = .accountName
+
     init(
         trades: any TradeRepository,
         session: any SessionProviding,
@@ -29,8 +33,53 @@ final class ManageAccountsViewModel {
         self.detailCache = detailCache
     }
 
-    var propAccounts: [TradingAccount] {
-        accounts.filter(\.isPropFirmAccount)
+    var filteredAccounts: [TradingAccount] {
+        ManageAccountsFiltering.apply(
+            to: accounts,
+            propFirm: propFirmFilter,
+            mode: modeFilter,
+            sort: sort
+        )
+    }
+
+    var availablePropFirms: [String] {
+        ManageAccountsFiltering.availablePropFirms(from: accounts)
+    }
+
+    var availableModes: [TradingAccountMode] {
+        ManageAccountsFiltering.availableModes(from: accounts)
+    }
+
+    var hasActiveFilters: Bool {
+        ManageAccountsFiltering.hasActiveFilters(propFirm: propFirmFilter, mode: modeFilter)
+    }
+
+    var showsFilteredEmptyState: Bool {
+        !accounts.isEmpty && filteredAccounts.isEmpty && hasActiveFilters
+    }
+
+    func setPropFirmFilter(_ filter: ManageAccountsFiltering.PropFirmFilter) {
+        guard propFirmFilter != filter else { return }
+        propFirmFilter = filter
+        ExperienceHaptics.play(.selection)
+    }
+
+    func setModeFilter(_ filter: ManageAccountsFiltering.ModeFilter) {
+        guard modeFilter != filter else { return }
+        modeFilter = filter
+        ExperienceHaptics.play(.selection)
+    }
+
+    func setSort(_ sort: ManageAccountsFiltering.Sort) {
+        guard self.sort != sort else { return }
+        self.sort = sort
+        ExperienceHaptics.play(.selection)
+    }
+
+    func clearFilters() {
+        propFirmFilter = .all
+        modeFilter = .all
+        ExperienceHaptics.play(.selection)
     }
 
     func loadIfNeeded() {
@@ -134,6 +183,30 @@ final class ManageAccountsViewModel {
         }
     }
 
+    func setShowInAccountDropdowns(id: TradingAccountID, show: Bool) async {
+        guard let account = accounts.first(where: { $0.id == id }),
+              account.showInAccountDropdowns != show
+        else { return }
+
+        _ = await mutate {
+            guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
+            let updated = try await trades.updateAccountInsightsSettings(
+                id: id,
+                ownerID: viewerID,
+                showInAccountDropdowns: show,
+                customPublicStatus: account.customPublicStatus
+            )
+            accounts = Self.sorted(accounts.map { $0.id == id ? updated : $0 })
+            SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
+            AccountMutationStore.shared.noteAccountUpdated(id)
+            ExperienceHaptics.play(.selection)
+        }
+    }
+
+    func showInAccountDropdowns(for accountID: TradingAccountID) -> Bool {
+        accounts.first(where: { $0.id == accountID })?.showInAccountDropdowns ?? true
+    }
+
     func payoutEntries(for accountID: TradingAccountID) -> [AccountPayoutEntry] {
         payoutEntriesByAccount[accountID] ?? []
     }
@@ -220,15 +293,30 @@ final class ManageAccountsViewModel {
         }
     }
 
-    func subtitle(for account: TradingAccount) -> String {
-        var parts: [String] = []
-        parts.append(account.category == .propFirm ? "Prop Firm" : account.category.rawValue.capitalized)
-        parts.append(Self.modeLabel(account.mode, category: account.category))
-        if let size = account.size {
-            parts.append(size.amount.formatted(.number.precision(.fractionLength(0))))
+    func rowTitle(for account: TradingAccount) -> String {
+        if let firm = TradingAccountDisplay.propFirmName(for: account) {
+            return firm
         }
-        if !account.showInAccountDropdowns {
-            parts.append("Hidden from Pickers")
+        let trimmed = account.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return account.category.rawValue.capitalized
+    }
+
+    func rowSubtitle(for account: TradingAccount) -> String {
+        var parts: [String] = []
+        if account.isPropFirmAccount {
+            let firm = TradingAccountDisplay.inferPropFirmName(account.name)
+            let trimmedName = account.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedName.isEmpty, trimmedName.compare(firm, options: .caseInsensitive) != .orderedSame {
+                parts.append(trimmedName)
+            }
+        }
+        parts.append(Self.modeLabel(account.mode, category: account.category))
+        if let suffix = TradingAccountDisplay.maskedAccountNumberSuffix(account.accountNumber) {
+            parts.append(suffix)
+        }
+        if let status = account.customPublicStatus?.trimmingCharacters(in: .whitespacesAndNewlines), !status.isEmpty {
+            parts.append(status)
         }
         if !account.canAddTrades {
             parts.append("Read Only")
@@ -237,6 +325,14 @@ final class ManageAccountsViewModel {
             parts.append("Inactive")
         }
         return parts.joined(separator: " · ")
+    }
+
+    func subtitle(for account: TradingAccount) -> String {
+        rowSubtitle(for: account)
+    }
+
+    static func modeFilterLabel(_ mode: TradingAccountMode) -> String {
+        ManageAccountsFiltering.modeFilterLabel(mode)
     }
 
     static func modeLabel(_ mode: TradingAccountMode, category: TradingAccountCategory) -> String {

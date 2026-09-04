@@ -8,7 +8,8 @@ struct ActivityHomeView: View {
 
     init(
         data: DataEnvironment,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        navigationHost: ActivityNavigationHost = .home
     ) {
         _viewModel = State(
             initialValue: ActivityHomeViewModel(
@@ -18,6 +19,7 @@ struct ActivityHomeView: View {
                 session: data.session,
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
+                navigationHost: navigationHost,
                 realtimeHub: data.realtimeHub,
                 inboxStore: .shared,
                 router: NotificationRouter(),
@@ -27,7 +29,11 @@ struct ActivityHomeView: View {
         self.imagePipeline = data.imagePipeline
     }
 
-    init(viewModel: ActivityHomeViewModel, imagePipeline: any ImagePipeline) {
+    init(
+        viewModel: ActivityHomeViewModel,
+        imagePipeline: any ImagePipeline,
+        navigationHost: ActivityNavigationHost = .home
+    ) {
         _viewModel = State(initialValue: viewModel)
         self.imagePipeline = imagePipeline
     }

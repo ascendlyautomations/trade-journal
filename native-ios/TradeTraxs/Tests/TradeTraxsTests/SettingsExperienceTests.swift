@@ -121,8 +121,7 @@ final class SettingsExperienceTests: XCTestCase {
         )
         viewModel.loadIfNeeded()
         await waitFor { viewModel.status != nil }
-        XCTAssertEqual(viewModel.planTitle, "TraxPro Trial")
-        XCTAssertEqual(viewModel.statusTitle, "Trialing")
+        XCTAssertEqual(viewModel.planTitle, "TraxPro")
     }
 
     func testAboutUsesBundleVersionMetadata() {

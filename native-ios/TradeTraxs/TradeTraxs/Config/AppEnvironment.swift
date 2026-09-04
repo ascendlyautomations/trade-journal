@@ -19,6 +19,8 @@ struct AppEnvironment {
     let profileOnboardingGate: ProfileOnboardingGateStore
     /// Centralized APNs registration + notification routing.
     let pushNotifications: PushNotificationCenter
+    /// Shared in-app UGC report sheet presenter.
+    let contentReportPresenter: ContentReportPresenter
 
     /// Convenience access: CompositionRoot → AppEnvironment → DependencyContainer → Navigation
     var navigation: NavigationEnvironment { dependencies.navigation }

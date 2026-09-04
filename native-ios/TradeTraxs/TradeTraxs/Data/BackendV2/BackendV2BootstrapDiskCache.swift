@@ -1,7 +1,7 @@
 import Foundation
 
 /// JSON disk cache for successful Backend V2 bootstrap payloads (no GRDB).
-enum BackendV2BootstrapDiskCache {
+nonisolated enum BackendV2BootstrapDiskCache {
     private static let folderName = "BackendV2BootstrapCache"
     private static let softStaleSeconds: TimeInterval = 10 * 60
     private static let hardExpirySeconds: TimeInterval = 24 * 60 * 60

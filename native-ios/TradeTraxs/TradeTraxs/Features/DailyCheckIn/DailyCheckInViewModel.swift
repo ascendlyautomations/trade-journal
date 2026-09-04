@@ -37,14 +37,14 @@ final class DailyCheckInViewModel {
     init(
         repository: any TraderDailyCheckInRepository,
         session: any SessionProviding,
-        store: TraderDailyCheckInStore = .shared,
+        store: TraderDailyCheckInStore? = nil,
         existing: TraderDailyCheckIn?,
         dateKey: String? = nil
     ) {
         self.repository = repository
         self.session = session
-        self.store = store
-        let resolvedDateKey = dateKey ?? existing?.checkInDate ?? store.todayDateKey
+        self.store = store ?? TraderDailyCheckInStore.shared
+        let resolvedDateKey = dateKey ?? existing?.checkInDate ?? self.store.todayDateKey
         if let existing {
             draft = TraderDailyCheckInDraft(checkIn: existing)
         } else {

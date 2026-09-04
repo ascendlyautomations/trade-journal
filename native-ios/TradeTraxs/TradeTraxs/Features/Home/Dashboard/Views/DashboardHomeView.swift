@@ -86,8 +86,7 @@ struct DashboardHomeView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     ExperienceHaptics.play(.selection)
-                    navigationCoordinator.selectTab(.profile)
-                    navigationCoordinator.pushProfile(.activity)
+                    navigationCoordinator.pushHome(.activity)
                 } label: {
                     ZStack(alignment: .topTrailing) {
                         Image(systemName: "bell")

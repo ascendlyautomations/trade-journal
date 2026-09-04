@@ -77,6 +77,19 @@ final class TradeHistoryViewModel {
         filters.activeChips { displayAccountTitle(for: $0) ?? accountNames[$0] }
     }
 
+    var showsClearAllChips: Bool {
+        activeChips.count >= 2
+    }
+
+    var showsFilterIndicator: Bool {
+        filters.hasActiveFilterConstraints
+    }
+
+    var resultCountLabel: String {
+        let count = summary.tradeCount
+        return count == 1 ? "1 trade" : "\(count) trades"
+    }
+
     var accountMenuTitle: String {
         switch filters.account {
         case .all:
@@ -129,7 +142,14 @@ final class TradeHistoryViewModel {
 
     var hasActiveQuery: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || filters.hasActiveConstraints
+            || filters.hasActiveFilterConstraints
+    }
+
+    private var matchContext: TradeHistoryMatchContext {
+        var context = TradeHistoryMatchContext()
+        context.accountTitles = accountNames
+        context.accountModes = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
+        return context
     }
 
     private var hasLocalBrowseConstraints: Bool {
@@ -275,6 +295,28 @@ final class TradeHistoryViewModel {
             #if DEBUG
             TradeHistoryLoadProbe.markRequest()
             #endif
+
+            if !hasLocalBrowseConstraints,
+               let ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID),
+               SessionOwnerTradesStore.shared.isFresh(for: profileID)
+            {
+                let seeded = TradeHistoryOwnerSeed.page(
+                    from: ownerTrades,
+                    query: currentQuery,
+                    limit: items.count + 40,
+                    context: matchContext
+                )
+                let newItems = Array(seeded.items.dropFirst(items.count))
+                if !newItems.isEmpty {
+                    appendUnique(newItems)
+                    nextCursor = seeded.nextCursor
+                    paginationErrorMessage = nil
+                    #if DEBUG
+                    TradeHistoryLoadProbe.markPageSize(newItems.count)
+                    #endif
+                    return
+                }
+            }
 
             if !hasLocalBrowseConstraints,
                let rpc,
@@ -472,15 +514,20 @@ final class TradeHistoryViewModel {
             filters: filters,
             searchText: searchText
         )
-        if reason == "open",
+        if Self.canUseOwnerTradeSeed(reason: reason),
            TradeHistoryOwnerSeed.canSeed(
                query: query,
                hasLocalBrowseConstraints: hasLocalBrowse
            ),
            let ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID),
-           SessionOwnerTradesStore.shared.isFresh(for: profileID),
-           let seeded = TradeHistoryOwnerSeed.page(from: ownerTrades, query: query, limit: 40)
+           SessionOwnerTradesStore.shared.isFresh(for: profileID)
         {
+            let seeded = TradeHistoryOwnerSeed.page(
+                from: ownerTrades,
+                query: query,
+                limit: 40,
+                context: matchContext
+            )
             #if DEBUG
             DataLoadStageProbe.trace(
                 correlation: stageCorrelation!,
@@ -732,29 +779,11 @@ final class TradeHistoryViewModel {
         accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
         detailCache.seed(accounts: accounts, for: profileID)
         let query = currentQuery
-        var filtered = all.filter { TradeHistoryLocalMatch.matches($0, query: query) }
+        var filtered = all.filter {
+            TradeHistoryLocalMatch.matches($0, query: query, context: matchContext)
+        }
         filtered = filtered.filter(matchesLocalBrowseConstraints)
-        // Account-name search for fixtures (server uses account_name ilike).
-        let search = query.trimmedSearch
-        if !search.isEmpty {
-            filtered = filtered.filter { trade in
-                let ticker = trade.symbol.ticker.localizedCaseInsensitiveContains(search)
-                let notes = trade.notePreview?.localizedCaseInsensitiveContains(search) == true
-                let account = trade.accountID.flatMap { accountNames[$0] }
-                    .map { $0.localizedCaseInsensitiveContains(search) } ?? false
-                return ticker || notes || account
-            }
-        }
-        switch filters.sort {
-        case .newest:
-            filtered.sort { $0.createdAt > $1.createdAt }
-        case .oldest:
-            filtered.sort { $0.createdAt < $1.createdAt }
-        case .highestPnL:
-            filtered.sort { ($0.realizedPnL?.amount ?? 0) > ($1.realizedPnL?.amount ?? 0) }
-        case .lowestPnL:
-            filtered.sort { ($0.realizedPnL?.amount ?? 0) < ($1.realizedPnL?.amount ?? 0) }
-        }
+        filtered = TradeHistorySortSupport.sorted(filtered, sort: filters.sort)
         items = filtered
         nextCursor = nil
         detailCache.seed(trades: filtered)
@@ -772,5 +801,14 @@ final class TradeHistoryViewModel {
         }
         detailCache.seed(trades: page)
         persistSnapshot()
+    }
+
+    private static func canUseOwnerTradeSeed(reason: String) -> Bool {
+        switch reason {
+        case "open", "search", "filters", "chip", "account", "clear":
+            return true
+        default:
+            return false
+        }
     }
 }

@@ -137,6 +137,60 @@ final class FeedExperienceTests: XCTestCase {
         XCTAssertNotNil(cache.story(id: story.id))
     }
 
+    func testApplyStoryDeletedRemovesStoryFromStripAndCache() async throws {
+        let cache = DetailPresentationCache()
+        let viewModel = FeedViewModel(
+            feed: FeedStubFeedRepository(),
+            trades: FeedStubTradeRepository(),
+            profiles: FeedStubProfileRepository(),
+            achievements: FeedStubAchievementRepository(),
+            session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
+            detailCache: cache,
+            engagementStore: EngagementStore(repository: FeedStubInteractionRepository()),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded && !viewModel.stories.isEmpty }
+
+        let story = try XCTUnwrap(viewModel.stories.first)
+        XCTAssertNotNil(cache.story(id: story.id))
+
+        viewModel.applyStoryDeleted(story.id)
+
+        XCTAssertFalse(viewModel.stories.contains { $0.id == story.id })
+        XCTAssertNil(cache.story(id: story.id))
+    }
+
+    func testStoryViewerOwnerDetection() async throws {
+        let cache = DetailPresentationCache()
+        let stories = FeedFixtures.stories(viewerID: FeedFixtures.viewerID)
+        cache.seed(stories: stories)
+
+        let ownStory = try XCTUnwrap(stories.first { $0.authorProfileID == FeedFixtures.viewerID })
+        let otherStory = try XCTUnwrap(stories.first { $0.authorProfileID != FeedFixtures.viewerID })
+
+        let ownViewer = FeedStoryViewerViewModel(
+            storyID: ownStory.id,
+            feed: FeedStubFeedRepository(),
+            session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
+            cache: cache,
+            onDismiss: {}
+        )
+        await ownViewer.loadIfNeeded()
+        XCTAssertTrue(ownViewer.isOwner)
+
+        let otherViewer = FeedStoryViewerViewModel(
+            storyID: otherStory.id,
+            feed: FeedStubFeedRepository(),
+            session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
+            cache: cache,
+            onDismiss: {}
+        )
+        await otherViewer.loadIfNeeded()
+        XCTAssertFalse(otherViewer.isOwner)
+    }
+
     func testStoryFixturesIncludeUnreadRingState() {
         let stories = FeedFixtures.stories()
         XCTAssertGreaterThanOrEqual(stories.count, 3)
@@ -466,6 +520,7 @@ private struct FeedWebShapedStubFeedRepository: FeedRepository {
             viewerHasSeen: false
         )
     }
+    func deleteStory(id: StoryID) async throws {}
     func reel(id: ReelID) async throws -> Reel {
         ProfileClipFixtures.samples(owner: FeedFixtures.viewerID)[0]
     }
@@ -510,6 +565,7 @@ private struct FeedStubFeedRepository: FeedRepository {
             viewerHasSeen: false
         )
     }
+    func deleteStory(id: StoryID) async throws {}
     func reel(id: ReelID) async throws -> Reel {
         ProfileClipFixtures.samples(owner: FeedFixtures.viewerID)[0]
     }

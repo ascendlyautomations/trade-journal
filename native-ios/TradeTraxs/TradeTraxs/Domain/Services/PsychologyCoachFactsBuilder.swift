@@ -172,7 +172,7 @@ nonisolated enum PsychologyCoachFactsBuilder {
     }
 }
 
-private extension JSONEncoder {
+private nonisolated extension JSONEncoder {
     static let psychologyCoach: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]

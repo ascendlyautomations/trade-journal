@@ -89,6 +89,7 @@ nonisolated enum TradeMapper: DTOMapper {
             isInitialImport: dto.is_initial_import,
             importSource: mapImportSource(dto.import_source),
             importFingerprint: dto.import_fingerprint,
+            accountMode: TradingAccountMode.parseWireValue(dto.account_type ?? dto.mode),
             publicAccountBadge: publicBadge,
             createdAt: createdAt,
             updatedAt: createdAt
@@ -459,6 +460,12 @@ nonisolated enum MessageMapper: DTOMapper {
             ) {
                 return .storyReply
             }
+            if StoryShareMessageSupport.isStoryShare(
+                type: dto.type,
+                content: dto.body ?? dto.content
+            ) {
+                return .storyShare
+            }
             if let raw = dto.kind, let parsed = MessageKind(rawValue: raw) { return parsed }
             return attachments.isEmpty ? .text : .media
         }()
@@ -679,18 +686,7 @@ nonisolated enum TradingAccountMapper {
 
     /// Web account mode strings — case-insensitive (`Funded` / `Evaluation` / `Live`).
     private static func mapAccountMode(_ raw: String?) -> TradingAccountMode {
-        switch (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "eval", "evaluation":
-            return .evaluation
-        case "funded":
-            return .funded
-        case "sim":
-            return .sim
-        case "backtest":
-            return .backtest
-        default:
-            return .live
-        }
+        TradingAccountMode.parseWireValue(raw) ?? .live
     }
 
     /// Normalizes DB / web category strings (`Prop Firm`, `prop_firm`, `propFirm`).

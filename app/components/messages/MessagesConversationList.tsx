@@ -1,6 +1,7 @@
 "use client"
 
 import { memo } from "react"
+import { sanitizeConversationListPreview } from "@/lib/storyShareMessage"
 import MessagesConversationRow, {
   type MessagesConversationRowProps,
 } from "./MessagesConversationRow"
@@ -50,7 +51,7 @@ function MessagesConversationList({
           displayName={c.displayName}
           username={c.username}
           profileUserId={c.profileUserId}
-          lastMessage={c.lastMessage}
+          lastMessage={sanitizeConversationListPreview(c.lastMessage)}
           lastMessageAt={c.lastMessageAt}
           avatarUrl={c.avatar_url}
           unreadCount={c.unreadCount ?? 0}

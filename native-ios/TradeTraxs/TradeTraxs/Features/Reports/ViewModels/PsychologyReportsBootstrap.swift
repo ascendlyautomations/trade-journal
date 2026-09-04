@@ -40,9 +40,3 @@ enum PsychologyReportsBootstrap {
         }
     }
 }
-
-extension PsychologyReportsSnapshot: Equatable {
-    static func == (lhs: PsychologyReportsSnapshot, rhs: PsychologyReportsSnapshot) -> Bool {
-        lhs.computedAt == rhs.computedAt && lhs.catalogPeriods == rhs.catalogPeriods
-    }
-}

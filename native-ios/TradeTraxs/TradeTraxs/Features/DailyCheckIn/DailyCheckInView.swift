@@ -143,8 +143,8 @@ struct DailyCheckInView: View {
             CompactRatingSelector(
                 title: "Stress",
                 value: $viewModel.draft.stressLevel,
-                lowLabel: "Calm",
-                highLabel: "Very stressed"
+                lowLabel: "Very Stressed",
+                highLabel: "Calm"
             )
             .accessibilityIdentifier("dailyCheckIn.stress")
             CompactRatingSelector(

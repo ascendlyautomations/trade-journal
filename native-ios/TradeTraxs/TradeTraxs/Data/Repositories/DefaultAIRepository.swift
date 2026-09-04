@@ -47,7 +47,7 @@ nonisolated struct DefaultAIRepository: AIRepository {
             throw AppError.domain(.permission(.notAuthenticated))
         case 403:
             return TradeAIAnalyzeResponse(
-                reply: reply ?? decoded?.error ?? "AI Analyst is a Pro feature."
+                reply: reply ?? decoded?.error ?? TraxProFeatureMessaging.tradeAIUnavailable
             )
         case 429:
             throw AppError.unknown(message: decoded?.error ?? "Slow down — try again in a moment.")

@@ -24,6 +24,8 @@ struct ProfileState: Equatable {
     var canViewTrades = true
     var ownedTradeRoom: TradeRoom?
     var didResolveTradeRoom = false
+    /// Active stories from profile bootstrap — seeds avatar ring + Story Viewer.
+    var activeStories: [Story] = []
 
     var trades: [Trade] = []
     var tradesNextCursor: String?

@@ -16,12 +16,28 @@ final class BackendV2ContractTests: XCTestCase {
         super.tearDown()
     }
 
-    func testAllFeatureFlagsDefaultOff() {
+    func testAllFeatureFlagsDefaultOffWhenTestsSuppressProductionDefaults() {
         let flags = BackendV2FeatureFlags.allFlags()
         XCTAssertEqual(flags.count, BackendV2FeatureFlag.allCases.count)
         for entry in flags {
             XCTAssertFalse(entry.enabled, entry.name)
             XCTAssertFalse(BackendV2FeatureFlags.isEnabled(entry.flag))
+        }
+    }
+
+    func testProductionShippedFlagsEnabledByDefault() {
+        BackendV2FeatureFlags.enableProductionDefaultsForTests()
+        for flag in BackendV2FeatureFlags.productionShippedFlags {
+            XCTAssertTrue(
+                BackendV2FeatureFlags.isEnabled(flag),
+                "Expected production default ON for \(flag.rawValue)"
+            )
+        }
+        for flag in BackendV2FeatureFlag.allCases where !BackendV2FeatureFlags.productionShippedFlags.contains(flag) {
+            XCTAssertFalse(
+                BackendV2FeatureFlags.isEnabled(flag),
+                "Expected production default OFF for \(flag.rawValue)"
+            )
         }
     }
 
@@ -69,6 +85,26 @@ final class BackendV2ContractTests: XCTestCase {
         XCTAssertEqual(value.data.public_stats?.profit_factor?.value, 1.85)
         XCTAssertEqual(value.data.public_stats?.average_rr?.value, 2.1)
         XCTAssertEqual(value.data.public_stats?.payout_total?.value, 2500)
+        XCTAssertEqual(value.data.active_stories?.count, 0)
+    }
+
+    @MainActor
+    func testProfileBootstrapApplierMapsActiveStories() throws {
+        let storyCreated = ISO8601.string(from: Date())
+        let json = """
+        {"meta":{"contract_version":"v1","found":true},"data":{"profile":{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a"},"viewer":{"is_own_profile":false,"can_view_trades":true,"is_following":true,"is_requested":false,"follows_you":false},"followers_count":1,"following_count":1,"active_stories":[{"id":"story-1","user_id":"22222222-2222-2222-2222-222222222222","image_url":"https://cdn.example/story.jpg","created_at":"\(storyCreated)"}]}}
+        """
+        let bootstrap = try JSONDecoder().decode(ProfileBootstrapV1.self, from: Data(json.utf8))
+        let profileID = ProfileID("22222222-2222-2222-2222-222222222222")
+        let cache = DetailPresentationCache()
+        let state = try ProfileBootstrapApplier.apply(
+            bootstrap,
+            profileID: profileID,
+            detailCache: cache
+        )
+        XCTAssertEqual(state.activeStories.count, 1)
+        XCTAssertEqual(state.activeStories.first?.id.rawValue, "story-1")
+        XCTAssertNotNil(cache.story(id: StoryID("story-1")))
     }
 
     @MainActor
@@ -233,7 +269,7 @@ enum BackendV2ContractFixtures {
     """
 
     static let profile = """
-    {"meta":{"contract_version":"v1","found":true,"server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"profile":{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","name":"Trader A","bio":"bio","avatar_url":null,"trading_style":null,"trader_type":"Futures","primary_market":null,"started_trading":null,"is_private":false,"created_at":"2026-08-19T20:00:00.000Z"},"viewer":{"is_own_profile":false,"can_view_trades":true,"is_following":true,"is_requested":false,"follows_you":false},"followers_count":5,"following_count":2,"section_counts":{"profile_posts":3},"public_stats":{"total_trades":10,"wins":6,"total_pnl":1000,"profit_factor":1.85,"average_rr":2.1,"payout_total":2500},"owned_room":null,"active_tab":"trades","trades_page":{"items":[],"page_meta":{"limit":6,"returned":0,"has_more":false,"next_cursor":null}},"trade_engagement":{}}}
+    {"meta":{"contract_version":"v1","found":true,"server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"profile":{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","name":"Trader A","bio":"bio","avatar_url":null,"trading_style":null,"trader_type":"Futures","primary_market":null,"started_trading":null,"is_private":false,"created_at":"2026-08-19T20:00:00.000Z"},"viewer":{"is_own_profile":false,"can_view_trades":true,"is_following":true,"is_requested":false,"follows_you":false},"followers_count":5,"following_count":2,"section_counts":{"profile_posts":3},"public_stats":{"total_trades":10,"wins":6,"total_pnl":1000,"profit_factor":1.85,"average_rr":2.1,"payout_total":2500},"owned_room":null,"active_stories":[],"active_tab":"trades","trades_page":{"items":[],"page_meta":{"limit":6,"returned":0,"has_more":false,"next_cursor":null}},"trade_engagement":{}}}
     """
 
     static let messages = """

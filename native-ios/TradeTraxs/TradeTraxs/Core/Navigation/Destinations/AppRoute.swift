@@ -31,6 +31,10 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case checkInHistory
     /// Owner-only check-in + trades for one Eastern trading day.
     case checkInDay(String)
+    /// Notifications / Activity inbox opened from Dashboard.
+    case activity
+    /// Pending follow requests opened from Activity.
+    case followRequests
     /// Hierarchical Settings — owned by the Home tab stack that opened Settings.
     case settings(SettingsRoute)
 }
@@ -110,7 +114,6 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case notificationsProduct = "notifications-product"
     case subscription
     case tradingAccounts = "trading-accounts"
-    case propFirm = "prop-firm"
     case privacy
     case privacyBlockedAccounts = "privacy-blocked-accounts"
     case privacyMutedAccounts = "privacy-muted-accounts"
@@ -136,9 +139,8 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .notificationsRooms: return "Trade Rooms"
         case .notificationsAchievements: return "Achievements"
         case .notificationsProduct: return "Product Updates"
-        case .subscription: return "Subscription"
+        case .subscription: return "Plan"
         case .tradingAccounts: return "Manage Accounts"
-        case .propFirm: return "Prop Firm"
         case .privacy: return "Privacy"
         case .privacyBlockedAccounts: return "Blocked Accounts"
         case .privacyMutedAccounts: return "Muted Accounts"
@@ -158,7 +160,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if let exact = SettingsRoute(rawValue: key) { return exact }
         switch key {
-        case "rules", "dashboard-risk", "copy-trading-groups":
+        case "rules", "dashboard-risk", "copy-trading-groups", "prop-firm":
             return .tradingAccounts
         case "messages":
             return .notificationsMessages

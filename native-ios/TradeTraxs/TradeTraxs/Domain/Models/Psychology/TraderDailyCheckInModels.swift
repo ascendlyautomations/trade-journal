@@ -77,6 +77,36 @@ nonisolated struct TraderDailyCheckInDraft: Hashable, Sendable {
     }
 }
 
+/// Stress rating scale for daily check-ins — 1 is most stressed, 5 is calmest (matches other 1–5 metrics).
+nonisolated enum TraderDailyCheckInStressScale {
+    static let labels: [Int: String] = [
+        1: "Very Stressed",
+        2: "Stressed",
+        3: "Moderate",
+        4: "Relaxed",
+        5: "Calm",
+    ]
+
+    static func label(for level: Int) -> String {
+        labels[level] ?? "\(level)/5"
+    }
+
+    static func displayText(for level: Int?) -> String {
+        guard let level else { return "—" }
+        return "\(label(for: level)) (\(level)/5)"
+    }
+
+    static func averageDisplayText(for average: Double) -> String {
+        let rounded = min(5, max(1, Int(average.rounded())))
+        return String(format: "%.1f/5 · %@", average, label(for: rounded))
+    }
+
+    /// True when the trader reported elevated stress (1–2 on the calmness scale).
+    static func isElevated(_ level: Int) -> Bool {
+        level <= 2
+    }
+}
+
 nonisolated enum TraderDailyCheckInValidation {
     static let ratingRange = 1...5
     static let sleepHoursRange: ClosedRange<Decimal> = 0...24

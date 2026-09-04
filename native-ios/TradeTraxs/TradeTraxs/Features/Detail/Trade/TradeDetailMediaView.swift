@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Trade detail media — thin wrapper over shared ``AspectFitMediaView``.
+/// Trade detail media — compact inline preview; tap for full screen.
 struct TradeDetailMediaView: View {
     let reference: MediaReference?
     let imagePipeline: any ImagePipeline
@@ -14,6 +14,7 @@ struct TradeDetailMediaView: View {
             accessibilityIdentifier: "detail.trade.media",
             emptyIcon: .chart,
             allowsFullResolutionViewer: true,
+            maxDisplayHeightOverride: 200,
             onDoubleTapLike: onDoubleTapLike
         )
     }

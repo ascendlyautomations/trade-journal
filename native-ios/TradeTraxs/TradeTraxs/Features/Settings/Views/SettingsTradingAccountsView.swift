@@ -3,7 +3,6 @@ import SwiftUI
 /// Single Manage Accounts experience — Settings, Dashboard, and Calendar all land here.
 struct SettingsTradingAccountsView: View {
     @State private var viewModel: ManageAccountsViewModel
-    var propFirmOnly: Bool = false
 
     @State private var editorPresentation: EditorPresentation?
     @Environment(\.themeColors) private var colors
@@ -20,7 +19,7 @@ struct SettingsTradingAccountsView: View {
         }
     }
 
-    init(data: DataEnvironment, propFirmOnly: Bool = false) {
+    init(data: DataEnvironment) {
         _viewModel = State(
             initialValue: ManageAccountsViewModel(
                 trades: data.trades,
@@ -28,12 +27,10 @@ struct SettingsTradingAccountsView: View {
                 detailCache: data.detailCache
             )
         )
-        self.propFirmOnly = propFirmOnly
     }
 
-    init(viewModel: ManageAccountsViewModel, propFirmOnly: Bool = false) {
+    init(viewModel: ManageAccountsViewModel) {
         _viewModel = State(initialValue: viewModel)
-        self.propFirmOnly = propFirmOnly
     }
 
     var body: some View {
@@ -46,48 +43,101 @@ struct SettingsTradingAccountsView: View {
                 }
             }
 
-            let rows = propFirmOnly ? viewModel.propAccounts : viewModel.accounts
-            if rows.isEmpty, !viewModel.isLoading {
+            if !viewModel.accounts.isEmpty {
+                Section {
+                    ManageAccountsFilterBar(viewModel: viewModel)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+
+                Section {
+                    Text(
+                        "Use the toggles below to choose which accounts appear in account selectors throughout TradeTraxs. Turning an account off does not delete the account or its trading data."
+                    )
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: ExperienceSpacing.xxs,
+                            leading: ExperienceSpacing.md,
+                            bottom: ExperienceSpacing.sm,
+                            trailing: ExperienceSpacing.md
+                        )
+                    )
+                } header: {
+                    Text("Account Dropdowns")
+                }
+                .accessibilityIdentifier("manageAccounts.dropdownIntro")
+            }
+
+            if viewModel.showsFilteredEmptyState {
                 Section {
                     SettingsIntroBlock(
-                        title: propFirmOnly ? "No prop firm accounts yet" : "No trading accounts yet",
-                        message: propFirmOnly
-                            ? "Add a prop firm account from Manage Accounts to track challenge rules and limits here."
-                            : "Add an account to organize your trades by broker, prop firm, or backtest."
+                        title: "No matching accounts",
+                        message: "Try changing your Prop Firm or Account Type filter."
+                    )
+                    Button("Clear Filters") {
+                        viewModel.clearFilters()
+                    }
+                    .accessibilityIdentifier("manageAccounts.clearFilters")
+                }
+            } else if viewModel.accounts.isEmpty, !viewModel.isLoading {
+                Section {
+                    SettingsIntroBlock(
+                        title: "No trading accounts yet",
+                        message: "Add an account to organize your trades by broker, prop firm, or backtest."
                     )
                 } footer: {
-                    Text(
-                        propFirmOnly
-                            ? "Prop firm accounts appear here once you’ve added one."
-                            : "Tap + to create your first account."
-                    )
+                    Text("Tap + to create your first account.")
                 }
             } else {
                 Section {
-                    ForEach(rows) { account in
-                        Button {
-                            editorPresentation = .edit(account)
-                        } label: {
-                            HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                                    Text(TradingAccountDisplay.title(for: account, audience: .owner))
-                                        .experienceStyle(.body, color: colors.primaryText)
-                                    Text(viewModel.subtitle(for: account))
-                                        .experienceStyle(.footnote, color: colors.secondaryText)
-                                    if let note = account.note, !note.isEmpty {
-                                        Text(note)
-                                            .experienceStyle(.caption, color: colors.tertiaryText)
-                                            .lineLimit(2)
+                    ForEach(viewModel.filteredAccounts) { account in
+                        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+                            CompactAccountDropdownToggle(
+                                isOn: Binding(
+                                    get: { viewModel.showInAccountDropdowns(for: account.id) },
+                                    set: { show in
+                                        Task {
+                                            await viewModel.setShowInAccountDropdowns(
+                                                id: account.id,
+                                                show: show
+                                            )
+                                        }
                                     }
+                                ),
+                                accessibilityIdentifier:
+                                    "manageAccounts.showInDropdowns.\(account.id.rawValue)",
+                                isOnAccessibilityValue: viewModel.showInAccountDropdowns(
+                                    for: account.id
+                                )
+                            )
+
+                            Button {
+                                editorPresentation = .edit(account)
+                            } label: {
+                                HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+                                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                                        Text(viewModel.rowTitle(for: account))
+                                            .experienceStyle(.body, color: colors.primaryText)
+                                        Text(viewModel.rowSubtitle(for: account))
+                                            .experienceStyle(.footnote, color: colors.secondaryText)
+                                        if let note = account.note, !note.isEmpty {
+                                            Text(note)
+                                                .experienceStyle(.caption, color: colors.tertiaryText)
+                                                .lineLimit(2)
+                                        }
+                                    }
+                                    Spacer(minLength: ExperienceSpacing.sm)
+                                    Image(systemName: "chevron.right")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(colors.tertiaryText)
                                 }
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.right")
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(colors.tertiaryText)
+                                .padding(.vertical, ExperienceSpacing.xxs)
+                                .contentShape(Rectangle())
                             }
-                            .padding(.vertical, ExperienceSpacing.xs)
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                         .accessibilityIdentifier("settings.account.\(account.id.rawValue)")
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button {
@@ -120,7 +170,7 @@ struct SettingsTradingAccountsView: View {
                         }
                     }
                 } header: {
-                    Text(propFirmOnly ? "Prop Firm Accounts" : "Your Accounts")
+                    Text("Your Accounts")
                 } footer: {
                     Text("Swipe to activate or deactivate. Deactivated accounts stay in history but hide from trade pickers.")
                 }
@@ -129,17 +179,15 @@ struct SettingsTradingAccountsView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .experienceNavigationTitle(propFirmOnly ? "Prop Firm" : "Manage Accounts")
+        .experienceNavigationTitle("Manage Accounts")
         .toolbar {
-            if !propFirmOnly {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        editorPresentation = .create
-                    } label: {
-                        Label("Add", systemImage: "plus")
-                    }
-                    .accessibilityIdentifier("manageAccounts.add")
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    editorPresentation = .create
+                } label: {
+                    Label("Add", systemImage: "plus")
                 }
+                .accessibilityIdentifier("manageAccounts.add")
             }
         }
         .overlay {
@@ -169,6 +217,6 @@ struct SettingsTradingAccountsView: View {
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
             Task { await viewModel.refresh() }
         }
-        .accessibilityIdentifier(propFirmOnly ? "settings.propFirm" : "settings.tradingAccounts")
+        .accessibilityIdentifier("settings.tradingAccounts")
     }
 }

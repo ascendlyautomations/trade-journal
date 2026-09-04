@@ -57,10 +57,8 @@ struct DeepLinkParser: DeepLinkParsing {
                     return .auth(.onboarding)
                 case "reset-password", "forgot-password", "resetPassword":
                     return .auth(.resetPassword)
-                case "choose-plan":
-                    return .auth(.choosePlan)
-                case "finish-trial":
-                    return .auth(.finishTrial)
+                case "choose-plan", "finish-trial":
+                    return .auth(.login)
                 default:
                     return .auth(.login)
                 }
@@ -70,8 +68,8 @@ struct DeepLinkParser: DeepLinkParsing {
             return .auth(.onboarding)
         case "reset-password", "forgot-password", "resetPassword":
             return .auth(.resetPassword)
-        case "choose-plan":
-            return .auth(.choosePlan)
+        case "choose-plan", "finish-trial":
+            return .auth(.login)
         case "dashboard", "home":
             return parseHome(Array(parts.dropFirst()))
         case "trades":
@@ -84,7 +82,8 @@ struct DeepLinkParser: DeepLinkParsing {
         case "calendar":
             return .home(.calendar)
         case "analyst", "ai":
-            return .home(.analyst)
+            // Trade AI is per-trade on detail screens — no standalone analyst route.
+            return .tab(.home)
         case "feed":
             return parseFeed(Array(parts.dropFirst()), query: query)
         case "explore":
@@ -201,7 +200,7 @@ struct DeepLinkParser: DeepLinkParsing {
 }
 
 extension URL {
-    var pathComponentsFiltered: [String] {
+    nonisolated var pathComponentsFiltered: [String] {
         pathComponents.filter { $0 != "/" && !$0.isEmpty }
     }
 

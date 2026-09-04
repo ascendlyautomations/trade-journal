@@ -13,9 +13,15 @@ nonisolated enum ConversationInboxActivity {
         if message.kind == .storyReply {
             return StoryReplyMessageSupport.previewText(from: message.body)
         }
+        if message.kind == .storyShare {
+            return StoryShareMessageSupport.previewText(from: message.body)
+        }
         if let body = message.body?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty {
             if StoryReplyMessageSupport.decode(from: body) != nil {
                 return StoryReplyMessageSupport.previewText(from: body)
+            }
+            if StoryShareMessageSupport.decode(from: body) != nil {
+                return StoryShareMessageSupport.previewText(from: body)
             }
             return body
         }
@@ -27,6 +33,20 @@ nonisolated enum ConversationInboxActivity {
             return "Photo"
         }
         return "New message"
+    }
+
+    static func preview(fromStoredContent content: String?, type: String? = nil) -> String? {
+        if type?.lowercased() == StoryShareMessageSupport.messageType {
+            return StoryShareMessageSupport.previewText(from: content)
+        }
+        if type?.lowercased() == StoryReplyMessageSupport.messageType {
+            return StoryReplyMessageSupport.previewText(from: content)
+        }
+        guard let content else { return nil }
+        if StoryShareMessageSupport.decode(from: content) != nil {
+            return StoryShareMessageSupport.previewText(from: content)
+        }
+        return StoryReplyMessageSupport.sanitizeInboxPreview(type: type, content: content)
     }
 
     /// True when `incoming` message should replace `existing` for preview ordering.

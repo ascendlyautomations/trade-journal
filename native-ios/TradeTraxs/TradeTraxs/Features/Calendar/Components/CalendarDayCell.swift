@@ -12,18 +12,21 @@ struct CalendarDayCell: View {
         Button(action: onTap) {
             VStack(spacing: 2) {
                 Text(cell.dayNumber.map(String.init) ?? "")
-                    .font(.caption2.weight(cell.isToday ? .bold : .medium))
+                    .font(.system(.caption2, design: .default).weight(cell.isToday ? .bold : .medium))
                     .foregroundStyle(dayNumberColor)
 
                 if let summary = cell.summary, cell.isCurrentMonth {
                     Text(CalendarFormatting.compactPnL(summary.netPnL))
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
                         .foregroundStyle(pnlColor(for: summary))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                    Text("\(summary.tradeCount)")
-                        .font(.system(size: 9, weight: .regular))
-                        .foregroundStyle(colors.tertiaryText)
+                    if summary.tradeCount > 0 {
+                        Text(compactTradeCount(summary.tradeCount))
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
                 } else {
                     Spacer(minLength: 0)
                 }
@@ -44,9 +47,14 @@ struct CalendarDayCell: View {
         .accessibilityIdentifier(cell.dayKey.map { "calendar.day.\($0)" } ?? "calendar.day.empty")
     }
 
+    private func compactTradeCount(_ count: Int) -> String {
+        count == 1 ? "1 tr" : "\(count) tr"
+    }
+
     private var dayNumberColor: Color {
         if !cell.isCurrentMonth { return colors.tertiaryText }
-        return colors.primaryText
+        if cell.isToday { return colors.primaryText }
+        return colors.secondaryText
     }
 
     private func pnlColor(for summary: TradingDaySummary) -> Color {

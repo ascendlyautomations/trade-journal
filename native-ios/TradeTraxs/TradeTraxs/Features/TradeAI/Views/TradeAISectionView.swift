@@ -1,35 +1,14 @@
 import SwiftUI
 
-/// Trade Detail analysis card — native analysis Menu, Analyze action, custom question field.
+/// Trade Detail analysis card — results first, custom question + Analyze below.
 struct TradeAISectionView: View {
     @Bindable var viewModel: TradeAISectionViewModel
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             header
-
-            Text("What would you like to analyze?")
-                .experienceStyle(.caption, color: colors.secondaryText)
-
-            analysisSelectorRow
-
-            Button {
-                Task { await viewModel.analyzeSelected() }
-            } label: {
-                Text(viewModel.isAnalyzing ? "Analyzing…" : "Analyze")
-                    .experienceStyle(.headline, color: colors.onAccent)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, ExperienceSpacing.sm)
-                    .background(
-                        canAnalyze ? colors.accent : colors.tertiaryText,
-                        in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                    )
-            }
-            .buttonStyle(.plain)
-            .disabled(!canAnalyze)
-            .accessibilityIdentifier("detail.trade.ai.analyze")
 
             if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
                 ProgressView()
@@ -47,13 +26,20 @@ struct TradeAISectionView: View {
                     .experienceStyle(.caption, color: colors.error)
             }
 
-            customQuestionField
+            analysisSelectorRow
+
+            customQuestionSection
+
+            ComplianceDisclaimerFootnote(
+                text: ComplianceDisclaimerCopy.tradeAI,
+                showsTermsLink: true
+            )
         }
-        .padding(ExperienceSpacing.md)
+        .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             colors.fillPrimary,
-            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+            in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
         )
         .accessibilityIdentifier("detail.trade.ai.section")
     }
@@ -61,10 +47,11 @@ struct TradeAISectionView: View {
     private var header: some View {
         HStack(spacing: ExperienceSpacing.xs) {
             Image(systemName: "brain.head.profile")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(colors.accent)
             Text("Trade AI")
-                .experienceStyle(.headline, color: colors.primaryText)
+                .experienceStyle(.subheadline, color: colors.primaryText)
+                .fontWeight(.semibold)
             Spacer(minLength: 0)
             if viewModel.isAnalyzing {
                 ProgressView()
@@ -74,7 +61,7 @@ struct TradeAISectionView: View {
         }
     }
 
-    /// Settings-style row backed by a native `Menu` (no horizontal chip scrolling).
+    /// Preset analysis type — shown when no results yet; still used when custom question is blank.
     private var analysisSelectorRow: some View {
         Menu {
             ForEach(viewModel.analysisOptions) { option in
@@ -90,17 +77,17 @@ struct TradeAISectionView: View {
                 }
             }
         } label: {
-            HStack(spacing: ExperienceSpacing.sm) {
+            HStack(spacing: ExperienceSpacing.xs) {
                 Text(viewModel.selectedPrompt.title)
-                    .experienceStyle(.body, color: colors.primaryText)
+                    .experienceStyle(.caption, color: colors.primaryText)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(colors.secondaryText)
             }
             .padding(.horizontal, ExperienceSpacing.sm)
-            .padding(.vertical, ExperienceSpacing.sm)
+            .padding(.vertical, 8)
             .background(
                 colors.fillSecondary,
                 in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
@@ -113,60 +100,57 @@ struct TradeAISectionView: View {
     }
 
     private var messages: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             ForEach(viewModel.messages) { message in
                 TradeAIMessageCard(message: message)
             }
         }
-        .padding(.top, ExperienceSpacing.xs)
     }
 
-    private var customQuestionField: some View {
+    private var customQuestionSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("Ask anything about this trade…")
-                .experienceStyle(.caption, color: colors.secondaryText)
+            Text("Custom Question")
+                .experienceStyle(.caption2, color: colors.secondaryText)
+                .textCase(.uppercase)
+                .tracking(0.35)
 
-            HStack(alignment: .bottom, spacing: ExperienceSpacing.sm) {
-                TextField(
-                    "Custom question",
-                    text: $viewModel.draft,
-                    axis: .vertical
-                )
-                .lineLimit(1 ... 4)
-                .textFieldStyle(.plain)
-                .foregroundStyle(colors.primaryText)
-                .padding(.horizontal, ExperienceSpacing.sm)
-                .padding(.vertical, ExperienceSpacing.xs)
-                .background(
-                    colors.fillSecondary,
-                    in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                )
-                .disabled(viewModel.isAnalyzing)
-                .accessibilityIdentifier("detail.trade.ai.input")
+            TextField(
+                "Ask anything about this trade…",
+                text: $viewModel.draft,
+                axis: .vertical
+            )
+            .lineLimit(1 ... 3)
+            .textFieldStyle(.plain)
+            .foregroundStyle(colors.primaryText)
+            .padding(.horizontal, ExperienceSpacing.sm)
+            .padding(.vertical, 8)
+            .background(
+                colors.fillSecondary,
+                in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+            )
+            .disabled(viewModel.isAnalyzing)
+            .accessibilityIdentifier("detail.trade.ai.input")
 
-                Button {
-                    Task { await viewModel.send() }
-                } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(
-                            canSendCustom ? colors.accent : colors.tertiaryText
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(!canSendCustom)
-                .accessibilityLabel("Send")
-                .accessibilityIdentifier("detail.trade.ai.send")
+            Button {
+                Task { await viewModel.analyzeTapped() }
+            } label: {
+                Text(viewModel.isAnalyzing ? "Analyzing…" : "Analyze Trade")
+                    .font(.system(.subheadline, design: .default).weight(.semibold))
+                    .foregroundStyle(canAnalyze ? colors.onAccent : colors.tertiaryText)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        canAnalyze ? colors.accent : colors.tertiaryText.opacity(0.35),
+                        in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                    )
             }
+            .buttonStyle(.plain)
+            .disabled(!canAnalyze)
+            .accessibilityIdentifier("detail.trade.ai.analyze")
         }
     }
 
     private var canAnalyze: Bool {
         !viewModel.isAnalyzing
-    }
-
-    private var canSendCustom: Bool {
-        !viewModel.isAnalyzing
-            && !viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }

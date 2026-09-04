@@ -81,8 +81,6 @@ struct SettingsDestinationView: View {
                 )
             case .tradingAccounts:
                 SettingsTradingAccountsView(data: data)
-            case .propFirm:
-                SettingsTradingAccountsView(data: data, propFirmOnly: true)
             case .privacy:
                 SettingsPrivacyView(data: data, profileStore: currentUserProfile)
             case .privacyBlockedAccounts:

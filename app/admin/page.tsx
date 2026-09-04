@@ -71,6 +71,7 @@ export default function AdminPage() {
   const router = useRouter()
   const [checking, setChecking] = useState(true)
   const [allowed, setAllowed] = useState(false)
+  const [openContentReportCount, setOpenContentReportCount] = useState<number>(0)
   const [unviewedFeedbackCount, setUnviewedFeedbackCount] = useState<number>(0)
   const [unviewedSupportCount, setUnviewedSupportCount] = useState<number>(0)
   const [openBugReportCount, setOpenBugReportCount] = useState<number>(0)
@@ -118,6 +119,12 @@ export default function AdminPage() {
       }
 
       if (!cancelled) {
+        const { count: openContentReports } = await supabase
+          .from("content_reports")
+          .select("*", { count: "exact", head: true })
+          .in("status", ["open", "reviewing"])
+        if (!cancelled) setOpenContentReportCount(openContentReports || 0)
+
         const { count } = await supabase
           .from("feedback_submissions")
           .select("*", { count: "exact", head: true })
@@ -217,14 +224,15 @@ export default function AdminPage() {
               description="Search profiles, view activity, ban or unban accounts."
             />
             <AdminModuleCard
-              comingSoon
-              title="Reports"
-              description="Advanced reporting tools are planned for a future update."
-            />
-            <AdminModuleCard
-              comingSoon
-              title="Moderation"
-              description="Community moderation tools are planned for a future update."
+              href="/admin/content-reports"
+              title="Content Reports"
+              description="UGC moderation queue from in-app user reports."
+              variant="blue"
+              badge={
+                <span className="rounded bg-blue-500 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
+                  {openContentReportCount} open
+                </span>
+              }
             />
             <AdminModuleCard
               href="/admin/support"

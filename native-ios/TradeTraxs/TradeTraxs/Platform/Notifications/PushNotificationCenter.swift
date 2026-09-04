@@ -121,14 +121,25 @@ final class PushNotificationCenter: NSObject {
     /// Call on logout — removes this install's token from the shared backend.
     /// Must be awaited **before** clearing the auth session when possible.
     func unregisterForLogout() async {
+        await unregisterPush(allDevices: false)
+    }
+
+    /// Call after successful account deletion — mirrors web Settings delete flow.
+    func unregisterForAccountDeletion() async {
+        await unregisterPush(allDevices: true)
+    }
+
+    private func unregisterPush(allDevices: Bool) async {
         let token = deviceTokenHex
         lastRegisteredToken = nil
         do {
-            try await tokenClient.unregister(deviceToken: token, allDevices: false)
-            AppLog.notifications.info("APNs device token unregistered on logout")
+            try await tokenClient.unregister(deviceToken: token, allDevices: allDevices)
+            AppLog.notifications.info(
+                "APNs device token unregistered (\(allDevices ? "all devices" : "this device", privacy: .public))"
+            )
         } catch {
             AppLog.notifications.error(
-                "APNs unregister on logout failed: \(error.localizedDescription, privacy: .public)"
+                "APNs unregister failed: \(error.localizedDescription, privacy: .public)"
             )
         }
         badgeController.clear()

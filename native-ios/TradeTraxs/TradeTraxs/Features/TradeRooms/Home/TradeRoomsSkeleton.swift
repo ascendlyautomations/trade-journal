@@ -5,19 +5,17 @@ struct TradeRoomsSkeleton: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: ExperienceSpacing.md) {
+            LazyVStack(spacing: ExperienceSpacing.sm) {
                 ForEach(0..<4, id: \.self) { _ in
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                        roundedRect(height: 72)
-                        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                                .fill(colors.fillSecondary)
-                                .frame(width: 52, height: 52)
-                            VStack(alignment: .leading, spacing: 8) {
-                                roundedRect(height: 14).frame(width: 140)
-                                roundedRect(height: 12).frame(width: 100)
-                                roundedRect(height: 12).frame(maxWidth: .infinity)
-                            }
+                    HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                        Circle()
+                            .fill(colors.fillSecondary)
+                            .frame(width: 52, height: 52)
+                        VStack(alignment: .leading, spacing: 8) {
+                            roundedRect(height: 14).frame(width: 160)
+                            roundedRect(height: 12).frame(width: 120)
+                            roundedRect(height: 12).frame(maxWidth: .infinity)
+                            roundedRect(height: 10).frame(width: 64)
                         }
                     }
                     .padding(ExperienceSpacing.sm)

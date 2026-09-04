@@ -148,8 +148,10 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             switch filters.sort {
             case .newest: return ("created_at", false)
             case .oldest: return ("created_at", true)
-            case .highestPnL: return ("pnl", false)
-            case .lowestPnL: return ("pnl", true)
+            case .highestPnL, .bestWin: return ("pnl", false)
+            case .lowestPnL, .worstLoss: return ("pnl", true)
+            case .highestRR: return ("rr", false)
+            case .lowestRR: return ("rr", true)
             }
         }()
 
@@ -212,6 +214,27 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         if let pnlUpper = filters.pnlMax {
             items.append(URLQueryItem(name: "pnl", value: "lte.\(Self.pnlQueryValue(pnlUpper))"))
         }
+        if let rrLower = filters.rrMin {
+            items.append(URLQueryItem(name: "rr", value: "gte.\(Self.pnlQueryValue(rrLower))"))
+        }
+        if let rrUpper = filters.rrMax {
+            items.append(URLQueryItem(name: "rr", value: "lte.\(Self.pnlQueryValue(rrUpper))"))
+        }
+
+        if let accountMode = filters.accountMode.tradingAccountMode {
+            items.append(
+                SupabaseQuery.isIn(
+                    "account_type",
+                    Self.accountTypeWireValues(for: accountMode)
+                )
+            )
+        }
+
+        if filters.tradingSession != .all {
+            items.append(
+                SupabaseQuery.eq("session", filters.tradingSession.title)
+            )
+        }
 
         let search = query.trimmedSearch
         if !search.isEmpty {
@@ -219,7 +242,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             items.append(
                 URLQueryItem(
                     name: "or",
-                    value: "(ticker.ilike.*\(escaped)*,notes.ilike.*\(escaped)*,account_name.ilike.*\(escaped)*,strategy.ilike.*\(escaped)*)"
+                    value: "(ticker.ilike.*\(escaped)*,notes.ilike.*\(escaped)*,account_name.ilike.*\(escaped)*,strategy.ilike.*\(escaped)*,session.ilike.*\(escaped)*)"
                 )
             )
         }
@@ -233,16 +256,31 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         let cursor: String? = {
             guard rows.count >= page.limit, let last = rows.last else { return nil }
             switch filters.sort {
-            case .newest, .oldest:
+            case .newest, .oldest, .bestWin, .worstLoss:
                 return last.created_at
             case .highestPnL, .lowestPnL:
                 if let pnl = last.pnl?.decimal {
                     return NSDecimalNumber(decimal: pnl).stringValue
                 }
                 return last.created_at
+            case .highestRR, .lowestRR:
+                if let rr = last.rr?.decimal {
+                    return NSDecimalNumber(decimal: rr).stringValue
+                }
+                return last.created_at
             }
         }()
         return CursorPage(items: mapped, nextCursor: cursor)
+    }
+
+    private static func accountTypeWireValues(for mode: TradingAccountMode) -> [String] {
+        switch mode {
+        case .live: return ["live", "Live", "LIVE"]
+        case .funded: return ["funded", "Funded", "FUNDED"]
+        case .evaluation: return ["eval", "Eval", "EVAL", "evaluation", "Evaluation", "EVALUATION"]
+        case .sim: return ["sim", "Sim", "SIM", "replay", "Replay"]
+        case .backtest: return ["backtest", "Backtest", "BACKTEST"]
+        }
     }
 
     private static func pnlQueryValue(_ value: Decimal) -> String {
@@ -685,7 +723,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             || text.localizedCaseInsensitiveContains("can_add_trades")
         {
             return AppError.unknown(
-                message: "Free plan allows up to \(FreeTierPolicy.maxTradeEntryAccounts) active accounts. Upgrade to Pro for unlimited accounts."
+                message: "Free plan allows up to \(FreeTierPolicy.maxTradeEntryAccounts) active accounts. TraxPro is required for unlimited accounts."
             )
         }
         if let app = error as? AppError { return app }

@@ -10,6 +10,7 @@ struct AppRootView: View {
     @Bindable var currentUserProfile: CurrentUserProfileStore
     @Bindable var appBootstrapState: AppBootstrapState
     @Bindable var profileOnboardingGate: ProfileOnboardingGateStore
+    @Bindable var contentReportPresenter: ContentReportPresenter
     let allowsDevelopmentBypass: Bool
 
     @Environment(\.scenePhase) private var scenePhase
@@ -41,6 +42,24 @@ struct AppRootView: View {
         .sheet(item: sheetBinding) { destination in
             sheetContent(destination)
                 .applyThemeEnvironment(themeManager.themeEnvironment)
+        }
+        .sheet(item: $contentReportPresenter.activeRequest) { request in
+            ContentReportSheet(
+                request: request,
+                repository: appEnvironment.data.contentReports,
+                onDismiss: { contentReportPresenter.dismiss() },
+                onBlockUser: { profileID in
+                    Task {
+                        _ = try? await UserBlockCoordinator.shared.setBlocked(
+                            otherID: profileID,
+                            conversationID: nil,
+                            blocked: true,
+                            messages: appEnvironment.data.messages
+                        )
+                    }
+                }
+            )
+            .applyThemeEnvironment(themeManager.themeEnvironment)
         }
         .fullScreenCover(item: fullScreenBinding) { destination in
             fullScreenContent(destination)
@@ -382,6 +401,10 @@ struct AppRootView: View {
                         initialImportChannel: .csv,
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
+                case .upgrade:
+                    TraxProMembershipInfoView(
+                        onClose: { navigation.coordinator.dismissFullScreen() }
+                    )
                 default:
                     NavigationInfrastructurePlaceholder(
                         title: fullScreenTitle(destination),
@@ -442,7 +465,7 @@ struct AppRootView: View {
         case .newAchievement: return "New Achievement"
         case .newReel: return "New Clip"
         case .newStory: return "New Story"
-        case .upgrade: return "Upgrade"
+        case .upgrade: return "TraxPro"
         case .mediaViewer: return "Media"
         case .storyViewer: return "Story"
         }

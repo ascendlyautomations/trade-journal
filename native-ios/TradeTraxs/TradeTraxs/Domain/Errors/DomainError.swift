@@ -89,7 +89,7 @@ extension AppError {
         case .subscription(let subscription):
             switch subscription {
             case .proRequired:
-                return .unknown(message: "TraxPro is required for this feature.")
+                return .unknown(message: TraxProFeatureMessaging.featureRequired)
             case .trialExpired:
                 return .unknown(message: "Your TraxPro trial has ended.")
             case .paymentRequired:

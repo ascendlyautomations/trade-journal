@@ -2,15 +2,15 @@ import XCTest
 @testable import TradeTraxs
 
 final class TradeHistoryOwnerSeedTests: XCTestCase {
-    func testCanSeedOnlyForDefaultQuery() {
+    func testCanSeedWhenNoLocalBrowseConstraints() {
         var query = TradeHistoryQuery()
         XCTAssertTrue(TradeHistoryOwnerSeed.canSeed(query: query, hasLocalBrowseConstraints: false))
 
         query.filters.account = .account(TradingAccountID("acct-1"))
-        XCTAssertFalse(TradeHistoryOwnerSeed.canSeed(query: query, hasLocalBrowseConstraints: false))
+        XCTAssertTrue(TradeHistoryOwnerSeed.canSeed(query: query, hasLocalBrowseConstraints: false))
 
         query = TradeHistoryQuery(searchText: "NQ")
-        XCTAssertFalse(TradeHistoryOwnerSeed.canSeed(query: query, hasLocalBrowseConstraints: false))
+        XCTAssertTrue(TradeHistoryOwnerSeed.canSeed(query: query, hasLocalBrowseConstraints: false))
 
         query = TradeHistoryQuery()
         XCTAssertFalse(TradeHistoryOwnerSeed.canSeed(query: query, hasLocalBrowseConstraints: true))
@@ -30,9 +30,26 @@ final class TradeHistoryOwnerSeedTests: XCTestCase {
             limit: 2
         )
 
-        XCTAssertEqual(result?.items.map(\.id.rawValue), ["new", "mid"])
-        XCTAssertNotNil(result?.nextCursor)
-        XCTAssertTrue(result?.isPartial == true)
+        XCTAssertEqual(result.items.map(\.id.rawValue), ["new", "mid"])
+        XCTAssertNotNil(result.nextCursor)
+        XCTAssertTrue(result.isPartial)
+    }
+
+    func testPageReturnsEmptyWhenNoMatches() {
+        let owner = ProfileID("viewer-1")
+        var trade = makeTrade(id: "t", owner: owner, createdAt: Date(), mode: .live)
+        var filters = TradeHistoryFilters()
+        filters.result = .losses
+        trade.realizedPnL = Money(amount: 100)
+
+        let result = TradeHistoryOwnerSeed.page(
+            from: [trade],
+            query: TradeHistoryQuery(filters: filters),
+            limit: 40
+        )
+
+        XCTAssertTrue(result.items.isEmpty)
+        XCTAssertNil(result.nextCursor)
     }
 
     func testEquivalentFiltersShareCacheKey() {

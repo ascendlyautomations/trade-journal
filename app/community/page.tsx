@@ -25,6 +25,7 @@ import DmStyleComposer, {
   type VoiceSendPayload,
 } from "../components/DmStyleComposer"
 import VoiceMessageBubble from "@/app/components/messages/VoiceMessageBubble"
+import StoryShareMessageCard from "@/app/components/messages/StoryShareMessageCard"
 import { supabase } from "../../lib/supabaseClient"
 import { stableIdKey } from "@/lib/realtimeFilters"
 import { compressImage, compressScreenshot } from "@/lib/compressImage"
@@ -139,6 +140,7 @@ import {
 import { asJsonObject } from "@/lib/supabaseProjectedQuery"
 import { isVoiceMessage, uploadVoiceMessageBlob } from "@/lib/voiceMessage"
 import { stopVoicePlayback } from "@/lib/voiceMessagePlayback"
+import { resolveStorySharePayload } from "@/lib/storyShareMessage"
 import { logRoomMessagePostgrestError } from "@/lib/roomMessagePostgrest"
 import {
   buildPendingSendContentKey,
@@ -344,6 +346,14 @@ function CommunityContent() {
   const viewSharedTrade = useCallback(
     (trade: { id?: string | null }) => {
       router.push(getSharedTradeViewHref(String(trade?.id ?? "")))
+    },
+    [router]
+  )
+  const viewSharedStory = useCallback(
+    (storyId: string) => {
+      const trimmed = storyId.trim()
+      if (!trimmed) return
+      router.push(`/story/${encodeURIComponent(trimmed)}`)
     },
     [router]
   )
@@ -4694,6 +4704,12 @@ function CommunityContent() {
                                     nativeIos ? "w-full max-w-full" : undefined
                                   }
                                 />
+                              ) : resolveStorySharePayload(msg) ? (
+                                <StoryShareMessageCard
+                                  payload={resolveStorySharePayload(msg)!}
+                                  isOutgoing={msg.user_id === user?.id}
+                                  onViewStory={viewSharedStory}
+                                />
                               ) : editingMessageId === msg.id &&
                                 canEditRoomMessage(user?.id, msg) ? (
                                 <div className="space-y-2">
@@ -4875,6 +4891,12 @@ function CommunityContent() {
                             className={
                               nativeIos ? "w-full max-w-full" : undefined
                             }
+                          />
+                        ) : resolveStorySharePayload(msg) ? (
+                          <StoryShareMessageCard
+                            payload={resolveStorySharePayload(msg)!}
+                            isOutgoing={msg.user_id === user?.id}
+                            onViewStory={viewSharedStory}
                           />
                         ) : editingMessageId === msg.id &&
                           canEditRoomMessage(user?.id, msg) ? (

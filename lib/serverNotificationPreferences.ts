@@ -197,6 +197,7 @@ export async function filterRecipientsByDmMessageTypePreference(
   if (type === "story_reply") {
     key = "story_replies_enabled"
   } else if (
+    type === "story_share" ||
     type === "trade" ||
     type === "post" ||
     type === "profile_post" ||

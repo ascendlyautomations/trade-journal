@@ -126,6 +126,8 @@ struct FeedHomeView: View {
             switch ContentMutationStore.shared.latest {
             case .story(let story):
                 viewModel.applyStoryCreated(story)
+            case .storyDeleted(let storyID):
+                viewModel.applyStoryDeleted(storyID)
             default:
                 Task { await viewModel.refresh() }
             }

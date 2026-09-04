@@ -39,8 +39,9 @@ final class UserBlockCoordinator {
         conversationID: ConversationID?,
         blocked: Bool,
         messages: any MessageRepository,
-        inboxStore: MessagesInboxStore = .shared
+        inboxStore: MessagesInboxStore? = nil
     ) async throws -> DmBlockStatus {
+        let inboxStore = inboxStore ?? MessagesInboxStore.shared
         let status: DmBlockStatus
         if let conversationID {
             status = try await messages.setDmUserBlock(conversationID: conversationID, blocked: blocked)

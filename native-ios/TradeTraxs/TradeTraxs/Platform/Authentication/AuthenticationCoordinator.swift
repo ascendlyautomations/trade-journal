@@ -17,6 +17,8 @@ final class AuthenticationCoordinator {
     var invalidateSessionCaches: (@MainActor () -> Void)?
     /// Bound by ``CompositionRoot`` — await push unregister **before** clearing auth.
     var prepareSessionTeardown: (@MainActor () async -> Void)?
+    /// Bound by ``CompositionRoot`` — all-device push unregister + realtime stop after server deletion.
+    var prepareAccountDeletion: (@MainActor () async -> Void)?
     /// Bound by ``CompositionRoot`` — APNs registration after a user session binds.
     var onAuthenticatedSessionBound: (@MainActor () -> Void)?
 
@@ -112,15 +114,50 @@ final class AuthenticationCoordinator {
     }
 
     func logout() async {
+        await performLocalSessionTeardown(
+            correlationLabel: "logout",
+            useAccountDeletionTeardown: false
+        )
+    }
+
+    /// Deletes the authenticated account on the server, then clears all local session state.
+    func deleteAccount(using repository: any AccountRepository) async throws {
+        let correlation = AuthFlowTracer.beginCorrelation()
+        AuthFlowTracer.trace(
+            "accountDeletion.started",
+            phase: authenticationManager.state.authFlowPhase,
+            correlation: correlation
+        )
+
+        try await repository.deleteAuthenticatedAccount()
+
+        AuthFlowTracer.trace(
+            "accountDeletion.serverConfirmed",
+            phase: authenticationManager.state.authFlowPhase,
+            correlation: correlation
+        )
+
+        await performLocalSessionTeardown(
+            correlationLabel: "accountDeletion",
+            useAccountDeletionTeardown: true
+        )
+    }
+
+    private func performLocalSessionTeardown(
+        correlationLabel: String,
+        useAccountDeletionTeardown: Bool
+    ) async {
         restoreGeneration &+= 1
         let correlation = AuthFlowTracer.beginCorrelation()
         AuthFlowTracer.trace(
-            "logout.started",
+            "\(correlationLabel).started",
             phase: authenticationManager.state.authFlowPhase,
             correlation: correlation,
             generation: restoreGeneration
         )
-        if let prepareSessionTeardown {
+        if useAccountDeletionTeardown, let prepareAccountDeletion {
+            await prepareAccountDeletion()
+        } else if let prepareSessionTeardown {
             await prepareSessionTeardown()
         }
         await authenticationManager.logout()
@@ -130,7 +167,7 @@ final class AuthenticationCoordinator {
         navigation.clearPersistedState()
         navigation.coordinator.markUnauthenticated()
         AuthFlowTracer.trace(
-            "logout.completed",
+            "\(correlationLabel).completed",
             phase: .unauthenticated,
             correlation: correlation,
             generation: restoreGeneration
@@ -140,6 +177,11 @@ final class AuthenticationCoordinator {
     /// Authenticated session email when present (nil for development bypass).
     var sessionEmail: String? {
         authenticationManager.state.session?.email
+    }
+
+    /// Primary sign-in provider for the active session (used by account deletion copy).
+    var currentSignInProvider: AuthenticationProviderKind? {
+        authenticationManager.state.session?.provider
     }
 
     func handleUnauthorizedFromNetwork() async {

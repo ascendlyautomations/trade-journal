@@ -18,7 +18,8 @@ final class DetailExperienceTests: XCTestCase {
             session: environment.data.session,
             imagePipeline: environment.data.imagePipeline,
             cache: cache,
-            navigationCoordinator: environment.navigation.coordinator
+            navigationCoordinator: environment.navigation.coordinator,
+            rpc: environment.data.rpc
         )
         viewModel.loadIfNeeded()
         for _ in 0..<20 {

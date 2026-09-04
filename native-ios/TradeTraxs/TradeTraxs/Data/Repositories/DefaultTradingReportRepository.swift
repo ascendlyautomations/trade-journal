@@ -12,6 +12,8 @@ actor DefaultTradingReportRepository: TradingReportRepository {
 
     private var snapshot: TradingReportsSnapshot?
     private var tradeFingerprint: String?
+    private var cachedEligibleTrades: [Trade] = []
+    private var yearlyCache: [String: TradingYearlyReport] = [:]
     private var notifiedKeys = Set<String>()
 
     init(
@@ -27,23 +29,7 @@ actor DefaultTradingReportRepository: TradingReportRepository {
     }
 
     func ensureSnapshot(forceNetwork: Bool) async throws -> TradingReportsSnapshot {
-        let userID = await session.currentUserID
-        let profileID = ProfileID(userID?.rawValue ?? "dev.reports")
-
-        let loaded: [Trade]
-        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
-            loaded = ProfileTradeFixtures.samples(owner: profileID)
-        } else {
-            loaded = try await SessionOwnerTradesStore.shared.trades(
-                for: profileID,
-                detailCache: detailCache,
-                repository: trades,
-                forceNetwork: forceNetwork
-            )
-        }
-
-        // Web dashboard reports use non-backtest trades.
-        let eligible = loaded.filter { $0.mode != .backtest }
+        let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
         let fingerprint = Self.fingerprint(eligible)
 
         if !forceNetwork,
@@ -59,8 +45,9 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         )
         snapshot = next
         tradeFingerprint = fingerprint
+        yearlyCache = [:]
 
-        await maybeNotify(userID: userID?.rawValue, snapshot: next)
+        await maybeNotify(userID: await session.currentUserID?.rawValue, snapshot: next)
         return next
     }
 
@@ -73,6 +60,67 @@ actor DefaultTradingReportRepository: TradingReportRepository {
             throw AppError.unknown(message: "Report unavailable for \(periodKey.rawValue).")
         }
         return report
+    }
+
+    func availableYears(forceNetwork: Bool) async throws -> [Int] {
+        let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
+        return TradingYearlyReportGenerator.availableYears(from: eligible)
+    }
+
+    func yearlyReport(
+        for year: Int,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingYearlyReport {
+        let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
+        let fingerprint = Self.fingerprint(eligible)
+        let cacheKey = Self.yearlyCacheKey(year: year, filters: filters, fingerprint: fingerprint)
+        if !forceNetwork, let cached = yearlyCache[cacheKey] {
+            return cached
+        }
+        let report = TradingYearlyReportGenerator.generate(
+            year: year,
+            trades: eligible,
+            filters: filters
+        )
+        yearlyCache[cacheKey] = report
+        return report
+    }
+
+    func monthReport(
+        for ref: TradingReportMonthRef,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingReport {
+        let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
+        return TradingYearlyReportGenerator.generateMonthReport(
+            ref: ref,
+            trades: eligible,
+            filters: filters
+        )
+    }
+
+    // MARK: - Trade load
+
+    private func loadEligibleTrades(forceNetwork: Bool) async throws -> [Trade] {
+        let userID = await session.currentUserID
+        let profileID = ProfileID(userID?.rawValue ?? "dev.reports")
+
+        let loaded: [Trade]
+        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            loaded = ProfileTradeFixtures.samples(owner: profileID)
+        } else {
+            loaded = try await SessionOwnerTradesStore.shared.trades(
+                for: profileID,
+                detailCache: detailCache,
+                repository: trades,
+                forceNetwork: forceNetwork
+            )
+        }
+
+        let eligible = loaded.filter { $0.mode != .backtest }
+        cachedEligibleTrades = eligible
+        return eligible
     }
 
     // MARK: - Notify (web `requestTradingReportNotification`)
@@ -120,6 +168,20 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         let head = trades.first?.id.rawValue ?? ""
         let tail = trades.last?.id.rawValue ?? ""
         return "\(trades.count):\(head):\(tail)"
+    }
+
+    private static func yearlyCacheKey(
+        year: Int,
+        filters: TradingReportFilters,
+        fingerprint: String
+    ) -> String {
+        let account: String = {
+            switch filters.accountFilter {
+            case .all: return "all"
+            case .account(let id): return id.rawValue
+            }
+        }()
+        return "\(fingerprint):year:\(year):account:\(account):mode:\(filters.accountMode.rawValue)"
     }
 
     private struct NotifyBody: Encodable {

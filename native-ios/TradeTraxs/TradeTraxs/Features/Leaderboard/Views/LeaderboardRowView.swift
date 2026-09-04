@@ -11,64 +11,32 @@ struct LeaderboardRowView: View {
 
     @Environment(\.themeColors) private var colors
 
+    private let rankWidth: CGFloat = 32
+    private let avatarSize: CGFloat = 44
+    private let metricWidth: CGFloat = 92
+    private let followWidth: CGFloat = 76
+
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: ExperienceSpacing.sm) {
                 Text("#\(row.rank)")
-                    .experienceStyle(.headline, color: colors.secondaryText)
-                    .frame(width: 36, alignment: .leading)
+                    .experienceStyle(.subheadline, color: colors.secondaryText)
+                    .fontWeight(.semibold)
+                    .frame(width: rankWidth, alignment: .leading)
                     .monospacedDigit()
 
-                FollowListAvatarView(profile: profile, imagePipeline: imagePipeline, size: 44)
+                FollowListAvatarView(profile: profile, imagePipeline: imagePipeline, size: avatarSize)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(profile.displayName)
-                            .experienceStyle(.subheadline, color: colors.primaryText)
-                            .fontWeight(.semibold)
-                            .lineLimit(1)
-                        if row.isVerified {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(colors.accent)
-                        }
-                    }
-                    if LeaderboardRowView.showsUsername(profile.username) {
-                        Text("@\(profile.username)")
-                            .experienceStyle(.caption, color: colors.secondaryText)
-                            .lineLimit(1)
-                    }
-                }
+                userInfoColumn
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
 
-                Spacer(minLength: ExperienceSpacing.xs)
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    HStack(spacing: 4) {
-                        trendIcon
-                        Text(row.primaryMetricText)
-                            .experienceStyle(.subheadline, color: primaryMetricColor)
-                            .fontWeight(.semibold)
-                            .lineLimit(1)
-                    }
-                    Text(row.secondaryMetricText)
-                        .experienceStyle(.caption2, color: colors.tertiaryText)
-                        .lineLimit(1)
-                }
+                metricColumn
+                    .frame(width: metricWidth, alignment: .trailing)
 
                 if showsFollowButton {
-                    Button(action: onToggleFollow) {
-                        Text(row.isFollowing ? "Following" : "Follow")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(row.isFollowing ? colors.primaryText : colors.onAccent)
-                            .padding(.horizontal, 12)
-                            .frame(height: 30)
-                            .background(
-                                Capsule().fill(row.isFollowing ? colors.fillSecondary : colors.accent)
-                            )
-                            .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                    followButton
+                        .frame(width: followWidth, alignment: .trailing)
                 }
             }
             .padding(.horizontal, ExperienceSpacing.md)
@@ -79,9 +47,68 @@ struct LeaderboardRowView: View {
         .accessibilityIdentifier("leaderboard.row.\(row.profileID.rawValue)")
     }
 
+    private var userInfoColumn: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Text(profile.displayName)
+                    .experienceStyle(.subheadline, color: colors.primaryText)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                if row.isVerified {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(colors.accent)
+                }
+            }
+            if LeaderboardRowView.showsUsername(profile.username) {
+                Text("@\(profile.username)")
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var metricColumn: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            HStack(spacing: 3) {
+                trendIcon
+                Text(row.primaryMetricText)
+                    .experienceStyle(.subheadline, color: primaryMetricColor)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            if !row.secondaryMetricText.isEmpty {
+                Text(row.secondaryMetricText)
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+        }
+    }
+
+    private var followButton: some View {
+        Button(action: onToggleFollow) {
+            Text(row.isFollowing ? "Following" : "Follow")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(row.isFollowing ? colors.primaryText : colors.onAccent)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+                .padding(.horizontal, row.isFollowing ? 8 : 10)
+                .frame(height: 30)
+                .frame(maxWidth: .infinity)
+                .background(
+                    Capsule().fill(row.isFollowing ? colors.fillSecondary : colors.accent)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(row.isFollowing ? "Following" : "Follow")
+    }
+
     private var trendIcon: some View {
         Image(systemName: trendSymbol)
-            .font(.system(size: 10, weight: .bold))
+            .font(.system(size: 9, weight: .bold))
             .foregroundStyle(trendColor)
     }
 

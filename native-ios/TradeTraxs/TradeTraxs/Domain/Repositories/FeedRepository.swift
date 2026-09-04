@@ -22,7 +22,11 @@ nonisolated protocol FeedRepository: Sendable {
     func addComment(_ comment: Comment) async throws -> Comment
     func setReaction(on item: FeedItem, kind: ReactionKind, isActive: Bool) async throws
     func stories(for viewer: ProfileID) async throws -> [Story]
+    /// Resolves a single active story when the viewer is allowed to see it (RLS + 24h window).
+    func story(id: StoryID) async throws -> Story?
     func createStory(userID: ProfileID, imageURL: String) async throws -> Story
+    /// Deletes a story the viewer owns.
+    func deleteStory(id: StoryID) async throws
     func reel(id: ReelID) async throws -> Reel
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel>
     /// Web `fetchUserProfileReels` — Profile Clips tab (trade-linked visibility filter).
@@ -39,6 +43,14 @@ nonisolated protocol FeedRepository: Sendable {
 }
 
 extension FeedRepository {
+    func story(id: StoryID) async throws -> Story? {
+        nil
+    }
+
+    func deleteStory(id: StoryID) async throws {
+        throw AppError.notImplemented(feature: "deleteStory")
+    }
+
     func deleteReel(id: ReelID) async throws {
         throw AppError.notImplemented(feature: "deleteReel")
     }

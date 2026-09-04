@@ -26,6 +26,8 @@ enum PushNotificationPresentationPolicy {
             return .normal
         case .tradingReport:
             return .normal
+        case .dailyCheckIn:
+            return .normal
         case .activity:
             switch type {
             case "follow", "follow_request_accepted", "comment":

@@ -183,10 +183,15 @@ final class FeedScreenViewModel {
 
     /// Inserts a newly published story into the strip without a full feed reload.
     func applyStoryCreated(_ story: Story) {
-        guard state.scope == .following else { return }
         guard ActiveStorySemantics.isActive(createdAt: story.createdAt) else { return }
         detailCache.seed(story)
         guard let viewerID = state.viewerID else { return }
+
+        if story.authorProfileID == viewerID {
+            ViewerActiveStoryStore.shared.applyStoryCreated(story, viewerID: viewerID)
+        }
+
+        guard state.scope == .following else { return }
 
         if story.authorProfileID == viewerID {
             let others = state.stories.filter { $0.authorProfileID != viewerID }
@@ -196,6 +201,15 @@ final class FeedScreenViewModel {
             merged.append(story)
             state.stories = ActiveStorySemantics.stripStories(from: merged, viewerID: viewerID)
         }
+        state.lastUpdated = Date()
+    }
+
+    /// Removes a deleted story from the strip without a full feed reload.
+    func applyStoryDeleted(_ storyID: StoryID) {
+        ViewerActiveStoryStore.shared.applyStoryDeleted(storyID)
+        guard state.scope == .following else { return }
+        detailCache.removeStory(id: storyID)
+        state.stories.removeAll { $0.id == storyID }
         state.lastUpdated = Date()
     }
 
@@ -247,6 +261,7 @@ final class FeedScreenViewModel {
                     if resetting {
                         state.entries = loaded.entries
                         state.stories = loaded.stories
+                        syncViewerStoryStoreIfNeeded()
                     } else {
                         let existing = Set(state.entries.map(\.id))
                         let appended = loaded.entries.filter { !existing.contains($0.id) }
@@ -302,6 +317,7 @@ final class FeedScreenViewModel {
             if resetting {
                 state.entries = page.entries
                 state.stories = page.stories
+                syncViewerStoryStoreIfNeeded()
             } else {
                 let existing = Set(state.entries.map(\.id))
                 let appended = page.entries.filter { !existing.contains($0.id) }
@@ -330,6 +346,11 @@ final class FeedScreenViewModel {
     private func prefetchEngagement() {
         let targets = state.visibleEntries.map(\.interactionTarget)
         engagementStore.prefetch(targets)
+    }
+
+    private func syncViewerStoryStoreIfNeeded() {
+        guard state.scope == .following, let viewerID = state.viewerID else { return }
+        ViewerActiveStoryStore.shared.sync(viewerID: viewerID, stories: state.stories)
     }
 
     // MARK: - Realtime (screen-owned only)

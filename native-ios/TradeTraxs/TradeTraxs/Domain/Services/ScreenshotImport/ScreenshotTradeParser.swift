@@ -275,7 +275,6 @@ nonisolated enum ScreenshotTradeParser {
         var entryPrice: Decimal?
         var exitPrice: Decimal?
         var pnl: Decimal?
-        var points: Decimal?
         var quantity: Decimal = 1
 
         if let pnlRange = trimmed.lowercased().range(of: "p&l") ?? trimmed.lowercased().range(of: "pnl") {
@@ -315,7 +314,7 @@ nonisolated enum ScreenshotTradeParser {
             entryAt: Date(),
             exitAt: nil,
             realizedPnL: pnl,
-            points: points,
+            points: nil,
             executionID: nil,
             orderID: nil,
             warnings: warnings,

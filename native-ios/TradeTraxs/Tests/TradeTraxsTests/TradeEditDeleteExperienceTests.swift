@@ -159,7 +159,8 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
             session: environment.data.session,
             imagePipeline: environment.data.imagePipeline,
             cache: cache,
-            navigationCoordinator: environment.navigation.coordinator
+            navigationCoordinator: environment.navigation.coordinator,
+            rpc: environment.data.rpc
         )
         viewModel.loadIfNeeded()
         await waitFor { viewModel.phase == .loaded }

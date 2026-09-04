@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// Rich trade-share card for DM and Trade Room bubbles (web trade message card).
 struct SharedTradeMessageCard: View {
@@ -14,11 +13,13 @@ struct SharedTradeMessageCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             if let trade {
-                if let reference = ProfileCardMediaPresence.tradeMedia(in: trade) {
-                    SharedTradeMessageScreenshotView(
-                        reference: reference,
-                        imagePipeline: imagePipeline
+                if ProfileCardMediaPresence.tradeMedia(in: trade) != nil {
+                    TradePreviewThumbnail(
+                        trade: trade,
+                        imagePipeline: imagePipeline,
+                        size: .messageHero()
                     )
+                    .frame(maxWidth: .infinity)
                     .modifier(SharedTradeMediaBleedModifier(enabled: !includesBackground))
                 }
 
@@ -197,55 +198,6 @@ struct SharedTradeMessageCard: View {
         }
         parts.append(TradeDisplay.dateTimeText(trade.entryAt))
         return parts.joined(separator: ", ")
-    }
-}
-
-/// Loads a trade screenshot via ``ImagePipeline`` and renders only when bytes decode.
-/// No placeholder or skeleton — the layout collapses when absent or failed.
-private struct SharedTradeMessageScreenshotView: View {
-    let reference: MediaReference
-    let imagePipeline: any ImagePipeline
-    var maxHeight: CGFloat = 168
-
-    @State private var image: Image?
-
-    var body: some View {
-        Group {
-            if let image {
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: maxHeight)
-                    .accessibilityHidden(true)
-            }
-        }
-        .task(id: "\(reference.id)|\(Int(maxHeight))") {
-            await load()
-        }
-    }
-
-    private func load() async {
-        let pixelBudget = max(256, Int(maxHeight * UIScreen.main.scale * 2))
-        do {
-            let data = try await imagePipeline.data(
-                for: ImageRequest(
-                    reference: reference,
-                    purpose: .tradeScreenshot,
-                    maxPixelSize: pixelBudget
-                )
-            )
-            let decoded = await Task.detached(priority: .utility) {
-                UIImage(data: data)
-            }.value
-            guard let decoded else {
-                image = nil
-                return
-            }
-            image = Image(uiImage: decoded)
-        } catch {
-            image = nil
-        }
     }
 }
 

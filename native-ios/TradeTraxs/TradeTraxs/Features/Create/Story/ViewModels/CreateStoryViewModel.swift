@@ -19,6 +19,8 @@ final class CreateStoryViewModel {
 
     private(set) var imagePreview: UIImage?
     private(set) var imageData: Data?
+    /// Original picked image — preserved separately from the rendered upload.
+    private(set) var sourceImage: UIImage?
     private(set) var contentType = "image/jpeg"
     private(set) var originalFileName = "story.jpg"
 
@@ -58,7 +60,7 @@ final class CreateStoryViewModel {
     }
 
     var hasUnsavedChanges: Bool {
-        imageData != nil
+        sourceImage != nil || imageData != nil
     }
 
     var canPublish: Bool {
@@ -81,27 +83,16 @@ final class CreateStoryViewModel {
         loadIfNeeded()
     }
 
-    func setImage(_ image: UIImage, fileName: String = "story.jpg") {
+    func setSourceImage(_ image: UIImage, fileName: String = "story.jpg") {
         guard canChangeMedia else { return }
         formError = nil
-        guard let prepared = MediaImagePreparation.storyJPEGData(from: image) else {
-            formError = "Couldn't prepare image."
-            return
-        }
-        if let message = StoryUploadValidation.validate(
-            data: prepared,
-            contentType: "image/jpeg",
-            fileName: fileName
-        ) {
-            formError = message
-            return
-        }
-        imagePreview = image
-        imageData = prepared
-        contentType = "image/jpeg"
+        sourceImage = image
+        imagePreview = nil
+        imageData = nil
         originalFileName = fileName.hasSuffix(".jpg") || fileName.hasSuffix(".jpeg")
             ? fileName
             : "story.jpg"
+        contentType = "image/jpeg"
         if case .idle = phase {
             phase = .ready
         } else if case .failed = phase {
@@ -109,8 +100,37 @@ final class CreateStoryViewModel {
         }
     }
 
+    func submitRenderedStory(_ rendered: UIImage) {
+        guard canChangeMedia else { return }
+        formError = nil
+        guard let prepared = MediaImagePreparation.jpegData(
+            from: rendered,
+            maxDimension: 1920,
+            quality: 0.92
+        ) else {
+            formError = "Couldn't prepare story image."
+            return
+        }
+        if let message = StoryUploadValidation.validate(
+            data: prepared,
+            contentType: "image/jpeg",
+            fileName: originalFileName
+        ) {
+            formError = message
+            return
+        }
+        imagePreview = rendered
+        imageData = prepared
+        contentType = "image/jpeg"
+    }
+
+    func setImage(_ image: UIImage, fileName: String = "story.jpg") {
+        setSourceImage(image, fileName: fileName)
+    }
+
     func clearImage() {
         guard canChangeMedia else { return }
+        sourceImage = nil
         imagePreview = nil
         imageData = nil
         formError = nil

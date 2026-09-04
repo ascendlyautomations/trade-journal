@@ -13,13 +13,26 @@ struct LeaderboardPodiumView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
 
+    private let podiumHeight: CGFloat = 184
+
     var body: some View {
-        HStack(alignment: .bottom, spacing: ExperienceSpacing.sm) {
-            podiumSlot(rank: 2)
-            podiumSlot(rank: 1)
-            podiumSlot(rank: 3)
+        GeometryReader { geometry in
+            let spacing = ExperienceSpacing.sm
+            let horizontalInset = ExperienceSpacing.md * 2
+            let columnGapTotal = spacing * 2
+            let availableWidth = max(geometry.size.width - horizontalInset - columnGapTotal, 0)
+            let sideWidth = availableWidth * 0.29
+            let centerWidth = availableWidth * 0.42
+
+            HStack(alignment: .bottom, spacing: spacing) {
+                podiumSlot(rank: 2, width: sideWidth)
+                podiumSlot(rank: 1, width: centerWidth, emphasized: true)
+                podiumSlot(rank: 3, width: sideWidth)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, ExperienceSpacing.md)
         }
-        .padding(.horizontal, ExperienceSpacing.md)
+        .frame(height: podiumHeight)
         .padding(.vertical, ExperienceSpacing.md)
         .opacity(appeared ? 1 : (animateEntrance && !reduceMotion ? 0.01 : 1))
         .offset(y: appeared || reduceMotion || !animateEntrance ? 0 : 16)
@@ -37,49 +50,51 @@ struct LeaderboardPodiumView: View {
     }
 
     @ViewBuilder
-    private func podiumSlot(rank: Int) -> some View {
+    private func podiumSlot(rank: Int, width: CGFloat, emphasized: Bool = false) -> some View {
         if let row = podium.first(where: { $0.rank == rank }) {
             Button {
                 onOpen(row)
             } label: {
-                card(for: row, emphasized: rank == 1)
+                card(for: row, emphasized: emphasized)
             }
             .buttonStyle(.plain)
-            .frame(maxWidth: .infinity)
+            .frame(width: max(width, 0))
             .accessibilityIdentifier("leaderboard.podium.\(rank)")
         } else {
-            Color.clear.frame(maxWidth: .infinity, minHeight: rank == 1 ? 168 : 132)
+            Color.clear
+                .frame(width: max(width, 0), height: emphasized ? 168 : 132)
         }
     }
 
     @ViewBuilder
     private func card(for row: LeaderboardRow, emphasized: Bool) -> some View {
         let profile = profileFor(row.profileID)
-        VStack(spacing: ExperienceSpacing.sm) {
+        VStack(spacing: ExperienceSpacing.xs) {
             ZStack(alignment: .topTrailing) {
                 FollowListAvatarView(
                     profile: profile,
                     imagePipeline: imagePipeline,
-                    size: emphasized ? 72 : 56
+                    size: emphasized ? 68 : 52
                 )
                 Text(rankBadge(row.rank))
-                    .font(.system(size: emphasized ? 14 : 12, weight: .bold))
+                    .font(.system(size: emphasized ? 13 : 11, weight: .bold))
                     .foregroundStyle(colors.onAccent)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
                     .background(Capsule().fill(badgeColor(for: row.rank)))
-                    .offset(x: 6, y: -6)
+                    .offset(x: 4, y: -4)
             }
 
             VStack(spacing: 2) {
-                HStack(spacing: 3) {
+                HStack(spacing: 2) {
                     Text(profile.displayName)
-                        .experienceStyle(emphasized ? .headline : .subheadline, color: colors.primaryText)
+                        .experienceStyle(emphasized ? .subheadline : .caption, color: colors.primaryText)
                         .fontWeight(.semibold)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                     if row.isVerified {
                         Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(colors.accent)
                     }
                 }
@@ -87,15 +102,18 @@ struct LeaderboardPodiumView: View {
                     Text("@\(profile.username)")
                         .experienceStyle(.caption2, color: colors.secondaryText)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                 }
                 Text(row.primaryMetricText)
-                    .experienceStyle(emphasized ? .body : .subheadline, color: metricColor(row.primaryMetricText))
+                    .experienceStyle(emphasized ? .subheadline : .caption, color: metricColor(row.primaryMetricText))
                     .fontWeight(.bold)
                     .lineLimit(1)
-                    .padding(.top, 2)
+                    .minimumScaleFactor(0.8)
+                    .padding(.top, 1)
             }
         }
-        .padding(ExperienceSpacing.sm)
+        .padding(.horizontal, ExperienceSpacing.xs)
+        .padding(.vertical, ExperienceSpacing.sm)
         .frame(maxWidth: .infinity)
         .frame(minHeight: emphasized ? 168 : 132)
         .background(
@@ -106,7 +124,6 @@ struct LeaderboardPodiumView: View {
             RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
                 .stroke(emphasized ? colors.accent.opacity(0.45) : colors.border.opacity(0.35), lineWidth: emphasized ? 1.5 : 1)
         )
-        .scaleEffect(emphasized ? 1.04 : 1)
     }
 
     private func rankBadge(_ rank: Int) -> String {

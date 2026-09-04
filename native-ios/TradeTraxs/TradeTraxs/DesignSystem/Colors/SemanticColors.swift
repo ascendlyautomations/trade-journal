@@ -130,6 +130,26 @@ extension SemanticColorPalette {
     /// Incoming DM / Trade Room bubble fill — slightly darker than the screen
     /// so bubbles separate cleanly (same family as segmented-control track / `fillPrimary`).
     var incomingMessageBubble: Color { fillPrimary }
+
+    // MARK: - TradeTraxs promotion aliases (all themes map to semantic fields)
+
+    /// App canvas — maps to ``backgroundPrimary``.
+    var appBackground: Color { backgroundPrimary }
+
+    /// Primary card / grouped surface — maps to ``surfacePrimary``.
+    var surface: Color { surfacePrimary }
+
+    /// Elevated card / row — maps to ``surfaceSecondary``.
+    var elevatedSurface: Color { surfaceSecondary }
+
+    /// Input and picker fills — maps to ``fillPrimary``.
+    var inputSurface: Color { fillPrimary }
+
+    /// Nested tertiary surface — maps to ``fillTertiary``.
+    var secondarySurface: Color { fillTertiary }
+
+    /// Selected / muted accent fill — maps to ``accentMuted``.
+    var selectedSurface: Color { accentMuted }
 }
 
 /// Static facade — resolves through the active Theme Engine palette.

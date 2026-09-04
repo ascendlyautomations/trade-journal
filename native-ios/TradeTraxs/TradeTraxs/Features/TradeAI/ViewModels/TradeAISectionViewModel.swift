@@ -65,6 +65,17 @@ final class TradeAISectionViewModel {
         )
     }
 
+    /// Primary Analyze action — custom question when filled, otherwise selected preset.
+    func analyzeTapped() async {
+        let custom = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !custom.isEmpty {
+            draft = ""
+            await submit(displayText: custom, promptKey: "custom")
+            return
+        }
+        await analyzeSelected()
+    }
+
     func send() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }

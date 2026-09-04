@@ -100,7 +100,7 @@ nonisolated struct DashboardTradeWireV1: Codable, Sendable, Equatable {
     }
 }
 
-extension DashboardTradeWireV1 {
+nonisolated extension DashboardTradeWireV1 {
     /// Merge journal fields from a domain trade after Edit Trade / local mutation.
     mutating func mergeJournalFields(from trade: Trade) {
         ticker = trade.symbol.ticker
@@ -140,7 +140,7 @@ extension DashboardTradeWireV1 {
     }
 }
 
-extension Trade {
+nonisolated extension Trade {
     func asDashboardWireV1() -> DashboardTradeWireV1 {
         var row = DashboardTradeWireV1(id: id.rawValue)
         row.user_id = ownerProfileID.rawValue

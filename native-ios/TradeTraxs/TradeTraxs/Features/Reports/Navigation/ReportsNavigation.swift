@@ -10,6 +10,10 @@ enum ReportsNavigation {
         coordinator.open(.home(.report(reportID)))
     }
 
+    static func openYearlyDetail(year: Int, using coordinator: NavigationCoordinator) {
+        coordinator.open(.home(.report(TradingReportYearRef(year: year).reportID)))
+    }
+
     static func openPsychologyDetail(_ reportID: ReportID, using coordinator: NavigationCoordinator) {
         coordinator.open(.home(.report(reportID)))
     }

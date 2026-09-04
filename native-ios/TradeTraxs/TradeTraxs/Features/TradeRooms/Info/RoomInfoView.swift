@@ -6,6 +6,7 @@ struct RoomInfoView: View {
     private let imagePipeline: any ImagePipeline
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.appEnvironment) private var appEnvironment
     @State private var logoImage: Image?
 
     init(
@@ -64,16 +65,6 @@ struct RoomInfoView: View {
         ) {
             Button("Leave Room", role: .destructive) {
                 Task { await viewModel.leaveRoom() }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-        .confirmationDialog(
-            "Report this Trade Room?",
-            isPresented: $viewModel.showsReportConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Report Room") {
-                viewModel.reportRoom()
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -164,7 +155,13 @@ struct RoomInfoView: View {
                     viewModel.showsLeaveConfirmation = true
                 }
                 Button("Report Room") {
-                    viewModel.showsReportConfirmation = true
+                    ExperienceHaptics.play(.selection)
+                    ContentReportSupport.presentTradeRoom(
+                        roomID: viewModel.roomID,
+                        roomName: viewModel.room?.name,
+                        ownerID: viewModel.room?.ownerProfileID,
+                        presenter: appEnvironment.contentReportPresenter
+                    )
                 }
             }
 

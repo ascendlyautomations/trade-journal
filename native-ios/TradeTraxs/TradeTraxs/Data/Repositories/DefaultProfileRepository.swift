@@ -65,7 +65,12 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         for id in unique {
             let key = "profile:\(id)"
             if let hit = cache.memory.value(forKey: key, as: Profile.self) {
-                cached.append(hit)
+                // Partial memory seeds (e.g. feed embeds) must not block avatar refetch.
+                if hit.avatar != nil {
+                    cached.append(hit)
+                } else {
+                    missing.append(id)
+                }
             } else {
                 missing.append(id)
             }

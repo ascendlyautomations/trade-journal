@@ -40,11 +40,6 @@ enum SettingsHomeModel {
             items: [
                 SettingsHomeItem(route: .subscription, systemImage: "creditcard"),
                 SettingsHomeItem(route: .tradingAccounts, systemImage: "chart.bar.doc.horizontal"),
-                SettingsHomeItem(
-                    route: .propFirm,
-                    systemImage: "building.columns",
-                    subtitle: "Rules & limits"
-                ),
                 SettingsHomeItem(route: .affiliate, systemImage: "gift"),
             ]
         ),

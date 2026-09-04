@@ -581,6 +581,41 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         return strip
     }
 
+    func story(id: StoryID) async throws -> Story? {
+        struct Row: Codable {
+            var id: String?
+            var user_id: String?
+            var image_url: String?
+            var created_at: String?
+        }
+
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "stories",
+            query: [
+                SupabaseQuery.select("id,user_id,image_url,created_at"),
+                SupabaseQuery.eq("id", id.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
+        guard let row = rows.first,
+              let storyID = row.id?.trimmingCharacters(in: .whitespacesAndNewlines), !storyID.isEmpty,
+              let author = row.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !author.isEmpty,
+              let media = row.image_url?.trimmingCharacters(in: .whitespacesAndNewlines), !media.isEmpty,
+              let created = ISO8601.date(from: row.created_at),
+              ActiveStorySemantics.isActive(createdAt: created)
+        else { return nil }
+
+        return Story(
+            id: StoryID(storyID),
+            authorProfileID: ProfileID(author),
+            media: MediaReference(id: media, kind: .image, altText: nil),
+            expiresAt: created.addingTimeInterval(ActiveStorySemantics.window),
+            createdAt: created,
+            viewerHasSeen: false
+        )
+    }
+
     func createStory(userID: ProfileID, imageURL: String) async throws -> Story {
         struct Body: Encodable {
             var user_id: String
@@ -619,6 +654,13 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             expiresAt: created.addingTimeInterval(ActiveStorySemantics.window),
             createdAt: created,
             viewerHasSeen: false
+        )
+    }
+
+    func deleteStory(id: StoryID) async throws {
+        try await supabase.database.delete(
+            from: "stories",
+            query: [SupabaseQuery.eq("id", id.rawValue)]
         )
     }
 

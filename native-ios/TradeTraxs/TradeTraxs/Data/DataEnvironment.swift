@@ -32,6 +32,7 @@ final class DataEnvironment {
     let explore: any ExploreRepository
     let search: any SearchRepository
     let billing: any BillingRepository
+    let account: any AccountRepository
     let analytics: any AnalyticsRepository
     let achievements: any AchievementRepository
     let referrals: any ReferralRepository
@@ -48,6 +49,7 @@ final class DataEnvironment {
     let tradingReports: any TradingReportRepository
     let psychologyReports: any PsychologyReportRepository
     let dailyCheckIns: any TraderDailyCheckInRepository
+    let contentReports: any ContentReportRepository
 
     init(
         configuration: DataConfiguration,
@@ -75,6 +77,7 @@ final class DataEnvironment {
         explore: any ExploreRepository,
         search: any SearchRepository,
         billing: any BillingRepository,
+        account: any AccountRepository,
         analytics: any AnalyticsRepository,
         achievements: any AchievementRepository,
         referrals: any ReferralRepository,
@@ -86,7 +89,8 @@ final class DataEnvironment {
         ai: any AIRepository,
         tradingReports: any TradingReportRepository,
         psychologyReports: any PsychologyReportRepository,
-        dailyCheckIns: any TraderDailyCheckInRepository
+        dailyCheckIns: any TraderDailyCheckInRepository,
+        contentReports: any ContentReportRepository
     ) {
         self.configuration = configuration
         self.supabase = supabase
@@ -113,6 +117,7 @@ final class DataEnvironment {
         self.explore = explore
         self.search = search
         self.billing = billing
+        self.account = account
         self.analytics = analytics
         self.achievements = achievements
         self.referrals = referrals
@@ -125,6 +130,7 @@ final class DataEnvironment {
         self.tradingReports = tradingReports
         self.psychologyReports = psychologyReports
         self.dailyCheckIns = dailyCheckIns
+        self.contentReports = contentReports
     }
 
     static func make(
@@ -237,6 +243,7 @@ final class DataEnvironment {
             explore: DefaultExploreRepository(supabase: supabase),
             search: DefaultSearchRepository(supabase: supabase, cache: cache),
             billing: DefaultBillingRepository(supabase: supabase, cache: cache),
+            account: DefaultAccountRepository(supabase: supabase),
             analytics: DefaultAnalyticsRepository(supabase: supabase),
             achievements: DefaultAchievementRepository(supabase: supabase, cache: cache),
             referrals: DefaultReferralRepository(supabase: supabase, cache: cache),
@@ -261,7 +268,8 @@ final class DataEnvironment {
                 session: session,
                 detailCache: detailCache
             ),
-            dailyCheckIns: dailyCheckInRepository
+            dailyCheckIns: dailyCheckInRepository,
+            contentReports: DefaultContentReportRepository(supabase: supabase)
         )
     }
 }

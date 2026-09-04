@@ -1,6 +1,7 @@
 import crypto from "crypto"
 import http2 from "http2"
 import { NATIVE_IOS_APP_ID } from "@/lib/nativeIosIdentity"
+import { redactDeviceToken } from "@/lib/server/push/deviceTokenRedaction"
 
 export type ApnsAlertPayload = {
   title: string
@@ -195,15 +196,15 @@ export async function sendApnsAlert(
 
   const jwt = createApnsJwt(config)
 
-  // TEMPORARY [tt-push-debug] — exact payload after APNs accept path starts.
-  console.info("[tt-push-debug] APNs request", {
+  // APNs delivery diagnostics — device tokens are redacted in logs.
+  console.info("[apns] request", {
     timestamp: new Date().toISOString(),
     host: config.production
       ? "api.push.apple.com"
       : "api.sandbox.push.apple.com",
     environment: config.production ? "production" : "sandbox",
     bundleId: config.bundleId,
-    deviceToken,
+    deviceToken: redactDeviceToken(deviceToken),
     notificationType: payload.notificationType,
     apsPayload: JSON.parse(body) as unknown,
   })
@@ -288,10 +289,9 @@ export async function sendApnsAlert(
     req.on("end", () => {
       const responseBody = Buffer.concat(chunks).toString("utf8")
       if (status === 200) {
-        // TEMPORARY [tt-push-debug]
-        console.info("[tt-push-debug] APNs accepted (200)", {
+        console.info("[apns] accepted", {
           timestamp: new Date().toISOString(),
-          deviceToken,
+          deviceToken: redactDeviceToken(deviceToken),
           notificationType: payload.notificationType,
           title: payload.title,
           body: payload.body,
@@ -310,10 +310,9 @@ export async function sendApnsAlert(
       } catch {
         /* ignore */
       }
-      // TEMPORARY [tt-push-debug]
-      console.error("[tt-push-debug] APNs rejected", {
+      console.error("[apns] rejected", {
         timestamp: new Date().toISOString(),
-        deviceToken,
+        deviceToken: redactDeviceToken(deviceToken),
         notificationType: payload.notificationType,
         status,
         reason,

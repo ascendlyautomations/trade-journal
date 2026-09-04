@@ -11,6 +11,7 @@ struct RoomConversationView: View {
     private let navigationHost: TradeRoomNavigationHost
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
@@ -258,7 +259,16 @@ struct RoomConversationView: View {
                                 onSharedTradeTap: { tradeID in
                                     guard let navigationCoordinator else { return }
                                     navigationCoordinator.open(navigationHost.sharedTrade(tradeID))
-                                }
+                                },
+                                onSharedStoryTap: { payload in
+                                    guard let data else { return }
+                                    StoryShareNavigation.open(
+                                        payload: payload,
+                                        cache: data.detailCache,
+                                        coordinator: navigationCoordinator
+                                    )
+                                },
+                                onReport: incomingRoomMessageReportAction(for: bubble)
                             )
                             .padding(.vertical, 2)
                             .background {
@@ -344,6 +354,19 @@ struct RoomConversationView: View {
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
         scrollToLatest(proxy: proxy, animated: animated)
+    }
+
+    private func incomingRoomMessageReportAction(for bubble: ConversationBubbleItem) -> (() -> Void)? {
+        guard !bubble.isOutgoing,
+              bubble.message.senderProfileID != viewModel.viewerID
+        else { return nil }
+        return {
+            ExperienceHaptics.play(.selection)
+            ContentReportSupport.presentTradeRoomMessage(
+                message: bubble.message,
+                presenter: appEnvironment.contentReportPresenter
+            )
+        }
     }
 }
 

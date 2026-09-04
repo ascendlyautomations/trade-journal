@@ -67,6 +67,15 @@ final class CreateReelViewModel {
         draft?.linkedTradeSummary
     }
 
+    /// Resolved trade for linked-trade preview (picker list or detail cache).
+    var linkedTrade: Trade? {
+        guard let id = draft?.linkedTradeID else { return nil }
+        if let match = pickerTrades.first(where: { $0.id == id }) {
+            return match
+        }
+        return detailCache.trade(id: id)
+    }
+
     /// Trade-linked clips cannot store `reels.caption` (DB check).
     var captionEnabled: Bool {
         draft?.linkedTradeID == nil
@@ -160,6 +169,7 @@ final class CreateReelViewModel {
     func applyScreenshotFixture(filled: Bool) {
         if filled {
             let trade = CreateReelFixtures.sampleTrade(owner: viewerID ?? CreateReelFixtures.viewerID)
+            detailCache.seed(trade)
             draft = CreateReelFixtures.screenshotDraft(linkedTrade: trade)
             captionText = ""
         } else {

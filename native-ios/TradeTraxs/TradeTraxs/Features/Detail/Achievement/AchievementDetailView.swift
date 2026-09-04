@@ -76,6 +76,7 @@ struct AchievementDetailView: View {
                             dateText: TradeDisplay.dateText(achievement.achievedAt),
                             isOwner: viewModel.isOwner,
                             contentLink: .achievement(achievement.id),
+                            ownerProfileID: achievement.ownerProfileID,
                             shareText: "\(achievement.title) on TradeTraxs",
                             accessibilityIdentifier: "detail.achievement.identity"
                         )
@@ -146,6 +147,10 @@ struct AchievementDetailView: View {
                                 )
                             )
                     }
+                }
+
+                if !viewModel.isOwner, achievement.value != nil {
+                    ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.pastPerformance)
                 }
 
                 if let description = achievement.description?

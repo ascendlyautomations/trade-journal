@@ -72,7 +72,7 @@ struct CheckInDayDetailView: View {
                     ("Sleep", sleepText(checkIn.sleepHours)),
                     ("Sleep Quality", ratingText(checkIn.sleepQuality)),
                     ("Morning", ratingText(checkIn.morningRating)),
-                    ("Stress", ratingText(checkIn.stressLevel)),
+                    ("Stress", TraderDailyCheckInStressScale.displayText(for: checkIn.stressLevel)),
                     ("Energy", ratingText(checkIn.energyLevel)),
                     ("Focus", ratingText(checkIn.focusLevel)),
                 ])

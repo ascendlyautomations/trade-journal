@@ -109,6 +109,44 @@ export function getSoonestStoryExpiryMs(
   return soonest
 }
 
+export function removeStoryFromStoriesByUser(
+  storiesByUser: StoriesByUserMap,
+  userId: string,
+  storyId: string
+): StoriesByUserMap {
+  const uid = String(userId)
+  const existing = storiesByUser[uid]
+  if (!existing?.length) return storiesByUser
+
+  const filtered = existing.filter((story) => String(story.id) !== String(storyId))
+  if (filtered.length === existing.length) return storiesByUser
+
+  const next = { ...storiesByUser }
+  if (filtered.length === 0) {
+    delete next[uid]
+  } else {
+    next[uid] = filtered
+  }
+  return next
+}
+
+export async function deleteStoryById(
+  client: SupabaseClient,
+  storyId: string
+): Promise<{ error: PostgrestError | null }> {
+  const trimmed = String(storyId ?? "").trim()
+  if (!trimmed) {
+    return { error: null }
+  }
+
+  if (isDemoModeActive()) {
+    return { error: null }
+  }
+
+  const { error } = await client.from("stories").delete().eq("id", trimmed)
+  return { error }
+}
+
 export async function fetchActiveStoriesForUserIds(
   client: SupabaseClient,
   userIds: string[]

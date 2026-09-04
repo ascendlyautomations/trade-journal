@@ -30,79 +30,21 @@ struct StatsContainerView: View {
             }
 
             equityBlock(metrics)
-            sessionsBlock(metrics)
 
-            groupedSection(title: "Performance", accessibilityID: "profile.stats.performance") {
-                metricRow(
-                    label: "Profit Factor",
-                    value: Self.factorText(metrics.profitFactor),
-                    tone: profitFactorTone(metrics.profitFactor)
-                )
-                sectionDivider
-                metricRow(
-                    label: "Win %",
-                    value: ProfileDisplay.formatWinRate(metrics.winRate),
-                    tone: .neutral
-                )
-                sectionDivider
-                metricRow(
-                    label: "Profit / Trade",
-                    value: Self.currencyText(metrics.profitPerTrade),
-                    tone: profitPerTradeTone(metrics.profitPerTrade)
-                )
+            ProfileStatsDashboardSection(title: "Trading Sessions", accessibilityID: "profile.stats.sessions") {
+                ProfileStatsDashboardCard {
+                    ProfileStatsSessionsCard(
+                        sessionTotal: metrics.sessionTotal,
+                        sessions: metrics.sessionBreakdown
+                    )
+                }
             }
 
-            groupedSection(title: "Trading", accessibilityID: "profile.stats.trading") {
-                metricRow(
-                    label: "Avg Winner",
-                    value: Self.currencyText(metrics.averageWinner),
-                    tone: metrics.averageWinner == nil ? .neutral : .positive
-                )
-                sectionDivider
-                metricRow(
-                    label: "Avg Loser",
-                    value: Self.currencyText(metrics.averageLoser),
-                    tone: metrics.averageLoser == nil ? .neutral : .negative
-                )
-                sectionDivider
-                metricRow(
-                    label: "Biggest Win",
-                    value: Self.pnlCurrencyText(metrics.biggestWin),
-                    tone: .positive
-                )
-                sectionDivider
-                metricRow(
-                    label: "Biggest Loss",
-                    value: metrics.biggestLoss.map { Self.pnlCurrencyText($0) } ?? "—",
-                    tone: metrics.biggestLoss == nil ? .neutral : .negative
-                )
-            }
-
-            groupedSection(title: "Activity", accessibilityID: "profile.stats.activity") {
-                metricRow(
-                    label: "Long Trades",
-                    value: "\(metrics.longTrades)",
-                    tone: .neutral
-                )
-                sectionDivider
-                metricRow(
-                    label: "Short Trades",
-                    value: "\(max(0, metrics.filteredTradeCount - metrics.longTrades))",
-                    tone: .neutral
-                )
-                sectionDivider
-                metricRow(
-                    label: "Largest Win Streak",
-                    value: "W\(metrics.maxWinStreak)",
-                    tone: metrics.maxWinStreak > 0 ? .positive : .neutral
-                )
-                sectionDivider
-                metricRow(
-                    label: "Largest Loss Streak",
-                    value: "L\(metrics.maxLossStreak)",
-                    tone: metrics.maxLossStreak > 0 ? .negative : .neutral
-                )
-            }
+            performanceSection(metrics)
+            winnerLoserSection(metrics)
+            extremesSection(metrics)
+            directionSection(metrics)
+            streaksSection(metrics)
         }
         .animation(
             ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
@@ -110,10 +52,105 @@ struct StatsContainerView: View {
         )
     }
 
+    // MARK: - Dashboard sections
+
+    private func performanceSection(_ metrics: ProfileStatisticsMetrics.Result) -> some View {
+        let valueAreaHeight: CGFloat = 62
+        return ProfileStatsDashboardSection(title: "Performance", accessibilityID: "profile.stats.performance") {
+            ProfileStatsDashboardCard {
+                HStack(alignment: .center, spacing: ExperienceSpacing.xxs) {
+                    ProfileStatsMetricCard(
+                        value: Self.factorText(metrics.profitFactor),
+                        label: "Profit Factor",
+                        valueColor: profitFactorColor(metrics.profitFactor),
+                        valueAreaHeight: valueAreaHeight
+                    )
+                    ProfileStatsWinRateCard(
+                        winRate: metrics.winRate,
+                        formattedWinRate: ProfileDisplay.formatWinRate(metrics.winRate),
+                        valueAreaHeight: valueAreaHeight
+                    )
+                    ProfileStatsMetricCard(
+                        value: Self.currencyText(metrics.profitPerTrade),
+                        label: "P / Trade",
+                        valueColor: profitPerTradeColor(metrics.profitPerTrade),
+                        valueAreaHeight: valueAreaHeight
+                    )
+                }
+            }
+        }
+    }
+
+    private func winnerLoserSection(_ metrics: ProfileStatisticsMetrics.Result) -> some View {
+        ProfileStatsDashboardSection(title: "Winner vs Loser", accessibilityID: "profile.stats.trading") {
+            ProfileStatsDashboardCard {
+                ProfileStatsWinnerLoserCard(
+                    averageWinner: metrics.averageWinner,
+                    averageLoser: metrics.averageLoser,
+                    winnerText: Self.currencyText(metrics.averageWinner),
+                    loserText: Self.currencyText(metrics.averageLoser),
+                    ratioText: Self.winLossRatioText(
+                        winner: metrics.averageWinner,
+                        loser: metrics.averageLoser
+                    )
+                )
+            }
+        }
+    }
+
+    private func extremesSection(_ metrics: ProfileStatisticsMetrics.Result) -> some View {
+        ProfileStatsDashboardSection(title: "Extremes", accessibilityID: "profile.stats.extremes") {
+            HStack(spacing: ExperienceSpacing.xs) {
+                ProfileStatsExtremeCard(
+                    title: "Best Trade",
+                    value: Self.positivePnlText(metrics.biggestWin),
+                    direction: .up,
+                    tone: colors.profit
+                )
+                ProfileStatsExtremeCard(
+                    title: "Worst Trade",
+                    value: metrics.biggestLoss.map { Self.pnlCurrencyText($0) } ?? "—",
+                    direction: .down,
+                    tone: metrics.biggestLoss == nil ? colors.primaryText : colors.loss
+                )
+            }
+        }
+    }
+
+    private func directionSection(_ metrics: ProfileStatisticsMetrics.Result) -> some View {
+        ProfileStatsDashboardSection(title: "Direction", accessibilityID: "profile.stats.activity") {
+            ProfileStatsDashboardCard {
+                ProfileStatsLongShortCard(
+                    longCount: metrics.longTrades,
+                    shortCount: max(0, metrics.filteredTradeCount - metrics.longTrades)
+                )
+            }
+        }
+    }
+
+    private func streaksSection(_ metrics: ProfileStatisticsMetrics.Result) -> some View {
+        ProfileStatsDashboardSection(title: "Streaks", accessibilityID: "profile.stats.streaks") {
+            HStack(spacing: ExperienceSpacing.xs) {
+                ProfileStatsStreakCard(
+                    title: "Best Win Streak",
+                    count: metrics.maxWinStreak,
+                    symbol: "🔥",
+                    tone: metrics.maxWinStreak > 0 ? colors.profit : colors.primaryText
+                )
+                ProfileStatsStreakCard(
+                    title: "Largest Loss Streak",
+                    count: metrics.maxLossStreak,
+                    symbol: "",
+                    tone: metrics.maxLossStreak > 0 ? colors.loss : colors.primaryText
+                )
+            }
+        }
+    }
+
     private var modeFilter: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: ExperienceSpacing.xs) {
-                ForEach(ProfileStatisticsMetrics.Mode.allCases) { mode in
+                ForEach(ProfileStatisticsMetrics.Mode.profileFilterCases) { mode in
                     ExperienceChip(
                         title: mode.title,
                         isSelected: viewModel.selectedMode == mode
@@ -125,125 +162,6 @@ struct StatsContainerView: View {
             }
         }
         .accessibilityLabel("Account mode filter")
-    }
-
-    // MARK: - Grouped sections (Settings / Health style)
-
-    private func groupedSection(
-        title: String,
-        accessibilityID: String,
-        @ViewBuilder rows: () -> some View
-    ) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text(title)
-                .font(.system(.caption, design: .default).weight(.semibold))
-                .foregroundStyle(colors.secondaryText)
-                .textCase(.uppercase)
-                .tracking(0.4)
-                .padding(.horizontal, ExperienceSpacing.xxs)
-                .accessibilityAddTraits(.isHeader)
-
-            VStack(spacing: 0) {
-                rows()
-            }
-            .background(
-                colors.fillSecondary.opacity(0.55),
-                in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-            )
-        }
-        .accessibilityIdentifier(accessibilityID)
-    }
-
-    private func metricRow(label: String, value: String, tone: MetricTone) -> some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-            Text(label)
-                .font(.system(.subheadline, design: .default))
-                .foregroundStyle(colors.primaryText)
-                .lineLimit(1)
-            Spacer(minLength: ExperienceSpacing.sm)
-            Text(value)
-                .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                .foregroundStyle(toneColor(tone))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .multilineTextAlignment(.trailing)
-        }
-        .padding(.horizontal, ExperienceSpacing.md)
-        .padding(.vertical, 9)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label), \(value)")
-    }
-
-    private var sectionDivider: some View {
-        Rectangle()
-            .fill(colors.separator.opacity(0.55))
-            .frame(height: ExperienceBorder.hairline)
-            .padding(.leading, ExperienceSpacing.md)
-    }
-
-    private func sessionsBlock(_ metrics: ProfileStatisticsMetrics.Result) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Trading Sessions")
-                    .font(.system(.subheadline, design: .default).weight(.semibold))
-                    .foregroundStyle(colors.primaryText)
-                Spacer()
-                Text(
-                    metrics.sessionTotal > 0
-                        ? "\(metrics.sessionTotal) trades tagged"
-                        : "No session data"
-                )
-                .experienceStyle(.caption2, color: colors.secondaryText)
-            }
-
-            if metrics.sessionBreakdown.isEmpty {
-                Text("Add session tags to trades to unlock this breakdown.")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            } else {
-                VStack(spacing: ExperienceSpacing.sm) {
-                    ForEach(metrics.sessionBreakdown) { row in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(row.label)
-                                    .font(.system(.subheadline, design: .default))
-                                    .foregroundStyle(colors.primaryText)
-                                Spacer()
-                                Text("\(Int(row.pct.rounded()))%")
-                                    .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                                    .foregroundStyle(colors.primaryText)
-                            }
-                            GeometryReader { geo in
-                                ZStack(alignment: .leading) {
-                                    Capsule().fill(colors.fillSecondary)
-                                    Capsule()
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [colors.accent, colors.profit],
-                                                startPoint: .leading,
-                                                endPoint: .trailing
-                                            )
-                                        )
-                                        .frame(
-                                            width: geo.size.width * CGFloat(
-                                                max(0.04, min(1, row.pct / 100))
-                                            )
-                                        )
-                                }
-                            }
-                            .frame(height: 10)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, ExperienceSpacing.md)
-        .padding(.vertical, ExperienceSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            colors.fillSecondary.opacity(0.55),
-            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-        )
-        .accessibilityIdentifier("profile.stats.sessions")
     }
 
     private func equityBlock(_ metrics: ProfileStatisticsMetrics.Result) -> some View {
@@ -274,22 +192,14 @@ struct StatsContainerView: View {
         .accessibilityIdentifier("profile.stats.equity")
     }
 
-    private func toneColor(_ tone: MetricTone) -> Color {
-        switch tone {
-        case .positive: return colors.profit
-        case .negative: return colors.loss
-        case .neutral: return colors.primaryText
-        }
+    private func profitFactorColor(_ value: Decimal?) -> Color {
+        guard let value else { return colors.primaryText }
+        return value >= 1 ? colors.profit : colors.loss
     }
 
-    private func profitFactorTone(_ value: Decimal?) -> MetricTone {
-        guard let value else { return .neutral }
-        return value >= 1 ? .positive : .negative
-    }
-
-    private func profitPerTradeTone(_ value: Decimal?) -> MetricTone {
-        guard let value else { return .neutral }
-        return value >= 0 ? .positive : .negative
+    private func profitPerTradeColor(_ value: Decimal?) -> Color {
+        guard let value else { return colors.primaryText }
+        return value >= 0 ? colors.profit : colors.loss
     }
 
     // MARK: - Formatting (web parity)
@@ -301,6 +211,11 @@ struct StatsContainerView: View {
 
     static func pnlCurrencyText(_ value: Decimal) -> String {
         signedCurrency(value, minFraction: 2, maxFraction: 2)
+    }
+
+    static func positivePnlText(_ value: Decimal) -> String {
+        let text = pnlCurrencyText(value)
+        return value > 0 ? "+\(text)" : text
     }
 
     static func equityMoneyText(_ value: Decimal) -> String {
@@ -317,6 +232,14 @@ struct StatsContainerView: View {
         return formatter.string(from: number) ?? "\(value)"
     }
 
+    static func winLossRatioText(winner: Decimal?, loser: Decimal?) -> String {
+        guard let winner, let loser else { return "—" }
+        let lossMagnitude = abs(NSDecimalNumber(decimal: loser).doubleValue)
+        guard lossMagnitude > 0 else { return "—" }
+        let ratio = NSDecimalNumber(decimal: winner).doubleValue / lossMagnitude
+        return String(format: "%.2fx", ratio)
+    }
+
     private static func signedCurrency(
         _ value: Decimal,
         minFraction: Int,
@@ -331,8 +254,4 @@ struct StatsContainerView: View {
         let body = formatter.string(from: NSDecimalNumber(decimal: absValue)) ?? "\(absValue)"
         return value < 0 ? "-$\(body)" : "$\(body)"
     }
-}
-
-private enum MetricTone {
-    case positive, negative, neutral
 }

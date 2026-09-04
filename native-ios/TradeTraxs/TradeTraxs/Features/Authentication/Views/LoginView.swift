@@ -167,6 +167,9 @@ struct LoginView: View {
 
     private var footer: some View {
         VStack(spacing: ExperienceSpacing.md) {
+            AuthLegalAgreementFootnote()
+                .padding(.top, ExperienceSpacing.sm)
+
             Button {
                 viewModel.toggleMode()
             } label: {

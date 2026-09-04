@@ -103,7 +103,7 @@ struct CheckInHistoryDayRow: View {
             parts.append("Focus \(focus)/5")
         }
         if let stress = checkIn.stressLevel {
-            parts.append("Stress \(stress)/5")
+            parts.append("Stress \(TraderDailyCheckInStressScale.displayText(for: stress))")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }

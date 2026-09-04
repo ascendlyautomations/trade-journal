@@ -3,6 +3,8 @@ import SwiftUI
 /// Reports catalog — Performance Reports + Psychology Reports.
 struct ReportsScreenView: View {
     @State private var viewModel: ReportsScreenViewModel
+    @State private var isPerformanceExpanded = false
+    @State private var isPsychologyExpanded = false
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -51,110 +53,166 @@ struct ReportsScreenView: View {
             )
             .experienceSheetChrome()
         }
+        .sheet(isPresented: $viewModel.showsYearPicker) {
+            TradingReportYearPickerView(
+                years: viewModel.availableYears,
+                onSelect: { viewModel.openYearlyReport(year: $0) },
+                onClose: { viewModel.showsYearPicker = false }
+            )
+            .experienceSheetChrome()
+        }
         .accessibilityIdentifier("reports.home")
     }
 
     private var catalogScroll: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                 intro
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.top, ExperienceSpacing.xs)
 
-                sectionHeader("Performance Reports")
-                ForEach(viewModel.cards) { card in
-                    ReportTypeCard(
-                        model: card,
-                        isGenerating: viewModel.generatingPeriod == card.periodKey
-                    ) {
-                        viewModel.primaryAction(for: card)
-                    }
-                    .padding(.horizontal, ExperienceSpacing.md)
-                }
-
-                sectionHeader("Psychology Reports")
-                ForEach(viewModel.psychologyCards) { card in
-                    PsychologyReportTypeCard(model: card) {
-                        viewModel.primaryAction(for: card)
-                    }
-                    .padding(.horizontal, ExperienceSpacing.md)
-                }
+                performanceSection
+                psychologySection
             }
             .padding(.bottom, ExperienceSpacing.xxxl)
             .animation(
-                ExperienceMotion.preferred(ExperienceMotion.modalPresent, reduceMotion: reduceMotion),
+                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+                value: isPerformanceExpanded
+            )
+            .animation(
+                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+                value: isPsychologyExpanded
+            )
+            .animation(
+                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
                 value: viewModel.cards.map(\.actionTitle)
             )
         }
     }
 
     private var intro: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             Text("Your Reports")
-                .experienceStyle(.title2, color: colors.primaryText)
+                .experienceStyle(.title3, color: colors.primaryText)
             Text("Performance reviews and psychology insights from your journal.")
-                .experienceStyle(.subheadline, color: colors.secondaryText)
+                .experienceStyle(.footnote, color: colors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            colors.accent.opacity(0.16),
-                            colors.fillSecondary.opacity(0.65),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        }
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .experienceStyle(.headline, color: colors.primaryText)
-            .padding(.horizontal, ExperienceSpacing.md)
-            .accessibilityAddTraits(.isHeader)
-    }
-}
+    private var performanceSection: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            ReportsSectionHeader(
+                title: "Performance Reports",
+                subtitle: "Trading performance and account reports",
+                isExpanded: isPerformanceExpanded,
+                onToggle: { togglePerformanceSection() }
+            )
+            .accessibilityIdentifier("reports.section.performance")
 
-struct PsychologyReportTypeCard: View {
-    let model: PsychologyReportCardModel
-    var onTap: () -> Void
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: ExperienceSpacing.md) {
-                Image(systemName: model.systemImage)
-                    .font(.title2)
-                    .foregroundStyle(colors.accent)
-                    .frame(width: 36)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(model.title)
-                        .experienceStyle(.headline, color: colors.primaryText)
-                    Text(model.subtitle)
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                        .multilineTextAlignment(.leading)
+            if isPerformanceExpanded {
+                ForEach(viewModel.cards) { card in
+                    performanceCard(card)
+                        .padding(.horizontal, ExperienceSpacing.md)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                Spacer()
-                Text(model.actionTitle)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(colors.accent)
-            }
-            .padding(ExperienceSpacing.md)
-            .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card))
-            .overlay {
-                RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                    .stroke(colors.border, lineWidth: 1)
+                if let yearlyCard = viewModel.yearlyCard {
+                    yearlyCardView(yearlyCard)
+                        .padding(.horizontal, ExperienceSpacing.md)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
         }
-        .buttonStyle(.plain)
+    }
+
+    private var psychologySection: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            ReportsSectionHeader(
+                title: "Psychology Reports",
+                subtitle: "Behavior, discipline and psychology reports",
+                isExpanded: isPsychologyExpanded,
+                onToggle: { togglePsychologySection() }
+            )
+            .accessibilityIdentifier("reports.section.psychology")
+
+            if isPsychologyExpanded {
+                ForEach(viewModel.psychologyCards) { card in
+                    psychologyCard(card)
+                        .padding(.horizontal, ExperienceSpacing.md)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+        }
+    }
+
+    private func performanceCard(_ card: ReportTypeCardModel) -> some View {
+        let generating = viewModel.generatingPeriod == card.periodKey
+        return ReportCard(
+            systemImage: card.systemImage,
+            title: card.title,
+            subtitle: card.subtitle,
+            trailingTitle: ReportCard.trailingTitle(
+                for: generating ? "Generating…" : card.actionTitle,
+                isGenerating: generating
+            ),
+            isGenerating: generating,
+            onTap: { viewModel.primaryAction(for: card) }
+        )
+        .accessibilityIdentifier("reports.card.\(card.periodKey.rawValue)")
+    }
+
+    private func yearlyCardView(_ card: YearlyReportCardModel) -> some View {
+        let showsPicker = card.availableYears.count > 1
+        return ReportCard(
+            systemImage: card.systemImage,
+            title: card.title,
+            subtitle: card.subtitle,
+            trailingTitle: ReportCard.trailingTitle(for: card.actionTitle, isGenerating: false),
+            trailingBehavior: showsPicker
+                ? .interactive { viewModel.primaryAction(for: card) }
+                : .decorative,
+            onTap: {
+                guard !card.availableYears.isEmpty else { return }
+                viewModel.primaryAction(for: card)
+            }
+        )
+        .accessibilityIdentifier("reports.card.yearly")
+    }
+
+    private func psychologyCard(_ card: PsychologyReportCardModel) -> some View {
+        let showsPeriodPicker = card.template.isPeriodic && card.availablePeriods.count > 1
+        return ReportCard(
+            systemImage: card.systemImage,
+            title: card.title,
+            subtitle: card.subtitle,
+            trailingTitle: ReportCard.trailingTitle(for: card.actionTitle, isGenerating: false),
+            trailingBehavior: showsPeriodPicker
+                ? .interactive { viewModel.showPsychologyPeriodPicker(for: card) }
+                : .decorative,
+            onTap: { viewModel.openPsychologyReport(for: card) }
+        )
+        .accessibilityIdentifier("reports.psychology.\(card.template.rawValue)")
+    }
+
+    private func togglePerformanceSection() {
+        ExperienceHaptics.play(.selection)
+        ExperienceMotion.withAnimation(
+            ExperienceMotion.selection,
+            reduceMotion: reduceMotion
+        ) {
+            isPerformanceExpanded.toggle()
+        }
+    }
+
+    private func togglePsychologySection() {
+        ExperienceHaptics.play(.selection)
+        ExperienceMotion.withAnimation(
+            ExperienceMotion.selection,
+            reduceMotion: reduceMotion
+        ) {
+            isPsychologyExpanded.toggle()
+        }
     }
 }
 
@@ -190,5 +248,33 @@ struct PsychologyReportPeriodPickerView: View {
                 }
             }
         }
+    }
+}
+
+struct TradingReportYearPickerView: View {
+    let years: [Int]
+    var onSelect: (Int) -> Void
+    var onClose: () -> Void
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        NavigationStack {
+            List(years, id: \.self) { year in
+                Button {
+                    onSelect(year)
+                } label: {
+                    Text(String(year))
+                        .experienceStyle(.headline, color: colors.primaryText)
+                }
+            }
+            .navigationTitle("Choose Year")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close", action: onClose)
+                }
+            }
+        }
+        .accessibilityIdentifier("reports.yearly.picker")
     }
 }

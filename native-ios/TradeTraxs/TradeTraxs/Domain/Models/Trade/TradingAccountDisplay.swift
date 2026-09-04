@@ -152,4 +152,22 @@ nonisolated enum TradingAccountDisplay {
         }
         return parts.joined(separator: ownerDropdownSeparator)
     }
+
+    /// Prop-firm grouping label from account name — mirrors web `inferPropFirmName`.
+    static func inferPropFirmName(_ accountName: String?) -> String {
+        let name = (accountName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return "" }
+        let pattern = #"\s+\$?[\d,]+(?:\.\d+)?\s*[kK]?$"#
+        if let range = name.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
+            let trimmed = String(name[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? name : trimmed
+        }
+        return name
+    }
+
+    static func propFirmName(for account: TradingAccount) -> String? {
+        guard account.isPropFirmAccount else { return nil }
+        let firm = inferPropFirmName(account.name)
+        return firm.isEmpty ? nil : firm
+    }
 }

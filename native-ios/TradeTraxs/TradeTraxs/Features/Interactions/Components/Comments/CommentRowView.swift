@@ -14,6 +14,8 @@ struct CommentRowView: View {
     let onTogglePin: ((Bool) -> Void)?
     var onDelete: (() -> Void)?
 
+    var onReport: (() -> Void)? = nil
+
     @Environment(\.themeColors) private var colors
 
     private var isPinnedTopLevel: Bool {
@@ -90,6 +92,12 @@ struct CommentRowView: View {
                 Divider()
                 Button(role: .destructive, action: onDelete) {
                     Label("Delete", systemImage: "trash")
+                }
+            }
+            if !isOwn, let onReport {
+                Divider()
+                Button(action: onReport) {
+                    Label("Report", systemImage: "flag")
                 }
             }
         }

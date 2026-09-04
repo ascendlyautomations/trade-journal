@@ -7,65 +7,112 @@ struct CalendarMonthSummaryBar: View {
     @Environment(\.experienceTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Month summary")
-                .experienceStyle(.footnote, color: colors.secondaryText)
+        ProfileStatsDashboardSection(
+            title: "Month Summary",
+            accessibilityID: "calendar.monthSummary"
+        ) {
+            ProfileStatsDashboardCard {
+                VStack(spacing: ExperienceSpacing.sm) {
+                    metricRow(
+                        CalendarSummaryMetric(
+                            label: "Net P&L",
+                            value: CalendarFormatting.fullPnL(summary.netPnL),
+                            tone: summary.netPnL,
+                            emphasis: true
+                        ),
+                        CalendarSummaryMetric(
+                            label: "Trades",
+                            value: "\(summary.tradeCount)",
+                            tone: nil,
+                            emphasis: false
+                        ),
+                        CalendarSummaryMetric(
+                            label: "Days",
+                            value: "\(summary.tradingDayCount)",
+                            tone: nil,
+                            emphasis: false
+                        )
+                    )
 
-            HStack(spacing: ExperienceSpacing.md) {
-                metric(
-                    "Net P&L",
-                    CalendarFormatting.fullPnL(summary.netPnL),
-                    tone: summary.netPnL
-                )
-                metric(
-                    "Trades",
-                    "\(summary.tradeCount)",
-                    tone: nil
-                )
-                metric(
-                    "Days",
-                    "\(summary.tradingDayCount)",
-                    tone: nil
-                )
-            }
+                    rowDivider
 
-            HStack(spacing: ExperienceSpacing.md) {
-                metric(
-                    "Win days",
-                    "\(summary.winningDayCount)",
-                    tone: summary.winningDayCount > 0 ? 1 : nil
-                )
-                metric(
-                    "Loss days",
-                    "\(summary.losingDayCount)",
-                    tone: summary.losingDayCount > 0 ? -1 : nil
-                )
-                if let avg = summary.averageDailyPnL {
-                    metric("Avg day", CalendarFormatting.compactPnL(avg), tone: avg)
+                    metricRow(
+                        CalendarSummaryMetric(
+                            label: "Win Days",
+                            value: "\(summary.winningDayCount)",
+                            tone: summary.winningDayCount > 0 ? 1 : nil,
+                            emphasis: false
+                        ),
+                        CalendarSummaryMetric(
+                            label: "Loss Days",
+                            value: "\(summary.losingDayCount)",
+                            tone: summary.losingDayCount > 0 ? -1 : nil,
+                            emphasis: false
+                        ),
+                        CalendarSummaryMetric(
+                            label: "Avg Day",
+                            value: summary.averageDailyPnL.map(CalendarFormatting.compactPnL) ?? "—",
+                            tone: summary.averageDailyPnL,
+                            emphasis: false
+                        )
+                    )
                 }
             }
         }
-        .padding(ExperienceSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
-        .accessibilityIdentifier("calendar.monthSummary")
     }
 
-    private func metric(_ label: String, _ value: String, tone: Decimal?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .experienceStyle(.caption, color: colors.secondaryText)
-            Text(value)
-                .experienceStyle(
-                    .headline,
-                    color: {
-                        guard let tone else { return colors.primaryText }
-                        return theme.metricColor(for: NSDecimalNumber(decimal: tone).doubleValue)
-                    }()
-                )
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+    private func metricRow(_ metrics: CalendarSummaryMetric...) -> some View {
+        HStack(spacing: 0) {
+            ForEach(Array(metrics.enumerated()), id: \.offset) { index, metric in
+                metricCell(metric)
+                if index < metrics.count - 1 {
+                    Rectangle()
+                        .fill(colors.border.opacity(0.45))
+                        .frame(width: ExperienceBorder.hairline)
+                        .padding(.vertical, ExperienceSpacing.xxs)
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    private func metricCell(_ metric: CalendarSummaryMetric) -> some View {
+        VStack(spacing: 3) {
+            Text(metric.label)
+                .font(.system(.caption2, design: .default).weight(.semibold))
+                .foregroundStyle(colors.secondaryText)
+                .textCase(.uppercase)
+                .tracking(0.25)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(metric.value)
+                .font(
+                    metric.emphasis
+                        ? .system(.title3, design: .rounded).weight(.bold).monospacedDigit()
+                        : .system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit()
+                )
+                .foregroundStyle(valueColor(for: metric.tone, emphasis: metric.emphasis))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var rowDivider: some View {
+        Rectangle()
+            .fill(colors.separator.opacity(0.55))
+            .frame(height: ExperienceBorder.hairline)
+    }
+
+    private func valueColor(for tone: Decimal?, emphasis: Bool) -> Color {
+        guard let tone else { return colors.primaryText }
+        return theme.metricColor(for: NSDecimalNumber(decimal: tone).doubleValue)
+    }
+}
+
+private struct CalendarSummaryMetric {
+    var label: String
+    var value: String
+    var tone: Decimal?
+    var emphasis: Bool
 }

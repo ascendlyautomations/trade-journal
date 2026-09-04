@@ -220,14 +220,20 @@ extension TradeRepository {
             page: page,
             publicOnly: publicOnly
         )
-        let filtered = loaded.items.filter { TradeHistoryLocalMatch.matches($0, query: query) }
+        let filtered = loaded.items.filter {
+            TradeHistoryLocalMatch.matches($0, query: query, context: .init())
+        }
         return CursorPage(items: filtered, nextCursor: loaded.nextCursor)
     }
 }
 
 /// Client-side matcher used by stubs and as a safety net after server filtering.
 nonisolated enum TradeHistoryLocalMatch {
-    static func matches(_ trade: Trade, query: TradeHistoryQuery) -> Bool {
+    static func matches(
+        _ trade: Trade,
+        query: TradeHistoryQuery,
+        context: TradeHistoryMatchContext = TradeHistoryMatchContext()
+    ) -> Bool {
         let filters = query.filters
         if trade.mode == .backtest { return false }
 
@@ -249,10 +255,26 @@ nonisolated enum TradeHistoryLocalMatch {
         if let min = filters.pnlMin, pnl < min { return false }
         if let max = filters.pnlMax, pnl > max { return false }
 
+        let rr = trade.riskReward
+        if let min = filters.rrMin {
+            guard let rr, rr >= min else { return false }
+        }
+        if let max = filters.rrMax {
+            guard let rr, rr <= max else { return false }
+        }
+
         switch filters.direction {
         case .any: break
         case .long: if trade.side != .long { return false }
         case .short: if trade.side != .short { return false }
+        }
+
+        if let expectedMode = filters.accountMode.tradingAccountMode {
+            guard context.resolvedAccountMode(for: trade) == expectedMode else { return false }
+        }
+
+        if !filters.tradingSession.matches(sessionLabel: trade.sessionLabel) {
+            return false
         }
 
         switch filters.visibility {
@@ -262,11 +284,93 @@ nonisolated enum TradeHistoryLocalMatch {
         }
 
         let search = query.trimmedSearch
-        if !search.isEmpty {
-            let ticker = trade.symbol.ticker.localizedCaseInsensitiveContains(search)
-            let notes = trade.notePreview?.localizedCaseInsensitiveContains(search) == true
-            if !ticker && !notes { return false }
+        if !search.isEmpty, !matchesSearch(trade, search: search, context: context) {
+            return false
         }
         return true
+    }
+
+    private static func matchesSearch(
+        _ trade: Trade,
+        search: String,
+        context: TradeHistoryMatchContext
+    ) -> Bool {
+        let needle = search
+        if trade.symbol.ticker.localizedCaseInsensitiveContains(needle) { return true }
+        if trade.notePreview?.localizedCaseInsensitiveContains(needle) == true { return true }
+        if trade.notes?.localizedCaseInsensitiveContains(needle) == true { return true }
+        if trade.strategy?.localizedCaseInsensitiveContains(needle) == true { return true }
+        if trade.sessionLabel?.localizedCaseInsensitiveContains(needle) == true { return true }
+        if let accountID = trade.accountID,
+           context.accountTitle(for: accountID)?.localizedCaseInsensitiveContains(needle) == true
+        {
+            return true
+        }
+        return false
+    }
+}
+
+/// Shared sort helpers for owner-cache seeding and local post-processing.
+nonisolated enum TradeHistorySortSupport {
+    static func sorted(_ rows: [Trade], sort: TradeHistorySort) -> [Trade] {
+        switch sort {
+        case .newest:
+            return rows.sorted { $0.createdAt > $1.createdAt }
+        case .oldest:
+            return rows.sorted { $0.createdAt < $1.createdAt }
+        case .highestPnL:
+            return rows.sorted {
+                ($0.realizedPnL?.amount ?? 0) > ($1.realizedPnL?.amount ?? 0)
+            }
+        case .lowestPnL:
+            return rows.sorted {
+                ($0.realizedPnL?.amount ?? 0) < ($1.realizedPnL?.amount ?? 0)
+            }
+        case .highestRR:
+            return rows.sorted {
+                ($0.riskReward ?? Decimal(-999_999)) > ($1.riskReward ?? Decimal(-999_999))
+            }
+        case .lowestRR:
+            return rows.sorted {
+                ($0.riskReward ?? Decimal(999_999)) < ($1.riskReward ?? Decimal(999_999))
+            }
+        case .bestWin:
+            return rows.sorted { lhs, rhs in
+                let leftPnL = lhs.realizedPnL?.amount ?? 0
+                let rightPnL = rhs.realizedPnL?.amount ?? 0
+                let leftWin = leftPnL > 0
+                let rightWin = rightPnL > 0
+                if leftWin != rightWin { return leftWin && !rightWin }
+                if leftWin && rightWin { return leftPnL > rightPnL }
+                return lhs.createdAt > rhs.createdAt
+            }
+        case .worstLoss:
+            return rows.sorted { lhs, rhs in
+                let leftPnL = lhs.realizedPnL?.amount ?? 0
+                let rightPnL = rhs.realizedPnL?.amount ?? 0
+                let leftLoss = leftPnL < 0
+                let rightLoss = rightPnL < 0
+                if leftLoss != rightLoss { return leftLoss && !rightLoss }
+                if leftLoss && rightLoss { return leftPnL < rightPnL }
+                return lhs.createdAt > rhs.createdAt
+            }
+        }
+    }
+
+    static func cursor(for last: Trade, sort: TradeHistorySort) -> String? {
+        switch sort {
+        case .newest, .oldest, .bestWin, .worstLoss:
+            return ISO8601.string(from: last.createdAt)
+        case .highestPnL, .lowestPnL:
+            if let pnl = last.realizedPnL?.amount {
+                return NSDecimalNumber(decimal: pnl).stringValue
+            }
+            return ISO8601.string(from: last.createdAt)
+        case .highestRR, .lowestRR:
+            if let rr = last.riskReward {
+                return NSDecimalNumber(decimal: rr).stringValue
+            }
+            return ISO8601.string(from: last.createdAt)
+        }
     }
 }

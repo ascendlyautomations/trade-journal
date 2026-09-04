@@ -65,7 +65,21 @@ nonisolated enum ProfileBootstrapApplier {
                 sizes: metadata.sizes,
                 for: profileID
             )
+            applyAuthoritativeAccountModes(
+                from: bootstrap.data.public_account_modes,
+                into: &state.accountModes
+            )
+            detailCache.seed(accountModes: state.accountModes)
             applyTradeEngagement(bootstrap.data.trade_engagement, store: engagementStore)
+        }
+
+        let mappedStories = StoryBootstrapMapping.map(bootstrap.data.active_stories ?? [])
+        state.activeStories = mappedStories
+        for story in mappedStories {
+            detailCache.seed(story)
+        }
+        if state.isOwner, let profileID = state.profileID {
+            ViewerActiveStoryStore.shared.sync(viewerID: profileID, stories: mappedStories)
         }
 
         state.phase = .loaded
@@ -169,8 +183,10 @@ nonisolated enum ProfileBootstrapApplier {
             {
                 names[accountID] = accountName
             }
-            if let modeLabel = row.mode ?? row.account_type {
-                modes[accountID] = mapAccountModeLabel(modeLabel)
+            if let modeLabel = row.account_type ?? row.mode,
+               let parsed = TradingAccountMode.parseWireValue(modeLabel)
+            {
+                modes[accountID] = parsed
             }
             if let size = row.account_size?.decimal {
                 sizes[accountID] = size
@@ -179,13 +195,14 @@ nonisolated enum ProfileBootstrapApplier {
         return (names, modes, sizes)
     }
 
-    private static func mapAccountModeLabel(_ raw: String) -> TradingAccountMode {
-        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "eval", "evaluation": return .evaluation
-        case "funded", "live": return .funded
-        case "sim", "replay": return .sim
-        case "backtest": return .backtest
-        default: return .live
+    private static func applyAuthoritativeAccountModes(
+        from wire: [String: String]?,
+        into modes: inout [TradingAccountID: TradingAccountMode]
+    ) {
+        guard let wire else { return }
+        for (accountID, rawMode) in wire {
+            guard let parsed = TradingAccountMode.parseWireValue(rawMode) else { continue }
+            modes[TradingAccountID(accountID)] = parsed
         }
     }
 

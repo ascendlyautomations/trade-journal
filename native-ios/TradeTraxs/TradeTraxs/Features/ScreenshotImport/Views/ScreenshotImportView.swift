@@ -151,6 +151,9 @@ struct ScreenshotImportView: View {
                     viewModel.analyzeWithAI()
                 }
                 .padding(.horizontal, ExperienceSpacing.lg)
+
+                ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.screenshotAI)
+                    .padding(.horizontal, ExperienceSpacing.lg)
             }
 
             if viewModel.summary?.successCount ?? 0 > 0 {
@@ -233,11 +236,14 @@ struct ScreenshotImportView: View {
     }
 
     private var aiAssistedBanner: some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            Image(systemName: "sparkles")
-            Text("AI-assisted extraction — review before importing")
-                .experienceStyle(.footnote, color: colors.primaryText)
-            Spacer()
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            HStack(spacing: ExperienceSpacing.sm) {
+                Image(systemName: "sparkles")
+                Text("AI-assisted extraction — review before importing")
+                    .experienceStyle(.footnote, color: colors.primaryText)
+                Spacer()
+            }
+            ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.screenshotAI)
         }
         .padding(ExperienceSpacing.md)
         .background(colors.backgroundSecondary.opacity(0.95))

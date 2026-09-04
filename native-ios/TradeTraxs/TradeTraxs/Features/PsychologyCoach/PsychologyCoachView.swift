@@ -97,6 +97,8 @@ struct PsychologyCoachView: View {
                     Text("Your patterns are computed from your journal. The coach explains them — it never invents statistics.")
                         .experienceStyle(.footnote, color: colors.tertiaryText)
 
+                    ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.psychologyCoach)
+
                     contentBlock
                     ForEach(Array(viewModel.messages.enumerated()), id: \.offset) { index, message in
                         if message.role == "assistant" {

@@ -64,7 +64,7 @@ struct ConversationBubbleItem: Identifiable, Hashable {
     }
 
     var imageReference: MediaReference? {
-        guard message.kind != .voice, message.kind != .storyReply else { return nil }
+        guard message.kind != .voice, message.kind != .storyReply, message.kind != .storyShare else { return nil }
         return message.attachments.first?.media
     }
 
@@ -81,6 +81,12 @@ struct ConversationBubbleItem: Identifiable, Hashable {
         if message.kind == .storyReply {
             return StoryReplyMessageSupport.decode(from: message.body)
                 .flatMap { StoryReplyMessageSupport.replyText(from: $0) }
+        }
+        if message.kind == .storyShare {
+            return nil
+        }
+        if StoryShareMessageSupport.decode(from: message.body) != nil {
+            return nil
         }
         if let payload = StoryReplyMessageSupport.decode(from: message.body) {
             return StoryReplyMessageSupport.replyText(from: payload)

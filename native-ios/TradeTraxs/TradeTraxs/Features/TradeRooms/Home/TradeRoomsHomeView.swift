@@ -105,7 +105,7 @@ struct TradeRoomsHomeView: View {
     private var roomList: some View {
         let _ = roomUnreadObservation
         return ScrollView {
-            LazyVStack(spacing: ExperienceSpacing.md) {
+            LazyVStack(spacing: ExperienceSpacing.sm) {
                 if viewModel.showsFilteredEmpty {
                     ExperienceEmptyState(
                         icon: .search,

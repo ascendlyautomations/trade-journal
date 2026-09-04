@@ -104,6 +104,7 @@ struct ClipDetailView: View {
                             dateText: TradeDisplay.dateText(reel.createdAt),
                             isOwner: viewModel.isOwner,
                             contentLink: .reel(reel.id),
+                            ownerProfileID: reel.authorProfileID,
                             shareText: {
                                 let caption = reel.caption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                                 if caption.isEmpty { return "Clip on TradeTraxs" }

@@ -77,45 +77,9 @@ enum ThemePalettes {
         accessibilityLoss: Color(hex: 0xFCA5A5)
     )
 
-    /// Signature TradeTraxs — navy brand cues from the website, native iOS surfaces.
-    ///
-    /// Website Capacitor uses `--tt-chrome: #0b1f3a` and `--tt-surface: #1e3a8a`.
-    /// Native keeps a deep navy canvas (not a mid-blue wash), elevated slate cards,
-    /// and a cyan accent for recognition without painting every control blue.
-    static let tradeTraxsSignature = SemanticColorPalette(
-        accent: Color(hex: 0x4EC4E0),
-        accentMuted: Color(hex: 0x4EC4E0, alpha: 0.20),
-        onAccent: Color(hex: 0x041018),
-        backgroundPrimary: Color(hex: 0x0A1628),
-        backgroundSecondary: Color(hex: 0x0B1F3A),
-        backgroundGrouped: Color(hex: 0x0A1628),
-        backgroundElevated: Color(hex: 0x132A4A),
-        surfacePrimary: Color(hex: 0x12263F),
-        surfaceSecondary: Color(hex: 0x16304D),
-        surfaceGrouped: Color(hex: 0x0F1E35),
-        surfaceOverlay: Color(hex: 0x020812, alpha: 0.64),
-        textPrimary: Color(hex: 0xF3F4F6),
-        textSecondary: Color(hex: 0xCBD5E1),
-        textTertiary: Color(hex: 0x94A3B8),
-        textQuaternary: Color(hex: 0x64748B),
-        textInverse: Color(hex: 0x0A1628),
-        separator: Color(hex: 0x1E3A5F),
-        border: Color(hex: 0x25456B),
-        borderStrong: Color(hex: 0x3B6A96),
-        fillPrimary: Color(hex: 0x1A3354),
-        fillSecondary: Color(hex: 0x16304D),
-        fillTertiary: Color(hex: 0x12263F),
-        success: Color(hex: 0x34D399),
-        warning: Color(hex: 0xE8B84A),
-        error: Color(hex: 0xF87171),
-        info: Color(hex: 0x60A5FA),
-        profit: Color(hex: 0x34D399),
-        loss: Color(hex: 0xF87171),
-        neutralMetric: Color(hex: 0xCBD5E1),
-        accessibilityAccent: Color(hex: 0x7DD3F0),
-        accessibilityProfit: Color(hex: 0x6EE7B7),
-        accessibilityLoss: Color(hex: 0xFCA5A5)
-    )
+    /// Signature TradeTraxs — lighter muted-blue canvas, neutral gray surfaces,
+    /// restrained cyan accent. See ``TradeTraxsThemeTokens``.
+    static let tradeTraxsSignature = TradeTraxsThemeTokens.semanticPalette
 }
 
 extension Color {

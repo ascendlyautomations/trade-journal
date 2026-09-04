@@ -71,15 +71,10 @@ final class TradeHistorySessionStore {
             guard snap.profileID == trade.ownerProfileID else { continue }
             let query = TradeHistoryQuery(filters: snap.filters, searchText: snap.searchText)
             let matches = TradeHistoryLocalMatch.matches(trade, query: query)
-            let existed = snap.items.contains(where: { $0.id == trade.id })
             snap.items.removeAll { $0.id == trade.id }
             if matches {
-                // Prefer front of list for newest / highest PnL; otherwise keep stable order.
-                if snap.filters.sort == .newest || snap.filters.sort == .highestPnL || !existed {
-                    snap.items.insert(trade, at: 0)
-                } else {
-                    snap.items.append(trade)
-                }
+                let sorted = TradeHistorySortSupport.sorted([trade] + snap.items.filter { $0.id != trade.id }, sort: snap.filters.sort)
+                snap.items = sorted
             }
             snap.loadedAt = Date()
             snapshots[key] = snap

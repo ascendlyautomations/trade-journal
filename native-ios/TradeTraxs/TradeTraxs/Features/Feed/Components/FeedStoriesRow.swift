@@ -57,9 +57,11 @@ struct FeedStoriesRow: View {
                     }
                 } label: {
                     ZStack {
-                        if hasActiveStory, let story = viewerStory {
-                            ring(for: story)
-                                .frame(width: 68, height: 68)
+                        if hasActiveStory {
+                            StoryAvatarRingStroke(
+                                isHighlighted: true,
+                                diameter: StoryAvatarRingStroke.ringDiameter(avatarSize: 58)
+                            )
                         } else {
                             Circle()
                                 .strokeBorder(
@@ -146,20 +148,9 @@ struct FeedStoriesRow: View {
 
     @ViewBuilder
     private func ring(for story: Story) -> some View {
-        if story.viewerHasSeen {
-            Circle().stroke(colors.border, lineWidth: 1)
-        } else {
-            Circle().stroke(
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.98, green: 0.35, blue: 0.45),
-                        Color(red: 0.96, green: 0.62, blue: 0.18),
-                    ],
-                    startPoint: .bottomLeading,
-                    endPoint: .topTrailing
-                ),
-                lineWidth: 2.5
-            )
-        }
+        StoryAvatarRingStroke(
+            isHighlighted: !story.viewerHasSeen,
+            diameter: StoryAvatarRingStroke.ringDiameter(avatarSize: 58)
+        )
     }
 }

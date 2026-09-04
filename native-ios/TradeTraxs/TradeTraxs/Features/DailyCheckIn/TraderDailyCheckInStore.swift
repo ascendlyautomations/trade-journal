@@ -59,6 +59,7 @@ final class TraderDailyCheckInStore {
         guard checkIn.checkInDate == todayDateKey else { return }
         todayCheckIn = checkIn
         isReady = true
+        DailyCheckInReminderCoordinator.shared.syncIfNeeded()
     }
 
     func invalidate() {
@@ -108,6 +109,7 @@ final class TraderDailyCheckInStore {
         }
 
         isRefreshing = false
+        DailyCheckInReminderCoordinator.shared.syncIfNeeded()
     }
 
     private func startRealtimeIfNeeded(viewerID: String) {

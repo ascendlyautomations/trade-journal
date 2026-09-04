@@ -42,6 +42,15 @@ struct ManageAccountEditorView: View {
 
     var body: some View {
         Form {
+            if case .edit = mode {
+                Section {
+                    Toggle("Display in Account Dropdowns", isOn: $showInAccountDropdowns)
+                        .accessibilityIdentifier("manageAccounts.showInDropdowns")
+                } footer: {
+                    Text("Hide this account from account selectors without deleting its data.")
+                }
+            }
+
             Section {
                 Picker("Type", selection: $draft.category) {
                     Text("Personal").tag(TradingAccountCategory.personal)
@@ -130,9 +139,6 @@ struct ManageAccountEditorView: View {
 
             if case .edit(let account) = mode {
                 Section {
-                    Toggle("Display in Account Dropdowns", isOn: $showInAccountDropdowns)
-                        .accessibilityIdentifier("manageAccounts.showInDropdowns")
-
                     SettingsLabeledField(
                         title: "Public Status",
                         helper: "Optional label on your profile (e.g. Passed, Funded, Blown)"
@@ -142,9 +148,7 @@ struct ManageAccountEditorView: View {
                             .accessibilityIdentifier("manageAccounts.publicStatus")
                     }
                 } header: {
-                    Text("Profile & Pickers")
-                } footer: {
-                    Text("Hidden accounts stay in Manage Accounts and your trade history. They only disappear from Add Trade and account filters.")
+                    Text("Profile")
                 }
 
                 Section {
@@ -215,6 +219,17 @@ struct ManageAccountEditorView: View {
             guard let accountID = editAccountID else { return }
             await viewModel.loadPayoutEntries(for: accountID)
         }
+        .onChange(of: viewModel.accounts) { _, _ in
+            syncInsightsFromViewModel()
+        }
+    }
+
+    private func syncInsightsFromViewModel() {
+        guard case .edit(let account) = mode,
+              let latest = viewModel.accounts.first(where: { $0.id == account.id })
+        else { return }
+        showInAccountDropdowns = latest.showInAccountDropdowns
+        customPublicStatus = latest.customPublicStatus ?? ""
     }
 
     private var editAccountID: TradingAccountID? {

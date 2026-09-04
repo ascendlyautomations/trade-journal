@@ -9,6 +9,8 @@ struct CommentListView: View {
 
     @Environment(\.themeColors) private var colors
 
+    @Environment(\.appEnvironment) private var appEnvironment
+
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             HStack {
@@ -66,7 +68,8 @@ struct CommentListView: View {
                                     ExperienceHaptics.play(.warning)
                                     pendingDelete = comment
                                 }
-                                : nil
+                                : nil,
+                            onReport: commentReportAction(for: comment)
                         )
                         ForEach(viewModel.replies(to: comment.id)) { reply in
                             CommentRowView(
@@ -87,7 +90,8 @@ struct CommentListView: View {
                                         ExperienceHaptics.play(.warning)
                                         pendingDelete = reply
                                     }
-                                    : nil
+                                    : nil,
+                                onReport: commentReportAction(for: reply)
                             )
                             .padding(.leading, ExperienceSpacing.xl)
                         }
@@ -117,5 +121,16 @@ struct CommentListView: View {
             Text("This comment will be removed.")
         }
         .accessibilityIdentifier("interaction.comment.list")
+    }
+
+    private func commentReportAction(for comment: InteractionComment) -> (() -> Void)? {
+        guard currentUserID != comment.authorProfileID else { return nil }
+        return {
+            ExperienceHaptics.play(.selection)
+            ContentReportSupport.presentComment(
+                comment: comment,
+                presenter: appEnvironment.contentReportPresenter
+            )
+        }
     }
 }

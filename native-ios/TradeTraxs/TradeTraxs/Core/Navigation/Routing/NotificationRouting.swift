@@ -35,6 +35,9 @@ nonisolated struct NotificationRouter: NotificationRouting {
             }
             return .tab(.home)
 
+        case .dailyCheckIn:
+            return .sheet(.dailyCheckIn)
+
         case .activity:
             let type = (notification.rawUserInfo["type"] ?? "").lowercased()
             if type == "follow" || type == "follow_request_accepted" {

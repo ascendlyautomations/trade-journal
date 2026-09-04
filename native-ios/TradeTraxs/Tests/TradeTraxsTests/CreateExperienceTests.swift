@@ -105,7 +105,7 @@ final class CreateExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.formError, "Choose a video to continue.")
     }
 
-    func testCreateReelDraftPreservationAndLinkTrade() async {
+    func testCreateReelDraftPreservationAndLinkTrade() async throws {
         var dismissed = false
         let viewModel = CreateReelViewModel(
             feed: CreateStubFeedRepository(),
@@ -122,6 +122,8 @@ final class CreateExperienceTests: XCTestCase {
         XCTAssertNotNil(viewModel.draft)
         XCTAssertFalse(viewModel.captionEnabled)
         XCTAssertNotNil(viewModel.linkedTradeSummary)
+        let linked = try XCTUnwrap(viewModel.linkedTrade)
+        XCTAssertNotNil(ProfileCardMediaPresence.tradeMedia(in: linked))
         viewModel.clearLinkedTrade()
         XCTAssertTrue(viewModel.captionEnabled)
         viewModel.captionText = "Standalone note"

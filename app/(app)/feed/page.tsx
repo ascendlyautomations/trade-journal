@@ -75,7 +75,9 @@ import {
 import {
   type ActiveStoryRow,
   type StoryBarProfile,
+  deleteStoryById,
   groupActiveStoriesByUser,
+  removeStoryFromStoriesByUser,
   userHasActiveStory,
 } from "@/lib/activeStories"
 import { useActiveStories } from "@/lib/useActiveStories"
@@ -455,6 +457,7 @@ function FeedPageContent() {
   const {
     storiesByUser,
     loadStories: reloadActiveStories,
+    setStoriesByUser,
   } = useActiveStories(
     followingStoryUserIds,
     !!user?.id &&
@@ -683,6 +686,34 @@ function FeedPageContent() {
     setActiveStoryUser(null)
     setCurrentStoryIndex(0)
   }, [])
+
+  const handleDeleteStory = useCallback(
+    async (storyId: string) => {
+      if (!user?.id) return false
+
+      const { error } = await deleteStoryById(supabase, storyId)
+      if (error) {
+        showPopup({
+          type: "error",
+          message: "Couldn't delete story. Please try again.",
+        })
+        return false
+      }
+
+      const ownerId = String(user.id)
+      setStoriesByUser((current) => {
+        const next = removeStoryFromStoriesByUser(current, ownerId, storyId)
+        const userIdsKey = [...new Set([...followingStoryUserIds, ownerId])]
+          .sort()
+          .join(",")
+        writeStoriesSession(userIdsKey, next)
+        return next
+      })
+
+      return true
+    },
+    [followingStoryUserIds, setStoriesByUser, showPopup, user?.id]
+  )
 
   const nextSlide = useCallback(() => {
     const list = activeStoryUser
@@ -3058,6 +3089,7 @@ function FeedPageContent() {
           onStoryReplyError={(message) =>
             showPopup({ type: "error", message })
           }
+          onDeleteStory={handleDeleteStory}
         />
       ) : null}
 

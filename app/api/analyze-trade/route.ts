@@ -7,7 +7,11 @@ import {
   buildTradeAnalysisPrompt,
 } from "@/lib/analyzeTradePrompt"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
-import { isProActive } from "@/lib/subscription"
+import {
+  consumeDurableUserRateLimit,
+  rateLimitExceededResponse,
+} from "@/lib/server/durableUserRateLimit"
+import { requireProEntitlement } from "@/lib/server/requireProEntitlement"
 import type { Database } from "@/lib/database.types"
 
 const openai = new OpenAI({
@@ -19,8 +23,6 @@ const supabaseAdmin = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-const aiCallByUser = new Map<string, number>()
 
 function resolveScreenshotPublicUrl(imagePath: string | null | undefined) {
   return tradeScreenshotPublicUrl(imagePath)
@@ -129,11 +131,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const lastCall = aiCallByUser.get(user.id) ?? 0
-  if (Date.now() - lastCall < 3000) {
-    return NextResponse.json({ error: "Slow down" }, { status: 429 })
+  const rate = await consumeDurableUserRateLimit(user.id, "ai_analyze_trade")
+  if (!rate.allowed) {
+    return rateLimitExceededResponse(rate.retryAfterSec)
   }
-  aiCallByUser.set(user.id, Date.now())
 
   try {
     const body = await req.json()
@@ -143,24 +144,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing trade id" }, { status: 400 })
     }
 
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("is_pro, subscription_status, trial_end")
-      .eq("id", user.id)
-      .single()
-
-    if (profileError) {
-      return NextResponse.json(
-        { error: "Could not verify subscription" },
-        { status: 500 }
-      )
-    }
-
-    if (!isProActive(profile)) {
-      return NextResponse.json(
-        { error: "Pro required", reply: "AI Analyst is a Pro feature." },
-        { status: 403 }
-      )
+    const entitlement = await requireProEntitlement(user.id, {
+      reply: "AI Analyst is a Pro feature.",
+    })
+    if (!entitlement.ok) {
+      return entitlement.response
     }
 
     const { data: existingTrade, error: tradeLookupError } = await supabaseAdmin

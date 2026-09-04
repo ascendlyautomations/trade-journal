@@ -98,6 +98,57 @@ final class ReportsExperienceTests: XCTestCase {
         XCTAssertEqual(store.paths.home.last, .report(card.periodKey.reportID))
     }
 
+    func testReportCardTrailingTitlesUseCompactChevrons() {
+        XCTAssertEqual(ReportCard.trailingTitle(for: "View Report", isGenerating: false), "View ›")
+        XCTAssertEqual(ReportCard.trailingTitle(for: "Generate", isGenerating: false), "Generate ›")
+        XCTAssertEqual(ReportCard.trailingTitle(for: "Choose Period", isGenerating: false), "Choose Period ›")
+        XCTAssertEqual(ReportCard.trailingTitle(for: "View Report", isGenerating: true), "Generating…")
+    }
+
+    func testOpenPsychologyReportUsesLatestPeriodWithoutOpeningPicker() async throws {
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        let coordinator = NavigationCoordinator(store: store)
+        let viewModel = ReportsScreenViewModel(
+            tradingReports: StubTradingReportRepository(),
+            psychologyReports: StubPsychologyReportRepository(),
+            navigationCoordinator: coordinator
+        )
+
+        await viewModel.bootstrapIfNeeded()
+        let weekly = try XCTUnwrap(
+            viewModel.psychologyCards.first { $0.template == .weekly }
+        )
+        let ref = try XCTUnwrap(weekly.periodRef)
+
+        viewModel.openPsychologyReport(for: weekly)
+
+        XCTAssertFalse(viewModel.showsPeriodPicker)
+        XCTAssertEqual(store.paths.home.last, .report(ref.reportID))
+    }
+
+    func testShowPsychologyPeriodPickerDoesNotNavigate() async throws {
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        let coordinator = NavigationCoordinator(store: store)
+        let viewModel = ReportsScreenViewModel(
+            tradingReports: StubTradingReportRepository(),
+            psychologyReports: StubPsychologyReportRepository(),
+            navigationCoordinator: coordinator
+        )
+
+        await viewModel.bootstrapIfNeeded()
+        let weekly = try XCTUnwrap(
+            viewModel.psychologyCards.first { $0.template == .weekly }
+        )
+        let pathCountBefore = store.paths.home.count
+
+        viewModel.showPsychologyPeriodPicker(for: weekly)
+
+        XCTAssertTrue(viewModel.showsPeriodPicker)
+        XCTAssertEqual(store.paths.home.count, pathCountBefore)
+    }
+
     func testDetailRendersDynamicBlocks() async {
         let viewModel = makeDetailViewModel(periodKey: .weeklyLast)
         await viewModel.bootstrapIfNeeded()
@@ -173,6 +224,97 @@ final class ReportsExperienceTests: XCTestCase {
         XCTAssertEqual(navigationStore.paths.home.last, .reports)
     }
 
+    func testYearBoundsUseJanuaryThroughTodayForCurrentYear() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: 12))!
+        let bounds = TradingReportPeriods.yearBounds(year: 2026, now: now, calendar: calendar)
+
+        XCTAssertEqual(calendar.component(.month, from: bounds.start), 1)
+        XCTAssertEqual(calendar.component(.day, from: bounds.start), 1)
+        XCTAssertEqual(calendar.component(.month, from: bounds.end), 9)
+        XCTAssertEqual(calendar.component(.day, from: bounds.end), 4)
+    }
+
+    func testAvailableYearsOnlyIncludeYearsWithTrades() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let profile = ProfileID("dev.reports.user")
+        let trades = ProfileTradeFixtures.samples(owner: profile)
+        let years = TradingYearlyReportGenerator.availableYears(from: trades, calendar: calendar)
+        XCTAssertFalse(years.isEmpty)
+        XCTAssertEqual(years, years.sorted(by: >))
+    }
+
+    func testYearlyReportMarksFutureMonthsAsUpcoming() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: 12))!
+        let profile = ProfileID("dev.reports.user")
+        let trades = ProfileTradeFixtures.samples(owner: profile)
+        let report = TradingYearlyReportGenerator.generate(
+            year: 2026,
+            trades: trades,
+            filters: TradingReportFilters(),
+            now: now,
+            calendar: calendar
+        )
+
+        let upcoming = report.monthRows.filter {
+            if case .upcoming = $0.availability { return true }
+            return false
+        }
+        XCTAssertEqual(upcoming.map(\.month), [10, 11, 12])
+        XCTAssertTrue(report.monthRows.contains { row in
+            row.month == 10 && {
+                if case .upcoming = row.availability { return true }
+                return false
+            }()
+        })
+    }
+
+    func testYearlyMetricsMatchDashboardChartMetricsForSameScope() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: 12))!
+        let profile = ProfileID("dev.reports.user")
+        let trades = ProfileTradeFixtures.samples(owner: profile).filter { $0.mode != .backtest }
+        let bounds = TradingReportPeriods.yearBounds(year: 2026, now: now, calendar: calendar)
+        let interval = DateInterval(start: bounds.start, end: bounds.end)
+        let inputs = trades.map { DashboardChartMetrics.Input(trade: $0, accountType: nil) }
+        let summary = DashboardChartMetrics.compute(
+            from: inputs,
+            accountFilter: .all,
+            accountMode: .all,
+            interval: interval,
+            now: now
+        )
+        let report = TradingYearlyReportGenerator.generate(
+            year: 2026,
+            trades: trades,
+            filters: TradingReportFilters(),
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(report.metrics.netPnl, summary.netPnL)
+        XCTAssertEqual(report.metrics.tradeCount, summary.tradeCount)
+        XCTAssertEqual(report.metrics.maxDrawdown, summary.maxDrawdown)
+    }
+
+    func testBootstrapIncludesYearlyCard() async throws {
+        let viewModel = ReportsScreenViewModel(
+            tradingReports: StubTradingReportRepository(),
+            psychologyReports: StubPsychologyReportRepository(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+
+        await viewModel.bootstrapIfNeeded()
+
+        XCTAssertNotNil(viewModel.yearlyCard)
+        XCTAssertFalse(viewModel.yearlyCard?.availableYears.isEmpty ?? true)
+    }
+
     // MARK: - Helpers
 
     private func makeDetailViewModel(
@@ -234,6 +376,33 @@ private actor StubTradingReportRepository: TradingReportRepository {
             throw AppError.unknown(message: "Missing report")
         }
         return report
+    }
+
+    func availableYears(forceNetwork: Bool) async throws -> [Int] {
+        let trades = ProfileTradeFixtures.samples(owner: ProfileID("dev.reports.stub"))
+        return TradingYearlyReportGenerator.availableYears(from: trades)
+    }
+
+    func yearlyReport(
+        for year: Int,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingYearlyReport {
+        let trades = ProfileTradeFixtures.samples(owner: ProfileID("dev.reports.stub"))
+        return TradingYearlyReportGenerator.generate(year: year, trades: trades, filters: filters)
+    }
+
+    func monthReport(
+        for ref: TradingReportMonthRef,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingReport {
+        let trades = ProfileTradeFixtures.samples(owner: ProfileID("dev.reports.stub"))
+        return TradingYearlyReportGenerator.generateMonthReport(
+            ref: ref,
+            trades: trades,
+            filters: filters
+        )
     }
 }
 

@@ -100,6 +100,33 @@ final class TradeAIExperienceTests: XCTestCase {
         XCTAssertEqual(repo.persistedBatches.first?.count, 2)
     }
 
+    func testAnalyzeTappedUsesCustomQuestionWhenFilled() async {
+        let trade = makeTrade()
+        let repo = MockAIRepository(reply: coachReply)
+        let vm = TradeAISectionViewModel(tradeID: trade.id, ai: repo)
+        vm.updateContext(trade: trade, notes: [])
+        vm.draft = "Was my entry early?"
+        await vm.analyzeTapped()
+
+        XCTAssertEqual(repo.analyzeCallCount, 1)
+        XCTAssertEqual(vm.messages.first?.content, "Was my entry early?")
+        XCTAssertEqual(vm.messages.first?.promptKey, "custom")
+        XCTAssertTrue(vm.draft.isEmpty)
+    }
+
+    func testAnalyzeTappedUsesSelectedPresetWhenCustomBlank() async {
+        let trade = makeTrade()
+        let repo = MockAIRepository(reply: coachReply)
+        let vm = TradeAISectionViewModel(tradeID: trade.id, ai: repo)
+        vm.updateContext(trade: trade, notes: [])
+        vm.selectedPrompt = TradeAISuggestedPrompts.all.first { $0.id == "risk" }!
+        await vm.analyzeTapped()
+
+        XCTAssertEqual(repo.analyzeCallCount, 1)
+        XCTAssertEqual(vm.messages.first?.content, "Review my risk management")
+        XCTAssertEqual(vm.messages.first?.promptKey, "risk")
+    }
+
     func testCustomQuestionStillSendsWithOpenCoachPrompt() async {
         let trade = makeTrade()
         let repo = MockAIRepository(reply: "**Solid** setup.\n\n1. Hold plan\n2. Size down")

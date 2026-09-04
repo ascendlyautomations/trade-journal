@@ -20,10 +20,12 @@ final class StatsContainerViewModel {
     private let achievements: any AchievementRepository
     private let detailCache: DetailPresentationCache
 
-    /// Cached public trades + account-type map (web analyticsTradeRows).
+    /// Cached public trades + authoritative account-mode map.
     private var tradeInputs: [ProfileStatisticsMetrics.TradeInput] = []
-    private var loadTask: Task<Void, Never>?
-    private var hasLoaded = false
+    private var accountModes: [TradingAccountID: TradingAccountMode] = [:]
+    private var analyticsTask: Task<Void, Never>?
+    private var hasLoadedAnalytics = false
+    private var analyticsFetchedAt: Date?
     private var canViewContent = true
     private var isScreenOwned = false
 
@@ -40,68 +42,60 @@ final class StatsContainerViewModel {
     }
 
     var filterEmptyMessage: String? {
-        guard hasLoaded, metrics?.filteredTradeCount == 0 else { return nil }
+        guard metrics != nil else { return nil }
+        guard hasLoadedAnalytics || !tradeInputs.isEmpty else { return nil }
+        guard metrics?.filteredTradeCount == 0 else { return nil }
         return "No trades for this filter selection"
     }
 
-    /// Applies shared trades when Stage 2 has filled them; otherwise loads on demand.
-    /// Prefers ``DetailPresentationCache`` when section data was mutated after bootstrap.
+    /// Applies shared trades when Stage 2 has filled them; always schedules full analytics fetch.
     func applyBootstrap(_ snapshot: ProfileState) {
         if snapshot.didBootstrap || snapshot.phase == .loaded {
             isScreenOwned = true
         }
         if snapshot.isContentLocked {
             canViewContent = false
-            hasLoaded = true
             state = .empty
             return
         }
         canViewContent = true
-        let hasTrades = snapshot.didLoadTrades || !snapshot.trades.isEmpty
-            || detailCache.publicTrades(for: profileID) != nil
-        guard hasTrades else {
-            if (snapshot.phase == .loading || snapshot.didBootstrap), metrics == nil {
-                state = .loading
-            }
-            return
+        accountModes = snapshot.accountModes
+
+        if let updated = snapshot.lastUpdated,
+           let fetchedAt = analyticsFetchedAt,
+           updated > fetchedAt
+        {
+            hasLoadedAnalytics = false
         }
-        hasLoaded = true
-        let sourceTrades = detailCache.publicTrades(for: profileID) ?? snapshot.trades
-        let accountTypes = Dictionary(
-            uniqueKeysWithValues: snapshot.accountModes.map {
-                ($0.key, ProfileStatisticsMetrics.accountTypeString(for: $0.value))
-            }
-        )
-        tradeInputs = sourceTrades.map { trade in
-            ProfileStatisticsMetrics.TradeInput(
-                pnl: trade.realizedPnL?.amount,
-                createdAt: trade.createdAt,
-                isLong: trade.side == .long,
-                session: trade.sessionLabel,
-                mode: trade.mode.rawValue,
-                accountType: trade.accountID.flatMap { accountTypes[$0] }
-            )
+
+        let cachedTrades = detailCache.publicTrades(for: profileID)
+        let sourceTrades = preferredTradeSource(cached: cachedTrades, bootstrap: snapshot.trades)
+        let hasTrades = snapshot.didLoadTrades || !sourceTrades.isEmpty
+
+        if hasTrades {
+            applyTradeInputs(from: sourceTrades)
+        } else if (snapshot.phase == .loading || snapshot.didBootstrap), metrics == nil {
+            state = .loading
         }
-        recompute()
+
+        scheduleAnalyticsLoadIfNeeded()
     }
 
     func loadIfNeeded() {
-        guard !hasLoaded, loadTask == nil else { return }
-        guard canViewContent else {
-            hasLoaded = true
-            state = .empty
-            return
-        }
-        loadTask = Task { await performLoad() }
+        scheduleAnalyticsLoadIfNeeded()
     }
 
     func refresh() async {
         if isScreenOwned {
-            // Screen pull-to-refresh re-bootstraps; local mode filter stays client-side.
+            hasLoadedAnalytics = false
+            analyticsTask?.cancel()
+            analyticsTask = nil
+            scheduleAnalyticsLoadIfNeeded(force: true)
             return
         }
-        loadTask?.cancel()
+        analyticsTask?.cancel()
         isRefreshing = true
+        hasLoadedAnalytics = false
         await performLoad(forceNetwork: true)
         isRefreshing = false
     }
@@ -118,17 +112,29 @@ final class StatsContainerViewModel {
 
     // MARK: - Load
 
+    private func scheduleAnalyticsLoadIfNeeded(force: Bool = false) {
+        guard canViewContent else {
+            state = .empty
+            return
+        }
+        if !force, hasLoadedAnalytics { return }
+        guard analyticsTask == nil else { return }
+        analyticsTask = Task { await performLoad(forceNetwork: force) }
+    }
+
     private func performLoad(forceNetwork: Bool = false) async {
+        defer { analyticsTask = nil }
+
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             applyFixtures()
-            hasLoaded = true
-            loadTask = nil
+            hasLoadedAnalytics = true
+            analyticsFetchedAt = Date()
             return
         }
 
         state = metrics == nil ? .loading : state
         do {
-            // Stats needs up to 500 rows — do not reuse the paginated Trades list cache.
+            // Stats needs up to 500 rows — do not reuse the paginated Trades list cache alone.
             let page = try await trades.trades(
                 ownedBy: profileID,
                 accountID: nil,
@@ -137,18 +143,9 @@ final class StatsContainerViewModel {
             )
             detailCache.seed(publicTrades: page.items, for: profileID)
 
-            tradeInputs = page.items.map { trade in
-                ProfileStatisticsMetrics.TradeInput(
-                    pnl: trade.realizedPnL?.amount,
-                    createdAt: trade.createdAt,
-                    isLong: trade.side == .long,
-                    session: trade.sessionLabel,
-                    mode: trade.mode.rawValue,
-                    accountType: trade.mode.rawValue
-                )
-            }
-
-            hasLoaded = true
+            applyTradeInputs(from: page.items)
+            hasLoadedAnalytics = true
+            analyticsFetchedAt = Date()
             recompute()
         } catch {
             guard !Task.isCancelled else { return }
@@ -156,26 +153,29 @@ final class StatsContainerViewModel {
                 state = .failed(message: ProfileSectionSupport.message(for: error))
             }
         }
-        loadTask = nil
     }
 
     private func applyFixtures() {
         let samples = ProfileTradeFixtures.samples(owner: profileID)
             .filter { $0.visibility == .public }
-        let modes = ProfileTradeFixtures.accountModes()
-        tradeInputs = samples.map { trade in
-            ProfileStatisticsMetrics.TradeInput(
-                pnl: trade.realizedPnL?.amount,
-                createdAt: trade.createdAt,
-                isLong: trade.side == .long,
-                session: trade.sessionLabel,
-                mode: trade.mode.rawValue,
-                accountType: trade.accountID.flatMap {
-                    modes[$0].map(ProfileStatisticsMetrics.accountTypeString(for:))
-                }
-            )
+        accountModes = ProfileTradeFixtures.accountModes()
+        applyTradeInputs(from: samples)
+    }
+
+    private func applyTradeInputs(from trades: [Trade]) {
+        tradeInputs = trades.map {
+            ProfileStatisticsMetrics.tradeInput(from: $0, accountModes: accountModes)
         }
         recompute()
+    }
+
+    private func preferredTradeSource(cached: [Trade]?, bootstrap: [Trade]) -> [Trade] {
+        switch (cached?.count ?? 0, bootstrap.count) {
+        case let (cachedCount, bootstrapCount) where cachedCount >= bootstrapCount:
+            return cached ?? bootstrap
+        default:
+            return bootstrap
+        }
     }
 
     private func recompute() {
@@ -187,7 +187,13 @@ final class StatsContainerViewModel {
 
         let allModes = ProfileStatisticsMetrics.compute(from: tradeInputs, selectedMode: .all)
         if allModes.filteredTradeCount == 0 {
-            state = .empty
+            if tradeInputs.isEmpty, !hasLoadedAnalytics, case .failed = state {
+                // Keep failure state until analytics retry succeeds.
+            } else if tradeInputs.isEmpty, !hasLoadedAnalytics {
+                state = .loading
+            } else {
+                state = .empty
+            }
         } else {
             state = .loaded(itemCount: max(result.filteredTradeCount, 1))
         }

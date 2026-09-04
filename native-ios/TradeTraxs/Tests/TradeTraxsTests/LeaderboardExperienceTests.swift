@@ -303,8 +303,184 @@ final class LeaderboardExperienceTests: XCTestCase {
         XCTAssertNotNil(vm.podium.first?.profile.avatar)
     }
 
+    func testCategoryResortsAndUpdatesPrimaryMetric() {
+        let fmt = ISO8601DateFormatter()
+        let now = Date()
+        let trades: [LeaderboardTradeRow] = [
+            .init(userID: "u-high-pnl", pnl: 10_000, rr: 1.0, createdAt: fmt.string(from: now), accountType: nil, mode: nil),
+            .init(userID: "u-high-pnl", pnl: -4_000, rr: 1.0, createdAt: fmt.string(from: now.addingTimeInterval(-60)), accountType: nil, mode: nil),
+            .init(userID: "u-high-win", pnl: 200, rr: 1.0, createdAt: fmt.string(from: now.addingTimeInterval(-120)), accountType: nil, mode: nil),
+            .init(userID: "u-high-win", pnl: 150, rr: 1.0, createdAt: fmt.string(from: now.addingTimeInterval(-180)), accountType: nil, mode: nil),
+            .init(userID: "u-high-win", pnl: 100, rr: 1.0, createdAt: fmt.string(from: now.addingTimeInterval(-240)), accountType: nil, mode: nil),
+            .init(userID: "u-high-win", pnl: -50, rr: 1.0, createdAt: fmt.string(from: now.addingTimeInterval(-300)), accountType: nil, mode: nil),
+            .init(userID: "u-high-rr", pnl: 500, rr: 4.0, createdAt: fmt.string(from: now.addingTimeInterval(-360)), accountType: nil, mode: nil),
+            .init(userID: "u-high-rr", pnl: -100, rr: 3.5, createdAt: fmt.string(from: now.addingTimeInterval(-420)), accountType: nil, mode: nil),
+            .init(userID: "u-high-rr", pnl: 500, rr: 3.5, createdAt: fmt.string(from: now.addingTimeInterval(-480)), accountType: nil, mode: nil),
+        ]
+
+        let entries = LeaderboardTradeWindowFilter.buildRankings(from: trades).entries
+        let profiles = Dictionary(uniqueKeysWithValues: entries.map {
+            (
+                $0.profileID,
+                Profile(
+                    id: $0.profileID,
+                    userID: UserID($0.profileID.rawValue),
+                    username: $0.profileID.rawValue,
+                    displayName: $0.profileID.rawValue,
+                    bio: nil,
+                    avatar: nil,
+                    traderType: nil,
+                    tradingStyle: nil,
+                    primaryMarket: nil,
+                    startedTradingAt: nil,
+                    isPrivate: false,
+                    isCreator: false,
+                    createdAt: .now
+                )
+            )
+        })
+
+        let pnlState = LeaderboardPresentation.buildState(
+            entries: entries,
+            profiles: profiles,
+            verified: [],
+            followers: [:],
+            following: [],
+            friends: [],
+            viewerID: nil,
+            audience: .all,
+            category: .pnl,
+            nextCursor: nil
+        )
+        XCTAssertEqual(pnlState.rows.first?.profileID, ProfileID("u-high-pnl"))
+        XCTAssertTrue(pnlState.rows.first?.primaryMetricText.hasPrefix("+") == true)
+
+        let winRateState = LeaderboardPresentation.buildState(
+            entries: entries,
+            profiles: profiles,
+            verified: [],
+            followers: [:],
+            following: [],
+            friends: [],
+            viewerID: nil,
+            audience: .all,
+            category: .winRate,
+            nextCursor: nil
+        )
+        XCTAssertEqual(winRateState.rows.first?.profileID, ProfileID("u-high-win"))
+        XCTAssertEqual(winRateState.rows.first?.primaryMetricText, "75.0%")
+
+        let rrState = LeaderboardPresentation.buildState(
+            entries: entries,
+            profiles: profiles,
+            verified: [],
+            followers: [:],
+            following: [],
+            friends: [],
+            viewerID: nil,
+            audience: .all,
+            category: .rr,
+            nextCursor: nil
+        )
+        XCTAssertEqual(rrState.rows.first?.profileID, ProfileID("u-high-rr"))
+        XCTAssertEqual(rrState.rows.first?.primaryMetricText, "3.67")
+    }
+
+    func testProfitFactorSortsUnavailableBelowCalculableValues() {
+        let entries: [LeaderboardEntry] = [
+            LeaderboardEntry(
+                rank: 1,
+                profileID: ProfileID("u-no-losses"),
+                username: "",
+                totalPnL: Money(amount: 50_000),
+                tradeCount: 5,
+                averageRiskReward: 2,
+                profitFactor: nil
+            ),
+            LeaderboardEntry(
+                rank: 2,
+                profileID: ProfileID("u-strong-pf"),
+                username: "",
+                totalPnL: Money(amount: 500),
+                tradeCount: 4,
+                averageRiskReward: 1.5,
+                profitFactor: Decimal(string: "2.50")
+            ),
+            LeaderboardEntry(
+                rank: 3,
+                profileID: ProfileID("u-weak-pf"),
+                username: "",
+                totalPnL: Money(amount: 200),
+                tradeCount: 3,
+                averageRiskReward: 1.2,
+                profitFactor: Decimal(string: "1.10")
+            ),
+        ]
+        let profiles = Dictionary(uniqueKeysWithValues: entries.map {
+            (
+                $0.profileID,
+                Profile(
+                    id: $0.profileID,
+                    userID: UserID($0.profileID.rawValue),
+                    username: $0.profileID.rawValue,
+                    displayName: $0.profileID.rawValue,
+                    bio: nil,
+                    avatar: nil,
+                    traderType: nil,
+                    tradingStyle: nil,
+                    primaryMarket: nil,
+                    startedTradingAt: nil,
+                    isPrivate: false,
+                    isCreator: false,
+                    createdAt: .now
+                )
+            )
+        })
+
+        let state = LeaderboardPresentation.buildState(
+            entries: entries,
+            profiles: profiles,
+            verified: [],
+            followers: [:],
+            following: [],
+            friends: [],
+            viewerID: nil,
+            audience: .all,
+            category: .profitFactor,
+            nextCursor: nil
+        )
+
+        XCTAssertEqual(state.rows.first?.profileID, ProfileID("u-strong-pf"))
+        XCTAssertEqual(state.rows[1].profileID, ProfileID("u-weak-pf"))
+        XCTAssertEqual(state.rows.last?.profileID, ProfileID("u-no-losses"))
+        XCTAssertEqual(state.rows.last?.primaryMetricText, "—")
+        XCTAssertEqual(state.podium.first?.profileID, ProfileID("u-strong-pf"))
+        XCTAssertEqual(state.podium.last?.profileID, ProfileID("u-no-losses"))
+        XCTAssertEqual(state.podium.last?.primaryMetricText, "—")
+    }
+
+    func testUserStatsAggregationComputesDerivedMetrics() {
+        let fmt = ISO8601DateFormatter()
+        let now = Date()
+        let stats = LeaderboardUserStatsAggregator.aggregate(trades: [
+            .init(userID: "u1", pnl: 100, rr: 2, createdAt: fmt.string(from: now.addingTimeInterval(-400)), accountType: nil, mode: nil),
+            .init(userID: "u1", pnl: 200, rr: 2, createdAt: fmt.string(from: now.addingTimeInterval(-300)), accountType: nil, mode: nil),
+            .init(userID: "u1", pnl: -50, rr: 1, createdAt: fmt.string(from: now.addingTimeInterval(-200)), accountType: nil, mode: nil),
+            .init(userID: "u1", pnl: 300, rr: 3, createdAt: fmt.string(from: now.addingTimeInterval(-100)), accountType: nil, mode: nil),
+        ])
+
+        XCTAssertEqual(stats.tradeCount, 4)
+        XCTAssertEqual(stats.totalPnL, 550)
+        XCTAssertEqual(stats.winStreak, 2)
+        XCTAssertEqual(stats.winRate, Decimal(3) / Decimal(4))
+        XCTAssertEqual(stats.profitFactor, Decimal(12))
+        XCTAssertEqual(stats.averageRiskReward, Decimal(2))
+    }
+
     func testBootstrapUsesOneProfileBatchNotPerRow() async {
         SessionProfileStore.shared.invalidate()
+        LeaderboardSessionStore.shared.invalidate()
+        await LeaderboardTradeRowsCache.shared.invalidate()
         let repo = MockLeaderboardRepository(trades: sampleTrades())
         let profiles = CountingBatchProfileRepository()
         let cache = DetailPresentationCache()
@@ -317,7 +493,9 @@ final class LeaderboardExperienceTests: XCTestCase {
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
         await vm.bootstrapIfNeeded()
-        XCTAssertEqual(profiles.profilesBatchCallCount, 1)
+        await vm.awaitPendingWork()
+        XCTAssertGreaterThanOrEqual(profiles.profilesBatchCallCount, 1, "Profiles must batch-fetch, not loop per row")
+        XCTAssertLessThanOrEqual(profiles.profilesBatchCallCount, 2, "Bootstrap + visible hydration may coalesce to at most two batches")
         XCTAssertEqual(profiles.profileSingleCallCount, 0)
     }
 

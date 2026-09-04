@@ -39,8 +39,12 @@ private nonisolated struct TradesListRpcArguments: Encodable, Sendable {
     var p_result: String
     var p_pnl_min: Double?
     var p_pnl_max: Double?
+    var p_rr_min: Double?
+    var p_rr_max: Double?
     var p_direction: String
     var p_visibility: String
+    var p_account_mode: String
+    var p_session: String
 
     init(query: TradeHistoryQuery, limit: Int, cursor: String?) {
         let filters = query.filters
@@ -60,8 +64,12 @@ private nonisolated struct TradesListRpcArguments: Encodable, Sendable {
         p_result = filters.result.rawValue
         p_pnl_min = filters.pnlMin.map { NSDecimalNumber(decimal: $0).doubleValue }
         p_pnl_max = filters.pnlMax.map { NSDecimalNumber(decimal: $0).doubleValue }
+        p_rr_min = filters.rrMin.map { NSDecimalNumber(decimal: $0).doubleValue }
+        p_rr_max = filters.rrMax.map { NSDecimalNumber(decimal: $0).doubleValue }
         p_direction = filters.direction.rawValue
         p_visibility = filters.visibility.rawValue
+        p_account_mode = filters.accountMode.rawValue
+        p_session = filters.tradingSession.rawValue
     }
 
     enum CodingKeys: String, CodingKey {
@@ -75,8 +83,12 @@ private nonisolated struct TradesListRpcArguments: Encodable, Sendable {
         case p_result
         case p_pnl_min
         case p_pnl_max
+        case p_rr_min
+        case p_rr_max
         case p_direction
         case p_visibility
+        case p_account_mode
+        case p_session
     }
 
     func encode(to encoder: Encoder) throws {
@@ -119,16 +131,30 @@ private nonisolated struct TradesListRpcArguments: Encodable, Sendable {
         } else {
             try container.encodeNil(forKey: .p_pnl_max)
         }
+        if let p_rr_min {
+            try container.encode(p_rr_min, forKey: .p_rr_min)
+        } else {
+            try container.encodeNil(forKey: .p_rr_min)
+        }
+        if let p_rr_max {
+            try container.encode(p_rr_max, forKey: .p_rr_max)
+        } else {
+            try container.encodeNil(forKey: .p_rr_max)
+        }
         try container.encode(p_direction, forKey: .p_direction)
         try container.encode(p_visibility, forKey: .p_visibility)
+        try container.encode(p_account_mode, forKey: .p_account_mode)
+        try container.encode(p_session, forKey: .p_session)
     }
 
     private static func sortParam(_ sort: TradeHistorySort) -> String {
         switch sort {
         case .newest: return "newest"
         case .oldest: return "oldest"
-        case .highestPnL: return "highest_pnl"
-        case .lowestPnL: return "lowest_pnl"
+        case .highestPnL, .bestWin: return "highest_pnl"
+        case .lowestPnL, .worstLoss: return "lowest_pnl"
+        case .highestRR: return "highest_rr"
+        case .lowestRR: return "lowest_rr"
         }
     }
 }

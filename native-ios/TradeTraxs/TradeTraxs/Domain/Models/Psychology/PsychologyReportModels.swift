@@ -147,12 +147,23 @@ nonisolated struct PsychologyReport: Hashable, Sendable, Identifiable {
     var id: ReportID { periodRef.reportID }
 }
 
-nonisolated struct PsychologyReportsSnapshot: Hashable, Sendable {
+nonisolated struct PsychologyReportsSnapshot: Sendable {
     var reports: [ReportID: PsychologyReport]
     var computedAt: TimeInterval
     var catalogPeriods: [PsychologyReportPeriodRef]
 
     func report(for id: ReportID) -> PsychologyReport? {
         reports[id]
+    }
+}
+
+extension PsychologyReportsSnapshot: Hashable {
+    nonisolated func hash(into hasher: inout Hasher) {
+        hasher.combine(computedAt)
+        hasher.combine(catalogPeriods)
+    }
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.computedAt == rhs.computedAt && lhs.catalogPeriods == rhs.catalogPeriods
     }
 }

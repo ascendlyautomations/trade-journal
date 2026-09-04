@@ -40,6 +40,7 @@ final class ProfileContentStore {
     /// First owned Trade Room when present (hidden in UI when nil after resolve).
     private(set) var ownedTradeRoom: TradeRoom?
     private(set) var didResolveTradeRoom = false
+    private(set) var activeStories: [Story] = []
 
     private let profiles: any ProfileRepository
     private let rooms: any RoomRepository
@@ -75,6 +76,11 @@ final class ProfileContentStore {
 
     var hasTradeRoom: Bool { ownedTradeRoom != nil }
 
+    /// Newest active story for avatar ring — from bootstrap, not a follow-up fetch.
+    var activeStory: Story? {
+        StoryBootstrapMapping.newestActive(activeStories)
+    }
+
     /// Web `canShowVisitorRoomCta` — owned room + `show_on_profile` + viewable profile content.
     /// Profile does not check membership; visitors always get “View Trade Room” when shown.
     var canShowVisitorTradeRoomCTA: Bool {
@@ -102,6 +108,7 @@ final class ProfileContentStore {
         stats = state.stats
         ownedTradeRoom = state.ownedTradeRoom
         didResolveTradeRoom = state.didResolveTradeRoom
+        applyActiveStories(from: state.activeStories, isOwner: state.isOwner)
         errorMessage = state.errorMessage
         // Follow must work as soon as Stage 1 publishes — capture viewer for toggle.
         Task { [weak self] in
@@ -204,7 +211,52 @@ final class ProfileContentStore {
         }
     }
 
+    func applyStoryCreated(_ story: Story) {
+        guard isOwner, story.authorProfileID == resolvedProfileID else { return }
+        detailCache.seed(story)
+        var merged = activeStories.filter { $0.id != story.id }
+        merged.append(story)
+        activeStories = ActiveStorySemantics.filterActive(merged)
+        if let profileID = resolvedProfileID {
+            ViewerActiveStoryStore.shared.applyStoryCreated(story, viewerID: profileID)
+        }
+    }
+
+    func applyStoryDeleted(_ storyID: StoryID) {
+        activeStories.removeAll { $0.id == storyID }
+        detailCache.removeStory(id: storyID)
+        ViewerActiveStoryStore.shared.applyStoryDeleted(storyID)
+    }
+
+    func reconcileExpiredStories(now: Date = Date()) {
+        let filtered = ActiveStorySemantics.filterActive(activeStories, now: now)
+        if filtered.count != activeStories.count {
+            activeStories = filtered
+        }
+    }
+
     // MARK: - Private
+
+    private func applyActiveStories(from incoming: [Story], isOwner: Bool) {
+        let activeIncoming = ActiveStorySemantics.filterActive(incoming)
+        if !activeIncoming.isEmpty {
+            activeStories = activeIncoming
+            for story in activeIncoming {
+                detailCache.seed(story)
+            }
+            if isOwner, let profileID = resolvedProfileID {
+                ViewerActiveStoryStore.shared.sync(viewerID: profileID, stories: activeIncoming)
+            }
+            return
+        }
+
+        // Empty RPC payload — keep optimistic owner story until server confirms deletion.
+        if isOwner {
+            let retained = ActiveStorySemantics.filterActive(activeStories)
+            if !retained.isEmpty { return }
+        }
+        activeStories = []
+    }
 
     private func performLoad(force: Bool) async {
         phase = profile == nil ? .loading : phase

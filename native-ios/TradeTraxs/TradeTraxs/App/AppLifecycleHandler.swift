@@ -25,6 +25,7 @@ final class AppLifecycleHandler {
         Task { @MainActor in
             await pushNotifications?.refreshAuthorizationStatus()
             pushNotifications?.syncBadgeFromActivity()
+            await DailyCheckInReminderCoordinator.shared.sync()
         }
     }
 

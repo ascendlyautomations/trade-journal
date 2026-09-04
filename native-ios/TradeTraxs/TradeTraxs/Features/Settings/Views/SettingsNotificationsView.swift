@@ -88,6 +88,25 @@ struct SettingsNotificationsView: View {
 
         Section {
             SettingsToggleRow(
+                title: "Daily Check-In Reminder",
+                subtitle: "Remind me before the market opens if I haven't completed my daily check-in.",
+                isOn: Binding(
+                    get: { viewModel.dailyCheckInReminderEnabled },
+                    set: { viewModel.setDailyCheckInReminderEnabled($0) }
+                ),
+                isEnabled: viewModel.systemAuthorization.isEnabled
+            )
+            .accessibilityIdentifier("settings.notifications.dailyCheckInReminder")
+        } footer: {
+            if viewModel.systemAuthorization.isEnabled {
+                Text("Weekday reminders arrive at 9:15 AM in your local time zone.")
+            } else {
+                Text("Turn on iOS notifications to receive weekday check-in reminders at 9:15 AM.")
+            }
+        }
+
+        Section {
+            SettingsToggleRow(
                 title: NotificationPreferenceKey.notificationsEnabled.title,
                 subtitle: NotificationPreferenceKey.notificationsEnabled.subtitle,
                 isOn: Binding(

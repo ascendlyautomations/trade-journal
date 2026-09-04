@@ -201,6 +201,15 @@ final class ProfileHeaderViewModel {
         navigationCoordinator.open(.profile(.rooms))
     }
 
+    func openViewerStory(_ story: Story) {
+        ExperienceHaptics.play(.selection)
+        detailCache.seed(story)
+        if let profile = store.profile {
+            detailCache.seed(profile)
+        }
+        navigationCoordinator.present(fullScreen: .storyViewer(story.id))
+    }
+
     // MARK: - Private
 
     private func openOrCreateConversation() async {

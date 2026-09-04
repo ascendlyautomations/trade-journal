@@ -70,6 +70,7 @@ export async function POST(req: Request) {
       .from("device_push_tokens")
       .delete()
       .eq("device_token", previousDeviceToken)
+      .eq("user_id", user.id)
     if (prevErr) {
       console.error("[api/push/register] previous token delete failed", prevErr)
       return Response.json({ error: prevErr.message }, { status: 500 })

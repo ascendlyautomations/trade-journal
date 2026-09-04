@@ -996,7 +996,7 @@ final class ConversationViewModel {
         applyHeader(from: applied.conversation)
         if let status = applied.blockStatus {
             blockStatus = status
-            if let peerID = peerProfileID {
+            if peerProfileID != nil {
                 UserBlockCoordinator.shared.cacheStatus(status)
             }
         }

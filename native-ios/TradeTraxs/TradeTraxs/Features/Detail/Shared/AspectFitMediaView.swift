@@ -23,6 +23,8 @@ struct AspectFitMediaView: View {
     var allowsFullResolutionViewer: Bool = true
     /// When `false`, omit empty / failed placeholders (Feed text-first layout).
     var showsPlaceholderWhenUnavailable: Bool = true
+    /// Optional cap for inline detail previews (trade detail uses a shorter height).
+    var maxDisplayHeightOverride: CGFloat? = nil
     /// Double-tap Like callback (like-only). When set, single-tap still opens the viewer if allowed.
     var onDoubleTapLike: (() -> Void)? = nil
 
@@ -34,9 +36,8 @@ struct AspectFitMediaView: View {
     @State private var showsFullViewer = false
     @State private var showLikeHeart = false
 
-    /// Soft cap for very tall portrait uploads (web `min(58dvh, …)` style).
     private var maxDisplayHeight: CGFloat {
-        min(UIScreen.main.bounds.height * 0.58, 720)
+        maxDisplayHeightOverride ?? min(UIScreen.main.bounds.height * 0.58, 720)
     }
 
     var body: some View {

@@ -278,6 +278,24 @@ export async function loadProfileBootstrapWithResilience(
         transientError: true,
       }
     }
+    if (err instanceof BackendV2RpcError) {
+      if (
+        process.env.NODE_ENV === "development" ||
+        process.env.NEXT_PUBLIC_PROFILE_FETCH_DEBUG === "1"
+      ) {
+        console.warn("[backendV2.profile] RPC failed; falling back to legacy profile load", {
+          rpc: err.rpcName,
+          code: err.code,
+          message: err.message,
+        })
+      }
+      return {
+        result: null,
+        source: "none",
+        revalidating: false,
+        transientError: false,
+      }
+    }
     throw err
   }
 }

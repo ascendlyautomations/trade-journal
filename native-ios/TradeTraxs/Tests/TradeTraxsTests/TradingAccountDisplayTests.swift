@@ -161,4 +161,36 @@ final class TradingAccountDisplayTests: XCTestCase {
             "Topstep · Funded · 0123"
         )
     }
+
+    func testInferPropFirmNameStripsTrailingSizeSuffix() {
+        XCTAssertEqual(TradingAccountDisplay.inferPropFirmName("Alpha Futures 50K"), "Alpha Futures")
+        XCTAssertEqual(TradingAccountDisplay.inferPropFirmName("Topstep $100K"), "Topstep")
+        XCTAssertEqual(TradingAccountDisplay.inferPropFirmName("Apex"), "Apex")
+        XCTAssertEqual(TradingAccountDisplay.inferPropFirmName("  "), "")
+    }
+
+    func testPropFirmNameOnlyForPropFirmCategory() {
+        let prop = TradingAccount(
+            id: TradingAccountID("p1"),
+            ownerProfileID: ProfileID("u1"),
+            name: "Tradeify 50K",
+            category: .propFirm,
+            mode: .evaluation,
+            size: Money(amount: 50_000),
+            isActive: true,
+            canAddTrades: true
+        )
+        let personal = TradingAccount(
+            id: TradingAccountID("p2"),
+            ownerProfileID: ProfileID("u1"),
+            name: "Tradeify 50K",
+            category: .personal,
+            mode: .live,
+            size: Money(amount: 50_000),
+            isActive: true,
+            canAddTrades: true
+        )
+        XCTAssertEqual(TradingAccountDisplay.propFirmName(for: prop), "Tradeify")
+        XCTAssertNil(TradingAccountDisplay.propFirmName(for: personal))
+    }
 }

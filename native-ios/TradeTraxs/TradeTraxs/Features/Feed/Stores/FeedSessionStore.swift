@@ -42,4 +42,19 @@ final class FeedSessionStore {
             snapshots = [:]
         }
     }
+
+    /// Newest active viewer story from any cached Following-scope bootstrap snapshot.
+    func activeViewerStory(viewerID: ProfileID, now: Date = Date()) -> Story? {
+        let prefix = "\(viewerID.rawValue)|\(FeedScope.following.rawValue)|"
+        var best: Story?
+        for snapshot in snapshots.values where snapshot.cacheKey.hasPrefix(prefix) {
+            guard let candidate = snapshot.stories.first(where: { $0.authorProfileID == viewerID }) else {
+                continue
+            }
+            guard ActiveStorySemantics.isActive(createdAt: candidate.createdAt, now: now) else { continue }
+            if let best, candidate.createdAt <= best.createdAt { continue }
+            best = candidate
+        }
+        return best
+    }
 }

@@ -101,7 +101,11 @@ final class ExploreViewModel {
     }
 
     func resolvedProfile(for trader: ExploreTraderSuggestion) -> Profile {
-        detailCache.profile(id: trader.id)?.mergingCachedPresentation(with: trader.profile) ?? trader.profile
+        var merged = trader.profile
+        if let cached = detailCache.profile(id: trader.id) {
+            merged = merged.mergingCachedPresentation(with: cached)
+        }
+        return merged
     }
 
     func refresh() async {
@@ -291,9 +295,18 @@ final class ExploreViewModel {
             #if DEBUG
             ExploreLoadProbe.noteRequest("rpc_v1_explore_bootstrap", blocking: true)
             #endif
-            for trader in applied.traders { detailCache.seed(trader.profile) }
+            var confirmedAbsent = store.avatarConfirmedAbsentIDs
+            let (hydrated, _) = await ExploreProfileHydration.hydrateTraders(
+                applied.traders,
+                authoritativeProfiles: [:],
+                detailCache: detailCache,
+                repository: profiles,
+                confirmedAbsent: &confirmedAbsent
+            )
+            store.updateAvatarConfirmedAbsent(confirmedAbsent)
+            for trader in hydrated { detailCache.seed(trader.profile) }
             store.applyBootstrap(
-                traders: applied.traders,
+                traders: hydrated,
                 rooms: applied.rooms,
                 following: applied.followingIDs,
                 tradersNextCursor: applied.tradersNextCursor

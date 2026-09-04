@@ -141,10 +141,10 @@ final class DataLayerTests: XCTestCase {
         let day: TimeInterval = 86_400
         let base = Date(timeIntervalSince1970: 1_700_000_000)
         let rows: [ProfileStatisticsMetrics.TradeInput] = [
-            .init(pnl: 100, createdAt: base.addingTimeInterval(3 * day), isLong: true, session: "NY", mode: "live", accountType: "eval"),
-            .init(pnl: -40, createdAt: base.addingTimeInterval(2 * day), isLong: false, session: "London", mode: "live", accountType: "eval"),
-            .init(pnl: 60, createdAt: base.addingTimeInterval(1 * day), isLong: true, session: "Asia Session", mode: "live", accountType: "funded"),
-            .init(pnl: 25, createdAt: base, isLong: true, session: "NY", mode: "backtest", accountType: nil),
+            .init(pnl: 100, createdAt: base.addingTimeInterval(3 * day), isLong: true, session: "NY", accountMode: .evaluation),
+            .init(pnl: -40, createdAt: base.addingTimeInterval(2 * day), isLong: false, session: "London", accountMode: .evaluation),
+            .init(pnl: 60, createdAt: base.addingTimeInterval(1 * day), isLong: true, session: "Asia Session", accountMode: .funded),
+            .init(pnl: 25, createdAt: base, isLong: true, session: "NY", accountMode: .backtest),
         ]
 
         let all = ProfileStatisticsMetrics.compute(from: rows, selectedMode: .all)
@@ -182,10 +182,36 @@ final class DataLayerTests: XCTestCase {
 
     func testProfileStatisticsModeAcceptsEvaluationAlias() {
         let rows: [ProfileStatisticsMetrics.TradeInput] = [
-            .init(pnl: 10, createdAt: Date(), isLong: true, session: nil, mode: "live", accountType: "evaluation"),
+            .init(pnl: 10, createdAt: Date(), isLong: true, session: nil, accountMode: .evaluation),
         ]
         let result = ProfileStatisticsMetrics.compute(from: rows, selectedMode: .eval)
         XCTAssertEqual(result.filteredTradeCount, 1)
+    }
+
+    func testProfileStatisticsModeFiltersLiveFundedEvalSeparately() {
+        let rows: [ProfileStatisticsMetrics.TradeInput] = [
+            .init(pnl: 100, createdAt: Date(), isLong: true, session: nil, accountMode: .live),
+            .init(pnl: 200, createdAt: Date(), isLong: true, session: nil, accountMode: .funded),
+            .init(pnl: 50, createdAt: Date(), isLong: true, session: nil, accountMode: .evaluation),
+        ]
+        XCTAssertEqual(
+            ProfileStatisticsMetrics.compute(from: rows, selectedMode: .live).filteredTradeCount,
+            1
+        )
+        XCTAssertEqual(
+            ProfileStatisticsMetrics.compute(from: rows, selectedMode: .funded).currentEquity,
+            200
+        )
+        XCTAssertEqual(
+            ProfileStatisticsMetrics.compute(from: rows, selectedMode: .eval).currentEquity,
+            50
+        )
+    }
+
+    func testTradeMapperParseAccountModeDoesNotCollapseLiveIntoFunded() {
+        XCTAssertEqual(TradingAccountMode.parseWireValue("live"), .live)
+        XCTAssertEqual(TradingAccountMode.parseWireValue("funded"), .funded)
+        XCTAssertEqual(TradingAccountMode.parseWireValue("evaluation"), .evaluation)
     }
 
     func testTradingAccountMapperPrefersAccountsNameColumn() throws {

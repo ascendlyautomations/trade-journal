@@ -66,9 +66,9 @@ enum MessagingBootstrapApplier {
             },
             isGroup: isGroup,
             isPinned: row.is_pinned,
-            lastMessagePreview: StoryReplyMessageSupport.sanitizeInboxPreview(
-                type: row.last_message_type,
-                content: row.last_message
+            lastMessagePreview: ConversationInboxActivity.preview(
+                fromStoredContent: row.last_message,
+                type: row.last_message_type
             ),
             lastMessageAt: lastAt,
             lastMessageID: lastMessageID,

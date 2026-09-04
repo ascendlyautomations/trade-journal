@@ -7,7 +7,7 @@ enum CalendarLoadPhase: Equatable, Sendable {
     case failed(String)
 }
 
-enum CalendarFormatting {
+nonisolated enum CalendarFormatting {
     /// Compact day-cell P&L (`+$842`, `-$1.2K`).
     static func compactPnL(_ value: Decimal) -> String {
         let number = NSDecimalNumber(decimal: value).doubleValue
@@ -27,7 +27,14 @@ enum CalendarFormatting {
     }
 
     static func fullPnL(_ value: Decimal) -> String {
-        ProfileDisplay.formatMoney(value)
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = true
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        let absAmount = abs(value)
+        let body = formatter.string(from: NSDecimalNumber(decimal: absAmount)) ?? "\(absAmount)"
+        return value < 0 ? "-$\(body)" : "$\(body)"
     }
 
     static func tradeCount(_ count: Int) -> String {

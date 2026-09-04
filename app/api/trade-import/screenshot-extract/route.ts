@@ -10,18 +10,16 @@ import {
   validateScreenshotTradeExtractionResponse,
   type ScreenshotTradeExtractRequestV1,
 } from "@/lib/screenshotTradeExtractContract"
+import {
+  consumeDurableUserRateLimit,
+  rateLimitExceededResponse,
+} from "@/lib/server/durableUserRateLimit"
+import { requireProEntitlement } from "@/lib/server/requireProEntitlement"
 import type { Database } from "@/lib/database.types"
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
-
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-const aiCallByUser = new Map<string, number>()
 
 const MAX_IMAGE_BYTES = 2_500_000
 const MAX_TOTAL_BYTES = 12_000_000
@@ -79,11 +77,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const lastCall = aiCallByUser.get(user.id) ?? 0
-  if (Date.now() - lastCall < 3000) {
-    return NextResponse.json({ error: "Slow down" }, { status: 429 })
+  const rate = await consumeDurableUserRateLimit(user.id, "ai_screenshot_extract")
+  if (!rate.allowed) {
+    return rateLimitExceededResponse(rate.retryAfterSec)
   }
-  aiCallByUser.set(user.id, Date.now())
+
+  const entitlement = await requireProEntitlement(user.id, {
+    reply:
+      "Screenshot trade import with AI is a TraxPro feature. Upgrade your plan on the web to unlock it.",
+  })
+  if (!entitlement.ok) {
+    return entitlement.response
+  }
 
   try {
     const body = await req.json()
@@ -95,20 +100,6 @@ export async function POST(req: Request) {
     const imageError = validateImagePayload(request)
     if (imageError) {
       return NextResponse.json({ error: imageError }, { status: 400 })
-    }
-
-    // Authenticated owner check — same pattern as other AI routes.
-    const { error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("id")
-      .eq("id", user.id)
-      .single()
-
-    if (profileError) {
-      return NextResponse.json(
-        { error: "Could not verify account" },
-        { status: 500 }
-      )
     }
 
     const prompt = buildScreenshotTradeExtractUserPrompt(request)

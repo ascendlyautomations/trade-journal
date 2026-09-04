@@ -11,6 +11,7 @@ struct ProfileView: View {
 
     /// Observed so the tab Profile can seed session cache from the already-loaded owner store.
     @Bindable private var currentUserProfile: CurrentUserProfileStore
+    @Bindable private var viewerStoryStore = ViewerActiveStoryStore.shared
 
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -63,7 +64,10 @@ struct ProfileView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-                ProfileHeaderView(store: contentStore, viewModel: headerViewModel)
+                ProfileHeaderView(
+                    store: contentStore,
+                    viewModel: headerViewModel
+                )
                     .experiencePadding(.horizontal, .lg)
                     .padding(.top, ExperienceSpacing.sm)
 
@@ -112,6 +116,17 @@ struct ProfileView: View {
                         Button("Share Profile", systemImage: "square.and.arrow.up") {
                             headerViewModel.presentShare()
                         }
+                        Button("Report User", systemImage: "flag") {
+                            guard let profileID = contentStore.resolvedProfileID ?? contentStore.profile?.id else {
+                                return
+                            }
+                            ExperienceHaptics.play(.selection)
+                            ContentReportSupport.presentUser(
+                                profileID: profileID,
+                                displayName: contentStore.profile?.displayName,
+                                presenter: appEnvironment.contentReportPresenter
+                            )
+                        }
                         Button(
                             headerViewModel.blockedByMe ? "Unblock User" : "Block User",
                             systemImage: headerViewModel.blockedByMe ? "person.crop.circle.badge.checkmark" : "hand.raised",
@@ -135,6 +150,24 @@ struct ProfileView: View {
             headerViewModel.onRetryBootstrap = { screen.retryBootstrap() }
             headerViewModel.onAppear()
             screen.onAppear(currentUserProfile: currentUserProfile)
+        }
+        .onChange(of: ContentMutationStore.shared.revision) { _, _ in
+            guard contentStore.resolvedProfileID ?? contentStore.profile?.id != nil else { return }
+            switch ContentMutationStore.shared.latest {
+            case .story(let story):
+                if contentStore.isOwner {
+                    contentStore.applyStoryCreated(story)
+                }
+            case .storyDeleted(let storyID):
+                if contentStore.isOwner {
+                    contentStore.applyStoryDeleted(storyID)
+                }
+            default:
+                break
+            }
+            if contentStore.isOwner {
+                viewerStoryStore.reconcileExpired()
+            }
         }
         .onChange(of: screen.state.profileID) { _, _ in
             screen.syncShellIfNeeded()

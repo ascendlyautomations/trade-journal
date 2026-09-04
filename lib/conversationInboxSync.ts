@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { storyReplyPreviewText } from "@/lib/storyReplyMessage"
+import {
+  decodeStoryShareContent,
+  storySharePreviewText,
+} from "@/lib/storyShareMessage"
 
 export const CONVERSATION_UPDATED_EVENT = "tj-conversation-updated"
 export const INBOX_PATCHES_STORAGE_KEY = "tj-conversation-inbox-patches"
@@ -59,6 +63,9 @@ export function previewFromMessage(row: {
   if (row.deleted_for_everyone) return "Message deleted"
   if (row.type === "story_reply") {
     return storyReplyPreviewText(row.content)
+  }
+  if (row.type === "story_share" || decodeStoryShareContent(row.content)) {
+    return storySharePreviewText(row.content)
   }
   if (row.type?.toLowerCase() === "voice") return "Voice message"
   if (row.audio_url?.trim()) return "Voice message"

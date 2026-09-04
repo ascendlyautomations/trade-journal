@@ -11,6 +11,7 @@ struct DetailIdentityHeader: View {
     let dateText: String
     let isOwner: Bool
     var contentLink: DetailContentLink? = nil
+    var ownerProfileID: ProfileID? = nil
     var shareText: String = "TradeTraxs"
     var editTitle: String = "Edit"
     var deleteTitle: String = "Delete"
@@ -19,6 +20,7 @@ struct DetailIdentityHeader: View {
     var accessibilityIdentifier: String = "detail.identity"
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.appEnvironment) private var appEnvironment
     @State private var isSharePresented = false
 
     var body: some View {
@@ -67,13 +69,7 @@ struct DetailIdentityHeader: View {
                     onCopyLink: contentLink.map { link in
                         { DetailOverflowActions.copyLink(link) }
                     },
-                    onReport: (isOwner || contentLink == nil)
-                        ? nil
-                        : {
-                            if let contentLink {
-                                DetailOverflowActions.openReport(contentLink)
-                            }
-                        },
+                    onReport: reportAction,
                     editTitle: editTitle,
                     deleteTitle: deleteTitle,
                     onEdit: onEdit,
@@ -90,6 +86,23 @@ struct DetailIdentityHeader: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private var reportAction: (() -> Void)? {
+        guard !isOwner,
+              let contentLink,
+              let ownerProfileID
+        else { return nil }
+        return {
+            ExperienceHaptics.play(.selection)
+            appEnvironment.contentReportPresenter.present(
+                ContentReportRequest(
+                    target: contentLink.reportTarget(ownerID: ownerProfileID),
+                    subjectTitle: contentLink.reportSubjectTitle,
+                    blockUserOffer: ownerProfileID
+                )
+            )
+        }
     }
 }
 

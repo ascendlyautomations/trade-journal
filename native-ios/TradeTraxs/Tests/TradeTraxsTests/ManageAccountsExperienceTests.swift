@@ -111,6 +111,33 @@ final class ManageAccountsExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.accounts.first { $0.id == id }?.isActive, false)
     }
 
+    func testSetShowInAccountDropdownsUpdatesSessionAndBroadcastsMutation() async {
+        let repository = ManageAccountsMutatingTradeRepository()
+        let cache = DetailPresentationCache()
+        let viewModel = ManageAccountsViewModel(
+            trades: repository,
+            session: ManageAccountsStubSession(userID: SettingsFixtures.viewerID.rawValue),
+            detailCache: cache
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { !viewModel.accounts.isEmpty }
+
+        let accountID = viewModel.accounts[0].id
+        let beforeRevision = AccountMutationStore.shared.revision
+
+        await viewModel.setShowInAccountDropdowns(id: accountID, show: false)
+        XCTAssertEqual(AccountMutationStore.shared.revision, beforeRevision + 1)
+        XCTAssertFalse(viewModel.showInAccountDropdowns(for: accountID))
+        XCTAssertFalse(viewModel.accounts.first { $0.id == accountID }!.showInAccountDropdowns)
+        XCTAssertEqual(
+            cache.accounts(for: SettingsFixtures.viewerID)?.first(where: { $0.id == accountID })?.showInAccountDropdowns,
+            false
+        )
+
+        await viewModel.setShowInAccountDropdowns(id: accountID, show: true)
+        XCTAssertTrue(viewModel.showInAccountDropdowns(for: accountID))
+    }
+
     func testWriteBodyMatchesWebAccountFields() {
         let body = TradingAccountMapper.writeBody(
             ownerID: ProfileID("user-1"),
@@ -178,6 +205,75 @@ final class ManageAccountsExperienceTests: XCTestCase {
         let subtitle = viewModel.subtitle(for: account)
         XCTAssertTrue(subtitle.contains("Read Only"))
         XCTAssertTrue(subtitle.contains("Inactive"))
+    }
+
+    func testSettingsHomeDoesNotExposePropFirmRoute() {
+        let routes = SettingsHomeModel.sections.flatMap(\.items).map(\.route)
+        XCTAssertTrue(routes.contains(.tradingAccounts))
+        XCTAssertFalse(routes.contains(where: { $0.rawValue == "prop-firm" }))
+    }
+
+    func testPropFirmDeepLinkRedirectsToManageAccounts() {
+        XCTAssertEqual(SettingsRoute.fromDeepLinkSegment("prop-firm"), .tradingAccounts)
+    }
+
+    func testManageAccountsFilteringCombinesPropFirmAndMode() async {
+        let userID = "dev.manage.accounts.filter.\(UUID().uuidString)"
+        let viewModel = ManageAccountsViewModel(
+            trades: ManageAccountsFilteringStubRepository(),
+            session: ManageAccountsStubSession(userID: userID),
+            detailCache: DetailPresentationCache()
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { !viewModel.accounts.isEmpty }
+
+        XCTAssertEqual(viewModel.availablePropFirms, ["Alpha Futures", "Apex", "Topstep Express"])
+        XCTAssertTrue(viewModel.availableModes.contains(.funded))
+        XCTAssertTrue(viewModel.availableModes.contains(.evaluation))
+
+        viewModel.setPropFirmFilter(.firm("Alpha Futures"))
+        viewModel.setModeFilter(.mode(.funded))
+        XCTAssertEqual(viewModel.filteredAccounts.count, 1)
+        XCTAssertEqual(viewModel.filteredAccounts.first?.name, "Alpha Futures 50K")
+        XCTAssertEqual(viewModel.filteredAccounts.first?.mode, .funded)
+
+        viewModel.clearFilters()
+        XCTAssertEqual(viewModel.filteredAccounts.count, viewModel.accounts.count)
+        XCTAssertFalse(viewModel.showsFilteredEmptyState)
+    }
+
+    func testManageAccountsFilteredEmptyStateRequiresActiveFilters() async {
+        let userID = "dev.manage.accounts.filter.\(UUID().uuidString)"
+        let viewModel = ManageAccountsViewModel(
+            trades: ManageAccountsFilteringStubRepository(),
+            session: ManageAccountsStubSession(userID: userID),
+            detailCache: DetailPresentationCache()
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { !viewModel.accounts.isEmpty }
+
+        viewModel.setPropFirmFilter(.firm("Tradeify"))
+        XCTAssertTrue(viewModel.filteredAccounts.isEmpty)
+        XCTAssertTrue(viewModel.showsFilteredEmptyState)
+
+        viewModel.clearFilters()
+        XCTAssertFalse(viewModel.showsFilteredEmptyState)
+    }
+
+    func testManageAccountsRowHierarchyForPropFirmAccount() async {
+        let userID = "dev.manage.accounts.filter.\(UUID().uuidString)"
+        let viewModel = ManageAccountsViewModel(
+            trades: ManageAccountsFilteringStubRepository(),
+            session: ManageAccountsStubSession(userID: userID),
+            detailCache: DetailPresentationCache()
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { !viewModel.accounts.isEmpty }
+
+        let account = viewModel.accounts.first { $0.id == TradingAccountID("filter.alpha.funded") }!
+        XCTAssertEqual(viewModel.rowTitle(for: account), "Alpha Futures")
+        XCTAssertTrue(viewModel.rowSubtitle(for: account).contains("Alpha Futures 50K"))
+        XCTAssertTrue(viewModel.rowSubtitle(for: account).contains("Funded"))
     }
 
     // MARK: - Helpers
@@ -354,6 +450,21 @@ private final class ManageAccountsMutatingTradeRepository: TradeRepository, @unc
         guard let index = stored.firstIndex(where: { $0.id == id }) else { return }
         stored[index].isActive = isActive
     }
+
+    func updateAccountInsightsSettings(
+        id: TradingAccountID,
+        ownerID: ProfileID,
+        showInAccountDropdowns: Bool,
+        customPublicStatus: String?
+    ) async throws -> TradingAccount {
+        guard let index = stored.firstIndex(where: { $0.id == id }) else {
+            throw AppError.unknown(message: "Account not found")
+        }
+        stored[index].showInAccountDropdowns = showInAccountDropdowns
+        stored[index].customPublicStatus = customPublicStatus
+        stored[index].ownerProfileID = ownerID
+        return stored[index]
+    }
 }
 
 private final class ManageAccountsStubHomeRepository: HomeRepository, @unchecked Sendable {
@@ -403,4 +514,98 @@ private final class ManageAccountsStubAchievementRepository: AchievementReposito
     }
 
     func save(_ achievement: Achievement) async throws -> Achievement { achievement }
+}
+
+private final class ManageAccountsFilteringStubRepository: TradeRepository, @unchecked Sendable {
+    func trade(id: TradeID) async throws -> Trade {
+        throw AppError.unknown(message: "not found")
+    }
+
+    func trades(
+        ownedBy profileID: ProfileID,
+        accountID: TradingAccountID?,
+        page: PageRequest,
+        publicOnly: Bool
+    ) async throws -> CursorPage<Trade> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func save(_ draft: TradeDraft) async throws -> Trade {
+        throw AppError.unknown(message: "stub")
+    }
+
+    func update(_ trade: Trade) async throws -> Trade { trade }
+    func delete(id: TradeID) async throws {}
+    func images(for tradeID: TradeID) async throws -> [TradeImage] { [] }
+    func notes(for tradeID: TradeID) async throws -> [TradeNote] { [] }
+
+    func statistics(
+        for profileID: ProfileID,
+        interval: DateIntervalValue
+    ) async throws -> TradeStatistics {
+        TradeStatistics(
+            tradeCount: 0,
+            winCount: 0,
+            lossCount: 0,
+            totalPnL: Money(amount: 0),
+            averagePnL: Money(amount: 0),
+            averageRiskReward: nil,
+            winRate: 0
+        )
+    }
+
+    func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
+        [
+            TradingAccount(
+                id: TradingAccountID("filter.alpha.funded"),
+                ownerProfileID: profileID,
+                name: "Alpha Futures 50K",
+                category: .propFirm,
+                mode: .funded,
+                size: Money(amount: 50_000),
+                isActive: true,
+                canAddTrades: true
+            ),
+            TradingAccount(
+                id: TradingAccountID("filter.alpha.eval"),
+                ownerProfileID: profileID,
+                name: "Alpha Futures 50K",
+                category: .propFirm,
+                mode: .evaluation,
+                size: Money(amount: 50_000),
+                isActive: true,
+                canAddTrades: true
+            ),
+            TradingAccount(
+                id: TradingAccountID("filter.apex"),
+                ownerProfileID: profileID,
+                name: "Apex 100K",
+                category: .propFirm,
+                mode: .evaluation,
+                size: Money(amount: 100_000),
+                isActive: true,
+                canAddTrades: true
+            ),
+            TradingAccount(
+                id: TradingAccountID("filter.topstep"),
+                ownerProfileID: profileID,
+                name: "Topstep Express",
+                category: .propFirm,
+                mode: .funded,
+                size: Money(amount: 50_000),
+                isActive: true,
+                canAddTrades: true
+            ),
+            TradingAccount(
+                id: TradingAccountID("filter.personal"),
+                ownerProfileID: profileID,
+                name: "Personal Live",
+                category: .personal,
+                mode: .live,
+                size: Money(amount: 25_000),
+                isActive: true,
+                canAddTrades: true
+            ),
+        ]
+    }
 }

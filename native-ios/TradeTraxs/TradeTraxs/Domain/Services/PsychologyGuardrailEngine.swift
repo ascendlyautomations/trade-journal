@@ -85,14 +85,14 @@ nonisolated enum PsychologyGuardrailEngine {
         facts: PsychologyCoachFacts,
         checkIn: TraderDailyCheckIn?
     ) -> PsychologyGuardrailNotice? {
-        guard let stress = checkIn?.stressLevel, stress >= 4 else { return nil }
+        guard let stress = checkIn?.stressLevel, TraderDailyCheckInStressScale.isElevated(stress) else { return nil }
         guard facts.topInsights.contains(where: { $0.category == "mentalState" && $0.headline.localizedCaseInsensitiveContains("stress") }) else {
             return nil
         }
         return PsychologyGuardrailNotice(
             id: "guardrail.highStress",
             title: "High Stress",
-            message: "You logged stress at \(stress)/5 today. Your journal shows weaker results on high-stress days.",
+            message: "You logged \(TraderDailyCheckInStressScale.displayText(for: stress)) today. Your journal shows weaker results on high-stress days.",
             kind: .highStress
         )
     }

@@ -40,13 +40,13 @@ struct SettingsLegalView: View {
     private var legalURL: URL? {
         switch route {
         case .legalTerms:
-            return URL(string: "https://www.tradetraxs.com/terms")
+            return LegalDocuments.terms
         case .legalPrivacy:
-            return URL(string: "https://www.tradetraxs.com/privacy")
+            return LegalDocuments.privacy
         case .legalCommunityGuidelines:
-            return URL(string: "https://www.tradetraxs.com/community-guidelines")
+            return LegalDocuments.communityGuidelines
         case .legalRefund:
-            return URL(string: "https://www.tradetraxs.com/refund-policy")
+            return LegalDocuments.refundPolicy
         default:
             return nil
         }

@@ -49,6 +49,17 @@ final class SettingsNotificationsViewModel {
         !systemAuthorization.isEnabled
     }
 
+    var dailyCheckInReminderEnabled: Bool {
+        DailyCheckInReminderPreferences.isEnabled
+    }
+
+    func setDailyCheckInReminderEnabled(_ enabled: Bool) {
+        guard DailyCheckInReminderPreferences.isEnabled != enabled else { return }
+        DailyCheckInReminderPreferences.isEnabled = enabled
+        ExperienceHaptics.play(.selection)
+        Task { await DailyCheckInReminderCoordinator.shared.sync() }
+    }
+
     func loadIfNeeded() {
         guard !hasLoaded else { return }
         hasLoaded = true
@@ -89,6 +100,7 @@ final class SettingsNotificationsViewModel {
     func refreshSystemAuthorization() async {
         systemAuthorization = await SystemNotificationAuthorization.currentStatus()
         await pushNotifications?.refreshAuthorizationStatus()
+        await DailyCheckInReminderCoordinator.shared.sync()
     }
 
     func binding(for key: NotificationPreferenceKey) -> Bool {

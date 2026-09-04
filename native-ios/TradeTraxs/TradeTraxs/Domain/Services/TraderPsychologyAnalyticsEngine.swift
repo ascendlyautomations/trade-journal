@@ -184,9 +184,9 @@ nonisolated enum TraderPsychologyAnalyticsEngine {
             }
         }
 
-        /// Higher score = better trading condition except stress.
+        /// Higher score = better trading condition (5 is best on every 1–5 check-in scale).
         var higherIsBetter: Bool {
-            self != .stress
+            true
         }
     }
 
@@ -342,10 +342,7 @@ nonisolated enum TraderPsychologyAnalyticsEngine {
         let delta = abs(NSDecimalNumber(decimal: bestExp - worstExp).doubleValue)
         guard delta >= 5 else { return nil }
 
-        let bestLabel = dimension.higherIsBetter ? "high" : "low"
-        let headline = dimension.higherIsBetter
-            ? "Higher \(dimension.title.lowercased()) associated with better results"
-            : "Lower \(dimension.title.lowercased()) associated with better results"
+        let headline = ratingHeadline(for: dimension)
 
         let wrBest = formatWinRate(best.1.winRate)
         let wrWorst = formatWinRate(worst.1.winRate)
@@ -361,6 +358,15 @@ nonisolated enum TraderPsychologyAnalyticsEngine {
             magnitude: delta,
             actionability: dimension == .stress || dimension == .focus ? 0.85 : 0.75
         )
+    }
+
+    private static func ratingHeadline(for dimension: DailyRatingDimension) -> String {
+        switch dimension {
+        case .stress:
+            return "Calmer days associated with better results"
+        default:
+            return "Higher \(dimension.title.lowercased()) associated with better results"
+        }
     }
 
     private static func groupedRatingInsight(
@@ -624,13 +630,13 @@ nonisolated enum TraderPsychologyAnalyticsEngine {
     ) -> [PsychologyInsightCard] {
         var cards: [PsychologyInsightCard] = []
 
-        // Low sleep (<6h) + high stress (4–5)
+        // Low sleep (<6h) + elevated stress (1–2)
         let lowSleepHighStress = enriched.filter { item in
             guard let checkIn = item.dailyCheckIn,
                   let hours = checkIn.sleepHours,
                   let stress = checkIn.stressLevel
             else { return false }
-            return NSDecimalNumber(decimal: hours).doubleValue < 6 && stress >= 4
+            return NSDecimalNumber(decimal: hours).doubleValue < 6 && TraderDailyCheckInStressScale.isElevated(stress)
         }
         if lowSleepHighStress.count >= 10 {
             let combined = metrics(for: lowSleepHighStress.map(\.trade))

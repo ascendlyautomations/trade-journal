@@ -16,6 +16,17 @@ final class ExperienceChromeTests: XCTestCase {
         XCTAssertEqual(boolValue, true)
     }
 
+    func testInfoPlistIncludesPhotoLibraryUsageDescription() {
+        let description = Bundle.main.object(forInfoDictionaryKey: "NSPhotoLibraryUsageDescription") as? String
+        XCTAssertNotNil(description)
+        XCTAssertFalse(description?.isEmpty ?? true)
+        XCTAssertTrue(description?.localizedCaseInsensitiveContains("photo library") == true)
+    }
+
+    func testInfoPlistDoesNotRequestPhotoLibraryAddUsageDescription() {
+        XCTAssertNil(Bundle.main.object(forInfoDictionaryKey: "NSPhotoLibraryAddUsageDescription"))
+    }
+
     func testFloatingTabBarPreferenceIsDisabledAtLaunch() {
         // Same registration AppDelegate performs at process launch.
         UserDefaults.standard.register(defaults: ["UseFloatingTabBar": false])

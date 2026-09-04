@@ -17,6 +17,7 @@ struct ContentView: View {
             currentUserProfile: appEnvironment.currentUserProfile,
             appBootstrapState: appEnvironment.appBootstrapState,
             profileOnboardingGate: appEnvironment.profileOnboardingGate,
+            contentReportPresenter: appEnvironment.contentReportPresenter,
             allowsDevelopmentBypass: appEnvironment.authentication.configuration.allowsDevelopmentSessionBypass
         )
     }
@@ -33,6 +34,7 @@ struct ContentView: View {
         currentUserProfile: environment.currentUserProfile,
         appBootstrapState: environment.appBootstrapState,
         profileOnboardingGate: environment.profileOnboardingGate,
+        contentReportPresenter: environment.contentReportPresenter,
         allowsDevelopmentBypass: environment.authentication.configuration.allowsDevelopmentSessionBypass
     )
     .environment(\.appEnvironment, environment)

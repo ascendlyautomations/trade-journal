@@ -57,7 +57,7 @@ nonisolated enum ProfileOnboardingPolicy {
     }
 }
 
-extension ProfileOnboardingSnapshot {
+nonisolated extension ProfileOnboardingSnapshot {
     static func from(session: SessionProfileV1, viewerID: String) -> ProfileOnboardingSnapshot {
         ProfileOnboardingSnapshot(
             profileID: ProfileID(viewerID),

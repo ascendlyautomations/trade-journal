@@ -6,6 +6,7 @@ import SwiftUI
 /// Owner Edit / Delete appear only when callbacks are provided.
 struct DetailOverflowMenu: View {
     let isOwner: Bool
+    var shareTitle: String = "Share"
     var onShare: (() -> Void)? = nil
     var onCopyLink: (() -> Void)? = nil
     var onReport: (() -> Void)? = nil
@@ -17,7 +18,7 @@ struct DetailOverflowMenu: View {
 
     var body: some View {
         Menu {
-            Button("Share", systemImage: "square.and.arrow.up") {
+            Button(shareTitle, systemImage: "square.and.arrow.up") {
                 ExperienceHaptics.play(.selection)
                 onShare?()
             }
@@ -28,11 +29,10 @@ struct DetailOverflowMenu: View {
             }
             .disabled(onCopyLink == nil)
 
-            if !isOwner {
+            if !isOwner, onReport != nil {
                 Button("Report", systemImage: "flag") {
                     onReport?()
                 }
-                .disabled(onReport == nil)
             }
 
             if isOwner, onEdit != nil || onDelete != nil {

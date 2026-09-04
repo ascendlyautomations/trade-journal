@@ -48,6 +48,12 @@ struct DeepLinkRouter: Sendable {
     @MainActor
     func openUnhandledTradeTraxsURLInBrowserIfNeeded(_ url: URL) {
         guard UniversalLinkPolicy.isSupportedHTTPSHost(url) else { return }
+        guard !SubscriptionExternalLinkPolicy.shouldSuppressBrowserFallback(for: url) else {
+            AppLog.navigation.info(
+                "Suppressed browser fallback for subscription URL: \(url.absoluteString, privacy: .public)"
+            )
+            return
+        }
         #if canImport(UIKit)
         UIApplication.shared.open(url)
         #endif

@@ -28,6 +28,22 @@ enum RoomMessageMapping {
             )
         }
 
+        let body = roomMessage.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if StoryShareMessageSupport.isStoryShare(type: nil, content: body) {
+            return Message(
+                id: MessageID(roomMessage.id.rawValue),
+                conversationID: conversationID,
+                senderProfileID: roomMessage.senderProfileID,
+                kind: .storyShare,
+                body: body,
+                attachments: [],
+                replyToMessageID: roomMessage.parentMessageID.map { MessageID($0.rawValue) },
+                createdAt: roomMessage.createdAt,
+                isReadByViewer: true,
+                roomReactions: roomMessage.reactions
+            )
+        }
+
         var attachments: [MessageAttachment] = roomMessage.media.enumerated().map { index, media in
             MessageAttachment(
                 id: media.id.isEmpty ? "\(roomMessage.id.rawValue)-\(index)" : media.id,
@@ -38,7 +54,6 @@ enum RoomMessageMapping {
                     : nil
             )
         }
-        let body = roomMessage.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if attachments.isEmpty, looksLikeImageURL(body) {
             attachments = [
                 MessageAttachment(

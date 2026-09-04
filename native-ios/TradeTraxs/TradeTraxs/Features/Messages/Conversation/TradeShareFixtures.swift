@@ -21,7 +21,11 @@ enum TradeShareFixtures {
                 sessionLabel: "NY",
                 visibility: .public,
                 publicCaption: nil,
-                thumbnail: nil,
+                thumbnail: MediaReference(
+                    id: "https://example.com/dev-trade-share.jpg",
+                    kind: .image,
+                    altText: "Trade screenshot"
+                ),
                 notePreview: nil,
                 createdAt: .now.addingTimeInterval(-3_600),
                 updatedAt: .now.addingTimeInterval(-3_000)

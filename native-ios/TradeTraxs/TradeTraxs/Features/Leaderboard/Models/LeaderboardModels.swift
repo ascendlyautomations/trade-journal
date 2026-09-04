@@ -100,6 +100,12 @@ struct LeaderboardRow: Hashable, Identifiable, Sendable {
     var totalPnL: Money
     var tradeCount: Int
     var averageRiskReward: Decimal?
+    var winRate: Decimal?
+    var profitFactor: Decimal?
+    var expectancy: Decimal?
+    var winStreak: Int
+    var profitPercent: Decimal?
+    var consistency: Decimal?
     var followerCount: Int
     var isFollowing: Bool
     var isCurrentUser: Bool
@@ -107,10 +113,23 @@ struct LeaderboardRow: Hashable, Identifiable, Sendable {
     /// Sort key for the selected category (higher is better).
     func sortValue(for category: LeaderboardCategory) -> Decimal {
         switch category {
-        case .pnl, .profitPercent, .winRate, .profitFactor, .expectancy, .winStreak, .consistency:
+        case .pnl:
             return totalPnL.amount
+        case .winRate:
+            return winRate ?? Decimal(-999_999)
+        case .profitFactor:
+            // Unavailable PF ("—") always sorts below calculable values.
+            return profitFactor ?? Decimal(-999_999)
+        case .expectancy:
+            return expectancy ?? Decimal(-999_999)
         case .rr:
             return averageRiskReward ?? Decimal(-999_999)
+        case .winStreak:
+            return Decimal(winStreak)
+        case .profitPercent:
+            return profitPercent ?? Decimal(-999_999)
+        case .consistency:
+            return consistency ?? Decimal(-999_999)
         case .followers:
             return Decimal(followerCount)
         }

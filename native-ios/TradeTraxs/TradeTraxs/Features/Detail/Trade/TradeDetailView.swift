@@ -7,21 +7,17 @@ struct TradeDetailView: View {
     @State private var viewModel: TradeDetailViewModel
     @State private var tradeAI: TradeAISectionViewModel?
     @State private var showsDeleteConfirm = false
+    @State private var showsShareSheet = false
     @State private var contentRevealed = false
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment
     private let experience: TradeDetailExperience
 
     @Environment(\.themeColors) private var colors
-    @Environment(\.experienceTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let entryExitColumns = [
-        GridItem(.flexible(), spacing: ExperienceSpacing.md),
-        GridItem(.flexible(), spacing: ExperienceSpacing.md),
-    ]
-
     private static let commentsAnchorID = "trade.detail.comments"
+    private static let sectionSpacing = ExperienceSpacing.md
 
     init(
         tradeID: TradeID,
@@ -38,6 +34,7 @@ struct TradeDetailView: View {
                 imagePipeline: data.imagePipeline,
                 cache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
+                rpc: data.rpc,
                 experience: experience
             )
         )
@@ -72,6 +69,13 @@ struct TradeDetailView: View {
         .experienceScreenBackground()
         .experienceNavigationTitle(viewModel.trade?.symbol.ticker ?? "Trade")
         .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            if experience == .journal, viewModel.isOwner, viewModel.trade != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ownerOverflowMenu
+                }
+            }
+        }
         .task {
             viewModel.loadIfNeeded()
             if experience == .social {
@@ -118,6 +122,11 @@ struct TradeDetailView: View {
         } message: {
             Text(viewModel.deleteErrorMessage ?? "")
         }
+        .sheet(isPresented: $showsShareSheet) {
+            if let trade = viewModel.trade, let url = DetailContentLink.trade(trade.id).url {
+                DetailShareSheet(items: [shareText(for: trade), url])
+            }
+        }
         .accessibilityIdentifier(
             experience == .journal ? "detail.trade.journal" : "detail.trade.social"
         )
@@ -137,42 +146,43 @@ struct TradeDetailView: View {
     private var content: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: Self.sectionSpacing) {
                     if let trade = viewModel.trade {
-                        identityHeader(trade)
-                            .padding(.horizontal, ExperienceSpacing.lg)
-                            .padding(.top, ExperienceSpacing.sm)
-                            .padding(.bottom, ExperienceSpacing.md)
-
-                        if let media = viewModel.mediaReference {
-                            TradeDetailMediaView(
-                                reference: media,
-                                imagePipeline: imagePipeline
-                            )
+                        if showsSocialIdentityHeader {
+                            identityHeader(trade)
                         }
 
-                        tradeBody(trade, scrollProxy: proxy)
-                            .padding(.horizontal, ExperienceSpacing.lg)
-                            .padding(.top, ExperienceSpacing.md)
-                            .padding(.bottom, ExperienceSpacing.xl)
+                        VStack(alignment: .leading, spacing: Self.sectionSpacing) {
+                            if experience == .journal {
+                                journalTradeContent(trade)
+                            } else {
+                                socialTradeContent(trade, scrollProxy: proxy)
+                            }
+                        }
                     }
                 }
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.top, ExperienceSpacing.xs)
+                .padding(.bottom, ExperienceSpacing.lg)
             }
         }
         .overlay {
             if viewModel.isDeleting {
                 ProgressView("Deleting…")
-                    .padding(ExperienceSpacing.lg)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ExperienceRadius.md))
+                    .padding(ExperienceSpacing.md)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
             }
         }
     }
 
-    // MARK: - Header
+    private var showsSocialIdentityHeader: Bool {
+        experience == .social || (experience == .journal && !viewModel.isOwner)
+    }
+
+    // MARK: - Header / toolbar
 
     private func identityHeader(_ trade: Trade) -> some View {
-        let showsOwnerActions = viewModel.isOwner
-        return DetailIdentityHeader(
+        DetailIdentityHeader(
             initials: viewModel.authorInitials,
             avatar: viewModel.authorAvatar,
             displayName: viewModel.authorDisplayName,
@@ -181,15 +191,12 @@ struct TradeDetailView: View {
             dateText: TradeDisplay.dateText(trade.entryAt),
             isOwner: viewModel.isOwner,
             contentLink: .trade(trade.id),
-            shareText: {
-                let pnl = TradeDisplay.pnlText(trade.realizedPnL)
-                let side = trade.side == .long ? "Long" : "Short"
-                return "\(trade.symbol.ticker) \(side) \(pnl) on TradeTraxs"
-            }(),
+            ownerProfileID: trade.ownerProfileID,
+            shareText: shareText(for: trade),
             editTitle: "Edit Trade",
             deleteTitle: "Delete Trade",
-            onEdit: showsOwnerActions ? { viewModel.editTrade() } : nil,
-            onDelete: showsOwnerActions ? {
+            onEdit: viewModel.isOwner ? { viewModel.editTrade() } : nil,
+            onDelete: viewModel.isOwner ? {
                 ExperienceHaptics.play(.warning)
                 showsDeleteConfirm = true
             } : nil,
@@ -197,187 +204,142 @@ struct TradeDetailView: View {
         )
     }
 
-    // MARK: - Body
-
-    private func tradeBody(_ trade: Trade, scrollProxy: ScrollViewProxy) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-            if experience == .social {
-                PublicTradeHeadlineRow(
-                    ticker: trade.symbol.ticker,
-                    realizedPnL: trade.realizedPnL
-                )
-                .accessibilityIdentifier("detail.trade.headline")
-
-                PublicTradeMetaChipRow(trade: trade)
-                    .accessibilityIdentifier("detail.trade.badges")
-            } else {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(trade.symbol.ticker)
-                        .experienceStyle(.title, color: colors.primaryText)
-                    Spacer(minLength: ExperienceSpacing.sm)
-                    Text(TradeDisplay.pnlText(trade.realizedPnL))
-                        .experienceStyle(
-                            .metricLarge,
-                            color: theme.metricColor(
-                                for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
-                            )
-                        )
-                }
-                .accessibilityIdentifier("detail.trade.headline")
-
-                badgeRow(trade)
-            }
-
-            descriptionSection(trade)
-
-            entryExitInformation(trade)
-
-            if experience == .journal {
-                journalDetailSections(trade)
-            }
-
-            switch experience {
-            case .journal:
-                journalNotesSection
-                if let tradeAI {
-                    TradeAISectionView(viewModel: tradeAI)
-                }
-            case .social:
-                EngagementBar(
-                    target: socialEngagementTarget(for: trade.id),
-                    store: data.engagementStore,
-                    onCommentTap: {
-                        withAnimation(
-                            ExperienceMotion.preferred(
-                                ExperienceMotion.selection,
-                                reduceMotion: reduceMotion
-                            )
-                        ) {
-                            scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
-                        }
-                    }
-                )
-                CommentsSectionView(
-                    target: socialEngagementTarget(for: trade.id),
-                    contentOwnerUserID: trade.ownerProfileID.rawValue,
-                    data: data
-                )
-                    .id(Self.commentsAnchorID)
-            }
-        }
+    private var ownerOverflowMenu: some View {
+        DetailOverflowMenu(
+            isOwner: true,
+            onShare: viewModel.trade.map { _ in { showsShareSheet = true } },
+            onCopyLink: viewModel.trade.map { trade in
+                { DetailOverflowActions.copyLink(.trade(trade.id)) }
+            },
+            deleteTitle: "Delete Trade",
+            onDelete: {
+                ExperienceHaptics.play(.warning)
+                showsDeleteConfirm = true
+            },
+            accessibilityIdentifier: "detail.trade.overflow"
+        )
     }
+
+    private func shareText(for trade: Trade) -> String {
+        let pnl = TradeDisplay.pnlText(trade.realizedPnL)
+        let side = trade.side == .long ? "Long" : "Short"
+        return "\(trade.symbol.ticker) \(side) \(pnl) on TradeTraxs"
+    }
+
+    // MARK: - Journal (owner analytics)
 
     @ViewBuilder
-    private var journalNotesSection: some View {
-        let bodies = viewModel.notes
-            .map { $0.body.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        if !bodies.isEmpty {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text("Journal Notes")
-                    .experienceStyle(.headline, color: colors.primaryText)
-                ForEach(Array(bodies.enumerated()), id: \.offset) { _, body in
-                    Text(body)
-                        .experienceStyle(.body, color: colors.primaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(ExperienceSpacing.md)
-                        .background(
-                            colors.fillPrimary,
-                            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                        )
-                }
-            }
-            .accessibilityIdentifier("detail.trade.journalNotes")
+    private func journalTradeContent(_ trade: Trade) -> some View {
+        TradeDetailCompactHeader(
+            trade: trade,
+            accountLine: viewModel.accountSummaryLine,
+            showsEdit: viewModel.isOwner,
+            onEdit: viewModel.isOwner ? { viewModel.editTrade() } : nil
+        )
+        .accessibilityIdentifier("detail.trade.headline")
+
+        TradeDetailQuickStatsSection(trade: trade)
+
+        if let media = viewModel.mediaReference {
+            TradeDetailMediaView(
+                reference: media,
+                imagePipeline: imagePipeline
+            )
+        }
+
+        if let cohort = viewModel.ownerAnalytics?.cohort {
+            TradeDetailComparisonSection(
+                trade: trade,
+                cohort: cohort,
+                quickInsight: viewModel.ownerAnalytics?.quickInsight
+            )
+        }
+
+        if let tickerHistory = viewModel.ownerAnalytics?.tickerHistory {
+            TradeDetailTickerHistorySection(history: tickerHistory)
+        }
+
+        TradeDetailJournalSection(
+            trade: trade,
+            notes: viewModel.notes,
+            isOwner: viewModel.isOwner
+        )
+
+        if let tradeAI {
+            TradeAISectionView(viewModel: tradeAI)
         }
     }
 
-    private func badgeRow(_ trade: Trade) -> some View {
+    // MARK: - Social (public)
+
+    @ViewBuilder
+    private func socialTradeContent(_ trade: Trade, scrollProxy: ScrollViewProxy) -> some View {
+        if let media = viewModel.mediaReference {
+            TradeDetailMediaView(
+                reference: media,
+                imagePipeline: imagePipeline
+            )
+        }
+
+        TradeDetailCompactHeader(
+            trade: trade,
+            accountLine: viewModel.accountIdentityLine
+        )
+        .accessibilityIdentifier("detail.trade.headline")
+
         PublicTradeMetaChipRow(trade: trade)
             .accessibilityIdentifier("detail.trade.badges")
-    }
 
-    @ViewBuilder
-    private func descriptionSection(_ trade: Trade) -> some View {
+        TradeDetailQuickStatsSection(trade: trade)
+
+        if !viewModel.isOwner {
+            ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.pastPerformance)
+        }
+
         if let description = trade.publicCaption?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !description.isEmpty
         {
             Text(description)
-                .experienceStyle(.body, color: colors.primaryText)
+                .experienceStyle(.subheadline, color: colors.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("detail.trade.description")
         }
-    }
 
-    private func entryExitInformation(_ trade: Trade) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-            LazyVGrid(columns: entryExitColumns, alignment: .leading, spacing: ExperienceSpacing.md) {
-                infoCell(title: "Entry Price", value: TradeDisplay.priceText(trade.entryPrice))
-                infoCell(title: "Exit Price", value: TradeDisplay.priceText(trade.exitPrice))
-                infoCell(title: "Entry Time", value: TradeDisplay.dateTimeText(trade.entryAt))
-                infoCell(
-                    title: "Exit Time",
-                    value: trade.exitAt.map(TradeDisplay.dateTimeText) ?? "—"
-                )
+        EngagementBar(
+            target: socialEngagementTarget(for: trade.id),
+            store: data.engagementStore,
+            onCommentTap: {
+                withAnimation(
+                    ExperienceMotion.preferred(
+                        ExperienceMotion.selection,
+                        reduceMotion: reduceMotion
+                    )
+                ) {
+                    scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
+                }
             }
-            if let duration = TradeDisplay.holdDuration(for: trade) {
-                infoCell(title: "Duration", value: duration)
-                    .accessibilityIdentifier("detail.trade.duration")
-            }
-        }
-        .accessibilityIdentifier("detail.trade.entryExit")
-    }
-
-    @ViewBuilder
-    private func journalDetailSections(_ trade: Trade) -> some View {
-        if let strategy = trade.strategy?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !strategy.isEmpty
-        {
-            labeledSection(title: "Setup", value: strategy)
-                .accessibilityIdentifier("detail.trade.strategy")
-        }
-
-        if viewModel.isOwner {
-            HStack(spacing: 4) {
-                Image(systemName: trade.visibility == .public ? "globe" : "lock.fill")
-                    .font(.caption2)
-                Text(trade.visibility == .public ? "Public" : "Private")
-                    .experienceStyle(.caption, color: colors.tertiaryText)
-            }
-            .foregroundStyle(colors.tertiaryText)
-            .accessibilityIdentifier("detail.trade.visibility")
-        }
-    }
-
-    private func labeledSection(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text(title.uppercased())
-                .experienceStyle(.caption2, color: colors.tertiaryText)
-                .tracking(0.4)
-            Text(value)
-                .experienceStyle(.body, color: colors.primaryText)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func infoCell(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .experienceStyle(.caption, color: colors.tertiaryText)
-            Text(value)
-                .experienceStyle(.headline, color: colors.primaryText)
-                .lineLimit(2)
-                .minimumScaleFactor(0.75)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(ExperienceSpacing.md)
-        .background(colors.fillPrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        )
+        CommentsSectionView(
+            target: socialEngagementTarget(for: trade.id),
+            contentOwnerUserID: trade.ownerProfileID.rawValue,
+            data: data
+        )
+        .id(Self.commentsAnchorID)
     }
 
     private func socialEngagementTarget(for tradeID: TradeID) -> InteractionTarget {
         data.detailCache.feedEngagementTarget(forTrade: tradeID) ?? .trade(tradeID)
     }
+}
+
+private struct DetailShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

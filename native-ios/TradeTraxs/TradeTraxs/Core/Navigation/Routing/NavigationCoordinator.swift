@@ -42,6 +42,9 @@ final class NavigationCoordinator {
         case .settingsStack(let routes):
             openSettingsDeepLink(routes)
         case .sheet(let sheet):
+            if sheet == .dailyCheckIn {
+                selectTab(.home)
+            }
             present(sheet: sheet)
         case .fullScreen(let cover):
             present(fullScreen: cover)

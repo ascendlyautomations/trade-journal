@@ -38,7 +38,7 @@ final class PsychologyCoachPhase5Tests: XCTestCase {
     }
 
     func testCombinedPatternsRequireStrongerSamples() {
-        let checkIn = makeCheckIn(date: "2026-09-02", stress: 5, sleepHours: 4)
+        let checkIn = makeCheckIn(date: "2026-09-02", stress: 1, sleepHours: 4)
         let trades = (0..<12).map {
             makeTrade(id: "t\($0)", pnl: -30, offsetHours: $0, dayOffset: 0)
         }

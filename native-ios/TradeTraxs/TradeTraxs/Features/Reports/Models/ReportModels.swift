@@ -1,5 +1,15 @@
 import Foundation
 
+/// Catalog card for the Yearly Performance Report entry point.
+struct YearlyReportCardModel: Hashable, Identifiable, Sendable {
+    var id: String { "yearly" }
+    var title: String
+    var subtitle: String
+    var systemImage: String
+    var actionTitle: String
+    var availableYears: [Int]
+}
+
 /// Catalog card for a web Trading Report period.
 struct ReportTypeCardModel: Hashable, Identifiable, Sendable {
     var id: TradingReportPeriodKey { periodKey }

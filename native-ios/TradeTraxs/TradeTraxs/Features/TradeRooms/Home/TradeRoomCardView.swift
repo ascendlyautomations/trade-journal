@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Premium Trade Room card for the dedicated Rooms home.
+/// Compact Trade Room card for the dedicated Rooms home — avatar + metadata only.
 struct TradeRoomCardView: View {
     let item: TradeRoomInboxItem
     let imagePipeline: any ImagePipeline
@@ -9,73 +9,74 @@ struct TradeRoomCardView: View {
     @Environment(\.themeColors) private var colors
     @State private var logoImage: Image?
 
+    private let avatarSize: CGFloat = 52
+
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            banner
-            HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                logo
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
-                        Text(item.room.name)
-                            .experienceStyle(
-                                item.unreadCount > 0 ? .headline : .body,
-                                color: colors.primaryText
-                            )
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+            avatar
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
+                    Text(item.room.name)
+                        .experienceStyle(
+                            item.unreadCount > 0 ? .headline : .body,
+                            color: colors.primaryText
+                        )
+                        .lineLimit(1)
+                    if item.ownerIsVerified {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.caption)
+                            .foregroundStyle(colors.accent)
+                            .accessibilityLabel("Verified")
+                    }
+                    Spacer(minLength: 4)
+                    if let timestamp = item.timestamp {
+                        Text(MessagesInboxSupport.relativeTimestamp(timestamp))
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                    }
+                }
+
+                HStack(spacing: ExperienceSpacing.xxs) {
+                    if let ownerName = item.ownerName, !ownerName.isEmpty {
+                        Text(ownerName)
+                            .experienceStyle(.caption, color: colors.secondaryText)
                             .lineLimit(1)
-                        if item.ownerIsVerified {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.caption)
-                                .foregroundStyle(colors.accent)
-                                .accessibilityLabel("Verified")
-                        }
-                        Spacer(minLength: 4)
-                        if let timestamp = item.timestamp {
-                            Text(MessagesInboxSupport.relativeTimestamp(timestamp))
+                    }
+                    if let memberCount = item.room.memberCount {
+                        if item.ownerName?.isEmpty == false {
+                            Text("·")
                                 .experienceStyle(.caption2, color: colors.tertiaryText)
                         }
+                        Text("\(ProfileDisplay.compactCount(memberCount)) members")
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                            .lineLimit(1)
                     }
+                }
 
-                    HStack(spacing: ExperienceSpacing.xs) {
-                        if let ownerName = item.ownerName, !ownerName.isEmpty {
-                            Text(ownerName)
-                                .experienceStyle(.caption, color: colors.secondaryText)
-                                .lineLimit(1)
-                        }
-                        if let memberCount = item.room.memberCount {
-                            if item.ownerName?.isEmpty == false {
-                                Text("·")
-                                    .experienceStyle(.caption2, color: colors.tertiaryText)
-                            }
-                            Text("\(ProfileDisplay.compactCount(memberCount)) members")
-                                .experienceStyle(.caption, color: colors.secondaryText)
-                                .lineLimit(1)
-                        }
+                Text(item.preview)
+                    .experienceStyle(
+                        item.unreadCount > 0 ? .subheadline : .footnote,
+                        color: item.unreadCount > 0 ? colors.primaryText : colors.secondaryText
+                    )
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: ExperienceSpacing.xs) {
+                    badge(
+                        title: item.isPrivate ? "Private" : "Public",
+                        tint: item.isPrivate ? colors.warning : colors.accent
+                    )
+                    if item.isMuted {
+                        badge(title: "Muted", tint: colors.tertiaryText)
                     }
-
-                    Text(item.preview)
-                        .experienceStyle(
-                            item.unreadCount > 0 ? .subheadline : .footnote,
-                            color: item.unreadCount > 0 ? colors.primaryText : colors.secondaryText
-                        )
-                        .lineLimit(2)
-
-                    HStack(spacing: ExperienceSpacing.xs) {
-                        badge(
-                            title: item.isPrivate ? "Private" : "Public",
-                            tint: item.isPrivate ? colors.warning : colors.accent
-                        )
-                        if item.isMuted {
-                            badge(title: "Muted", tint: colors.tertiaryText)
-                        }
-                        Spacer(minLength: 0)
-                        if item.unreadCount > 0 {
-                            Text(item.unreadCount > 99 ? "99+" : "\(item.unreadCount)")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(colors.onAccent)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(colors.accent, in: Capsule())
-                        }
+                    Spacer(minLength: 0)
+                    if item.unreadCount > 0 {
+                        Text(item.unreadCount > 99 ? "99+" : "\(item.unreadCount)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(colors.onAccent)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(colors.accent, in: Capsule())
                     }
                 }
             }
@@ -95,33 +96,7 @@ struct TradeRoomCardView: View {
         )
     }
 
-    private var banner: some View {
-        ZStack(alignment: .bottomLeading) {
-            LinearGradient(
-                colors: [
-                    colors.accent.opacity(0.35),
-                    colors.fillSecondary.opacity(0.9),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            if let logoImage {
-                logoImage
-                    .resizable()
-                    .scaledToFill()
-                    .opacity(0.22)
-                    .allowsHitTesting(false)
-            }
-        }
-        .frame(height: 72)
-        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-        .overlay(alignment: .topTrailing) {
-            ExperienceIcon(icon: .rooms, size: .sm, color: colors.onAccent.opacity(0.85))
-                .padding(ExperienceSpacing.xs)
-        }
-    }
-
-    private var logo: some View {
+    private var avatar: some View {
         Group {
             if let logoImage {
                 logoImage
@@ -134,8 +109,8 @@ struct TradeRoomCardView: View {
                 }
             }
         }
-        .frame(width: 52, height: 52)
-        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        .frame(width: avatarSize, height: avatarSize)
+        .clipShape(Circle())
     }
 
     private func badge(title: String, tint: Color) -> some View {

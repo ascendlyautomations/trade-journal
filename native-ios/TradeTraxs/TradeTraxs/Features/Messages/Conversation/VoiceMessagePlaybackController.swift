@@ -62,7 +62,7 @@ final class VoiceMessagePlaybackController: ObservableObject {
                 object: item,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     self?.handlePlaybackEnded()
                 }
             }
@@ -71,7 +71,7 @@ final class VoiceMessagePlaybackController: ObservableObject {
                 forInterval: CMTime(seconds: 0.05, preferredTimescale: 600),
                 queue: .main
             ) { [weak self] time in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.currentTime = time.seconds
                     if self.duration <= 0, item.duration.seconds.isFinite, item.duration.seconds > 0 {

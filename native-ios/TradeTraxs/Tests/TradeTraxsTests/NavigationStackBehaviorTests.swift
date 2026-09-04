@@ -86,9 +86,25 @@ final class NavigationStackBehaviorTests: XCTestCase {
         XCTAssertTrue(store.paths.home.isEmpty)
     }
 
-    // MARK: - Flow E (Profile → Activity → Notifications)
+    // MARK: - Flow E (Dashboard → Activity → Back)
 
-    func testFlowE_ProfileActivityNotificationsBackChain() {
+    func testFlowE_DashboardActivityBack() {
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        store.selectedTab = .home
+        let coordinator = NavigationCoordinator(store: store)
+
+        coordinator.pushHome(.activity)
+        XCTAssertEqual(store.paths.home, [.activity])
+        XCTAssertTrue(store.paths.profile.isEmpty)
+
+        simulateSystemBack(&store.paths.home)
+        XCTAssertTrue(store.paths.home.isEmpty)
+    }
+
+    // MARK: - Flow F (Profile → Activity → Notifications)
+
+    func testFlowF_ProfileActivityNotificationsBackChain() {
         let store = NavigationStore()
         store.sessionPhase = .authenticated
         store.selectedTab = .profile

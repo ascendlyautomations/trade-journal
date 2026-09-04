@@ -1,9 +1,10 @@
 import Foundation
 
-/// Owner journal filters — web `/trades` semantics + native numeric P&L bounds.
+/// Owner journal filters — web `/trades` semantics + native numeric P&L / RR bounds.
 ///
 /// Server-applied where possible (account, visibility, date, direction, P&L range,
-/// symbol/notes search, sort). Tags/setup are not first-class DB columns on trades.
+/// symbol/notes/setup/session/account search, sort). Account mode and RR also filter
+/// locally when served from the owner trade cache.
 nonisolated struct TradeHistoryFilters: Hashable, Sendable {
     var account: DashboardAccountFilter = .all
     var dateRange: TradeHistoryDateRange = .allTime
@@ -12,22 +13,34 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
     var result: TradeHistoryResultFilter = .any
     var pnlMin: Decimal?
     var pnlMax: Decimal?
+    var rrMin: Decimal?
+    var rrMax: Decimal?
     var direction: TradeHistoryDirectionFilter = .any
+    var accountMode: TradeHistoryAccountModeFilter = .all
+    var tradingSession: TradeHistorySessionFilter = .all
     var visibility: TradeHistoryVisibilityFilter = .any
     var sort: TradeHistorySort = .newest
 
+    /// Any non-default filter or sort selection.
     var hasActiveConstraints: Bool {
+        hasActiveFilterConstraints || sort != .newest
+    }
+
+    /// Filter chips / empty-state — excludes sort (sort lives in the filter sheet only).
+    var hasActiveFilterConstraints: Bool {
         if case .all = account {} else { return true }
         if dateRange != .allTime { return true }
         if result != .any { return true }
         if pnlMin != nil || pnlMax != nil { return true }
+        if rrMin != nil || rrMax != nil { return true }
         if direction != .any { return true }
+        if accountMode != .all { return true }
+        if tradingSession != .all { return true }
         if visibility != .any { return true }
-        if sort != .newest { return true }
         return false
     }
 
-    /// Compact chip descriptors for the active filter strip.
+    /// Compact chip descriptors for the active filter strip (sort excluded).
     func activeChips(accountTitle: (TradingAccountID) -> String?) -> [TradeHistoryFilterChip] {
         var chips: [TradeHistoryFilterChip] = []
         if case .account(let id) = account {
@@ -37,7 +50,7 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
             chips.append(.init(id: "date", title: dateRange.title))
         }
         if result != .any {
-            chips.append(.init(id: "result", title: result.title))
+            chips.append(.init(id: "result", title: result.chipTitle))
         }
         if let pnlMin {
             chips.append(.init(id: "pnlMin", title: "P&L ≥ \(Self.chipMoney(pnlMin))"))
@@ -45,14 +58,23 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
         if let pnlMax {
             chips.append(.init(id: "pnlMax", title: "P&L ≤ \(Self.chipMoney(pnlMax))"))
         }
+        if let rrMin {
+            chips.append(.init(id: "rrMin", title: "RR ≥ \(Self.chipRR(rrMin))"))
+        }
+        if let rrMax {
+            chips.append(.init(id: "rrMax", title: "RR ≤ \(Self.chipRR(rrMax))"))
+        }
         if direction != .any {
             chips.append(.init(id: "direction", title: direction.title))
         }
+        if accountMode != .all {
+            chips.append(.init(id: "accountMode", title: accountMode.title))
+        }
+        if tradingSession != .all {
+            chips.append(.init(id: "tradingSession", title: tradingSession.title))
+        }
         if visibility != .any {
             chips.append(.init(id: "visibility", title: visibility.title))
-        }
-        if sort != .newest {
-            chips.append(.init(id: "sort", title: sort.title))
         }
         return chips
     }
@@ -67,9 +89,12 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
         case "result": result = .any
         case "pnlMin": pnlMin = nil
         case "pnlMax": pnlMax = nil
+        case "rrMin": rrMin = nil
+        case "rrMax": rrMax = nil
         case "direction": direction = .any
+        case "accountMode": accountMode = .all
+        case "tradingSession": tradingSession = .all
         case "visibility": visibility = .any
-        case "sort": sort = .newest
         default: break
         }
     }
@@ -115,6 +140,11 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
         formatter.maximumFractionDigits = 2
         return formatter.string(from: number) ?? "\(value)"
     }
+
+    private static func chipRR(_ value: Decimal) -> String {
+        let formatted = NSDecimalNumber(decimal: value).stringValue
+        return "\(formatted)R"
+    }
 }
 
 nonisolated struct TradeHistoryFilterChip: Hashable, Identifiable, Sendable {
@@ -154,12 +184,14 @@ nonisolated enum TradeHistoryResultFilter: String, CaseIterable, Identifiable, H
 
     var title: String {
         switch self {
-        case .any: return "Any"
-        case .wins: return "Wins"
-        case .losses: return "Losses"
+        case .any: return "All"
+        case .wins: return "Winners"
+        case .losses: return "Losers"
         case .breakeven: return "Breakeven"
         }
     }
+
+    var chipTitle: String { title }
 }
 
 nonisolated enum TradeHistoryDirectionFilter: String, CaseIterable, Identifiable, Hashable, Sendable {
@@ -171,9 +203,71 @@ nonisolated enum TradeHistoryDirectionFilter: String, CaseIterable, Identifiable
 
     var title: String {
         switch self {
-        case .any: return "Any"
+        case .any: return "All"
         case .long: return "Long"
         case .short: return "Short"
+        }
+    }
+}
+
+/// Authoritative account mode filter — maps to ``TradingAccountMode`` / denormalized trade mode.
+nonisolated enum TradeHistoryAccountModeFilter: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case all
+    case live
+    case funded
+    case eval
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .live: return "Live"
+        case .funded: return "Funded"
+        case .eval: return "Eval"
+        }
+    }
+
+    var tradingAccountMode: TradingAccountMode? {
+        switch self {
+        case .all: return nil
+        case .live: return .live
+        case .funded: return .funded
+        case .eval: return .evaluation
+        }
+    }
+}
+
+/// Trading session filter — matches authoritative `trades.session` labels.
+nonisolated enum TradeHistorySessionFilter: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case all
+    case ny
+    case london
+    case asia
+    case after
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .ny: return "NY"
+        case .london: return "London"
+        case .asia: return "Asia"
+        case .after: return "After"
+        }
+    }
+
+    func matches(sessionLabel: String?) -> Bool {
+        guard self != .all else { return true }
+        let normalized = (sessionLabel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return false }
+        switch self {
+        case .all: return true
+        case .ny: return normalized.localizedCaseInsensitiveCompare("NY") == .orderedSame
+        case .london: return normalized.localizedCaseInsensitiveCompare("London") == .orderedSame
+        case .asia: return normalized.localizedCaseInsensitiveCompare("Asia") == .orderedSame
+        case .after: return normalized.localizedCaseInsensitiveCompare("After") == .orderedSame
         }
     }
 }
@@ -200,6 +294,10 @@ nonisolated enum TradeHistorySort: String, CaseIterable, Identifiable, Hashable,
     case oldest
     case highestPnL
     case lowestPnL
+    case highestRR
+    case lowestRR
+    case bestWin
+    case worstLoss
 
     var id: String { rawValue }
 
@@ -209,14 +307,33 @@ nonisolated enum TradeHistorySort: String, CaseIterable, Identifiable, Hashable,
         case .oldest: return "Oldest"
         case .highestPnL: return "Highest P&L"
         case .lowestPnL: return "Lowest P&L"
+        case .highestRR: return "Highest RR"
+        case .lowestRR: return "Lowest RR"
+        case .bestWin: return "Best Win"
+        case .worstLoss: return "Worst Loss"
         }
+    }
+}
+
+/// Optional resolver context for local trade-history matching.
+nonisolated struct TradeHistoryMatchContext: Hashable, Sendable {
+    var accountTitles: [TradingAccountID: String] = [:]
+    var accountModes: [TradingAccountID: TradingAccountMode] = [:]
+
+    func accountTitle(for accountID: TradingAccountID?) -> String? {
+        guard let accountID else { return nil }
+        return accountTitles[accountID]
+    }
+
+    func resolvedAccountMode(for trade: Trade) -> TradingAccountMode? {
+        ProfileStatisticsMetrics.resolveAccountMode(trade: trade, accountModes: accountModes)
     }
 }
 
 /// Bounded history request — never unbounded full-history download.
 nonisolated struct TradeHistoryQuery: Hashable, Sendable {
     var filters: TradeHistoryFilters
-    /// Free-text search over ticker / notes / account_name (ilike). Not used for P&L.
+    /// Free-text search over ticker / notes / setup / session / account name.
     var searchText: String
 
     init(filters: TradeHistoryFilters = TradeHistoryFilters(), searchText: String = "") {
@@ -229,7 +346,24 @@ nonisolated struct TradeHistoryQuery: Hashable, Sendable {
     }
 
     func cacheKey(profileID: ProfileID) -> String {
-        "\(profileID.rawValue)|\(filters.account)|\(filters.dateRange.rawValue)|\(filters.customStart?.timeIntervalSince1970 ?? 0)|\(filters.customEnd?.timeIntervalSince1970 ?? 0)|\(filters.result.rawValue)|\(filters.pnlMin.map(String.init(describing:)) ?? "")|\(filters.pnlMax.map(String.init(describing:)) ?? "")|\(filters.direction.rawValue)|\(filters.visibility.rawValue)|\(filters.sort.rawValue)|\(trimmedSearch.lowercased())"
+        var parts: [String] = []
+        parts.append(profileID.rawValue)
+        parts.append(String(describing: filters.account))
+        parts.append(filters.dateRange.rawValue)
+        parts.append(String(filters.customStart?.timeIntervalSince1970 ?? 0))
+        parts.append(String(filters.customEnd?.timeIntervalSince1970 ?? 0))
+        parts.append(filters.result.rawValue)
+        parts.append(filters.pnlMin.map(String.init(describing:)) ?? "")
+        parts.append(filters.pnlMax.map(String.init(describing:)) ?? "")
+        parts.append(filters.rrMin.map(String.init(describing:)) ?? "")
+        parts.append(filters.rrMax.map(String.init(describing:)) ?? "")
+        parts.append(filters.direction.rawValue)
+        parts.append(filters.accountMode.rawValue)
+        parts.append(filters.tradingSession.rawValue)
+        parts.append(filters.visibility.rawValue)
+        parts.append(filters.sort.rawValue)
+        parts.append(trimmedSearch.lowercased())
+        return parts.joined(separator: "|")
     }
 }
 

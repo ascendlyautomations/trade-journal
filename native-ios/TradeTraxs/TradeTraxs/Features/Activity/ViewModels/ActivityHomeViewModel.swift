@@ -10,6 +10,7 @@ final class ActivityHomeViewModel {
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator
+    private let navigationHost: ActivityNavigationHost
     private let realtimeHub: RealtimeHub?
     private let inboxStore: ActivityInboxStore
     private let router: any NotificationRouting
@@ -27,6 +28,7 @@ final class ActivityHomeViewModel {
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
+        navigationHost: ActivityNavigationHost = .home,
         realtimeHub: RealtimeHub? = nil,
         inboxStore: ActivityInboxStore,
         router: any NotificationRouting,
@@ -38,6 +40,7 @@ final class ActivityHomeViewModel {
         self.session = session
         self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
+        self.navigationHost = navigationHost
         self.realtimeHub = realtimeHub
         self.inboxStore = inboxStore
         self.router = router
@@ -108,12 +111,22 @@ final class ActivityHomeViewModel {
 
     func openFollowRequests() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.profile(.followRequests))
+        switch navigationHost {
+        case .home:
+            navigationCoordinator.pushHome(.followRequests)
+        case .profile:
+            navigationCoordinator.open(.profile(.followRequests))
+        }
     }
 
     func openNotificationSettings() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.pushProfile(.settings(.notifications))
+        switch navigationHost {
+        case .home:
+            navigationCoordinator.pushHome(.settings(.notifications))
+        case .profile:
+            navigationCoordinator.pushProfile(.settings(.notifications))
+        }
     }
 
     func markRead(id: NotificationID, playHaptic: Bool = true) {

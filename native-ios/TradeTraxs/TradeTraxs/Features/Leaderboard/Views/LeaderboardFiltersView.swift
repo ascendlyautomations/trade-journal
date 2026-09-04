@@ -21,15 +21,12 @@ struct LeaderboardFiltersView: View {
             .pickerStyle(.segmented)
             .accessibilityIdentifier("leaderboard.audience")
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: ExperienceSpacing.xs) {
-                    ForEach(LeaderboardTimeframe.allCases, id: \.self) { option in
-                        timeframeChip(option)
-                    }
+            HStack(spacing: 4) {
+                ForEach(LeaderboardTimeframe.allCases, id: \.self) { option in
+                    timeframeChip(option)
+                        .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, ExperienceSpacing.md)
             }
-            .padding(.horizontal, -ExperienceSpacing.md)
             .accessibilityIdentifier("leaderboard.timeframe")
 
             Menu {
@@ -80,10 +77,13 @@ struct LeaderboardFiltersView: View {
             onTimeframe(option)
         } label: {
             Text(option.title)
-                .font(.subheadline.weight(.semibold))
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
                 .foregroundStyle(selected ? colors.onAccent : colors.primaryText)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity)
                 .background(
                     Capsule().fill(selected ? colors.accent : colors.fillSecondary)
                 )

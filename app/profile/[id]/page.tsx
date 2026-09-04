@@ -140,10 +140,12 @@ import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import ImageCropModal from "../../components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import {
+  deleteStoryById,
   getActiveStoriesForUser,
+  removeStoryFromStoriesByUser,
 } from "@/lib/activeStories"
 import { useActiveStories } from "@/lib/useActiveStories"
-import { readStoriesSession } from "@/lib/storiesSessionCache"
+import { readStoriesSession, writeStoriesSession } from "@/lib/storiesSessionCache"
 import {
   createStoryPreviewUrl,
   prepareStoryImageFile,
@@ -545,7 +547,7 @@ function ProfilePageContent() {
     [profile?.id]
   )
 
-  const { storiesByUser: profileStoriesByUser, loadStories: loadProfileStories } =
+  const { storiesByUser: profileStoriesByUser, loadStories: loadProfileStories, setStoriesByUser: setProfileStoriesByUser } =
     useActiveStories(
       profileStoryUserIds,
       !!profile?.id,
@@ -591,6 +593,53 @@ function ProfilePageContent() {
     setProfileStoryIndex(0)
     setProfileStoryOpen(true)
   }, [loadProfileStories, profile?.id])
+
+  const handleDeleteProfileStory = useCallback(
+    async (storyId: string) => {
+      if (!profile?.id || !currentUserId || currentUserId !== profile.id) {
+        return false
+      }
+
+      const { error } = await deleteStoryById(supabase, storyId)
+      if (error) {
+        showPopup({
+          type: "error",
+          message: "Couldn't delete story. Please try again.",
+        })
+        return false
+      }
+
+      const ownerId = String(profile.id)
+      setProfileStoriesByUser((current) => {
+        const next = removeStoryFromStoriesByUser(current, ownerId, storyId)
+        writeStoriesSession(profileStoryUserIds.slice().sort().join(","), next)
+
+        const remaining = next[ownerId]?.length ?? 0
+        if (remaining === 0) {
+          setBootstrapSectionCounts((prev) =>
+            prev
+              ? { ...prev, has_active_story: false }
+              : { has_active_story: false }
+          )
+          patchProfileSession(profileId, {
+            bootstrapSectionCounts: { has_active_story: false },
+          })
+        }
+
+        return next
+      })
+
+      return true
+    },
+    [
+      currentUserId,
+      profile?.id,
+      profileId,
+      profileStoryUserIds,
+      setProfileStoriesByUser,
+      showPopup,
+    ]
+  )
 
   const profileHasActiveStory = resolveProfileHasActiveStory({
     bootstrapHasActiveStory: bootstrapSectionCounts?.has_active_story,
@@ -3750,6 +3799,9 @@ function ProfilePageContent() {
           onNextUser={() => {}}
           onStoryReplyError={(message) =>
             showPopup({ type: "error", message })
+          }
+          onDeleteStory={
+            currentUserId === profile.id ? handleDeleteProfileStory : undefined
           }
         />
       ) : null}

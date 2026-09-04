@@ -464,6 +464,20 @@ nonisolated enum TradeDisplay {
         return String(format: "RR %.1f", number.doubleValue)
     }
 
+    /// Compact R multiple — `+7.1R`.
+    static func compactRRText(_ value: Decimal?) -> String? {
+        guard let value else { return nil }
+        let formatted = String(format: "%.1fR", abs(NSDecimalNumber(decimal: value).doubleValue))
+        if value > 0 { return "+\(formatted)" }
+        if value < 0 { return "-\(formatted)" }
+        return formatted
+    }
+
+    /// Compact hold label — `8m 42s`.
+    static func compactHoldDuration(seconds: Int) -> String? {
+        durationTextFromSeconds(seconds)
+    }
+
     /// Journal-style R:R — `1:2.9` when value is the reward multiple.
     static func journalRRText(_ value: Decimal?) -> String? {
         guard let value else { return nil }
@@ -558,6 +572,30 @@ nonisolated enum TradeDisplay {
 
     static func dateTimeText(_ date: Date) -> String {
         compactDateTimeFormatter.string(from: date)
+    }
+
+    /// Entry/exit time in quick stats — time-only when paired timestamps share a day.
+    static func entryExecutionTimeText(for trade: Trade) -> String {
+        executionTimestampText(trade.entryAt, compareTo: trade.exitAt)
+    }
+
+    static func exitExecutionTimeText(for trade: Trade) -> String {
+        guard let exitAt = trade.exitAt else { return "—" }
+        return executionTimestampText(exitAt, compareTo: trade.entryAt)
+    }
+
+    private static let executionTimeOnlyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "h:mm a"
+        return formatter
+    }()
+
+    private static func executionTimestampText(_ date: Date, compareTo other: Date?) -> String {
+        if let other, Calendar.current.isDate(date, inSameDayAs: other) {
+            return executionTimeOnlyFormatter.string(from: date)
+        }
+        return journalDateTimeFormatter.string(from: date)
     }
 
     /// Web `resolveTradeModeBadgeLabel` account-status titles.

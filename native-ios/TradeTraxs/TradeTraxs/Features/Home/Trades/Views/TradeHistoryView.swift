@@ -63,8 +63,8 @@ struct TradeHistoryView: View {
                 } else if viewModel.isEmptyFiltered {
                     ExperienceEmptyState(
                         icon: .search,
-                        title: "No matching trades",
-                        message: "Try adjusting search or filters.",
+                        title: "No trades match these filters.",
+                        message: nil,
                         actionTitle: "Clear Filters",
                         action: { viewModel.clearAllFilters() }
                     )
@@ -85,24 +85,21 @@ struct TradeHistoryView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    ForEach(TradeHistorySort.allCases) { sort in
-                        Button {
-                            viewModel.filters.sort = sort
-                            Task { await viewModel.refresh() }
-                        } label: {
-                            if viewModel.filters.sort == sort {
-                                Label(sort.title, systemImage: "checkmark")
-                            } else {
-                                Text(sort.title)
+                Button {
+                    viewModel.openFilters()
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .overlay(alignment: .topTrailing) {
+                            if viewModel.showsFilterIndicator {
+                                Circle()
+                                    .fill(colors.accent)
+                                    .frame(width: 7, height: 7)
+                                    .offset(x: 4, y: -4)
                             }
                         }
-                    }
-                } label: {
-                    Image(systemName: "arrow.up.arrow.down")
                 }
-                .accessibilityLabel("Sort")
-                .accessibilityIdentifier("trades.sort")
+                .accessibilityLabel("Filters")
+                .accessibilityIdentifier("trades.filters")
             }
         }
         .sheet(isPresented: $viewModel.showsFilterSheet) {
@@ -264,35 +261,26 @@ struct TradeHistoryView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Remove \(chip.title) filter")
                 }
-                Button {
-                    viewModel.clearAllFilters()
-                } label: {
-                    Text("Clear All")
-                        .experienceStyle(.caption, color: colors.accent)
+                if viewModel.showsClearAllChips {
+                    Button {
+                        viewModel.clearAllFilters()
+                    } label: {
+                        Text("Clear All")
+                            .experienceStyle(.caption, color: colors.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("trades.clearAll")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("trades.clearAll")
             }
         }
         .accessibilityIdentifier("trades.activeFilters")
     }
 
     private var summaryRow: some View {
-        let summary = viewModel.summary
-        return HStack(spacing: ExperienceSpacing.md) {
-            Text("\(summary.tradeCount) Trades")
-                .experienceStyle(.footnote, color: colors.secondaryText)
-            Text(TradeDisplay.pnlText(Money(amount: summary.netPnL)))
-                .experienceStyle(.footnote, color: colors.primaryText)
-                .accessibilityLabel("Net P and L \(TradeDisplay.pnlText(Money(amount: summary.netPnL)))")
-            if let winRate = summary.winRate {
-                Text("\(NSDecimalNumber(decimal: winRate).intValue)% Win")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
-            Spacer(minLength: 0)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("trades.summary")
+        Text(viewModel.resultCountLabel)
+            .experienceStyle(.footnote, color: colors.secondaryText)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("trades.summary")
     }
 }
 

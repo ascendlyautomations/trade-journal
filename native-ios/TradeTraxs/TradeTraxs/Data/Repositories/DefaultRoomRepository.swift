@@ -259,6 +259,32 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
             return mapped
         }
 
+        if let content = message.body,
+           StoryShareMessageSupport.isStoryShare(type: StoryShareMessageSupport.messageType, content: content)
+        {
+            struct StoryShareBody: Encodable {
+                var room_id: String
+                var user_id: String
+                var type: String
+                var content: String
+                var section_id: String?
+            }
+            let body = StoryShareBody(
+                room_id: message.roomID.rawValue,
+                user_id: message.senderProfileID.rawValue,
+                type: StoryShareMessageSupport.messageType,
+                content: content,
+                section_id: message.channelID?.rawValue
+            )
+            let dto: RoomDTO.Message = try await supabase.database.insert(
+                body,
+                into: "room_messages",
+                returning: RoomDTO.Message.self
+            )
+            guard let mapped = mapMessage(dto) else { return message }
+            return mapped
+        }
+
         if let audio = message.media.first(where: { $0.kind == .audio }) {
             struct VoiceBody: Encodable {
                 var room_id: String
@@ -454,6 +480,26 @@ nonisolated struct DefaultRoomRepository: RoomRepository {
         let tradeID = dto.trade_id.flatMap { raw -> TradeID? in
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : TradeID(trimmed)
+        }
+        let rawContent = dto.body ?? dto.content ?? ""
+        if dto.type?.lowercased() == StoryShareMessageSupport.messageType
+            || StoryShareMessageSupport.isStoryShare(type: dto.type, content: rawContent)
+        {
+            return RoomMessage(
+                id: RoomMessageID(id),
+                roomID: RoomID(roomID),
+                senderProfileID: ProfileID(sender),
+                body: rawContent,
+                attachedTradeID: nil,
+                media: [],
+                parentMessageID: dto.parent_message_id.map { RoomMessageID($0) },
+                channelID: dto.section_id.map { RoomChannelID($0) },
+                isPinned: dto.is_pinned ?? false,
+                createdAt: ISO8601.date(from: dto.created_at) ?? Date(),
+                reactions: (dto.room_message_reactions ?? []).compactMap {
+                    mapReaction($0, fallbackMessageID: RoomMessageID(id))
+                }
+            )
         }
         let imageURL = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
         let audioURL = dto.audio_url?.trimmingCharacters(in: .whitespacesAndNewlines)

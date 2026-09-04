@@ -27,6 +27,7 @@ final class TradeDetailViewModel {
     private(set) var isOwner = false
     private(set) var isDeleting = false
     var deleteErrorMessage: String?
+    private(set) var ownerAnalytics: TradeDetailAnalytics.Result?
 
     let tradeID: TradeID
 
@@ -36,6 +37,7 @@ final class TradeDetailViewModel {
     private let imagePipeline: any ImagePipeline
     private let cache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator
+    private let rpc: any RPCClient
     private var loadTask: Task<Void, Never>?
     /// Prevents repeat account fetches when size is legitimately absent.
     private let experience: TradeDetailExperience
@@ -49,6 +51,7 @@ final class TradeDetailViewModel {
         imagePipeline: any ImagePipeline,
         cache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
+        rpc: any RPCClient,
         experience: TradeDetailExperience = .social
     ) {
         self.tradeID = tradeID
@@ -58,6 +61,7 @@ final class TradeDetailViewModel {
         self.imagePipeline = imagePipeline
         self.cache = cache
         self.navigationCoordinator = navigationCoordinator
+        self.rpc = rpc
         self.experience = experience
     }
 
@@ -79,6 +83,19 @@ final class TradeDetailViewModel {
             audience: accountDisplayAudience,
             category: nil
         )
+    }
+
+    /// Owner journal summary line — account name + compact mode.
+    var accountSummaryLine: String? {
+        guard experience == .journal, isOwner else { return accountIdentityLine }
+        var parts: [String] = []
+        if let accountName, !accountName.isEmpty {
+            parts.append(accountName)
+        }
+        if let accountMode {
+            parts.append(TradeDisplay.accountModeCompactTitle(accountMode))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var accountDisplayAudience: TradingAccountDisplay.Audience {
@@ -162,6 +179,7 @@ final class TradeDetailViewModel {
             ]
         }
         Task { await resolveAccountMetadata(for: trade) }
+        Task { await loadOwnerAnalytics(for: trade) }
     }
 
     func handleJournalMutation() {
@@ -296,6 +314,7 @@ final class TradeDetailViewModel {
                 ).first
             }
             await loadAuthorAvatar()
+            await loadOwnerAnalytics(for: trade)
             return
         }
 
@@ -331,6 +350,78 @@ final class TradeDetailViewModel {
         author = cache.profile(id: trade.ownerProfileID) ?? fetchedAuthor
         await loadAuthorAvatar()
         await resolveAccountMetadata(for: trade)
+        await loadOwnerAnalytics(for: trade)
+    }
+
+    private func loadOwnerAnalytics(for trade: Trade) async {
+        guard isOwner, experience == .journal else {
+            ownerAnalytics = nil
+            return
+        }
+        guard let userID = await session.currentUserID else { return }
+        let profileID = ProfileID(userID.rawValue)
+        guard profileID == trade.ownerProfileID else {
+            ownerAnalytics = nil
+            return
+        }
+
+        let accountModes = Dictionary(
+            uniqueKeysWithValues: (cache.accounts(for: profileID) ?? []).map { ($0.id, $0.mode) }
+        )
+
+        var dataSource = "client_fallback(\(SessionOwnerTradesStore.shared.cached(for: profileID) != nil ? "SessionOwnerTradesStore.cache" : "TradeRepository.trades"))"
+        var rpcPayload: TradeDetailOwnerComparisonBootstrapV1.DataPayload?
+        var rpcError: String?
+
+        do {
+            let bootstrap = try await TradeDetailComparisonLoader.loadBootstrap(trade: trade, rpc: rpc)
+            rpcPayload = bootstrap.data
+            ownerAnalytics = TradeDetailAnalytics.map(from: bootstrap.data, trade: trade)
+            dataSource = BackendV2Versioning.RPCName.tradeDetailOwnerComparison.rawValue
+        } catch {
+            rpcError = String(describing: error)
+            let history: [Trade]
+            if let cached = SessionOwnerTradesStore.shared.cached(for: profileID) {
+                history = cached
+            } else {
+                history = (try? await SessionOwnerTradesStore.shared.trades(
+                    for: profileID,
+                    detailCache: cache,
+                    repository: trades
+                )) ?? []
+            }
+
+            ownerAnalytics = TradeDetailAnalytics.analyze(
+                trade: trade,
+                history: history,
+                accountModes: accountModes
+            )
+        }
+
+        #if DEBUG
+        let debugHistory: [Trade]
+        if let cached = SessionOwnerTradesStore.shared.cached(for: profileID) {
+            debugHistory = cached
+        } else {
+            debugHistory = (try? await SessionOwnerTradesStore.shared.trades(
+                for: profileID,
+                detailCache: cache,
+                repository: trades
+            )) ?? []
+        }
+        TradeDetailTickerHistoryDiagnostics.log(
+            TradeDetailTickerHistoryDiagnostics.Context(
+                trade: trade,
+                profileID: profileID,
+                dataSource: dataSource,
+                rpcPayload: rpcPayload,
+                rpcError: rpcError,
+                rawHistory: debugHistory,
+                accountModes: accountModes,
+                displayedHistory: ownerAnalytics?.tickerHistory
+            )
+        )
+        #endif
     }
 
     private func resolveAccountMetadata(for trade: Trade) async {

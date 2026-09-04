@@ -14,6 +14,8 @@ struct SettingsAccountView: View {
         _viewModel = State(
             initialValue: SettingsAccountViewModel(
                 profiles: data.profiles,
+                billing: data.billing,
+                account: data.account,
                 session: data.session,
                 authenticationCoordinator: authenticationCoordinator,
                 navigationCoordinator: navigationCoordinator
@@ -31,6 +33,14 @@ struct SettingsAccountView: View {
                 Section {
                     SettingsInlineError(message: error) {
                         Task { await viewModel.refresh() }
+                    }
+                }
+            }
+
+            if let deleteError = viewModel.deleteErrorMessage {
+                Section {
+                    SettingsInlineError(message: deleteError) {
+                        viewModel.clearDeleteError()
                     }
                 }
             }
@@ -61,12 +71,23 @@ struct SettingsAccountView: View {
             }
 
             Section {
-                SettingsIntroBlock(
-                    title: "Need to delete your account?",
-                    message: "Account deletion is available in Settings on the TradeTraxs website. Contact support if you need help."
-                )
+                Button {
+                    ExperienceHaptics.play(.warning)
+                    viewModel.requestDeleteAccount()
+                } label: {
+                    SettingsNavigationRow(
+                        title: "Delete Account",
+                        systemImage: "trash",
+                        isDestructive: true,
+                        showsChevron: false
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isDeletingAccount)
             } header: {
                 Text("Delete Account")
+            } footer: {
+                Text("Permanently delete your TradeTraxs account and associated data.")
             }
 
             Section {
@@ -80,6 +101,7 @@ struct SettingsAccountView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .disabled(viewModel.isDeletingAccount)
             }
         }
         .listStyle(.insetGrouped)
@@ -87,8 +109,11 @@ struct SettingsAccountView: View {
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Account")
         .overlay {
-            if viewModel.isLoading {
-                ProgressView()
+            if viewModel.isLoading || viewModel.isDeletingAccount {
+                ProgressView(viewModel.isDeletingAccount ? "Deleting account…" : "")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(colors.groupedBackground.opacity(viewModel.isDeletingAccount ? 0.92 : 0))
+                    .accessibilityIdentifier("settings.account.deleting")
             }
         }
         .onAppear { viewModel.loadIfNeeded() }
@@ -102,6 +127,40 @@ struct SettingsAccountView: View {
         ) {
             Button("Log Out", role: .destructive) { viewModel.logout() }
             Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "Delete your account?",
+            isPresented: Binding(
+                get: { viewModel.showsDeleteAccountExplainer },
+                set: { if !$0 { viewModel.cancelDeleteAccountFlow() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Continue", role: .destructive) {
+                viewModel.proceedToDeleteConfirmation()
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelDeleteAccountFlow()
+            }
+        } message: {
+            Text(viewModel.deleteAccountExplainerMessage)
+        }
+        .confirmationDialog(
+            "Delete Account",
+            isPresented: Binding(
+                get: { viewModel.showsDeleteAccountConfirmation },
+                set: { if !$0 { viewModel.cancelDeleteAccountFlow() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Account", role: .destructive) {
+                viewModel.confirmDeleteAccount()
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelDeleteAccountFlow()
+            }
+        } message: {
+            Text(viewModel.deleteAccountConfirmationMessage)
         }
         .accessibilityIdentifier("settings.account")
     }
@@ -120,6 +179,8 @@ struct SettingsSecurityView: View {
         _viewModel = State(
             initialValue: SettingsAccountViewModel(
                 profiles: data.profiles,
+                billing: data.billing,
+                account: data.account,
                 session: data.session,
                 authenticationCoordinator: authenticationCoordinator,
                 navigationCoordinator: navigationCoordinator

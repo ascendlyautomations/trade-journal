@@ -10,6 +10,7 @@ final class ReportDetailViewModel: ScreenLifecycle {
     private(set) var state = ReportDetailState()
 
     private let periodKey: TradingReportPeriodKey
+    private let monthRef: TradingReportMonthRef?
     private let tradingReports: any TradingReportRepository
     private let trades: any TradeRepository
     private let session: any SessionProviding
@@ -25,14 +26,19 @@ final class ReportDetailViewModel: ScreenLifecycle {
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator
     ) {
-        let key = TradingReportPeriodKey(rawValue: reportID.rawValue) ?? .weeklyThis
-        self.periodKey = key
+        if let monthRef = TradingReportMonthRef.parse(reportID: reportID) {
+            self.monthRef = monthRef
+            self.periodKey = .monthlyThis
+        } else {
+            self.monthRef = nil
+            self.periodKey = TradingReportPeriodKey(rawValue: reportID.rawValue) ?? .weeklyThis
+        }
         self.tradingReports = tradingReports
         self.trades = trades
         self.session = session
         self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
-        state.periodKey = key
+        state.periodKey = periodKey
     }
 
     init(
@@ -43,6 +49,7 @@ final class ReportDetailViewModel: ScreenLifecycle {
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator
     ) {
+        self.monthRef = nil
         self.periodKey = periodKey
         self.tradingReports = tradingReports
         self.trades = trades
@@ -109,13 +116,25 @@ final class ReportDetailViewModel: ScreenLifecycle {
         }
 
         do {
-            let result = try await ReportDetailBootstrap.load(
-                ReportDetailBootstrap.Context(
-                    periodKey: periodKey,
-                    tradingReports: tradingReports,
-                    forceNetwork: forceNetwork
+            let result: ReportDetailBootstrap.Result
+            if let monthRef {
+                result = try await ReportDetailBootstrap.loadMonth(
+                    ReportDetailBootstrap.MonthContext(
+                        monthRef: monthRef,
+                        filters: TradingReportSessionStore.shared.filters,
+                        tradingReports: tradingReports,
+                        forceNetwork: forceNetwork
+                    )
                 )
-            )
+            } else {
+                result = try await ReportDetailBootstrap.load(
+                    ReportDetailBootstrap.Context(
+                        periodKey: periodKey,
+                        tradingReports: tradingReports,
+                        forceNetwork: forceNetwork
+                    )
+                )
+            }
             var next = state
             next.report = result.report
             next.blocks = result.blocks

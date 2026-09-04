@@ -41,6 +41,10 @@ struct OnboardingView: View {
             Spacer()
 
             VStack(spacing: ExperienceSpacing.sm) {
+                AuthLegalAgreementFootnote()
+                    .padding(.horizontal, ExperienceSpacing.xl)
+                    .padding(.bottom, ExperienceSpacing.sm)
+
                 ExperienceButton(
                     title: "Get Started",
                     kind: .primary,
@@ -70,27 +74,5 @@ struct OnboardingView: View {
                 appeared = true
             }
         }
-    }
-}
-
-struct AuthPlanPlaceholderView: View {
-    let title: String
-    let message: String
-    let navigationCoordinator: NavigationCoordinator
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-            Text(message)
-                .experienceStyle(.body, color: colors.secondaryText)
-            Spacer()
-            ExperienceButton(title: "Continue", kind: .primary) {
-                navigationCoordinator.open(.auth(.login))
-            }
-        }
-        .experiencePadding(.xl)
-        .experienceScreenBackground()
-        .experienceNavigationTitle(title)
     }
 }

@@ -6,7 +6,12 @@ import {
   buildPsychologyCoachUserPrompt,
   type PsychologyCoachFactsPayload,
 } from "@/lib/psychologyCoachPrompt"
-import type { Database } from "@/lib/database.types"
+import {
+  consumeDurableUserRateLimit,
+  rateLimitExceededResponse,
+} from "@/lib/server/durableUserRateLimit"
+import { requireProEntitlement } from "@/lib/server/requireProEntitlement"
+import type { Database, Json } from "@/lib/database.types"
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -16,8 +21,6 @@ const supabaseAdmin = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-const aiCallByUser = new Map<string, number>()
 
 export async function POST(req: Request) {
   const token = req.headers.get("authorization")?.replace("Bearer ", "")
@@ -42,11 +45,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const lastCall = aiCallByUser.get(user.id) ?? 0
-  if (Date.now() - lastCall < 3000) {
-    return NextResponse.json({ error: "Slow down" }, { status: 429 })
+  const rate = await consumeDurableUserRateLimit(user.id, "ai_psychology_coach")
+  if (!rate.allowed) {
+    return rateLimitExceededResponse(rate.retryAfterSec)
   }
-  aiCallByUser.set(user.id, Date.now())
+
+  const entitlement = await requireProEntitlement(user.id, {
+    reply:
+      "Psychology Coach AI is a TraxPro feature. Upgrade your plan on the web to unlock it.",
+  })
+  if (!entitlement.ok) {
+    return entitlement.response
+  }
 
   try {
     const body = await req.json()
@@ -90,7 +100,7 @@ export async function POST(req: Request) {
         {
           user_id: user.id,
           facts_hash: factsHash,
-          summary_json: facts,
+          summary_json: facts as unknown as Json,
           ai_explanation: reply,
           generated_at: new Date().toISOString(),
         },

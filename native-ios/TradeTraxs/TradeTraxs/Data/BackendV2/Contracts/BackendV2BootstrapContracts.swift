@@ -296,6 +296,10 @@ nonisolated struct ProfileBootstrapV1: Codable, Sendable, Equatable {
         var section_counts: [String: JSONValue]?
         var public_stats: PublicStatsWire?
         var owned_room: OwnedRoomWire?
+        /// Active stories for this profile (24h window, stories RLS) — same shape as Feed bootstrap.
+        var active_stories: [FeedStoryPreviewV1]?
+        /// Authoritative `accounts.mode` for accounts with public trades (`account_id` → mode).
+        var public_account_modes: [String: String]?
         var active_tab: String?
         var trades_page: TradesPageWire?
         var trade_engagement: [String: TradeEngagementWire]?

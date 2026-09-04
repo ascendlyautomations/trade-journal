@@ -11,7 +11,7 @@ enum ExploreProfileHydration {
         profile.avatar != nil || confirmedAbsent.contains(profile.id)
     }
 
-    /// Batch-hydrate trader avatars; prefer authoritative API rows over partial cache seeds.
+    /// Batch-hydrate trader avatars; merge embedded rows without treating missing avatars as final.
     static func hydrateTraders(
         _ suggestions: [ExploreTraderSuggestion],
         authoritativeProfiles: [ProfileID: Profile],
@@ -24,32 +24,64 @@ enum ExploreProfileHydration {
 
         var needsBatch: [ProfileID] = []
         var merged: [ExploreTraderSuggestion] = []
+        #if DEBUG
+        var traces: [ExploreHydrationDiagnostics.TraderAvatarTrace] = []
+        #endif
 
         for var suggestion in suggestions {
             let profileID = suggestion.profile.id
+            let bootstrapHasAvatar = suggestion.profile.avatar != nil
+
             if let authoritative = authoritativeProfiles[profileID] {
                 suggestion.profile = suggestion.profile.mergingCachedPresentation(with: authoritative)
-                detailCache.seed(suggestion.profile)
-                if suggestion.profile.avatar == nil {
-                    confirmedAbsent.insert(profileID)
-                } else {
+                if suggestion.profile.avatar != nil {
+                    detailCache.seed(suggestion.profile)
                     confirmedAbsent.remove(profileID)
                 }
-                merged.append(suggestion)
-                continue
             }
 
+            let beforeCacheMerge = suggestion.profile.avatar
             if let cached = detailCache.profile(id: profileID), cached.avatar != nil {
                 suggestion.profile = suggestion.profile.mergingCachedPresentation(with: cached)
+                if suggestion.profile.avatar != nil {
+                    confirmedAbsent.remove(profileID)
+                }
             }
+            #if DEBUG
+            let cachePreservedAvatar = beforeCacheMerge == nil && suggestion.profile.avatar != nil
+            #endif
 
-            if isAvatarResolved(suggestion.profile, confirmedAbsent: confirmedAbsent) {
+            if suggestion.profile.avatar != nil {
                 merged.append(suggestion)
+                #if DEBUG
+                traces.append(
+                    ExploreHydrationDiagnostics.TraderAvatarTrace(
+                        profileID: profileID,
+                        bootstrapHasAvatar: bootstrapHasAvatar,
+                        batchRequired: false,
+                        batchHasAvatar: nil,
+                        cachePreservedAvatar: cachePreservedAvatar,
+                        finalHasAvatar: true
+                    )
+                )
+                #endif
                 continue
             }
 
             needsBatch.append(profileID)
             merged.append(suggestion)
+            #if DEBUG
+            traces.append(
+                ExploreHydrationDiagnostics.TraderAvatarTrace(
+                    profileID: profileID,
+                    bootstrapHasAvatar: bootstrapHasAvatar,
+                    batchRequired: true,
+                    batchHasAvatar: nil,
+                    cachePreservedAvatar: cachePreservedAvatar,
+                    finalHasAvatar: suggestion.profile.avatar != nil
+                )
+            )
+            #endif
         }
 
         let unique = Array(Set(needsBatch))
@@ -61,6 +93,7 @@ enum ExploreProfileHydration {
                 resolved: merged.filter { isAvatarResolved($0.profile, confirmedAbsent: confirmedAbsent) }.count,
                 withAvatar: merged.filter { $0.profile.avatar != nil }.count
             )
+            ExploreHydrationDiagnostics.logTraderAvatars(traces)
             #endif
             return (merged, metrics)
         }
@@ -72,13 +105,16 @@ enum ExploreProfileHydration {
             detailCache: detailCache,
             repository: repository,
             forceNetwork: forceNetwork,
-            acceptCached: { isAvatarResolved($0, confirmedAbsent: absentSnapshot) }
+            acceptCached: { profile in
+                profile.avatar != nil
+                    || (absentSnapshot.contains(profile.id) && !forceNetwork)
+            }
         )) ?? []
 
         let byID = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
         for profileID in unique {
-            guard let profile = byID[profileID] ?? detailCache.profile(id: profileID) else { continue }
-            detailCache.seed(profile)
+            let profile = detailCache.profile(id: profileID) ?? byID[profileID]
+            guard let profile else { continue }
             if profile.avatar == nil {
                 confirmedAbsent.insert(profileID)
             } else {
@@ -96,11 +132,18 @@ enum ExploreProfileHydration {
         }
 
         #if DEBUG
+        for index in traces.indices where traces[index].batchRequired {
+            let profileID = traces[index].profileID
+            let final = hydrated.first(where: { $0.id == profileID })?.profile
+            traces[index].batchHasAvatar = final?.avatar != nil
+            traces[index].finalHasAvatar = final?.avatar != nil
+        }
         ExploreHydrationDiagnostics.logProfiles(
             requested: suggestions.count,
             resolved: hydrated.filter { isAvatarResolved($0.profile, confirmedAbsent: confirmedAbsent) }.count,
             withAvatar: hydrated.filter { $0.profile.avatar != nil }.count
         )
+        ExploreHydrationDiagnostics.logTraderAvatars(traces)
         #endif
 
         return (hydrated, metrics)

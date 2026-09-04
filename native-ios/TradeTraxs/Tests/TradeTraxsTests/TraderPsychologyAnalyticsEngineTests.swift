@@ -49,22 +49,31 @@ final class TraderPsychologyAnalyticsEngineTests: XCTestCase {
     }
 
     func testStressDirectionTreatsHighStressAsWorse() {
-        let checkInLowStress = makeCheckIn(date: "2026-09-02", stress: 2, sleepHours: 8)
-        let checkInHighStress = makeCheckIn(date: "2026-09-03", stress: 5, sleepHours: 8)
+        let checkInCalm = makeCheckIn(date: "2026-09-02", stress: 5, sleepHours: 8)
+        let checkInVeryStressed = makeCheckIn(date: "2026-09-03", stress: 1, sleepHours: 8)
 
-        let lowStressTrades = (0..<6).map {
+        let calmDayTrades = (0..<6).map {
             makeTrade(id: "l\($0)", pnl: 50, offsetHours: $0, dayOffset: 0)
         }
-        let highStressTrades = (0..<6).map {
+        let stressedDayTrades = (0..<6).map {
             makeTrade(id: "h\($0)", pnl: -20, offsetHours: $0, dayOffset: 1)
         }
 
         let report = TraderPsychologyAnalyticsEngine.buildReport(
-            trades: lowStressTrades + highStressTrades,
-            checkIns: [checkInLowStress, checkInHighStress]
+            trades: calmDayTrades + stressedDayTrades,
+            checkIns: [checkInCalm, checkInVeryStressed]
         )
 
         XCTAssertFalse(report.dashboardCards.isEmpty)
+    }
+
+    func testStressScaleLabelsAndElevatedThreshold() {
+        XCTAssertEqual(TraderDailyCheckInStressScale.label(for: 1), "Very Stressed")
+        XCTAssertEqual(TraderDailyCheckInStressScale.label(for: 5), "Calm")
+        XCTAssertTrue(TraderDailyCheckInStressScale.isElevated(1))
+        XCTAssertTrue(TraderDailyCheckInStressScale.isElevated(2))
+        XCTAssertFalse(TraderDailyCheckInStressScale.isElevated(3))
+        XCTAssertFalse(TraderDailyCheckInStressScale.isElevated(5))
     }
 
     func testConvictionGroupingInsight() {

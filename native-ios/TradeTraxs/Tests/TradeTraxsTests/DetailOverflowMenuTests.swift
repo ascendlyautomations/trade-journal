@@ -19,13 +19,21 @@ final class DetailOverflowMenuTests: XCTestCase {
             DetailContentLink.achievement(AchievementID("a1")).absoluteString,
             "https://www.tradetraxs.com/feed?achievement=a1"
         )
+        XCTAssertEqual(
+            DetailContentLink.story(StoryID("s1")).absoluteString,
+            "https://www.tradetraxs.com/story/s1"
+        )
     }
 
-    func testReportMailtoIncludesSupportAddressAndLink() {
-        let url = DetailContentLink.post(PostID("abc")).reportMailtoURL
-        XCTAssertNotNil(url)
-        XCTAssertEqual(url?.scheme, "mailto")
-        XCTAssertTrue(url?.absoluteString.contains("support@tradetraxs.com") == true)
-        XCTAssertTrue(url?.absoluteString.contains("post") == true)
+    func testReportTargetMappingForEachContentKind() {
+        let owner = ProfileID("owner-1")
+        XCTAssertEqual(
+            DetailContentLink.trade(TradeID("t1")).reportTarget(ownerID: owner).type,
+            .trade
+        )
+        XCTAssertEqual(
+            DetailContentLink.reel(ReelID("r1")).reportSubjectTitle,
+            "this clip"
+        )
     }
 }

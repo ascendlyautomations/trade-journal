@@ -49,6 +49,44 @@ nonisolated struct LeaderboardEntry: Hashable, Codable, Sendable, Identifiable {
     var totalPnL: Money
     var tradeCount: Int
     var averageRiskReward: Decimal?
+    /// Win rate as `0...1` over trades in the selected window.
+    var winRate: Decimal?
+    var profitFactor: Decimal?
+    var expectancy: Decimal?
+    /// Longest consecutive winning trades (`pnl > 0`) in the window.
+    var winStreak: Int
+    /// Share of trading days with positive net PnL (`0...100`).
+    var profitPercent: Decimal?
+    /// Inverse win concentration — higher means profits are less dominated by one trade (`0...100`).
+    var consistency: Decimal?
+
+    init(
+        rank: Int,
+        profileID: ProfileID,
+        username: String,
+        totalPnL: Money,
+        tradeCount: Int,
+        averageRiskReward: Decimal?,
+        winRate: Decimal? = nil,
+        profitFactor: Decimal? = nil,
+        expectancy: Decimal? = nil,
+        winStreak: Int = 0,
+        profitPercent: Decimal? = nil,
+        consistency: Decimal? = nil
+    ) {
+        self.rank = rank
+        self.profileID = profileID
+        self.username = username
+        self.totalPnL = totalPnL
+        self.tradeCount = tradeCount
+        self.averageRiskReward = averageRiskReward
+        self.winRate = winRate
+        self.profitFactor = profitFactor
+        self.expectancy = expectancy
+        self.winStreak = winStreak
+        self.profitPercent = profitPercent
+        self.consistency = consistency
+    }
 }
 
 nonisolated enum SearchResultKind: String, Hashable, Codable, Sendable {

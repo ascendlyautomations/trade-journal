@@ -12,9 +12,11 @@ struct ConversationBubbleView: View {
     var onRetry: (() -> Void)?
     var onDelete: (() -> Void)?
     var onSharedTradeTap: ((TradeID) -> Void)? = nil
+    var onSharedStoryTap: ((StoryShareMessageSupport.Payload) -> Void)? = nil
     var isSelectionMode: Bool = false
     var isSelected: Bool = false
     var onToggleSelection: (() -> Void)? = nil
+    var onReport: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
 
@@ -107,6 +109,14 @@ struct ConversationBubbleView: View {
                       let payload = StoryReplyMessageSupport.decode(from: item.message.body)
             {
                 storyReplyBubble(payload: payload)
+            } else if item.message.kind == .storyShare,
+                      let payload = StoryShareMessageSupport.decode(from: item.message.body)
+            {
+                storyShareBubble(payload: payload)
+            } else if item.message.kind != .storyReply,
+                      let payload = StoryShareMessageSupport.decode(from: item.message.body)
+            {
+                storyShareBubble(payload: payload)
             } else if let reference = item.voiceReference {
                 voiceBubble(reference: reference, duration: item.voiceDuration)
             } else if let reference = item.imageReference, item.message.kind != .tradeShare {
@@ -154,6 +164,11 @@ struct ConversationBubbleView: View {
                 onDelete?()
             } label: {
                 Label("Delete", systemImage: "trash")
+            }
+        }
+        if !item.isOutgoing, let onReport {
+            Button(action: onReport) {
+                Label("Report", systemImage: "flag")
             }
         }
     }
@@ -207,6 +222,31 @@ struct ConversationBubbleView: View {
         StoryReplyMessageBubbleView(
             payload: payload,
             viewerProfileID: viewerProfileID,
+            isOutgoing: item.isOutgoing,
+            imagePipeline: imagePipeline
+        )
+    }
+
+    private func storyShareBubble(payload: StoryShareMessageSupport.Payload) -> some View {
+        Group {
+            if isSelectionMode {
+                storyShareBubbleContent(payload: payload)
+            } else {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    onSharedStoryTap?(payload)
+                } label: {
+                    storyShareBubbleContent(payload: payload)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .accessibilityIdentifier("conversation.bubble.storyShare")
+    }
+
+    private func storyShareBubbleContent(payload: StoryShareMessageSupport.Payload) -> some View {
+        StoryShareMessageBubbleView(
+            payload: payload,
             isOutgoing: item.isOutgoing,
             imagePipeline: imagePipeline
         )

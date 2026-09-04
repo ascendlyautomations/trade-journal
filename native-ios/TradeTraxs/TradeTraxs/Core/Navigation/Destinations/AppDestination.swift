@@ -51,6 +51,7 @@ struct NotificationDestination: Hashable, Sendable {
         case roomMention
         case followRequest
         case tradingReport
+        case dailyCheckIn
         case unknown
     }
 

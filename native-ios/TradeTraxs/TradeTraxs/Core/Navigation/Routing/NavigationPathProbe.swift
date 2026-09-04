@@ -64,6 +64,8 @@ nonisolated enum NavigationPathProbeFormatter {
         case .psychologyCoach: return "psychologyCoach"
         case .checkInHistory: return "checkInHistory"
         case .checkInDay: return "checkInDay"
+        case .activity: return "activity"
+        case .followRequests: return "followRequests"
         case .settings(let settings): return "settings(\(settings.rawValue))"
         }
     }

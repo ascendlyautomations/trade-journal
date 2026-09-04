@@ -183,6 +183,9 @@ nonisolated enum ConversationThreadBootstrapApplier {
             if StoryReplyMessageSupport.isStoryReply(type: row.type, content: row.content) {
                 return .storyReply
             }
+            if StoryShareMessageSupport.isStoryShare(type: row.type, content: row.content) {
+                return .storyShare
+            }
             return attachments.isEmpty ? .text : .media
         }()
 

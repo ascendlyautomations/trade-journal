@@ -106,6 +106,11 @@ import {
   decodeStoryReplyContent,
   STORY_REPLY_MESSAGE_TYPE,
 } from "@/lib/storyReplyMessage"
+import {
+  resolveStorySharePayload,
+  STORY_SHARE_MESSAGE_TYPE,
+} from "@/lib/storyShareMessage"
+import StoryShareMessageCard from "@/app/components/messages/StoryShareMessageCard"
 import { consumeConversationOpenFromInbox, consumeInboxConversationId, peekInboxConversationId } from "@/lib/conversationOpenIntent"
 import {
   dmPostPreviewCacheKey,
@@ -792,6 +797,92 @@ function PostMessageBubble({
   )
 }
 
+function StoryShareMessageBubble({
+  message,
+  isMe,
+  userId,
+  activeMenuId,
+  setActiveMenuId,
+  deleteForMe,
+  deleteForEveryone,
+  onReply,
+  onJumpToParent,
+  onReplyUnavailable,
+  parentMessage,
+  onViewStory,
+  onMediaLoad,
+}: {
+  message: any
+  isMe: boolean
+  userId: string | undefined
+  activeMenuId: string | null
+  setActiveMenuId: (id: string | null) => void
+  deleteForMe: (m: any) => void
+  deleteForEveryone: (m: any) => void
+  onReply: (message: any) => void
+  onJumpToParent: (parentId: string) => boolean
+  onReplyUnavailable: () => void
+  parentMessage?: ReplyParentMessageLike | null
+  onViewStory: (storyId: string) => void
+  onMediaLoad?: () => void
+}) {
+  if (message.deleted_for_everyone) {
+    return (
+      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+        <p className="text-sm italic text-gray-400">Message deleted</p>
+      </div>
+    )
+  }
+
+  const payload = resolveStorySharePayload(message)
+  if (!payload) {
+    return (
+      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+        <p className="text-sm italic text-gray-400">Story unavailable</p>
+      </div>
+    )
+  }
+
+  const menuOpen = activeMenuId === message.id
+
+  return (
+    <div
+      id={dmMessageElementId(message.id)}
+      data-dm-message-id={message.id}
+      className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+    >
+      <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
+        <DmMessageActionMenu
+          message={message}
+          isMe={isMe}
+          userId={userId}
+          menuOpen={menuOpen}
+          setActiveMenuId={setActiveMenuId}
+          onReply={onReply}
+          deleteForMe={deleteForMe}
+          deleteForEveryone={deleteForEveryone}
+          alignRight={isMe}
+        />
+
+        <div className="space-y-2">
+          <DmReplyReference
+            message={message}
+            parentMessage={parentMessage}
+            onJumpToParent={onJumpToParent}
+            onUnavailable={onReplyUnavailable}
+          />
+          <StoryShareMessageCard
+            payload={payload}
+            isOutgoing={isMe}
+            onViewStory={onViewStory}
+            onMediaLoad={onMediaLoad}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function StoryReplyMessageBubble({
   message,
   isMe,
@@ -945,7 +1036,10 @@ export default function DMPage() {
       const storyImage =
         message?.type === STORY_REPLY_MESSAGE_TYPE
           ? decodeStoryReplyContent(message.content)?.story_image_url
-          : null
+          : message?.type === STORY_SHARE_MESSAGE_TYPE ||
+              resolveStorySharePayload(message)
+            ? resolveStorySharePayload(message)?.story_image_url
+            : null
       if (
         message?.image_url ||
         message?.trade_id ||
@@ -1403,6 +1497,12 @@ export default function DMPage() {
 
   function viewSharedPost(post: Parameters<typeof getSharedContentViewHref>[0]) {
     router.push(getSharedContentViewHref(post))
+  }
+
+  function viewSharedStory(storyId: string) {
+    const trimmed = storyId.trim()
+    if (!trimmed) return
+    router.push(`/story/${encodeURIComponent(trimmed)}`)
   }
 
   useEffect(() => {
@@ -3600,6 +3700,45 @@ export default function DMPage() {
                         onJumpToParent={scrollToDmMessage}
                         onReplyUnavailable={notifyReplyUnavailable}
                         parentMessage={parentMessage}
+                        onMediaLoad={bumpMessageLayout}
+                      />
+                      {showTimestamp ? (
+                        <DmClusterTimestamp
+                          createdAt={message.created_at}
+                          isMe={isMe}
+                        />
+                      ) : null}
+                    </div>
+                  </Fragment>
+                )
+              }
+
+              if (
+                message.type === STORY_SHARE_MESSAGE_TYPE ||
+                resolveStorySharePayload(message)
+              ) {
+                return (
+                  <Fragment key={message.id}>
+                    {showDateDivider ? (
+                      <ConversationDateDivider label={dateDividerLabel} />
+                    ) : null}
+                    <div className={rowClass}>
+                      {showName ? (
+                        <DmSenderNameLine message={message} />
+                      ) : null}
+                      <StoryShareMessageBubble
+                        message={message}
+                        isMe={isMe}
+                        userId={user?.id}
+                        activeMenuId={activeMenuId}
+                        setActiveMenuId={setActiveMenuId}
+                        deleteForMe={deleteForMe}
+                        deleteForEveryone={deleteForEveryone}
+                        onReply={startReplyToMessage}
+                        onJumpToParent={scrollToDmMessage}
+                        onReplyUnavailable={notifyReplyUnavailable}
+                        parentMessage={parentMessage}
+                        onViewStory={viewSharedStory}
                         onMediaLoad={bumpMessageLayout}
                       />
                       {showTimestamp ? (

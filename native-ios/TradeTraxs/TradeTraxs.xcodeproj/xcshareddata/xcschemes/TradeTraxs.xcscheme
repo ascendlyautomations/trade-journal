@@ -117,11 +117,6 @@
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
-            key = "BACKEND_V2_CONVERSATION_THREAD"
-            value = "1"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
             key = "BACKEND_V2_ACTIVITY"
             value = "1"
             isEnabled = "YES">

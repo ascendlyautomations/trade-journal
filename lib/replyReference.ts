@@ -1,4 +1,8 @@
 import { storyReplyPreviewText } from "@/lib/storyReplyMessage"
+import {
+  decodeStoryShareContent,
+  storySharePreviewText,
+} from "@/lib/storyShareMessage"
 
 export const REPLY_PREVIEW_MAX = 80
 
@@ -72,6 +76,9 @@ export function previewTextFromMessage(
   const type = message.type?.trim()
   if (type === "story_reply") {
     return storyReplyPreviewText(message.content, "Replied to your story")
+  }
+  if (type === "story_share" || decodeStoryShareContent(message.content)) {
+    return storySharePreviewText(message.content)
   }
   if (type === "trade") return "Shared a trade"
   if (type === "post" || type === "profile_post") return "Shared a post"

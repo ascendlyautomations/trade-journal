@@ -96,39 +96,48 @@ nonisolated enum LeaderboardTradeWindowFilter {
         offset: Int = 0,
         limit: Int = 100
     ) -> (entries: [LeaderboardEntry], hasMore: Bool) {
-        var byUser: [String: (pnl: Decimal, count: Int, rrSum: Decimal, rrCount: Int)] = [:]
-        for trade in windowTrades {
-            var agg = byUser[trade.userID] ?? (0, 0, 0, 0)
-            agg.pnl += trade.pnl ?? 0
-            agg.count += 1
-            if let rr = trade.rr {
-                agg.rrSum += rr
-                agg.rrCount += 1
-            }
-            byUser[trade.userID] = agg
+        var byUser: [String: [LeaderboardTradeRow]] = [:]
+        for trade in windowTrades where !trade.userID.isEmpty {
+            byUser[trade.userID, default: []].append(trade)
         }
 
         let sorted = byUser.sorted { lhs, rhs in
-            if lhs.value.pnl != rhs.value.pnl { return lhs.value.pnl > rhs.value.pnl }
+            let lhsPnL = lhs.value.reduce(Decimal(0)) { $0 + ($1.pnl ?? 0) }
+            let rhsPnL = rhs.value.reduce(Decimal(0)) { $0 + ($1.pnl ?? 0) }
+            if lhsPnL != rhsPnL { return lhsPnL > rhsPnL }
             return lhs.key < rhs.key
         }
 
         let page = Array(sorted.dropFirst(max(offset, 0)).prefix(max(limit, 1)))
         let entries: [LeaderboardEntry] = page.enumerated().map { index, element in
-            let avgRR: Decimal? = element.value.rrCount > 0
-                ? element.value.rrSum / Decimal(element.value.rrCount)
-                : nil
+            let stats = LeaderboardUserStatsAggregator.aggregate(trades: element.value)
             return LeaderboardEntry(
                 rank: offset + index + 1,
                 profileID: ProfileID(element.key),
                 username: "",
-                totalPnL: Money(amount: element.value.pnl),
-                tradeCount: element.value.count,
-                averageRiskReward: avgRR
+                totalPnL: Money(amount: stats.totalPnL),
+                tradeCount: stats.tradeCount,
+                averageRiskReward: stats.averageRiskReward,
+                winRate: stats.winRate,
+                profitFactor: stats.profitFactor,
+                expectancy: stats.expectancy,
+                winStreak: stats.winStreak,
+                profitPercent: stats.profitPercent,
+                consistency: stats.consistency
             )
         }
         let hasMore = offset + page.count < sorted.count
         return (entries, hasMore)
+    }
+
+    /// Stable sort key for chronological trade aggregation.
+    static func createdAtTimestamp(_ iso: String) -> TimeInterval {
+        parseCreatedAt(iso)
+    }
+
+    /// NY calendar day key (`YYYY-MM-DD`) for daily leaderboard metrics.
+    static func tradingDayKey(for createdAt: String) -> String {
+        formatDateNY(parseCreatedAtDate(createdAt))
     }
 
     /// Convenience: filter then rank (web chart pipeline order).

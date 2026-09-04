@@ -53,7 +53,54 @@ nonisolated enum DashboardChartMetrics {
         payoutTotal: Decimal?,
         now: Date = Date()
     ) -> Summary {
-        let filtered = filter(inputs, accountFilter: accountFilter, dateRange: dateRange, now: now)
+        compute(
+            from: inputs,
+            accountFilter: accountFilter,
+            accountMode: .all,
+            interval: nil,
+            dateRange: dateRange,
+            payoutTotal: payoutTotal,
+            now: now
+        )
+    }
+
+    /// Interval-scoped analytics — used by yearly/monthly Performance Reports.
+    static func compute(
+        from inputs: [Input],
+        accountFilter: DashboardAccountFilter,
+        accountMode: ProfileStatisticsMetrics.Mode = .all,
+        interval: DateInterval,
+        payoutTotal: Decimal? = nil,
+        now: Date = Date()
+    ) -> Summary {
+        compute(
+            from: inputs,
+            accountFilter: accountFilter,
+            accountMode: accountMode,
+            interval: interval,
+            dateRange: nil,
+            payoutTotal: payoutTotal,
+            now: now
+        )
+    }
+
+    private static func compute(
+        from inputs: [Input],
+        accountFilter: DashboardAccountFilter,
+        accountMode: ProfileStatisticsMetrics.Mode,
+        interval: DateInterval?,
+        dateRange: DashboardDateRange?,
+        payoutTotal: Decimal?,
+        now: Date
+    ) -> Summary {
+        let filtered = filter(
+            inputs,
+            accountFilter: accountFilter,
+            accountMode: accountMode,
+            interval: interval,
+            dateRange: dateRange,
+            now: now
+        )
         let trades = filtered.map(\.trade)
 
         let pnlValues = trades.map { $0.realizedPnL?.amount ?? 0 }
@@ -93,8 +140,7 @@ nonisolated enum DashboardChartMetrics {
                 createdAt: $0.trade.entryAt,
                 isLong: $0.trade.side == .long,
                 session: $0.trade.sessionLabel,
-                mode: $0.trade.mode.rawValue,
-                accountType: $0.accountType
+                accountMode: $0.trade.accountMode ?? TradingAccountMode.parseWireValue($0.accountType)
             )
         }
         let profileStats = ProfileStatisticsMetrics.compute(from: statsInputs, selectedMode: .all)
@@ -146,7 +192,32 @@ nonisolated enum DashboardChartMetrics {
         dateRange: DashboardDateRange,
         now: Date = Date()
     ) -> [Trade] {
-        filter(inputs, accountFilter: accountFilter, dateRange: dateRange, now: now).map(\.trade)
+        filter(
+            inputs,
+            accountFilter: accountFilter,
+            accountMode: .all,
+            interval: nil,
+            dateRange: dateRange,
+            now: now
+        ).map(\.trade)
+    }
+
+    /// Filtered trades for an explicit interval — shared with Performance Reports.
+    static func filteredTrades(
+        from inputs: [Input],
+        accountFilter: DashboardAccountFilter,
+        accountMode: ProfileStatisticsMetrics.Mode = .all,
+        interval: DateInterval,
+        now: Date = Date()
+    ) -> [Trade] {
+        filter(
+            inputs,
+            accountFilter: accountFilter,
+            accountMode: accountMode,
+            interval: interval,
+            dateRange: nil,
+            now: now
+        ).map(\.trade)
     }
 
     // MARK: - Filter (web time + account)
@@ -157,12 +228,28 @@ nonisolated enum DashboardChartMetrics {
         dateRange: DashboardDateRange,
         now: Date
     ) -> [Input] {
+        filter(
+            inputs,
+            accountFilter: accountFilter,
+            accountMode: .all,
+            interval: nil,
+            dateRange: dateRange,
+            now: now
+        )
+    }
+
+    private static func filter(
+        _ inputs: [Input],
+        accountFilter: DashboardAccountFilter,
+        accountMode selectedMode: ProfileStatisticsMetrics.Mode,
+        interval: DateInterval?,
+        dateRange: DashboardDateRange?,
+        now: Date
+    ) -> [Input] {
         inputs.filter { input in
             let trade = input.trade
-            // Exclude backtest — same as ProfileStatisticsMetrics / web dashboard.
-            let mode = trade.mode.rawValue.lowercased()
-            let accountType = (input.accountType ?? "").lowercased()
-            if mode == "backtest" || accountType == "backtest" { return false }
+            let tradeAccountMode = trade.accountMode ?? TradingAccountMode.parseWireValue(input.accountType)
+            if tradeAccountMode == .backtest, selectedMode != .backtest { return false }
 
             switch accountFilter {
             case .all:
@@ -171,8 +258,23 @@ nonisolated enum DashboardChartMetrics {
                 guard trade.accountID == id else { return false }
             }
 
+            let tradeInput = ProfileStatisticsMetrics.TradeInput(
+                pnl: trade.realizedPnL?.amount,
+                createdAt: trade.entryAt,
+                isLong: trade.side == .long,
+                session: trade.sessionLabel,
+                accountMode: tradeAccountMode
+            )
+            guard ProfileStatisticsMetrics.matchesMode(tradeInput, selectedMode) else { return false }
+
             let stamp = trade.exitAt ?? trade.entryAt
-            return dateRange.contains(stamp, now: now)
+            if let interval {
+                return stamp >= interval.start && stamp <= interval.end
+            }
+            if let dateRange {
+                return dateRange.contains(stamp, now: now)
+            }
+            return true
         }
     }
 

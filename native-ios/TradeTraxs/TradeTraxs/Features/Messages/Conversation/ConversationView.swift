@@ -13,9 +13,11 @@ struct ConversationView: View {
     @State private var userReleasedInitialPin = false
     @State private var showsConversationActions = false
     private let imagePipeline: any ImagePipeline
+    private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator?
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let bottomProximityThreshold: CGFloat = 80
@@ -54,6 +56,7 @@ struct ConversationView: View {
             )
         )
         self.imagePipeline = data.imagePipeline
+        self.detailCache = data.detailCache
         self.navigationCoordinator = navigationCoordinator
     }
 
@@ -61,6 +64,7 @@ struct ConversationView: View {
     init(viewModel: ConversationViewModel, imagePipeline: any ImagePipeline) {
         _viewModel = State(initialValue: viewModel)
         self.imagePipeline = imagePipeline
+        self.detailCache = DetailPresentationCache()
         self.navigationCoordinator = nil
     }
 
@@ -128,6 +132,16 @@ struct ConversationView: View {
             }
             Button(viewModel.isMuted ? "Unmute Conversation" : "Mute Conversation") {
                 viewModel.toggleMute()
+            }
+            if let peerProfileID = viewModel.peerProfileID {
+                Button("Report User", role: .destructive) {
+                    ExperienceHaptics.play(.selection)
+                    ContentReportSupport.presentUser(
+                        profileID: peerProfileID,
+                        displayName: viewModel.peerProfile?.displayName,
+                        presenter: appEnvironment.contentReportPresenter
+                    )
+                }
             }
             if viewModel.blockedByMe {
                 Button("Unblock User") {
@@ -311,11 +325,19 @@ struct ConversationView: View {
                                 onSharedTradeTap: { tradeID in
                                     navigationCoordinator?.pushMessages(.sharedTrade(tradeID))
                                 },
+                                onSharedStoryTap: { payload in
+                                    StoryShareNavigation.open(
+                                        payload: payload,
+                                        cache: detailCache,
+                                        coordinator: navigationCoordinator
+                                    )
+                                },
                                 isSelectionMode: viewModel.isSelectionMode,
                                 isSelected: viewModel.isMessageSelected(bubble.id),
                                 onToggleSelection: {
                                     viewModel.toggleMessageSelection(bubble.id)
-                                }
+                                },
+                                onReport: incomingMessageReportAction(for: bubble)
                             )
                             .id(bubble.id.rawValue)
                             .onAppear {
@@ -701,6 +723,17 @@ struct ConversationView: View {
             } else {
                 apply()
             }
+        }
+    }
+
+    private func incomingMessageReportAction(for bubble: ConversationBubbleItem) -> (() -> Void)? {
+        guard !bubble.isOutgoing else { return nil }
+        return {
+            ExperienceHaptics.play(.selection)
+            ContentReportSupport.presentDirectMessage(
+                message: bubble.message,
+                presenter: appEnvironment.contentReportPresenter
+            )
         }
     }
 }

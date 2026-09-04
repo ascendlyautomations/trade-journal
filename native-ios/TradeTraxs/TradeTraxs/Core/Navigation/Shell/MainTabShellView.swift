@@ -9,6 +9,7 @@ struct MainTabShellView: View {
     let coordinator: NavigationCoordinator
     let authenticationCoordinator: AuthenticationCoordinator
     @Bindable var currentUserProfile: CurrentUserProfileStore
+    @Bindable private var viewerStoryStore = ViewerActiveStoryStore.shared
 
     var body: some View {
         // Edge-anchored tab bar (not floating capsule). Background reaches the
@@ -25,6 +26,23 @@ struct MainTabShellView: View {
         .experienceAppChrome()
         .onChange(of: store.selectedTab) { _, _ in
             OwnerAccountFilterDropdownController.shared.dismiss()
+        }
+        .onChange(of: ContentMutationStore.shared.revision) { _, _ in
+            guard let profileID = currentUserProfile.profile?.id else { return }
+            switch ContentMutationStore.shared.latest {
+            case .story(let story):
+                viewerStoryStore.applyStoryCreated(story, viewerID: profileID)
+            case .storyDeleted(let storyID):
+                viewerStoryStore.applyStoryDeleted(storyID)
+            default:
+                break
+            }
+            viewerStoryStore.reconcileExpired()
+        }
+        .onAppear {
+            guard let profileID = currentUserProfile.profile?.id else { return }
+            viewerStoryStore.reconcileFromFeedCache(viewerID: profileID)
+            viewerStoryStore.reconcileExpired()
         }
 #if DEBUG
         .overlay(alignment: .topLeading) {
@@ -76,7 +94,8 @@ struct MainTabShellView: View {
                 } icon: {
                     ProfileTabBarIcon(
                         tabAvatar: currentUserProfile.tabBarAvatarUIImage,
-                        isSelected: store.selectedTab == .profile
+                        isSelected: store.selectedTab == .profile,
+                        showsStoryRing: viewerStoryStore.activeStory != nil
                     )
                 }
             }
@@ -162,6 +181,12 @@ struct HomeNavigationStack: View {
         case .report(let reportID):
             if PsychologyReportPeriodRef.parse(reportID: reportID) != nil {
                 PsychologyReportDetailView(reportID: reportID, data: appEnvironment.data)
+            } else if let yearRef = TradingReportYearRef.parse(reportID: reportID) {
+                YearlyReportDetailView(
+                    year: yearRef.year,
+                    data: appEnvironment.data,
+                    navigationCoordinator: coordinator
+                )
             } else {
                 ReportDetailView(
                     reportID: reportID,
@@ -174,6 +199,17 @@ struct HomeNavigationStack: View {
         case .checkInDay(let dateKey):
             CheckInDayDetailView(
                 dateKey: dateKey,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .activity:
+            ActivityHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .home
+            )
+        case .followRequests:
+            FollowRequestsView(
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
@@ -214,6 +250,12 @@ struct HomeNavigationStack: View {
                 authenticationCoordinator: authenticationCoordinator,
                 currentUserProfile: currentUserProfile
             )
+        case .analyst:
+            // Legacy /analyst links — Trade AI lives on trade detail, not a standalone screen.
+            DashboardHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         default:
             NavigationInfrastructurePlaceholder(
                 title: homeTitle(route),
@@ -244,6 +286,8 @@ struct HomeNavigationStack: View {
         case .psychologyCoach: return "Psychology Coach"
         case .checkInHistory: return "Check-In History"
         case .checkInDay: return "Daily Check-In"
+        case .activity: return "Activity"
+        case .followRequests: return "Follow Requests"
         case .settings(let route): return route.title
         }
     }
@@ -610,7 +654,8 @@ struct ProfileNavigationStack: View {
         case .activity:
             ActivityHomeView(
                 data: appEnvironment.data,
-                navigationCoordinator: coordinator
+                navigationCoordinator: coordinator,
+                navigationHost: .profile
             )
         case .followRequests:
             FollowRequestsView(
@@ -660,6 +705,7 @@ private struct CreateTabPlaceholder: View {
 private struct ProfileTabBarIcon: View {
     let tabAvatar: UIImage?
     let isSelected: Bool
+    var showsStoryRing: Bool = false
 
     @Environment(\.themeColors) private var colors
 
@@ -676,7 +722,12 @@ private struct ProfileTabBarIcon: View {
         .frame(width: size, height: size)
         .fixedSize()
         .overlay {
-            if tabAvatar != nil, isSelected {
+            if showsStoryRing {
+                StoryAvatarRingStroke(
+                    isHighlighted: true,
+                    diameter: StoryAvatarRingStroke.ringDiameter(avatarSize: size)
+                )
+            } else if tabAvatar != nil, isSelected {
                 Circle()
                     .strokeBorder(colors.accent, lineWidth: 1.5)
                     .frame(width: size, height: size)

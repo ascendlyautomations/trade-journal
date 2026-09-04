@@ -2,15 +2,17 @@ import Foundation
 
 /// Mirrors web `useProfileStatistics` + `ProfileStatisticsTab` analytics formulas.
 ///
-/// Source universe: public trades (`is_public = true`). Mode filter matches
-/// `trade.mode` / `trade.account_type` (Eval / Funded / Live). Backtest rows
-/// are excluded — same as web.
+/// Mode filter uses authoritative ``TradingAccountMode`` only — from linked
+/// `accounts.mode` (profile bootstrap) or denormalized trade `account_type` / `mode`.
+/// Backtest rows are excluded from All / Eval / Funded / Live / Sim — same as web.
 nonisolated enum ProfileStatisticsMetrics {
     enum Mode: String, CaseIterable, Identifiable, Sendable {
         case all
         case eval
         case funded
         case live
+        case sim
+        case backtest
 
         var id: String { rawValue }
 
@@ -20,8 +22,24 @@ nonisolated enum ProfileStatisticsMetrics {
             case .eval: return "Eval"
             case .funded: return "Funded"
             case .live: return "Live"
+            case .sim: return "Sim"
+            case .backtest: return "Backtest"
             }
         }
+
+        var tradingAccountMode: TradingAccountMode? {
+            switch self {
+            case .all: return nil
+            case .eval: return .evaluation
+            case .funded: return .funded
+            case .live: return .live
+            case .sim: return .sim
+            case .backtest: return .backtest
+            }
+        }
+
+        /// Profile Statistics filter chips — Sim/Backtest remain valid modes elsewhere.
+        static let profileFilterCases: [Mode] = [.all, .live, .funded, .eval]
     }
 
     struct TradeInput: Sendable, Equatable {
@@ -29,10 +47,8 @@ nonisolated enum ProfileStatisticsMetrics {
         var createdAt: Date?
         var isLong: Bool
         var session: String?
-        /// Raw trade `mode` (web `trade.mode`).
-        var mode: String?
-        /// Raw trade `account_type` or resolved account mode (web `trade.account_type`).
-        var accountType: String?
+        /// Authoritative account mode for this trade.
+        var accountMode: TradingAccountMode?
     }
 
     struct EquityPoint: Sendable, Equatable, Identifiable {
@@ -69,9 +85,33 @@ nonisolated enum ProfileStatisticsMetrics {
         var equityData: [EquityPoint]
     }
 
+    /// Resolve authoritative account mode: linked account map wins, then trade denormalization.
+    static func resolveAccountMode(
+        trade: Trade,
+        accountModes: [TradingAccountID: TradingAccountMode]
+    ) -> TradingAccountMode? {
+        if let accountID = trade.accountID, let authoritative = accountModes[accountID] {
+            return authoritative
+        }
+        return trade.accountMode
+    }
+
+    static func tradeInput(
+        from trade: Trade,
+        accountModes: [TradingAccountID: TradingAccountMode]
+    ) -> TradeInput {
+        TradeInput(
+            pnl: trade.realizedPnL?.amount,
+            createdAt: trade.createdAt,
+            isLong: trade.side == .long,
+            session: trade.sessionLabel,
+            accountMode: resolveAccountMode(trade: trade, accountModes: accountModes)
+        )
+    }
+
     static func compute(from trades: [TradeInput], selectedMode: Mode) -> Result {
         let filtered = trades.filter { matchesMode($0, selectedMode) }
-        let analytics = excludingBacktest(filtered)
+        let analytics = selectedMode == .backtest ? filtered : excludingBacktest(filtered)
 
         let totalTrades = analytics.count
         let wins = analytics.filter { ($0.pnl ?? 0) > 0 }.count
@@ -138,27 +178,16 @@ nonisolated enum ProfileStatisticsMetrics {
         )
     }
 
-    // MARK: - Filters (web parity)
+    // MARK: - Filters
 
     static func excludingBacktest(_ trades: [TradeInput]) -> [TradeInput] {
-        trades.filter { trade in
-            let mode = normalized(trade.mode)
-            let accountType = normalized(trade.accountType)
-            return mode != "backtest" && accountType != "backtest"
-        }
+        trades.filter { $0.accountMode != .backtest }
     }
 
     static func matchesMode(_ trade: TradeInput, _ selected: Mode) -> Bool {
         if selected == .all { return true }
-        let target = selected.rawValue
-        let modeValue = normalized(trade.mode)
-        let accountType = normalized(trade.accountType)
-        if modeValue == target || accountType == target { return true }
-        // iOS account mode uses `evaluation`; web filter id is `eval`.
-        if selected == .eval {
-            return modeValue == "evaluation" || accountType == "evaluation"
-        }
-        return false
+        guard let target = selected.tradingAccountMode else { return true }
+        return trade.accountMode == target
     }
 
     /// Map `TradingAccountMode` → web filter / account_type string.
@@ -173,10 +202,6 @@ nonisolated enum ProfileStatisticsMetrics {
     }
 
     // MARK: - Private
-
-    private static func normalized(_ value: String?) -> String {
-        (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
 
     private static func maxStreaks(_ trades: [TradeInput]) -> (win: Int, loss: Int) {
         let ordered = trades.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
@@ -205,7 +230,7 @@ nonisolated enum ProfileStatisticsMetrics {
     private static func sessionBreakdown(_ trades: [TradeInput]) -> (total: Int, rows: [SessionRow]) {
         var counts: [String: Int] = [:]
         for trade in trades {
-            let raw = normalized(trade.session)
+            let raw = (trade.session ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let label: String?
             if raw.contains("ny") || raw.contains("new york") {
                 label = "NY"

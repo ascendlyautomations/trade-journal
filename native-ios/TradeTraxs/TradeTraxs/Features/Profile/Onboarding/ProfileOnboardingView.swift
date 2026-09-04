@@ -83,8 +83,11 @@ struct ProfileOnboardingView: View {
             .clipShape(Circle())
             .overlay(Circle().stroke(colors.secondaryText.opacity(0.25), lineWidth: 1))
 
+            let avatarButtonTitle = viewModel.avatarPreview == nil
+                ? "Add Profile Picture"
+                : "Change Profile Picture"
             PhotosPicker(selection: $photoItem, matching: .images) {
-                Text(viewModel.avatarPreview == nil ? "Add Profile Picture" : "Change Profile Picture")
+                Text(avatarButtonTitle)
                     .experienceStyle(.footnote, color: colors.primaryText)
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.vertical, ExperienceSpacing.sm)

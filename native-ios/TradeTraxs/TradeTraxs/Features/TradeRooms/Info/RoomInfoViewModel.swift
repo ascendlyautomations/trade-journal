@@ -21,7 +21,6 @@ final class RoomInfoViewModel {
     private(set) var viewerID: ProfileID?
     private(set) var didLeave = false
     var showsLeaveConfirmation = false
-    var showsReportConfirmation = false
     var statusMessage: String?
 
     private let rooms: any RoomRepository
@@ -110,11 +109,6 @@ final class RoomInfoViewModel {
             statusMessage = ConversationThreadSupport.message(for: error)
             ExperienceHaptics.play(.error)
         }
-    }
-
-    func reportRoom() {
-        ExperienceHaptics.play(.warning)
-        statusMessage = "Thanks — this room was reported for review."
     }
 
     private func performLoad() async {

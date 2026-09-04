@@ -94,7 +94,18 @@ final class CreateAchievementViewModel {
     }
 
     var canPublish: Bool {
-        phase != .publishing && phase != .idle
+        phase == .ready && isFormCompleteForSubmit
+    }
+
+    /// Mirrors ``validate()`` without mutating ``formError`` — drives submit button state.
+    var isFormCompleteForSubmit: Bool {
+        let title = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, imageData != nil else { return false }
+        if isPayoutKind {
+            guard let amount = Self.parsePayout(payoutAmountText), amount > 0 else { return false }
+        }
+        guard achievedAt <= Date().addingTimeInterval(60) else { return false }
+        return true
     }
 
     static let allKinds: [AchievementKind] = [
@@ -168,7 +179,7 @@ final class CreateAchievementViewModel {
     #endif
 
     func publish() {
-        guard canPublish, publishTask == nil else { return }
+        guard phase == .ready, publishTask == nil else { return }
         publishTask = Task { await performPublish() }
     }
 

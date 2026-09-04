@@ -13,12 +13,15 @@ struct CreateReelView: View {
     @State private var showsPreview = false
     @State private var didApplyScreenshotPrefill = false
 
+    private let imagePipeline: any ImagePipeline
+
     @Environment(\.themeColors) private var colors
 
     init(
         data: DataEnvironment,
         onDismiss: @escaping () -> Void
     ) {
+        imagePipeline = data.imagePipeline
         _viewModel = State(
             initialValue: CreateReelViewModel(
                 feed: data.feed,
@@ -33,6 +36,7 @@ struct CreateReelView: View {
     }
 
     init(viewModel: CreateReelViewModel) {
+        imagePipeline = PlaceholderImagePipeline()
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -72,6 +76,7 @@ struct CreateReelView: View {
             NavigationStack {
                 TradePickerView(
                     trades: viewModel.pickerTrades,
+                    imagePipeline: imagePipeline,
                     isLoading: viewModel.isLoadingTrades,
                     onSelect: { trade in
                         viewModel.selectLinkedTrade(trade)
@@ -286,10 +291,19 @@ struct CreateReelView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             CreateComposerSectionLabel(title: "Linked trade")
 
-            if let summary = viewModel.linkedTradeSummary {
+            if let trade = viewModel.linkedTrade {
+                LinkedTradePreviewCard(
+                    trade: trade,
+                    imagePipeline: imagePipeline,
+                    onChange: { showsTradePicker = true },
+                    onRemove: { viewModel.clearLinkedTrade() }
+                )
+                .accessibilityIdentifier("createReel.linkedTrade")
+            } else if viewModel.linkedTradeSummary != nil {
+                // Summary without resolved trade — legacy/dev fallback.
                 HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(summary)
+                        Text(viewModel.linkedTradeSummary ?? "")
                             .experienceStyle(.body, color: colors.primaryText)
                         Text("Clip description uses this trade")
                             .experienceStyle(.caption, color: colors.secondaryText)

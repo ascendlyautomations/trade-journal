@@ -94,8 +94,7 @@ struct PsychologyReportDetailView: View {
                 .experienceStyle(.headline, color: colors.primaryText)
             Text(text)
                 .experienceStyle(.body, color: colors.secondaryText)
-            Text("Numbers above come from TradeTraxs analytics — AI explains supported patterns only.")
-                .experienceStyle(.caption2, color: colors.tertiaryText)
+            ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.psychologyReportAI)
         }
         .padding(ExperienceSpacing.md)
         .background(colors.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))

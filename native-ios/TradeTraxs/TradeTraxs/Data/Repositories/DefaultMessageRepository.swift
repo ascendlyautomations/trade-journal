@@ -154,6 +154,10 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             return try await sendTradeShare(message, tradeID: tradeID)
         }
 
+        if message.kind == .storyShare, let content = message.body {
+            return try await sendStoryShare(message, content: content)
+        }
+
         if message.kind == .voice,
            let audioURL = message.attachments.first?.media.id
         {
@@ -803,10 +807,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             },
             isGroup: isGroup,
             isPinned: dto.is_pinned == true,
-            lastMessagePreview: StoryReplyMessageSupport.sanitizeInboxPreview(
-                type: nil,
-                content: dto.last_message
-            ),
+            lastMessagePreview: ConversationInboxActivity.preview(fromStoredContent: dto.last_message),
             lastMessageAt: lastAt,
             unreadCount: unreadCount,
             isMuted: isMuted,
@@ -889,6 +890,37 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
                     tradeID: tradeID
                 ),
             ],
+            replyToMessageID: message.replyToMessageID,
+            createdAt: ISO8601.date(from: inserted.created_at) ?? message.createdAt,
+            isReadByViewer: true
+        )
+    }
+
+    private func sendStoryShare(_ message: Message, content: String) async throws -> Message {
+        let body = MessageInsertBodies.StoryShare(
+            conversation_id: message.conversationID.rawValue,
+            sender_id: message.senderProfileID.rawValue,
+            type: StoryShareMessageSupport.messageType,
+            content: content,
+            parent_message_id: message.replyToMessageID?.rawValue
+        )
+        let inserted: DMInsertRow = try await supabase.database.insert(
+            body,
+            into: "messages",
+            query: [SupabaseQuery.select("id,created_at")],
+            returning: DMInsertRow.self
+        )
+        guard let id = inserted.id, !id.isEmpty else {
+            throw AppError.unknown(message: "Story share insert returned no id")
+        }
+        scheduleDirectMessagePush(messageID: id)
+        return Message(
+            id: MessageID(id),
+            conversationID: message.conversationID,
+            senderProfileID: message.senderProfileID,
+            kind: .storyShare,
+            body: content,
+            attachments: [],
             replyToMessageID: message.replyToMessageID,
             createdAt: ISO8601.date(from: inserted.created_at) ?? message.createdAt,
             isReadByViewer: true
@@ -1006,6 +1038,30 @@ private nonisolated enum MessageInsertBodies {
             try container.encode(type, forKey: .type)
             try container.encode(trade_id, forKey: .trade_id)
             try container.encodeNil(forKey: .content)
+            try container.encodeNil(forKey: .channel)
+            if let parent_message_id {
+                try container.encode(parent_message_id, forKey: .parent_message_id)
+            }
+        }
+    }
+
+    struct StoryShare: Encodable, Sendable {
+        var conversation_id: String
+        var sender_id: String
+        var type: String
+        var content: String
+        var parent_message_id: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case conversation_id, sender_id, type, content, channel, parent_message_id
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(conversation_id, forKey: .conversation_id)
+            try container.encode(sender_id, forKey: .sender_id)
+            try container.encode(type, forKey: .type)
+            try container.encode(content, forKey: .content)
             try container.encodeNil(forKey: .channel)
             if let parent_message_id {
                 try container.encode(parent_message_id, forKey: .parent_message_id)

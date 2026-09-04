@@ -69,6 +69,9 @@ struct LeaderboardScreenView: View {
                     .padding(.horizontal, ExperienceSpacing.md)
                     .accessibilityIdentifier("leaderboard.timeframe.fallback")
             }
+
+            ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.leaderboard)
+                .padding(.horizontal, ExperienceSpacing.md)
         }
         .accessibilityIdentifier("leaderboard.filters.pinned")
     }
@@ -129,7 +132,7 @@ struct LeaderboardScreenView: View {
 
                         if row.profileID != viewModel.listRows.last?.profileID {
                             Divider()
-                                .padding(.leading, 52 + ExperienceSpacing.md)
+                                .padding(.leading, 32 + 44 + ExperienceSpacing.sm * 2 + ExperienceSpacing.md)
                                 .opacity(0.35)
                         }
                     }

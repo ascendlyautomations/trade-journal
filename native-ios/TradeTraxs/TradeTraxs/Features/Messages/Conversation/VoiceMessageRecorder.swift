@@ -88,7 +88,7 @@ final class VoiceMessageRecorder: ObservableObject {
     private func startTimer() {
         stopTimer()
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self, self.phase == .recording else { return }
                 self.elapsed += 0.1
                 if self.elapsed >= VoiceMessageSupport.maxRecordingDuration {

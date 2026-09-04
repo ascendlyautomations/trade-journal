@@ -11,6 +11,7 @@ enum CompositionRoot {
         AppLog.application.info("CompositionRoot.bootstrap — Phase 4B Supabase integration")
 
         let configuration = AppConfiguration.make(for: .current)
+        AppConfigurationValidator.assertReadyForLaunch(configuration)
         let featureFlags = FeatureFlags.make(for: configuration.buildConfiguration)
         let lifecycle = AppLifecycleHandler()
         let themeManager = ThemeManager()
@@ -124,6 +125,10 @@ enum CompositionRoot {
         authentication.coordinator.prepareSessionTeardown = {
             await pushNotifications.unregisterForLogout()
         }
+        authentication.coordinator.prepareAccountDeletion = {
+            await pushNotifications.unregisterForAccountDeletion()
+            await data.realtimeHub.stop()
+        }
         authentication.coordinator.invalidateSessionCaches = {
             SessionScopedCaches.invalidate(
                 currentUserProfile: currentUserProfile,
@@ -136,10 +141,15 @@ enum CompositionRoot {
             Task {
                 await authentication.manager.awaitNetworkReady()
                 pushNotifications.syncRegistrationForAuthenticatedSession()
+                await DailyCheckInReminderCoordinator.shared.sync()
             }
         }
 
         // Push registration runs after session restore via onAuthenticatedSessionBound.
+
+        let contentReportPresenter = MainActor.assumeIsolated {
+            ContentReportPresenter()
+        }
 
         return AppEnvironment(
             configuration: configuration,
@@ -150,7 +160,8 @@ enum CompositionRoot {
             currentUserProfile: currentUserProfile,
             appBootstrapState: appBootstrapState,
             profileOnboardingGate: profileOnboardingGate,
-            pushNotifications: pushNotifications
+            pushNotifications: pushNotifications,
+            contentReportPresenter: contentReportPresenter
         )
     }
 

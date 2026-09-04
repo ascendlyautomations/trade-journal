@@ -44,6 +44,17 @@ final class UniversalLinksTests: XCTestCase {
         XCTAssertNil(parser.parse(url: url))
     }
 
+    func testAnalystAndAILinksOpenHomeDashboard() throws {
+        let analyst = try XCTUnwrap(URL(string: "https://www.tradetraxs.com/analyst"))
+        XCTAssertEqual(parser.parse(url: analyst), .tab(.home))
+
+        let ai = try XCTUnwrap(URL(string: "https://tradetraxs.com/ai"))
+        XCTAssertEqual(parser.parse(url: ai), .tab(.home))
+
+        let custom = try XCTUnwrap(URL(string: "tradetraxs://analyst"))
+        XCTAssertEqual(parser.parse(url: custom), .tab(.home))
+    }
+
     func testUniversalLinkPolicyMatchesDomains() throws {
         let www = try XCTUnwrap(URL(string: "https://www.tradetraxs.com/trade/t1"))
         let apex = try XCTUnwrap(URL(string: "https://tradetraxs.com/trade/t1"))

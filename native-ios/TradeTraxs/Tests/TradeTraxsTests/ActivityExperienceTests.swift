@@ -7,13 +7,15 @@ final class ActivityExperienceTests: XCTestCase {
         ActivityInboxStore.shared.resetForTesting()
     }
 
-    func testDashboardBellOpensActivityRoute() {
+    func testDashboardBellOpensActivityOnHomeStack() {
         let store = NavigationStore()
         store.sessionPhase = .authenticated
+        store.selectedTab = .home
         let coordinator = NavigationCoordinator(store: store)
-        coordinator.open(.profile(.activity))
-        XCTAssertEqual(store.selectedTab, .profile)
-        XCTAssertEqual(store.paths.profile, [.activity])
+        coordinator.pushHome(.activity)
+        XCTAssertEqual(store.selectedTab, .home)
+        XCTAssertEqual(store.paths.home, [.activity])
+        XCTAssertTrue(store.paths.profile.isEmpty)
     }
 
     func testInboxTypesMatchWebAllowlist() {

@@ -10,4 +10,21 @@ nonisolated protocol TradingReportRepository: Sendable {
 
     /// Returns a cached report or generates the full snapshot first.
     func report(for periodKey: TradingReportPeriodKey, forceNetwork: Bool) async throws -> TradingReport
+
+    /// Years with at least one eligible trade for the signed-in owner.
+    func availableYears(forceNetwork: Bool) async throws -> [Int]
+
+    /// Yearly performance report for the given calendar year and filters.
+    func yearlyReport(
+        for year: Int,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingYearlyReport
+
+    /// Calendar month drill-down from a yearly breakdown row.
+    func monthReport(
+        for ref: TradingReportMonthRef,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingReport
 }

@@ -38,6 +38,26 @@ nonisolated enum TradingAccountMode: String, Hashable, Codable, Sendable {
     case evaluation
     case funded
     case backtest
+
+    /// Parses authoritative `accounts.mode` / denormalized trade `account_type` wire values.
+    static func parseWireValue(_ raw: String?) -> TradingAccountMode? {
+        let normalized = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+        switch normalized {
+        case "eval", "evaluation":
+            return .evaluation
+        case "funded":
+            return .funded
+        case "sim", "replay":
+            return .sim
+        case "backtest":
+            return .backtest
+        case "live":
+            return .live
+        default:
+            return nil
+        }
+    }
 }
 
 /// Prop-firm rule columns on `accounts` — source of truth mirrors web `PropfirmAccountRules`.
@@ -163,6 +183,8 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var importSource: TradeImportSource? = nil
     /// Deterministic import fingerprint — `trades.import_fingerprint`.
     var importFingerprint: String? = nil
+    /// Authoritative account mode from denormalized trade fields / linked account.
+    var accountMode: TradingAccountMode? = nil
     /// Compact public account badge (Eval / Funded / Live / …) from denormalized trade mode fields.
     var publicAccountBadge: String? = nil
     var createdAt: Date

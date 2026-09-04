@@ -60,7 +60,8 @@ final class TradeDetailExperienceTests: XCTestCase {
             session: environment.data.session,
             imagePipeline: environment.data.imagePipeline,
             cache: cache,
-            navigationCoordinator: environment.navigation.coordinator
+            navigationCoordinator: environment.navigation.coordinator,
+            rpc: environment.data.rpc
         )
         viewModel.loadIfNeeded()
         for _ in 0..<30 {
@@ -180,6 +181,131 @@ final class TradeDetailExperienceTests: XCTestCase {
             "https://proj.supabase.co/storage/v1/object/public/screenshots/abc/def/ghi.jpg"
         )
         XCTAssertFalse(url?.absoluteString.contains("%2F") == true)
+    }
+
+    func testExecutionTimestampTextUsesTimeOnlyOnSameDay() {
+        let entry = Date(timeIntervalSince1970: 1_700_000_000)
+        let exitSameDay = entry.addingTimeInterval(900)
+        var trade = makeAnalyticsTrade(id: "same", ticker: "NQ", pnl: 437, rr: 7.1, dayOffset: 0)
+        trade.entryAt = entry
+        trade.exitAt = exitSameDay
+
+        XCTAssertFalse(TradeDisplay.entryExecutionTimeText(for: trade).contains("·"))
+        XCTAssertFalse(TradeDisplay.exitExecutionTimeText(for: trade).contains("·"))
+
+        trade.exitAt = entry.addingTimeInterval(86_400 + 900)
+        XCTAssertTrue(TradeDisplay.entryExecutionTimeText(for: trade).contains("·"))
+        XCTAssertTrue(TradeDisplay.exitExecutionTimeText(for: trade).contains("·"))
+    }
+
+    func testExitExecutionTimeTextShowsDashWhenMissing() {
+        var trade = makeAnalyticsTrade(id: "open", ticker: "NQ", pnl: 0, rr: 1, dayOffset: 0)
+        trade.exitAt = nil
+        XCTAssertEqual(TradeDisplay.exitExecutionTimeText(for: trade), "—")
+    }
+
+    func testCompactRRTextFormatsSignedMultiple() {
+        XCTAssertEqual(TradeDisplay.compactRRText(Decimal(string: "7.1")), "+7.1R")
+        XCTAssertEqual(TradeDisplay.compactRRText(Decimal(string: "-2.4")), "-2.4R")
+        XCTAssertNil(TradeDisplay.compactRRText(nil))
+    }
+
+    func testTradeDetailAnalyticsComparesAgainstOwnerHistory() {
+        let owner = ProfileID("user-analytics")
+        let current = makeAnalyticsTrade(id: "current", ticker: "MNQ", pnl: 437, rr: 7.1, dayOffset: 0)
+        let history = (1...12).map { index in
+            makeAnalyticsTrade(
+                id: "h\(index)",
+                ticker: index <= 8 ? "MNQ" : "ES",
+                pnl: index.isMultiple(of: 3) ? 120 : -40,
+                rr: 1.8,
+                dayOffset: index
+            )
+        }
+
+        let result = TradeDetailAnalytics.analyze(trade: current, history: history + [current])
+        XCTAssertNotNil(result.cohort)
+        XCTAssertEqual(result.tickerHistory?.previousTradeCount, 8)
+        XCTAssertTrue(result.tickerHistory?.comparisonSentence.contains("previous 8 MNQ") == true)
+    }
+
+    func testTickerHistoryUsesNetPnLAndExcludesCurrentTrade() {
+        let owner = ProfileID("user-net")
+        var current = makeAnalyticsTrade(id: "current", ticker: "MNQ", pnl: 500, rr: 2, dayOffset: 0)
+        current.ownerProfileID = owner
+        var win = makeAnalyticsTrade(id: "w1", ticker: "MNQ", pnl: 300, rr: 2, dayOffset: 1)
+        win.ownerProfileID = owner
+        var loss = makeAnalyticsTrade(id: "l1", ticker: "MNQ", pnl: -100, rr: -1, dayOffset: 2)
+        loss.ownerProfileID = owner
+        var duplicate = win
+
+        let result = TradeDetailAnalytics.analyze(
+            trade: current,
+            history: [current, win, loss, duplicate]
+        )
+
+        XCTAssertEqual(result.tickerHistory?.previousTradeCount, 2)
+        XCTAssertEqual(result.tickerHistory?.totalPnL, 200)
+        XCTAssertEqual(result.tickerHistory?.avgTradePnL, 100)
+        XCTAssertEqual(result.tickerHistory?.profitFactor, 3)
+    }
+
+    func testTickerHistoryNormalizesContractSuffix() {
+        let owner = ProfileID("user-root")
+        var current = makeAnalyticsTrade(id: "current", ticker: "MNQ", pnl: 100, rr: 1, dayOffset: 0)
+        current.ownerProfileID = owner
+        var prior = makeAnalyticsTrade(id: "p1", ticker: "MNQU26", pnl: 50, rr: 1, dayOffset: 1)
+        prior.ownerProfileID = owner
+
+        let result = TradeDetailAnalytics.analyze(trade: current, history: [prior, current])
+        XCTAssertEqual(result.tickerHistory?.previousTradeCount, 1)
+        XCTAssertEqual(result.tickerHistory?.totalPnL, 50)
+    }
+
+    func testTickerHistoryExcludesBacktestRows() {
+        let owner = ProfileID("user-bt")
+        var current = makeAnalyticsTrade(id: "current", ticker: "MNQ", pnl: 100, rr: 1, dayOffset: 0)
+        current.ownerProfileID = owner
+        var live = makeAnalyticsTrade(id: "live", ticker: "MNQ", pnl: 50, rr: 1, dayOffset: 1)
+        live.ownerProfileID = owner
+        var backtest = makeAnalyticsTrade(id: "bt", ticker: "MNQ", pnl: 9_999, rr: 9, dayOffset: 2)
+        backtest.ownerProfileID = owner
+        backtest.mode = .backtest
+
+        let result = TradeDetailAnalytics.analyze(trade: current, history: [live, backtest, current])
+        XCTAssertEqual(result.tickerHistory?.previousTradeCount, 1)
+        XCTAssertEqual(result.tickerHistory?.totalPnL, 50)
+    }
+
+    private func makeAnalyticsTrade(
+        id: String,
+        ticker: String,
+        pnl: Decimal,
+        rr: Decimal,
+        dayOffset: Int
+    ) -> Trade {
+        let entry = Date(timeIntervalSince1970: Double(dayOffset) * 86_400)
+        return Trade(
+            id: TradeID(id),
+            ownerProfileID: ProfileID("user-analytics"),
+            accountID: nil,
+            symbol: Symbol(ticker: ticker),
+            side: .long,
+            mode: .live,
+            quantity: 2,
+            entryPrice: 20_000,
+            exitPrice: 20_100,
+            entryAt: entry,
+            exitAt: entry.addingTimeInterval(522),
+            realizedPnL: Money(amount: pnl),
+            riskReward: rr,
+            points: nil,
+            sessionLabel: "NY",
+            visibility: .private,
+            publicCaption: nil,
+            createdAt: entry,
+            updatedAt: entry
+        )
     }
 }
 

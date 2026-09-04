@@ -385,6 +385,10 @@ final class DetailPresentationCache {
         reels[id] = nil
     }
 
+    func removeStory(id: StoryID) {
+        storiesByID[id] = nil
+    }
+
     /// Drop all session seeds when the authenticated user changes.
     func removeAll() {
         trades = [:]

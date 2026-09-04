@@ -20,6 +20,7 @@ enum SessionScopedCaches {
         Task { await LeaderboardTradeRowsCache.shared.invalidate() }
         TradeHistorySessionStore.shared.invalidate()
         FeedSessionStore.shared.invalidate()
+        ViewerActiveStoryStore.shared.invalidate()
         ConversationThreadSessionStore.shared.invalidate()
         DirectConversationPairIndex.shared.invalidate()
         ConversationCreationCoordinator.shared.invalidate()
@@ -46,6 +47,7 @@ enum SessionScopedCaches {
         FollowMutationCoordinator.shared.invalidate()
         GettingStartedStore.shared.invalidate()
         TraderDailyCheckInStore.shared.invalidate()
+        Task { await DailyCheckInReminderCoordinator.shared.cancelAll() }
         SessionDailyCheckInsStore.shared.invalidate()
         PsychologyAnalyticsSessionStore.shared.update(nil)
         PsychologyCoachSessionStore.shared.invalidate()
@@ -54,6 +56,7 @@ enum SessionScopedCaches {
         CheckInHistorySessionStore.shared.invalidate()
         data.detailCache.removeAll()
         data.engagementStore.removeAll()
+        Task { await data.realtimeHub.stop() }
         #if DEBUG
         SessionNetworkProbe.resetForTesting()
         SupabaseSessionUsage.resetForTesting()

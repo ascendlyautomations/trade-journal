@@ -1,14 +1,16 @@
 import Foundation
-import OSLog
 
-/// Backend V2 feature flags — all default OFF.
+/// Backend V2 feature flags.
 ///
-/// Runtime enable (iOS):
-///   1. Process env `BACKEND_V2_SESSION=1` (Xcode Scheme)
+/// Shipped production flags default ON so Release/TestFlight archives match Debug
+/// without relying on Xcode scheme environment variables.
+///
+/// Runtime override (iOS):
+///   1. Process env `BACKEND_V2_SESSION=1` (Xcode Scheme / CI)
 ///   2. UserDefaults `backendV2.session` = true
 ///   3. Test-only: `setFlagForTests(.session, enabled: true)`
 ///
-/// Priority: test > processEnvironment > userDefaults > default(false)
+/// Priority: test > processEnvironment > userDefaults > productionDefault
 nonisolated enum BackendV2FeatureFlag: String, CaseIterable, Sendable {
     case session
     case dashboard
@@ -42,11 +44,25 @@ nonisolated enum BackendV2FeatureFlag: String, CaseIterable, Sendable {
 }
 
 nonisolated enum BackendV2FeatureFlags {
-    private static let defaults: [BackendV2FeatureFlag: Bool] = Dictionary(
-        uniqueKeysWithValues: BackendV2FeatureFlag.allCases.map { ($0, false) }
-    )
+    /// Flags intentionally enabled for production Release archives (matches Debug scheme).
+    static let productionShippedFlags: Set<BackendV2FeatureFlag> = [
+        .session,
+        .dashboard,
+        .feed,
+        .messages,
+        .messageThreads,
+        .rooms,
+        .profile,
+        .propFirm,
+        .activity,
+        .explore,
+        .calendar,
+        .tradesList,
+        .gettingStarted,
+    ]
 
     nonisolated(unsafe) private static var testOverrides: [BackendV2FeatureFlag: Bool] = [:]
+    nonisolated(unsafe) private static var suppressProductionDefaultsForTests = false
     nonisolated(unsafe) private static var didLogStartup = false
 
     static func isEnabled(_ flag: BackendV2FeatureFlag) -> Bool {
@@ -71,7 +87,11 @@ nonisolated enum BackendV2FeatureFlags {
         if UserDefaults.standard.object(forKey: flag.dottedName) != nil {
             return (UserDefaults.standard.bool(forKey: flag.dottedName), "userDefaults")
         }
-        return (defaults[flag] ?? false, "default")
+        if suppressProductionDefaultsForTests {
+            return (false, "default")
+        }
+        let enabled = productionShippedFlags.contains(flag)
+        return (enabled, "productionDefault")
     }
 
     static func allFlags() -> [(flag: BackendV2FeatureFlag, name: String, enabled: Bool)] {
@@ -90,21 +110,17 @@ nonisolated enum BackendV2FeatureFlags {
 
     static func resetFlagsForTests() {
         testOverrides.removeAll()
+        suppressProductionDefaultsForTests = true
         didLogStartup = false
     }
 
-    /// DEBUG-only — logs N1 flags without printing other environment variables.
+    static func enableProductionDefaultsForTests() {
+        suppressProductionDefaultsForTests = false
+    }
+
+    /// Startup logging is handled by ``AppConfigurationValidator``; kept for tests.
     static func logStartupFlags() {
-        #if DEBUG
         guard !didLogStartup else { return }
         didLogStartup = true
-        let logger = Logger(subsystem: AppLog.subsystem, category: "BackendV2.Flags")
-        for flag in [BackendV2FeatureFlag.session, BackendV2FeatureFlag.dashboard] {
-            let resolved = resolve(flag)
-            logger.debug(
-                "\(flag.dottedName, privacy: .public) enabled=\(resolved.enabled, privacy: .public) source=\(resolved.source, privacy: .public)"
-            )
-        }
-        #endif
     }
 }

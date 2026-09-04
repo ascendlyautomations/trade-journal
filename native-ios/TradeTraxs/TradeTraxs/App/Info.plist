@@ -27,12 +27,16 @@
 		</dict>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>TradeTraxs needs the camera to record trading clips.</string>
+	<string>TradeTraxs uses the camera to record video for trading clips and trade attachments.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>TradeTraxs needs the microphone to record voice messages and trading clips.</string>
+	<string>TradeTraxs uses the microphone for voice messages and audio in recorded videos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>TradeTraxs uses your photo library so you can attach images and videos to trades, posts, stories, messages, and your profile.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

@@ -23,7 +23,11 @@ enum CreateReelFixtures {
             sessionLabel: "NY",
             visibility: .public,
             publicCaption: "Liquidity sweep long",
-            thumbnail: nil,
+            thumbnail: MediaReference(
+                id: "https://example.com/dev-reel-trade.jpg",
+                kind: .image,
+                altText: "Trade screenshot"
+            ),
             notePreview: nil,
             createdAt: Date(timeIntervalSince1970: 1_723_300_000),
             updatedAt: Date(timeIntervalSince1970: 1_723_300_000)

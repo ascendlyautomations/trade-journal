@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// Bounded recent-trade picker reused by Create flows that need a trade reference.
+/// Bounded recent-trade picker reused by Create flows and DM/Room trade share.
 struct TradePickerView: View {
     let trades: [Trade]
+    let imagePipeline: any ImagePipeline
     var isLoading: Bool
     var title: String = "Link Trade"
+    var emptyTitle: String = "No trades yet"
+    var emptyMessage: String = "Log a trade first, then link it here."
     var onSelect: (Trade) -> Void
     var onClose: () -> Void
 
@@ -18,32 +21,17 @@ struct TradePickerView: View {
             } else if trades.isEmpty {
                 ExperienceEmptyState(
                     icon: .trades,
-                    title: "No trades yet",
-                    message: "Log a trade first, then link it here."
+                    title: emptyTitle,
+                    message: emptyMessage
                 )
             } else {
                 List(trades) { trade in
                     Button {
                         onSelect(trade)
                     } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("\(trade.symbol.ticker) · \(trade.side.rawValue.capitalized)")
-                                .experienceStyle(.headline, color: colors.primaryText)
-                            HStack(spacing: ExperienceSpacing.sm) {
-                                if let pnl = trade.realizedPnL {
-                                    Text(TradeDisplay.pnlText(pnl))
-                                        .experienceStyle(
-                                            .subheadline,
-                                            color: pnl.amount >= 0 ? colors.profit : colors.loss
-                                        )
-                                }
-                                Text(trade.entryAt, style: .date)
-                                    .experienceStyle(.caption, color: colors.tertiaryText)
-                            }
-                        }
-                        .padding(.vertical, 2)
+                        TradePickerRowView(trade: trade, imagePipeline: imagePipeline)
                     }
-                    .accessibilityIdentifier("create.tradePicker.\(trade.id.rawValue)")
+                    .accessibilityIdentifier(pickerAccessibilityID(for: trade))
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
@@ -56,6 +44,16 @@ struct TradePickerView: View {
                 Button("Close", action: onClose)
             }
         }
-        .accessibilityIdentifier("create.tradePicker")
+        .accessibilityIdentifier(rootAccessibilityIdentifier)
+    }
+
+    private var rootAccessibilityIdentifier: String {
+        title == "Send Trade" ? "conversation.tradePicker" : "create.tradePicker"
+    }
+
+    private func pickerAccessibilityID(for trade: Trade) -> String {
+        title == "Send Trade"
+            ? "conversation.tradePicker.\(trade.id.rawValue)"
+            : "create.tradePicker.\(trade.id.rawValue)"
     }
 }

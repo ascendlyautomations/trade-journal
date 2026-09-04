@@ -58,6 +58,10 @@ struct ProfileHeaderView: View {
 
             ProfileStatisticsRow(metrics: ProfileDisplay.headerMetrics(from: stats))
 
+            if !store.isOwner {
+                ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.pastPerformance)
+            }
+
             if let bio = profile.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty {
                 Text(bio)
                     .font(.system(.subheadline, design: .default))
@@ -93,12 +97,7 @@ struct ProfileHeaderView: View {
     @ViewBuilder
     private func identityBlock(_ profile: Profile, stats: ProfileStats?) -> some View {
         HStack(alignment: .center, spacing: ExperienceSpacing.md) {
-            ExperienceAvatar(
-                initials: store.initials,
-                image: store.avatarImage,
-                size: 88
-            )
-            .accessibilityLabel("\(profile.displayName) profile photo")
+            profileAvatar(profile)
 
             VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                 HStack(spacing: ExperienceSpacing.xxs) {
@@ -155,6 +154,40 @@ struct ProfileHeaderView: View {
             } label: {
                 Label("Share Profile", systemImage: "square.and.arrow.up")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func profileAvatar(_ profile: Profile) -> some View {
+        let avatarSize: CGFloat = 88
+        let ringDiameter = StoryAvatarRingStroke.ringDiameter(avatarSize: avatarSize)
+
+        if let story = store.activeStory {
+            Button {
+                viewModel.openViewerStory(story)
+            } label: {
+                ZStack {
+                    StoryAvatarRingStroke(isHighlighted: true, diameter: ringDiameter)
+                    ExperienceAvatar(
+                        initials: store.initials,
+                        image: store.avatarImage,
+                        size: avatarSize
+                    )
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                store.isOwner ? "View your story" : "View @\(profile.username)'s story"
+            )
+            .accessibilityIdentifier("profile.avatar.story")
+        } else {
+            ExperienceAvatar(
+                initials: store.initials,
+                image: store.avatarImage,
+                size: avatarSize
+            )
+            .accessibilityLabel("\(profile.displayName) profile photo")
+            .accessibilityIdentifier("profile.avatar")
         }
     }
 

@@ -342,7 +342,7 @@ export function validateScreenshotTradeExtractRequest(
         : undefined
       return {
         index,
-        mimeType,
+        mimeType: mimeType as "image/jpeg" | "image/png",
         base64,
         ocrBlocks,
       }

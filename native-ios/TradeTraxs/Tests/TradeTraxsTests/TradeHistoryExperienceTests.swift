@@ -76,6 +76,10 @@ final class TradeHistoryExperienceTests: XCTestCase {
         var priv = makeTrade(id: "v", profileID: profileID, side: .long, pnl: 10)
         priv.visibility = .private
         priv.notePreview = "breakout notes"
+        var setup = makeTrade(id: "s", profileID: profileID, side: .long, pnl: 10)
+        setup.strategy = "Opening Drive"
+        var sessionTrade = makeTrade(id: "sess", profileID: profileID, side: .long, pnl: 10)
+        sessionTrade.sessionLabel = "London"
 
         var filters = TradeHistoryFilters()
         filters.visibility = .public
@@ -88,6 +92,47 @@ final class TradeHistoryExperienceTests: XCTestCase {
 
         let byNotes = TradeHistoryQuery(filters: TradeHistoryFilters(), searchText: "breakout")
         XCTAssertTrue(TradeHistoryLocalMatch.matches(priv, query: byNotes))
+
+        let bySetup = TradeHistoryQuery(filters: TradeHistoryFilters(), searchText: "opening")
+        XCTAssertTrue(TradeHistoryLocalMatch.matches(setup, query: bySetup))
+
+        let bySession = TradeHistoryQuery(filters: TradeHistoryFilters(), searchText: "london")
+        XCTAssertTrue(TradeHistoryLocalMatch.matches(sessionTrade, query: bySession))
+    }
+
+    func testLocalMatchFiltersRRAccountModeAndSession() {
+        let profileID = ProfileID("dev.trades.advanced")
+        let accountID = TradingAccountID("acct-funded")
+        var trade = makeTrade(id: "t", profileID: profileID, side: .long, pnl: 250)
+        trade.riskReward = 2.5
+        trade.sessionLabel = "NY"
+        trade.accountID = accountID
+        trade.accountMode = .funded
+
+        var context = TradeHistoryMatchContext()
+        context.accountModes = [accountID: .funded]
+
+        var filters = TradeHistoryFilters()
+        filters.rrMin = 2
+        filters.accountMode = .funded
+        filters.tradingSession = .ny
+        filters.pnlMin = 200
+        filters.result = .wins
+        let query = TradeHistoryQuery(filters: filters, searchText: "NQ")
+        XCTAssertTrue(TradeHistoryLocalMatch.matches(trade, query: query, context: context))
+
+        filters.rrMin = 3
+        XCTAssertFalse(
+            TradeHistoryLocalMatch.matches(
+                trade,
+                query: TradeHistoryQuery(filters: filters, searchText: "NQ"),
+                context: context
+            )
+        )
+
+        filters = TradeHistoryFilters()
+        filters.accountMode = .eval
+        XCTAssertFalse(TradeHistoryLocalMatch.matches(trade, query: TradeHistoryQuery(filters: filters), context: context))
     }
 
     func testDatePresetsAndCustomRange() {

@@ -1,4 +1,8 @@
 import { storyReplyPreviewText } from "@/lib/storyReplyMessage"
+import {
+  decodeStoryShareContent,
+  storySharePreviewText,
+} from "@/lib/storyShareMessage"
 
 /** Keep APNs alert bodies readable on the lock screen. */
 export const DM_PUSH_PREVIEW_MAX_LENGTH = 100
@@ -43,6 +47,15 @@ export function buildDirectMessagePushPreview(message: {
     const text = storyReplyPreviewText(message.content, "").trim()
     if (text) return truncatePushPreview(text)
     return "Replied to your story"
+  }
+
+  if (type === "story_share") {
+    return truncatePushPreview(storySharePreviewText(message.content))
+  }
+
+  const legacyStoryShare = decodeStoryShareContent(message.content)
+  if (legacyStoryShare) {
+    return truncatePushPreview(storySharePreviewText(message.content))
   }
 
   const text = String(message.content ?? "").trim()
