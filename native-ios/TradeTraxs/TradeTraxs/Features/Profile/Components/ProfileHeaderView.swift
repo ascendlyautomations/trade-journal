@@ -53,14 +53,10 @@ struct ProfileHeaderView: View {
     private func loadedHeader(_ profile: Profile) -> some View {
         let stats = store.stats
 
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             identityBlock(profile, stats: stats)
 
             ProfileStatisticsRow(metrics: ProfileDisplay.headerMetrics(from: stats))
-
-            if !store.isOwner {
-                ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.pastPerformance)
-            }
 
             if let bio = profile.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty {
                 Text(bio)
@@ -83,6 +79,18 @@ struct ProfileHeaderView: View {
                 isMessaging: viewModel.isOpeningMessage,
                 canMessage: viewModel.canMessage
             )
+
+            if store.isOwner {
+                ProfileTradeRoomDestinationRow(
+                    title: store.hasTradeRoom ? "View Trade Room" : "Create Trade Room",
+                    accessibilityIdentifier: store.hasTradeRoom
+                        ? "profile.viewTradeRoom"
+                        : "profile.createTradeRoom",
+                    action: store.hasTradeRoom ? viewModel.openTradeRoom : viewModel.createTradeRoom
+                )
+            } else if store.canShowVisitorTradeRoomCTA {
+                ProfileTradeRoomDestinationRow(action: viewModel.openTradeRoom)
+            }
         }
         .sheet(isPresented: $viewModel.isSharePresented) {
             if let url = viewModel.shareURL {

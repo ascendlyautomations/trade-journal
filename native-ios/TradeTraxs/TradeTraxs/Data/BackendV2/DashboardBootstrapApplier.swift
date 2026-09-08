@@ -7,6 +7,10 @@ nonisolated enum DashboardBootstrapApplier {
         var trades: [Trade]
         var payoutTotal: Decimal?
         var skippedTrades: Int
+        /// `trade_window_meta.total_trade_count` when loaded via dashboard bootstrap RPC.
+        var totalTradeCount: Int?
+        /// `trade_window_meta.history_complete` — when false, trade window may be partial.
+        var tradeHistoryComplete: Bool = true
     }
 
     @MainActor
@@ -43,7 +47,9 @@ nonisolated enum DashboardBootstrapApplier {
             accounts: accounts,
             trades: mapped.trades,
             payoutTotal: payout,
-            skippedTrades: mapped.skipped
+            skippedTrades: mapped.skipped,
+            totalTradeCount: bootstrap.data.trade_window_meta.total_trade_count,
+            tradeHistoryComplete: bootstrap.data.trade_window_meta.history_complete
         )
     }
 

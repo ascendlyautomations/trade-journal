@@ -132,9 +132,15 @@ struct DashboardHomeView: View {
             GettingStartedRefreshCenter.noteEligibleUserAction()
         }
         .onChange(of: FollowMutationCoordinator.shared.revision) { _, _ in
-            GettingStartedRefreshCenter.noteEligibleUserAction()
+            switch FollowMutationCoordinator.shared.latest {
+            case .followed, .unfollowed, .followRequestApproved:
+                GettingStartedRefreshCenter.noteEligibleUserAction()
+            default:
+                break
+            }
         }
         .onChange(of: ContentMutationStore.shared.revision) { _, _ in
+            viewModel.handleContentMutation()
             GettingStartedRefreshCenter.noteEligibleUserAction()
         }
         .onChange(of: TraderDailyCheckInStore.shared.todayCheckIn?.updatedAt) { _, _ in

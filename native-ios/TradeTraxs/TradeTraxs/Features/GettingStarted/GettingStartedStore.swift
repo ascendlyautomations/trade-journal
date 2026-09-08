@@ -47,6 +47,7 @@ final class GettingStartedStore {
 
     func loadIfNeeded() {
         guard BackendV2FeatureFlags.isEnabled(.gettingStarted) else { return }
+        guard !signalsReady else { return }
         guard refreshTask == nil else { return }
 
         refreshTask = Task { [weak self] in

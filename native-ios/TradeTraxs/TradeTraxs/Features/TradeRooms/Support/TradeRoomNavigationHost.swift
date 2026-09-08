@@ -30,6 +30,14 @@ enum TradeRoomNavigationHost: Hashable, Sendable {
         }
     }
 
+    func manageRoom(_ id: RoomID) -> AppDestination {
+        switch self {
+        case .messages: return .messages(.manageRoom(id))
+        case .feed: return .feed(.manageRoom(id))
+        case .profile: return .profile(.manageRoom(id))
+        }
+    }
+
     func profile(_ id: ProfileID) -> AppDestination {
         switch self {
         case .messages: return .messages(.profile(id))

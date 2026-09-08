@@ -20,16 +20,19 @@ enum SessionScopedCaches {
         Task { await LeaderboardTradeRowsCache.shared.invalidate() }
         TradeHistorySessionStore.shared.invalidate()
         FeedSessionStore.shared.invalidate()
+        FeedBlockedAuthorsFilter.shared.clear()
         ViewerActiveStoryStore.shared.invalidate()
         ConversationThreadSessionStore.shared.invalidate()
         DirectConversationPairIndex.shared.invalidate()
         ConversationCreationCoordinator.shared.invalidate()
         CalendarMonthSessionStore.shared.invalidate()
         SessionAccountsStore.shared.invalidate()
+        SessionPayoutCyclesStore.shared.invalidateAll()
         SessionProfileStore.shared.invalidate()
         SessionTradeEntityStore.shared.invalidate()
         SessionOwnerTradesStore.shared.invalidate()
         SessionMemberRoomsStore.shared.invalidate()
+        SessionRoomMemberTagsStore.shared.invalidate()
         ProfileRequestFlight.shared.invalidate()
         RepositoryRequestFlight.shared.invalidate()
         Task { await SessionFollowingStore.shared.invalidate() }
@@ -56,6 +59,7 @@ enum SessionScopedCaches {
         CheckInHistorySessionStore.shared.invalidate()
         data.detailCache.removeAll()
         data.engagementStore.removeAll()
+        data.vaultStore.removeAll()
         Task { await data.realtimeHub.stop() }
         #if DEBUG
         SessionNetworkProbe.resetForTesting()

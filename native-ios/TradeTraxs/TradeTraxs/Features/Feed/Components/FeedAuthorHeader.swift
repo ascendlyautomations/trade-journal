@@ -7,43 +7,61 @@ struct FeedAuthorHeader: View {
     let timestamp: Date
     let imagePipeline: any ImagePipeline
     let onOpenAuthor: () -> Void
+    var isOwner: Bool = false
+    var onReport: (() -> Void)? = nil
+    var onAddToVault: (() -> Void)? = nil
+    var onManageInVault: (() -> Void)? = nil
+    var onEdit: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        Button(action: onOpenAuthor) {
-            HStack(spacing: ExperienceSpacing.sm) {
-                FollowListAvatarView(
-                    profile: resolvedProfile,
-                    imagePipeline: imagePipeline,
-                    size: 36
-                )
-                .accessibilityHidden(true)
+        HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
+            Button(action: onOpenAuthor) {
+                HStack(spacing: ExperienceSpacing.sm) {
+                    FollowListAvatarView(
+                        profile: resolvedProfile,
+                        imagePipeline: imagePipeline,
+                        size: 36
+                    )
+                    .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(displayName)
-                        .experienceStyle(.headline, color: colors.primaryText)
-                        .lineLimit(1)
-
-                    HStack(spacing: 4) {
-                        if !username.isEmpty {
-                            Text("@\(username)")
-                                .experienceStyle(.caption, color: colors.secondaryText)
-                                .lineLimit(1)
-                            Text("·")
-                                .experienceStyle(.caption, color: colors.tertiaryText)
-                        }
-                        Text(MessagesInboxSupport.relativeTimestamp(timestamp))
-                            .experienceStyle(.caption, color: colors.tertiaryText)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(displayName)
+                            .experienceStyle(.headline, color: colors.primaryText)
                             .lineLimit(1)
-                    }
-                }
 
-                Spacer(minLength: 0)
+                        HStack(spacing: 4) {
+                            if !username.isEmpty {
+                                Text("@\(username)")
+                                    .experienceStyle(.caption, color: colors.secondaryText)
+                                    .lineLimit(1)
+                                Text("·")
+                                    .experienceStyle(.caption, color: colors.tertiaryText)
+                            }
+                            Text(MessagesInboxSupport.relativeTimestamp(timestamp))
+                                .experienceStyle(.caption, color: colors.tertiaryText)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+
+            ContentOverflowMenu(
+                isOwner: isOwner,
+                onReport: onReport,
+                onAddToVault: onAddToVault,
+                onManageInVault: onManageInVault,
+                onEdit: onEdit,
+                onDelete: onDelete,
+                accessibilityIdentifier: "feed.header.overflow.\(fallbackID.rawValue)"
+            )
         }
-        .buttonStyle(.plain)
         .accessibilityIdentifier("feed.author.\(fallbackID.rawValue)")
     }
 

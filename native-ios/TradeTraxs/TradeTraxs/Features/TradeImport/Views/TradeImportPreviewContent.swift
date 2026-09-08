@@ -137,6 +137,7 @@ struct TradeImportPreviewContent: View {
                     onCancel: onCancelReview
                 )
             }
+            .experienceProtectedFormDismiss()
         }
         .accessibilityIdentifier("\(config.accessibilityPrefix).preview")
     }

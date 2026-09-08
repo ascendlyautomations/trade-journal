@@ -136,6 +136,11 @@ final class NavigationCoordinator {
         }
     }
 
+    /// Add Achievement with optional production prefill (e.g. after Record Payout).
+    func openComposeAchievement() {
+        openCompose(.achievement)
+    }
+
     /// Full-screen native trade editor (web `InputTradeForm` edit mode).
     func editTrade(_ tradeID: TradeID) {
         present(fullScreen: .editTrade(tradeID))
@@ -195,7 +200,7 @@ final class NavigationCoordinator {
             InboxMarkReadCoordinator.shared.prepareOpenConversation(conversationID)
         case .room(let roomID):
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
-        case .roomMembers, .roomInfo, .sharedTrade, .sharedPost, .sharedReel, .profile, .settings:
+        case .roomMembers, .roomInfo, .manageRoom, .sharedTrade, .sharedPost, .sharedReel, .sharedAchievement, .profile, .settings:
             break
         }
         let pathBefore = store.paths.messages.count
@@ -228,6 +233,20 @@ final class NavigationCoordinator {
             pathAfter: store.paths.profile.count
         )
         emit(.pushed(tab: .profile, description: String(describing: route)))
+    }
+
+    /// Opens trade detail on the active tab stack without switching tabs.
+    func pushTradeDetail(_ tradeID: TradeID, cache: DetailPresentationCache) {
+        ExperienceHaptics.play(.selection)
+        if let trade = cache.trade(id: tradeID) {
+            cache.seed(trade)
+        }
+        switch store.selectedTab {
+        case .profile:
+            pushProfile(.trade(tradeID))
+        default:
+            pushFeed(.trade(tradeID))
+        }
     }
 
     func pop() {

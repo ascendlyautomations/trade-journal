@@ -4,7 +4,7 @@ struct ProfileHeaderSkeleton: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             HStack(alignment: .center, spacing: ExperienceSpacing.md) {
                 Circle()
                     .fill(colors.skeleton)
@@ -33,16 +33,11 @@ struct ProfileHeaderSkeleton: View {
                 isLoading: true
             )
 
-            ExperienceSkeleton(height: 14, cornerRadius: ExperienceRadius.xs)
-                .frame(maxWidth: .infinity)
-
             HStack(spacing: ExperienceSpacing.xs) {
-                ExperienceSkeleton(height: 32, cornerRadius: ExperienceRadius.button)
-                    .frame(width: 96)
-                ExperienceSkeleton(height: 32, cornerRadius: ExperienceRadius.button)
-                    .frame(width: 72)
-                ExperienceSkeleton(height: 32, cornerRadius: ExperienceRadius.button)
-                    .frame(width: 32)
+                ExperienceSkeleton(height: 28, cornerRadius: ExperienceRadius.button)
+                    .frame(width: 64)
+                ExperienceSkeleton(height: 28, cornerRadius: ExperienceRadius.button)
+                    .frame(width: 68)
                 Spacer(minLength: 0)
             }
             .frame(minHeight: ExperienceAccessibility.minTouchTarget, alignment: .center)

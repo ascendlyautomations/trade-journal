@@ -54,4 +54,26 @@ extension View {
     func experienceScreenBackground() -> some View {
         modifier(ExperienceScreenBackgroundModifier())
     }
+
+    /// Opaque Feed navigation chrome while the vertical Clips pager scrolls.
+    func experienceFeedClipsChrome(isActive: Bool) -> some View {
+        modifier(FeedClipsChromeModifier(isActive: isActive))
+    }
+}
+
+/// Keeps Feed nav/filter regions opaque while Clips video scrolls underneath.
+private struct FeedClipsChromeModifier: ViewModifier {
+    var isActive: Bool
+    @Environment(\.themeColors) private var colors
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isActive {
+            content
+                .toolbarBackground(colors.navigationBackground, for: .navigationBar)
+                .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+        } else {
+            content
+        }
+    }
 }

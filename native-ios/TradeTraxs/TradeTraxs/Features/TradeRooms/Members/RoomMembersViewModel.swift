@@ -18,6 +18,9 @@ final class RoomMembersViewModel {
     private(set) var members: [RoomMemberItem] = []
     private(set) var viewerID: ProfileID?
     var searchText = ""
+    var pendingMemberAction: ManageRoomViewModel.MemberAction?
+    var showsMemberActionConfirmation = false
+    var statusMessage: String?
 
     private let rooms: any RoomRepository
     private let profiles: any ProfileRepository
@@ -26,8 +29,11 @@ final class RoomMembersViewModel {
     private let navigationCoordinator: NavigationCoordinator?
     private let navigationHost: TradeRoomNavigationHost
     private let inboxStore: MessagesInboxStore
+    private let tagStore: SessionRoomMemberTagsStore
 
     private var loadTask: Task<Void, Never>?
+    private var loadGeneration: UInt64 = 0
+    private var initialLoadStarted = false
 
     init(
         roomID: RoomID,
@@ -37,7 +43,8 @@ final class RoomMembersViewModel {
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator? = nil,
         navigationHost: TradeRoomNavigationHost = .messages,
-        inboxStore: MessagesInboxStore? = nil
+        inboxStore: MessagesInboxStore? = nil,
+        tagStore: SessionRoomMemberTagsStore? = nil
     ) {
         self.roomID = roomID
         self.rooms = rooms
@@ -47,6 +54,7 @@ final class RoomMembersViewModel {
         self.navigationCoordinator = navigationCoordinator
         self.navigationHost = navigationHost
         self.inboxStore = inboxStore ?? .shared
+        self.tagStore = tagStore ?? .shared
     }
 
     var filteredMembers: [RoomMemberItem] {
@@ -59,15 +67,104 @@ final class RoomMembersViewModel {
         }
     }
 
+    var isOwner: Bool {
+        guard let viewerID, let room else { return false }
+        return room.ownerProfileID == viewerID
+    }
+
+    func requestMemberAction(_ action: ManageRoomViewModel.MemberAction) {
+        pendingMemberAction = action
+        showsMemberActionConfirmation = true
+    }
+
+    func confirmMemberAction() async {
+        guard isOwner,
+              let management = rooms as? any RoomManagementRepository,
+              let viewerID,
+              let room,
+              let action = pendingMemberAction
+        else { return }
+        let targetID: ProfileID
+        switch action {
+        case .remove(let profileID), .ban(let profileID):
+            targetID = profileID
+        }
+        guard targetID != viewerID, targetID != room.ownerProfileID else { return }
+        pendingMemberAction = nil
+        showsMemberActionConfirmation = false
+        do {
+            switch action {
+            case .remove(let profileID):
+                try await management.removeMember(roomID: roomID, profileID: profileID)
+                statusMessage = "Member removed."
+            case .ban(let profileID):
+                try await management.banMember(
+                    roomID: roomID,
+                    profileID: profileID,
+                    bannedBy: viewerID
+                )
+                statusMessage = "Member banned."
+            }
+            members.removeAll { $0.id == targetID }
+            let activeCount = (try? await rooms.activeMemberCounts(for: [roomID]))?[roomID] ?? members.count
+            if var updated = self.room {
+                updated.memberCount = activeCount
+                self.room = updated
+            }
+            RoomMemberCountSync.apply(
+                roomID: roomID,
+                count: activeCount,
+                inboxStore: inboxStore,
+                viewerID: viewerID
+            )
+            ExperienceHaptics.play(.success)
+        } catch {
+            statusMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.error)
+        }
+    }
+
+    func openManageRoom() {
+        guard isOwner else { return }
+        navigationCoordinator?.open(navigationHost.manageRoom(roomID))
+    }
+
+    func canManageMember(_ item: RoomMemberItem) -> Bool {
+        guard isOwner, let viewerID, let room else { return false }
+        return item.role != .owner
+            && item.id != viewerID
+            && item.id != room.ownerProfileID
+    }
+
+    func memberActionTitle(for action: ManageRoomViewModel.MemberAction) -> String {
+        switch action {
+        case .remove: return "Remove this member from the room?"
+        case .ban: return "Ban this member from the room?"
+        }
+    }
+
+    func memberActionButtonTitle(for action: ManageRoomViewModel.MemberAction) -> String {
+        switch action {
+        case .remove: return "Remove Member"
+        case .ban: return "Ban Member"
+        }
+    }
+
     func loadIfNeeded() {
-        guard loadTask == nil, phase != .loaded else { return }
-        loadTask = Task { await performLoad() }
+        guard !initialLoadStarted, loadTask == nil, phase != .loaded else { return }
+        initialLoadStarted = true
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        loadTask = Task { await performLoad(generation: generation) }
     }
 
     func retry() {
         guard loadTask == nil else { return }
+        loadGeneration &+= 1
+        initialLoadStarted = true
         phase = .idle
-        loadTask = Task { await performLoad() }
+        let generation = loadGeneration
+        loadTask = Task { await performLoad(generation: generation) }
     }
 
     func openProfile(_ profileID: ProfileID) {
@@ -75,8 +172,11 @@ final class RoomMembersViewModel {
         navigationCoordinator?.open(navigationHost.profile(profileID))
     }
 
-    private func performLoad() async {
+    private func performLoad(generation: UInt64) async {
+        RoomMembersLoadProbe.begin(roomID: roomID)
         phase = .loading
+        defer { loadTask = nil }
+
         let viewer = await session.currentUserID.map { ProfileID($0.rawValue) }
         viewerID = viewer
 
@@ -103,89 +203,154 @@ final class RoomMembersViewModel {
                     viewerID: viewer
                 )
                 phase = .loaded
-                loadTask = nil
+                RoomMembersLoadProbe.completed(roomID: roomID, memberCount: members.count)
                 return
             }
 
             let loaded = try await rooms.room(id: roomID)
+            guard generation == loadGeneration else { return }
             room = loaded
 
-            let viewerMembership: RoomMembership? = if let viewer {
-                try? await rooms.membership(roomID: roomID, profileID: viewer)
-            } else {
-                nil
-            }
+            let activeRows = try await rooms.activeMembers(
+                roomID: roomID,
+                ownerProfileID: loaded.ownerProfileID
+            )
+            guard generation == loadGeneration else { return }
 
-            // Active participants from recent room messages (no members list API on RoomRepository).
-            let page = try await rooms.messages(roomID: roomID, page: PageRequest(limit: 80))
-            var neededIDs: [ProfileID] = [loaded.ownerProfileID]
-            if let viewer, viewer != loaded.ownerProfileID {
-                neededIDs.append(viewer)
-            }
-            for message in page.items {
-                neededIDs.append(message.senderProfileID)
-            }
-            _ = try? await SessionProfileStore.shared.profiles(
-                ids: neededIDs,
+            let profileIDs = activeRows.map(\.profile.id)
+            let fetchedProfiles = try? await SessionProfileStore.shared.profiles(
+                ids: profileIDs,
                 detailCache: detailCache,
                 repository: profiles
             )
+            RoomMembersLoadProbe.profiles(count: fetchedProfiles?.count ?? 0)
 
-            var assembled: [RoomMemberItem] = []
-            if let ownerProfile = resolveProfile(loaded.ownerProfileID) {
-                assembled.append(
-                    RoomMemberItem(
-                        profile: ownerProfile,
-                        role: .owner,
-                        joinedAt: loaded.createdAt,
-                        isOnline: false
-                    )
+            members = activeRows.map { row in
+                RoomMemberItem(
+                    profile: resolveProfile(row.profile.id) ?? row.profile,
+                    role: row.role,
+                    joinedAt: row.joinedAt,
+                    isOnline: false,
+                    tags: row.tags
                 )
             }
-
-            if let viewer,
-               let viewerMembership,
-               viewer != loaded.ownerProfileID,
-               let viewerProfile = resolveProfile(viewer)
-            {
-                assembled.append(
-                    RoomMemberItem(
-                        profile: viewerProfile,
-                        role: viewerMembership.role,
-                        joinedAt: viewerMembership.joinedAt,
-                        isOnline: true
-                    )
-                )
-            }
-
-            var seen = Set(assembled.map(\.id))
-            for message in page.items {
-                let senderID = message.senderProfileID
-                guard !seen.contains(senderID) else { continue }
-                seen.insert(senderID)
-                guard let profile = resolveProfile(senderID) else { continue }
-                let role: RoomMemberRole = senderID == loaded.ownerProfileID ? .owner : .member
-                assembled.append(
-                    RoomMemberItem(
-                        profile: profile,
-                        role: role,
-                        joinedAt: nil,
-                        isOnline: false
-                    )
-                )
-            }
-
-            members = assembled.sorted { lhs, rhs in
+            .sorted { lhs, rhs in
                 roleRank(lhs.role) < roleRank(rhs.role)
                     || (lhs.role == rhs.role
                         && lhs.profile.displayName.localizedCaseInsensitiveCompare(rhs.profile.displayName)
                             == .orderedAscending)
             }
+
+            let listCount = members.count
+            let activeCount = (try? await rooms.activeMemberCounts(for: [roomID]))?[roomID] ?? listCount
+            guard generation == loadGeneration else { return }
+
+            room?.memberCount = activeCount
+            RoomMemberCountSync.apply(
+                roomID: roomID,
+                count: activeCount,
+                inboxStore: inboxStore,
+                viewerID: viewer
+            )
+            RoomMemberCountProbe.record(
+                roomID: roomID,
+                displayedMemberCount: activeCount,
+                activeMembershipCount: activeCount,
+                loadedMemberListCount: listCount,
+                source: .network
+            )
             phase = .loaded
+            RoomMembersLoadProbe.completed(roomID: roomID, memberCount: listCount)
+
+            await enrichMemberTagsIfNeeded(
+                generation: generation,
+                room: loaded,
+                viewerID: viewer
+            )
         } catch {
+            guard generation == loadGeneration else { return }
+            RoomMembersLoadProbe.failed(
+                stage: failureStage(for: error),
+                operation: failureOperation(for: error),
+                error: error
+            )
             phase = .failed(ConversationThreadSupport.message(for: error))
         }
-        loadTask = nil
+    }
+
+    private func enrichMemberTagsIfNeeded(
+        generation: UInt64,
+        room: TradeRoom,
+        viewerID: ProfileID?
+    ) async {
+        guard generation == loadGeneration else { return }
+        guard let management = rooms as? any RoomManagementRepository else { return }
+
+        let isOwner = viewerID == room.ownerProfileID
+        let ensureStatus = await tagStore.ensureDefaultTagsIfOwner(
+            roomID: roomID,
+            isOwner: isOwner,
+            repository: management
+        )
+        RoomMembersLoadProbe.ensureDefaults(status: ensureStatus)
+
+        do {
+            try await tagStore.hydrateTags(roomID: roomID, repository: management)
+            guard generation == loadGeneration else { return }
+            RoomMembersLoadProbe.tags(count: tagStore.tags(for: roomID).count)
+            RoomMembersLoadProbe.assignments(count: tagStore.assignments(for: roomID).count)
+            applyCachedTagsToMembers()
+        } catch {
+            RoomMembersLoadProbe.tagEnrichmentFailed(
+                operation: "SessionRoomMemberTagsStore.hydrateTags",
+                error: error
+            )
+        }
+    }
+
+    private func applyCachedTagsToMembers() {
+        members = members.map { item in
+            var updated = item
+            updated.tags = tagStore.tags(for: item.id, roomID: roomID)
+            return updated
+        }
+    }
+
+    private func failureStage(for error: Error) -> RoomMembersLoadProbe.Stage {
+        let description = String(describing: error).lowercased()
+        if description.contains("room_members") || description.contains("decode") {
+            return .memberships
+        }
+        if description.contains("profile") {
+            return .profiles
+        }
+        if description.contains("ensure_room_member_tags") || description.contains("ensuredefault") {
+            return .ensureDefaults
+        }
+        if description.contains("room_member_tags") {
+            return .tags
+        }
+        if description.contains("room_member_tag_assignments") {
+            return .assignments
+        }
+        return .room
+    }
+
+    private func failureOperation(for error: Error) -> String {
+        let description = String(describing: error).lowercased()
+        if description.contains("room_members") {
+            return "DefaultRoomRepository.fetchActiveMemberRows"
+        }
+        if description.contains("profiles") {
+            return "SessionProfileStore.profiles.batch"
+        }
+        if description.contains("room_member_tag_assignments") {
+            return "DefaultRoomRepository.memberTagAssignments"
+        }
+        if description.contains("room_member_tags") {
+            return "DefaultRoomRepository.memberTags"
+        }
+        return "DefaultRoomRepository.room"
     }
 
     private func resolveProfile(_ id: ProfileID) -> Profile? {

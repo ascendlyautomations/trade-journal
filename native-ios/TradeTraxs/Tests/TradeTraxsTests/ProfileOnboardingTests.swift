@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 @testable import TradeTraxs
 
@@ -242,6 +243,86 @@ final class ProfileOnboardingTests: XCTestCase {
         )
         XCTAssertFalse(ProfileOnboardingPolicy.profileNeedsOnboarding(snapshot))
     }
+
+    func testBootstrapSnapshotPrefersGoogleDisplayNameAndAvatar() {
+        let viewerID = UUID().uuidString
+        let snapshot = ProfileOnboardingSnapshot.from(
+            session: SessionProfileV1(
+                id: viewerID,
+                username: "user_abcd1234",
+                avatar_url: "https://cdn.example.com/session-avatar.jpg",
+                onboarding_completed: false,
+                bio: nil,
+                trading_style: nil,
+                trader_type: nil,
+                started_trading: nil
+            ),
+            viewer: ViewerCardV1(
+                id: viewerID,
+                username: "user_abcd1234",
+                display_name: "Alex Morgan",
+                avatar_url: "https://cdn.example.com/google-avatar.jpg",
+                is_private: false,
+                onboarding_flags: [:],
+                entitlement: EntitlementV1(plan: "free", status: nil, flags: [:])
+            ),
+            viewerID: viewerID
+        )
+        XCTAssertEqual(snapshot.displayName, "Alex Morgan")
+        XCTAssertEqual(snapshot.avatarURL, "https://cdn.example.com/session-avatar.jpg")
+    }
+
+    @MainActor
+    func testAvatarUploadFailureAllowsContinueWithoutPhoto() async {
+        let profileID = ProfileID(UUID().uuidString)
+        let repo = RecordingOnboardingProfileRepository()
+        repo.storedSnapshot = ProfileOnboardingSnapshot(
+            profileID: profileID,
+            onboardingCompleted: false
+        )
+        let gate = ProfileOnboardingGateStore(
+            profiles: repo,
+            session: FixedSessionProvider(userID: UserID(profileID.rawValue)),
+            rpc: nil,
+            detailCache: nil,
+            realtimeHub: nil,
+            profileStore: CurrentUserProfileStore(
+                profiles: repo,
+                session: FixedSessionProvider(userID: UserID(profileID.rawValue)),
+                imagePipeline: PlaceholderImagePipeline()
+            )
+        )
+
+        let uploadService = FailingAvatarUploadService()
+        let vm = ProfileOnboardingViewModel(
+            snapshot: repo.storedSnapshot!,
+            profiles: repo,
+            gateStore: gate,
+            uploadService: uploadService,
+            objectStorage: OnboardingStubObjectStorage(),
+            appConfiguration: AppConfiguration.make(for: .debug)
+        )
+        vm.username = "alex_m"
+        vm.tradingStyle = "Scalping"
+        vm.traderType = .futures
+        vm.startedTrading = "2020-01-01"
+        guard let avatarImage = UIImage(systemName: "person.fill") else {
+            XCTFail("Expected system image")
+            return
+        }
+        vm.setAvatarImage(avatarImage)
+
+        await vm.submit()
+        XCTAssertTrue(vm.canContinueWithoutPhoto)
+        XCTAssertNotNil(vm.avatarUploadError)
+
+        await vm.continueWithoutPhoto()
+        if case .complete = gate.phase {
+            XCTAssertTrue(true)
+        } else {
+            XCTFail("Expected gate complete after continue without photo")
+        }
+    }
 }
 
 private final class RecordingOnboardingProfileRepository: ProfileRepository, @unchecked Sendable {
@@ -271,7 +352,7 @@ private final class RecordingOnboardingProfileRepository: ProfileRepository, @un
 
     func profile(username: String) async throws -> Profile { try await profile(id: ProfileID(UUID().uuidString)) }
 
-    func onboardingSnapshot(for profileID: ProfileID) async throws -> ProfileOnboardingSnapshot {
+    func onboardingSnapshot(for profileID: ProfileID, authoritative: Bool) async throws -> ProfileOnboardingSnapshot {
         storedSnapshot ?? ProfileOnboardingSnapshot(profileID: profileID, onboardingCompleted: false)
     }
 
@@ -343,6 +424,13 @@ private func makeOnboardingViewModel(
 private struct OnboardingStubUploadService: UploadService {
     func upload(_ request: UploadRequest) async throws -> MediaReference {
         MediaReference(id: request.path, kind: .image, altText: nil)
+    }
+}
+
+private struct FailingAvatarUploadService: UploadService {
+    func upload(_ request: UploadRequest) async throws -> MediaReference {
+        _ = request
+        throw AppError.transport(.server(statusCode: 500, message: "upload failed"))
     }
 }
 

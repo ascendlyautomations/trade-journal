@@ -38,12 +38,19 @@ struct RoomMemberRowView: View {
                         .experienceStyle(.footnote, color: colors.secondaryText)
                         .lineLimit(1)
                     HStack(spacing: ExperienceSpacing.xs) {
-                        Text(roleLabel)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(colors.accent)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(colors.accent.opacity(0.12), in: Capsule())
+                        RoomMemberTagChipsView(
+                            tags: item.tags,
+                            showsOwnerBadge: item.role == .owner,
+                            limit: 3
+                        )
+                        if item.role == .member && item.tags.isEmpty {
+                            Text("Member")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(colors.secondaryText)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(colors.fillSecondary, in: Capsule())
+                        }
                         if let joinedAt = item.joinedAt {
                             Text("Joined \(MessagesInboxSupport.relativeTimestamp(joinedAt))")
                                 .experienceStyle(.caption2, color: colors.tertiaryText)
@@ -58,13 +65,5 @@ struct RoomMemberRowView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("tradeRooms.member.\(item.id.rawValue)")
-    }
-
-    private var roleLabel: String {
-        switch item.role {
-        case .owner: return "Owner"
-        case .admin: return "Moderator"
-        case .member: return "Member"
-        }
     }
 }

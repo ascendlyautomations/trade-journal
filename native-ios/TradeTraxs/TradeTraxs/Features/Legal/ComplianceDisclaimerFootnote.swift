@@ -8,9 +8,7 @@ enum ComplianceDisclaimerCopy {
         "Coach responses are AI-generated, may contain mistakes, and are for educational and informational purposes only — not financial or investment advice."
 
     static let leaderboard =
-        "Performance shown is for informational purposes only. Past performance does not guarantee future results."
-
-    static let pastPerformance = "Past performance does not guarantee future results."
+        "Performance shown is for informational purposes only."
 
     static let screenshotAI =
         "AI extraction may be inaccurate. Review all fields before importing."

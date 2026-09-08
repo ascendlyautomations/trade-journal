@@ -9,6 +9,9 @@ nonisolated enum ConversationInboxActivity {
     static func preview(for message: Message) -> String {
         if message.kind == .system { return "System message" }
         if message.kind == .tradeShare { return "Shared a trade" }
+        if message.kind == .feedPostShare || message.kind == .profilePostShare { return "Shared a post" }
+        if message.kind == .achievementPostShare { return "Shared an achievement" }
+        if message.kind == .reelShare { return "Shared a clip" }
         if message.kind == .voice { return "Voice message" }
         if message.kind == .storyReply {
             return StoryReplyMessageSupport.previewText(from: message.body)
@@ -36,6 +39,9 @@ nonisolated enum ConversationInboxActivity {
     }
 
     static func preview(fromStoredContent content: String?, type: String? = nil) -> String? {
+        if let typedPreview = SharedContentMessageSupport.preview(fromStoredType: type) {
+            return typedPreview
+        }
         if type?.lowercased() == StoryShareMessageSupport.messageType {
             return StoryShareMessageSupport.previewText(from: content)
         }

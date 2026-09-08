@@ -152,4 +152,75 @@ final class FollowMutationCoordinatorTests: XCTestCase {
         )
         XCTAssertEqual(cache.stats(for: target)?.followerCount, 2)
     }
+
+    func testSeedViewerFollowingRelationshipsResolvesEdgesWithoutDefaultingToNotFollowing() {
+        let cache = DetailPresentationCache()
+        let viewer = ProfileID("viewer-feed")
+        let followed = ProfileID("author-followed")
+        let unknown = ProfileID("author-unknown")
+
+        FollowMutationCoordinator.shared.configure(
+            detailCache: cache,
+            currentUserProfile: CurrentUserProfileStore(
+                profiles: CompositionRoot.bootstrap().data.profiles,
+                session: CompositionRoot.bootstrap().data.session,
+                imagePipeline: CompositionRoot.bootstrap().data.imagePipeline,
+                detailCache: cache
+            )
+        )
+
+        XCTAssertFalse(
+            FollowMutationCoordinator.shared.isFollowRelationshipResolved(
+                viewer: viewer,
+                target: followed
+            )
+        )
+
+        FollowMutationCoordinator.shared.seedViewerFollowingRelationships(
+            ids: [followed],
+            viewer: viewer
+        )
+
+        XCTAssertTrue(
+            FollowMutationCoordinator.shared.isFollowRelationshipResolved(
+                viewer: viewer,
+                target: followed
+            )
+        )
+        XCTAssertTrue(
+            FollowMutationCoordinator.shared.isFollowing(viewer: viewer, target: followed)
+        )
+        XCTAssertFalse(
+            FollowMutationCoordinator.shared.isFollowing(viewer: viewer, target: unknown)
+        )
+    }
+
+    func testSeedViewerFollowingRelationshipsDoesNotBumpRevisionWhenUnchanged() {
+        let cache = DetailPresentationCache()
+        let viewer = ProfileID("viewer-feed-stable")
+        let followed = ProfileID("author-followed")
+
+        FollowMutationCoordinator.shared.configure(
+            detailCache: cache,
+            currentUserProfile: CurrentUserProfileStore(
+                profiles: CompositionRoot.bootstrap().data.profiles,
+                session: CompositionRoot.bootstrap().data.session,
+                imagePipeline: CompositionRoot.bootstrap().data.imagePipeline,
+                detailCache: cache
+            )
+        )
+
+        FollowMutationCoordinator.shared.seedViewerFollowingRelationships(
+            ids: [followed],
+            viewer: viewer
+        )
+        let revisionAfterFirstSeed = FollowMutationCoordinator.shared.revision
+
+        FollowMutationCoordinator.shared.seedViewerFollowingRelationships(
+            ids: [followed],
+            viewer: viewer
+        )
+
+        XCTAssertEqual(FollowMutationCoordinator.shared.revision, revisionAfterFirstSeed)
+    }
 }

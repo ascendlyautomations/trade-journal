@@ -154,8 +154,16 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             return try await sendTradeShare(message, tradeID: tradeID)
         }
 
+        if let reference = message.sharedContent, reference.messageKind != .tradeShare {
+            return try await sendSharedContent(message, reference: reference)
+        }
+
         if message.kind == .storyShare, let content = message.body {
             return try await sendStoryShare(message, content: content)
+        }
+
+        if message.kind == .storyReply, let content = message.body {
+            return try await sendStoryReply(message, content: content)
         }
 
         if message.kind == .voice,
@@ -524,6 +532,26 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
                 p_blocked: blocked
             )
         )
+    }
+
+    func fetchActiveBlockPeerIDs() async throws -> Set<ProfileID> {
+        guard await session.currentUserID != nil else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let data = try await supabase.database.rpcData(
+            functionName: "get_active_block_peer_ids",
+            parametersJSON: Data("{}".utf8)
+        )
+        if let ids = try? JSONDecoder().decode([String].self, from: data) {
+            return Set(ids.map { ProfileID($0) })
+        }
+        struct Row: Decodable { var get_active_block_peer_ids: [String]? }
+        if let row = try? JSONDecoder().decode(Row.self, from: data),
+           let ids = row.get_active_block_peer_ids
+        {
+            return Set(ids.map { ProfileID($0) })
+        }
+        return Set()
     }
 
     func fetchBlockedAccounts() async throws -> [BlockedAccount] {
@@ -896,6 +924,56 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         )
     }
 
+    private func sendSharedContent(
+        _ message: Message,
+        reference: SharedContentReference
+    ) async throws -> Message {
+        let body = MessageInsertBodies.SharedContent(
+            conversation_id: message.conversationID.rawValue,
+            sender_id: message.senderProfileID.rawValue,
+            type: reference.messageType,
+            post_id: {
+                if case .feedPost(let id) = reference { return id.rawValue }
+                return nil
+            }(),
+            profile_post_id: {
+                if case .profilePost(let id) = reference { return id.rawValue }
+                return nil
+            }(),
+            achievement_post_id: {
+                if case .achievementPost(let id) = reference { return id.rawValue }
+                return nil
+            }(),
+            reel_id: {
+                if case .reel(let id) = reference { return id.rawValue }
+                return nil
+            }(),
+            parent_message_id: message.replyToMessageID?.rawValue
+        )
+        let inserted: DMInsertRow = try await supabase.database.insert(
+            body,
+            into: "messages",
+            query: [SupabaseQuery.select("id,created_at")],
+            returning: DMInsertRow.self
+        )
+        guard let id = inserted.id, !id.isEmpty else {
+            throw AppError.unknown(message: "Shared content insert returned no id")
+        }
+        scheduleDirectMessagePush(messageID: id)
+        return Message(
+            id: MessageID(id),
+            conversationID: message.conversationID,
+            senderProfileID: message.senderProfileID,
+            kind: reference.messageKind,
+            body: nil,
+            attachments: [],
+            replyToMessageID: message.replyToMessageID,
+            createdAt: ISO8601.date(from: inserted.created_at) ?? message.createdAt,
+            isReadByViewer: true,
+            sharedContent: reference
+        )
+    }
+
     private func sendStoryShare(_ message: Message, content: String) async throws -> Message {
         let body = MessageInsertBodies.StoryShare(
             conversation_id: message.conversationID.rawValue,
@@ -919,6 +997,37 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             conversationID: message.conversationID,
             senderProfileID: message.senderProfileID,
             kind: .storyShare,
+            body: content,
+            attachments: [],
+            replyToMessageID: message.replyToMessageID,
+            createdAt: ISO8601.date(from: inserted.created_at) ?? message.createdAt,
+            isReadByViewer: true
+        )
+    }
+
+    private func sendStoryReply(_ message: Message, content: String) async throws -> Message {
+        let body = MessageInsertBodies.StoryShare(
+            conversation_id: message.conversationID.rawValue,
+            sender_id: message.senderProfileID.rawValue,
+            type: StoryReplyMessageSupport.messageType,
+            content: content,
+            parent_message_id: message.replyToMessageID?.rawValue
+        )
+        let inserted: DMInsertRow = try await supabase.database.insert(
+            body,
+            into: "messages",
+            query: [SupabaseQuery.select("id,created_at")],
+            returning: DMInsertRow.self
+        )
+        guard let id = inserted.id, !id.isEmpty else {
+            throw AppError.unknown(message: "Story reply insert returned no id")
+        }
+        scheduleDirectMessagePush(messageID: id)
+        return Message(
+            id: MessageID(id),
+            conversationID: message.conversationID,
+            senderProfileID: message.senderProfileID,
+            kind: .storyReply,
             body: content,
             attachments: [],
             replyToMessageID: message.replyToMessageID,
@@ -1063,6 +1172,38 @@ private nonisolated enum MessageInsertBodies {
             try container.encode(type, forKey: .type)
             try container.encode(content, forKey: .content)
             try container.encodeNil(forKey: .channel)
+            if let parent_message_id {
+                try container.encode(parent_message_id, forKey: .parent_message_id)
+            }
+        }
+    }
+
+    struct SharedContent: Encodable, Sendable {
+        var conversation_id: String
+        var sender_id: String
+        var type: String
+        var post_id: String?
+        var profile_post_id: String?
+        var achievement_post_id: String?
+        var reel_id: String?
+        var parent_message_id: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case conversation_id, sender_id, type, content, channel
+            case post_id, profile_post_id, achievement_post_id, reel_id, parent_message_id
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(conversation_id, forKey: .conversation_id)
+            try container.encode(sender_id, forKey: .sender_id)
+            try container.encode(type, forKey: .type)
+            try container.encodeNil(forKey: .content)
+            try container.encodeNil(forKey: .channel)
+            try container.encodeIfPresent(post_id, forKey: .post_id)
+            try container.encodeIfPresent(profile_post_id, forKey: .profile_post_id)
+            try container.encodeIfPresent(achievement_post_id, forKey: .achievement_post_id)
+            try container.encodeIfPresent(reel_id, forKey: .reel_id)
             if let parent_message_id {
                 try container.encode(parent_message_id, forKey: .parent_message_id)
             }

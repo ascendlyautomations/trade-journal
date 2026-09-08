@@ -270,6 +270,19 @@ nonisolated enum PropFirmMetrics {
         return true
     }
 
+    /// Mirrors web `computePayoutDrawdownFloor`.
+    static func computePayoutDrawdownFloor(
+        behavior: PayoutDrawdownBehavior,
+        accountBaseBalance: Decimal,
+        trailingMetricsBeforePayout: TrailingDrawdownResult,
+        maxDrawdown: Decimal
+    ) -> Decimal {
+        if behavior == .resetToAccount {
+            return accountBaseBalance
+        }
+        return trailingMetricsBeforePayout.drawdownFloor
+    }
+
     /// Orchestrator — mirrors `computePropfirmAccountMetrics`.
     ///
     /// Payout cycle defaults to account inception (`startedAt == nil`) when

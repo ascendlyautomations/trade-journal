@@ -584,6 +584,15 @@ final class MessagingDomain {
                 if let counts = try? await rooms.activeMemberCounts(for: visible) {
                     inboxStore.applyMemberCounts(counts)
                     SessionMemberRoomsStore.shared.applyMemberCounts(counts, for: viewerID)
+                    for (roomID, count) in counts {
+                        RoomMemberCountProbe.record(
+                            roomID: roomID,
+                            displayedMemberCount: count,
+                            activeMembershipCount: count,
+                            loadedMemberListCount: nil,
+                            source: .realtime
+                        )
+                    }
                 }
             }
             roomMemberCountTask = nil

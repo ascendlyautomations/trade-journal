@@ -4,8 +4,10 @@ struct ClipsContainerView: View {
     @Bindable var viewModel: ClipsContainerViewModel
     let imagePipeline: any ImagePipeline
     @Bindable var engagementStore: EngagementStore
+    @Bindable var vaultStore: VaultStore
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
         ProfileSectionContainerChrome(
@@ -19,7 +21,10 @@ struct ClipsContainerView: View {
                         reel: reel,
                         imagePipeline: imagePipeline,
                         engagementStore: engagementStore,
-                        onOpen: { viewModel.openClip(reel) }
+                        vaultStore: vaultStore,
+                        onOpen: { viewModel.openClip(reel) },
+                        isOwner: viewModel.isOwner,
+                        onReport: reportAction(for: reel)
                     )
                     .transition(
                         reduceMotion
@@ -39,6 +44,18 @@ struct ClipsContainerView: View {
                 viewModel.prefetchEngagement(for: viewModel.items.map(\.id))
             }
             .accessibilityIdentifier("profile.clips.list")
+        }
+    }
+
+    private func reportAction(for reel: Reel) -> (() -> Void)? {
+        guard !viewModel.isOwner else { return nil }
+        return {
+            ExperienceHaptics.play(.selection)
+            ContentReportSupport.presentReel(
+                reel.id,
+                ownerID: viewModel.profileOwnerID,
+                presenter: appEnvironment.contentReportPresenter
+            )
         }
     }
 }

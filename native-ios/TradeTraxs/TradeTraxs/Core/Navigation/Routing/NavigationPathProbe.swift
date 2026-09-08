@@ -85,6 +85,7 @@ nonisolated enum NavigationPathProbeFormatter {
         case .room: return "room"
         case .roomMembers: return "roomMembers"
         case .roomInfo: return "roomInfo"
+        case .manageRoom: return "manageRoom"
         case .settings(let settings): return "settings(\(settings.rawValue))"
         }
     }
@@ -95,10 +96,12 @@ nonisolated enum NavigationPathProbeFormatter {
         case .sharedTrade: return "sharedTrade"
         case .sharedPost: return "sharedPost"
         case .sharedReel: return "sharedReel"
+        case .sharedAchievement: return "sharedAchievement"
         case .profile: return "profile"
         case .room: return "room"
         case .roomMembers: return "roomMembers"
         case .roomInfo: return "roomInfo"
+        case .manageRoom: return "manageRoom"
         case .settings(let settings): return "settings(\(settings.rawValue))"
         }
     }
@@ -116,6 +119,7 @@ nonisolated enum NavigationPathProbeFormatter {
         case .room: return "room"
         case .roomMembers: return "roomMembers"
         case .roomInfo: return "roomInfo"
+        case .manageRoom: return "manageRoom"
         case .settings(let settings): return "settings(\(settings.rawValue))"
         case .help: return "help"
         case .affiliate: return "affiliate"

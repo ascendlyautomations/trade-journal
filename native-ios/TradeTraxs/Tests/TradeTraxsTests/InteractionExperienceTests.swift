@@ -262,6 +262,71 @@ final class InteractionExperienceTests: XCTestCase {
         XCTAssertTrue(repository.setLikedCalls.isEmpty)
     }
 
+    func testEnsureLikedPreservesOptimisticDuringPrefetch() async {
+        let repository = InMemoryInteractionRepository()
+        repository.engagementDelayNanoseconds = 120_000_000
+        repository.likeDelayNanoseconds = 200_000_000
+        let store = EngagementStore(repository: repository)
+        let target = InteractionTarget.trade(TradeID("race-trade-prefetch"))
+        repository.engagementMap[target] = EngagementSnapshot(
+            likeCount: 3,
+            commentCount: 2,
+            viewerHasLiked: false
+        )
+
+        store.prefetch([target])
+        let likeTask = Task { await store.ensureLiked(on: target) }
+        try? await Task.sleep(nanoseconds: 5_000_000)
+
+        XCTAssertTrue(store.snapshot(for: target).viewerHasLiked)
+        XCTAssertEqual(store.snapshot(for: target).likeCount, 1)
+
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertTrue(store.snapshot(for: target).viewerHasLiked)
+        XCTAssertEqual(store.snapshot(for: target).likeCount, 1)
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertTrue(store.snapshot(for: target).viewerHasLiked)
+        XCTAssertEqual(store.snapshot(for: target).likeCount, 1)
+        XCTAssertEqual(store.snapshot(for: target).commentCount, 2)
+
+        await likeTask.value
+
+        XCTAssertTrue(store.snapshot(for: target).viewerHasLiked)
+        XCTAssertEqual(store.snapshot(for: target).likeCount, 1)
+        XCTAssertEqual(repository.setLikedCalls.count, 1)
+    }
+
+    func testEnsureLikedPreservesOptimisticDuringSeed() async {
+        let repository = InMemoryInteractionRepository()
+        repository.likeDelayNanoseconds = 120_000_000
+        let store = EngagementStore(repository: repository)
+        let target = InteractionTarget.reel(ReelID("race-reel-seed"))
+        store.seed(
+            EngagementSnapshot(likeCount: 7, commentCount: 1, viewerHasLiked: false),
+            for: target
+        )
+
+        let likeTask = Task { await store.ensureLiked(on: target) }
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        store.seed(
+            EngagementSnapshot(likeCount: 7, commentCount: 1, viewerHasLiked: false),
+            for: target
+        )
+
+        XCTAssertTrue(store.snapshot(for: target).viewerHasLiked)
+        XCTAssertEqual(store.snapshot(for: target).likeCount, 8)
+
+        await likeTask.value
+
+        XCTAssertTrue(store.snapshot(for: target).viewerHasLiked)
+        XCTAssertEqual(store.snapshot(for: target).likeCount, 8)
+        XCTAssertEqual(repository.setLikedCalls.count, 1)
+    }
+
     func testCommentsLoadPostDeleteAndSort() async {
         let repository = InMemoryInteractionRepository()
         let session = InteractionStubSession(userID: UserID("user-1"))
@@ -378,6 +443,175 @@ final class InteractionExperienceTests: XCTestCase {
         await viewModel.refresh()
         XCTAssertEqual(viewModel.topLevelComments.count, 1)
         XCTAssertEqual(viewModel.replies(to: parent.id).count, 1)
+    }
+
+    func testReplyThreadDisplayMatchesWebCollapseRules() {
+        let replies = (0..<3).map { index in
+            InteractionComment(
+                id: CommentID("reply-\(index)"),
+                target: .trade(TradeID("t1")),
+                authorProfileID: ProfileID("user-\(index)"),
+                authorUsername: "peer",
+                body: "Reply \(index)",
+                parentCommentID: CommentID("root"),
+                createdAt: Date(timeIntervalSince1970: Double(index)),
+                isPinned: false
+            )
+        }
+
+        let collapsedManyTopLevel = CommentThreadSupport.replyThreadDisplay(
+            replies: replies,
+            topLevelCommentCount: 5,
+            expanded: false
+        )
+        XCTAssertEqual(collapsedManyTopLevel.visibleReplies.count, 0)
+        XCTAssertEqual(collapsedManyTopLevel.collapsedLabel, "View 3 replies")
+
+        let collapsedFewTopLevel = CommentThreadSupport.replyThreadDisplay(
+            replies: replies,
+            topLevelCommentCount: 2,
+            expanded: false
+        )
+        XCTAssertEqual(collapsedFewTopLevel.visibleReplies.count, 1)
+        XCTAssertEqual(collapsedFewTopLevel.collapsedLabel, "View 2 more replies")
+
+        let expanded = CommentThreadSupport.replyThreadDisplay(
+            replies: replies,
+            topLevelCommentCount: 2,
+            expanded: true
+        )
+        XCTAssertEqual(expanded.visibleReplies.count, 3)
+        XCTAssertTrue(expanded.showToggle)
+    }
+
+    func testReplyToReplyUsesThreadRootParentID() async {
+        let repository = InMemoryInteractionRepository()
+        let session = InteractionStubSession(userID: UserID("user-1"))
+        let store = EngagementStore(repository: repository)
+        let target = InteractionTarget.trade(TradeID("live-reply-root"))
+        let root = InteractionComment(
+            id: CommentID("root"),
+            target: target,
+            authorProfileID: ProfileID("user-2"),
+            authorUsername: "peer",
+            body: "Root",
+            parentCommentID: nil,
+            createdAt: Date(timeIntervalSince1970: 1),
+            isPinned: false
+        )
+        let firstReply = InteractionComment(
+            id: CommentID("reply-1"),
+            target: target,
+            authorProfileID: ProfileID("user-3"),
+            authorUsername: "other",
+            body: "First reply",
+            parentCommentID: root.id,
+            createdAt: Date(timeIntervalSince1970: 2),
+            isPinned: false
+        )
+        repository.commentsByTarget[target] = [root, firstReply]
+
+        let viewModel = CommentsViewModel(
+            target: target,
+            repository: repository,
+            engagementStore: store,
+            session: session
+        )
+        await viewModel.refresh()
+        viewModel.beginReply(to: firstReply)
+
+        XCTAssertEqual(viewModel.replyTarget?.parentCommentID, root.id)
+        XCTAssertEqual(viewModel.draft, "@other ")
+        viewModel.draft += "Thanks"
+        await viewModel.submit()
+
+        XCTAssertNil(viewModel.replyTarget)
+        XCTAssertTrue(viewModel.isReplyThreadExpanded(root.id))
+        let submittedReply = viewModel.replies(to: root.id).last
+        XCTAssertEqual(submittedReply?.parentCommentID, root.id)
+        XCTAssertEqual(submittedReply?.body, "@other Thanks")
+    }
+
+    func testCancelReplyClearsComposerState() async {
+        let repository = InMemoryInteractionRepository()
+        let session = InteractionStubSession(userID: UserID("user-1"))
+        let store = EngagementStore(repository: repository)
+        let target = InteractionTarget.trade(TradeID("live-cancel-reply"))
+        let root = InteractionComment(
+            id: CommentID("root"),
+            target: target,
+            authorProfileID: ProfileID("user-2"),
+            authorUsername: "peer",
+            body: "Root",
+            parentCommentID: nil,
+            createdAt: Date(),
+            isPinned: false
+        )
+        repository.commentsByTarget[target] = [root]
+
+        let viewModel = CommentsViewModel(
+            target: target,
+            repository: repository,
+            engagementStore: store,
+            session: session
+        )
+        await viewModel.refresh()
+        viewModel.beginReply(to: root)
+        viewModel.cancelReply()
+
+        XCTAssertNil(viewModel.replyTarget)
+        XCTAssertEqual(viewModel.draft, "")
+    }
+
+    func testDeleteReplyDoesNotRemoveSiblingReplies() async {
+        let repository = InMemoryInteractionRepository()
+        let session = InteractionStubSession(userID: UserID("user-1"))
+        let store = EngagementStore(repository: repository)
+        let target = InteractionTarget.trade(TradeID("live-delete-reply"))
+        let root = InteractionComment(
+            id: CommentID("root"),
+            target: target,
+            authorProfileID: ProfileID("user-2"),
+            authorUsername: "peer",
+            body: "Root",
+            parentCommentID: nil,
+            createdAt: Date(timeIntervalSince1970: 1),
+            isPinned: false
+        )
+        let replyA = InteractionComment(
+            id: CommentID("reply-a"),
+            target: target,
+            authorProfileID: ProfileID("user-1"),
+            authorUsername: "me",
+            body: "A",
+            parentCommentID: root.id,
+            createdAt: Date(timeIntervalSince1970: 2),
+            isPinned: false
+        )
+        let replyB = InteractionComment(
+            id: CommentID("reply-b"),
+            target: target,
+            authorProfileID: ProfileID("user-3"),
+            authorUsername: "other",
+            body: "B",
+            parentCommentID: root.id,
+            createdAt: Date(timeIntervalSince1970: 3),
+            isPinned: false
+        )
+        repository.commentsByTarget[target] = [root, replyA, replyB]
+
+        let viewModel = CommentsViewModel(
+            target: target,
+            repository: repository,
+            engagementStore: store,
+            session: session
+        )
+        await viewModel.refresh()
+        await viewModel.delete(replyA)
+
+        XCTAssertEqual(viewModel.replies(to: root.id).count, 1)
+        XCTAssertEqual(viewModel.replies(to: root.id).first?.id, replyB.id)
+        XCTAssertEqual(store.snapshot(for: target).commentCount, 2)
     }
 
     func testDataEnvironmentExposesSharedEngagementStore() {
@@ -498,11 +732,15 @@ private final class InMemoryInteractionRepository: InteractionRepository, @unche
     var shouldFailCommentPin = false
     var commentLikeMeta: [CommentID: CommentLikeSnapshot] = [:]
     var likeDelayNanoseconds: UInt64 = 0
+    var engagementDelayNanoseconds: UInt64 = 0
     private let lock = NSLock()
 
     func engagement(
         for targets: [InteractionTarget]
     ) async throws -> [InteractionTarget: EngagementSnapshot] {
+        if engagementDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: engagementDelayNanoseconds)
+        }
         var result: [InteractionTarget: EngagementSnapshot] = [:]
         for target in targets {
             result[target] = engagementMap[target] ?? .empty

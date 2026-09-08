@@ -21,17 +21,16 @@ struct LikeButton: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: snap.viewerHasLiked ? "heart.fill" : "heart")
-                    .symbolEffect(.bounce, value: pulse)
-                    .foregroundStyle(snap.viewerHasLiked ? colors.error : colors.secondaryText)
-                    .scaleEffect(pulse ? 1.15 : 1)
-                Text(Self.formatCount(snap.likeCount))
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .contentTransition(.numericText())
-            }
+            EngagementActionRowLabel(
+                kind: .like(liked: snap.viewerHasLiked),
+                count: snap.likeCount,
+                iconColor: snap.viewerHasLiked ? colors.error : colors.secondaryText,
+                iconScale: pulse ? 1.15 : 1,
+                symbolBounce: pulse
+            )
         }
         .buttonStyle(.plain)
+        .engagementActionRowContainer()
         .accessibilityLabel(snap.viewerHasLiked ? "Unlike" : "Like")
         .accessibilityValue("\(snap.likeCount)")
         .accessibilityIdentifier("interaction.like.\(target.kind.rawValue).\(target.id)")

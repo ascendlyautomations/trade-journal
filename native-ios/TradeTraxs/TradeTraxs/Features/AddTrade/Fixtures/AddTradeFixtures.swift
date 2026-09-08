@@ -44,6 +44,18 @@ enum AddTradeFixtures {
 
     static var recentSymbols: [String] { ["MNQ", "NQ", "MES", "ES", "CL"] }
 
+    static var instrumentPickerSnapshot: InstrumentPickerSnapshot {
+        InstrumentPickerSnapshot(
+            mostUsed: recentSymbols,
+            custom: ["TEST"],
+            futures: InstrumentPickerCatalog.futures,
+            stocks: InstrumentPickerCatalog.stocks,
+            options: InstrumentPickerCatalog.options,
+            crypto: InstrumentPickerCatalog.crypto,
+            forex: InstrumentPickerCatalog.forex
+        )
+    }
+
     static func unattachedReels(owner: ProfileID = viewerID) -> [Reel] {
         [
             Reel(

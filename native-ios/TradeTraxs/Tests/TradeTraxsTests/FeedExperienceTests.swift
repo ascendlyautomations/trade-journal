@@ -15,6 +15,71 @@ final class FeedExperienceTests: XCTestCase {
         XCTAssertEqual(dates, dates.sorted(by: >))
     }
 
+    func testFeedSessionStoreResolvedEntriesUsesSiblingFilterCache() {
+        FeedSessionStore.shared.invalidate()
+        let viewer = ProfileID("viewer-feed-cache")
+        let allKey = FeedSessionStore.cacheKey(viewerID: viewer, scope: .following, contentFilter: .all, cursor: nil)
+        let entries = FeedFixtures.timeline(viewerID: viewer)
+        FeedSessionStore.shared.save(
+            FeedSessionStore.Snapshot(
+                cacheKey: allKey,
+                entries: entries,
+                stories: [],
+                nextCursor: nil,
+                loadedAt: Date()
+            )
+        )
+
+        let postsResolved = FeedSessionStore.shared.resolvedEntries(
+            viewerID: viewer,
+            scope: .following,
+            contentFilter: .posts
+        )
+        XCTAssertEqual(postsResolved.source, .siblingFilterCache)
+        XCTAssertFalse(postsResolved.entries.isEmpty)
+        XCTAssertTrue(postsResolved.entries.allSatisfy { $0.matches(filter: .posts) })
+
+        let exactResolved = FeedSessionStore.shared.resolvedEntries(
+            viewerID: viewer,
+            scope: .following,
+            contentFilter: .all
+        )
+        XCTAssertEqual(exactResolved.source, .exactFilterCache)
+        FeedSessionStore.shared.invalidate()
+    }
+
+    func testFixturesResolveLinkedTradeAndClipAttachments() {
+        let cache = DetailPresentationCache()
+        FeedFixtures.seedDetailCache(cache)
+        let entries = FeedFixtures.timeline()
+        let postWithTrade = entries.first {
+            guard case .post(_, let post) = $0 else { return false }
+            return post.linkedTradeID != nil
+        }
+        XCTAssertNotNil(postWithTrade)
+        if let postWithTrade {
+            XCTAssertNotNil(FeedLinkedContentResolver.linkedTrade(for: postWithTrade, cache: cache))
+        }
+
+        let tradeWithClip = entries.first {
+            if case .trade = $0 { return true }
+            return false
+        }
+        XCTAssertNotNil(tradeWithClip)
+        if let tradeWithClip {
+            XCTAssertNotNil(FeedLinkedContentResolver.linkedReel(for: tradeWithClip, cache: cache))
+        }
+
+        let clipWithTrade = entries.first {
+            if case .clip = $0 { return true }
+            return false
+        }
+        XCTAssertNotNil(clipWithTrade)
+        if let clipWithTrade {
+            XCTAssertNotNil(FeedLinkedContentResolver.linkedTrade(for: clipWithTrade, cache: cache))
+        }
+    }
+
     func testContentFilterMatchesKinds() {
         let entries = FeedFixtures.timeline()
         XCTAssertEqual(entries.filter { $0.matches(filter: .all) }.count, entries.count)
@@ -34,6 +99,12 @@ final class FeedExperienceTests: XCTestCase {
         XCTAssertEqual(FeedContentFilter.posts.icon.systemName, "text.bubble")
         XCTAssertEqual(FeedContentFilter.clips.icon.systemName, "play.rectangle")
         XCTAssertEqual(FeedContentFilter.achievements.icon.systemName, "trophy")
+    }
+
+    func testClipsFilterMapsToReelsRpcValue() {
+        XCTAssertEqual(FeedContentFilter.clips.rpcValue, "reels")
+        XCTAssertEqual(FeedContentFilter.all.rpcValue, "all")
+        XCTAssertEqual(FeedContentFilter.trades.rpcValue, "trades")
     }
 
     func testFeedRowsSplitMediaVersusTextLayouts() {
@@ -59,6 +130,7 @@ final class FeedExperienceTests: XCTestCase {
             session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
             detailCache: cache,
             engagementStore: engagement,
+            vaultStore: VaultStore.testInstance(),
             navigationCoordinator: coordinator
         )
 
@@ -97,6 +169,7 @@ final class FeedExperienceTests: XCTestCase {
             session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
             detailCache: cache,
             engagementStore: engagement,
+            vaultStore: VaultStore.testInstance(),
             navigationCoordinator: coordinator
         )
 
@@ -124,6 +197,7 @@ final class FeedExperienceTests: XCTestCase {
             session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
             detailCache: cache,
             engagementStore: engagement,
+            vaultStore: VaultStore.testInstance(),
             navigationCoordinator: coordinator
         )
 
@@ -147,6 +221,7 @@ final class FeedExperienceTests: XCTestCase {
             session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
             detailCache: cache,
             engagementStore: EngagementStore(repository: FeedStubInteractionRepository()),
+            vaultStore: VaultStore.testInstance(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
 
@@ -269,6 +344,7 @@ final class FeedExperienceTests: XCTestCase {
             session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
             detailCache: cache,
             engagementStore: engagement,
+            vaultStore: VaultStore.testInstance(),
             navigationCoordinator: coordinator
         )
         viewModel.loadIfNeeded()
@@ -300,6 +376,7 @@ final class FeedExperienceTests: XCTestCase {
             session: FeedStubSession(userID: viewerUUID),
             detailCache: cache,
             engagementStore: engagement,
+            vaultStore: VaultStore.testInstance(),
             navigationCoordinator: coordinator
         )
 
@@ -358,6 +435,7 @@ final class FeedExperienceTests: XCTestCase {
             session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
             detailCache: DetailPresentationCache(),
             engagementStore: EngagementStore(repository: FeedStubInteractionRepository()),
+            vaultStore: VaultStore.testInstance(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
 
@@ -383,6 +461,7 @@ final class FeedExperienceTests: XCTestCase {
             session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
             detailCache: DetailPresentationCache(),
             engagementStore: EngagementStore(repository: FeedStubInteractionRepository()),
+            vaultStore: VaultStore.testInstance(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
 
@@ -399,6 +478,42 @@ final class FeedExperienceTests: XCTestCase {
         XCTAssertTrue(viewModel.stories.isEmpty)
     }
 
+    func testFilterChangeSuppressesConcurrentPagination() async {
+        FeedLoadProbe.resetForTesting()
+        let viewModel = FeedViewModel(
+            feed: FeedStubFeedRepository(),
+            trades: FeedStubTradeRepository(),
+            profiles: FeedStubProfileRepository(),
+            achievements: FeedStubAchievementRepository(),
+            session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
+            detailCache: DetailPresentationCache(),
+            engagementStore: EngagementStore(repository: FeedStubInteractionRepository()),
+            vaultStore: VaultStore.testInstance(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        guard let lastID = viewModel.visibleEntries.last?.id else {
+            XCTFail("Expected loaded feed rows")
+            return
+        }
+
+        viewModel.testing_setPagination(nextCursor: "page-2", hasMore: true)
+        FeedLoadProbe.resetForTesting()
+
+        viewModel.setContentFilter(.posts)
+        await viewModel.loadMoreIfNeeded(currentID: lastID)
+        await waitFor { !viewModel.testing_isQueryReloadInProgress() }
+
+        XCTAssertEqual(
+            FeedLoadProbe.recordedTriggers,
+            [.contentFilterChanged],
+            "Pagination must not start while a filter reload is in flight"
+        )
+    }
+
     func testFeedViewModelAliasIsFeedScreenViewModel() {
         let screen: FeedScreenViewModel = FeedViewModel(
             feed: FeedStubFeedRepository(),
@@ -408,6 +523,7 @@ final class FeedExperienceTests: XCTestCase {
             session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
             detailCache: DetailPresentationCache(),
             engagementStore: EngagementStore(repository: FeedStubInteractionRepository()),
+            vaultStore: VaultStore.testInstance(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
         XCTAssertTrue(type(of: screen) == FeedScreenViewModel.self)
@@ -444,7 +560,7 @@ private struct FeedStubSession: SessionProviding {
 
 /// Returns web-parity mixed kinds with `profiles(...)` author fields already on each item.
 private struct FeedWebShapedStubFeedRepository: FeedRepository {
-    func feed(scope: FeedScope, page: PageRequest) async throws -> FeedPageResult {
+    func feed(scope: FeedScope, contentFilter: FeedContentFilter, page: PageRequest) async throws -> FeedPageResult {
         _ = scope
         _ = page
         let peer = ProfileID("dev.follower.ada")
@@ -521,20 +637,22 @@ private struct FeedWebShapedStubFeedRepository: FeedRepository {
         )
     }
     func deleteStory(id: StoryID) async throws {}
-    func reel(id: ReelID) async throws -> Reel {
-        ProfileClipFixtures.samples(owner: FeedFixtures.viewerID)[0]
+    func reel(id: ReelID) async throws -> ReelLoadResult {
+        ReelLoadResult(reel: ProfileClipFixtures.samples(owner: FeedFixtures.viewerID)[0], embeddedTrade: nil)
     }
 
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
         CursorPage(items: [], nextCursor: nil)
     }
 
-    func profileReels(for profileID: ProfileID) async throws -> [Reel] { [] }
+    func profileReels(for profileID: ProfileID) async throws -> ProfileReelsResult {
+        ProfileReelsResult(reels: [], embeddedTrades: [])
+    }
     func createReel(_ reel: Reel) async throws -> Reel { reel }
 }
 
 private struct FeedStubFeedRepository: FeedRepository {
-    func feed(scope: FeedScope, page: PageRequest) async throws -> FeedPageResult {
+    func feed(scope: FeedScope, contentFilter: FeedContentFilter, page: PageRequest) async throws -> FeedPageResult {
         FeedPageResult(items: [], nextCursor: nil, embeddedTrades: [])
     }
 
@@ -566,15 +684,17 @@ private struct FeedStubFeedRepository: FeedRepository {
         )
     }
     func deleteStory(id: StoryID) async throws {}
-    func reel(id: ReelID) async throws -> Reel {
-        ProfileClipFixtures.samples(owner: FeedFixtures.viewerID)[0]
+    func reel(id: ReelID) async throws -> ReelLoadResult {
+        ReelLoadResult(reel: ProfileClipFixtures.samples(owner: FeedFixtures.viewerID)[0], embeddedTrade: nil)
     }
 
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
         CursorPage(items: [], nextCursor: nil)
     }
 
-    func profileReels(for profileID: ProfileID) async throws -> [Reel] { [] }
+    func profileReels(for profileID: ProfileID) async throws -> ProfileReelsResult {
+        ProfileReelsResult(reels: [], embeddedTrades: [])
+    }
     func createReel(_ reel: Reel) async throws -> Reel { reel }
 }
 

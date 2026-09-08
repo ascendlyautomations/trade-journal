@@ -12,7 +12,7 @@ final class ContentMutationStore {
 
     enum Kind: Equatable {
         case post(Post)
-        case achievement(AchievementID)
+        case achievement(Achievement)
         case reel(Reel)
         case reelLinked(ReelID)
         case story(Story)
@@ -35,9 +35,9 @@ final class ContentMutationStore {
         revision += 1
     }
 
-    func noteAchievementCreated(_ id: AchievementID) {
-        latest = .achievement(id)
-        latestAchievementID = id
+    func noteAchievementCreated(_ achievement: Achievement) {
+        latest = .achievement(achievement)
+        latestAchievementID = achievement.id
         revision += 1
     }
 

@@ -21,11 +21,9 @@ struct FeedSkeleton: View {
                     .padding(.vertical, ExperienceSpacing.sm)
                 }
 
-                Rectangle()
-                    .fill(colors.border.opacity(0.4))
-                    .frame(height: ExperienceBorder.hairline)
+                FeedSectionSeparator()
 
-                ForEach(0..<3, id: \.self) { _ in
+                ForEach(0..<3, id: \.self) { index in
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: ExperienceSpacing.sm) {
                             ExperienceSkeleton(height: 36, cornerRadius: 18)
@@ -50,6 +48,10 @@ struct FeedSkeleton: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .padding(ExperienceSpacing.md)
+
+                        if index < 2 {
+                            FeedSectionSeparator()
+                        }
                     }
                 }
             }

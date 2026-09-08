@@ -32,6 +32,7 @@ enum PropFirmBootstrapLoader {
     struct LoadResult: Sendable {
         var snapshot: PropFirmStatusSnapshot
         var seededTradeCount: Int
+        var payoutCycles: [AccountPayoutCycle]
     }
 
     @MainActor

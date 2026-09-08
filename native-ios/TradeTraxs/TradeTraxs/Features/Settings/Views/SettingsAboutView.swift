@@ -26,7 +26,6 @@ struct SettingsAboutView: View {
                 legalButton(.legalTerms)
                 legalButton(.legalPrivacy)
                 legalButton(.legalCommunityGuidelines)
-                legalButton(.legalRefund)
             }
         }
         .listStyle(.insetGrouped)

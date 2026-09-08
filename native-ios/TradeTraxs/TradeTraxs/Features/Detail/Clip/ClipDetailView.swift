@@ -4,6 +4,7 @@ import SwiftUI
 struct ClipDetailView: View {
     @State private var viewModel: ClipDetailViewModel
     private let data: DataEnvironment
+    private let navigationCoordinator: NavigationCoordinator
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -25,6 +26,7 @@ struct ClipDetailView: View {
             )
         )
         self.data = data
+        self.navigationCoordinator = navigationCoordinator
     }
 
     var body: some View {
@@ -59,6 +61,9 @@ struct ClipDetailView: View {
         .task {
             viewModel.loadIfNeeded()
             data.engagementStore.prefetch([.reel(viewModel.reelID)])
+            data.vaultStore.prefetch([
+                VaultContentRef(contentType: .reel, contentID: viewModel.reelID.rawValue),
+            ])
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {
@@ -115,6 +120,7 @@ struct ClipDetailView: View {
                                 ExperienceHaptics.play(.warning)
                                 showsDeleteConfirm = true
                             } : nil,
+                            vaultRef: VaultContentRef(contentType: .reel, contentID: reel.id.rawValue),
                             accessibilityIdentifier: "detail.clip.identity"
                         )
                         .padding(.horizontal, ExperienceSpacing.lg)
@@ -152,13 +158,15 @@ struct ClipDetailView: View {
             EngagementBar(
                 target: .reel(reel.id),
                 store: data.engagementStore,
+                vaultStore: data.vaultStore,
                 onCommentTap: {
                     withAnimation(
                         ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
                     ) {
                         scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
                     }
-                }
+                },
+                vaultRef: VaultContentRef(contentType: .reel, contentID: reel.id.rawValue)
             )
 
             if let caption = reel.caption?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -169,6 +177,15 @@ struct ClipDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("detail.clip.caption")
+            }
+
+            if let linkedTrade {
+                ClipLinkedTradeSection(
+                    trade: linkedTrade,
+                    style: .detailBody,
+                    onOpen: { openLinkedTrade(linkedTrade.id) }
+                )
+                .accessibilityIdentifier("detail.clip.linkedTrade")
             }
 
             if viewModel.didReachEnd {
@@ -230,4 +247,15 @@ struct ClipDetailView: View {
     }
 
     private static let commentsAnchorID = "detail.clip.comments"
+
+    private var linkedTrade: Trade? {
+        guard let reel = viewModel.reel,
+              let tradeID = reel.linkedTradeID
+        else { return nil }
+        return data.detailCache.trade(id: tradeID)
+    }
+
+    private func openLinkedTrade(_ tradeID: TradeID) {
+        navigationCoordinator.pushTradeDetail(tradeID, cache: data.detailCache)
+    }
 }

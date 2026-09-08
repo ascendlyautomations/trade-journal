@@ -61,6 +61,7 @@ final class AddTradeViewModel {
     var publicCaptionText = ""
     var shareToProfile = false
     var screenshotData: Data?
+    var feedPresentation: ContentImagePresentation?
     var screenshotPreview: UIImage?
     var hasScreenshotPreview: Bool { screenshotPreview != nil }
 
@@ -175,15 +176,20 @@ final class AddTradeViewModel {
         return list.map { byID[$0.id] ?? $0 }
     }
 
+    private(set) var instrumentCatalogRevision = 0
+
     var ownerAccountsProfileID: ProfileID? { viewerID }
 
-    var recentSymbols: [String] {
+    var instrumentPickerSnapshot: InstrumentPickerSnapshot {
         if let viewerID, viewerID.rawValue.hasPrefix("dev.") {
-            return AddTradeFixtures.recentSymbols
+            return AddTradeFixtures.instrumentPickerSnapshot
         }
-        // Prefer tickers already in the session detail cache / recent trades seed.
-        let fromCache = detailCache.recentTradeTickers(limit: 8)
-        return fromCache.isEmpty ? [] : fromCache
+        guard let viewerID else { return .empty }
+        return InstrumentCatalog.pickerSnapshot(for: viewerID, detailCache: detailCache)
+    }
+
+    var recentSymbols: [String] {
+        instrumentPickerSnapshot.mostUsed
     }
 
     var hasUnsavedChanges: Bool {
@@ -337,8 +343,26 @@ final class AddTradeViewModel {
             fieldErrors[.symbol] = "Symbol is required"
             return
         }
-        // Free-text ticker — same storage as web (`trades.ticker`); no instrument table.
         applySymbol(normalized)
+        if let viewerID {
+            InstrumentCatalog.registerCustom(normalized, for: viewerID)
+            instrumentCatalogRevision &+= 1
+        }
+    }
+
+    func deleteCustomInstrument(_ ticker: String) {
+        guard let viewerID else { return }
+        InstrumentCatalog.removeCustom(ticker, for: viewerID)
+        instrumentCatalogRevision &+= 1
+        ExperienceHaptics.play(.selection)
+    }
+
+    func setScreenshot(_ result: ImageCropSelectionResult) {
+        screenshotPreview = result.originalImage
+        screenshotData = Self.prepareScreenshotJPEG(result.originalImage)
+        feedPresentation = result.presentation
+        screenshotDisplayMode = result.presentation.usesFillCrop ? .fill : .fit
+        removeExistingScreenshot = false
     }
 
     func setScreenshot(_ image: UIImage?) {
@@ -346,14 +370,21 @@ final class AddTradeViewModel {
             clearScreenshot()
             return
         }
-        screenshotPreview = image
-        screenshotData = Self.prepareScreenshotJPEG(image)
-        removeExistingScreenshot = false
+        let width = UIScreen.main.bounds.width - 32
+        let pixelSize = MediaImageOrientation.pixelSize(of: image)
+        let presentation = FeedMediaPresentation.make(
+            aspectOption: .original,
+            imagePixelSize: pixelSize,
+            containerWidth: width,
+            transform: .default
+        )
+        setScreenshot(ImageCropSelectionResult(originalImage: image, presentation: presentation))
     }
 
     func clearScreenshot() {
         screenshotData = nil
         screenshotPreview = nil
+        feedPresentation = nil
         if existingImageURL != nil {
             removeExistingScreenshot = true
         }
@@ -695,6 +726,9 @@ final class AddTradeViewModel {
                 let uploaded = try await uploadScreenshot(screenshotData)
                 uploadedStoragePath = uploaded.storagePath
                 imageURL = uploaded.publicURL
+                if let feedPresentation {
+                    FeedMediaPresentationStore.save(feedPresentation, forMediaURL: uploaded.publicURL)
+                }
                 isUploadingMedia = false
             } else if isEditing {
                 imageURL = removeExistingScreenshot ? nil : existingImageURL
@@ -746,7 +780,8 @@ final class AddTradeViewModel {
                 imageDisplayMode: screenshotDisplayMode,
                 durationSeconds: holdDuration?.seconds,
                 durationText: holdDuration?.text,
-                imageURL: imageURL
+                imageURL: imageURL,
+                imageCrop: feedPresentation
             )
 
             let trade: Trade
@@ -1167,12 +1202,5 @@ final class AddTradeViewModel {
             return "This account can't accept new trades."
         }
         return "Couldn't save trade. Check your connection and try again."
-    }
-}
-
-extension DetailPresentationCache {
-    fileprivate func recentTradeTickers(limit: Int) -> [String] {
-        _ = limit
-        return []
     }
 }

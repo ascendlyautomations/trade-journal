@@ -44,12 +44,36 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     }
 
     /// Web `topUpMergedFeedBuffer` first page — trades + profile_posts + reels + achievement_posts.
-    func feed(scope: FeedScope, page: PageRequest) async throws -> FeedPageResult {
+    func feed(
+        scope: FeedScope,
+        contentFilter: FeedContentFilter,
+        page: PageRequest
+    ) async throws -> FeedPageResult {
         let viewerID = await session.currentUserID?.rawValue
         let followingIDs = try await fetchFollowingIDs(viewerID: viewerID)
 
         if scope == .following, followingIDs.isEmpty {
             return FeedPageResult(items: [], nextCursor: nil, embeddedTrades: [])
+        }
+
+        if contentFilter == .clips {
+            let reels = try await fetchReelFeedBatch(
+                scope: scope,
+                viewerID: viewerID,
+                followingIDs: followingIDs,
+                page: page
+            )
+            let blockPeers = try await fetchActiveBlockPeerIDs()
+            var merged = reels
+            if !blockPeers.isEmpty {
+                merged = merged.filter { !blockPeers.contains($0.authorProfileID) }
+            }
+            merged.sort { $0.createdAt > $1.createdAt }
+            let limited = Array(merged.prefix(page.limit))
+            let next = limited.count >= page.limit
+                ? ISO8601.string(from: limited.last?.createdAt ?? Date())
+                : nil
+            return FeedPageResult(items: limited, nextCursor: next, embeddedTrades: [])
         }
 
         async let tradeBatch = fetchTradeFeedBatch(
@@ -91,6 +115,11 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         var merged = tradePage.items + posts + standaloneReels + achievements
         merged.sort { $0.createdAt > $1.createdAt }
 
+        let blockPeers = try await fetchActiveBlockPeerIDs()
+        if !blockPeers.isEmpty {
+            merged = merged.filter { !blockPeers.contains($0.authorProfileID) }
+        }
+
         let limited = Array(merged.prefix(page.limit))
         let next = limited.count >= page.limit
             ? ISO8601.string(from: limited.last?.createdAt ?? Date())
@@ -101,6 +130,18 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     }
 
     // MARK: - Web feed batches (`lib/feedContent.ts`)
+
+    private func fetchActiveBlockPeerIDs() async throws -> Set<ProfileID> {
+        guard await session.currentUserID != nil else { return [] }
+        let data = try await supabase.database.rpcData(
+            functionName: "get_active_block_peer_ids",
+            parametersJSON: Data("{}".utf8)
+        )
+        if let ids = try? JSONDecoder().decode([String].self, from: data) {
+            return Set(ids.map { ProfileID($0) })
+        }
+        return []
+    }
 
     private func fetchFollowingIDs(viewerID: String?) async throws -> [String] {
         guard let viewerID, !viewerID.isEmpty else { return [] }
@@ -493,7 +534,23 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     }
 
     /// Web `fetchActiveStoriesForUserIds` — following + self, `image_url`, client 24h window.
+    func allActiveStories(for viewer: ProfileID) async throws -> [Story] {
+        try await fetchActiveStories(viewer: viewer)
+    }
+
     func stories(for viewer: ProfileID) async throws -> [Story] {
+        let active = try await fetchActiveStories(viewer: viewer)
+        let strip = ActiveStorySemantics.stripStories(from: active, viewerID: viewer)
+        #if DEBUG
+        StoriesLoadProbe.record(
+            stage: "filtered",
+            detail: "active=\(active.count) strip=\(strip.count)"
+        )
+        #endif
+        return strip
+    }
+
+    private func fetchActiveStories(viewer: ProfileID) async throws -> [Story] {
         struct Row: Codable {
             var id: String?
             var user_id: String?
@@ -563,22 +620,16 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
 
         let now = Date()
         let active = ActiveStorySemantics.filterActive(mapped, now: now)
-        let strip = ActiveStorySemantics.stripStories(from: active, viewerID: viewer)
         #if DEBUG
         if mapped.count > 0, active.isEmpty {
             let ages = mapped.map { Int(now.timeIntervalSince($0.createdAt)) }
             StoriesLoadProbe.record(
                 stage: "filtered",
-                detail: "active=0 strip=0 agesSec=\(ages) window=\(Int(ActiveStorySemantics.window))"
-            )
-        } else {
-            StoriesLoadProbe.record(
-                stage: "filtered",
-                detail: "active=\(active.count) strip=\(strip.count)"
+                detail: "active=0 agesSec=\(ages) window=\(Int(ActiveStorySemantics.window))"
             )
         }
         #endif
-        return strip
+        return active
     }
 
     func story(id: StoryID) async throws -> Story? {
@@ -664,19 +715,20 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         )
     }
 
-    func reel(id: ReelID) async throws -> Reel {
+    func reel(id: ReelID) async throws -> ReelLoadResult {
         let row: ProfileReelRow = try await supabase.database.selectOne(
             ProfileReelRow.self,
             from: "reels",
             query: [
-                SupabaseQuery.select(Self.reelRowSelect),
+                SupabaseQuery.select(Self.profileReelsSelect),
                 SupabaseQuery.eq("id", id.rawValue),
             ]
         )
         guard let mapped = mapReel(row) else {
             throw AppError.domain(.notFound(entity: "reel", id: id.rawValue))
         }
-        return mapped
+        let embeddedTrade = mapEmbeddedTrade(from: row)
+        return ReelLoadResult(reel: mapped, embeddedTrade: embeddedTrade)
     }
 
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
@@ -695,7 +747,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         )
     }
 
-    func profileReels(for profileID: ProfileID) async throws -> [Reel] {
+    func profileReels(for profileID: ProfileID) async throws -> ProfileReelsResult {
         // Mirror web `fetchUserProfileReels`: embed query → filter; fallback hydrate.
         try await RepositoryRequestFlight.shared.coalesce(
             key: "feed.profileReels:\(profileID.rawValue)",
@@ -705,7 +757,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         }
     }
 
-    private func fetchProfileReelsUncoalesced(for profileID: ProfileID) async throws -> [Reel] {
+    private func fetchProfileReelsUncoalesced(for profileID: ProfileID) async throws -> ProfileReelsResult {
         let rows: [ProfileReelRow]
         do {
             rows = try await supabase.database.select(
@@ -733,7 +785,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             rows = try await hydrateReelsWithTrades(fallback)
         }
 
-        return rows
+        let reels = rows
             .filter(Self.isReelListedOnProfile)
             .compactMap { row in
                 let mapped = mapReel(row)
@@ -744,6 +796,8 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                 }
                 return mapped
             }
+        let embeddedTrades = rows.compactMap(mapEmbeddedTrade(from:))
+        return ProfileReelsResult(reels: reels, embeddedTrades: embeddedTrades)
     }
 
     func createReel(_ reel: Reel) async throws -> Reel {
@@ -926,6 +980,25 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         let raw = Self.resolveTradeJoin(row)?.public_description?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return (raw?.isEmpty == false) ? raw : nil
+    }
+
+    private func mapEmbeddedTrade(from row: ProfileReelRow) -> Trade? {
+        let tradeIDRaw = row.trade_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !tradeIDRaw.isEmpty else { return nil }
+        guard let join = Self.resolveTradeJoin(row) else { return nil }
+        guard join.is_public != false else { return nil }
+
+        var dto = TradeDTO.Trade()
+        dto.id = join.id ?? tradeIDRaw
+        dto.user_id = row.user_id
+        dto.ticker = join.ticker
+        dto.direction = join.direction
+        dto.public_description = join.public_description
+        dto.pnl = join.pnl
+        dto.rr = join.rr
+        dto.is_public = join.is_public ?? true
+        dto.created_at = row.created_at
+        return try? TradeMapper.mapToDomain(dto)
     }
 
     private func hydrateReelsWithTrades(_ rows: [ProfileReelRow]) async throws -> [ProfileReelRow] {

@@ -17,6 +17,7 @@ final class ProfileOnboardingViewModel {
     var avatarUploadError: String?
 
     private(set) var displayName: String = ""
+    private(set) var prefilledAvatarReference: MediaReference?
 
     private var pendingAvatarData: Data?
     private var existingAvatarURL: String?
@@ -58,6 +59,9 @@ final class ProfileOnboardingViewModel {
         }
         self.bio = snapshot.bio?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         self.existingAvatarURL = snapshot.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmptyOrNil
+        if let existingAvatarURL {
+            prefilledAvatarReference = MediaReference(id: existingAvatarURL, kind: .image, altText: nil)
+        }
     }
 
     var canSubmit: Bool {
@@ -67,6 +71,10 @@ final class ProfileOnboardingViewModel {
             && traderType != nil
             && !startedTrading.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !StartedTradingDatePolicy.isFuture(startedTrading)
+    }
+
+    var canContinueWithoutPhoto: Bool {
+        avatarUploadError != nil && pendingAvatarData != nil
     }
 
     func clearUsernameError() {
@@ -95,15 +103,22 @@ final class ProfileOnboardingViewModel {
     func clearAvatarSelection() {
         setAvatarImage(nil)
         avatarUploadError = nil
+        prefilledAvatarReference = nil
     }
 
-    func submit() async {
+    func continueWithoutPhoto() async {
+        await submit(skipPendingAvatar: true)
+    }
+
+    func submit(skipPendingAvatar: Bool = false) async {
         guard !isSubmitting else { return }
         guard canSubmit else { return }
 
         errorMessage = nil
         usernameError = nil
-        avatarUploadError = nil
+        if !skipPendingAvatar {
+            avatarUploadError = nil
+        }
 
         if let usernameValidationError = ProfileUsernamePolicy.validateNotEmpty(username) {
             usernameError = usernameValidationError
@@ -125,15 +140,19 @@ final class ProfileOnboardingViewModel {
 
         do {
             var avatarURL = existingAvatarURL
-            if let pendingAvatarData {
+            if let pendingAvatarData, !skipPendingAvatar {
                 do {
                     avatarURL = try await uploadAvatar(pendingAvatarData)
+                    self.pendingAvatarData = nil
                 } catch {
                     ProfileOnboardingErrorMapping.debugStage("avatar.upload", error: error)
                     avatarUploadError = ProfileOnboardingErrorMapping.avatarUploadMessage(for: error)
                     ExperienceHaptics.play(.warning)
                     return
                 }
+            } else if skipPendingAvatar {
+                pendingAvatarData = nil
+                avatarUploadError = nil
             }
 
             let submission = ProfileOnboardingSubmission(

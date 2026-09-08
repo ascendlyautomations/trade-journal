@@ -98,8 +98,30 @@ enum FeedBootstrapLoader {
             cursor: cursor
         )
         if !forceNetwork, cursor == nil, let cached = FeedSessionStore.shared.restore(key: cacheKey) {
+            #if DEBUG
+            FeedFilterCacheProbe.logHydrate(
+                filter: contentFilter,
+                scope: scope,
+                source: .exactFilterCache,
+                cachedCount: cached.entries.count,
+                knownEmpty: cached.entries.isEmpty
+            )
+            #endif
+            await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
             return (cached.entries, cached.nextCursor, cached.stories, [:])
         }
+
+        #if DEBUG
+        if cursor == nil {
+            FeedFilterCacheProbe.logHydrate(
+                filter: contentFilter,
+                scope: scope,
+                source: .none,
+                cachedCount: 0,
+                knownEmpty: false
+            )
+        }
+        #endif
 
         let rpcName = BackendV2Versioning.RPCName.feed.rawValue
         if await BackendV2RpcAvailability.shared.isUnavailable(rpcName: rpcName, viewerID: viewerID.rawValue) {
@@ -109,7 +131,7 @@ enum FeedBootstrapLoader {
         let flightKey = BackendV2FlightKeys.feed(
             viewerID: viewerID.rawValue,
             scope: scope.rawValue,
-            contentFilter: contentFilter.rawValue,
+            contentFilter: contentFilter.rpcValue,
             cursor: cursor
         )
 
@@ -119,7 +141,7 @@ enum FeedBootstrapLoader {
                 let repo = FeedRpcBootstrapRepository(rpc: rpc)
                 let value = try await repo.loadFeedBootstrap(
                     scope: scope.rawValue,
-                    contentFilter: contentFilter.rawValue,
+                    contentFilter: contentFilter.rpcValue,
                     cursor: cursor,
                     limit: limit
                 )
@@ -136,6 +158,16 @@ enum FeedBootstrapLoader {
 
         let applied = FeedBootstrapApplier.apply(bootstrap)
         _ = FeedRpcProjectionSeeder.seed(bootstrap: bootstrap, detailCache: detailCache)
+        let followingIDs = Set(
+            bootstrap.data.following_ids_echo
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map { ProfileID($0) }
+        )
+        FollowMutationCoordinator.shared.seedViewerFollowingRelationships(
+            ids: followingIDs,
+            viewer: viewerID
+        )
         var entries = FeedSupport.sortDescending(
             FeedBootstrap.buildEntriesFromSeededItems(applied.items, detailCache: detailCache)
         )

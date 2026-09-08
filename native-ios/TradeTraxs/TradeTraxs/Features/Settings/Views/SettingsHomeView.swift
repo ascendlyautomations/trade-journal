@@ -70,6 +70,8 @@ struct SettingsHomeView: View {
         switch sectionID {
         case "preferences":
             return "Choose which notifications you’d like to receive."
+        case "personal":
+            return "Private saved content — only you can see your Vault."
         case "tradetraxs":
             return "Membership, accounts, and referrals."
         case "privacy":

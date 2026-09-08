@@ -4,11 +4,20 @@ import SwiftUI
 struct ProfileOnboardingView: View {
     @State private var viewModel: ProfileOnboardingViewModel
     @State private var photoItem: PhotosPickerItem?
+    @State private var cropSourceImage: UIImage?
     @FocusState private var usernameFieldFocused: Bool
     @Environment(\.themeColors) private var colors
+    let imagePipeline: any ImagePipeline
+    let onSignOut: () -> Void
 
-    init(viewModel: ProfileOnboardingViewModel) {
+    init(
+        viewModel: ProfileOnboardingViewModel,
+        imagePipeline: any ImagePipeline,
+        onSignOut: @escaping () -> Void
+    ) {
         _viewModel = State(initialValue: viewModel)
+        self.imagePipeline = imagePipeline
+        self.onSignOut = onSignOut
     }
 
     var body: some View {
@@ -34,21 +43,47 @@ struct ProfileOnboardingView: View {
                 ) {
                     Task { await viewModel.submit() }
                 }
+
+                if viewModel.canContinueWithoutPhoto {
+                    Button {
+                        Task { await viewModel.continueWithoutPhoto() }
+                    } label: {
+                        Text("Continue without photo")
+                            .experienceStyle(.body, color: colors.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isSubmitting)
+                    .accessibilityIdentifier("onboarding.continueWithoutPhoto")
+                }
+
+                Button(action: onSignOut) {
+                    Text("Use a different account")
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, ExperienceSpacing.sm)
+                .accessibilityIdentifier("onboarding.signOut")
             }
             .experiencePadding(.xl)
             .frame(maxWidth: 480)
             .frame(maxWidth: .infinity)
         }
         .experienceScreenBackground()
-        .interactiveDismissDisabled(true)
+        .experienceProtectedFormDismiss()
         .onChange(of: viewModel.usernameError) { _, error in
             if error != nil {
                 usernameFieldFocused = true
             }
         }
         .onChange(of: photoItem) { _, item in
-            Task { await loadPhoto(item) }
+            Task { await presentAvatarCrop(for: item) }
         }
+        .imageCropSelectionBaked(
+            sourceImage: $cropSourceImage,
+            preset: .avatar,
+            onConfirm: { viewModel.setAvatarImage($0) },
+            onCancel: { photoItem = nil }
+        )
     }
 
     private var header: some View {
@@ -72,6 +107,14 @@ struct ProfileOnboardingView: View {
                     Image(uiImage: preview)
                         .resizable()
                         .scaledToFill()
+                } else if let reference = viewModel.prefilledAvatarReference {
+                    TradeImageView(
+                        reference: reference,
+                        imagePipeline: imagePipeline,
+                        purpose: .profileAvatar,
+                        contentMode: .fill,
+                        side: 96
+                    )
                 } else {
                     Image(systemName: "person.crop.circle.fill")
                         .font(.system(size: 56))
@@ -95,7 +138,7 @@ struct ProfileOnboardingView: View {
                     .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous))
             }
 
-            if viewModel.avatarPreview != nil {
+            if viewModel.avatarPreview != nil || viewModel.prefilledAvatarReference != nil {
                 Button {
                     photoItem = nil
                     viewModel.clearAvatarSelection()
@@ -225,18 +268,12 @@ struct ProfileOnboardingView: View {
         )
     }
 
-    private func loadPhoto(_ item: PhotosPickerItem?) async {
-        guard let item else { return }
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data)
-            else {
-                viewModel.avatarUploadError = "Couldn't load that photo. Try another image."
-                return
-            }
-            viewModel.setAvatarImage(image)
-        } catch {
+    private func presentAvatarCrop(for item: PhotosPickerItem?) async {
+        guard let image = await ImageCropSelectionSupport.loadUIImage(from: item) else {
             viewModel.avatarUploadError = "Couldn't load that photo. Try another image."
+            return
         }
+        viewModel.avatarUploadError = nil
+        cropSourceImage = image
     }
 }

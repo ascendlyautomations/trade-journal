@@ -4,9 +4,11 @@ struct TradesContainerView: View {
     @Bindable var viewModel: TradesContainerViewModel
     let imagePipeline: any ImagePipeline
     @Bindable var engagementStore: EngagementStore
+    @Bindable var vaultStore: VaultStore
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
@@ -17,7 +19,9 @@ struct TradesContainerView: View {
                 ExperienceBanner(
                     title: "Couldn’t load more trades",
                     message: paginationErrorMessage,
-                    tone: .warning
+                    tone: .warning,
+                    actionTitle: "Try again",
+                    action: { viewModel.retryLoadMore() }
                 )
                 .experiencePadding(.horizontal, .lg)
             }
@@ -41,11 +45,13 @@ struct TradesContainerView: View {
                             trade: trade,
                             imagePipeline: imagePipeline,
                             engagementStore: engagementStore,
+                            vaultStore: vaultStore,
                             showsOwnerActions: viewModel.showsOwnerActions,
                             onOpen: { viewModel.openTrade(trade) },
                             onShare: { viewModel.shareTrade(trade) },
                             onEdit: { viewModel.editTrade(trade) },
-                            onDelete: { viewModel.requestDelete(trade) }
+                            onDelete: { viewModel.requestDelete(trade) },
+                            onReport: reportAction(for: trade)
                         )
                         .transition(
                             reduceMotion
@@ -91,6 +97,18 @@ struct TradesContainerView: View {
             }
         } message: {
             Text("This action cannot be undone.")
+        }
+    }
+
+    private func reportAction(for trade: Trade) -> (() -> Void)? {
+        guard !viewModel.showsOwnerActions else { return nil }
+        return {
+            ExperienceHaptics.play(.selection)
+            ContentReportSupport.presentTrade(
+                trade.id,
+                ownerID: viewModel.profileOwnerID,
+                presenter: appEnvironment.contentReportPresenter
+            )
         }
     }
 }

@@ -34,13 +34,21 @@ nonisolated enum PropFirmBootstrapApplier {
         let tradeList = mapTrades(bootstrap.data.trades, ownerID: profileID)
             .filter { $0.accountID == accountID }
 
-        guard let snapshot = PropFirmStatusSnapshot.build(account: account, trades: tradeList) else {
+        let payoutCycles = AccountPayoutCycleMapper.mapCycles(from: bootstrap.data.payout_cycles)
+            .filter { $0.accountID == accountID }
+
+        guard let snapshot = PropFirmStatusSnapshot.build(
+            account: account,
+            trades: tradeList,
+            payoutCycles: payoutCycles
+        ) else {
             throw PropFirmBootstrapLoader.LoaderError.accountNotFound
         }
 
         return PropFirmBootstrapLoader.LoadResult(
             snapshot: snapshot,
-            seededTradeCount: tradeList.count
+            seededTradeCount: tradeList.count,
+            payoutCycles: payoutCycles
         )
     }
 

@@ -127,12 +127,15 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         return try await insertProfileShell(for: profileID)
     }
 
-    func onboardingSnapshot(for profileID: ProfileID) async throws -> ProfileOnboardingSnapshot {
-        if let bootstrap = await MainActor.run(body: { SessionBootstrapStore.shared.last }),
+    func onboardingSnapshot(for profileID: ProfileID, authoritative: Bool) async throws -> ProfileOnboardingSnapshot {
+        if !authoritative,
+           let bootstrap = await MainActor.run(body: { SessionBootstrapStore.shared.last }),
            bootstrap.data.session_profile.id == profileID.rawValue
-           || bootstrap.data.viewer.id == profileID.rawValue {
+           || bootstrap.data.viewer.id == profileID.rawValue
+        {
             return ProfileOnboardingSnapshot.from(
                 session: bootstrap.data.session_profile,
+                viewer: bootstrap.data.viewer,
                 viewerID: profileID.rawValue
             )
         }
@@ -379,26 +382,32 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         return mapped
     }
 
-    func createWallPost(authorID: ProfileID, content: String, imageURL: String?) async throws -> Post {
-        struct Body: Encodable {
-            var user_id: String
-            var content: String
-            var image_url: String?
-        }
+    func createWallPost(
+        authorID: ProfileID,
+        content: String,
+        imageURL: String?,
+        imageCrop: ContentImagePresentation?
+    ) async throws -> Post {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let body = Body(
+        let body = ProfileWallPostInsertBody(
             user_id: authorID.rawValue,
             content: trimmed,
-            image_url: imageURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+            image_url: imageURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+            image_crop: ContentImagePresentationCodec.encodeJSONValue(imageCrop),
+            includeImageCropKey: imageCrop != nil
         )
-        let dto: FeedDTO.ProfileWallPost = try await supabase.database.insert(
-            body,
-            into: "profile_posts",
-            returning: FeedDTO.ProfileWallPost.self
+        let dto = try await ImageCropWireInsert.insertWallPost(
+            supabase: supabase,
+            body: body
         )
         guard let mapped = Self.mapWallPost(dto) else {
-            throw AppError.unknown(message: "Created post but response was incomplete.")
+            let error = AppError.unknown(message: "Created post but response was incomplete.")
+            PostPublishProbe.logFailed(stage: .responseDecode, error: error)
+            throw error
         }
+        RepositoryRequestFlight.shared.invalidate(
+            prefix: "profiles.wallPosts:\(authorID.rawValue):"
+        )
         return mapped
     }
 
@@ -633,7 +642,14 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         let media: [MediaReference] = {
             guard let url = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !url.isEmpty else { return [] }
-            return [MediaReference(id: url, kind: .image, altText: nil)]
+            return [
+                MediaReference(
+                    id: url,
+                    kind: .image,
+                    altText: nil,
+                    imagePresentation: dto.image_crop
+                )
+            ]
         }()
         return Post(
             id: PostID(id),

@@ -123,7 +123,18 @@ final class PropFirmDetailViewModel {
                 detailCache.seed(trades: page.items)
             }
 
-            snapshot = PropFirmStatusSnapshot.build(account: account, trades: tradeList)
+            let payoutCycles: [AccountPayoutCycle]
+            if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+                payoutCycles = []
+            } else {
+                payoutCycles = try await trades.payoutCycleHistory(for: accountID)
+            }
+
+            snapshot = PropFirmStatusSnapshot.build(
+                account: account,
+                trades: tradeList,
+                payoutCycles: payoutCycles
+            )
             hasLoaded = true
             await startRealtime(profileID: profileID)
         } catch {

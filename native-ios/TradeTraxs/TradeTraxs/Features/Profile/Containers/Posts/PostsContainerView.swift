@@ -4,8 +4,10 @@ struct PostsContainerView: View {
     @Bindable var viewModel: PostsContainerViewModel
     let imagePipeline: any ImagePipeline
     @Bindable var engagementStore: EngagementStore
+    @Bindable var vaultStore: VaultStore
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
         ProfileSectionContainerChrome(
@@ -19,7 +21,10 @@ struct PostsContainerView: View {
                         post: post,
                         imagePipeline: imagePipeline,
                         engagementStore: engagementStore,
-                        onOpen: { viewModel.openPost(post) }
+                        vaultStore: vaultStore,
+                        onOpen: { viewModel.openPost(post) },
+                        isOwner: viewModel.isOwner,
+                        onReport: reportAction(for: post)
                     )
                     .transition(
                         reduceMotion
@@ -39,6 +44,18 @@ struct PostsContainerView: View {
                 viewModel.prefetchEngagement(for: viewModel.items.map(\.id))
             }
             .accessibilityIdentifier("profile.posts.list")
+        }
+    }
+
+    private func reportAction(for post: Post) -> (() -> Void)? {
+        guard !viewModel.isOwner else { return nil }
+        return {
+            ExperienceHaptics.play(.selection)
+            ContentReportSupport.presentPost(
+                post.id,
+                ownerID: viewModel.profileOwnerID,
+                presenter: appEnvironment.contentReportPresenter
+            )
         }
     }
 }

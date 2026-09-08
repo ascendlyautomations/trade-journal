@@ -199,7 +199,8 @@ struct ProfileView: View {
                 TradesContainerView(
                     viewModel: viewModel,
                     imagePipeline: appEnvironment.data.imagePipeline,
-                    engagementStore: appEnvironment.data.engagementStore
+                    engagementStore: appEnvironment.data.engagementStore,
+                    vaultStore: appEnvironment.data.vaultStore
                 )
             }
         case .posts:
@@ -207,7 +208,8 @@ struct ProfileView: View {
                 PostsContainerView(
                     viewModel: viewModel,
                     imagePipeline: appEnvironment.data.imagePipeline,
-                    engagementStore: appEnvironment.data.engagementStore
+                    engagementStore: appEnvironment.data.engagementStore,
+                    vaultStore: appEnvironment.data.vaultStore
                 )
             }
         case .clips:
@@ -215,7 +217,8 @@ struct ProfileView: View {
                 ClipsContainerView(
                     viewModel: viewModel,
                     imagePipeline: appEnvironment.data.imagePipeline,
-                    engagementStore: appEnvironment.data.engagementStore
+                    engagementStore: appEnvironment.data.engagementStore,
+                    vaultStore: appEnvironment.data.vaultStore
                 )
             }
         case .stats:
@@ -227,7 +230,8 @@ struct ProfileView: View {
                 AchievementsContainerView(
                     viewModel: viewModel,
                     imagePipeline: appEnvironment.data.imagePipeline,
-                    engagementStore: appEnvironment.data.engagementStore
+                    engagementStore: appEnvironment.data.engagementStore,
+                    vaultStore: appEnvironment.data.vaultStore
                 )
             }
         }

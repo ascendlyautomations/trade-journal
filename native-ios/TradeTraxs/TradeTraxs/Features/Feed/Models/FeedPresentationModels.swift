@@ -18,6 +18,14 @@ nonisolated enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
         }
     }
 
+    /// RPC / REST filter token — maps UI "Clips" to server `reels` (includes trade-linked clips).
+    var rpcValue: String {
+        switch self {
+        case .clips: return "reels"
+        default: return rawValue
+        }
+    }
+
     /// Compact monochrome SF Symbol for the feed filter strip.
     var icon: AppIcon {
         switch self {
@@ -137,5 +145,39 @@ nonisolated enum FeedSupport {
     /// Web `sortFeedItemsDesc` — newest `created_at` first.
     static func sortDescending(_ entries: [FeedTimelineEntry]) -> [FeedTimelineEntry] {
         entries.sorted { $0.createdAt > $1.createdAt }
+    }
+}
+
+extension FeedTimelineEntry {
+    /// Maps a feed row to the existing content-report target types (non-owner only).
+    func reportRequest(viewerID: ProfileID?) -> ContentReportRequest? {
+        guard viewerID == nil || authorProfileID != viewerID else { return nil }
+        let ownerID = authorProfileID
+        switch self {
+        case .trade(_, let trade):
+            return ContentReportRequest(
+                target: .trade(trade.id, ownerID: ownerID),
+                subjectTitle: "this trade",
+                blockUserOffer: ownerID
+            )
+        case .post(let item, _):
+            return ContentReportRequest(
+                target: .post(PostID(item.id), ownerID: ownerID),
+                subjectTitle: "this post",
+                blockUserOffer: ownerID
+            )
+        case .clip(let item, _):
+            return ContentReportRequest(
+                target: .reel(ReelID(item.id), ownerID: ownerID),
+                subjectTitle: "this clip",
+                blockUserOffer: ownerID
+            )
+        case .achievement(let item, _):
+            return ContentReportRequest(
+                target: .achievement(AchievementID(item.id), ownerID: ownerID),
+                subjectTitle: "this achievement",
+                blockUserOffer: ownerID
+            )
+        }
     }
 }

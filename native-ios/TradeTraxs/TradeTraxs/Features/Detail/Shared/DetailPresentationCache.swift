@@ -11,6 +11,7 @@ final class DetailPresentationCache {
     private var trades: [TradeID: Trade] = [:]
     private var posts: [PostID: Post] = [:]
     private var reels: [ReelID: Reel] = [:]
+    private var reelIDByLinkedTradeID: [TradeID: ReelID] = [:]
     private var achievements: [AchievementID: Achievement] = [:]
     private var storiesByID: [StoryID: Story] = [:]
     private var profilesByID: [ProfileID: Profile] = [:]
@@ -97,12 +98,21 @@ final class DetailPresentationCache {
     }
 
     func seed(_ reel: Reel) {
+        if let existing = reels[reel.id],
+           let existingTradeID = existing.linkedTradeID,
+           existingTradeID != reel.linkedTradeID
+        {
+            reelIDByLinkedTradeID.removeValue(forKey: existingTradeID)
+        }
         reels[reel.id] = reel
+        if let tradeID = reel.linkedTradeID {
+            reelIDByLinkedTradeID[tradeID] = reel.id
+        }
     }
 
     func seed(reels items: [Reel]) {
         for reel in items {
-            reels[reel.id] = reel
+            seed(reel)
         }
     }
 
@@ -310,12 +320,21 @@ final class DetailPresentationCache {
         trades[id]
     }
 
+    func tradesOwnedBy(_ profileID: ProfileID) -> [Trade] {
+        trades.values.filter { $0.ownerProfileID == profileID }
+    }
+
     func post(id: PostID) -> Post? {
         posts[id]
     }
 
     func reel(id: ReelID) -> Reel? {
         reels[id]
+    }
+
+    func reel(linkedTo tradeID: TradeID) -> Reel? {
+        guard let reelID = reelIDByLinkedTradeID[tradeID] else { return nil }
+        return reels[reelID]
     }
 
     func achievement(id: AchievementID) -> Achievement? {
@@ -382,6 +401,9 @@ final class DetailPresentationCache {
     }
 
     func removeReel(id: ReelID) {
+        if let reel = reels[id], let tradeID = reel.linkedTradeID {
+            reelIDByLinkedTradeID.removeValue(forKey: tradeID)
+        }
         reels[id] = nil
     }
 
@@ -394,6 +416,7 @@ final class DetailPresentationCache {
         trades = [:]
         posts = [:]
         reels = [:]
+        reelIDByLinkedTradeID = [:]
         achievements = [:]
         storiesByID = [:]
         profilesByID = [:]

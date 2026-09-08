@@ -35,6 +35,10 @@ final class OwnerProfileOptimisticStore {
         }
     }
 
+    func syncOwnerPostsState(_ posts: [Post]) {
+        ownerScreen?.syncPostsFromSection(posts)
+    }
+
     func notePostCreated(_ post: Post) {
         posts = Self.upserting(post, into: posts)
         ownerScreen?.applyOptimisticPost(post)
@@ -57,7 +61,7 @@ final class OwnerProfileOptimisticStore {
     func noteAchievementCreated(_ achievement: Achievement) {
         achievements = Self.upserting(achievement, into: achievements)
         ownerScreen?.applyOptimisticAchievement(achievement)
-        ContentMutationStore.shared.noteAchievementCreated(achievement.id)
+        ContentMutationStore.shared.noteAchievementCreated(achievement)
         revision += 1
     }
 
@@ -99,14 +103,14 @@ final class OwnerProfileOptimisticStore {
         return reel.visibility == .public
     }
 
-    static func upserting<T: Identifiable>(_ item: T, into items: [T]) -> [T] where T.ID: Hashable {
+    nonisolated static func upserting<T: Identifiable>(_ item: T, into items: [T]) -> [T] where T.ID: Hashable {
         var next = items.filter { $0.id != item.id }
         next.insert(item, at: 0)
         return next
     }
 
     /// Overlay items appear first; base fills the rest without duplicates.
-    static func merging<T: Identifiable>(overlay: [T], into base: [T]) -> [T] where T.ID: Hashable {
+    nonisolated static func merging<T: Identifiable>(overlay: [T], into base: [T]) -> [T] where T.ID: Hashable {
         guard !overlay.isEmpty else { return base }
         var seen = Set(overlay.map(\.id))
         var result = overlay

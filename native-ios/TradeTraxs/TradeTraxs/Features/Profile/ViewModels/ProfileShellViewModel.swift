@@ -35,6 +35,34 @@ final class ProfileShellViewModel {
         self.isOwner = isOwner
     }
 
+    /// Ensures the Posts section VM exists without changing the selected tab.
+    func ensurePostsSection() {
+        if posts == nil {
+            posts = PostsContainerViewModel(
+                profileID: profileID,
+                profiles: data.profiles,
+                navigationCoordinator: navigationCoordinator,
+                detailCache: data.detailCache,
+                engagementStore: data.engagementStore,
+                isOwner: isOwner
+            )
+        }
+        posts?.applyBootstrap(latestState)
+    }
+
+    /// Applies bootstrap to every created section VM except Posts (mutation-owned).
+    func applyExcludingPosts(state: ProfileState) {
+        latestState = state
+        isOwner = state.isOwner
+        if let profileID = state.profileID {
+            self.profileID = profileID
+        }
+        trades?.applyBootstrap(state)
+        clips?.applyBootstrap(state)
+        stats?.applyBootstrap(state)
+        achievements?.applyBootstrap(state)
+    }
+
     /// Applies the screen bootstrap snapshot to every created section VM.
     func apply(state: ProfileState) {
         latestState = state
@@ -98,7 +126,8 @@ final class ProfileShellViewModel {
                     profiles: data.profiles,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
-                    engagementStore: data.engagementStore
+                    engagementStore: data.engagementStore,
+                    isOwner: isOwner
                 )
             }
             posts?.applyBootstrap(latestState)
@@ -110,7 +139,8 @@ final class ProfileShellViewModel {
                     feed: data.feed,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
-                    engagementStore: data.engagementStore
+                    engagementStore: data.engagementStore,
+                    isOwner: isOwner
                 )
             }
             clips?.applyBootstrap(latestState)

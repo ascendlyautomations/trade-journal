@@ -61,12 +61,20 @@ final class AuthenticationEnvironment {
         let authBackend = backend ?? PlaceholderAuthenticationBackend()
         let emailProvider = EmailAuthenticationProvider(backend: authBackend)
         let appleProvider = AppleSignInProvider(backend: authBackend)
-        let googlePerformer: any GoogleSignInPerforming = appConfiguration.isSupabaseConfigured
-            ? SupabaseGoogleOAuthPerformer(configuration: appConfiguration)
-            : GoogleIDTokenSignInPerformer(
+        let googlePerformer: any GoogleSignInPerforming
+        if appConfiguration.isSupabaseConfigured,
+           let supabaseBackend = authBackend as? SupabaseAuthenticationBackend
+        {
+            googlePerformer = SupabaseGoogleOAuthPerformer(
+                configuration: appConfiguration,
+                backend: supabaseBackend
+            )
+        } else {
+            googlePerformer = GoogleIDTokenSignInPerformer(
                 backend: authBackend,
                 credentialSource: UnavailableGoogleCredentialSource()
             )
+        }
         let googleProvider = GoogleSignInProvider(performer: googlePerformer)
         let passkeys = FuturePasskeySupport()
 

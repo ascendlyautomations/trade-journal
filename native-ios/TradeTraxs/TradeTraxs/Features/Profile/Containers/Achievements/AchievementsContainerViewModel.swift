@@ -17,6 +17,11 @@ final class AchievementsContainerViewModel {
     private var hasLoaded = false
     private var isScreenOwned = false
 
+    var hasAuthoritativePayload: Bool { hasLoaded }
+
+    var profileOwnerID: ProfileID { profileID }
+    var isOwner: Bool { viewerIsOwner }
+
     init(
         profileID: ProfileID,
         achievements: any AchievementRepository,
@@ -48,8 +53,14 @@ final class AchievementsContainerViewModel {
             }
             return
         }
-        hasLoaded = true
-        items = snapshot.achievements
+        let reconciled = ProfileSectionSupport.reconcileSectionItems(
+            snapshotItems: snapshot.achievements,
+            loadedItems: items,
+            hasLoaded: hasLoaded,
+            didLoadAuthoritative: snapshot.didLoadAchievements
+        )
+        items = reconciled.items
+        hasLoaded = reconciled.hasLoaded
         detailCache.seed(achievements: items)
         state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
         prefetchEngagement(for: items.map(\.id))
@@ -94,7 +105,10 @@ final class AchievementsContainerViewModel {
                 publicOnly: !viewerIsOwner
             )
             guard !Task.isCancelled else { return }
-            items = page.items
+            let overlay = OwnerProfileOptimisticStore.shared.achievements.filter {
+                $0.ownerProfileID == profileID
+            }
+            items = OwnerProfileOptimisticStore.merging(overlay: overlay, into: page.items)
             detailCache.seed(achievements: items)
             hasLoaded = true
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)

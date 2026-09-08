@@ -92,6 +92,31 @@ final class FeedRpcProjectionN3Tests: XCTestCase {
         }
     }
 
+    func testReelLinkedTradeSeedsFromNestedPayload() throws {
+        let json = """
+        {"meta":{"contract_version":"v1","server_time":"2026-08-20T12:00:00.000Z","viewer_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"},"data":{"scope":"following","content_filter":"all","items":[{"kind":"reel","id":"reel-linked","created_at":"2026-08-20T12:00:00.000Z","author_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","payload":{"id":"reel-linked","user_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","caption":"Linked clip","video_url":"https://cdn.example/v.mp4","thumbnail_url":"https://cdn.example/t.jpg","duration_seconds":12,"trade_id":"dddddddd-dddd-dddd-dddd-dddddddddddd","created_at":"2026-08-20T12:00:00.000Z","trades":{"id":"dddddddd-dddd-dddd-dddd-dddddddddddd","ticker":"NQ","direction":"long","pnl":250,"rr":3,"is_public":true}}}],"authors":{},"engagement":{},"stories":[],"story_authors":{},"next_cursor":null,"page_meta":{"limit":8,"returned":1,"has_more":false},"following_ids_echo":[]}}
+        """
+        let bootstrap: FeedBootstrapV1 = try decode(json)
+        let cache = DetailPresentationCache()
+        _ = FeedRpcProjectionSeeder.seed(bootstrap: bootstrap, detailCache: cache)
+        let tradeID = TradeID("dddddddd-dddd-dddd-dddd-dddddddddddd")
+        XCTAssertNotNil(cache.trade(id: tradeID))
+        XCTAssertNotNil(cache.reel(id: ReelID("reel-linked")))
+        let reel = cache.reel(id: ReelID("reel-linked"))
+        XCTAssertEqual(reel?.linkedTradeID, tradeID)
+    }
+
+    func testTradeAttachedReelSeedsFromNestedPayload() throws {
+        let json = """
+        {"meta":{"contract_version":"v1","server_time":"2026-08-20T12:00:00.000Z","viewer_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"},"data":{"scope":"following","content_filter":"all","items":[{"kind":"post","id":"post-linked-reel","created_at":"2026-08-20T12:00:00.000Z","author_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","payload":{"id":"post-linked-reel","user_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","trade_id":"dddddddd-dddd-dddd-dddd-dddddddddddd","created_at":"2026-08-20T12:00:00.000Z","image_url":"https://cdn.example/trade.png","trades":{"ticker":"ES","direction":"long","public_description":"Breakout","is_public":true,"reels":{"id":"reel-attached","user_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","video_url":"https://cdn.example/v.mp4","thumbnail_url":"https://cdn.example/t.jpg","duration_seconds":10,"trade_id":"dddddddd-dddd-dddd-dddd-dddddddddddd"}}}}],"authors":{},"engagement":{},"stories":[],"story_authors":{},"next_cursor":null,"page_meta":{"limit":8,"returned":1,"has_more":false},"following_ids_echo":[]}}
+        """
+        let bootstrap: FeedBootstrapV1 = try decode(json)
+        let cache = DetailPresentationCache()
+        _ = FeedRpcProjectionSeeder.seed(bootstrap: bootstrap, detailCache: cache)
+        let tradeID = TradeID("dddddddd-dddd-dddd-dddd-dddddddddddd")
+        XCTAssertNotNil(cache.reel(linkedTo: tradeID))
+    }
+
     private func decode<T: Decodable>(_ json: String) throws -> T {
         try JSONDecoder().decode(T.self, from: Data(json.utf8))
     }

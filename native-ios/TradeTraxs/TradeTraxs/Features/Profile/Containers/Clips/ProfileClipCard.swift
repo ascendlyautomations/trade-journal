@@ -4,7 +4,10 @@ struct ProfileClipCard: View {
     let reel: Reel
     let imagePipeline: any ImagePipeline
     let engagementStore: EngagementStore
+    let vaultStore: VaultStore
     let onOpen: () -> Void
+    var isOwner: Bool = true
+    var onReport: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
 
@@ -58,9 +61,22 @@ struct ProfileClipCard: View {
                 EngagementBar(
                     target: target,
                     store: engagementStore,
-                    onCommentTap: onOpen
+                    vaultStore: vaultStore,
+                    onCommentTap: onOpen,
+                    vaultRef: ProfileCardMediaPresence.engagementVaultRef(
+                        for: target,
+                        profileIsOwner: isOwner
+                    )
                 )
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            ContentOverflowMenu(
+                isOwner: isOwner,
+                onReport: onReport,
+                accessibilityIdentifier: "profile.clip.overflow.\(reel.id.rawValue)"
+            )
+            .padding(ExperienceSpacing.xxs)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("profile.clips.card.\(reel.id.rawValue)")

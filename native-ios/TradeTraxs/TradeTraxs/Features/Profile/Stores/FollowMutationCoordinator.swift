@@ -139,6 +139,45 @@ final class FollowMutationCoordinator {
         resolvedIsFollowing(viewer: viewer, target: target)
     }
 
+    /// True when the viewer→target edge can be resolved without defaulting to not-following.
+    func isFollowRelationshipResolved(viewer: ProfileID, target: ProfileID) -> Bool {
+        guard viewer != target else { return true }
+        if detailCache?.viewerFollowEdge(for: target) != nil { return true }
+        if detailCache?.viewerFollowingIDs() != nil { return true }
+        return false
+    }
+
+    /// Seeds the complete viewer following set from bootstrap RPCs (Feed / Session).
+    ///
+    /// Idempotent — does not bump ``revision`` when the following set is unchanged.
+    /// Feed listens to ``revision`` for user follow/unfollow refreshes; bumping on every
+    /// bootstrap seed caused a sequential reload loop (bootstrap → seed → refresh → …).
+    func seedViewerFollowingRelationships(ids: Set<ProfileID>, viewer: ProfileID) {
+        guard let detailCache else { return }
+        let normalized = Set(ids.filter { $0 != viewer })
+        if detailCache.viewerFollowingIDs() == normalized {
+            return
+        }
+        detailCache.seedViewerFollowingIDs(normalized)
+        Task {
+            await SessionFollowingStore.shared.seed(
+                viewerID: viewer.rawValue,
+                ids: Set(normalized.map(\.rawValue))
+            )
+        }
+        revision += 1
+    }
+
+    /// Hydrates the shared following set from SessionFollowingStore when bootstrap cache missed DetailPresentationCache.
+    func hydrateViewerFollowingRelationshipsIfNeeded(viewer: ProfileID) async {
+        guard detailCache?.viewerFollowingIDs() == nil else { return }
+        guard let cached = await SessionFollowingStore.shared.cached(viewerID: viewer.rawValue) else { return }
+        seedViewerFollowingRelationships(
+            ids: Set(cached.map { ProfileID($0) }),
+            viewer: viewer
+        )
+    }
+
     func invalidate() {
         latest = nil
         revision = 0

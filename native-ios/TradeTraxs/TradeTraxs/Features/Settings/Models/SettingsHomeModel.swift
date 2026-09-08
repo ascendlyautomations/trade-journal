@@ -35,6 +35,17 @@ enum SettingsHomeModel {
             ]
         ),
         SettingsHomeSection(
+            id: "personal",
+            title: "Personal",
+            items: [
+                SettingsHomeItem(
+                    route: .vault,
+                    systemImage: "hexagon.fill",
+                    subtitle: "Saved trades, clips, posts & achievements"
+                ),
+            ]
+        ),
+        SettingsHomeSection(
             id: "tradetraxs",
             title: "TradeTraxs",
             items: [
@@ -65,7 +76,6 @@ enum SettingsHomeModel {
                 SettingsHomeItem(route: .legalTerms, systemImage: "doc.text"),
                 SettingsHomeItem(route: .legalPrivacy, systemImage: "doc.plaintext"),
                 SettingsHomeItem(route: .legalCommunityGuidelines, systemImage: "person.3"),
-                SettingsHomeItem(route: .legalRefund, systemImage: "arrow.uturn.backward"),
             ]
         ),
     ]

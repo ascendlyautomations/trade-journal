@@ -86,6 +86,7 @@ enum FeedRpcProjectionSeeder {
         dto.rr = flexibleNumber(row.payload["rr"]) ?? flexibleNumber(nested["rr"])
         dto.points = flexibleNumber(nested["points"])
         dto.image_url = string(row.payload, keys: ["image_url"])
+        dto.image_crop = decodeImageCrop(row.payload["image_crop"])
         dto.mode = string(nested, keys: ["mode", "trade_mode"])
         dto.account_type = string(nested, keys: ["account_type"])
         dto.entry_time = string(nested, keys: ["entry_time"]) ?? row.created_at
@@ -97,6 +98,7 @@ enum FeedRpcProjectionSeeder {
 
         guard let trade = try? TradeMapper.mapToDomain(dto) else { return false }
         detailCache.seed(trade)
+        seedAttachedReel(from: row.payload, tradeID: trade.id, authorID: row.author_id, detailCache: detailCache)
         return true
     }
 
@@ -106,22 +108,31 @@ enum FeedRpcProjectionSeeder {
         guard let created = ISO8601.date(from: row.created_at) else { return false }
         let body = string(row.payload, keys: ["content", "body"]) ?? ""
         let imageURL = string(row.payload, keys: ["image_url"])
+        let imageCrop = decodeImageCrop(row.payload["image_crop"])
         let media: [MediaReference] = {
             guard let imageURL, !imageURL.isEmpty else { return [] }
-            return [MediaReference(id: imageURL, kind: .image, altText: nil)]
+            return [
+                ContentImagePresentation.mediaReference(url: imageURL, crop: imageCrop)
+            ].compactMap { $0 }
         }()
+        let tradeID = string(row.payload, keys: ["trade_id"]).flatMap { raw -> TradeID? in
+            raw.isEmpty ? nil : TradeID(raw)
+        }
         let post = Post(
             id: PostID(row.id),
             authorProfileID: ProfileID(row.author_id),
             body: body,
             media: media,
             visibility: .public,
-            linkedTradeID: nil,
+            linkedTradeID: tradeID,
             isPinned: false,
             createdAt: created,
             updatedAt: created
         )
         detailCache.seed(post)
+        if let tradeID {
+            seedLinkedTrade(from: row.payload, tradeID: tradeID, authorID: row.author_id, detailCache: detailCache)
+        }
         return true
     }
 
@@ -150,7 +161,83 @@ enum FeedRpcProjectionSeeder {
             createdAt: created
         )
         detailCache.seed(reel)
+        if let tradeID {
+            seedLinkedTrade(from: row.payload, tradeID: tradeID, authorID: row.author_id, detailCache: detailCache)
+        }
         return true
+    }
+
+    // MARK: - Linked attachments
+
+    private static func seedAttachedReel(
+        from payload: [String: JSONValue],
+        tradeID: TradeID,
+        authorID: String,
+        detailCache: DetailPresentationCache
+    ) {
+        guard detailCache.reel(linkedTo: tradeID) == nil else { return }
+        guard let nestedTrade = object(payload["trades"]),
+              let reelsPayload = nestedTrade["reels"]
+        else { return }
+        guard let reel = mapNestedReel(
+            reelsPayload,
+            tradeID: tradeID,
+            authorID: authorID,
+            createdAt: string(payload, keys: ["created_at"])
+        ) else { return }
+        detailCache.seed(reel)
+    }
+
+    private static func seedLinkedTrade(
+        from payload: [String: JSONValue],
+        tradeID: TradeID,
+        authorID: String,
+        detailCache: DetailPresentationCache
+    ) {
+        guard detailCache.trade(id: tradeID) == nil else { return }
+        let nested = object(payload["trades"]) ?? payload
+        var dto = TradeDTO.Trade()
+        dto.id = tradeID.rawValue
+        dto.user_id = string(nested, keys: ["user_id"]) ?? authorID
+        dto.ticker = string(nested, keys: ["ticker"])
+        dto.direction = string(nested, keys: ["direction"])
+        dto.public_description = string(nested, keys: ["public_description"])
+        dto.pnl = flexibleNumber(nested["pnl"])
+        dto.rr = flexibleNumber(nested["rr"])
+        dto.image_url = string(payload, keys: ["image_url"])
+        dto.image_crop = decodeImageCrop(payload["image_crop"])
+        dto.mode = string(nested, keys: ["mode", "trade_mode"])
+        dto.account_type = string(nested, keys: ["account_type"])
+        dto.is_public = boolValue(nested["is_public"]) ?? true
+        dto.created_at = string(nested, keys: ["created_at"]) ?? string(payload, keys: ["created_at"])
+        guard let trade = try? TradeMapper.mapToDomain(dto) else { return }
+        detailCache.seed(trade)
+    }
+
+    private static func mapNestedReel(
+        _ reelsPayload: JSONValue,
+        tradeID: TradeID,
+        authorID: String,
+        createdAt: String?
+    ) -> Reel? {
+        let nested = object(reelsPayload) ?? [:]
+        guard let reelID = string(nested, keys: ["id"]), !reelID.isEmpty else { return nil }
+        let videoURL = string(nested, keys: ["video_url"]) ?? ""
+        let thumbURL = string(nested, keys: ["thumbnail_url"]) ?? videoURL
+        guard !videoURL.isEmpty || !thumbURL.isEmpty else { return nil }
+        let created = ISO8601.date(from: createdAt ?? "") ?? Date()
+        let duration = intValue(nested["duration_seconds"])
+        return Reel(
+            id: ReelID(reelID),
+            authorProfileID: ProfileID(string(nested, keys: ["user_id"]) ?? authorID),
+            video: MediaReference(id: videoURL.isEmpty ? thumbURL : videoURL, kind: .video, altText: nil),
+            thumbnail: MediaReference(id: thumbURL, kind: .image, altText: nil),
+            caption: string(nested, keys: ["caption"]),
+            visibility: .public,
+            linkedTradeID: tradeID,
+            durationSeconds: duration,
+            createdAt: created
+        )
     }
 
     // MARK: - Achievement
@@ -234,7 +321,7 @@ enum FeedRpcProjectionSeeder {
             valueText: dto.value_text,
             firm: dto.firm,
             accountID: dto.account_id.map { TradingAccountID($0) },
-            image: imageURL.flatMap { $0.isEmpty ? nil : MediaReference(id: $0, kind: .image, altText: nil) },
+            image: ContentImagePresentation.mediaReference(url: imageURL, crop: dto.image_crop),
             isPublic: dto.is_public ?? true,
             isFeatured: dto.is_featured ?? false,
             sortOrder: dto.sort_order ?? 0,
@@ -273,6 +360,10 @@ enum FeedRpcProjectionSeeder {
     }
 
     // MARK: - JSON helpers
+
+    private static func decodeImageCrop(_ value: JSONValue?) -> ContentImagePresentation? {
+        ContentImagePresentationCodec.decode(from: value)
+    }
 
     private static func object(_ value: JSONValue?) -> [String: JSONValue]? {
         guard case .object(let dict) = value else { return nil }

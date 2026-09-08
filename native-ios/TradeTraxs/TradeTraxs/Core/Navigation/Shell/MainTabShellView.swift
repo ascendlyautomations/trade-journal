@@ -10,6 +10,7 @@ struct MainTabShellView: View {
     let authenticationCoordinator: AuthenticationCoordinator
     @Bindable var currentUserProfile: CurrentUserProfileStore
     @Bindable private var viewerStoryStore = ViewerActiveStoryStore.shared
+    @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
         // Edge-anchored tab bar (not floating capsule). Background reaches the
@@ -24,6 +25,7 @@ struct MainTabShellView: View {
         }
         .tabViewStyle(.tabBarOnly)
         .experienceAppChrome()
+        .vaultConfirmationOverlay(store: appEnvironment.data.vaultStore)
         .onChange(of: store.selectedTab) { _, _ in
             OwnerAccountFilterDropdownController.shared.dismiss()
         }
@@ -169,7 +171,8 @@ struct HomeNavigationStack: View {
         case .propFirm(let accountID):
             PropFirmDetailView(
                 accountID: accountID,
-                data: appEnvironment.data
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
             )
         case .reports:
             ReportsScreenView(
@@ -177,7 +180,10 @@ struct HomeNavigationStack: View {
                 navigationCoordinator: coordinator
             )
         case .payouts:
-            PayoutsScreenView(data: appEnvironment.data)
+            PayoutsScreenView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .report(let reportID):
             if PsychologyReportPeriodRef.parse(reportID: reportID) != nil {
                 PsychologyReportDetailView(reportID: reportID, data: appEnvironment.data)
@@ -388,6 +394,13 @@ struct FeedNavigationStack: View {
                 navigationCoordinator: coordinator,
                 navigationHost: .feed
             )
+        case .manageRoom(let roomID):
+            ManageRoomView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .feed
+            )
         case .story(let storyID):
             FeedStoryViewerView(
                 storyID: storyID,
@@ -434,6 +447,7 @@ struct FeedNavigationStack: View {
         case .room: return "Trade Room"
         case .roomMembers: return "Members"
         case .roomInfo: return "Room Info"
+        case .manageRoom: return "Manage Room"
         case .settings(let route): return route.title
         }
     }
@@ -500,11 +514,34 @@ struct MessagesNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .manageRoom(let roomID):
+            ManageRoomView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .sharedTrade(let tradeID):
             SocialTradeDetailView(
                 tradeID: tradeID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
+            )
+        case .sharedPost(let postID):
+            PostDetailView(
+                postID: postID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .sharedReel(let reelID):
+            ClipDetailView(
+                reelID: reelID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .sharedAchievement(let achievementID):
+            AchievementDetailView(
+                achievementID: achievementID,
+                data: appEnvironment.data
             )
         case .settings(let settingsRoute):
             SettingsDestinationView(
@@ -514,13 +551,6 @@ struct MessagesNavigationStack: View {
                 authenticationCoordinator: authenticationCoordinator,
                 currentUserProfile: currentUserProfile
             )
-        default:
-            NavigationInfrastructurePlaceholder(
-                title: messagesTitle(route),
-                subtitle: String(describing: route),
-                systemImage: "bubble.left"
-            )
-            .experienceNavigationTitle(messagesTitle(route))
         }
     }
 
@@ -529,11 +559,13 @@ struct MessagesNavigationStack: View {
         case .thread: return "Conversation"
         case .sharedTrade: return "Shared Trade"
         case .sharedPost: return "Shared Post"
-        case .sharedReel: return "Shared Reel"
+        case .sharedReel: return "Shared Clip"
+        case .sharedAchievement: return "Shared Achievement"
         case .profile: return "Profile"
         case .room: return "Trade Room"
         case .roomMembers: return "Members"
         case .roomInfo: return "Room Info"
+        case .manageRoom: return "Manage Room"
         case .settings(let settingsRoute): return settingsRoute.title
         }
     }
@@ -639,6 +671,13 @@ struct ProfileNavigationStack: View {
                 navigationCoordinator: coordinator,
                 navigationHost: .profile
             )
+        case .manageRoom(let roomID):
+            ManageRoomView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .profile
+            )
         case .settings(let settingsRoute):
             SettingsDestinationView(
                 route: settingsRoute,
@@ -684,6 +723,7 @@ struct ProfileNavigationStack: View {
         case .room: return "Trade Room"
         case .roomMembers: return "Members"
         case .roomInfo: return "Room Info"
+        case .manageRoom: return "Manage Room"
         }
     }
 }

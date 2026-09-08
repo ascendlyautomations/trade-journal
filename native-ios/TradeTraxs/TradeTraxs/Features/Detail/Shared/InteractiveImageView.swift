@@ -1,0 +1,689 @@
+import SwiftUI
+import UIKit
+
+// MARK: - Debug probe
+
+#if DEBUG
+enum InteractiveImageZoomProbe {
+    static func log(_ message: String) {
+        print("[InteractiveImageZoom] \(message)")
+    }
+
+    static func describe(_ rect: CGRect) -> String {
+        "(\(Int(rect.origin.x)),\(Int(rect.origin.y)),\(Int(rect.width))x\(Int(rect.height)))"
+    }
+
+    static func describe(_ point: CGPoint) -> String {
+        "(\(Int(point.x)),\(Int(point.y)))"
+    }
+}
+#else
+enum InteractiveImageZoomProbe {
+    static func log(_ message: String) {}
+    static func describe(_ rect: CGRect) -> String { "" }
+    static func describe(_ point: CGPoint) -> String { "" }
+}
+#endif
+
+// MARK: - SwiftUI entry (Feed + detail image renderer with interactive zoom)
+
+/// Shared interactive image — UIKit owns pixels, bounds, pinch/tap, and window overlay zoom.
+struct InteractiveImageView: View {
+    let mediaID: String
+    let reference: MediaReference?
+    let purpose: ImagePurpose
+    let imagePipeline: any ImagePipeline
+    var emptyIcon: AppIcon = .photo
+    var accessibilityIdentifier: String = "interactive.media"
+    var displayMode: AdaptiveMediaDisplayMode? = nil
+    var feedPresentationOverride: ContentImagePresentation? = nil
+    var onSingleTap: (() -> Void)?
+    var onDoubleTapLike: (() -> Void)?
+
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.themeColors) private var colors
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var displayImage: UIImage?
+    @State private var didFail = false
+    @State private var showLikeHeart = false
+
+    var body: some View {
+        Group {
+            if let displayImage {
+                let aspect = MediaImageOrientation.aspectRatio(of: displayImage)
+                AdaptiveInlineMediaContainer(
+                    imageAspect: aspect,
+                    feedPresentationForWidth: usesDetailLayout
+                        ? nil
+                        : { width in
+                            resolvedFeedPresentation(
+                                imageAspect: aspect,
+                                containerWidth: width
+                            )
+                        },
+                    renderSurface: "feed",
+                    renderMediaID: mediaID,
+                    background: colors.fillSecondary
+                ) { metrics in
+                    let presentation = resolvedFeedPresentation(
+                        imageAspect: aspect,
+                        containerWidth: metrics.containerWidth
+                    )
+                    let mode: AdaptiveMediaDisplayMode = usesDetailLayout
+                        ? .originalDetail
+                        : .feedCard(presentation)
+                    InteractiveImageRepresentable(
+                        mediaID: mediaID,
+                        image: displayImage,
+                        backgroundColor: .clear,
+                        displayMode: mode,
+                        feedPresentation: presentation,
+                        containerSize: CGSize(
+                            width: metrics.containerWidth,
+                            height: metrics.containerHeight
+                        ),
+                        onSingleTap: onSingleTap,
+                        onDoubleTapLike: onDoubleTapLike.map { action in
+                            {
+                                presentLikeFeedback()
+                                action()
+                            }
+                        }
+                    )
+                }
+            } else if didFail || reference == nil {
+                placeholder
+            } else {
+                loading
+            }
+        }
+        .overlay {
+            LikeFeedbackOverlay(isVisible: showLikeHeart, reduceMotion: reduceMotion)
+        }
+        .task(id: "\(reference?.id ?? "")|\(purpose.rawValue)|\(displayScale)") {
+            await loadDisplayImage()
+        }
+        .accessibilityIdentifier(accessibilityIdentifier)
+        .accessibilityAddTraits(.isImage)
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            colors.fillPrimary
+            ExperienceIcon(icon: emptyIcon, size: .xl, color: colors.tertiaryText)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 200)
+    }
+
+    private var loading: some View {
+        ZStack {
+            colors.fillPrimary
+            ExperienceLoadingSpinner()
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 200)
+    }
+
+    private func presentLikeFeedback() {
+        ExperienceHaptics.play(.impactLight)
+        if reduceMotion {
+            showLikeHeart = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 280_000_000)
+                showLikeHeart = false
+            }
+            return
+        }
+        ExperienceMotion.withAnimation(MotionSpring.bouncy.animation, reduceMotion: false) {
+            showLikeHeart = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 520_000_000)
+            ExperienceMotion.withAnimation(
+                MotionCurve.easeOut.animation(duration: .fast),
+                reduceMotion: false
+            ) {
+                showLikeHeart = false
+            }
+        }
+    }
+
+    private func loadDisplayImage() async {
+        guard let reference else {
+            displayImage = nil
+            didFail = false
+            return
+        }
+        didFail = false
+        do {
+            let data = try await imagePipeline.data(
+                for: ImageRequest(
+                    reference: reference,
+                    purpose: purpose,
+                    maxPixelSize: nil,
+                    allowsProgressiveLoading: true
+                )
+            )
+            let scale = displayScale
+            let decoded = await Task.detached(priority: .userInitiated) {
+                UIImage(data: data, scale: scale)
+            }.value
+            guard let decoded else {
+                didFail = true
+                displayImage = nil
+                return
+            }
+            displayImage = MediaImageOrientation.normalized(decoded)
+        } catch {
+            didFail = true
+            displayImage = nil
+        }
+    }
+
+    private var usesDetailLayout: Bool {
+        if case .some(.originalDetail) = displayMode { return true }
+        return false
+    }
+
+    private func resolvedFeedPresentation(
+        imageAspect: CGFloat,
+        containerWidth: CGFloat
+    ) -> ContentImagePresentation {
+        if let feedPresentationOverride { return feedPresentationOverride }
+        if let fromReference = reference?.imagePresentation { return fromReference }
+        if let reference,
+           let stored = ContentImagePresentationStore.presentation(forMediaURL: reference.id) {
+            return stored
+        }
+        return ContentImagePresentation.inferredLegacy(imageAspect: imageAspect)
+    }
+}
+
+// MARK: - UIViewRepresentable
+
+private struct InteractiveImageRepresentable: UIViewRepresentable {
+    let mediaID: String
+    let image: UIImage
+    let backgroundColor: UIColor
+    let displayMode: AdaptiveMediaDisplayMode
+    let feedPresentation: ContentImagePresentation
+    let containerSize: CGSize
+    let onSingleTap: (() -> Void)?
+    let onDoubleTapLike: (() -> Void)?
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            mediaID: mediaID,
+            onSingleTap: onSingleTap,
+            onDoubleTapLike: onDoubleTapLike
+        )
+    }
+
+    func makeUIView(context: Context) -> InteractiveImageUIView {
+        let view = InteractiveImageUIView(mediaID: mediaID)
+        view.coordinator = context.coordinator
+        view.backgroundFillColor = backgroundColor
+        applyLayout(to: view)
+        context.coordinator.rootView = view
+        return view
+    }
+
+    func updateUIView(_ uiView: InteractiveImageUIView, context: Context) {
+        context.coordinator.onSingleTap = onSingleTap
+        context.coordinator.onDoubleTapLike = onDoubleTapLike
+        uiView.coordinator = context.coordinator
+        uiView.backgroundFillColor = backgroundColor
+        guard !uiView.isPinching else { return }
+        uiView.setImage(image)
+        applyLayout(to: uiView)
+    }
+
+    private func applyLayout(to view: InteractiveImageUIView) {
+        switch displayMode {
+        case .feedCard(let presentation):
+            view.applyFeedFraming(
+                image: image,
+                presentation: presentation,
+                containerSize: containerSize
+            )
+        case .originalDetail:
+            view.applyDetailFit(image: image)
+        }
+    }
+
+    final class Coordinator: NSObject {
+        let mediaID: String
+        var onSingleTap: (() -> Void)?
+        var onDoubleTapLike: (() -> Void)?
+        weak var rootView: InteractiveImageUIView?
+
+        init(
+            mediaID: String,
+            onSingleTap: (() -> Void)?,
+            onDoubleTapLike: (() -> Void)?
+        ) {
+            self.mediaID = mediaID
+            self.onSingleTap = onSingleTap
+            self.onDoubleTapLike = onDoubleTapLike
+        }
+    }
+}
+
+// MARK: - UIKit root (pixels + pinch/tap — recognizer stays here; overlay follows live)
+
+/// Root interactive surface — `UIImageView` displays pixels; root owns recognizers.
+final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
+    let mediaID: String
+    let imageView = UIImageView()
+
+    fileprivate weak var coordinator: InteractiveImageRepresentable.Coordinator?
+
+    var backgroundFillColor: UIColor = .clear {
+        didSet {
+            guard !isPinching else { return }
+            backgroundColor = backgroundFillColor
+        }
+    }
+
+    private(set) var isPinching = false
+
+    private var pinchRecognizer: UIPinchGestureRecognizer!
+    private var singleTapRecognizer: UITapGestureRecognizer?
+    private var doubleTapRecognizer: UITapGestureRecognizer?
+    private weak var scrollView: UIScrollView?
+    private weak var overlayImageView: UIImageView?
+    private var didLogMount = false
+
+    private var pinchStartFrame: CGRect = .zero
+    private var pinchStartMidpoint: CGPoint = .zero
+    private var normalizedPinchAnchor = CGPoint(x: 0.5, y: 0.5)
+    private var livePinchScale: CGFloat = 1
+    private var usesFeedFraming = false
+
+    init(mediaID: String) {
+        self.mediaID = mediaID
+        super.init(frame: .zero)
+        isUserInteractionEnabled = true
+        isMultipleTouchEnabled = true
+        clipsToBounds = true
+
+        imageView.contentMode = .scaleAspectFit
+        imageView.isUserInteractionEnabled = false
+        imageView.clipsToBounds = true
+        addSubview(imageView)
+
+        pinchRecognizer = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+        pinchRecognizer.delegate = self
+        pinchRecognizer.cancelsTouchesInView = false
+        addGestureRecognizer(pinchRecognizer)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setImage(_ image: UIImage) {
+        guard !isPinching else { return }
+        imageView.image = image
+        setNeedsLayout()
+    }
+
+    func applyFeedFraming(
+        image: UIImage,
+        presentation: ContentImagePresentation,
+        containerSize: CGSize
+    ) {
+        usesFeedFraming = true
+        setImage(image)
+        let pixelSize = MediaImageOrientation.pixelSize(of: image)
+        if presentation.usesFillCrop,
+           let draw = ContentImagePresentation.drawRect(
+            imagePixelSize: pixelSize,
+            containerSize: containerSize,
+            presentation: presentation
+           ) {
+            imageView.contentMode = .scaleToFill
+            imageView.frame = CGRect(
+                x: draw.x,
+                y: draw.y,
+                width: draw.width,
+                height: draw.height
+            )
+        } else {
+            imageView.contentMode = .scaleAspectFit
+            imageView.frame = bounds
+        }
+    }
+
+    func applyDetailFit(image: UIImage) {
+        usesFeedFraming = false
+        setImage(image)
+        imageView.contentMode = .scaleAspectFit
+        imageView.frame = bounds
+    }
+
+    func installTapRecognizersIfNeeded() {
+        guard singleTapRecognizer == nil, doubleTapRecognizer == nil else { return }
+
+        if coordinator?.onDoubleTapLike != nil {
+            let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+            doubleTap.numberOfTapsRequired = 2
+            doubleTap.numberOfTouchesRequired = 1
+            doubleTap.delegate = self
+            doubleTap.cancelsTouchesInView = false
+            addGestureRecognizer(doubleTap)
+            doubleTapRecognizer = doubleTap
+        }
+
+        if coordinator?.onSingleTap != nil {
+            let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
+            singleTap.numberOfTapsRequired = 1
+            singleTap.numberOfTouchesRequired = 1
+            singleTap.delegate = self
+            singleTap.cancelsTouchesInView = false
+            if let doubleTapRecognizer {
+                singleTap.require(toFail: doubleTapRecognizer)
+            }
+            addGestureRecognizer(singleTap)
+            singleTapRecognizer = singleTap
+        }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil else { return }
+        scrollView = enclosingScrollView
+        installTapRecognizersIfNeeded()
+        guard !didLogMount else { return }
+        didLogMount = true
+        InteractiveImageZoomProbe.log("mounted id=\(mediaID)")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard !isPinching else { return }
+        if !usesFeedFraming {
+            imageView.frame = bounds
+        }
+        logLayoutMetrics()
+    }
+
+    private func logLayoutMetrics() {
+        let rootBounds = InteractiveImageZoomProbe.describe(bounds)
+        let imageBounds = InteractiveImageZoomProbe.describe(imageView.bounds)
+        let windowFrame: String
+        if let window {
+            windowFrame = InteractiveImageZoomProbe.describe(convert(bounds, to: window))
+        } else {
+            windowFrame = "no-window"
+        }
+        InteractiveImageZoomProbe.log(
+            "rootBounds=\(rootBounds) imageBounds=\(imageBounds) windowFrame=\(windowFrame)"
+        )
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let result = super.hitTest(point, with: event)
+        guard event?.type == .touches else { return result }
+        let winner = result.map { String(describing: type(of: $0)) } ?? "nil"
+        let touchCount = event?.allTouches?.filter {
+            switch $0.phase {
+            case .ended, .cancelled: return false
+            default: return true
+            }
+        }.count ?? 0
+        InteractiveImageZoomProbe.log(
+            "HIT id=\(mediaID) point=(\(Int(point.x)),\(Int(point.y))) "
+                + "activeTouches=\(touchCount) winner=\(winner)"
+        )
+        return result
+    }
+
+    @objc private func handleSingleTap(_ recognizer: UITapGestureRecognizer) {
+        guard !isPinching else { return }
+        coordinator?.onSingleTap?()
+    }
+
+    @objc private func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
+        guard !isPinching else { return }
+        coordinator?.onDoubleTapLike?()
+    }
+
+    @objc private func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
+        guard let window else { return }
+
+        switch recognizer.state {
+        case .began:
+            beginPinch(recognizer, in: window)
+        case .changed:
+            updatePinch(recognizer, in: window)
+        case .ended, .cancelled, .failed:
+            endPinch(in: window)
+        default:
+            break
+        }
+    }
+
+    private func beginPinch(_ recognizer: UIPinchGestureRecognizer, in window: UIWindow) {
+        guard let image = imageView.image else { return }
+        dismissOverlay(animated: false)
+
+        let frame = convert(bounds, to: window)
+        guard frame.width > 0, frame.height > 0 else { return }
+
+        let midpoint = pinchMidpoint(recognizer, in: window)
+        let overlay = UIImageView(image: image)
+        overlay.contentMode = .scaleAspectFit
+        overlay.clipsToBounds = false
+        overlay.isUserInteractionEnabled = false
+        overlay.frame = frame
+        overlay.layer.zPosition = 10_000
+        window.addSubview(overlay)
+
+        overlayImageView = overlay
+        pinchStartFrame = frame
+        pinchStartMidpoint = midpoint
+        normalizedPinchAnchor = normalizedPoint(midpoint, in: frame)
+        livePinchScale = 1
+        isPinching = true
+
+        scrollView?.isScrollEnabled = false
+        imageView.alpha = 0
+
+        applyPinchTransform(to: overlay, scale: 1, translation: .zero)
+
+        InteractiveImageZoomProbe.log(
+            "began scale=\(String(format: "%.3f", recognizer.scale)) "
+                + "midpoint=\(InteractiveImageZoomProbe.describe(midpoint)) "
+                + "frame=\(InteractiveImageZoomProbe.describe(frame))"
+        )
+    }
+
+    private func updatePinch(_ recognizer: UIPinchGestureRecognizer, in window: UIWindow) {
+        guard isPinching, let overlay = overlayImageView else { return }
+
+        let scale = min(max(recognizer.scale, 1), 4)
+        let midpoint = pinchMidpoint(recognizer, in: window)
+        let proposedTranslation = CGPoint(
+            x: midpoint.x - pinchStartMidpoint.x,
+            y: midpoint.y - pinchStartMidpoint.y
+        )
+        livePinchScale = scale
+
+        let translation = clampedTranslation(
+            proposedTranslation,
+            scale: scale,
+            overlay: overlay
+        )
+        applyPinchTransform(to: overlay, scale: scale, translation: translation)
+
+        InteractiveImageZoomProbe.log(
+            "changed scale=\(String(format: "%.3f", scale)) "
+                + "midpoint=\(InteractiveImageZoomProbe.describe(midpoint)) "
+                + "translation=\(InteractiveImageZoomProbe.describe(translation))"
+        )
+    }
+
+    private func endPinch(in window: UIWindow) {
+        guard isPinching else { return }
+
+        let endingScale = livePinchScale
+        InteractiveImageZoomProbe.log("ended scale=\(String(format: "%.3f", endingScale))")
+
+        guard let overlay = overlayImageView else {
+            restoreAfterPinch()
+            return
+        }
+
+        let targetFrame = convert(bounds, to: window)
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+
+        let finish = { [weak self] in
+            overlay.removeFromSuperview()
+            self?.overlayImageView = nil
+            self?.restoreAfterPinch()
+        }
+
+        if reduceMotion {
+            finish()
+            return
+        }
+
+        UIView.animate(
+            withDuration: 0.28,
+            delay: 0,
+            usingSpringWithDamping: 0.86,
+            initialSpringVelocity: 0,
+            options: [.beginFromCurrentState, .allowUserInteraction]
+        ) {
+            overlay.transform = .identity
+            overlay.frame = targetFrame
+        } completion: { _ in
+            finish()
+        }
+    }
+
+    private func restoreAfterPinch() {
+        isPinching = false
+        livePinchScale = 1
+        pinchStartFrame = .zero
+        pinchStartMidpoint = .zero
+        normalizedPinchAnchor = CGPoint(x: 0.5, y: 0.5)
+        imageView.alpha = 1
+        imageView.transform = .identity
+        scrollView?.isScrollEnabled = true
+        setNeedsLayout()
+    }
+
+    private func dismissOverlay(animated: Bool) {
+        overlayImageView?.removeFromSuperview()
+        overlayImageView = nil
+    }
+
+    private func applyPinchTransform(to view: UIView, scale: CGFloat, translation: CGPoint) {
+        let anchorInWindow = CGPoint(
+            x: pinchStartFrame.minX + normalizedPinchAnchor.x * pinchStartFrame.width,
+            y: pinchStartFrame.minY + normalizedPinchAnchor.y * pinchStartFrame.height
+        )
+        var transform = CGAffineTransform.identity
+        transform = transform.translatedBy(x: anchorInWindow.x, y: anchorInWindow.y)
+        transform = transform.scaledBy(x: scale, y: scale)
+        transform = transform.translatedBy(x: -anchorInWindow.x, y: -anchorInWindow.y)
+        transform = transform.translatedBy(x: translation.x, y: translation.y)
+        view.transform = transform
+    }
+
+    /// Keeps the scaled overlay covering the original image viewport — no empty gaps inside.
+    private func clampedTranslation(
+        _ proposed: CGPoint,
+        scale: CGFloat,
+        overlay: UIView
+    ) -> CGPoint {
+        var translation = proposed
+        let viewport = pinchStartFrame
+
+        for _ in 0..<4 {
+            applyPinchTransform(to: overlay, scale: scale, translation: translation)
+            let visual = overlay.frame
+
+            var adjust = CGPoint.zero
+            if visual.minX > viewport.minX {
+                adjust.x += viewport.minX - visual.minX
+            }
+            if visual.maxX < viewport.maxX {
+                adjust.x += viewport.maxX - visual.maxX
+            }
+            if visual.minY > viewport.minY {
+                adjust.y += viewport.minY - visual.minY
+            }
+            if visual.maxY < viewport.maxY {
+                adjust.y += viewport.maxY - visual.maxY
+            }
+
+            if abs(adjust.x) < 0.5, abs(adjust.y) < 0.5 {
+                break
+            }
+            translation.x += adjust.x
+            translation.y += adjust.y
+        }
+
+        return translation
+    }
+
+    private func pinchMidpoint(_ gesture: UIGestureRecognizer, in window: UIWindow) -> CGPoint {
+        let count = max(gesture.numberOfTouches, 1)
+        var sum = CGPoint.zero
+        for index in 0..<count {
+            let point = gesture.location(ofTouch: index, in: window)
+            sum.x += point.x
+            sum.y += point.y
+        }
+        return CGPoint(x: sum.x / CGFloat(count), y: sum.y / CGFloat(count))
+    }
+
+    private func normalizedPoint(_ point: CGPoint, in frame: CGRect) -> CGPoint {
+        guard frame.width > 0, frame.height > 0 else { return CGPoint(x: 0.5, y: 0.5) }
+        return CGPoint(
+            x: min(max((point.x - frame.minX) / frame.width, 0), 1),
+            y: min(max((point.y - frame.minY) / frame.height, 0), 1)
+        )
+    }
+
+    // MARK: UIGestureRecognizerDelegate
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        if isPinching { return false }
+        let involvesPinch = gestureRecognizer is UIPinchGestureRecognizer
+            || otherGestureRecognizer is UIPinchGestureRecognizer
+        guard involvesPinch, let scrollView else { return false }
+        let involvesScrollPan = gestureRecognizer === scrollView.panGestureRecognizer
+            || otherGestureRecognizer === scrollView.panGestureRecognizer
+        return involvesScrollPan
+    }
+
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if isPinching {
+            return gestureRecognizer is UIPinchGestureRecognizer
+        }
+        if gestureRecognizer is UIPinchGestureRecognizer {
+            return imageView.image != nil
+        }
+        return super.gestureRecognizerShouldBegin(gestureRecognizer)
+    }
+}
+
+private extension UIView {
+    var enclosingScrollView: UIScrollView? {
+        var view: UIView? = self
+        while let current = view {
+            if let scroll = current as? UIScrollView { return scroll }
+            view = current.superview
+        }
+        return nil
+    }
+}

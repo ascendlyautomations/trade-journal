@@ -75,6 +75,7 @@ struct TradeEntryHubView: View {
                 Button("Cancel", action: onDismiss)
             }
         }
+        .experienceProtectedFormDismiss()
         .accessibilityIdentifier("tradeEntry.hub")
     }
 

@@ -71,7 +71,7 @@ struct CreateStoryView: View {
             Button("Discard", role: .destructive) { viewModel.dismissRequested() }
             Button("Keep Editing", role: .cancel) {}
         }
-        .interactiveDismissDisabled(viewModel.phase == .publishing)
+        .experienceProtectedFormDismiss()
         .task { viewModel.loadIfNeeded() }
         .onChange(of: photoItem) { _, item in
             Task { await loadPhoto(item) }

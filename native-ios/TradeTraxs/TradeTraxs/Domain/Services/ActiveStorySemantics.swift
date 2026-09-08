@@ -16,6 +16,23 @@ nonisolated enum ActiveStorySemantics {
         stories.filter { isActive(createdAt: $0.createdAt, now: now) }
     }
 
+    /// Groups active stories by author — oldest first within each author (Instagram slide order).
+    static func groupByAuthor(_ active: [Story]) -> [ProfileID: [Story]] {
+        var grouped: [ProfileID: [Story]] = [:]
+        for story in active {
+            grouped[story.authorProfileID, default: []].append(story)
+        }
+        for authorID in grouped.keys {
+            grouped[authorID]?.sort { $0.createdAt < $1.createdAt }
+        }
+        return grouped
+    }
+
+    /// Author ring order for the story viewer — matches ``stripStories`` author sequence.
+    static func authorOrder(from active: [Story], viewerID: ProfileID) -> [ProfileID] {
+        stripStories(from: active, viewerID: viewerID).map(\.authorProfileID)
+    }
+
     /// One strip bubble per author (newest story), ordered like web bar:
     /// viewer first (if present), then others by newest story `created_at` desc.
     static func stripStories(from active: [Story], viewerID: ProfileID) -> [Story] {

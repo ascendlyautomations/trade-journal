@@ -35,50 +35,83 @@ struct PublicTradeHeadlineRow: View {
 
 /// Side, account-type, RR, quantity (and optional session) chips for public trade surfaces.
 struct PublicTradeMetaChipRow: View {
+    enum LayoutStyle: Sendable {
+        /// Feed / detail — horizontal scroll when chips overflow.
+        case horizontalScroll
+        /// Profile compact cards — wrap onto additional lines within available width.
+        case wrap
+    }
+
     let trade: Trade
     var showsQuantity: Bool = true
     var showsSession: Bool = true
+    var layout: LayoutStyle = .horizontalScroll
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: ExperienceSpacing.xxs) {
-                PublicTradeMetaChip(
-                    title: TradeDisplay.sideTitle(trade.side),
-                    tone: trade.side == .long ? .success : .error
-                )
-                if let accountBadge = trade.publicAccountBadge {
-                    PublicTradeMetaChip(title: accountBadge, tone: .info)
-                }
-                if trade.riskReward != nil {
-                    PublicTradeMetaChip(title: TradeDisplay.rrText(trade.riskReward), tone: .info)
-                }
-                if let points = TradeDisplay.pointsText(trade.points) {
-                    PublicTradeMetaChip(title: "Pts \(points)", tone: .info)
-                }
-                if trade.mode == .copyTraded {
-                    PublicTradeMetaChip(
-                        title: TradeDisplay.tradeModeFallbackTitle(.copyTraded) ?? "Copy Traded",
-                        tone: .info
-                    )
-                }
-                if showsQuantity {
-                    PublicTradeMetaChip(
-                        title: TradeDisplay.quantityBadgeText(trade.quantity),
-                        tone: .info
-                    )
-                }
-                if showsSession,
-                   let session = trade.sessionLabel?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                   !session.isEmpty
-                {
-                    PublicTradeMetaChip(title: session, tone: .info)
+        switch layout {
+        case .horizontalScroll:
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: PublicTradeMetaChipRowLayout.chipSpacing) {
+                    chipContent
                 }
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .wrap:
+            ExperienceFlowLayout(
+                spacing: PublicTradeMetaChipRowLayout.chipSpacing,
+                rowSpacing: PublicTradeMetaChipRowLayout.chipSpacing
+            ) {
+                chipContent
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    @ViewBuilder
+    private var chipContent: some View {
+        PublicTradeMetaChip(
+            title: TradeDisplay.sideTitle(trade.side),
+            tone: trade.side == .long ? .success : .error
+        )
+        if let accountBadge = trade.publicAccountBadge {
+            PublicTradeMetaChip(title: accountBadge, tone: .info)
+        }
+        if trade.riskReward != nil {
+            PublicTradeMetaChip(title: TradeDisplay.rrText(trade.riskReward), tone: .info)
+        }
+        if let points = TradeDisplay.pointsText(trade.points) {
+            PublicTradeMetaChip(title: "Pts \(points)", tone: .info)
+        }
+        if trade.mode == .copyTraded {
+            PublicTradeMetaChip(
+                title: TradeDisplay.tradeModeFallbackTitle(.copyTraded) ?? "Copy Traded",
+                tone: .info
+            )
+        }
+        if showsQuantity {
+            PublicTradeMetaChip(
+                title: TradeDisplay.quantityBadgeText(trade.quantity),
+                tone: .info
+            )
+        }
+        if let duration = TradeDisplay.cardDurationText(for: trade) {
+            PublicTradeMetaChip(title: duration, tone: .info)
+        }
+        if showsSession,
+           let session = trade.sessionLabel?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !session.isEmpty
+        {
+            PublicTradeMetaChip(title: session, tone: .info)
+        }
+    }
+}
+
+private enum PublicTradeMetaChipRowLayout {
+    static let chipSpacing: CGFloat = 3
+    static let chipHorizontalPadding: CGFloat = 4
+    static let chipVerticalPadding: CGFloat = 2
 }
 
 /// Compact intrinsic-width chip for public trade metadata rows.
@@ -93,10 +126,9 @@ private struct PublicTradeMetaChip: View {
         Text(title)
             .experienceStyle(.caption2, color: toneColor)
             .lineLimit(1)
-            .minimumScaleFactor(0.85)
             .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
+            .padding(.horizontal, PublicTradeMetaChipRowLayout.chipHorizontalPadding)
+            .padding(.vertical, PublicTradeMetaChipRowLayout.chipVerticalPadding)
             .background(toneColor.opacity(ExperienceOpacity.subtle))
             .clipShape(Capsule())
             .experienceAccessibility(label: title, identifier: "tag.\(title)")

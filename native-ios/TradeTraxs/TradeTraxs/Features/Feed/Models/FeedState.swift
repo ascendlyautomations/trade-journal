@@ -25,13 +25,36 @@ struct FeedState: Equatable {
     var isLoadingMore = false
     var didBootstrap = false
     var lastUpdated: Date?
+    /// True while a scope/filter reload is in flight — suppress false empty states.
+    var isQueryReloadInProgress = false
+    /// Filter cache keys confirmed empty by an authoritative first-page load this session.
+    var knownEmptyFilterKeys: Set<String> = []
 
     var visibleEntries: [FeedTimelineEntry] {
         entries.filter { $0.matches(filter: contentFilter) }
     }
 
     var showsEmpty: Bool {
-        phase == .loaded && visibleEntries.isEmpty
+        guard phase == .loaded, !isQueryReloadInProgress else { return false }
+        guard visibleEntries.isEmpty else { return false }
+        guard let key = Self.firstPageCacheKey(viewerID: viewerID, scope: scope, contentFilter: contentFilter) else {
+            return false
+        }
+        return knownEmptyFilterKeys.contains(key)
+    }
+
+    static func firstPageCacheKey(
+        viewerID: ProfileID?,
+        scope: FeedScope,
+        contentFilter: FeedContentFilter
+    ) -> String? {
+        guard let viewerID else { return nil }
+        return FeedSessionStore.cacheKey(
+            viewerID: viewerID,
+            scope: scope,
+            contentFilter: contentFilter,
+            cursor: nil
+        )
     }
 }
 

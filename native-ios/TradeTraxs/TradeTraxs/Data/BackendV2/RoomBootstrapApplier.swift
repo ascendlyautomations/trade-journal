@@ -30,7 +30,10 @@ nonisolated enum RoomBootstrapApplier {
         let roomWire = bootstrap.data.room
         let resolvedRoomID = RoomID(roomWire.id)
         let ownerID = ProfileID(roomWire.owner_user_id ?? "")
-        let memberCount = bootstrap.data.member_stats?.total_members ?? 0
+        let memberCount = RoomMemberCountAuthority.resolve(
+            memberStats: bootstrap.data.member_stats,
+            activeMemberCount: bootstrap.data.active_member_count
+        )
 
         let room = TradeRoom(
             id: resolvedRoomID,

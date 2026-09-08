@@ -15,15 +15,14 @@ struct CommentButton: View {
             ExperienceHaptics.play(.selection)
             action()
         }) {
-            HStack(spacing: 4) {
-                Image(systemName: "bubble.right")
-                    .foregroundStyle(colors.secondaryText)
-                Text(LikeButton.formatCount(count))
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .contentTransition(.numericText())
-            }
+            EngagementActionRowLabel(
+                kind: .comment,
+                count: count,
+                iconColor: colors.secondaryText
+            )
         }
         .buttonStyle(.plain)
+        .engagementActionRowContainer()
         .accessibilityLabel("Comments")
         .accessibilityValue("\(count)")
         .accessibilityIdentifier("interaction.comment.\(target.kind.rawValue).\(target.id)")

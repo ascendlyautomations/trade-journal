@@ -247,7 +247,7 @@ private struct AddTradePsychologyStubStorage: ObjectStorageProviding {
 }
 
 private struct AddTradePsychologyStubFeed: FeedRepository {
-    func feed(scope: FeedScope, page: PageRequest) async throws -> FeedPageResult {
+    func feed(scope: FeedScope, contentFilter: FeedContentFilter, page: PageRequest) async throws -> FeedPageResult {
         FeedPageResult(items: [], nextCursor: nil, embeddedTrades: [])
     }
     func post(id: PostID) async throws -> Post { throw AppError.unknown(message: "stub") }
@@ -272,11 +272,13 @@ private struct AddTradePsychologyStubFeed: FeedRepository {
             viewerHasSeen: false
         )
     }
-    func reel(id: ReelID) async throws -> Reel { throw AppError.unknown(message: "stub") }
+    func reel(id: ReelID) async throws -> ReelLoadResult { throw AppError.unknown(message: "stub") }
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
         CursorPage(items: [], nextCursor: nil)
     }
-    func profileReels(for profileID: ProfileID) async throws -> [Reel] { [] }
+    func profileReels(for profileID: ProfileID) async throws -> ProfileReelsResult {
+        ProfileReelsResult(reels: [], embeddedTrades: [])
+    }
     func createReel(_ reel: Reel) async throws -> Reel { reel }
     func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] { [] }
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {}

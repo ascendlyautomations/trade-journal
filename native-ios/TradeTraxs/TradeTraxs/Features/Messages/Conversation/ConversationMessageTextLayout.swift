@@ -11,18 +11,26 @@ struct ConversationMessageTextLayout: Layout {
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard let subview = subviews.first else { return .zero }
-        let capped = cappedWidth(from: proposal.width)
+        let ideal = subview.sizeThatFits(.unspecified)
+        if ideal.width <= maxWidth {
+            return ideal
+        }
         return subview.sizeThatFits(
-            ProposedViewSize(width: capped, height: proposal.height)
+            ProposedViewSize(width: maxWidth, height: proposal.height)
         )
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         guard let subview = subviews.first else { return }
-        let capped = cappedWidth(from: bounds.width)
-        let size = subview.sizeThatFits(
-            ProposedViewSize(width: capped, height: bounds.height)
-        )
+        let ideal = subview.sizeThatFits(.unspecified)
+        let size: CGSize
+        if ideal.width <= maxWidth {
+            size = ideal
+        } else {
+            size = subview.sizeThatFits(
+                ProposedViewSize(width: maxWidth, height: bounds.height)
+            )
+        }
         let originX: CGFloat
         switch horizontalAlignment {
         case .trailing:
@@ -37,11 +45,6 @@ struct ConversationMessageTextLayout: Layout {
             anchor: .topLeading,
             proposal: ProposedViewSize(width: size.width, height: size.height)
         )
-    }
-
-    private func cappedWidth(from proposed: CGFloat?) -> CGFloat? {
-        guard let proposed, proposed.isFinite else { return maxWidth }
-        return min(proposed, maxWidth)
     }
 }
 

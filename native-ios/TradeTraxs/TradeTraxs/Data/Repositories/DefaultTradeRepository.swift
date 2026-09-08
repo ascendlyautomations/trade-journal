@@ -64,7 +64,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             key: key,
             resource: "trades.owned"
         ) { [supabase] in
-            var query = SupabaseQuery.page(page) + [
+            var query = SupabaseQuery.createdAtIDPage(page) + [
                 SupabaseQuery.select(publicOnly ? TradeDTO.profileListSelect : "*"),
                 SupabaseQuery.eq("user_id", profileID.rawValue),
             ]
@@ -84,7 +84,12 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             let items = Self.mapTradesSkippingFailures(rows)
             return CursorPage(
                 items: items,
-                nextCursor: SupabaseQuery.nextCursor(items: rows, limit: page.limit) { $0.created_at }
+                nextCursor: SupabaseQuery.nextCreatedAtIDCursor(
+                    items: rows,
+                    limit: page.limit,
+                    createdAt: { $0.created_at },
+                    id: { $0.id }
+                )
             )
         }
     }
@@ -323,28 +328,34 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             throw AppError.domain(.permission(.notAuthenticated))
         }
         let body = TradeMapper.insertBody(from: draft, userID: userID)
-        let dto: TradeDTO.Trade = try await supabase.database.insert(
-            body,
-            into: "trades",
-            returning: TradeDTO.Trade.self
+        let dto = try await ImageCropWireInsert.insertTradeRow(
+            supabase: supabase,
+            body: body
         )
         let trade = try TradeMapper.mapToDomain(dto)
 
         // Web `saveManualTrade`: public trades also create a `posts` row for the feed.
         if draft.visibility == .public {
-            let post = TradeDTO.TradePostInsertBody(
+            let imageCrop = ContentImagePresentationCodec.encodeJSONValue(draft.imageCrop)
+            let post = ImageCropWireInsert.TradePublicPostInsertBody(
                 user_id: userID.rawValue,
                 trade_id: trade.id.rawValue,
                 image_url: draft.imageURL,
+                image_crop: imageCrop,
                 pnl: draft.realizedPnL.map { NSDecimalNumber(decimal: $0.amount).doubleValue },
                 rr: draft.riskReward.map { NSDecimalNumber(decimal: $0).doubleValue },
-                caption: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                caption: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                includeImageCropKey: draft.imageCrop != nil
             )
             do {
-                try await supabase.database.insert(post, into: "posts")
+                try await ImageCropWireInsert.insertPublicTradePost(
+                    supabase: supabase,
+                    body: post
+                )
             } catch {
                 // Trade already exists — surface post failure without rolling back the journal row
                 // (same soft-failure class as web logging; user still has the trade).
+                PostPublishProbe.logFailed(stage: .databaseInsert, error: error)
                 AppLog.networking.error(
                     "Public trade post insert failed — \(String(describing: error), privacy: .public)"
                 )
@@ -391,13 +402,16 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         // Web edit: upsert public feed post, or delete when privatized.
         if draft.visibility == .public {
             struct PostUpsertRow: Decodable { var trade_id: String? }
-            let post = TradeDTO.TradePostInsertBody(
+            let imageCrop = ContentImagePresentationCodec.encodeJSONValue(draft.imageCrop)
+            let post = ImageCropWireInsert.TradePublicPostInsertBody(
                 user_id: userID.rawValue,
                 trade_id: trade.id.rawValue,
                 image_url: draft.imageURL,
+                image_crop: imageCrop,
                 pnl: draft.realizedPnL.map { NSDecimalNumber(decimal: $0.amount).doubleValue },
                 rr: draft.riskReward.map { NSDecimalNumber(decimal: $0).doubleValue },
-                caption: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                caption: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                includeImageCropKey: draft.imageCrop != nil
             )
             do {
                 _ = try await supabase.database.upsert(
@@ -408,9 +422,27 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                     select: "trade_id"
                 )
             } catch {
-                AppLog.networking.error(
-                    "Public trade post upsert failed — \(String(describing: error), privacy: .public)"
-                )
+                if draft.imageCrop != nil,
+                   ContentImagePresentationCodec.isMissingImageCropColumnError(error) {
+                    PostPublishProbe.logNote(
+                        "posts.image_crop column missing during upsert — retrying without image_crop. "
+                            + ImageCropWireInsert.migrationHint
+                    )
+                    var fallback = post
+                    fallback.includeImageCropKey = false
+                    _ = try await supabase.database.upsert(
+                        fallback,
+                        into: "posts",
+                        onConflict: "trade_id",
+                        returning: PostUpsertRow.self,
+                        select: "trade_id"
+                    )
+                } else {
+                    PostPublishProbe.logFailed(stage: .databaseInsert, error: error)
+                    AppLog.networking.error(
+                        "Public trade post upsert failed — \(String(describing: error), privacy: .public)"
+                    )
+                }
             }
         } else if previous.visibility == .public {
             try? await supabase.database.delete(
@@ -704,6 +736,65 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             from: "account_payout_entries",
             query: [SupabaseQuery.eq("id", id.rawValue)]
         )
+    }
+
+    func payoutCycleHistory(for accountID: TradingAccountID) async throws -> [AccountPayoutCycle] {
+        let rows: [AccountPayoutCycleMapper.Row] = try await supabase.database.select(
+            AccountPayoutCycleMapper.Row.self,
+            from: "account_payout_cycles",
+            query: [
+                SupabaseQuery.select(AccountPayoutCycleMapper.selectFields),
+                SupabaseQuery.eq("account_id", accountID.rawValue),
+                URLQueryItem(name: "order", value: "started_at.desc"),
+            ]
+        )
+        return rows.compactMap { try? AccountPayoutCycleMapper.mapToDomain($0) }
+    }
+
+    func recordAccountPayout(
+        accountID: TradingAccountID,
+        input: RecordAccountPayoutInput
+    ) async throws -> RecordAccountPayoutResult {
+        struct Body: Encodable {
+            var p_account_id: String
+            var p_balance_after_payout: Double
+            var p_payout_amount: Double
+            var p_drawdown_behavior: String
+            var p_drawdown_floor_after_payout: Double
+            var p_balance_before_payout: Double
+            var p_remember_drawdown_behavior: Bool
+        }
+        let body = Body(
+            p_account_id: accountID.rawValue,
+            p_balance_after_payout: NSDecimalNumber(decimal: input.balanceAfterPayout).doubleValue,
+            p_payout_amount: NSDecimalNumber(decimal: input.payoutAmount).doubleValue,
+            p_drawdown_behavior: input.drawdownBehavior.rawValue,
+            p_drawdown_floor_after_payout: NSDecimalNumber(decimal: input.drawdownFloorAfterPayout).doubleValue,
+            p_balance_before_payout: NSDecimalNumber(decimal: input.balanceBeforePayout).doubleValue,
+            p_remember_drawdown_behavior: input.rememberDrawdownBehavior
+        )
+        let data = try await supabase.database.rpcData(
+            functionName: "record_account_payout",
+            parametersJSON: try JSONEncoder().encode(body)
+        )
+        let cycleID: String
+        if let decoded = try? JSONDecoder().decode(String.self, from: data) {
+            cycleID = decoded
+        } else if let raw = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"")) {
+            cycleID = raw
+        } else {
+            throw AppError.unknown(message: "Payout cycle was not created.")
+        }
+        var preferences: AccountPayoutPreferences?
+        if input.rememberDrawdownBehavior {
+            preferences = AccountPayoutPreferences(
+                payoutDrawdownBehavior: input.drawdownBehavior,
+                rememberPayoutDrawdownBehavior: true
+            )
+        }
+        return RecordAccountPayoutResult(cycleID: cycleID, accountPreferences: preferences)
     }
 
     func profileAccountInsights(for profileID: ProfileID) async throws -> [ProfileAccountInsight] {

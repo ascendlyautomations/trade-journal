@@ -55,6 +55,7 @@ struct PostTradeReflectionSheet: View {
                 }
             }
         }
+        .experienceProtectedFormDismiss()
         .presentationDetents([.medium])
         .accessibilityIdentifier("postTradeReflection.sheet")
     }

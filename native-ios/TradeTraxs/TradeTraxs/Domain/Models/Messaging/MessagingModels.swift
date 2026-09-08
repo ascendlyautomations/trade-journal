@@ -3,6 +3,10 @@ import Foundation
 nonisolated enum MessageKind: String, Hashable, Codable, Sendable {
     case text
     case tradeShare
+    case feedPostShare = "post"
+    case profilePostShare = "profile_post"
+    case achievementPostShare = "achievement_post"
+    case reelShare = "reel"
     case media
     case voice
     case storyReply = "story_reply"
@@ -48,6 +52,8 @@ nonisolated struct Message: Hashable, Codable, Sendable, Identifiable {
     var replyToMessageID: MessageID?
     var createdAt: Date
     var isReadByViewer: Bool
+    /// Structured share target persisted in `messages.*_id` columns.
+    var sharedContent: SharedContentReference? = nil
     /// Trade Room only — web `room_message_reactions` embed.
     var roomReactions: [RoomMessageReaction] = []
 }

@@ -45,6 +45,64 @@ nonisolated enum DashboardDateRange: String, CaseIterable, Identifiable, Sendabl
     }
 }
 
+/// Per-account Home date-range resolution — prefer 30D when it has enough trades for a
+/// meaningful equity curve (2+), else the next wider preset; single-trade accounts use All Time.
+nonisolated enum DashboardDateRangeFallback {
+    /// Minimum trades required before an automatic preset is considered useful for the equity curve.
+    static let minimumTradeCountForInitialRange = 2
+
+    /// Wider presets after the default 30D window (7D omitted — narrower than 30D).
+    static let initialLoadOrder: [DashboardDateRange] = [
+        .thirtyDays,
+        .ninetyDays,
+        .ytd,
+        .all,
+    ]
+
+    static func initialEffectiveRange(
+        tradeInputs: [DashboardChartMetrics.Input],
+        accountFilter: DashboardAccountFilter,
+        now: Date = Date()
+    ) -> DashboardDateRange {
+        for range in initialLoadOrder {
+            let tradeCount = filteredTradeCount(
+                tradeInputs: tradeInputs,
+                accountFilter: accountFilter,
+                dateRange: range,
+                now: now
+            )
+            if tradeCount >= minimumTradeCountForInitialRange {
+                return range
+            }
+        }
+
+        let allTimeCount = filteredTradeCount(
+            tradeInputs: tradeInputs,
+            accountFilter: accountFilter,
+            dateRange: .all,
+            now: now
+        )
+        if allTimeCount >= 1 {
+            return .all
+        }
+        return .thirtyDays
+    }
+
+    private static func filteredTradeCount(
+        tradeInputs: [DashboardChartMetrics.Input],
+        accountFilter: DashboardAccountFilter,
+        dateRange: DashboardDateRange,
+        now: Date
+    ) -> Int {
+        DashboardChartMetrics.filteredTrades(
+            from: tradeInputs,
+            accountFilter: accountFilter,
+            dateRange: dateRange,
+            now: now
+        ).count
+    }
+}
+
 nonisolated enum DashboardAccountFilter: Hashable, Sendable {
     case all
     case account(TradingAccountID)

@@ -15,6 +15,7 @@ enum FeedBootstrap: ScreenBootstrap {
         var session: any SessionProviding
         var detailCache: DetailPresentationCache
         var scope: FeedScope
+        var contentFilter: FeedContentFilter = .all
         var cursor: String?
         var limit: Int = 20
     }
@@ -38,6 +39,13 @@ enum FeedBootstrap: ScreenBootstrap {
 
         if let viewer, FeedSupport.isLocalDevelopmentProfile(viewer) {
             FeedFixtures.seedDetailCache(context.detailCache, viewerID: viewer)
+            if context.scope == .following {
+            FeedStoriesCatalogStore.shared.replace(
+                catalog: FeedFixtures.stories(viewerID: viewer),
+                viewerID: viewer,
+                isFullCatalog: true
+            )
+            }
             return PageResult(
                 viewerID: viewer,
                 entries: FeedFixtures.timeline(viewerID: viewer),
@@ -86,7 +94,11 @@ enum FeedBootstrap: ScreenBootstrap {
     private static func loadTimeline(_ context: Context) async throws -> TimelinePage {
         var page = PageRequest(limit: context.limit)
         page.cursor = context.cursor
-        let result = try await context.feed.feed(scope: context.scope, page: page)
+        let result = try await context.feed.feed(
+            scope: context.scope,
+            contentFilter: context.contentFilter,
+            page: page
+        )
         if !result.embeddedTrades.isEmpty {
             context.detailCache.seed(trades: result.embeddedTrades)
         }
@@ -114,17 +126,19 @@ enum FeedBootstrap: ScreenBootstrap {
         }
 
         do {
-            let loaded = try await context.feed.stories(for: viewer)
+            let loaded = try await context.feed.allActiveStories(for: viewer)
             context.detailCache.seed(stories: loaded)
             await hydrateStoryAuthors(
                 loaded,
                 profiles: context.profiles,
                 detailCache: context.detailCache
             )
+            FeedStoriesCatalogStore.shared.replace(catalog: loaded, viewerID: viewer, isFullCatalog: true)
+            let strip = ActiveStorySemantics.stripStories(from: loaded, viewerID: viewer)
             #if DEBUG
-            StoriesLoadProbe.record(stage: "ui", detail: "assigned stories=\(loaded.count)")
+            StoriesLoadProbe.record(stage: "ui", detail: "assigned stories=\(strip.count) catalog=\(loaded.count)")
             #endif
-            return loaded
+            return strip
         } catch {
             #if DEBUG
             StoriesLoadProbe.record(stage: "error", detail: String(describing: error))
@@ -209,9 +223,14 @@ enum FeedBootstrap: ScreenBootstrap {
             guard item.kind == .trade, let id = item.tradeID else { return nil }
             return detailCache.trade(id: id) == nil ? id : nil
         }
-        if !tradeIDs.isEmpty {
+        let linkedTradeIDs = items.compactMap { item -> TradeID? in
+            guard item.kind == .reel, let id = item.tradeID else { return nil }
+            return detailCache.trade(id: id) == nil ? id : nil
+        }
+        let missingTradeIDs = Array(Set(tradeIDs + linkedTradeIDs))
+        if !missingTradeIDs.isEmpty {
             _ = try? await SessionTradeEntityStore.shared.trades(
-                ids: tradeIDs,
+                ids: missingTradeIDs,
                 detailCache: detailCache,
                 repository: trades
             )
@@ -348,8 +367,11 @@ enum FeedBootstrap: ScreenBootstrap {
                 return .clip(item, reel)
             }
             if let reel = try? await feed.reel(id: reelID) {
-                detailCache.seed(reel)
-                return .clip(item, reel)
+                detailCache.seed(reel.reel)
+                if let embeddedTrade = reel.embeddedTrade {
+                    detailCache.seed(embeddedTrade)
+                }
+                return .clip(item, reel.reel)
             }
             return nil
 

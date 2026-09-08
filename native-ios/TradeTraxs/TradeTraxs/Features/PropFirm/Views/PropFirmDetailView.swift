@@ -4,11 +4,21 @@ import SwiftUI
 struct PropFirmDetailView: View {
     let accountID: TradingAccountID
     @State private var viewModel: PropFirmDetailViewModel
+    @State private var showsRecordPayout = false
 
     @Environment(\.themeColors) private var colors
 
-    init(accountID: TradingAccountID, data: DataEnvironment) {
+    private let recordPayoutData: DataEnvironment?
+    private let recordPayoutCoordinator: NavigationCoordinator?
+
+    init(
+        accountID: TradingAccountID,
+        data: DataEnvironment,
+        navigationCoordinator: NavigationCoordinator
+    ) {
         self.accountID = accountID
+        self.recordPayoutData = data
+        self.recordPayoutCoordinator = navigationCoordinator
         _viewModel = State(
             initialValue: PropFirmDetailViewModel(
                 accountID: accountID,
@@ -24,6 +34,8 @@ struct PropFirmDetailView: View {
     /// Tests.
     init(viewModel: PropFirmDetailViewModel) {
         self.accountID = viewModel.accountID
+        self.recordPayoutData = nil
+        self.recordPayoutCoordinator = nil
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -64,6 +76,15 @@ struct PropFirmDetailView: View {
             Task { await viewModel.refresh() }
         }
         .onDisappear { viewModel.onDisappear() }
+        .sheet(isPresented: $showsRecordPayout) {
+            if let data = recordPayoutData, let navigationCoordinator = recordPayoutCoordinator {
+                RecordPayoutFlowView(
+                    accountID: accountID,
+                    data: data,
+                    navigationCoordinator: navigationCoordinator
+                )
+            }
+        }
         .accessibilityIdentifier("propFirm.detail")
     }
 
@@ -138,8 +159,16 @@ struct PropFirmDetailView: View {
                     s.payoutReady ? "Ready" : "Not yet",
                     tone: s.payoutReady ? .positive : .neutral
                 )
-                Text("Payout readiness mirrors web `isPropfirmPayoutReady` (client advisory). Cycle history loads in a later pass.")
-                    .experienceStyle(.caption2, color: colors.tertiaryText)
+
+                Button {
+                    showsRecordPayout = true
+                } label: {
+                    Label("Record Payout", systemImage: "dollarsign.circle")
+                }
+                .disabled(recordPayoutData == nil)
+                .accessibilityIdentifier("propFirm.recordPayout")
+
+                FundedPayoutCycleHistoryContent(cycles: s.completedPayoutHistory)
             } else {
                 Text("Payout eligibility applies after the account is funded.")
                     .experienceStyle(.footnote, color: colors.secondaryText)

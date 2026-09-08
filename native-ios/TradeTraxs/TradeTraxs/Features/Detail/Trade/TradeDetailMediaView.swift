@@ -1,20 +1,21 @@
 import SwiftUI
 
-/// Trade detail media — compact inline preview; tap for full screen.
+/// Trade detail media — inline interactive pinch zoom (no separate fullscreen viewer).
 struct TradeDetailMediaView: View {
+    let mediaID: String
     let reference: MediaReference?
     let imagePipeline: any ImagePipeline
     var onDoubleTapLike: (() -> Void)? = nil
 
     var body: some View {
-        AspectFitMediaView(
+        InteractiveImageView(
+            mediaID: mediaID,
             reference: reference,
             purpose: .tradeScreenshot,
             imagePipeline: imagePipeline,
-            accessibilityIdentifier: "detail.trade.media",
             emptyIcon: .chart,
-            allowsFullResolutionViewer: true,
-            maxDisplayHeightOverride: 200,
+            accessibilityIdentifier: "detail.trade.media",
+            displayMode: .originalDetail,
             onDoubleTapLike: onDoubleTapLike
         )
     }

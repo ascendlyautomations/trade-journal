@@ -13,4 +13,12 @@ enum ProfileCardMediaPresence {
         let trimmed = thumbnail.id.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : thumbnail
     }
+
+    /// Vault is hidden on the viewer's own profile cards; shown when browsing another profile.
+    static func engagementVaultRef(
+        for target: InteractionTarget,
+        profileIsOwner: Bool
+    ) -> VaultContentRef? {
+        profileIsOwner ? nil : VaultContentRef.from(target)
+    }
 }

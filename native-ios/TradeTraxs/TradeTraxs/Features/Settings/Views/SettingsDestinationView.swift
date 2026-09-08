@@ -80,7 +80,10 @@ struct SettingsDestinationView: View {
                     navigationCoordinator: navigationCoordinator
                 )
             case .tradingAccounts:
-                SettingsTradingAccountsView(data: data)
+                SettingsTradingAccountsView(
+                    data: data,
+                    navigationCoordinator: navigationCoordinator
+                )
             case .privacy:
                 SettingsPrivacyView(data: data, profileStore: currentUserProfile)
             case .privacyBlockedAccounts:
@@ -108,6 +111,8 @@ struct SettingsDestinationView: View {
                 )
             case .affiliate:
                 SettingsAffiliateView(data: data)
+            case .vault:
+                VaultHomeView(data: data, navigationCoordinator: navigationCoordinator)
             case .support:
                 SettingsSupportView()
             case .about:

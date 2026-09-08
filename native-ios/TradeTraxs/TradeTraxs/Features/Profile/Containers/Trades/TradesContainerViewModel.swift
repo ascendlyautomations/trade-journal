@@ -27,8 +27,10 @@ final class TradesContainerViewModel {
     private let isOwner: Bool
 
     private var loadTask: Task<Void, Never>?
+    private var loadMoreTask: Task<Void, Never>?
     private var hasLoaded = false
     private var isLoadingMore = false
+    private var paginationGeneration = 0
     private var canViewContent = true
     /// When true, initial data comes from ``ProfileScreenViewModel`` bootstrap.
     private var isScreenOwned = false
@@ -66,6 +68,8 @@ final class TradesContainerViewModel {
     }
 
     var showsOwnerActions: Bool { isOwner }
+
+    var profileOwnerID: ProfileID { profileID }
 
     var emptyTitle: String {
         switch filter {
@@ -152,26 +156,46 @@ final class TradesContainerViewModel {
     }
 
     func loadMoreIfNeeded(currentTradeID: TradeID?) async {
-        guard hasLoaded, !isLoadingMore, nextCursor != nil else { return }
-        guard let currentTradeID else { return }
-        guard let last = visibleItems.last, last.id == currentTradeID else { return }
-
-        isLoadingMore = true
-        defer { isLoadingMore = false }
-        do {
-            let page = try await trades.trades(
-                ownedBy: profileID,
-                accountID: nil,
-                page: PageRequest(cursor: nextCursor),
-                publicOnly: true
-            )
-            appendUnique(page.items)
-            nextCursor = page.nextCursor
-            paginationErrorMessage = nil
-            updateStateForVisibleItems()
-        } catch {
-            paginationErrorMessage = ProfileSectionSupport.message(for: error)
+        guard hasLoaded else {
+            #if DEBUG
+            ProfileTradesPaginationDiagnostics.skipped(reason: "notLoaded")
+            #endif
+            return
         }
+        guard nextCursor != nil else {
+            #if DEBUG
+            ProfileTradesPaginationDiagnostics.skipped(reason: "noMore")
+            #endif
+            return
+        }
+        guard loadMoreTask == nil, !isLoadingMore else {
+            #if DEBUG
+            ProfileTradesPaginationDiagnostics.skipped(reason: "inFlight")
+            #endif
+            return
+        }
+        guard let currentTradeID, items.last?.id == currentTradeID else { return }
+
+        let cursor = nextCursor
+        let generation = paginationGeneration
+        isLoadingMore = true
+        #if DEBUG
+        ProfileTradesPaginationDiagnostics.started(profileID: profileID, cursor: cursor)
+        #endif
+
+        loadMoreTask = Task { @MainActor in
+            defer {
+                isLoadingMore = false
+                loadMoreTask = nil
+            }
+            await performLoadMore(cursor: cursor, generation: generation)
+        }
+    }
+
+    func retryLoadMore() {
+        paginationErrorMessage = nil
+        guard let lastID = items.last?.id else { return }
+        Task { await loadMoreIfNeeded(currentTradeID: lastID) }
     }
 
     func openTrade(_ trade: Trade) {
@@ -290,6 +314,7 @@ final class TradesContainerViewModel {
 
     private func refresh(background: Bool) async {
         loadTask?.cancel()
+        cancelLoadMore(reason: "refresh")
         if !background {
             isRefreshing = true
         }
@@ -297,7 +322,95 @@ final class TradesContainerViewModel {
         isRefreshing = false
     }
 
+    private func cancelLoadMore(reason: String) {
+        paginationGeneration &+= 1
+        loadMoreTask?.cancel()
+        loadMoreTask = nil
+        isLoadingMore = false
+        #if DEBUG
+        ProfileTradesPaginationDiagnostics.cancelledOrStale(reason: reason)
+        #endif
+    }
+
+    private func performLoadMore(cursor: String?, generation: Int) async {
+        guard generation == paginationGeneration else {
+            #if DEBUG
+            ProfileTradesPaginationDiagnostics.cancelledOrStale(reason: "generationMismatch")
+            #endif
+            return
+        }
+
+        do {
+            let page = try await trades.trades(
+                ownedBy: profileID,
+                accountID: nil,
+                page: PageRequest(cursor: cursor, limit: 30),
+                publicOnly: true
+            )
+
+            guard generation == paginationGeneration, !Task.isCancelled else {
+                #if DEBUG
+                ProfileTradesPaginationDiagnostics.cancelledOrStale(reason: "cancelledAfterFetch")
+                #endif
+                return
+            }
+
+            #if DEBUG
+            ProfileTradesPaginationDiagnostics.response(
+                count: page.items.count,
+                hasMore: page.nextCursor != nil
+            )
+            #endif
+
+            let beforeCount = items.count
+            if page.items.isEmpty {
+                nextCursor = nil
+            } else {
+                appendUnique(page.items)
+                nextCursor = page.nextCursor
+                if items.count == beforeCount {
+                    nextCursor = nil
+                }
+            }
+            paginationErrorMessage = nil
+            updateStateForVisibleItems()
+            prefetchEngagement(for: visibleItems.map(\.id))
+
+            #if DEBUG
+            ProfileTradesPaginationDiagnostics.completed(
+                appended: items.count - beforeCount,
+                hasMore: nextCursor != nil
+            )
+            #endif
+        } catch is CancellationError {
+            #if DEBUG
+            ProfileTradesPaginationDiagnostics.cancelledOrStale(reason: "cancellation")
+            #endif
+        } catch {
+            if Self.isBenignPaginationCancellation(error) {
+                #if DEBUG
+                ProfileTradesPaginationDiagnostics.cancelledOrStale(reason: "cancelled")
+                #endif
+                return
+            }
+            guard generation == paginationGeneration, !Task.isCancelled else {
+                #if DEBUG
+                ProfileTradesPaginationDiagnostics.cancelledOrStale(reason: "cancelledAfterError")
+                #endif
+                return
+            }
+            let message = ProfileSectionSupport.message(for: error)
+            paginationErrorMessage = message
+            #if DEBUG
+            ProfileTradesPaginationDiagnostics.failed(message: message)
+            #endif
+        }
+    }
+
     private func performLoad(reset: Bool) async {
+        if reset {
+            cancelLoadMore(reason: "reset")
+        }
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             hasLoaded = true
             items = ProfileTradeFixtures.samples(owner: profileID)
@@ -392,6 +505,14 @@ final class TradesContainerViewModel {
             return
         }
         state = .loaded(itemCount: visibleItems.count)
+    }
+
+    private static func isBenignPaginationCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if case AppError.cancelled = error { return true }
+        if case AppError.transport(.cancelled) = error { return true }
+        if NetworkTaskCancellation.mapIfCancelled(error) == .cancelled { return true }
+        return false
     }
 }
 
@@ -508,6 +629,17 @@ nonisolated enum TradeDisplay {
         return durationTextFromSeconds(seconds)
     }
 
+    /// Public trade-card duration — derived only from entry/exit timestamps.
+    static func cardDurationText(for trade: Trade) -> String? {
+        cardDurationText(entryAt: trade.entryAt, exitAt: trade.exitAt)
+    }
+
+    static func cardDurationText(entryAt: Date, exitAt: Date?) -> String? {
+        guard let exitAt, exitAt >= entryAt else { return nil }
+        let seconds = Int(exitAt.timeIntervalSince(entryAt))
+        return cardDurationTextFromSeconds(seconds)
+    }
+
     /// Prefer authoritative DB duration fields, then entry/exit timestamps.
     static func holdDuration(for trade: Trade) -> String? {
         if let text = trade.durationText?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -536,6 +668,26 @@ nonisolated enum TradeDisplay {
             return "\(secs)s"
         }
         return nil
+    }
+
+    private static func cardDurationTextFromSeconds(_ seconds: Int) -> String? {
+        guard seconds > 0 else { return nil }
+        let hours = seconds / 3_600
+        let minutes = (seconds % 3_600) / 60
+        let secs = seconds % 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        if minutes >= 10 {
+            return "\(minutes)m"
+        }
+        if minutes >= 1 {
+            if secs > 0 {
+                return "\(minutes)m \(secs)s"
+            }
+            return "\(minutes)m"
+        }
+        return "\(secs)s"
     }
 
     /// Account · date · time line for journal cards.

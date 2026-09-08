@@ -107,6 +107,7 @@ enum SessionBootstrapLoader {
                 profileID: viewerID,
                 profiles: profiles,
                 detailCache: detailCache,
+                forceNetwork: forceNetwork,
                 path: .legacy_flag_off
             )
         }
@@ -153,6 +154,7 @@ enum SessionBootstrapLoader {
                 profileID: viewerID,
                 profiles: profiles,
                 detailCache: detailCache,
+                forceNetwork: forceNetwork,
                 path: .legacy_missing_rpc
             )
         }
@@ -194,6 +196,7 @@ enum SessionBootstrapLoader {
                     profileID: viewerID,
                     profiles: profiles,
                     detailCache: detailCache,
+                    forceNetwork: forceNetwork,
                     path: .legacy_missing_rpc
                 )
             }
@@ -286,11 +289,15 @@ enum SessionBootstrapLoader {
         profileID: ProfileID,
         profiles: any ProfileRepository,
         detailCache: DetailPresentationCache?,
+        forceNetwork: Bool,
         path: BackendV2BootstrapPath
     ) async throws -> SessionBootstrapLoadResult {
         async let profileTask = profiles.profile(id: profileID)
         async let statsTask = profiles.stats(for: profileID)
-        async let onboardingTask = profiles.onboardingSnapshot(for: profileID)
+        async let onboardingTask = profiles.onboardingSnapshot(
+            for: profileID,
+            authoritative: forceNetwork
+        )
         let (profile, stats, onboardingSnapshot) = try await (profileTask, statsTask, onboardingTask)
         detailCache?.seed(profile)
         detailCache?.seed(stats: stats)

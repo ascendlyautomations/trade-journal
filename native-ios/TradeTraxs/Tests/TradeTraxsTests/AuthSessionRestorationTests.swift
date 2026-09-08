@@ -82,6 +82,33 @@ final class AuthSessionRestorationTests: XCTestCase {
         XCTAssertEqual(navigation.store.sessionPhase, .authenticated)
     }
 
+    func testSessionRestoreFiresAuthenticatedSessionBoundCallback() async throws {
+        let (auth, _, _) = makeAuth()
+        var sessionBoundCount = 0
+        auth.coordinator.onAuthenticatedSessionBound = {
+            sessionBoundCount += 1
+        }
+        try auth.sessionManager.install(validSession())
+        _ = auth.manager.prepareColdLaunch()
+        await auth.coordinator.bootstrapSession()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertTrue(auth.manager.state.isSessionReady)
+        XCTAssertEqual(sessionBoundCount, 1, "Push registration hook must run after keychain session restore")
+    }
+
+    func testSyncNavigationAfterColdLaunchFiresSessionBoundCallback() async throws {
+        let (auth, _, _) = makeAuth()
+        var sessionBoundCount = 0
+        auth.coordinator.onAuthenticatedSessionBound = {
+            sessionBoundCount += 1
+        }
+        try auth.sessionManager.install(validSession())
+        let state = auth.manager.prepareColdLaunch()
+        auth.coordinator.syncNavigation(with: state)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(sessionBoundCount, 1, "Push registration hook must run after cold-launch syncNavigation")
+    }
+
     // MARK: - Expired token refresh
 
     func testExpiredAccessTokenTriggersRefreshState() throws {

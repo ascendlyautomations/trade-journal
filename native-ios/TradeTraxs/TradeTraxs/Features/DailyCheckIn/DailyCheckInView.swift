@@ -81,6 +81,7 @@ struct DailyCheckInView: View {
                 }
             }
         }
+        .experienceProtectedFormDismiss()
         .accessibilityIdentifier("dailyCheckIn.sheet")
     }
 

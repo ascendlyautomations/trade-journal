@@ -205,9 +205,6 @@ final class AuthenticationCoordinator {
 
         switch state {
         case .authenticated, .locked:
-            if boundUserID == nil {
-                boundUserID = state.session?.userID
-            }
             if navigation.store.sessionPhase != .authenticated {
                 AuthFlowTracer.trace(
                     "root.authenticated",
@@ -346,6 +343,12 @@ final class AuthenticationCoordinator {
         let isNewBind = boundUserID == nil && newID != nil
         boundUserID = newID
         if isNewBind || switchedAccounts {
+            if authenticationManager.state.session?.provider == .google {
+                AppLog.authentication.info("OAuth authenticated session bound")
+            }
+            AppLog.authentication.info(
+                "Authenticated session bound newBind=\(isNewBind, privacy: .public) switched=\(switchedAccounts, privacy: .public)"
+            )
             #if DEBUG
             if isNewBind {
                 SupabaseSessionUsage.beginSession()

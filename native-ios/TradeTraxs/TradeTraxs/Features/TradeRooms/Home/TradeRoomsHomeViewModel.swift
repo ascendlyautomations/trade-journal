@@ -15,6 +15,7 @@ final class TradeRoomsHomeViewModel {
     var searchText = ""
     var pendingLeaveRoomID: RoomID?
     var showsLeaveRoomConfirmation = false
+    var showsCreateRoom = false
 
     private let messages: any MessageRepository
     private let rooms: any RoomRepository
@@ -98,6 +99,29 @@ final class TradeRoomsHomeViewModel {
         ExperienceHaptics.play(.selection)
         // Mark-read runs inside ``NavigationCoordinator`` for `.messages(.room)`.
         navigationCoordinator.open(navigationHost.room(item.id))
+    }
+
+    func presentCreateRoom() {
+        ExperienceHaptics.play(.selection)
+        showsCreateRoom = true
+    }
+
+    func handleRoomCreated(_ room: TradeRoom) {
+        showsCreateRoom = false
+        Task {
+            await domain.refreshRooms()
+            openRoom(
+                TradeRoomInboxItem(
+                    room: room,
+                    ownerName: nil,
+                    ownerIsVerified: false,
+                    preview: room.description ?? "No messages yet",
+                    timestamp: room.createdAt,
+                    unreadCount: 0,
+                    isMuted: false
+                )
+            )
+        }
     }
 
     func toggleMute(roomID: RoomID) {

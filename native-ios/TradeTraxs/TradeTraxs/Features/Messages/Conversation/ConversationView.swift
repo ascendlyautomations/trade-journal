@@ -50,6 +50,8 @@ struct ConversationView: View {
                 objectStorage: data.objectStorage,
                 detailCache: data.detailCache,
                 trades: data.trades,
+                feed: data.feed,
+                achievements: data.achievements,
                 notifications: data.notifications,
                 realtimeHub: data.realtimeHub,
                 rpc: data.rpc
@@ -315,6 +317,16 @@ struct ConversationView: View {
                                 imagePipeline: imagePipeline,
                                 viewerProfileID: viewModel.viewerID,
                                 sharedTrade: viewModel.sharedTrade(for: bubble.message),
+                                sharedPost: viewModel.sharedPost(for: bubble.message),
+                                sharedPostAuthor: viewModel.sharedPost(for: bubble.message)
+                                    .map { viewModel.authorProfile(for: $0.authorProfileID) } ?? nil,
+                                sharedReel: viewModel.sharedReel(for: bubble.message),
+                                sharedReelAuthor: viewModel.sharedReel(for: bubble.message)
+                                    .map { viewModel.authorProfile(for: $0.authorProfileID) } ?? nil,
+                                sharedAchievement: viewModel.sharedAchievement(for: bubble.message),
+                                sharedAchievementAuthor: viewModel.sharedAchievement(for: bubble.message)
+                                    .map { viewModel.authorProfile(for: $0.ownerProfileID) } ?? nil,
+                                isSharedContentUnavailable: viewModel.isSharedContentUnavailable(bubble.message),
                                 canDelete: viewModel.canDeleteMessage(bubble),
                                 onRetry: {
                                     Task { await viewModel.retry(bubble) }
@@ -324,6 +336,13 @@ struct ConversationView: View {
                                 },
                                 onSharedTradeTap: { tradeID in
                                     navigationCoordinator?.pushMessages(.sharedTrade(tradeID))
+                                },
+                                onSharedContentTap: { reference in
+                                    SharedContentNavigation.open(
+                                        reference: reference,
+                                        cache: detailCache,
+                                        coordinator: navigationCoordinator
+                                    )
                                 },
                                 onSharedStoryTap: { payload in
                                     StoryShareNavigation.open(

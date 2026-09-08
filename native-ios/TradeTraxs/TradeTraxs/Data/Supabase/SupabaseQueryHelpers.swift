@@ -45,6 +45,50 @@ nonisolated enum SupabaseQuery {
         guard items.count >= limit, let last = items.last else { return nil }
         return cursor(last)
     }
+
+    /// Parses `created_at|id` keyset cursors from RPC bootstrap and REST pagination.
+    static func parseCreatedAtIDCursor(_ cursor: String) -> (createdAt: String, id: String?) {
+        let parts = cursor.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+        if parts.count == 2 {
+            return (String(parts[0]), String(parts[1]))
+        }
+        return (cursor, nil)
+    }
+
+    /// Keyset page for `(created_at desc, id desc)` — matches profile bootstrap pagination.
+    static func createdAtIDPage(_ request: PageRequest) -> [URLQueryItem] {
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+            URLQueryItem(name: "limit", value: String(request.limit)),
+        ]
+        if let cursor = request.cursor, !cursor.isEmpty {
+            items.append(contentsOf: keysetBeforeCreatedAtID(cursor))
+        }
+        return items
+    }
+
+    /// Rows strictly before `(createdAt, id)` in descending `(created_at, id)` order.
+    static func keysetBeforeCreatedAtID(_ cursor: String) -> [URLQueryItem] {
+        let parsed = parseCreatedAtIDCursor(cursor)
+        if let id = parsed.id, !id.isEmpty {
+            let filter = "(created_at.lt.\(parsed.createdAt),and(created_at.eq.\(parsed.createdAt),id.lt.\(id)))"
+            return [URLQueryItem(name: "or", value: filter)]
+        }
+        return [URLQueryItem(name: "created_at", value: "lt.\(parsed.createdAt)")]
+    }
+
+    static func nextCreatedAtIDCursor<T>(
+        items: [T],
+        limit: Int,
+        createdAt: (T) -> String?,
+        id: (T) -> String?
+    ) -> String? {
+        guard items.count >= limit, let last = items.last else { return nil }
+        guard let createdAt = createdAt(last), !createdAt.isEmpty,
+              let id = id(last), !id.isEmpty
+        else { return nil }
+        return "\(createdAt)|\(id)"
+    }
 }
 
 extension Array {

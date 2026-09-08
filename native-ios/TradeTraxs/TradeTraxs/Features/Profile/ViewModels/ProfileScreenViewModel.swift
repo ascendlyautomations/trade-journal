@@ -63,7 +63,8 @@ final class ProfileScreenViewModel {
             OwnerProfileOptimisticStore.shared.registerOwnerScreen(self)
         }
         if state.didBootstrap {
-            publish(state)
+            syncSectionSnapshotsIntoState()
+            reapplyOptimisticOverlaysToSections()
             return
         }
         bootstrapIfNeeded(force: false)
@@ -165,23 +166,85 @@ final class ProfileScreenViewModel {
         guard isOwnerTarget else { return }
         let merged = OwnerProfileOptimisticStore.shared.merging(into: state)
         guard merged != state else { return }
-        applyLocalState(merged)
+        let skipPosts = shellViewModel?.posts?.hasAuthoritativePayload == true
+        applyLocalState(merged, skipPostsBootstrap: skipPosts)
+        if skipPosts, let visible = shellViewModel?.posts?.items {
+            syncPostsFromSection(visible)
+        }
     }
 
     func applyOptimisticPost(_ post: Post) {
         guard isOwnerTarget else { return }
         guard matchesOwner(post.authorProfileID) else { return }
         data.detailCache.seed(post)
+
+        syncShellIfNeeded()
+        shellViewModel?.ensurePostsSection()
+
+        let basePosts = preferredPostsBase()
         var next = state
-        next.posts = OwnerProfileOptimisticStore.upserting(post, into: next.posts)
+        next.posts = OwnerProfileOptimisticStore.upserting(post, into: basePosts)
+
+        shellViewModel?.posts?.notePublishSucceeded(
+            post,
+            preservingExisting: basePosts
+        )
+
         if next.phase == .idle || next.phase == .loading {
-            // Keep overlays; bootstrap `publish` merges them when load completes.
-            applyLocalState(next)
+            applyLocalState(next, skipPostsBootstrap: true)
+        } else {
+            next.phase = .loaded
+            next.didBootstrap = true
+            applyLocalState(next, skipPostsBootstrap: true)
+        }
+
+        if let visible = shellViewModel?.posts?.items {
+            syncPostsFromSection(visible)
+        }
+    }
+
+    /// Keeps ``ProfileState.posts`` aligned with the section VM after authoritative refresh.
+    func syncPostsFromSection(_ posts: [Post]) {
+        guard isOwnerTarget else { return }
+        guard state.posts != posts else { return }
+        var next = state
+        next.posts = posts
+        next.lastUpdated = Date()
+        state = next
+    }
+
+    private func preferredPostsBase() -> [Post] {
+        if let postsVM = shellViewModel?.posts, !postsVM.items.isEmpty {
+            return postsVM.items
+        }
+        if !state.posts.isEmpty {
+            return state.posts
+        }
+        return OwnerProfileOptimisticStore.shared.posts.filter {
+            matchesOwner($0.authorProfileID)
+        }
+    }
+
+    private func syncSectionSnapshotsIntoState() {
+        guard let postsVM = shellViewModel?.posts, postsVM.hasAuthoritativePayload else { return }
+        guard state.posts != postsVM.items else { return }
+        var next = state
+        next.posts = postsVM.items
+        state = next
+    }
+
+    /// Re-merge owner overlays when returning to Profile without a full bootstrap republish.
+    private func reapplyOptimisticOverlaysToSections() {
+        guard isOwnerTarget else { return }
+        var next = OwnerProfileOptimisticStore.shared.merging(into: state)
+        guard next != state else {
+            shellViewModel?.apply(state: state)
             return
         }
-        next.phase = .loaded
-        next.didBootstrap = true
-        applyLocalState(next)
+        next.lastUpdated = Date()
+        next.isRefreshing = state.isRefreshing
+        state = next
+        shellViewModel?.apply(state: next)
     }
 
     func applyOptimisticReel(_ reel: Reel) {
@@ -190,7 +253,13 @@ final class ProfileScreenViewModel {
         guard OwnerProfileOptimisticStore.isListedOnOwnerProfile(reel) else { return }
         data.detailCache.seed(reel)
         var next = state
-        next.clips = OwnerProfileOptimisticStore.upserting(reel, into: next.clips)
+        let baseClips: [Reel]
+        if let clipsVM = shellViewModel?.clips, clipsVM.hasAuthoritativePayload {
+            baseClips = clipsVM.items
+        } else {
+            baseClips = next.clips
+        }
+        next.clips = OwnerProfileOptimisticStore.upserting(reel, into: baseClips)
         if next.phase == .idle || next.phase == .loading {
             applyLocalState(next)
             return
@@ -205,7 +274,18 @@ final class ProfileScreenViewModel {
         guard matchesOwner(achievement.ownerProfileID) else { return }
         data.detailCache.seed(achievement)
         var next = state
-        next.achievements = OwnerProfileOptimisticStore.upserting(achievement, into: next.achievements)
+        let baseAchievements: [Achievement]
+        if let achievementsVM = shellViewModel?.achievements, achievementsVM.hasAuthoritativePayload {
+            baseAchievements = achievementsVM.items
+        } else {
+            baseAchievements = next.achievements
+        }
+        next.achievements = OwnerProfileOptimisticStore.upserting(achievement, into: baseAchievements)
+        if var stats = next.stats {
+            stats.payoutTotal = Self.publicPayoutTotal(from: next.achievements)
+            next.stats = stats
+            data.detailCache.seed(stats: stats)
+        }
         if next.phase == .idle || next.phase == .loading {
             applyLocalState(next)
             return
@@ -213,6 +293,10 @@ final class ProfileScreenViewModel {
         next.phase = .loaded
         next.didBootstrap = true
         applyLocalState(next)
+    }
+
+    private static func publicPayoutTotal(from achievements: [Achievement]) -> Decimal {
+        ProfilePayoutTotals.sum(from: achievements.filter(\.isPublic))
     }
 
     func applyOptimisticPostRemoval(id: PostID) {
@@ -246,15 +330,16 @@ final class ProfileScreenViewModel {
         return isOwnerTarget
     }
 
-    private func applyLocalState(_ next: ProfileState) {
+    private func applyLocalState(_ next: ProfileState, skipPostsBootstrap: Bool = false) {
         var next = next
         next.lastUpdated = Date()
         next.isRefreshing = state.isRefreshing
         state = next
         contentStore.applyBootstrap(next)
-        // Push into shell `latestState` + any mounted section VMs — do not reset selection.
         if shellViewModel == nil {
             syncShellIfNeeded()
+        } else if skipPostsBootstrap {
+            shellViewModel?.applyExcludingPosts(state: next)
         } else {
             shellViewModel?.apply(state: next)
         }

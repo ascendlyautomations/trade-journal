@@ -4,8 +4,10 @@ struct AchievementsContainerView: View {
     @Bindable var viewModel: AchievementsContainerViewModel
     let imagePipeline: any ImagePipeline
     let engagementStore: EngagementStore
+    let vaultStore: VaultStore
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
         ProfileSectionContainerChrome(
@@ -19,7 +21,10 @@ struct AchievementsContainerView: View {
                         achievement: achievement,
                         imagePipeline: imagePipeline,
                         engagementStore: engagementStore,
-                        onOpen: { viewModel.openAchievement(achievement) }
+                        vaultStore: vaultStore,
+                        onOpen: { viewModel.openAchievement(achievement) },
+                        isOwner: viewModel.isOwner,
+                        onReport: reportAction(for: achievement)
                     )
                     .transition(
                         reduceMotion
@@ -39,6 +44,18 @@ struct AchievementsContainerView: View {
                 viewModel.prefetchEngagement(for: viewModel.items.map(\.id))
             }
             .accessibilityIdentifier("profile.achievements.list")
+        }
+    }
+
+    private func reportAction(for achievement: Achievement) -> (() -> Void)? {
+        guard !viewModel.isOwner else { return nil }
+        return {
+            ExperienceHaptics.play(.selection)
+            ContentReportSupport.presentAchievement(
+                achievement.id,
+                ownerID: viewModel.profileOwnerID,
+                presenter: appEnvironment.contentReportPresenter
+            )
         }
     }
 }

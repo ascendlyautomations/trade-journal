@@ -12,6 +12,7 @@ struct CommentRowView: View {
     let canPin: Bool
     let isPinBusy: Bool
     let onTogglePin: ((Bool) -> Void)?
+    var onReply: (() -> Void)? = nil
     var onDelete: (() -> Void)?
 
     var onReport: (() -> Void)? = nil
@@ -58,6 +59,14 @@ struct CommentRowView: View {
                         isBusy: isLikeBusy,
                         onToggle: onToggleLike
                     )
+                    if let onReply {
+                        Button(action: onReply) {
+                            Text("Reply")
+                                .experienceStyle(.caption2, color: colors.tertiaryText)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("interaction.comment.reply")
+                    }
                     Spacer(minLength: 0)
                 }
             }

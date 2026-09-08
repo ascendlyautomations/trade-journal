@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Lightweight story viewer — aspect-fill media, owner delete, cached Story / Profile.
+/// Instagram-style story viewer — multi-slide carousel, tap navigation, private DM replies.
 struct FeedStoryViewerView: View {
     @State private var viewModel: FeedStoryViewerViewModel
     private let data: DataEnvironment
@@ -9,8 +9,11 @@ struct FeedStoryViewerView: View {
 
     @State private var showsDeleteConfirm = false
     @State private var showsShareSheet = false
+    @State private var replyText = ""
+    @State private var isReplyFocused = false
 
     @Environment(\.appEnvironment) private var appEnvironment
+    @Environment(\.scenePhase) private var scenePhase
 
     init(
         storyID: StoryID,
@@ -23,8 +26,10 @@ struct FeedStoryViewerView: View {
             initialValue: FeedStoryViewerViewModel(
                 storyID: storyID,
                 feed: data.feed,
+                messages: data.messages,
                 session: data.session,
                 cache: data.detailCache,
+                objectStorage: data.objectStorage,
                 onDismiss: onClose
             )
         )
@@ -52,10 +57,9 @@ struct FeedStoryViewerView: View {
                 }
             }
         }
-        .experienceSwipeToDismiss(onDismiss: onClose)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Close", action: onClose)
+                Button("Close", action: closeViewer)
                     .foregroundStyle(.white)
             }
             if viewModel.phase == .loaded {
@@ -99,6 +103,17 @@ struct FeedStoryViewerView: View {
         } message: {
             Text(viewModel.deleteErrorMessage ?? "")
         }
+        .alert(
+            "Couldn't send message",
+            isPresented: Binding(
+                get: { viewModel.replyErrorMessage != nil },
+                set: { if !$0 { viewModel.clearReplyError() } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.replyErrorMessage ?? "")
+        }
         .interactiveDismissDisabled(viewModel.isDeleting)
         .sheet(isPresented: $showsShareSheet) {
             if let story = viewModel.story {
@@ -111,7 +126,25 @@ struct FeedStoryViewerView: View {
             }
         }
         .task { await viewModel.loadIfNeeded() }
+        .onDisappear { viewModel.tearDown() }
+        .onChange(of: isReplyFocused) { _, focused in
+            viewModel.setReplyComposerActive(focused)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                viewModel.setBackgroundPaused(false)
+            case .background, .inactive:
+                viewModel.setBackgroundPaused(true)
+            @unknown default:
+                break
+            }
+        }
         .accessibilityIdentifier("feed.story.viewer")
+    }
+
+    private func closeViewer() {
+        viewModel.dismissViewer()
     }
 
     private var storyReportAction: (() -> Void)? {
@@ -136,13 +169,75 @@ struct FeedStoryViewerView: View {
             header(for: story)
                 .padding(.horizontal, ExperienceSpacing.md)
                 .padding(.top, ExperienceSpacing.sm)
+                .padding(.bottom, ExperienceSpacing.sm)
 
-            StoryAspectFillMediaView(
-                reference: story.media,
-                imagePipeline: imagePipeline
-            )
+            ZStack {
+                StoryPlaybackMediaView(
+                    reference: story.media,
+                    imagePipeline: imagePipeline,
+                    player: viewModel.playback.player,
+                    isVideo: viewModel.isVideoStory
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .id(story.id)
+                .storyHoldToPause(isEnabled: !isReplyFocused) { holding in
+                    viewModel.setHoldPaused(holding)
+                }
+
+                storyTapNavigationOverlay
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if viewModel.showReplyComposer {
+                StoryReplyInputView(
+                    text: $replyText,
+                    isFocused: $isReplyFocused,
+                    isSending: viewModel.isSendingReply,
+                    onSend: {
+                        Task {
+                            let draft = replyText
+                            let sent = await viewModel.sendStoryReply(text: draft)
+                            if sent {
+                                replyText = ""
+                                isReplyFocused = false
+                            }
+                        }
+                    }
+                )
+            }
         }
+        .safeAreaPadding(.bottom)
+        .simultaneousGesture(storyDragGesture)
+    }
+
+    private var storyDragGesture: some Gesture {
+        StoryViewerDragGestureSupport.dragGesture(
+            isReplyFocused: isReplyFocused,
+            canOpenReplyComposer: viewModel.showReplyComposer,
+            onSwipeDown: closeViewer,
+            onSwipeUp: { isReplyFocused = true },
+            onSwipeLeft: { viewModel.goNextAuthor() },
+            onSwipeRight: { viewModel.goPreviousAuthor() }
+        )
+    }
+
+    private var storyTapNavigationOverlay: some View {
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .frame(width: proxy.size.width * 0.38)
+                    .onTapGesture { viewModel.goPreviousSlide() }
+                    .accessibilityLabel("Previous story")
+
+                Color.clear
+                    .contentShape(Rectangle())
+                    .frame(width: proxy.size.width * 0.62)
+                    .onTapGesture { viewModel.goNextSlide() }
+                    .accessibilityLabel("Next story")
+            }
+        }
+        .allowsHitTesting(!isReplyFocused)
     }
 
     private func header(for story: Story) -> some View {

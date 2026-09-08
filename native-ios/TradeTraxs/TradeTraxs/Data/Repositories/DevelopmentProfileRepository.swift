@@ -47,7 +47,7 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
         return try await base.ensureProfileExists(for: profileID)
     }
 
-    func onboardingSnapshot(for profileID: ProfileID) async throws -> ProfileOnboardingSnapshot {
+    func onboardingSnapshot(for profileID: ProfileID, authoritative: Bool) async throws -> ProfileOnboardingSnapshot {
         if Self.isDevelopmentID(profileID) {
             return ProfileOnboardingSnapshot(
                 profileID: profileID,
@@ -56,7 +56,7 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
                 onboardingCompleted: true
             )
         }
-        return try await base.onboardingSnapshot(for: profileID)
+        return try await base.onboardingSnapshot(for: profileID, authoritative: authoritative)
     }
 
     func isUsernameTaken(_ username: String, excluding profileID: ProfileID) async throws -> Bool {
@@ -115,8 +115,18 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
         return try await base.wallPost(id: id)
     }
 
-    func createWallPost(authorID: ProfileID, content: String, imageURL: String?) async throws -> Post {
-        try await base.createWallPost(authorID: authorID, content: content, imageURL: imageURL)
+    func createWallPost(
+        authorID: ProfileID,
+        content: String,
+        imageURL: String?,
+        imageCrop: ContentImagePresentation?
+    ) async throws -> Post {
+        try await base.createWallPost(
+            authorID: authorID,
+            content: content,
+            imageURL: imageURL,
+            imageCrop: imageCrop
+        )
     }
 
     func deleteWallPost(id: PostID) async throws {

@@ -1,11 +1,17 @@
 import SwiftUI
 
-/// Owner-only payout ledger — manual entries across all trading accounts.
+/// Owner payout hub — funded prop cycles via Record Payout; legacy manual ledger elsewhere.
 struct PayoutsScreenView: View {
     @State private var viewModel: ManageAccountsViewModel
     @State private var payoutSheetContext: PayoutSheetContext?
+    @State private var recordPayoutAccountID: TradingAccountID?
+    @State private var payoutCyclesByAccount: [TradingAccountID: [AccountPayoutCycle]] = [:]
+    @State private var loadingCycleAccounts: Set<TradingAccountID> = []
 
     @Environment(\.themeColors) private var colors
+
+    private let data: DataEnvironment?
+    private let navigationCoordinator: NavigationCoordinator?
 
     private struct PayoutSheetContext: Identifiable {
         let accountID: TradingAccountID
@@ -17,7 +23,9 @@ struct PayoutsScreenView: View {
         }
     }
 
-    init(data: DataEnvironment) {
+    init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
+        self.data = data
+        self.navigationCoordinator = navigationCoordinator
         _viewModel = State(
             initialValue: ManageAccountsViewModel(
                 trades: data.trades,
@@ -28,6 +36,8 @@ struct PayoutsScreenView: View {
     }
 
     init(viewModel: ManageAccountsViewModel) {
+        self.data = nil
+        self.navigationCoordinator = nil
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -48,11 +58,14 @@ struct PayoutsScreenView: View {
         .toolbar(.hidden, for: .tabBar)
         .refreshable {
             await viewModel.refresh()
-            await viewModel.loadAllPayoutEntries()
+            await reloadAllPayoutData()
         }
         .task {
             viewModel.loadIfNeeded()
             await loadPayoutsWhenReady()
+        }
+        .onChange(of: AccountMutationStore.shared.revision) { _, _ in
+            Task { await reloadFundedCycleHistory() }
         }
         .sheet(item: $payoutSheetContext) { context in
             AccountPayoutEditorSheet(
@@ -66,7 +79,33 @@ struct PayoutsScreenView: View {
                 )
             )
         }
+        .sheet(isPresented: recordPayoutPresented) {
+            if let accountID = recordPayoutAccountID,
+               let data,
+               let navigationCoordinator {
+                RecordPayoutFlowView(
+                    accountID: accountID,
+                    data: data,
+                    navigationCoordinator: navigationCoordinator
+                )
+            }
+        }
         .accessibilityIdentifier("payouts.home")
+    }
+
+    private var recordPayoutPresented: Binding<Bool> {
+        Binding(
+            get: { recordPayoutAccountID != nil },
+            set: { if !$0 { recordPayoutAccountID = nil } }
+        )
+    }
+
+    private var fundedAccounts: [TradingAccount] {
+        viewModel.accounts.filter { PropFirmPayoutPolicy.supportsRecordPayout(for: $0) }
+    }
+
+    private var manualLedgerAccounts: [TradingAccount] {
+        viewModel.accounts.filter { PropFirmPayoutPolicy.supportsManualPayoutLedger(for: $0) }
     }
 
     private var payoutList: some View {
@@ -90,28 +129,62 @@ struct PayoutsScreenView: View {
                 Section {
                     SettingsIntroBlock(
                         title: "No trading accounts yet",
-                        message: "Add an account from Manage Accounts to track manual payouts here."
+                        message: "Add an account from Manage Accounts to track payouts here."
                     )
                 }
             } else {
-                ForEach(viewModel.accounts) { account in
+                if !fundedAccounts.isEmpty {
                     Section {
-                        AccountPayoutListContent(
-                            viewModel: viewModel,
-                            accountID: account.id,
-                            onAdd: { presentAddPayout(for: account.id) },
-                            onEdit: { entry in presentEditPayout(entry, accountID: account.id) }
-                        )
+                        Text("Funded prop-firm accounts use payout cycles. Recording a payout closes the current cycle and starts the next from your post-payout balance.")
+                            .experienceStyle(.footnote, color: colors.secondaryText)
                     } header: {
-                        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                            Text(TradingAccountDisplay.title(for: account, audience: .owner))
-                            Text(viewModel.subtitle(for: account))
-                                .font(.caption)
-                                .foregroundStyle(colors.secondaryText)
+                        Text("Record Payout")
+                    }
+
+                    ForEach(fundedAccounts) { account in
+                        Section {
+                            fundedAccountContent(account)
+                        } header: {
+                            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                                Text(TradingAccountDisplay.title(for: account, audience: .owner))
+                                Text(viewModel.subtitle(for: account))
+                                    .font(.caption)
+                                    .foregroundStyle(colors.secondaryText)
+                            }
+                        }
+                        .task(id: account.id.rawValue) {
+                            await loadPayoutCycles(for: account.id)
                         }
                     }
-                    .task(id: account.id.rawValue) {
-                        await viewModel.loadPayoutEntries(for: account.id)
+                }
+
+                if !manualLedgerAccounts.isEmpty {
+                    Section {
+                        Text("Private ledger entries for live and other supported accounts. Share payouts publicly by posting payout achievements.")
+                            .experienceStyle(.footnote, color: colors.secondaryText)
+                    } header: {
+                        Text("Manual Payouts")
+                    }
+
+                    ForEach(manualLedgerAccounts) { account in
+                        Section {
+                            AccountPayoutListContent(
+                                viewModel: viewModel,
+                                accountID: account.id,
+                                onAdd: { presentAddPayout(for: account.id) },
+                                onEdit: { entry in presentEditPayout(entry, accountID: account.id) }
+                            )
+                        } header: {
+                            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                                Text(TradingAccountDisplay.title(for: account, audience: .owner))
+                                Text(viewModel.subtitle(for: account))
+                                    .font(.caption)
+                                    .foregroundStyle(colors.secondaryText)
+                            }
+                        }
+                        .task(id: account.id.rawValue) {
+                            await viewModel.loadPayoutEntries(for: account.id)
+                        }
                     }
                 }
             }
@@ -119,11 +192,37 @@ struct PayoutsScreenView: View {
         .listStyle(.insetGrouped)
     }
 
+    @ViewBuilder
+    private func fundedAccountContent(_ account: TradingAccount) -> some View {
+        Button {
+            recordPayoutAccountID = account.id
+        } label: {
+            Label("Record Payout", systemImage: "dollarsign.circle")
+        }
+        .disabled(navigationCoordinator == nil)
+        .accessibilityIdentifier("payouts.recordPayout.\(account.id.rawValue)")
+
+        if loadingCycleAccounts.contains(account.id),
+           payoutCyclesByAccount[account.id] == nil {
+            HStack {
+                ProgressView()
+                Text("Loading payout history…")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+        } else {
+            FundedPayoutCycleHistoryContent(
+                cycles: PropFirmPayoutCycleSupport.selectCompletedPayoutHistory(
+                    payoutCyclesByAccount[account.id] ?? []
+                )
+            )
+        }
+    }
+
     private var introBlock: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("Manual Payouts")
+            Text("Payouts")
                 .experienceStyle(.title2, color: colors.primaryText)
-            Text("Private ledger entries for your accounts. Share payouts publicly by posting payout achievements.")
+            Text("Record funded prop-firm payouts against your payout cycles, or maintain a private manual ledger on supported accounts.")
                 .experienceStyle(.subheadline, color: colors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -183,6 +282,34 @@ struct PayoutsScreenView: View {
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
         guard !viewModel.accounts.isEmpty else { return }
+        await reloadAllPayoutData()
+    }
+
+    private func reloadAllPayoutData() async {
         await viewModel.loadAllPayoutEntries()
+        await reloadFundedCycleHistory()
+    }
+
+    private func reloadFundedCycleHistory() async {
+        guard let data else { return }
+        for account in fundedAccounts {
+            await loadPayoutCycles(for: account.id, trades: data.trades)
+        }
+    }
+
+    private func loadPayoutCycles(for accountID: TradingAccountID, trades: any TradeRepository) async {
+        loadingCycleAccounts.insert(accountID)
+        defer { loadingCycleAccounts.remove(accountID) }
+        do {
+            let cycles = try await trades.payoutCycleHistory(for: accountID)
+            payoutCyclesByAccount[accountID] = cycles
+        } catch {
+            payoutCyclesByAccount[accountID] = []
+        }
+    }
+
+    private func loadPayoutCycles(for accountID: TradingAccountID) async {
+        guard let data else { return }
+        await loadPayoutCycles(for: accountID, trades: data.trades)
     }
 }

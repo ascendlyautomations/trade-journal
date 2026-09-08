@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Compact SF Symbol filter strip — All / Trades / Posts / Clips / Achievements.
 struct FeedContentToggle: View {
-    @Binding var filter: FeedContentFilter
-    let onChange: (FeedContentFilter) -> Void
+    let filter: FeedContentFilter
+    let onSelect: (FeedContentFilter) -> Void
 
     @Environment(\.themeColors) private var colors
 
@@ -22,9 +22,7 @@ struct FeedContentToggle: View {
         let selected = filter == value
         return Button {
             guard filter != value else { return }
-            ExperienceHaptics.play(.selection)
-            filter = value
-            onChange(value)
+            onSelect(value)
         } label: {
             VStack(spacing: 3) {
                 ExperienceIcon(

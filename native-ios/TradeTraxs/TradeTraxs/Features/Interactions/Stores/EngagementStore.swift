@@ -25,10 +25,7 @@ final class EngagementStore {
 
     /// Inject cached engagement (list → detail, fixtures, screenshots).
     func seed(_ snapshot: EngagementSnapshot, for target: InteractionTarget) {
-        snapshots[target] = snapshot
-        loadedTargets.insert(target)
-        requestedTargets.insert(target)
-        pendingTargets.remove(target)
+        applyIncomingSnapshot(snapshot, for: target)
     }
 
     /// Prefetch counts for visible cards — batches IDs and never cancels in-flight work.
@@ -62,8 +59,7 @@ final class EngagementStore {
 
         do {
             try await repository.setLiked(optimistic.viewerHasLiked, on: target)
-            loadedTargets.insert(target)
-            requestedTargets.insert(target)
+            commitSuccessfulLikeMutation(optimistic, for: target)
         } catch {
             snapshots[target] = previous
             ExperienceHaptics.play(.warning)
@@ -95,8 +91,7 @@ final class EngagementStore {
 
         do {
             try await repository.setLiked(true, on: target)
-            loadedTargets.insert(target)
-            requestedTargets.insert(target)
+            commitSuccessfulLikeMutation(optimistic, for: target)
         } catch {
             snapshots[target] = previous
             ExperienceHaptics.play(.warning)
@@ -132,6 +127,34 @@ final class EngagementStore {
 
     // MARK: - Private
 
+    /// Applies bootstrap/prefetch snapshots without clobbering an in-flight like mutation.
+    private func applyIncomingSnapshot(_ snapshot: EngagementSnapshot, for target: InteractionTarget) {
+        if inFlightLikes.contains(target), let current = snapshots[target] {
+            var merged = snapshot
+            merged.viewerHasLiked = current.viewerHasLiked
+            merged.likeCount = current.likeCount
+            snapshots[target] = merged
+        } else {
+            snapshots[target] = snapshot
+        }
+        loadedTargets.insert(target)
+        requestedTargets.insert(target)
+        pendingTargets.remove(target)
+    }
+
+    /// Reconcile like fields after a successful mutation without discarding merged prefetch data.
+    private func commitSuccessfulLikeMutation(
+        _ optimistic: EngagementSnapshot,
+        for target: InteractionTarget
+    ) {
+        var confirmed = snapshot(for: target)
+        confirmed.viewerHasLiked = optimistic.viewerHasLiked
+        confirmed.likeCount = optimistic.likeCount
+        snapshots[target] = confirmed
+        loadedTargets.insert(target)
+        requestedTargets.insert(target)
+    }
+
     private func pumpPrefetchIfNeeded() {
         guard prefetchTask == nil else { return }
         guard !pendingTargets.isEmpty else { return }
@@ -147,8 +170,7 @@ final class EngagementStore {
                     for (target, snap) in map {
                         // Respect seeds / prior loads that landed while the fetch was in flight.
                         guard !self.loadedTargets.contains(target) else { continue }
-                        self.snapshots[target] = snap
-                        self.loadedTargets.insert(target)
+                        self.applyIncomingSnapshot(snap, for: target)
                     }
                 } catch {
                     // Soft-fail — allow a later prefetch to retry these IDs.

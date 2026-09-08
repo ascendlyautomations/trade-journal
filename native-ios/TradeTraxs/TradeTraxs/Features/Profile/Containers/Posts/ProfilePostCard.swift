@@ -6,7 +6,10 @@ struct ProfilePostCard: View {
     let post: Post
     let imagePipeline: any ImagePipeline
     let engagementStore: EngagementStore
+    let vaultStore: VaultStore
     let onOpen: () -> Void
+    var isOwner: Bool = true
+    var onReport: (() -> Void)? = nil
 
     private var target: InteractionTarget { .profilePost(post.id) }
     private let thumbnailSide: CGFloat = 96
@@ -26,13 +29,15 @@ struct ProfilePostCard: View {
                 Group {
                     if let mediaReference {
                         HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                            TradeImageView(
+                            TradeTraxsContentImage(
+                                mediaID: post.id.rawValue,
                                 reference: mediaReference,
-                                imagePipeline: imagePipeline,
                                 purpose: .postImage,
-                                contentMode: .fill,
-                                side: thumbnailSide
+                                imagePipeline: imagePipeline,
+                                surface: .profile,
+                                fixedSize: CGSize(width: thumbnailSide, height: thumbnailSide)
                             )
+                            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
                             .accessibilityHidden(true)
 
                             PostCardTextPreview(
@@ -63,9 +68,22 @@ struct ProfilePostCard: View {
                 EngagementBar(
                     target: target,
                     store: engagementStore,
-                    onCommentTap: onOpen
+                    vaultStore: vaultStore,
+                    onCommentTap: onOpen,
+                    vaultRef: ProfileCardMediaPresence.engagementVaultRef(
+                        for: target,
+                        profileIsOwner: isOwner
+                    )
                 )
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            ContentOverflowMenu(
+                isOwner: isOwner,
+                onReport: onReport,
+                accessibilityIdentifier: "profile.post.overflow.\(post.id.rawValue)"
+            )
+            .padding(ExperienceSpacing.xxs)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("profile.posts.card.\(post.id.rawValue)")

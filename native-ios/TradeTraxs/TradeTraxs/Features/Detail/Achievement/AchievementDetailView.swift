@@ -48,6 +48,9 @@ struct AchievementDetailView: View {
         .task {
             viewModel.loadIfNeeded()
             data.engagementStore.prefetch([engagementTarget(forRouteID: viewModel.achievementID)])
+            data.vaultStore.prefetch([
+                VaultContentRef(contentType: .achievement, contentID: viewModel.achievementID.rawValue),
+            ])
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {
@@ -78,19 +81,24 @@ struct AchievementDetailView: View {
                             contentLink: .achievement(achievement.id),
                             ownerProfileID: achievement.ownerProfileID,
                             shareText: "\(achievement.title) on TradeTraxs",
+                            vaultRef: VaultContentRef(
+                                contentType: .achievement,
+                                contentID: achievement.id.rawValue
+                            ),
                             accessibilityIdentifier: "detail.achievement.identity"
                         )
                         .padding(.horizontal, ExperienceSpacing.lg)
                         .padding(.top, ExperienceSpacing.sm)
                         .padding(.bottom, ExperienceSpacing.md)
 
-                        AspectFitMediaView(
+                        InteractiveImageView(
+                            mediaID: achievement.id.rawValue,
                             reference: achievement.image,
                             purpose: .postImage,
                             imagePipeline: imagePipeline,
-                            accessibilityIdentifier: "detail.achievement.media",
                             emptyIcon: .leaderboard,
-                            allowsFullResolutionViewer: true,
+                            accessibilityIdentifier: "detail.achievement.media",
+                            displayMode: .originalDetail,
                             onDoubleTapLike: {
                                 Task {
                                     if let achievement = viewModel.achievement {
@@ -120,13 +128,18 @@ struct AchievementDetailView: View {
             EngagementBar(
                 target: engagementTarget(for: achievement),
                 store: data.engagementStore,
+                vaultStore: data.vaultStore,
                 onCommentTap: {
                     withAnimation(
                         ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
                     ) {
                         scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
                     }
-                }
+                },
+                vaultRef: VaultContentRef(
+                    contentType: .achievement,
+                    contentID: engagementTarget(for: achievement).id
+                )
             )
 
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
@@ -147,10 +160,6 @@ struct AchievementDetailView: View {
                                 )
                             )
                     }
-                }
-
-                if !viewModel.isOwner, achievement.value != nil {
-                    ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.pastPerformance)
                 }
 
                 if let description = achievement.description?

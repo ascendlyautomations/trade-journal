@@ -6,10 +6,33 @@ struct FeedItemRow: View {
     let author: Profile?
     let imagePipeline: any ImagePipeline
     let engagementStore: EngagementStore
+    let vaultStore: VaultStore
+    let detailCache: DetailPresentationCache
+    let playbackCoordinator: FeedVideoPlaybackCoordinator
     let onOpen: () -> Void
     let onOpenAuthor: () -> Void
+    let onOpenLinkedTrade: (TradeID) -> Void
+    let onOpenLinkedClip: (ReelID) -> Void
+    var viewerID: ProfileID?
+    var onReport: (() -> Void)?
+    var onShare: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
+    @State private var showsVaultSheet = false
+
+    private var vaultRef: VaultContentRef? { VaultContentRef.from(entry.interactionTarget) }
+    private var isVaulted: Bool {
+        guard let vaultRef else { return false }
+        return vaultStore.state(for: vaultRef).isVaulted
+    }
+
+    private var linkedTrade: Trade? {
+        FeedLinkedContentResolver.linkedTrade(for: entry, cache: detailCache)
+    }
+
+    private var linkedReel: Reel? {
+        FeedLinkedContentResolver.linkedReel(for: entry, cache: detailCache)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -18,21 +41,24 @@ struct FeedItemRow: View {
                 fallbackID: entry.authorProfileID,
                 timestamp: entry.createdAt,
                 imagePipeline: imagePipeline,
-                onOpenAuthor: onOpenAuthor
+                onOpenAuthor: onOpenAuthor,
+                isOwner: viewerID == entry.authorProfileID,
+                onReport: onReport,
+                onAddToVault: vaultRef == nil ? nil : { openVaultSheet() },
+                onManageInVault: vaultRef == nil || !isVaulted ? nil : { openVaultSheet() }
             )
             .padding(.horizontal, ExperienceSpacing.md)
             .padding(.vertical, ExperienceSpacing.sm)
 
-            if entry.hasDisplayMedia {
+            if isImagePostRow {
+                imagePostLayout
+            } else if entry.hasDisplayMedia {
                 mediaLayout
             } else {
                 textLayout
             }
 
-            Rectangle()
-                .fill(colors.border.opacity(0.55))
-                .frame(height: ExperienceBorder.hairline)
-                .accessibilityHidden(true)
+            FeedSectionSeparator()
         }
         .contextMenu {
             Button {
@@ -55,33 +81,64 @@ struct FeedItemRow: View {
             } label: {
                 Label("Comment", systemImage: "bubble.right")
             }
+            if onShare != nil {
+                Button {
+                    onShare?()
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
         } preview: {
             FeedItemRowPreview(entry: entry, author: author)
                 .frame(width: 320)
         }
         .accessibilityIdentifier("feed.row.\(entry.id)")
+        .sheet(isPresented: $showsVaultSheet) {
+            if let vaultRef {
+                VaultDestinationSheet(ref: vaultRef, store: vaultStore)
+            }
+        }
+    }
+
+    private func openVaultSheet() {
+        vaultStore.loadFoldersIfNeeded()
+        showsVaultSheet = true
     }
 
     // MARK: - Layout A (media)
 
+    /// Profile posts with image media — trade-style hierarchy without trade stats.
+    private var imagePostLayout: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            feedImageMedia
+
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                engagement
+                if case .post = entry, let caption = entry.feedCaptionText {
+                    FeedCaptionPreview(
+                        text: caption,
+                        lineLimit: FeedCaptionLineLimit.post,
+                        onSeeMore: onOpen,
+                        seeMoreAccessibilityIdentifier: "feed.post.seeMore"
+                    )
+                }
+                linkedEmbeds
+            }
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.top, ExperienceSpacing.sm)
+            .padding(.bottom, ExperienceSpacing.md)
+        }
+    }
+
     private var mediaLayout: some View {
         VStack(alignment: .leading, spacing: 0) {
-            mediaContent
-                .allowsHitTesting(false)
-                .overlay {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .experienceDoubleTapLike(
-                            target: entry.interactionTarget,
-                            store: engagementStore,
-                            onSingleTap: onOpen
-                        )
-                }
+            feedImageMedia
 
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 engagement
                 summary
-                caption(lineLimit: 2)
+                feedCaptionPreview
+                linkedEmbeds
             }
             .padding(.horizontal, ExperienceSpacing.md)
             .padding(.top, ExperienceSpacing.sm)
@@ -95,7 +152,8 @@ struct FeedItemRow: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 summary
-                caption(lineLimit: 8)
+                feedCaptionPreview
+                linkedEmbeds
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
@@ -114,62 +172,105 @@ struct FeedItemRow: View {
     // MARK: - Media (full bleed — only when hasDisplayMedia)
 
     @ViewBuilder
-    private var mediaContent: some View {
+    private var feedImageMedia: some View {
         switch entry {
         case .trade(_, let trade):
-            AspectFitMediaView(
+            InteractiveImageView(
+                mediaID: entry.id,
                 reference: trade.thumbnail,
                 purpose: .tradeScreenshot,
                 imagePipeline: imagePipeline,
-                accessibilityIdentifier: "feed.trade.media",
                 emptyIcon: .chart,
-                allowsFullResolutionViewer: false,
-                showsPlaceholderWhenUnavailable: false
+                accessibilityIdentifier: "feed.trade.media",
+                onSingleTap: onOpen,
+                onDoubleTapLike: {
+                    Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
+                }
             )
 
         case .post(_, let post):
             if let first = post.media.first(where: {
                 !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }) {
-                AspectFitMediaView(
+                InteractiveImageView(
+                    mediaID: entry.id,
                     reference: first,
                     purpose: .postImage,
                     imagePipeline: imagePipeline,
-                    accessibilityIdentifier: "feed.post.media",
                     emptyIcon: .photo,
-                    allowsFullResolutionViewer: false,
-                    showsPlaceholderWhenUnavailable: false
+                    accessibilityIdentifier: "feed.post.media",
+                    onSingleTap: onOpen,
+                    onDoubleTapLike: {
+                        Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
+                    }
                 )
             }
 
         case .clip(_, let reel):
-            ZStack(alignment: .bottomTrailing) {
-                AspectFitMediaView(
-                    reference: reel.thumbnail ?? reel.video,
-                    purpose: .reelThumbnail,
-                    imagePipeline: imagePipeline,
-                    accessibilityIdentifier: "feed.clip.media",
-                    emptyIcon: .video,
-                    allowsFullResolutionViewer: false,
-                    showsPlaceholderWhenUnavailable: false
-                )
-
-                ExperienceIcon(icon: .play, size: .lg, color: .white)
-                    .padding(ExperienceSpacing.md)
-                    .shadow(radius: 2)
+            FeedClipMediaView(
+                reel: reel,
+                imagePipeline: imagePipeline,
+                playbackCoordinator: playbackCoordinator
+            )
+            .overlay {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .experienceDoubleTapLike(
+                        target: entry.interactionTarget,
+                        store: engagementStore,
+                        onSingleTap: {
+                            playbackCoordinator.togglePlayPause(for: reel)
+                        }
+                    )
             }
 
         case .achievement(_, let achievement):
-            AspectFitMediaView(
+            InteractiveImageView(
+                mediaID: entry.id,
                 reference: achievement.image,
                 purpose: .postImage,
                 imagePipeline: imagePipeline,
-                accessibilityIdentifier: "feed.achievement.media",
                 emptyIcon: .leaderboard,
-                allowsFullResolutionViewer: false,
-                showsPlaceholderWhenUnavailable: false
+                accessibilityIdentifier: "feed.achievement.media",
+                onSingleTap: onOpen,
+                onDoubleTapLike: {
+                    Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
+                }
             )
         }
+    }
+
+    // MARK: - Linked attachments
+
+    @ViewBuilder
+    private var linkedEmbeds: some View {
+        if let linkedTrade {
+            FeedLinkedTradeEmbed(
+                trade: linkedTrade,
+                imagePipeline: imagePipeline,
+                onOpen: { onOpenLinkedTrade(linkedTrade.id) }
+            )
+        }
+        if let linkedReel {
+            FeedLinkedClipEmbed(
+                reel: linkedReel,
+                imagePipeline: imagePipeline,
+                onOpen: { onOpenLinkedClip(linkedReel.id) }
+            )
+        }
+    }
+
+    private var isImagePostRow: Bool {
+        guard case .post(_, let post) = entry else { return false }
+        return post.media.contains {
+            !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private var postCaptionText: String? {
+        guard case .post(_, let post) = entry else { return nil }
+        let trimmed = post.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     // MARK: - Engagement
@@ -179,7 +280,10 @@ struct FeedItemRow: View {
         EngagementBar(
             target: entry.interactionTarget,
             store: engagementStore,
-            onCommentTap: onOpen
+            vaultStore: vaultStore,
+            onCommentTap: onOpen,
+            onShareTap: onShare,
+            vaultRef: vaultRef
         )
     }
 
@@ -218,26 +322,15 @@ struct FeedItemRow: View {
     // MARK: - Caption
 
     @ViewBuilder
-    private func caption(lineLimit: Int) -> some View {
-        if let text = previewText, !text.isEmpty {
-            Text(text)
-                .experienceStyle(.body, color: colors.primaryText)
-                .lineLimit(lineLimit)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("feed.caption")
-        }
-    }
-
-    private var previewText: String? {
-        switch entry {
-        case .trade(_, let trade):
-            return trade.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
-        case .post(_, let post):
-            return post.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        case .clip(_, let reel):
-            return reel.caption?.trimmingCharacters(in: .whitespacesAndNewlines)
-        case .achievement(_, let achievement):
-            return achievement.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var feedCaptionPreview: some View {
+        if let text = entry.feedCaptionText,
+           let lineLimit = entry.feedCaptionLineLimit
+        {
+            FeedCaptionPreview(
+                text: text,
+                lineLimit: lineLimit,
+                onSeeMore: onOpen
+            )
         }
     }
 }

@@ -48,7 +48,7 @@ struct CheckInDayDetailView: View {
                     }
                 )
             }
-            .experienceSheetChrome()
+            .experienceSheetChrome(interactiveDismiss: false)
         }
         .accessibilityIdentifier("checkInDay.detail")
     }

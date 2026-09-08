@@ -17,6 +17,7 @@ final class CreateAchievementViewModel {
     private(set) var isLoadingAccounts = false
     private(set) var formError: String?
     private(set) var isUploadingMedia = false
+    private(set) var lockKind = false
 
     var kind: AchievementKind = .milestone
     var titleText = ""
@@ -27,6 +28,7 @@ final class CreateAchievementViewModel {
     var selectedAccountID: TradingAccountID?
     var imageData: Data?
     var imagePreview: UIImage?
+    var feedPresentation: ContentImagePresentation?
 
     private let achievements: any AchievementRepository
     private let trades: any TradeRepository
@@ -46,6 +48,7 @@ final class CreateAchievementViewModel {
         session: any SessionProviding,
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
+        prefill: CreateAchievementPrefill? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.achievements = achievements
@@ -54,6 +57,9 @@ final class CreateAchievementViewModel {
         self.uploadService = uploadService
         self.objectStorage = objectStorage
         self.onDismiss = onDismiss
+        if let prefill {
+            applyPrefill(prefill)
+        }
     }
 
     var selectedAccount: TradingAccount? {
@@ -152,19 +158,32 @@ final class CreateAchievementViewModel {
         selectedAccountID = id
     }
 
+    func setImage(_ result: ImageCropSelectionResult) {
+        imagePreview = result.originalImage
+        imageData = MediaImagePreparation.jpegData(from: result.originalImage)
+        feedPresentation = result.presentation
+    }
+
     func setImage(_ image: UIImage?) {
         guard let image else {
-            imageData = nil
-            imagePreview = nil
+            clearImage()
             return
         }
-        imagePreview = image
-        imageData = MediaImagePreparation.jpegData(from: image)
+        let width = UIScreen.main.bounds.width - 32
+        let pixelSize = MediaImageOrientation.pixelSize(of: image)
+        let presentation = FeedMediaPresentation.make(
+            aspectOption: .original,
+            imagePixelSize: pixelSize,
+            containerWidth: width,
+            transform: .default
+        )
+        setImage(ImageCropSelectionResult(originalImage: image, presentation: presentation))
     }
 
     func clearImage() {
         imageData = nil
         imagePreview = nil
+        feedPresentation = nil
     }
 
     #if DEBUG
@@ -198,6 +217,17 @@ final class CreateAchievementViewModel {
             return
         }
         phase = .ready
+    }
+
+    func applyPrefill(_ prefill: CreateAchievementPrefill) {
+        kind = prefill.kind
+        titleText = prefill.titleText
+        descriptionText = prefill.descriptionText
+        payoutAmountText = prefill.payoutAmountText
+        achievedAt = prefill.achievedAt
+        selectedAccountID = prefill.selectedAccountID
+        isPublic = prefill.isPublic
+        lockKind = prefill.lockKind
     }
 
     private func loadAccounts() async {
@@ -252,7 +282,15 @@ final class CreateAchievementViewModel {
                 isUploadingMedia = true
                 let uploaded = try await uploadImage(imageData, viewerID: viewerID)
                 uploadedStoragePath = uploaded.storagePath
-                imageRef = MediaReference(id: uploaded.publicURL, kind: .image, altText: nil)
+                imageRef = MediaReference(
+                    id: uploaded.publicURL,
+                    kind: .image,
+                    altText: nil,
+                    imagePresentation: feedPresentation
+                )
+                if let feedPresentation {
+                    FeedMediaPresentationStore.save(feedPresentation, forMediaURL: uploaded.publicURL)
+                }
                 isUploadingMedia = false
             }
 

@@ -62,6 +62,7 @@ struct CSVImportTradeReviewView: View {
                     .disabled(draft.symbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
+        .experienceProtectedFormDismiss()
         .accessibilityIdentifier("csvImport.review")
     }
 

@@ -45,6 +45,16 @@ final class DashboardViewModel {
     private var contractDecodeFailed = false
     private var loadGeneration: UInt64 = 0
     private var watchedChannel: RealtimeChannelID?
+    /// Manual date-range override for the current account filter (cleared on account switch).
+    private var hasUserSelectedDateRangeForCurrentFilter = false
+    /// When true, pick the best preset for ``accountFilter`` once trade history is authoritative.
+    private var pendingAutomaticDateRangeResolution = true
+    /// True once owner trade history is authoritative enough to pick a date preset.
+    private var initialTradeHistoryReady = false
+    /// Server-reported total trades (V2 bootstrap); nil on legacy REST bootstrap.
+    private var authoritativeTotalTradeCount: Int?
+    /// Funded prop-firm payout cycles keyed by account — drives Prop Firm Status card boundaries.
+    private var payoutCyclesByAccount: [TradingAccountID: [AccountPayoutCycle]] = [:]
 
     /// Test / composition seam — `home` retained for call-site compatibility but unused.
     init(
@@ -146,7 +156,12 @@ final class DashboardViewModel {
     var propFirmStatus: PropFirmStatusSnapshot? {
         guard let account = selectedAccount, account.isPropFirmAccount else { return nil }
         let trades = tradeInputs.map(\.trade)
-        return PropFirmStatusSnapshot.build(account: account, trades: trades)
+        let cycles = payoutCyclesByAccount[account.id] ?? []
+        return PropFirmStatusSnapshot.build(
+            account: account,
+            trades: trades,
+            payoutCycles: cycles
+        )
     }
 
     /// Single-account selection from the account filter (nil for All Accounts).
@@ -288,7 +303,21 @@ final class DashboardViewModel {
     }
 
     func handleAccountMutation() {
-        Task { await reloadAccountsOnly() }
+        switch AccountMutationStore.shared.latestKind {
+        case .payoutRecorded(let accountID):
+            Task { await reloadAfterPayout(accountID: accountID) }
+        case .generic:
+            Task { await reloadAccountsOnly() }
+        }
+    }
+
+    func handleContentMutation() {
+        guard case .achievement(let achievement) = ContentMutationStore.shared.latest else { return }
+        guard achievement.isPublic, ProfilePayoutTotals.isPayout(achievement.kind) else { return }
+        detailCache.seed(achievement)
+        let prior = payoutTotal ?? 0
+        payoutTotal = prior + (achievement.value?.amount ?? 0)
+        recompute()
     }
 
     func handleCheckInMutation() {
@@ -299,12 +328,30 @@ final class DashboardViewModel {
         guard accountFilter != filter else { return }
         ExperienceHaptics.play(.selection)
         accountFilter = filter
+        hasUserSelectedDateRangeForCurrentFilter = false
+        pendingAutomaticDateRangeResolution = true
+        if case .account(let id) = filter,
+           payoutCyclesByAccount[id] == nil,
+           let profileID,
+           let account = accounts.first(where: { $0.id == id }),
+           PropFirmPayoutPolicy.supportsRecordPayout(for: account)
+        {
+            Task {
+                await hydratePropFirmPayoutCycles(
+                    profileID: profileID,
+                    accountIDs: [id],
+                    forceNetwork: false
+                )
+            }
+        }
         recompute()
     }
 
     func setDateRange(_ range: DashboardDateRange) {
         guard dateRange != range else { return }
         ExperienceHaptics.play(.selection)
+        hasUserSelectedDateRangeForCurrentFilter = true
+        pendingAutomaticDateRangeResolution = false
         dateRange = range
         recompute()
     }
@@ -487,7 +534,7 @@ final class DashboardViewModel {
 
         do {
             if BackendV2FeatureFlags.isEnabled(.dashboard), let rpc {
-                if let v2 = try await BootstrapTransportTimeout.run({ [self] in
+                if let loadResult = try await BootstrapTransportTimeout.run({ [self] in
                     try await loadDashboardV2(
                         profileID: profileID,
                         rpc: rpc,
@@ -499,10 +546,15 @@ final class DashboardViewModel {
                         loadTask = nil
                         return
                     }
+                    let v2 = loadResult.applied
                     apply(
                         trades: v2.trades,
                         accounts: v2.accounts,
                         profileID: profileID
+                    )
+                    noteTradeHistoryApplied(
+                        totalTradeCount: v2.totalTradeCount,
+                        historyComplete: v2.tradeHistoryComplete
                     )
                     if let payout = v2.payoutTotal {
                         payoutTotal = payout
@@ -513,6 +565,15 @@ final class DashboardViewModel {
                     DashboardLoadProbe.markFirstUsefulRender()
                     if v2.payoutTotal != nil {
                         DashboardLoadProbe.markFullHydration()
+                    }
+                    if pendingAutomaticDateRangeResolution,
+                       loadResult.path == .cache_stale_revalidate || !v2.tradeHistoryComplete {
+                        Task { [weak self] in
+                            await self?.refreshAuthoritativeTradeHistory(
+                                profileID: profileID,
+                                generation: activeGeneration
+                            )
+                        }
                     }
                     secondaryTask?.cancel()
                     secondaryTask = Task { [weak self] in
@@ -566,6 +627,10 @@ final class DashboardViewModel {
             }
 
             apply(trades: page.items, accounts: fetchedAccounts, profileID: profileID)
+            noteTradeHistoryApplied(
+                totalTradeCount: page.items.count,
+                historyComplete: forceNetwork || !page.items.isEmpty
+            )
             guard !Task.isCancelled else {
                 loadTask = nil
                 return
@@ -574,6 +639,15 @@ final class DashboardViewModel {
             recompute()
             phase = .loaded
             DashboardLoadProbe.markFirstUsefulRender()
+
+            if !initialTradeHistoryReady, pendingAutomaticDateRangeResolution {
+                Task { [weak self] in
+                    await self?.refreshAuthoritativeTradeHistory(
+                        profileID: profileID,
+                        generation: activeGeneration
+                    )
+                }
+            }
 
             await startRealtime(profileID: profileID)
 
@@ -612,9 +686,9 @@ final class DashboardViewModel {
         rpc: any RPCClient,
         forceNetwork: Bool,
         generation: UInt64
-    ) async throws -> DashboardBootstrapApplier.Applied? {
+    ) async throws -> DashboardBootstrapLoadResult? {
         do {
-            let result = try await DashboardBootstrapLoader.load(
+            return try await DashboardBootstrapLoader.load(
                 viewerID: profileID,
                 rpc: rpc,
                 detailCache: detailCache,
@@ -622,7 +696,6 @@ final class DashboardViewModel {
                 loadGeneration: generation,
                 currentGeneration: { [weak self] in self?.loadGeneration ?? 0 }
             )
-            return result.applied
         } catch DashboardBootstrapLoaderError.flagOff, DashboardBootstrapLoaderError.rpcUnavailable {
             return nil
         }
@@ -742,6 +815,10 @@ final class DashboardViewModel {
             )
         }
         detailCache.seed(trades: samples)
+        noteTradeHistoryApplied(
+            totalTradeCount: samples.count,
+            historyComplete: true
+        )
         recompute()
     }
 
@@ -802,6 +879,27 @@ final class DashboardViewModel {
         await ensureFullOwnerAccounts(profileID: profileID, forceNetwork: true)
     }
 
+    private func reloadAfterPayout(accountID: TradingAccountID) async {
+        guard let profileID else { return }
+        SessionAccountsStore.shared.invalidate(profileID: profileID)
+        SessionPayoutCyclesStore.shared.invalidate(accountID: accountID, profileID: profileID)
+        await ensureFullOwnerAccounts(profileID: profileID, forceNetwork: true)
+        await hydratePropFirmPayoutCycles(
+            profileID: profileID,
+            accountIDs: [accountID],
+            forceNetwork: true
+        )
+        #if DEBUG
+        if let snapshot = propFirmStatus {
+            PayoutCycleRefreshProbe.logDashboardReload(
+                accountID: accountID,
+                cycles: payoutCyclesByAccount[accountID] ?? [],
+                snapshot: snapshot
+            )
+        }
+        #endif
+    }
+
     private func ensureFullOwnerAccounts(profileID: ProfileID?, forceNetwork: Bool = false) async {
         guard let profileID else { return }
         do {
@@ -834,6 +932,7 @@ final class DashboardViewModel {
     }
 
     private func recompute() {
+        resolveAutomaticDateRangeIfNeeded()
         let result = DashboardChartMetrics.compute(
             from: tradeInputs,
             accountFilter: accountFilter,
@@ -842,6 +941,85 @@ final class DashboardViewModel {
         )
         summary = result
         recomputePsychology()
+    }
+
+    /// Picks 30D → 90D → YTD → All for the current ``accountFilter`` when history is ready.
+    private func resolveAutomaticDateRangeIfNeeded() {
+        guard pendingAutomaticDateRangeResolution else { return }
+        guard !hasUserSelectedDateRangeForCurrentFilter else {
+            pendingAutomaticDateRangeResolution = false
+            return
+        }
+        guard initialTradeHistoryReady else { return }
+
+        if tradeInputs.isEmpty {
+            if authoritativeTotalTradeCount == 0 {
+                pendingAutomaticDateRangeResolution = false
+            }
+            // Server reports trades but owner history not hydrated yet — wait for fuller data.
+            return
+        }
+
+        let resolved = DashboardDateRangeFallback.initialEffectiveRange(
+            tradeInputs: tradeInputs,
+            accountFilter: accountFilter
+        )
+        pendingAutomaticDateRangeResolution = false
+        if dateRange != resolved {
+            dateRange = resolved
+        }
+    }
+
+    private func noteTradeHistoryApplied(totalTradeCount: Int?, historyComplete: Bool) {
+        authoritativeTotalTradeCount = totalTradeCount
+        initialTradeHistoryReady = historyComplete
+    }
+
+    /// Re-fetch owner trades when a stale dashboard cache blocked initial date-range resolution.
+    private func refreshAuthoritativeTradeHistory(profileID: ProfileID, generation: UInt64) async {
+        guard generation == loadGeneration, pendingAutomaticDateRangeResolution else { return }
+
+        if BackendV2FeatureFlags.isEnabled(.dashboard), let rpc {
+            do {
+                let loadResult = try await DashboardBootstrapLoader.load(
+                    viewerID: profileID,
+                    rpc: rpc,
+                    detailCache: detailCache,
+                    forceNetwork: true,
+                    loadGeneration: generation,
+                    currentGeneration: { [weak self] in self?.loadGeneration ?? 0 }
+                )
+                guard generation == loadGeneration, !Task.isCancelled, pendingAutomaticDateRangeResolution else {
+                    return
+                }
+                let v2 = loadResult.applied
+                apply(trades: v2.trades, accounts: v2.accounts, profileID: profileID)
+                noteTradeHistoryApplied(
+                    totalTradeCount: v2.totalTradeCount,
+                    historyComplete: v2.tradeHistoryComplete
+                )
+                recompute()
+            } catch {
+                // Preserve current presentation — non-fatal.
+            }
+            return
+        }
+
+        do {
+            let page = try await bootstrapTrades(profileID: profileID, forceNetwork: true)
+            guard generation == loadGeneration, !Task.isCancelled, pendingAutomaticDateRangeResolution else {
+                return
+            }
+            let fetchedAccounts = try await bootstrapAccounts(profileID: profileID, forceNetwork: false)
+            apply(trades: page.items, accounts: fetchedAccounts, profileID: profileID)
+            noteTradeHistoryApplied(
+                totalTradeCount: page.items.count,
+                historyComplete: true
+            )
+            recompute()
+        } catch {
+            // Preserve current presentation — non-fatal.
+        }
     }
 
     private func recomputePsychology() {
@@ -907,8 +1085,48 @@ final class DashboardViewModel {
             if skipPayouts { return }
             await hydratePayouts(profileID: profileID, forceNetwork: forceNetwork)
         }()
+        async let propFirmCycles: Void = hydratePropFirmPayoutCycles(
+            profileID: profileID,
+            accountIDs: fundedPropAccountIDs(),
+            forceNetwork: forceNetwork
+        )
         async let checkIns: Void = hydrateCheckIns(profileID: profileID, forceNetwork: forceNetwork)
-        _ = await (payouts, checkIns)
+        _ = await (payouts, propFirmCycles, checkIns)
+    }
+
+    private func fundedPropAccountIDs() -> [TradingAccountID] {
+        accounts.filter { PropFirmPayoutPolicy.supportsRecordPayout(for: $0) }.map(\.id)
+    }
+
+    private func hydratePropFirmPayoutCycles(
+        profileID: ProfileID,
+        accountIDs: [TradingAccountID],
+        forceNetwork: Bool
+    ) async {
+        guard !accountIDs.isEmpty else { return }
+        let repository = trades
+        await withTaskGroup(of: (TradingAccountID, [AccountPayoutCycle]?).self) { group in
+            for accountID in accountIDs {
+                group.addTask { @MainActor in
+                    do {
+                        let cycles = try await SessionPayoutCyclesStore.shared.cycles(
+                            for: accountID,
+                            profileID: profileID,
+                            repository: repository,
+                            forceNetwork: forceNetwork
+                        )
+                        return (accountID, cycles)
+                    } catch {
+                        return (accountID, nil)
+                    }
+                }
+            }
+            for await (accountID, cycles) in group {
+                if let cycles {
+                    payoutCyclesByAccount[accountID] = cycles
+                }
+            }
+        }
     }
 
     private func hydrateCheckIns(profileID: ProfileID, forceNetwork: Bool) async {

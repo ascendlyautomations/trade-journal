@@ -54,6 +54,51 @@ final class PropFirmExperienceTests: XCTestCase {
         XCTAssertEqual(result.allowedMax, 440) // 1100 * 0.4
     }
 
+    func testActivePayoutCycleResetsCycleMetrics() {
+        let profileID = ProfileID("dev.propfirm")
+        let accounts = PropFirmFixtures.accounts(owner: profileID)
+        guard let account = accounts.first(where: \.isPropFirmAccount) else {
+            XCTFail("missing prop fixture")
+            return
+        }
+        let trades = PropFirmFixtures.trades(owner: profileID, accountID: account.id)
+        let payoutDate = date("2026-06-01T12:00:00Z")
+        let balanceAfter = Decimal(string: "52242.50")!
+        let activeCycle = AccountPayoutCycle(
+            id: "cycle-2",
+            accountID: account.id,
+            startedAt: payoutDate,
+            endedAt: nil,
+            cycleStartBalance: balanceAfter,
+            payoutAmount: nil,
+            note: nil,
+            balanceBeforePayout: nil,
+            balanceAfterPayout: nil,
+            drawdownBehavior: .resetToAccount,
+            drawdownFloorAfterPayout: balanceAfter,
+            cycleNumber: 2
+        )
+
+        let withoutCycle = PropFirmStatusSnapshot.build(
+            account: account,
+            trades: trades,
+            payoutCycles: []
+        )
+        let withNewCycle = PropFirmStatusSnapshot.build(
+            account: account,
+            trades: trades,
+            payoutCycles: [activeCycle]
+        )
+
+        XCTAssertNotNil(withoutCycle)
+        XCTAssertNotNil(withNewCycle)
+        XCTAssertNotEqual(withoutCycle?.cyclePnL, 0)
+        XCTAssertEqual(withNewCycle?.cyclePnL, 0)
+        XCTAssertEqual(withNewCycle?.currentBalance, balanceAfter)
+        XCTAssertEqual(withNewCycle?.winningDays, 0)
+        XCTAssertFalse(withNewCycle?.payoutReady ?? true)
+    }
+
     func testPropStatusHiddenForAllAccountsAndPersonal() {
         let profileID = ProfileID("dev.propfirm")
         let accounts = PropFirmFixtures.accounts(owner: profileID)

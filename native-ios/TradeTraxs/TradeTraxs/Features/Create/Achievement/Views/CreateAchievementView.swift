@@ -8,6 +8,7 @@ struct CreateAchievementView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var showsDiscardConfirm = false
     @State private var didApplyScreenshotPrefill = false
+    @State private var cropSourceImage: UIImage?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.themeEnvironment) private var themeEnvironment
@@ -24,6 +25,7 @@ struct CreateAchievementView: View {
 
     init(
         data: DataEnvironment,
+        prefill: CreateAchievementPrefill? = nil,
         onDismiss: @escaping () -> Void
     ) {
         _viewModel = State(
@@ -33,9 +35,17 @@ struct CreateAchievementView: View {
                 session: data.session,
                 uploadService: data.uploadService,
                 objectStorage: data.objectStorage,
+                prefill: prefill,
                 onDismiss: onDismiss
             )
         )
+    }
+
+    init(
+        data: DataEnvironment,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.init(data: data, prefill: nil, onDismiss: onDismiss)
     }
 
     init(viewModel: CreateAchievementViewModel) {
@@ -74,8 +84,7 @@ struct CreateAchievementView: View {
             Button("Discard", role: .destructive) { viewModel.dismissRequested() }
             Button("Keep Editing", role: .cancel) {}
         }
-        .experienceSwipeToDismiss { requestDismiss() }
-        .interactiveDismissDisabled()
+        .experienceProtectedFormDismiss()
         .task { viewModel.loadIfNeeded() }
         .onChange(of: viewModel.phase) { _, phase in
             #if DEBUG
@@ -83,8 +92,14 @@ struct CreateAchievementView: View {
             #endif
         }
         .onChange(of: photoItem) { _, item in
-            Task { await loadPhoto(item) }
+            Task { await presentCrop(for: item) }
         }
+        .imageCropSelection(
+            sourceImage: $cropSourceImage,
+            preset: .socialContent,
+            onConfirm: { viewModel.setImage($0) },
+            onCancel: { photoItem = nil }
+        )
         .accessibilityIdentifier("createAchievement.root")
     }
 
@@ -133,11 +148,9 @@ struct CreateAchievementView: View {
             }
 
             Section {
-                if let preview = viewModel.imagePreview {
-                    Image(uiImage: preview)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxHeight: 140)
+                if let preview = viewModel.imagePreview,
+                   let presentation = viewModel.feedPresentation {
+                    AdaptiveMediaPreviewImage(image: preview, presentation: presentation)
                         .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
                         .accessibilityLabel("Achievement image preview")
                         .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
@@ -278,17 +291,23 @@ struct CreateAchievementView: View {
         }
     }
 
+    @ViewBuilder
     private var kindField: some View {
-        Picker("Type", selection: Binding(
-            get: { viewModel.kind },
-            set: { viewModel.selectKind($0) }
-        )) {
-            ForEach(CreateAchievementViewModel.allKinds, id: \.self) { kind in
-                Text(CreateAchievementViewModel.displayTitle(for: kind))
-                    .tag(kind)
+        if viewModel.lockKind {
+            LabeledContent("Type", value: CreateAchievementViewModel.displayTitle(for: viewModel.kind))
+                .accessibilityIdentifier("createAchievement.kindLocked")
+        } else {
+            Picker("Type", selection: Binding(
+                get: { viewModel.kind },
+                set: { viewModel.selectKind($0) }
+            )) {
+                ForEach(CreateAchievementViewModel.allKinds, id: \.self) { kind in
+                    Text(CreateAchievementViewModel.displayTitle(for: kind))
+                        .tag(kind)
+                }
             }
+            .accessibilityIdentifier("createAchievement.kindPicker")
         }
-        .accessibilityIdentifier("createAchievement.kindPicker")
     }
 
     private func requestDismiss() {
@@ -299,13 +318,9 @@ struct CreateAchievementView: View {
         }
     }
 
-    private func loadPhoto(_ item: PhotosPickerItem?) async {
-        guard let item else { return }
-        if let data = try? await item.loadTransferable(type: Data.self),
-           let image = UIImage(data: data)
-        {
-            viewModel.setImage(image)
-        }
+    private func presentCrop(for item: PhotosPickerItem?) async {
+        guard let image = await ImageCropSelectionSupport.loadUIImage(from: item) else { return }
+        cropSourceImage = image
     }
 
     #if DEBUG

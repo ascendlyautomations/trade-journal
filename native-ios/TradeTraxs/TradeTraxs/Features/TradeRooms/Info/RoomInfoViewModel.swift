@@ -22,8 +22,16 @@ final class RoomInfoViewModel {
     private(set) var didLeave = false
     var showsLeaveConfirmation = false
     var statusMessage: String?
+    var isSavingDetails = false
+
+    // Owner editing
+    var editName = ""
+    var editDescription = ""
+    var editShowsOnProfile = true
+    var pendingImageData: Data?
 
     private let rooms: any RoomRepository
+    private let uploadService: any UploadService
     private let profiles: any ProfileRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
@@ -36,6 +44,7 @@ final class RoomInfoViewModel {
     init(
         roomID: RoomID,
         rooms: any RoomRepository,
+        uploadService: any UploadService,
         profiles: any ProfileRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
@@ -45,6 +54,7 @@ final class RoomInfoViewModel {
     ) {
         self.roomID = roomID
         self.rooms = rooms
+        self.uploadService = uploadService
         self.profiles = profiles
         self.session = session
         self.detailCache = detailCache
@@ -56,6 +66,15 @@ final class RoomInfoViewModel {
     var inviteLink: String {
         let slug = room?.slug ?? roomID.rawValue
         return "https://www.tradetraxs.com/rooms/\(slug)"
+    }
+
+    var displayedMemberCount: Int? {
+        inboxStore.rooms.first(where: { $0.id == roomID })?.memberCount ?? room?.memberCount
+    }
+
+    var isOwner: Bool {
+        guard let viewerID, let room else { return false }
+        return room.ownerProfileID == viewerID
     }
 
     var rulesText: String {
@@ -80,6 +99,58 @@ final class RoomInfoViewModel {
         guard let ownerProfile else { return }
         ExperienceHaptics.play(.selection)
         navigationCoordinator?.open(navigationHost.profile(ownerProfile.id))
+    }
+
+    func openManageRoom() {
+        guard isOwner else { return }
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator?.open(navigationHost.manageRoom(roomID))
+    }
+
+    func saveDetails() async {
+        guard isOwner, let management = rooms as? any RoomManagementRepository else { return }
+        isSavingDetails = true
+        defer { isSavingDetails = false }
+        do {
+            var imageURL: String?
+            if let imageData = pendingImageData {
+                let path = "room-images/\(Int(Date().timeIntervalSince1970))-avatar.jpg"
+                let reference = try await uploadService.upload(
+                    UploadRequest(
+                        bucket: "avatars",
+                        path: path,
+                        data: imageData,
+                        contentType: "image/jpeg",
+                        purpose: .profileAvatar
+                    )
+                )
+                imageURL = reference.id
+                pendingImageData = nil
+            }
+            let trimmedName = editName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedDescription = editDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            let updated = try await management.updateRoom(
+                roomID: roomID,
+                request: RoomUpdateRequest(
+                    name: trimmedName.isEmpty ? nil : trimmedName,
+                    description: trimmedDescription.isEmpty ? nil : trimmedDescription,
+                    imageURL: imageURL,
+                    showsOnProfile: editShowsOnProfile
+                )
+            )
+            room = updated
+            RoomMetadataSync.apply(
+                updated,
+                inboxStore: inboxStore,
+                detailCache: detailCache,
+                viewerID: viewerID
+            )
+            statusMessage = "Room details saved."
+            ExperienceHaptics.play(.success)
+        } catch {
+            statusMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.error)
+        }
     }
 
     func openMembers() {
@@ -157,6 +228,9 @@ final class RoomInfoViewModel {
 
             let loaded = try await rooms.room(id: roomID)
             room = loaded
+            editName = loaded.name
+            editDescription = loaded.description ?? ""
+            editShowsOnProfile = loaded.showsOnProfile
             if let cached = detailCache.profile(id: loaded.ownerProfileID) {
                 ownerProfile = cached
             } else if let owner = try? await SessionProfileStore.shared.profiles(

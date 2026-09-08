@@ -50,6 +50,9 @@ final class DataEnvironment {
     let psychologyReports: any PsychologyReportRepository
     let dailyCheckIns: any TraderDailyCheckInRepository
     let contentReports: any ContentReportRepository
+    let vault: any VaultRepository
+    /// Session-scoped private Vault cache — shared by Feed, detail, and Vault home.
+    let vaultStore: VaultStore
 
     init(
         configuration: DataConfiguration,
@@ -90,7 +93,9 @@ final class DataEnvironment {
         tradingReports: any TradingReportRepository,
         psychologyReports: any PsychologyReportRepository,
         dailyCheckIns: any TraderDailyCheckInRepository,
-        contentReports: any ContentReportRepository
+        contentReports: any ContentReportRepository,
+        vault: any VaultRepository,
+        vaultStore: VaultStore
     ) {
         self.configuration = configuration
         self.supabase = supabase
@@ -131,6 +136,8 @@ final class DataEnvironment {
         self.psychologyReports = psychologyReports
         self.dailyCheckIns = dailyCheckIns
         self.contentReports = contentReports
+        self.vault = vault
+        self.vaultStore = vaultStore
     }
 
     static func make(
@@ -185,6 +192,10 @@ final class DataEnvironment {
         #endif
 
         let interactions: any InteractionRepository = DefaultInteractionRepository(
+            supabase: supabase,
+            session: session
+        )
+        let vaultRepository: any VaultRepository = DefaultVaultRepository(
             supabase: supabase,
             session: session
         )
@@ -269,7 +280,9 @@ final class DataEnvironment {
                 detailCache: detailCache
             ),
             dailyCheckIns: dailyCheckInRepository,
-            contentReports: DefaultContentReportRepository(supabase: supabase)
+            contentReports: DefaultContentReportRepository(supabase: supabase),
+            vault: vaultRepository,
+            vaultStore: VaultStore(repository: vaultRepository)
         )
     }
 }

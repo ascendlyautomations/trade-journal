@@ -277,6 +277,7 @@ nonisolated struct TradeDraft: Hashable, Codable, Sendable {
     var durationText: String? = nil
     /// Public screenshot URL after upload (storage path or absolute URL).
     var imageURL: String? = nil
+    var imageCrop: ContentImagePresentation? = nil
     /// Import origin when created via bulk import.
     var importSource: TradeImportSource? = nil
     /// Deterministic import fingerprint for idempotent re-import.

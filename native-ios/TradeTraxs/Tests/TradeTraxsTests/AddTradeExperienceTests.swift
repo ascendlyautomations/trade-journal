@@ -395,6 +395,105 @@ final class AddTradeExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.fieldErrors[.symbol], "Symbol is required")
     }
 
+    func testCustomInstrumentPersistsInUserStore() async {
+        let profileID = ProfileID("user-custom-instruments")
+        let store = UserCustomInstrumentStore(defaults: UserDefaults(suiteName: "test.custom.instruments")!)
+        store.add("TEST", for: profileID)
+        store.add("test", for: profileID)
+        XCTAssertEqual(store.customSymbols(for: profileID), ["TEST"])
+        store.add("MGC", for: profileID)
+        XCTAssertEqual(store.customSymbols(for: profileID).prefix(2), ["MGC", "TEST"])
+        store.remove("TEST", for: profileID)
+        XCTAssertEqual(store.customSymbols(for: profileID), ["MGC"])
+    }
+
+    func testApplyCustomSymbolRegistersForViewer() async {
+        let cache = DetailPresentationCache()
+        let profileID = ProfileID("live-custom-symbol-viewer")
+        UserCustomInstrumentStore.shared.remove("TEST", for: profileID)
+
+        let viewModel = AddTradeViewModel(
+            trades: AddTradeStubRepository(),
+            feed: AddTradeStubFeedRepository(),
+            session: AddTradeStubSession(userID: profileID.rawValue),
+            detailCache: cache,
+            uploadService: AddTradeStubUpload(),
+            objectStorage: AddTradeStubStorage(),
+            onDismiss: {}
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .ready }
+        viewModel.applyCustomSymbol("TEST")
+        XCTAssertEqual(viewModel.symbolText, "TEST")
+        XCTAssertEqual(UserCustomInstrumentStore.shared.customSymbols(for: profileID).first, "TEST")
+    }
+
+    func testInstrumentCatalogMostUsedFallsBackToDefaults() {
+        let cache = DetailPresentationCache()
+        let profileID = ProfileID("live-empty-history")
+        let mostUsed = InstrumentCatalog.mostUsedSymbols(for: profileID, detailCache: cache)
+        XCTAssertEqual(mostUsed, InstrumentPickerCatalog.defaultMostUsed)
+    }
+
+    func testInstrumentCatalogUsesTradeHistoryWhenAvailable() {
+        let cache = DetailPresentationCache()
+        let profileID = ProfileID("live-history")
+        let trade = Trade(
+            id: TradeID("t1"),
+            ownerProfileID: profileID,
+            accountID: nil,
+            symbol: Symbol(ticker: "MGC"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 100,
+            exitPrice: 101,
+            entryAt: Date(timeIntervalSince1970: 100),
+            exitAt: Date(timeIntervalSince1970: 200),
+            realizedPnL: Money(amount: 10),
+            riskReward: nil,
+            points: nil,
+            sessionLabel: nil,
+            visibility: .private,
+            publicCaption: nil,
+            thumbnail: nil,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200)
+        )
+        SessionOwnerTradesStore.shared.seed([trade], for: profileID, detailCache: cache)
+        defer { SessionOwnerTradesStore.shared.invalidate(profileID: profileID) }
+
+        let mostUsed = InstrumentCatalog.mostUsedSymbols(for: profileID, detailCache: cache, limit: 4)
+        XCTAssertEqual(mostUsed.first, "MGC")
+    }
+
+    func testInstrumentPickerSnapshotIncludesBuiltInFutures() {
+        let snapshot = InstrumentCatalog.pickerSnapshot(
+            for: ProfileID("live-picker"),
+            detailCache: DetailPresentationCache()
+        )
+        XCTAssertTrue(snapshot.futures.contains("NQ"))
+        XCTAssertTrue(snapshot.futures.contains("MNQ"))
+        XCTAssertTrue(snapshot.futures.contains("ES"))
+        XCTAssertTrue(snapshot.futures.contains("MES"))
+    }
+
+    func testInstrumentPickerSearchFiltersAllSections() {
+        let snapshot = InstrumentPickerSnapshot(
+            mostUsed: ["NQ"],
+            custom: ["TEST"],
+            futures: ["ES", "MES"],
+            stocks: ["AAPL"],
+            options: [],
+            crypto: ["BTC"],
+            forex: ["EURUSD"]
+        )
+        let filtered = snapshot.filtering(matching: "es")
+        XCTAssertTrue(filtered.futures.contains("ES"))
+        XCTAssertTrue(filtered.futures.contains("MES"))
+        XCTAssertTrue(filtered.custom.isEmpty)
+    }
+
     func testRiskRewardFormattingAndParsing() {
         XCTAssertEqual(AddTradeViewModel.formatRiskReward(Decimal(string: "2.35")!), "1 : 2.35")
         XCTAssertEqual(AddTradeViewModel.formatRiskReward(2), "1 : 2")
@@ -452,7 +551,7 @@ private final class AddTradeStubFeedRepository: FeedRepository, @unchecked Senda
     private(set) var attachCalls = 0
     var shouldFailAttach = false
 
-    func feed(scope: FeedScope, page: PageRequest) async throws -> FeedPageResult {
+    func feed(scope: FeedScope, contentFilter: FeedContentFilter, page: PageRequest) async throws -> FeedPageResult {
         FeedPageResult(items: [], nextCursor: nil, embeddedTrades: [])
     }
     func post(id: PostID) async throws -> Post { throw AppError.unknown(message: "stub") }
@@ -477,12 +576,12 @@ private final class AddTradeStubFeedRepository: FeedRepository, @unchecked Senda
             viewerHasSeen: false
         )
     }
-    func reel(id: ReelID) async throws -> Reel { throw AppError.unknown(message: "stub") }
+    func reel(id: ReelID) async throws -> ReelLoadResult { throw AppError.unknown(message: "stub") }
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
         CursorPage(items: AddTradeFixtures.unattachedReels(owner: profileID), nextCursor: nil)
     }
-    func profileReels(for profileID: ProfileID) async throws -> [Reel] {
-        AddTradeFixtures.unattachedReels(owner: profileID)
+    func profileReels(for profileID: ProfileID) async throws -> ProfileReelsResult {
+        ProfileReelsResult(reels: AddTradeFixtures.unattachedReels(owner: profileID), embeddedTrades: [])
     }
     func createReel(_ reel: Reel) async throws -> Reel { reel }
     func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] {

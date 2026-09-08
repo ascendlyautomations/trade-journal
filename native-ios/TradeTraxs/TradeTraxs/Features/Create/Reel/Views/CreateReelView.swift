@@ -121,8 +121,7 @@ struct CreateReelView: View {
             Button("Discard", role: .destructive) { viewModel.dismissRequested() }
             Button("Keep Editing", role: .cancel) {}
         }
-        .experienceSwipeToDismiss { requestDismiss() }
-        .interactiveDismissDisabled()
+        .experienceProtectedFormDismiss()
         .task { viewModel.loadIfNeeded() }
         .onChange(of: viewModel.phase) { _, phase in
             #if DEBUG

@@ -123,6 +123,25 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
         )
     }
 
+    /// PKCE code exchange after Google OAuth returns to the native callback deep link.
+    func exchangeOAuthPKCECode(
+        _ authCode: String,
+        codeVerifier: String,
+        provider: AuthenticationProviderKind = .google
+    ) async throws -> AuthenticationSession {
+        struct Body: Encodable {
+            var auth_code: String
+            var code_verifier: String
+        }
+        return try await tokenRequest(
+            path: "/auth/v1/token",
+            query: [URLQueryItem(name: "grant_type", value: "pkce")],
+            body: Body(auth_code: authCode, code_verifier: codeVerifier),
+            provider: provider,
+            requiresAuthentication: false
+        )
+    }
+
     // MARK: - Private
 
     private func tokenRequest<Body: Encodable>(

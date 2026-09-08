@@ -489,6 +489,48 @@ private struct TradeRoomsStubRoomRepository: RoomRepository {
         CursorPage(items: TradeRoomsFixtures.rooms(ownerID: profileID), nextCursor: nil)
     }
 
+    func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] {
+        Dictionary(uniqueKeysWithValues: roomIDs.map { id in
+            let fixture = TradeRoomsFixtures.room(id: id)
+            return (id, fixture?.memberCount ?? TradeRoomsFixtures.members(
+                room: fixture ?? TradeRoom(
+                    id: id,
+                    ownerProfileID: TradeRoomsFixtures.viewerID,
+                    name: "Room",
+                    slug: id.rawValue,
+                    description: nil,
+                    image: nil,
+                    memberCount: 0,
+                    showsOnProfile: true,
+                    createdAt: .now
+                ),
+                viewerID: TradeRoomsFixtures.viewerID
+            ).count)
+        })
+    }
+
+    func activeMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember] {
+        let fixture = TradeRoomsFixtures.room(id: roomID) ?? TradeRoom(
+            id: roomID,
+            ownerProfileID: ownerProfileID,
+            name: "Room",
+            slug: roomID.rawValue,
+            description: nil,
+            image: nil,
+            memberCount: 0,
+            showsOnProfile: true,
+            createdAt: .now
+        )
+        return TradeRoomsFixtures.members(room: fixture, viewerID: TradeRoomsFixtures.viewerID).map {
+            RoomManagedMember(
+                profile: $0.profile,
+                role: $0.role,
+                joinedAt: $0.joinedAt,
+                tags: $0.tags
+            )
+        }
+    }
+
     func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] {
         MessagesInboxFixtures.roomUnread().filter { roomIDs.contains($0.key) }
     }

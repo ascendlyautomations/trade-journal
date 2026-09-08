@@ -37,4 +37,12 @@ enum ProfileClipFixtures {
     static func reel(id: ReelID) -> Reel? {
         samples(owner: ProfileID("dev.fixture")).first { $0.id == id }
     }
+
+    /// Sample linked trades for development clips — seeds detail cache without network.
+    static func linkedTrades(for reels: [Reel]) -> [Trade] {
+        let tradeIDs = Set(reels.compactMap(\.linkedTradeID))
+        guard !tradeIDs.isEmpty else { return [] }
+        return ProfileTradeFixtures.samples(owner: ProfileID("dev.fixture"))
+            .filter { tradeIDs.contains($0.id) }
+    }
 }

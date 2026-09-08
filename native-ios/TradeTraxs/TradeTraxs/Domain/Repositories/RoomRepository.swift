@@ -4,10 +4,20 @@ nonisolated protocol RoomRepository: Sendable {
     func room(id: RoomID) async throws -> TradeRoom
     /// Rooms owned by a profile (Profile “Trade Room” CTA).
     func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom>
+    /// Owned room lookup — web pre-create `rooms` where `owner_user_id = user.id` limit 1.
+    func ownedRoom(for profileID: ProfileID) async throws -> TradeRoom?
+    /// Creates a Trade Room with default channels and owner membership (web `createUserRoom`).
+    func createRoom(
+        request: RoomCreateRequest,
+        ownerProfileID: ProfileID,
+        ownerUsername: String
+    ) async throws -> TradeRoom
     /// Member rooms — web Community `loadMemberRooms` (`room_members` + embed).
     func memberRooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom>
     /// Active member counts for many rooms — one `room_members` SELECT (web `loadMemberStats` parity).
     func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int]
+    /// Active room memberships with profiles — `room_members` where `left_at IS NULL`.
+    func activeMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember]
     /// Web `get_room_unread_counts`.
     func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int]
     /// Web `mark_room_read` — advances `room_members.last_read_at` / `last_read_message_id`.
@@ -42,5 +52,21 @@ nonisolated protocol RoomRepository: Sendable {
 }
 
 extension RoomRepository {
+    func ownedRoom(for profileID: ProfileID) async throws -> TradeRoom? {
+        let page = try await rooms(for: profileID, page: PageRequest(limit: 1))
+        return page.items.first
+    }
+
+    func createRoom(
+        request: RoomCreateRequest,
+        ownerProfileID: ProfileID,
+        ownerUsername: String
+    ) async throws -> TradeRoom {
+        throw DomainError.businessRule(.message("Create room is not supported by this repository."))
+    }
+
     func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] { [:] }
+    func activeMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember] {
+        []
+    }
 }

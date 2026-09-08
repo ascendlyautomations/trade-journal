@@ -7,7 +7,7 @@ nonisolated protocol ProfileRepository: Sendable {
     func profiles(ids: [ProfileID]) async throws -> [Profile]
     func profile(username: String) async throws -> Profile
     func ensureProfileExists(for profileID: ProfileID) async throws -> Profile
-    func onboardingSnapshot(for profileID: ProfileID) async throws -> ProfileOnboardingSnapshot
+    func onboardingSnapshot(for profileID: ProfileID, authoritative: Bool) async throws -> ProfileOnboardingSnapshot
     func isUsernameTaken(_ username: String, excluding profileID: ProfileID) async throws -> Bool
     func completeProfileOnboarding(_ submission: ProfileOnboardingSubmission) async throws -> Profile
     func updateProfile(_ profile: Profile) async throws -> Profile
@@ -17,7 +17,12 @@ nonisolated protocol ProfileRepository: Sendable {
     /// Single wall post for detail destinations (`profile_posts`).
     func wallPost(id: PostID) async throws -> Post
     /// Web Profile “Create Post” — inserts into `profile_posts` (not feed `posts`).
-    func createWallPost(authorID: ProfileID, content: String, imageURL: String?) async throws -> Post
+    func createWallPost(
+        authorID: ProfileID,
+        content: String,
+        imageURL: String?,
+        imageCrop: ContentImagePresentation?
+    ) async throws -> Post
     /// Deletes a wall post the viewer owns (`profile_posts`).
     func deleteWallPost(id: PostID) async throws
     func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState
@@ -43,6 +48,20 @@ extension ProfileRepository {
 
 extension ProfileRepository {
     func createWallPost(authorID: ProfileID, content: String, imageURL: String?) async throws -> Post {
+        try await createWallPost(
+            authorID: authorID,
+            content: content,
+            imageURL: imageURL,
+            imageCrop: nil
+        )
+    }
+
+    func createWallPost(
+        authorID: ProfileID,
+        content: String,
+        imageURL: String?,
+        imageCrop: ContentImagePresentation?
+    ) async throws -> Post {
         throw AppError.notImplemented(feature: "createWallPost")
     }
 
@@ -56,6 +75,10 @@ extension ProfileRepository {
     }
 
     func onboardingSnapshot(for profileID: ProfileID) async throws -> ProfileOnboardingSnapshot {
+        try await onboardingSnapshot(for: profileID, authoritative: false)
+    }
+
+    func onboardingSnapshot(for profileID: ProfileID, authoritative: Bool) async throws -> ProfileOnboardingSnapshot {
         throw AppError.notImplemented(feature: "onboardingSnapshot")
     }
 

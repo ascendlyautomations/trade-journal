@@ -63,6 +63,13 @@ nonisolated protocol TradeRepository: Sendable {
         draft: AccountPayoutEntryDraft
     ) async throws -> AccountPayoutEntry
     func deletePayoutEntry(id: AccountPayoutEntryID) async throws
+    /// Prop-firm payout cycle history — `account_payout_cycles`.
+    func payoutCycleHistory(for accountID: TradingAccountID) async throws -> [AccountPayoutCycle]
+    /// Web `record_account_payout` — closes open cycle and starts the next.
+    func recordAccountPayout(
+        accountID: TradingAccountID,
+        input: RecordAccountPayoutInput
+    ) async throws -> RecordAccountPayoutResult
     /// Whitelisted public profile account cards — `rpc_v1_profile_account_insights`.
     func profileAccountInsights(for profileID: ProfileID) async throws -> [ProfileAccountInsight]
     /// Web `insertCsvTradesWithAccount` — one bulk `trades` insert (not per-row).
@@ -168,6 +175,17 @@ extension TradeRepository {
 
     func deletePayoutEntry(id: AccountPayoutEntryID) async throws {
         throw AppError.notImplemented(feature: "deletePayoutEntry")
+    }
+
+    func payoutCycleHistory(for accountID: TradingAccountID) async throws -> [AccountPayoutCycle] {
+        throw AppError.notImplemented(feature: "payoutCycleHistory")
+    }
+
+    func recordAccountPayout(
+        accountID: TradingAccountID,
+        input: RecordAccountPayoutInput
+    ) async throws -> RecordAccountPayoutResult {
+        throw AppError.notImplemented(feature: "recordAccountPayout")
     }
 
     func profileAccountInsights(for profileID: ProfileID) async throws -> [ProfileAccountInsight] {

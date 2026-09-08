@@ -54,6 +54,7 @@ enum FeedRoute: Hashable, Codable, Sendable {
     case room(RoomID)
     case roomMembers(RoomID)
     case roomInfo(RoomID)
+    case manageRoom(RoomID)
     /// Hierarchical Settings — owned by the Feed tab stack that opened Settings.
     case settings(SettingsRoute)
 }
@@ -64,10 +65,12 @@ enum MessagesRoute: Hashable, Codable, Sendable {
     case sharedTrade(TradeID)
     case sharedPost(PostID)
     case sharedReel(ReelID)
+    case sharedAchievement(AchievementID)
     case profile(ProfileID)
     case room(RoomID)
     case roomMembers(RoomID)
     case roomInfo(RoomID)
+    case manageRoom(RoomID)
     /// Hierarchical Settings — owned by the Messages tab stack that opened Settings.
     case settings(SettingsRoute)
 }
@@ -94,6 +97,7 @@ enum ProfileRoute: Hashable, Codable, Sendable {
     case room(RoomID)
     case roomMembers(RoomID)
     case roomInfo(RoomID)
+    case manageRoom(RoomID)
 }
 
 /// Settings navigation hierarchy (Instagram / Apple Settings style).
@@ -119,6 +123,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case privacyMutedAccounts = "privacy-muted-accounts"
     case privacyMessageAudience = "privacy-message-audience"
     case affiliate
+    case vault
     case support
     case about
     case legalTerms = "legal-terms"
@@ -146,6 +151,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .privacyMutedAccounts: return "Muted Accounts"
         case .privacyMessageAudience: return "Who Can Message Me"
         case .affiliate: return "Referrals"
+        case .vault: return "Vault"
         case .support: return "Help & Support"
         case .about: return "About TradeTraxs"
         case .legalTerms: return "Terms & Conditions"

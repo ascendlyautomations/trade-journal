@@ -12,6 +12,33 @@ nonisolated enum StoryReplyMessageSupport {
         var storyOwnerUsername: String?
     }
 
+    static func encode(
+        text: String,
+        storyID: StoryID,
+        imageURL: String,
+        ownerID: ProfileID,
+        ownerUsername: String?
+    ) -> String {
+        var payload: [String: Any] = [
+            "text": text,
+            "story_id": storyID.rawValue,
+            "story_image_url": imageURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            "story_owner_id": ownerID.rawValue,
+        ]
+        if let trimmedUsername = ownerUsername?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !trimmedUsername.isEmpty
+        {
+            payload["story_owner_username"] = trimmedUsername
+        }
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8)
+        else {
+            return "{}"
+        }
+        return json
+    }
+
     static func decode(from content: String?) -> Payload? {
         guard let raw = content?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
               let data = raw.data(using: .utf8),

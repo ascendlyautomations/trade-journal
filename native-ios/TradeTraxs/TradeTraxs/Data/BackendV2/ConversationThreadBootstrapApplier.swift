@@ -175,6 +175,15 @@ nonisolated enum ConversationThreadBootstrapApplier {
             ]
         }()
 
+        let sharedContent = SharedContentReference.resolve(
+            type: row.type,
+            postID: row.post_id,
+            profilePostID: row.profile_post_id,
+            achievementPostID: row.achievement_post_id,
+            reelID: row.reel_id,
+            tradeID: row.trade_id
+        )
+
         let kind: MessageKind = {
             if row.is_system.value == true { return .system }
             if isTrade { return .tradeShare }
@@ -186,7 +195,22 @@ nonisolated enum ConversationThreadBootstrapApplier {
             if StoryShareMessageSupport.isStoryShare(type: row.type, content: row.content) {
                 return .storyShare
             }
+            if let sharedContent,
+               sharedContent.messageKind != .tradeShare
+            {
+                return sharedContent.messageKind
+            }
             return attachments.isEmpty ? .text : .media
+        }()
+
+        let resolvedSharedContent: SharedContentReference? = {
+            if isTrade, let tradeID { return .trade(tradeID) }
+            if kind == .feedPostShare || kind == .profilePostShare
+                || kind == .achievementPostShare || kind == .reelShare
+            {
+                return sharedContent
+            }
+            return nil
         }()
 
         let replyID = row.parent_message_id.flatMap { raw -> MessageID? in
@@ -205,7 +229,8 @@ nonisolated enum ConversationThreadBootstrapApplier {
             attachments: attachments,
             replyToMessageID: replyID,
             createdAt: createdAt,
-            isReadByViewer: isRead
+            isReadByViewer: isRead,
+            sharedContent: resolvedSharedContent
         )
     }
 }

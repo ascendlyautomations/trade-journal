@@ -109,6 +109,11 @@ struct RoomConversationView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    if viewModel.isOwner {
+                        Button("Manage Room", systemImage: "gearshape") {
+                            viewModel.openManageRoom()
+                        }
+                    }
                     Button(
                         viewModel.isMuted ? "Unmute notifications" : "Mute notifications",
                         systemImage: viewModel.isMuted ? "bell.fill" : "bell.slash"
@@ -160,6 +165,18 @@ struct RoomConversationView: View {
         }
         .onDisappear {
             viewModel.stopRealtime()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tradeRoomMetadataDidChange)) { notification in
+            guard let changedID = notification.object as? RoomID,
+                  changedID == viewModel.roomID
+            else { return }
+            Task { await viewModel.reloadRoomMetadataIfNeeded() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tradeRoomChannelsDidChange)) { notification in
+            guard let changedID = notification.object as? RoomID,
+                  changedID == viewModel.roomID
+            else { return }
+            Task { await viewModel.reloadChannelsIfNeeded() }
         }
     }
 
@@ -259,6 +276,14 @@ struct RoomConversationView: View {
                                 onSharedTradeTap: { tradeID in
                                     guard let navigationCoordinator else { return }
                                     navigationCoordinator.open(navigationHost.sharedTrade(tradeID))
+                                },
+                                onSharedContentTap: { reference in
+                                    guard let data else { return }
+                                    SharedContentNavigation.open(
+                                        reference: reference,
+                                        cache: data.detailCache,
+                                        coordinator: navigationCoordinator
+                                    )
                                 },
                                 onSharedStoryTap: { payload in
                                     guard let data else { return }

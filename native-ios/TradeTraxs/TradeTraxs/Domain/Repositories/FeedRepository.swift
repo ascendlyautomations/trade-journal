@@ -1,5 +1,17 @@
 import Foundation
 
+/// Profile clips load — reels plus trades embedded in the PostgREST join.
+nonisolated struct ProfileReelsResult: Sendable {
+    var reels: [Reel]
+    var embeddedTrades: [Trade]
+}
+
+/// Single reel fetch — reel body plus optional embedded linked trade.
+nonisolated struct ReelLoadResult: Sendable {
+    var reel: Reel
+    var embeddedTrade: Trade?
+}
+
 /// Bounded feed page plus trades already embedded in the PostgREST join.
 nonisolated struct FeedPageResult: Sendable {
     var items: [FeedItem]
@@ -13,7 +25,11 @@ nonisolated struct FeedPageResult: Sendable {
 }
 
 nonisolated protocol FeedRepository: Sendable {
-    func feed(scope: FeedScope, page: PageRequest) async throws -> FeedPageResult
+    func feed(
+        scope: FeedScope,
+        contentFilter: FeedContentFilter,
+        page: PageRequest
+    ) async throws -> FeedPageResult
     func post(id: PostID) async throws -> Post
     func posts(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post>
     func createPost(_ post: Post) async throws -> Post
@@ -22,15 +38,17 @@ nonisolated protocol FeedRepository: Sendable {
     func addComment(_ comment: Comment) async throws -> Comment
     func setReaction(on item: FeedItem, kind: ReactionKind, isActive: Bool) async throws
     func stories(for viewer: ProfileID) async throws -> [Story]
+    /// All active stories for the viewer's following ring (not deduped per author).
+    func allActiveStories(for viewer: ProfileID) async throws -> [Story]
     /// Resolves a single active story when the viewer is allowed to see it (RLS + 24h window).
     func story(id: StoryID) async throws -> Story?
     func createStory(userID: ProfileID, imageURL: String) async throws -> Story
     /// Deletes a story the viewer owns.
     func deleteStory(id: StoryID) async throws
-    func reel(id: ReelID) async throws -> Reel
+    func reel(id: ReelID) async throws -> ReelLoadResult
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel>
     /// Web `fetchUserProfileReels` — Profile Clips tab (trade-linked visibility filter).
-    func profileReels(for profileID: ProfileID) async throws -> [Reel]
+    func profileReels(for profileID: ProfileID) async throws -> ProfileReelsResult
     func createReel(_ reel: Reel) async throws -> Reel
     /// Deletes a reel the viewer owns.
     func deleteReel(id: ReelID) async throws
@@ -43,6 +61,10 @@ nonisolated protocol FeedRepository: Sendable {
 }
 
 extension FeedRepository {
+    func allActiveStories(for viewer: ProfileID) async throws -> [Story] {
+        try await stories(for: viewer)
+    }
+
     func story(id: StoryID) async throws -> Story? {
         nil
     }

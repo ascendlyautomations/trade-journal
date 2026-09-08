@@ -61,6 +61,8 @@ nonisolated protocol MessageRepository: Sendable {
     func setUserBlock(otherID: ProfileID, blocked: Bool) async throws -> DmBlockStatus
     /// Blocked accounts list — `user_blocks` + embedded profiles (RLS: own rows).
     func fetchBlockedAccounts() async throws -> [BlockedAccount]
+    /// Bidirectional block peers — `get_active_block_peer_ids` (Feed filtering).
+    func fetchActiveBlockPeerIDs() async throws -> Set<ProfileID>
     /// Muted 1:1 peers — `list_muted_dm_peers`.
     func fetchMutedDirectMessagePeers() async throws -> [MutedDirectMessagePeer]
 }
@@ -84,6 +86,10 @@ extension MessageRepository {
 
     func fetchBlockedAccounts() async throws -> [BlockedAccount] {
         throw AppError.notImplemented(feature: "fetchBlockedAccounts")
+    }
+
+    func fetchActiveBlockPeerIDs() async throws -> Set<ProfileID> {
+        throw AppError.notImplemented(feature: "fetchActiveBlockPeerIDs")
     }
 
     func fetchMutedDirectMessagePeers() async throws -> [MutedDirectMessagePeer] {

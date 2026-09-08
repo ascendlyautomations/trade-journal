@@ -15,12 +15,24 @@ struct ManageAccountEditorView: View {
     @State private var payoutDraft = AccountPayoutEntryDraft(amountDigits: "", payoutDate: .now, note: "")
     @State private var editingPayoutID: AccountPayoutEntryID?
     @State private var showsPayoutSheet = false
+    @State private var showsRecordPayout = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColors) private var colors
 
-    init(viewModel: ManageAccountsViewModel, mode: Mode, draft: TradingAccountDraft) {
+    private let data: DataEnvironment?
+    private let navigationCoordinator: NavigationCoordinator?
+
+    init(
+        viewModel: ManageAccountsViewModel,
+        mode: Mode,
+        draft: TradingAccountDraft,
+        data: DataEnvironment? = nil,
+        navigationCoordinator: NavigationCoordinator? = nil
+    ) {
         self.viewModel = viewModel
         self.mode = mode
+        self.data = data
+        self.navigationCoordinator = navigationCoordinator
         _draft = State(initialValue: draft)
         if case .edit(let account) = mode {
             _showInAccountDropdowns = State(initialValue: account.showInAccountDropdowns)
@@ -151,29 +163,54 @@ struct ManageAccountEditorView: View {
                     Text("Profile")
                 }
 
-                Section {
-                    AccountPayoutListContent(
-                        viewModel: viewModel,
-                        accountID: account.id,
-                        onAdd: {
-                            editingPayoutID = nil
-                            payoutDraft = AccountPayoutEntryDraft(amountDigits: "", payoutDate: .now, note: "")
-                            showsPayoutSheet = true
-                        },
-                        onEdit: { entry in
-                            editingPayoutID = entry.id
-                            payoutDraft = AccountPayoutEntryDraft(
-                                amountDigits: NSDecimalNumber(decimal: entry.amount.amount).stringValue,
-                                payoutDate: entry.payoutDate,
-                                note: entry.note ?? ""
-                            )
-                            showsPayoutSheet = true
+                if PropFirmPayoutPolicy.supportsRecordPayout(for: account) {
+                    Section {
+                        Button {
+                            showsRecordPayout = true
+                        } label: {
+                            Label("Record Payout", systemImage: "dollarsign.circle")
                         }
-                    )
-                } header: {
-                    Text("Manual Payouts")
-                } footer: {
-                    Text("Private to you. Share payouts publicly by posting payout achievements.")
+                        .disabled(data == nil || navigationCoordinator == nil)
+                        .accessibilityIdentifier("manageAccounts.recordPayout")
+                    } header: {
+                        Text("Payout Cycle")
+                    } footer: {
+                        Text("Closes the current payout cycle and starts the next from your post-payout balance. Share publicly afterward with a payout Achievement.")
+                    }
+                }
+
+                if PropFirmPayoutPolicy.supportsManualPayoutLedger(for: account) {
+                    Section {
+                        AccountPayoutListContent(
+                            viewModel: viewModel,
+                            accountID: account.id,
+                            onAdd: {
+                                editingPayoutID = nil
+                                payoutDraft = AccountPayoutEntryDraft(amountDigits: "", payoutDate: .now, note: "")
+                                showsPayoutSheet = true
+                            },
+                            onEdit: { entry in
+                                editingPayoutID = entry.id
+                                payoutDraft = AccountPayoutEntryDraft(
+                                    amountDigits: NSDecimalNumber(decimal: entry.amount.amount).stringValue,
+                                    payoutDate: entry.payoutDate,
+                                    note: entry.note ?? ""
+                                )
+                                showsPayoutSheet = true
+                            }
+                        )
+                    } header: {
+                        Text("Manual Payouts")
+                    } footer: {
+                        Text("Private to you. Share payouts publicly by posting payout achievements.")
+                    }
+                } else if !PropFirmPayoutPolicy.supportsRecordPayout(for: account) {
+                    Section {
+                        Text("Payout recording is not available for evaluation, simulated, or backtest accounts.")
+                            .experienceStyle(.footnote, color: colors.secondaryText)
+                    } header: {
+                        Text("Payouts")
+                    }
                 }
             }
 
@@ -204,6 +241,7 @@ struct ManageAccountEditorView: View {
         }
         .disabled(viewModel.isSaving)
         .accessibilityIdentifier("manageAccounts.editor")
+        .experienceProtectedFormDismiss()
         .sheet(isPresented: $showsPayoutSheet) {
             if let accountID = saveAccountID {
                 AccountPayoutEditorSheet(
@@ -215,8 +253,22 @@ struct ManageAccountEditorView: View {
                 )
             }
         }
+        .sheet(isPresented: $showsRecordPayout) {
+            if let accountID = saveAccountID,
+               let data,
+               let navigationCoordinator {
+                RecordPayoutFlowView(
+                    accountID: accountID,
+                    data: data,
+                    navigationCoordinator: navigationCoordinator
+                )
+            }
+        }
         .task(id: editAccountID?.rawValue) {
             guard let accountID = editAccountID else { return }
+            let account = viewModel.accounts.first(where: { $0.id == accountID })
+                ?? editModeAccount
+            guard let account, PropFirmPayoutPolicy.supportsManualPayoutLedger(for: account) else { return }
             await viewModel.loadPayoutEntries(for: accountID)
         }
         .onChange(of: viewModel.accounts) { _, _ in
@@ -234,6 +286,11 @@ struct ManageAccountEditorView: View {
 
     private var editAccountID: TradingAccountID? {
         if case .edit(let account) = mode { return account.id }
+        return nil
+    }
+
+    private var editModeAccount: TradingAccount? {
+        if case .edit(let account) = mode { return account }
         return nil
     }
 

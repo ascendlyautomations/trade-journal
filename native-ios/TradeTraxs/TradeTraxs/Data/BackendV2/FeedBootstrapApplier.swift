@@ -87,14 +87,20 @@ enum FeedBootstrapApplier {
             item.caption = stringPayload(row.payload, keys: ["public_description"])
                 ?? nestedString(row.payload, objectKey: "trades", keys: ["public_description"])
             item.mediaURL = stringPayload(row.payload, keys: ["image_url"])
-        case .post:
-            item.postID = PostID(row.id)
-            item.caption = stringPayload(row.payload, keys: ["content", "body"])
-            item.mediaURL = stringPayload(row.payload, keys: ["image_url"])
         case .reel:
             item.reelID = ReelID(row.id)
+            item.tradeID = stringPayload(row.payload, keys: ["trade_id"]).flatMap { raw in
+                raw.isEmpty ? nil : TradeID(raw)
+            }
             item.caption = stringPayload(row.payload, keys: ["caption"])
-            item.mediaURL = stringPayload(row.payload, keys: ["thumbnail_url", "image_url"])
+            item.mediaURL = stringPayload(row.payload, keys: ["thumbnail_url", "video_url", "image_url"])
+        case .post:
+            item.postID = PostID(row.id)
+            item.tradeID = stringPayload(row.payload, keys: ["trade_id"]).flatMap { raw in
+                raw.isEmpty ? nil : TradeID(raw)
+            }
+            item.caption = stringPayload(row.payload, keys: ["content", "body"])
+            item.mediaURL = stringPayload(row.payload, keys: ["image_url"])
         case .achievement:
             item.achievementID = AchievementID(
                 stringPayload(row.payload, keys: ["achievement_id"]) ?? row.id

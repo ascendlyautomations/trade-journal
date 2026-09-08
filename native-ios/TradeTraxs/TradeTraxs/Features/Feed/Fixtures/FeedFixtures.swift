@@ -197,6 +197,14 @@ enum FeedFixtures {
     }
 
     static func seedDetailCache(_ cache: DetailPresentationCache, viewerID: ProfileID = viewerID) {
+        let peer = ProfileID("dev.follower.ada")
+        for trade in ProfileTradeFixtures.samples(owner: peer) {
+            cache.seed(trade)
+        }
+        for clip in ProfileClipFixtures.samples(owner: peer) {
+            cache.seed(clip)
+        }
+
         let entries = timeline(viewerID: viewerID)
         for entry in entries {
             switch entry {

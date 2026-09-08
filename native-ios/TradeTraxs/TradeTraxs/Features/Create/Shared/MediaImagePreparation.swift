@@ -8,12 +8,15 @@ enum MediaImagePreparation {
         maxDimension: CGFloat = 2560,
         quality: CGFloat = 0.92
     ) -> Data? {
-        let size = image.size
-        let scale = min(1, maxDimension / max(size.width, size.height))
-        let target = CGSize(width: size.width * scale, height: size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: target)
+        let normalized = MediaImageOrientation.normalized(image)
+        let pixelSize = MediaImageOrientation.pixelSize(of: normalized)
+        let scale = min(1, maxDimension / max(pixelSize.width, pixelSize.height))
+        let target = CGSize(width: pixelSize.width * scale, height: pixelSize.height * scale)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: target, format: format)
         let rendered = renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: target))
+            normalized.draw(in: CGRect(origin: .zero, size: target))
         }
         return rendered.jpegData(compressionQuality: quality)
     }

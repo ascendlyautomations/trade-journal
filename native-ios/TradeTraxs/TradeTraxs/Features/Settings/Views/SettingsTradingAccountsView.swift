@@ -3,9 +3,12 @@ import SwiftUI
 /// Single Manage Accounts experience — Settings, Dashboard, and Calendar all land here.
 struct SettingsTradingAccountsView: View {
     @State private var viewModel: ManageAccountsViewModel
-
     @State private var editorPresentation: EditorPresentation?
+
     @Environment(\.themeColors) private var colors
+
+    private let data: DataEnvironment?
+    private let navigationCoordinator: NavigationCoordinator?
 
     private enum EditorPresentation: Identifiable {
         case create
@@ -19,7 +22,8 @@ struct SettingsTradingAccountsView: View {
         }
     }
 
-    init(data: DataEnvironment) {
+    init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator? = nil) {
+        self.navigationCoordinator = navigationCoordinator
         _viewModel = State(
             initialValue: ManageAccountsViewModel(
                 trades: data.trades,
@@ -27,9 +31,12 @@ struct SettingsTradingAccountsView: View {
                 detailCache: data.detailCache
             )
         )
+        self.data = data
     }
 
     init(viewModel: ManageAccountsViewModel) {
+        self.data = nil
+        self.navigationCoordinator = nil
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -202,16 +209,21 @@ struct SettingsTradingAccountsView: View {
                     ManageAccountEditorView(
                         viewModel: viewModel,
                         mode: .create,
-                        draft: viewModel.emptyDraft()
+                        draft: viewModel.emptyDraft(),
+                        data: data,
+                        navigationCoordinator: navigationCoordinator
                     )
                 case .edit(let account):
                     ManageAccountEditorView(
                         viewModel: viewModel,
                         mode: .edit(account),
-                        draft: viewModel.draft(from: account)
+                        draft: viewModel.draft(from: account),
+                        data: data,
+                        navigationCoordinator: navigationCoordinator
                     )
                 }
             }
+            .experienceProtectedFormDismiss()
         }
         .onAppear { viewModel.loadIfNeeded() }
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in

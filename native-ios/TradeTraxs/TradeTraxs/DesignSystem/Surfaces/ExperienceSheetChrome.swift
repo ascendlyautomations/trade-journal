@@ -33,6 +33,14 @@ extension View {
         )
     }
 
+    /// Blocks swipe-down interactive dismissal on compose/edit forms with user-entered data.
+    ///
+    /// Pair with an explicit Close / Cancel toolbar action. Does **not** add custom swipe-to-dismiss
+    /// and does not affect navigation back gestures inside a pushed stack.
+    func experienceProtectedFormDismiss(_ disabled: Bool = true) -> some View {
+        interactiveDismissDisabled(disabled)
+    }
+
     /// Soft content reveal for detail screens — respects Reduce Motion.
     func experienceDetailEntry(
         revealed: Bool,

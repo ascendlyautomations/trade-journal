@@ -17,11 +17,18 @@ struct DetailIdentityHeader: View {
     var deleteTitle: String = "Delete"
     var onEdit: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
+    var vaultRef: VaultContentRef? = nil
     var accessibilityIdentifier: String = "detail.identity"
 
     @Environment(\.themeColors) private var colors
     @Environment(\.appEnvironment) private var appEnvironment
     @State private var isSharePresented = false
+    @State private var showsVaultSheet = false
+
+    private var isVaulted: Bool {
+        guard let vaultRef else { return false }
+        return appEnvironment.data.vaultStore.state(for: vaultRef).isVaulted
+    }
 
     var body: some View {
         // Equal row spacing; menu overlaid so it does not inflate the name-row height.
@@ -69,6 +76,8 @@ struct DetailIdentityHeader: View {
                     onCopyLink: contentLink.map { link in
                         { DetailOverflowActions.copyLink(link) }
                     },
+                    onAddToVault: vaultRef == nil || isVaulted ? nil : { openVaultSheet() },
+                    onManageInVault: vaultRef == nil || !isVaulted ? nil : { openVaultSheet() },
                     onReport: reportAction,
                     editTitle: editTitle,
                     deleteTitle: deleteTitle,
@@ -84,8 +93,21 @@ struct DetailIdentityHeader: View {
                 DetailShareSheet(items: [shareText])
             }
         }
+        .sheet(isPresented: $showsVaultSheet) {
+            if let vaultRef {
+                VaultDestinationSheet(
+                    ref: vaultRef,
+                    store: appEnvironment.data.vaultStore
+                )
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private func openVaultSheet() {
+        appEnvironment.data.vaultStore.loadFoldersIfNeeded()
+        showsVaultSheet = true
     }
 
     private var reportAction: (() -> Void)? {

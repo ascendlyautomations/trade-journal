@@ -6,17 +6,25 @@ import SwiftUI
 /// Child views (stories, cards, filters, empty/error) are render-only.
 struct FeedHomeView: View {
     @State private var viewModel: FeedScreenViewModel
+    @State private var playbackCoordinator: FeedVideoPlaybackCoordinator
+    @State private var shareTarget: SharedContentShareTarget?
     private let imagePipeline: any ImagePipeline
     private let detailCache: DetailPresentationCache
     private let engagementStore: EngagementStore
+    private let vaultStore: VaultStore
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     init(
         data: DataEnvironment,
         navigationCoordinator: NavigationCoordinator
     ) {
+        _playbackCoordinator = State(
+            initialValue: FeedVideoPlaybackCoordinator(storage: data.objectStorage)
+        )
         _viewModel = State(
             initialValue: FeedScreenViewModel(
                 feed: data.feed,
@@ -26,14 +34,17 @@ struct FeedHomeView: View {
                 session: data.session,
                 detailCache: data.detailCache,
                 engagementStore: data.engagementStore,
+                vaultStore: data.vaultStore,
                 navigationCoordinator: navigationCoordinator,
                 realtimeHub: data.realtimeHub,
-                rpc: data.rpc
+                rpc: data.rpc,
+                messages: data.messages
             )
         )
         self.imagePipeline = data.imagePipeline
         self.detailCache = data.detailCache
         self.engagementStore = data.engagementStore
+        self.vaultStore = data.vaultStore
     }
 
     /// Tests / previews.
@@ -41,12 +52,16 @@ struct FeedHomeView: View {
         viewModel: FeedScreenViewModel,
         imagePipeline: any ImagePipeline,
         detailCache: DetailPresentationCache,
-        engagementStore: EngagementStore
+        engagementStore: EngagementStore,
+        vaultStore: VaultStore,
+        playbackCoordinator: FeedVideoPlaybackCoordinator
     ) {
+        _playbackCoordinator = State(initialValue: playbackCoordinator)
         _viewModel = State(initialValue: viewModel)
         self.imagePipeline = imagePipeline
         self.detailCache = detailCache
         self.engagementStore = engagementStore
+        self.vaultStore = vaultStore
     }
 
     var body: some View {
@@ -55,6 +70,8 @@ struct FeedHomeView: View {
             case .idle, .loading:
                 if viewModel.entries.isEmpty {
                     FeedSkeleton()
+                } else if viewModel.contentFilter == .clips {
+                    clipsExperience
                 } else {
                     feedList
                 }
@@ -65,25 +82,42 @@ struct FeedHomeView: View {
                         message: message,
                         onRetry: { Task { await viewModel.refresh() } }
                     )
+                } else if viewModel.contentFilter == .clips {
+                    clipsExperience
                 } else {
                     feedList
                 }
-            case .loaded where viewModel.showsEmpty:
-                VStack(spacing: 0) {
-                if viewModel.scope == .following {
-                    storiesSection
+            case .loaded where viewModel.isQueryReloadInProgress && viewModel.visibleEntries.isEmpty:
+                if viewModel.contentFilter == .clips {
+                    clipsExperience
+                } else {
+                    FeedSkeleton()
                 }
-                    ExperienceEmptyState(
-                        icon: .feed,
-                        title: emptyTitle,
-                        message: emptyMessage
-                    )
+            case .loaded where viewModel.showsEmpty:
+                if viewModel.contentFilter == .clips {
+                    clipsEmptyState
+                } else {
+                    VStack(spacing: 0) {
+                        if viewModel.scope == .following {
+                            storiesSection
+                        }
+                        ExperienceEmptyState(
+                            icon: .feed,
+                            title: emptyTitle,
+                            message: emptyMessage
+                        )
+                    }
                 }
             case .loaded:
-                feedList
+                if viewModel.contentFilter == .clips {
+                    clipsExperience
+                } else {
+                    feedList
+                }
             }
         }
         .experienceScreenBackground()
+        .experienceFeedClipsChrome(isActive: viewModel.contentFilter == .clips)
         .experienceNavigationTitle("Feed")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -95,17 +129,21 @@ struct FeedHomeView: View {
                 )
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            contentFilterBar
-        }
-        .refreshable {
+        .modifier(
+            FeedClipsViewportLayoutModifier(
+                isClips: viewModel.contentFilter == .clips,
+                categoryBar: contentFilterBar
+            )
+        )
+        .feedClipsBoundsLogging(isEnabled: viewModel.contentFilter == .clips)
+        .modifier(FeedHomeRefreshModifier(isEnabled: viewModel.contentFilter != .clips) {
             await viewModel.refresh()
-        }
+        })
         .task {
             viewModel.loadIfNeeded()
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-uitesting-feed-text-only") {
-                viewModel.setContentFilter(.posts)
+                viewModel.userSelectedContentFilter(.posts)
             }
             #endif
         }
@@ -113,11 +151,11 @@ struct FeedHomeView: View {
             // Private journal inserts do not belong in Feed.
             switch TradeJournalMutationStore.shared.latest {
             case .created(let trade) where trade.visibility == .public:
-                Task { await viewModel.refresh() }
+                Task { await viewModel.refresh(trigger: .journalMutation) }
             case .updated(let trade) where trade.visibility == .public:
-                Task { await viewModel.refresh() }
+                Task { await viewModel.refresh(trigger: .journalMutation) }
             case .deleted:
-                Task { await viewModel.refresh() }
+                Task { await viewModel.refresh(trigger: .journalMutation) }
             default:
                 break
             }
@@ -129,31 +167,71 @@ struct FeedHomeView: View {
             case .storyDeleted(let storyID):
                 viewModel.applyStoryDeleted(storyID)
             default:
-                Task { await viewModel.refresh() }
+                Task { await viewModel.refresh(trigger: .contentMutation) }
             }
         }
         .onChange(of: FollowMutationCoordinator.shared.revision) { _, _ in
-            // Following scope membership changed — soft refresh timeline without timers.
+            // Only user follow/unfollow edges affect Following timeline membership.
             guard viewModel.scope == .following else { return }
-            Task { await viewModel.refresh() }
+            switch FollowMutationCoordinator.shared.latest {
+            case .followed, .unfollowed, .followRequestApproved:
+                Task { await viewModel.refresh(trigger: .followingChanged) }
+            default:
+                break
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase != .active {
+                playbackCoordinator.pauseAll()
+            } else if viewModel.contentFilter == .clips {
+                playbackCoordinator.beginClipsExperience()
+            }
+        }
+        .onChange(of: viewModel.contentFilter) { oldFilter, newFilter in
+            if newFilter == .clips {
+                playbackCoordinator.beginClipsExperience()
+            } else if oldFilter == .clips {
+                playbackCoordinator.endClipsExperience()
+            }
+        }
+        .onDisappear {
+            if viewModel.contentFilter == .clips {
+                playbackCoordinator.endClipsExperience()
+            } else {
+                playbackCoordinator.pauseAll()
+            }
+        }
+        .sheet(item: $shareTarget) { target in
+            SharedContentShareSheet(
+                target: target,
+                data: appEnvironment.data,
+                onClose: { shareTarget = nil }
+            )
         }
         .accessibilityIdentifier("feed.home")
     }
 
     private var contentFilterBar: some View {
         FeedContentToggle(
-            filter: Binding(
-                get: { viewModel.contentFilter },
-                set: { viewModel.setContentFilter($0) }
-            ),
-            onChange: { _ in }
+            filter: viewModel.contentFilter,
+            onSelect: { viewModel.userSelectedContentFilter($0) }
         )
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.top, 4)
         .padding(.bottom, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.backgroundPrimary.opacity(0.96))
+        .background(contentFilterBarBackground)
         .accessibilityIdentifier("feed.header.contentFilter")
+    }
+
+    private var contentFilterBarBackground: some View {
+        Group {
+            if viewModel.contentFilter == .clips {
+                colors.navigationBackground
+            } else {
+                colors.backgroundPrimary.opacity(0.96)
+            }
+        }
     }
 
     private var feedList: some View {
@@ -161,9 +239,7 @@ struct FeedHomeView: View {
             LazyVStack(spacing: 0) {
                 if viewModel.scope == .following {
                     storiesSection
-                    Rectangle()
-                        .fill(colors.border.opacity(0.55))
-                        .frame(height: ExperienceBorder.hairline)
+                    FeedSectionSeparator()
                 }
 
                 ForEach(viewModel.visibleEntries) { entry in
@@ -172,8 +248,21 @@ struct FeedHomeView: View {
                         author: viewModel.author(for: entry.authorProfileID),
                         imagePipeline: imagePipeline,
                         engagementStore: engagementStore,
+                        vaultStore: vaultStore,
+                        detailCache: detailCache,
+                        playbackCoordinator: playbackCoordinator,
                         onOpen: { viewModel.open(entry) },
-                        onOpenAuthor: { viewModel.openAuthor(entry.authorProfileID) }
+                        onOpenAuthor: { viewModel.openAuthor(entry.authorProfileID) },
+                        onOpenLinkedTrade: { viewModel.openLinkedTrade($0) },
+                        onOpenLinkedClip: { viewModel.openLinkedClip($0) },
+                        viewerID: viewModel.viewerID,
+                        onReport: reportAction(for: entry),
+                        onShare: {
+                            shareTarget = SharedContentShareTarget.from(
+                                entry: entry,
+                                author: viewModel.author(for: entry.authorProfileID)
+                            )
+                        }
                     )
                     .onAppear {
                         Task { await viewModel.loadMoreIfNeeded(currentID: entry.id) }
@@ -197,6 +286,44 @@ struct FeedHomeView: View {
         }
         .scrollContentBackground(.hidden)
         .accessibilityIdentifier("feed.list")
+    }
+
+    private var clipsExperience: some View {
+        FeedClipsPagerView(
+            entries: viewModel.visibleEntries,
+            author: { viewModel.author(for: $0) },
+            imagePipeline: imagePipeline,
+            detailCache: detailCache,
+            engagementStore: engagementStore,
+            vaultStore: vaultStore,
+            playbackCoordinator: playbackCoordinator,
+            isLoadingMore: viewModel.isLoadingMore,
+            viewerID: viewModel.viewerID,
+            onOpenAuthor: { viewModel.openAuthor($0) },
+            onOpenLinkedTrade: { viewModel.openLinkedTrade($0) },
+            onReport: { entry in reportAction(for: entry) },
+            onShare: { entry in
+                shareTarget = SharedContentShareTarget.from(
+                    entry: entry,
+                    author: viewModel.author(for: entry.authorProfileID)
+                )
+            },
+            onOpenDetail: { viewModel.open($0) },
+            onLoadMore: { entryID in
+                Task { await viewModel.loadMoreIfNeeded(currentID: entryID) }
+            }
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(colors.primaryBackground)
+    }
+
+    private var clipsEmptyState: some View {
+        ExperienceEmptyState(
+            icon: .video,
+            title: emptyTitle,
+            message: emptyMessage
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var storiesSection: some View {
@@ -226,6 +353,55 @@ struct FeedHomeView: View {
             return "Follow traders to see their activity here."
         case .global:
             return "New public activity will show up here."
+        }
+    }
+
+    private func reportAction(for entry: FeedTimelineEntry) -> (() -> Void)? {
+        guard let request = entry.reportRequest(viewerID: viewModel.viewerID) else { return nil }
+        return {
+            ExperienceHaptics.play(.selection)
+            appEnvironment.contentReportPresenter.present(request)
+        }
+    }
+}
+
+/// Pull-to-refresh only for non-Clips feed modes — nested Clips pager owns its own scroll surface.
+private struct FeedHomeRefreshModifier: ViewModifier {
+    let isEnabled: Bool
+    let action: () async -> Void
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.refreshable {
+                await action()
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// Clips mode uses a structural VStack so the pager starts exactly below the category bar.
+/// Other feed modes keep the floating top inset layout.
+private struct FeedClipsViewportLayoutModifier<CategoryBar: View>: ViewModifier {
+    let isClips: Bool
+    let categoryBar: CategoryBar
+
+    func body(content: Content) -> some View {
+        if isClips {
+            VStack(spacing: 0) {
+                categoryBar
+                    .feedClipsBoundsAnchor(.categoryBar)
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .clipped()
+                    .feedClipsBoundsAnchor(.pager)
+            }
+        } else {
+            content
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    categoryBar
+                }
         }
     }
 }

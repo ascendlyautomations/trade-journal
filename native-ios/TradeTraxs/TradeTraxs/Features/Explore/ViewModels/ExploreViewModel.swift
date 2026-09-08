@@ -143,9 +143,11 @@ final class ExploreViewModel {
                 $0.name.lowercased().contains(lowered) || $0.slug.lowercased().contains(lowered)
             }
             // Broaden screenshot/demo search so "alex" hits people while rooms stay discoverable.
+            #if DEBUG
             if searchRooms.isEmpty, forceFixtures {
                 searchRooms = ExploreFixtures.rooms()
             }
+            #endif
             searchPhase = .idle
             return
         }

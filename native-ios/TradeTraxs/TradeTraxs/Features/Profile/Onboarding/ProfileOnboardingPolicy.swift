@@ -58,18 +58,48 @@ nonisolated enum ProfileOnboardingPolicy {
 }
 
 nonisolated extension ProfileOnboardingSnapshot {
-    static func from(session: SessionProfileV1, viewerID: String) -> ProfileOnboardingSnapshot {
+    static func from(
+        session: SessionProfileV1,
+        viewer: ViewerCardV1,
+        viewerID: String
+    ) -> ProfileOnboardingSnapshot {
         ProfileOnboardingSnapshot(
             profileID: ProfileID(viewerID),
             username: session.username,
-            displayName: nil,
+            displayName: resolvedDisplayName(viewer: viewer, session: session),
             onboardingCompleted: session.onboarding_completed == true,
             traderType: session.trader_type,
             tradingStyle: session.trading_style,
             startedTrading: session.started_trading,
             bio: session.bio,
-            avatarURL: nil
+            avatarURL: resolvedAvatarURL(viewer: viewer, session: session)
         )
+    }
+
+    private static func resolvedDisplayName(
+        viewer: ViewerCardV1,
+        session: SessionProfileV1
+    ) -> String? {
+        _ = session
+        guard let normalized = ProfileDisplayNamePolicy.normalized(viewer.display_name),
+              !ProfileDisplayNamePolicy.isPlaceholder(normalized)
+        else {
+            return nil
+        }
+        return normalized
+    }
+
+    private static func resolvedAvatarURL(
+        viewer: ViewerCardV1,
+        session: SessionProfileV1
+    ) -> String? {
+        for raw in [session.avatar_url, viewer.avatar_url] {
+            let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+        return nil
     }
 
     static func from(dto: ProfileDTO.OnboardingFields, profileID: ProfileID) -> ProfileOnboardingSnapshot {

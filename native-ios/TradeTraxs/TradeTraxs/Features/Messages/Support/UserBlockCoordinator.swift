@@ -52,6 +52,9 @@ final class UserBlockCoordinator {
 
         if blocked {
             inboxStore.removeDirectConversations(with: otherID)
+            FeedBlockedAuthorsFilter.shared.noteBlock(peerID: otherID)
+        } else {
+            FeedBlockedAuthorsFilter.shared.noteUnblock(peerID: otherID)
         }
 
         NotificationCenter.default.post(name: .userBlockListDidChange, object: nil)

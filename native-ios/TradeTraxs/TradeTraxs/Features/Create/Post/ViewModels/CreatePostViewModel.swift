@@ -20,6 +20,7 @@ final class CreatePostViewModel {
     var bodyText = ""
     var imageData: Data?
     var imagePreview: UIImage?
+    var feedPresentation: ContentImagePresentation?
 
     private let profiles: any ProfileRepository
     private let session: any SessionProviding
@@ -70,19 +71,32 @@ final class CreatePostViewModel {
         loadIfNeeded()
     }
 
+    func setImage(_ result: ImageCropSelectionResult) {
+        imagePreview = result.originalImage
+        imageData = MediaImagePreparation.jpegData(from: result.originalImage)
+        feedPresentation = result.presentation
+    }
+
     func setImage(_ image: UIImage?) {
         guard let image else {
-            imageData = nil
-            imagePreview = nil
+            clearImage()
             return
         }
-        imagePreview = image
-        imageData = MediaImagePreparation.jpegData(from: image)
+        let width = UIScreen.main.bounds.width - 32
+        let pixelSize = MediaImageOrientation.pixelSize(of: image)
+        let presentation = ContentImagePresentation.make(
+            aspectOption: .original,
+            imagePixelSize: pixelSize,
+            viewportSize: CGSize(width: width, height: width / FeedMediaLayout.minimumFeedAspectRatio),
+            transform: .default
+        )
+        setImage(ImageCropSelectionResult(originalImage: image, presentation: presentation))
     }
 
     func clearImage() {
         imageData = nil
         imagePreview = nil
+        feedPresentation = nil
     }
 
     func publish() {
@@ -120,8 +134,35 @@ final class CreatePostViewModel {
             return
         }
 
+        let pixelSize = imagePreview.map { MediaImageOrientation.pixelSize(of: $0) }
+        let caption = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        PostPublishProbe.logStarted(
+            flow: "profile_post",
+            captionLength: caption.count,
+            imagePresent: imagePreview != nil,
+            imageBytes: imageData?.count,
+            imagePixelSize: pixelSize,
+            cropMetadata: feedPresentation
+        )
+
+        if imagePreview != nil {
+            guard let imageData, !imageData.isEmpty else {
+                let error = AppError.unknown(message: "Image encoding produced empty JPEG data.")
+                PostPublishProbe.logFailed(stage: .imageEncode, error: error)
+                formError = PostPublishProbe.userFacingMessage(for: .imageEncode, error: error)
+                publishTask = nil
+                return
+            }
+            PostPublishProbe.logImageEncode(
+                byteCount: imageData.count,
+                mimeType: "image/jpeg",
+                pixelSize: pixelSize
+            )
+        }
+
         phase = .publishing
         var uploadedStoragePath: String?
+        var failedStage = PostPublishProbe.Stage.unknown
         do {
             let content = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
             let post: Post
@@ -136,16 +177,28 @@ final class CreatePostViewModel {
             } else {
                 var imageURL: String?
                 if let imageData {
+                    failedStage = .upload
                     isUploadingMedia = true
-                    let uploaded = try await uploadImage(imageData, viewerID: viewerID)
+                    let path = "\(viewerID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+                    PostPublishProbe.logUploadStarted(
+                        storagePath: path,
+                        bucket: StorageBucket.profilePosts.rawValue
+                    )
+                    let uploaded = try await uploadImage(imageData, viewerID: viewerID, path: path)
                     uploadedStoragePath = uploaded.storagePath
                     imageURL = uploaded.publicURL
+                    PostPublishProbe.logUploadSucceeded(path: uploaded.storagePath)
+                    if let feedPresentation {
+                        FeedMediaPresentationStore.save(feedPresentation, forMediaURL: uploaded.publicURL)
+                    }
                     isUploadingMedia = false
                 }
+                failedStage = .databaseInsert
                 post = try await profiles.createWallPost(
                     authorID: viewerID,
                     content: content,
-                    imageURL: imageURL
+                    imageURL: imageURL,
+                    imageCrop: feedPresentation
                 )
             }
 
@@ -155,14 +208,19 @@ final class CreatePostViewModel {
             onDismiss()
         } catch {
             isUploadingMedia = false
+            if error is DecodingError {
+                failedStage = .responseDecode
+            }
+            PostPublishProbe.logFailed(stage: failedStage, error: error)
             if let path = uploadedStoragePath {
+                PostPublishProbe.logNote("cleaning up uploaded storage path=\(path)")
                 try? await objectStorage.delete(
                     bucket: StorageBucket.profilePosts.rawValue,
                     path: path
                 )
             }
             phase = .ready
-            formError = "Couldn't publish post. Check your connection and try again."
+            formError = PostPublishProbe.userFacingMessage(for: failedStage, error: error)
         }
         publishTask = nil
     }
@@ -181,8 +239,7 @@ final class CreatePostViewModel {
         var publicURL: String
     }
 
-    private func uploadImage(_ data: Data, viewerID: ProfileID) async throws -> UploadedImage {
-        let path = "\(viewerID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+    private func uploadImage(_ data: Data, viewerID: ProfileID, path: String) async throws -> UploadedImage {
         let reference = try await uploadService.upload(
             UploadRequest(
                 bucket: StorageBucket.profilePosts.rawValue,

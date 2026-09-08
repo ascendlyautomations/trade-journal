@@ -207,6 +207,18 @@ final class ProfileHeaderViewModel {
         if let profile = store.profile {
             detailCache.seed(profile)
         }
+        if let catalogViewer = FeedStoriesCatalogStore.shared.viewerID {
+            FeedStoriesCatalogStore.shared.mergeAuthorStories(
+                store.activeStories,
+                authorID: story.authorProfileID,
+                viewerID: catalogViewer
+            )
+        } else if let profileID = store.resolvedProfileID {
+            FeedStoriesCatalogStore.shared.replace(
+                catalog: store.activeStories,
+                viewerID: profileID
+            )
+        }
         navigationCoordinator.present(fullScreen: .storyViewer(story.id))
     }
 

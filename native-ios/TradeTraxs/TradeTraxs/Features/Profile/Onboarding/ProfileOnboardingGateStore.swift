@@ -26,6 +26,8 @@ final class ProfileOnboardingGateStore {
     private var resolveTask: Task<Void, Never>?
     private var realtimeTask: Task<Void, Never>?
     private var loadGeneration: UInt64 = 0
+    /// True until the first successful gate resolve for this authenticated session.
+    private var requiresAuthoritativeResolve = true
 
     init(
         profiles: any ProfileRepository,
@@ -56,6 +58,7 @@ final class ProfileOnboardingGateStore {
         phase = .idle
         snapshot = nil
         loadGeneration &+= 1
+        requiresAuthoritativeResolve = true
     }
 
     func resolveIfNeeded(forceNetwork: Bool = false) {
@@ -94,10 +97,12 @@ final class ProfileOnboardingGateStore {
 
         if await isDevelopmentBypassSession() {
             phase = .complete
+            requiresAuthoritativeResolve = false
             return
         }
 
         let profileID = ProfileID(userID.rawValue)
+        let authoritative = requiresAuthoritativeResolve || forceNetwork
 
         do {
             let onboardingSnapshot: ProfileOnboardingSnapshot
@@ -109,7 +114,7 @@ final class ProfileOnboardingGateStore {
                     rpc: rpc,
                     profiles: profiles,
                     detailCache: detailCache,
-                    forceNetwork: forceNetwork,
+                    forceNetwork: authoritative,
                     loadGeneration: generation,
                     currentGeneration: { [weak self] in self?.loadGeneration ?? generation }
                 )
@@ -117,15 +122,22 @@ final class ProfileOnboardingGateStore {
                 onboardingSnapshot = result.onboardingSnapshot
                 profileStore.applyBootstrapResult(profile: profile, stats: result.stats)
             } else {
-                onboardingSnapshot = try await profiles.onboardingSnapshot(for: profileID)
+                onboardingSnapshot = try await profiles.onboardingSnapshot(
+                    for: profileID,
+                    authoritative: authoritative
+                )
                 profile = try await profiles.profile(id: profileID)
                 let stats = try await profiles.stats(for: profileID)
                 profileStore.applyBootstrapResult(profile: profile, stats: stats)
             }
 
-            guard generation == loadGeneration, !Task.isCancelled else { return }
+            guard generation == loadGeneration, !Task.isCancelled else {
+                if case .resolving = phase { phase = .idle }
+                return
+            }
 
             snapshot = onboardingSnapshot
+            requiresAuthoritativeResolve = false
             if ProfileOnboardingPolicy.profileNeedsOnboarding(onboardingSnapshot) {
                 phase = .required(onboardingSnapshot)
                 startRealtime(viewerID: userID.rawValue)
@@ -172,7 +184,10 @@ final class ProfileOnboardingGateStore {
     private func handleExternalProfileUpdate() async {
         guard let userID = await session.currentUserID else { return }
         do {
-            let fresh = try await profiles.onboardingSnapshot(for: ProfileID(userID.rawValue))
+            let fresh = try await profiles.onboardingSnapshot(
+                for: ProfileID(userID.rawValue),
+                authoritative: true
+            )
             snapshot = fresh
             if !ProfileOnboardingPolicy.profileNeedsOnboarding(fresh) {
                 let profile = try await profiles.profile(id: ProfileID(userID.rawValue))

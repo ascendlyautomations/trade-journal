@@ -40,6 +40,7 @@ nonisolated enum TradeDTO {
         var is_pinned: Bool?
         var public_description: String?
         var image_url: String?
+        var image_crop: ContentImagePresentation?
         var notes: String?
         var created_at: String?
         var date: String?
@@ -191,6 +192,7 @@ nonisolated enum TradeDTO {
         var strategy: String?
         var notes: String?
         var image_url: String?
+        var image_crop: JSONValue?
         var is_public: Bool
         var public_description: String?
         var confidence: Double?
@@ -211,16 +213,6 @@ nonisolated enum TradeDTO {
         var is_initial_import: Bool? = nil
         var import_source: String? = nil
         var import_fingerprint: String? = nil
-    }
-
-    /// Feed post created when a trade is shared publicly (web `posts` insert).
-    struct TradePostInsertBody: Encodable, Sendable {
-        var user_id: String
-        var trade_id: String
-        var image_url: String?
-        var pnl: Double?
-        var rr: Double?
-        var caption: String
     }
 
     /// Mirrors web `InputTradeForm` save/update journal + psychology columns.
@@ -247,6 +239,7 @@ nonisolated enum TradeDTO {
         var notes: String?
         /// Explicit optional — always encoded (null clears screenshot like web `removeScreenshot`).
         var image_url: String?
+        var image_crop: JSONValue?
         var is_public: Bool
         var public_description: String?
         var confidence: Double?
@@ -268,7 +261,7 @@ nonisolated enum TradeDTO {
             case account_id, account_name, account_size, account_type, account_category
             case ticker, direction, mode, contracts
             case entry_price, exit_price, entry_time, exit_time, trade_date
-            case pnl, rr, points, session, strategy, notes, image_url
+            case pnl, rr, points, session, strategy, notes, image_url, image_crop
             case is_public, public_description, created_at
             case confidence, emotion, followed_plan, market_condition, timeframe, news_event
             case psychology_notes, exit_emotion, execution_rating, duration_seconds, duration_text, image_display_mode, reviewed
@@ -305,6 +298,7 @@ nonisolated enum TradeDTO {
             try container.encodeIfPresent(strategy, forKey: .strategy)
             try container.encodeIfPresent(notes, forKey: .notes)
             try container.encode(image_url, forKey: .image_url)
+            try container.encodeIfPresent(image_crop, forKey: .image_crop)
             try container.encode(is_public, forKey: .is_public)
             try container.encodeIfPresent(public_description, forKey: .public_description)
             if let confidence {
@@ -467,6 +461,7 @@ nonisolated enum FeedDTO {
         var user_id: String?
         var content: String?
         var image_url: String?
+        var image_crop: ContentImagePresentation?
         var created_at: String?
         var is_pinned: Bool?
         var profiles: EmbeddedAuthor?
@@ -730,6 +725,10 @@ nonisolated enum MessageDTO {
         var audio_url: String?
         var audio_duration_ms: Int?
         var trade_id: String?
+        var post_id: String?
+        var profile_post_id: String?
+        var achievement_post_id: String?
+        var reel_id: String?
         var created_at: String?
         var is_read: Bool?
         var deleted_for_everyone: Bool?
@@ -838,6 +837,75 @@ nonisolated enum RoomDTO {
         private enum CodingKeys: String, CodingKey {
             case room_id, unread_count
         }
+    }
+
+    struct MemberTag: Codable, Sendable {
+        var id: String?
+        var room_id: String?
+        var name: String?
+        var color_key: String?
+        var is_preset: Bool?
+    }
+
+    struct TagAssignment: Codable, Sendable {
+        var room_id: String?
+        var user_id: String?
+        var tag_id: String?
+    }
+
+    struct ManagedMemberRow: Decodable, Sendable {
+        var user_id: String?
+        var joined_at: String?
+        var profiles: EmbeddedProfile?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            user_id = try container.decodeIfPresent(String.self, forKey: .user_id)
+            joined_at = try container.decodeIfPresent(String.self, forKey: .joined_at)
+            if let single = try? container.decodeIfPresent(EmbeddedProfile.self, forKey: .profiles) {
+                profiles = single
+            } else if let many = try? container.decodeIfPresent([EmbeddedProfile].self, forKey: .profiles) {
+                profiles = many.first
+            } else {
+                profiles = nil
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case user_id, joined_at, profiles
+        }
+    }
+
+    struct BanRow: Decodable, Sendable {
+        var id: String?
+        var user_id: String?
+        var created_at: String?
+        var profiles: EmbeddedProfile?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(String.self, forKey: .id)
+            user_id = try container.decodeIfPresent(String.self, forKey: .user_id)
+            created_at = try container.decodeIfPresent(String.self, forKey: .created_at)
+            if let single = try? container.decodeIfPresent(EmbeddedProfile.self, forKey: .profiles) {
+                profiles = single
+            } else if let many = try? container.decodeIfPresent([EmbeddedProfile].self, forKey: .profiles) {
+                profiles = many.first
+            } else {
+                profiles = nil
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, user_id, created_at, profiles
+        }
+    }
+
+    struct EmbeddedProfile: Codable, Sendable {
+        var id: String?
+        var username: String?
+        var avatar_url: String?
+        var name: String?
     }
 }
 
@@ -953,6 +1021,7 @@ nonisolated enum AchievementDTO {
         var mode: String?
         var firm: String?
         var image_url: String?
+        var image_crop: ContentImagePresentation?
         var achieved_at: String?
         var created_at: String?
         var updated_at: String?

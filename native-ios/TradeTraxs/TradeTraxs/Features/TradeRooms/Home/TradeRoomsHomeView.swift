@@ -3,6 +3,7 @@ import SwiftUI
 /// Dedicated Trade Rooms home — member rooms with search, refresh, and empty/error states.
 struct TradeRoomsHomeView: View {
     @State private var viewModel: TradeRoomsHomeViewModel
+    private let data: DataEnvironment?
     private let imagePipeline: any ImagePipeline
 
     @Environment(\.themeColors) private var colors
@@ -25,12 +26,14 @@ struct TradeRoomsHomeView: View {
                 realtimeHub: data.realtimeHub
             )
         )
+        self.data = data
         self.imagePipeline = data.imagePipeline
     }
 
     /// Tests / previews.
     init(viewModel: TradeRoomsHomeViewModel, imagePipeline: any ImagePipeline) {
         _viewModel = State(initialValue: viewModel)
+        self.data = nil
         self.imagePipeline = imagePipeline
     }
 
@@ -57,7 +60,9 @@ struct TradeRoomsHomeView: View {
                 ExperienceEmptyState(
                     icon: .rooms,
                     title: "No Trade Rooms yet",
-                    message: "Join a community room to trade ideas with other traders."
+                    message: "Create your own Trade Room or join a community room to trade ideas with other traders.",
+                    actionTitle: "Create Trade Room",
+                    action: { viewModel.presentCreateRoom() }
                 )
             case .loaded:
                 roomList
@@ -65,6 +70,17 @@ struct TradeRoomsHomeView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Trade Rooms")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    viewModel.presentCreateRoom()
+                } label: {
+                    ExperienceIcon(icon: .compose, size: .md, color: colors.accent)
+                }
+                .accessibilityLabel("Create Trade Room")
+                .accessibilityIdentifier("tradeRooms.create")
+            }
+        }
         .searchable(
             text: $viewModel.searchText,
             placement: .navigationBarDrawer(displayMode: .always),
@@ -94,6 +110,15 @@ struct TradeRoomsHomeView: View {
             }
         } message: {
             Text("You can rejoin later if the room is still available.")
+        }
+        .sheet(isPresented: $viewModel.showsCreateRoom) {
+            if let data {
+                CreateRoomView(
+                    data: data,
+                    onDismiss: { viewModel.showsCreateRoom = false },
+                    onCreated: { room in viewModel.handleRoomCreated(room) }
+                )
+            }
         }
     }
 

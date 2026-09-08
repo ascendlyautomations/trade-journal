@@ -8,6 +8,7 @@ struct AddTradeView: View {
     @State private var viewModel: AddTradeViewModel
     @State private var photoItem: PhotosPickerItem?
     @State private var clipVideoItem: PhotosPickerItem?
+    @State private var cropSourceImage: UIImage?
     @State private var showsDiscardConfirm = false
     @State private var showsClipMenu = false
     @State private var showsNewClipComposer = false
@@ -81,7 +82,8 @@ struct AddTradeView: View {
         .sheet(isPresented: $showsInstrumentPicker) {
             NavigationStack {
                 AddTradeInstrumentPickerView(
-                    recentSymbols: viewModel.recentSymbols,
+                    snapshot: viewModel.instrumentPickerSnapshot,
+                    catalogRevision: viewModel.instrumentCatalogRevision,
                     selectedSymbol: viewModel.symbolText,
                     startInCustomEntry: ProcessInfo.processInfo.arguments.contains("-uitesting-addtrade-custom"),
                     initialCustomText: ProcessInfo.processInfo.arguments.contains("-uitesting-addtrade-custom")
@@ -94,6 +96,9 @@ struct AddTradeView: View {
                     onCustom: { ticker in
                         viewModel.applyCustomSymbol(ticker)
                         showsInstrumentPicker = false
+                    },
+                    onDeleteCustom: { ticker in
+                        viewModel.deleteCustomInstrument(ticker)
                     },
                     onClose: { showsInstrumentPicker = false }
                 )
@@ -131,7 +136,7 @@ struct AddTradeView: View {
                     onDone: { showsNewClipComposer = false }
                 )
             }
-            .experienceSheetChrome()
+            .experienceSheetChrome(interactiveDismiss: false)
         }
         .sheet(isPresented: $showsReelPicker) {
             NavigationStack {
@@ -152,7 +157,7 @@ struct AddTradeView: View {
             AddTradePsychologySheet(viewModel: viewModel) {
                 showsPsychologySheet = false
             }
-            .experienceSheetChrome()
+            .experienceSheetChrome(interactiveDismiss: false)
         }
         .fullScreenCover(isPresented: $showsClipCamera) {
             CameraVideoPicker(
@@ -186,8 +191,7 @@ struct AddTradeView: View {
             Button("Discard", role: .destructive) { viewModel.dismissRequested() }
             Button("Keep Editing", role: .cancel) {}
         }
-        .experienceSwipeToDismiss { requestDismiss() }
-        .interactiveDismissDisabled()
+        .experienceProtectedFormDismiss()
         .task { viewModel.loadIfNeeded() }
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
             viewModel.reloadAccountsAfterMutation()
@@ -203,8 +207,14 @@ struct AddTradeView: View {
             screenshotPickerShowsPreview = hasPreview
         }
         .onChange(of: photoItem) { _, item in
-            Task { await loadPhoto(item) }
+            Task { await presentScreenshotCrop(for: item) }
         }
+        .imageCropSelection(
+            sourceImage: $cropSourceImage,
+            preset: .tradeScreenshot,
+            onConfirm: { viewModel.setScreenshot($0) },
+            onCancel: { photoItem = nil }
+        )
         .onChange(of: clipVideoItem) { _, item in
             Task { await loadClipVideo(item) }
         }
@@ -227,6 +237,7 @@ struct AddTradeView: View {
                     },
                     onSkip: { viewModel.skipPostTradeReflection() }
                 )
+                .experienceProtectedFormDismiss()
             }
         }
     }
@@ -552,12 +563,9 @@ struct AddTradeView: View {
 
     private var mediaContentSection: some View {
         Section("Media & Content") {
-            if let preview = viewModel.screenshotPreview {
-                Image(uiImage: preview)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxHeight: 140)
-                    .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+            if let preview = viewModel.screenshotPreview,
+               let presentation = viewModel.feedPresentation {
+                AdaptiveMediaPreviewImage(image: preview, presentation: presentation)
                     .accessibilityLabel("Trade screenshot preview")
                 Button("Remove Screenshot", role: .destructive) {
                     viewModel.clearScreenshot()
@@ -676,12 +684,9 @@ struct AddTradeView: View {
 
     private var screenshotSection: some View {
         Section("Screenshot") {
-            if let preview = viewModel.screenshotPreview {
-                Image(uiImage: preview)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxHeight: 180)
-                    .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+            if let preview = viewModel.screenshotPreview,
+               let presentation = viewModel.feedPresentation {
+                AdaptiveMediaPreviewImage(image: preview, presentation: presentation)
                 Button("Remove Screenshot", role: .destructive) {
                     viewModel.clearScreenshot()
                     photoItem = nil
@@ -870,25 +875,23 @@ struct AddTradeView: View {
         }
     }
 
-    private func loadPhoto(_ item: PhotosPickerItem?) async {
-        guard let item else { return }
-        if let data = try? await item.loadTransferable(type: Data.self),
-           let image = UIImage(data: data)
-        {
-            viewModel.setScreenshot(image)
-        }
+    private func presentScreenshotCrop(for item: PhotosPickerItem?) async {
+        guard let image = await ImageCropSelectionSupport.loadUIImage(from: item) else { return }
+        cropSourceImage = image
     }
 }
 
 // MARK: - Instrument picker
 
 struct AddTradeInstrumentPickerView: View {
-    let recentSymbols: [String]
+    let snapshot: InstrumentPickerSnapshot
+    var catalogRevision: Int = 0
     let selectedSymbol: String
     var startInCustomEntry: Bool = false
     var initialCustomText: String = ""
     var onSelect: (String) -> Void
     var onCustom: (String) -> Void
+    var onDeleteCustom: ((String) -> Void)? = nil
     var onClose: () -> Void
 
     @State private var searchText = ""
@@ -896,10 +899,9 @@ struct AddTradeInstrumentPickerView: View {
     @State private var showsCustomEntry = false
     @Environment(\.themeColors) private var colors
 
-    private var filtered: [String] {
-        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !q.isEmpty else { return recentSymbols }
-        return recentSymbols.filter { $0.contains(q) }
+    private var filtered: InstrumentPickerSnapshot {
+        _ = catalogRevision
+        return snapshot.filtering(matching: searchText)
     }
 
     @ViewBuilder
@@ -920,22 +922,26 @@ struct AddTradeInstrumentPickerView: View {
                     showsCustomEntry = true
                     customText = searchText
                 } label: {
-                    Label("Custom Instrument", systemImage: "plus.circle")
+                    Label("Add Custom Instrument", systemImage: "plus.circle")
                 }
                 .accessibilityIdentifier("addTrade.instrument.custom")
             }
         } header: {
             Text(showsCustomEntry ? "Custom Instrument" : "")
         } footer: {
-            Text("Custom symbols are stored as the trade ticker — same as web free-text entry.")
+            Text("Custom symbols are saved for your account and stored on trades as the ticker — same as web.")
         }
     }
 
     @ViewBuilder
-    private var recentInstrumentsSection: some View {
-        if !filtered.isEmpty {
-            Section("Recent") {
-                ForEach(filtered, id: \.self) { ticker in
+    private func symbolSection(
+        _ title: String,
+        symbols: [String],
+        allowDelete: Bool = false
+    ) -> some View {
+        if !symbols.isEmpty {
+            Section(title) {
+                ForEach(symbols, id: \.self) { ticker in
                     Button {
                         onSelect(ticker)
                     } label: {
@@ -950,11 +956,33 @@ struct AddTradeInstrumentPickerView: View {
                         }
                     }
                     .accessibilityIdentifier("addTrade.instrument.\(ticker)")
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        if allowDelete, let onDeleteCustom {
+                            Button(role: .destructive) {
+                                onDeleteCustom(ticker)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
                 }
             }
-        } else if !searchText.isEmpty {
+        }
+    }
+
+    @ViewBuilder
+    private var catalogSections: some View {
+        symbolSection("Recent / Most Used", symbols: filtered.mostUsed)
+        symbolSection("Custom", symbols: filtered.custom, allowDelete: onDeleteCustom != nil)
+        symbolSection("Futures", symbols: filtered.futures)
+        symbolSection("Stocks", symbols: filtered.stocks)
+        symbolSection("Options", symbols: filtered.options)
+        symbolSection("Crypto", symbols: filtered.crypto)
+        symbolSection("Forex", symbols: filtered.forex)
+
+        if !searchText.isEmpty, !filtered.hasVisibleSymbols {
             Section {
-                Text("No recent match — use Custom Instrument.")
+                Text("No match — add a custom instrument below.")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
         }
@@ -962,19 +990,18 @@ struct AddTradeInstrumentPickerView: View {
 
     var body: some View {
         List {
-            // When entering a custom symbol, keep that field above Recent so it stays visible.
             if showsCustomEntry {
                 customInstrumentSection
-                recentInstrumentsSection
+                catalogSections
             } else {
-                recentInstrumentsSection
+                catalogSections
                 customInstrumentSection
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
-        .searchable(text: $searchText, prompt: "Search your instruments")
+        .searchable(text: $searchText, prompt: "Search instruments")
         .experienceNavigationTitle("Instrument")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

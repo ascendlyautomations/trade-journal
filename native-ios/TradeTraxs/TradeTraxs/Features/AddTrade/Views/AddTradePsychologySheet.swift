@@ -52,6 +52,9 @@ struct AddTradePsychologySheet: View {
             .background(colors.groupedBackground.ignoresSafeArea())
             .experienceNavigationTitle("Trade Psychology")
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onClose)
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         onClose()

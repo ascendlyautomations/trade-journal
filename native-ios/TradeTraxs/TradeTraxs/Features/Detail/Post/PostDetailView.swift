@@ -48,6 +48,9 @@ struct PostDetailView: View {
         .task {
             viewModel.loadIfNeeded()
             data.engagementStore.prefetch([.profilePost(viewModel.postID)])
+            data.vaultStore.prefetch([
+                VaultContentRef(contentType: .profilePost, contentID: viewModel.postID.rawValue),
+            ])
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {
@@ -101,6 +104,10 @@ struct PostDetailView: View {
                                 ExperienceHaptics.play(.warning)
                                 showsDeleteConfirm = true
                             } : nil,
+                            vaultRef: VaultContentRef(
+                                contentType: .profilePost,
+                                contentID: post.id.rawValue
+                            ),
                             accessibilityIdentifier: "detail.post.identity"
                         )
                         .padding(.horizontal, ExperienceSpacing.lg)
@@ -131,13 +138,15 @@ struct PostDetailView: View {
             EngagementBar(
                 target: .profilePost(post.id),
                 store: data.engagementStore,
+                vaultStore: data.vaultStore,
                 onCommentTap: {
                     withAnimation(
                         ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
                     ) {
                         scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
                     }
-                }
+                },
+                vaultRef: VaultContentRef(contentType: .profilePost, contentID: post.id.rawValue)
             )
 
             caption(post)
@@ -161,13 +170,14 @@ struct PostDetailView: View {
             .frame(maxWidth: .infinity)
             .frame(height: 200)
         } else if post.media.count == 1 {
-            AspectFitMediaView(
+            InteractiveImageView(
+                mediaID: post.id.rawValue,
                 reference: post.media[0],
                 purpose: .postImage,
                 imagePipeline: imagePipeline,
-                accessibilityIdentifier: "detail.post.media",
                 emptyIcon: .photo,
-                allowsFullResolutionViewer: true,
+                accessibilityIdentifier: "detail.post.media",
+                displayMode: .originalDetail,
                 onDoubleTapLike: {
                     Task { await data.engagementStore.ensureLiked(on: .profilePost(post.id)) }
                 }
@@ -175,13 +185,14 @@ struct PostDetailView: View {
         } else {
             TabView {
                 ForEach(Array(post.media.enumerated()), id: \.offset) { index, media in
-                    AspectFitMediaView(
+                    InteractiveImageView(
+                        mediaID: "\(post.id.rawValue)-\(index)",
                         reference: media,
                         purpose: .postImage,
                         imagePipeline: imagePipeline,
-                        accessibilityIdentifier: "detail.post.media.\(index)",
                         emptyIcon: .photo,
-                        allowsFullResolutionViewer: true,
+                        accessibilityIdentifier: "detail.post.media.\(index)",
+                        displayMode: .originalDetail,
                         onDoubleTapLike: {
                             Task { await data.engagementStore.ensureLiked(on: .profilePost(post.id)) }
                         }
@@ -191,7 +202,6 @@ struct PostDetailView: View {
             .tabViewStyle(.page(indexDisplayMode: .automatic))
             .frame(maxWidth: .infinity)
             .frame(minHeight: 200)
-            .frame(maxHeight: min(UIScreen.main.bounds.height * 0.58, 720))
             .accessibilityIdentifier("detail.post.media")
         }
     }

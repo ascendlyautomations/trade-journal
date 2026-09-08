@@ -7,11 +7,19 @@ struct ConversationBubbleView: View {
     let imagePipeline: any ImagePipeline
     var viewerProfileID: ProfileID? = nil
     var sharedTrade: Trade? = nil
+    var sharedPost: Post? = nil
+    var sharedPostAuthor: Profile? = nil
+    var sharedReel: Reel? = nil
+    var sharedReelAuthor: Profile? = nil
+    var sharedAchievement: Achievement? = nil
+    var sharedAchievementAuthor: Profile? = nil
+    var isSharedContentUnavailable: Bool = false
     var reactionConfiguration: MessageReactionConfiguration? = nil
     var canDelete: Bool = false
     var onRetry: (() -> Void)?
     var onDelete: (() -> Void)?
     var onSharedTradeTap: ((TradeID) -> Void)? = nil
+    var onSharedContentTap: ((SharedContentReference) -> Void)? = nil
     var onSharedStoryTap: ((StoryShareMessageSupport.Payload) -> Void)? = nil
     var isSelectionMode: Bool = false
     var isSelected: Bool = false
@@ -68,13 +76,21 @@ struct ConversationBubbleView: View {
                 Text(name)
                     .experienceStyle(.caption2, color: colors.tertiaryText)
                     .padding(.leading, 4)
+                if item.showsOwnerBadge || !item.authorTags.isEmpty {
+                    RoomMemberTagChipsView(
+                        tags: item.authorTags,
+                        showsOwnerBadge: item.showsOwnerBadge,
+                        limit: 3
+                    )
+                    .padding(.leading, 4)
+                }
             }
             bubbleContent
             if item.showsTimestamp || item.sendState != .sent {
                 timestampRow
             }
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder
@@ -105,6 +121,12 @@ struct ConversationBubbleView: View {
                let tradeID = item.message.attachments.first?.tradeID
             {
                 tradeShareBubble(tradeID: tradeID)
+            } else if item.message.kind == .feedPostShare || item.message.kind == .profilePostShare {
+                sharedPostBubble
+            } else if item.message.kind == .reelShare {
+                sharedReelBubble
+            } else if item.message.kind == .achievementPostShare {
+                sharedAchievementBubble
             } else if item.message.kind == .storyReply,
                       let payload = StoryReplyMessageSupport.decode(from: item.message.body)
             {
@@ -193,13 +215,9 @@ struct ConversationBubbleView: View {
             }
             if showsInlineReactions {
                 inlineReactionStrip(topPadding: 6)
-                    .frame(
-                        maxWidth: bubbleMaxWidth,
-                        alignment: Alignment(horizontal: alignment, vertical: .top)
-                    )
             }
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .fixedSize(horizontal: true, vertical: false)
         .padding(.horizontal, ExperienceSpacing.sm + 2)
         .padding(.top, ExperienceSpacing.sm)
         .padding(.bottom, reactionBottomPadding)
@@ -318,8 +336,100 @@ struct ConversationBubbleView: View {
         )
     }
 
+    private var sharedPostBubble: some View {
+        sharedContentBubble {
+            if isSharedContentUnavailable {
+                SharedContentUnavailableCard(title: "Shared a post", isOutgoing: item.isOutgoing, includesBackground: false)
+            } else if let post = sharedPost, let tradeID = post.linkedTradeID, item.message.kind == .feedPostShare {
+                SharedTradeMessageCard(
+                    trade: sharedTrade,
+                    tradeID: tradeID,
+                    imagePipeline: imagePipeline,
+                    isOutgoing: item.isOutgoing,
+                    includesBackground: false
+                )
+            } else {
+                SharedPostMessageCard(
+                    post: sharedPost,
+                    author: sharedPostAuthor,
+                    imagePipeline: imagePipeline,
+                    isOutgoing: item.isOutgoing,
+                    includesBackground: false,
+                    headerTitle: item.message.kind == .profilePostShare ? "Shared a post" : "Shared a post"
+                )
+            }
+        }
+    }
+
+    private var sharedReelBubble: some View {
+        sharedContentBubble {
+            if isSharedContentUnavailable {
+                SharedContentUnavailableCard(title: "Shared a clip", isOutgoing: item.isOutgoing, includesBackground: false)
+            } else {
+                SharedReelMessageCard(
+                    reel: sharedReel,
+                    author: sharedReelAuthor,
+                    imagePipeline: imagePipeline,
+                    isOutgoing: item.isOutgoing,
+                    includesBackground: false
+                )
+            }
+        }
+    }
+
+    private var sharedAchievementBubble: some View {
+        sharedContentBubble {
+            if isSharedContentUnavailable {
+                SharedContentUnavailableCard(title: "Shared an achievement", isOutgoing: item.isOutgoing, includesBackground: false)
+            } else {
+                SharedAchievementMessageCard(
+                    achievement: sharedAchievement,
+                    author: sharedAchievementAuthor,
+                    imagePipeline: imagePipeline,
+                    isOutgoing: item.isOutgoing,
+                    includesBackground: false
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sharedContentBubble<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        Group {
+            if isSelectionMode {
+                sharedContentBubbleContent(content: content)
+            } else if let reference = item.message.sharedContent {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    onSharedContentTap?(reference)
+                } label: {
+                    sharedContentBubbleContent(content: content)
+                }
+                .buttonStyle(.plain)
+            } else {
+                sharedContentBubbleContent(content: content)
+            }
+        }
+    }
+
+    private func sharedContentBubbleContent<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            content()
+            inlineReactionStrip(topPadding: 6)
+        }
+        .padding(.horizontal, ExperienceSpacing.sm + 2)
+        .padding(.top, ExperienceSpacing.sm)
+        .padding(.bottom, reactionBottomPadding)
+        .frame(maxWidth: tradeBubbleMaxWidth, alignment: .leading)
+        .background(
+            item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
+            in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+        )
+    }
+
     private var reactionsOnlyBubble: some View {
         inlineReactionStrip(topPadding: 0)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, ExperienceSpacing.sm + 2)
             .padding(.vertical, ExperienceSpacing.xs)
             .background(
@@ -338,6 +448,7 @@ struct ConversationBubbleView: View {
                 isEnabled: reactionConfiguration.isEnabled,
                 onToggle: reactionConfiguration.onToggle
             )
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.top, topPadding)
         }
     }

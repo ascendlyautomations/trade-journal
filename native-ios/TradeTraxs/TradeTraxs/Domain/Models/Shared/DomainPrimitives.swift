@@ -55,6 +55,20 @@ nonisolated struct MediaReference: Hashable, Codable, Sendable {
     var id: String
     var kind: MediaKind
     var altText: String?
+    /// Authoritative Feed/Profile crop metadata when available from API or upload.
+    var imagePresentation: ContentImagePresentation?
+
+    init(
+        id: String,
+        kind: MediaKind,
+        altText: String? = nil,
+        imagePresentation: ContentImagePresentation? = nil
+    ) {
+        self.id = id
+        self.kind = kind
+        self.altText = altText
+        self.imagePresentation = imagePresentation
+    }
 }
 
 nonisolated struct Symbol: Hashable, Codable, Sendable {

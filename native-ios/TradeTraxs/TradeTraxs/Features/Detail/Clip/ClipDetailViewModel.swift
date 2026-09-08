@@ -122,10 +122,13 @@ final class ClipDetailViewModel {
         }
 
         do {
-            let loaded = try await feed.reel(id: reelID)
+            let result = try await feed.reel(id: reelID)
             guard !Task.isCancelled else { return }
-            cache.seed(loaded)
-            await apply(loaded)
+            cache.seed(result.reel)
+            if let embeddedTrade = result.embeddedTrade {
+                cache.seed(embeddedTrade)
+            }
+            await apply(result.reel)
         } catch {
             guard !Task.isCancelled else { return }
             if reel == nil {

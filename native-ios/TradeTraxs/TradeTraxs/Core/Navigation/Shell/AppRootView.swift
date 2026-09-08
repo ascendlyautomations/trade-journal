@@ -185,20 +185,24 @@ struct AppRootView: View {
                         uploadService: appEnvironment.data.uploadService,
                         objectStorage: appEnvironment.data.objectStorage,
                         appConfiguration: appEnvironment.configuration
-                    )
+                    ),
+                    imagePipeline: appEnvironment.data.imagePipeline,
+                    onSignOut: {
+                        Task { await authenticationCoordinator.logout() }
+                    }
                 )
 
             case .complete:
                 mainAuthenticatedShell
 
             case .failed(let message):
-                SessionValidationView(
+                ProfileOnboardingResolveView(
                     message: message,
                     isRetrying: false,
                     onRetry: {
                         profileOnboardingGate.resolveIfNeeded(forceNetwork: true)
                     },
-                    onSignIn: {
+                    onSignOut: {
                         Task { await authenticationCoordinator.logout() }
                     }
                 )
@@ -343,8 +347,12 @@ struct AppRootView: View {
                     }
                 }
             }
-            .experienceSheetChrome(detents: detents(for: destination))
+            .experienceSheetChrome(
+                detents: detents(for: destination),
+                interactiveDismiss: !requiresProtectedFormDismiss(destination)
+            )
         }
+        .experienceProtectedFormDismiss(requiresProtectedFormDismiss(destination))
     }
 
     @ViewBuilder
@@ -378,6 +386,7 @@ struct AppRootView: View {
                 case .newAchievement:
                     CreateAchievementView(
                         data: appEnvironment.data,
+                        prefill: CreateAchievementPrefillStore.shared.consume(),
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
                 case .newReel:
@@ -421,6 +430,25 @@ struct AppRootView: View {
                     }
                 }
             }
+        }
+        .experienceProtectedFormDismiss(fullScreenRequiresProtectedFormDismiss(destination))
+    }
+
+    private func requiresProtectedFormDismiss(_ destination: SheetDestination) -> Bool {
+        switch destination {
+        case .dailyCheckIn:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func fullScreenRequiresProtectedFormDismiss(_ destination: FullScreenDestination) -> Bool {
+        switch destination {
+        case .addTrade, .editTrade, .importCSV, .importReview, .newPost, .newAchievement, .newReel, .newStory:
+            return true
+        default:
+            return false
         }
     }
 

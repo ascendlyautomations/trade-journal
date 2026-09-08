@@ -4,11 +4,13 @@ struct ProfileTradeCard: View {
     let trade: Trade
     let imagePipeline: any ImagePipeline
     let engagementStore: EngagementStore
+    let vaultStore: VaultStore
     let showsOwnerActions: Bool
     let onOpen: () -> Void
     let onShare: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
+    var onReport: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
 
@@ -24,13 +26,19 @@ struct ProfileTradeCard: View {
                 Group {
                     if let mediaReference {
                         HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                            TradeImageView(
+                            TradeTraxsContentImage(
+                                mediaID: trade.id.rawValue,
                                 reference: mediaReference,
-                                imagePipeline: imagePipeline
+                                purpose: .tradeScreenshot,
+                                imagePipeline: imagePipeline,
+                                surface: .profile,
+                                fixedSize: CGSize(width: 96, height: 96)
                             )
+                            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
                             .accessibilityHidden(true)
 
                             tradeSummaryColumn
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } else {
                         tradeSummaryColumn
@@ -58,9 +66,24 @@ struct ProfileTradeCard: View {
                 EngagementBar(
                     target: target,
                     store: engagementStore,
-                    onCommentTap: onOpen
+                    vaultStore: vaultStore,
+                    onCommentTap: onOpen,
+                    vaultRef: ProfileCardMediaPresence.engagementVaultRef(
+                        for: target,
+                        profileIsOwner: showsOwnerActions
+                    )
                 )
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            ContentOverflowMenu(
+                isOwner: showsOwnerActions,
+                onReport: onReport,
+                onEdit: showsOwnerActions ? onEdit : nil,
+                onDelete: showsOwnerActions ? onDelete : nil,
+                accessibilityIdentifier: "profile.trade.overflow.\(trade.id.rawValue)"
+            )
+            .padding(ExperienceSpacing.xxs)
         }
         .contextMenu {
             Button("Open", action: onOpen)
@@ -94,34 +117,20 @@ struct ProfileTradeCard: View {
 
     private var tradeSummaryColumn: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            PublicTradeHeadlineRow(
+            ProfileTradeHeadlineRow(
                 ticker: trade.symbol.ticker,
                 realizedPnL: trade.realizedPnL
             )
             .accessibilityIdentifier("profile.trade.headline")
 
             HStack(spacing: ExperienceSpacing.xs) {
-                ExperienceTag(
-                    title: TradeDisplay.sideTitle(trade.side),
-                    tone: trade.side == .long ? .success : .error
-                )
                 Text(TradeDisplay.dateText(trade.createdAt))
                     .experienceStyle(.caption, color: colors.secondaryText)
                 visibilityIcon
             }
 
-            metaRow
-        }
-    }
-
-    private var metaRow: some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            if let accountBadge = trade.publicAccountBadge {
-                ExperienceTag(title: accountBadge, tone: .info)
-            }
-            Text(TradeDisplay.rrText(trade.riskReward))
-                .experienceStyle(.caption, color: colors.tertiaryText)
-            Spacer(minLength: 0)
+            PublicTradeMetaChipRow(trade: trade, showsSession: false, layout: .wrap)
+                .accessibilityIdentifier("profile.trade.badges")
         }
     }
 
@@ -149,6 +158,44 @@ struct ProfileTradeCard: View {
     private var accessibilitySummary: String {
         let pnl = TradeDisplay.pnlText(trade.realizedPnL)
         let side = TradeDisplay.sideTitle(trade.side)
-        return "\(trade.symbol.ticker), \(side), \(pnl)"
+        return "\(pnl), \(trade.symbol.ticker), \(side)"
+    }
+}
+
+/// Profile → Trades headline: `P&L | TICKER` with space reserved for the overflow menu.
+private struct ProfileTradeHeadlineRow: View {
+    let ticker: String
+    let realizedPnL: Money?
+
+    @Environment(\.themeColors) private var colors
+    @Environment(\.experienceTheme) private var theme
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
+            Text(TradeDisplay.pnlText(realizedPnL))
+                .font(ExperienceTypography.headline.monospacedDigit())
+                .foregroundStyle(
+                    theme.metricColor(
+                        for: NSDecimalNumber(decimal: realizedPnL?.amount ?? 0).doubleValue
+                    )
+                )
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .layoutPriority(1)
+
+            Text("|")
+                .font(ExperienceTypography.headline)
+                .foregroundStyle(colors.tertiaryText)
+                .accessibilityHidden(true)
+
+            Text(ticker)
+                .font(ExperienceTypography.headline)
+                .foregroundStyle(colors.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .padding(.trailing, ExperienceAccessibility.minTouchTarget + ExperienceSpacing.xxs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }

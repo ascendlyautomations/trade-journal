@@ -222,4 +222,106 @@ final class ProfileBootstrapV2Tests: XCTestCase {
 
         OwnerProfileOptimisticStore.shared.invalidate()
     }
+
+    func testPostsSectionReconcilePreservesLoadedItemsOnOptimisticSnapshot() {
+        let owner = ProfileID("dev.optimistic-posts")
+        let environment = CompositionRoot.bootstrap()
+        var existing = CreatePostFixtures.samplePost(author: owner, body: "older")
+        existing.id = PostID("post-existing")
+        let postsVM = PostsContainerViewModel(
+            profileID: owner,
+            profiles: environment.data.profiles,
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: DetailPresentationCache()
+        )
+        var loadedSnapshot = ProfileState()
+        loadedSnapshot.profileID = owner
+        loadedSnapshot.posts = [existing]
+        loadedSnapshot.didLoadPosts = true
+        loadedSnapshot.didBootstrap = true
+        loadedSnapshot.phase = .loaded
+        postsVM.applyBootstrap(loadedSnapshot)
+        XCTAssertEqual(postsVM.items.count, 1)
+
+        let created = CreatePostFixtures.samplePost(author: owner, body: "new")
+        var optimisticSnapshot = ProfileState()
+        optimisticSnapshot.profileID = owner
+        optimisticSnapshot.posts = [created]
+        optimisticSnapshot.didLoadPosts = false
+        optimisticSnapshot.didBootstrap = true
+        optimisticSnapshot.phase = .loaded
+        postsVM.applyBootstrap(optimisticSnapshot)
+        XCTAssertEqual(postsVM.items.count, 2)
+        XCTAssertEqual(postsVM.items.first?.id, created.id)
+        XCTAssertTrue(postsVM.items.contains { $0.id == existing.id })
+    }
+
+    func testPostsSectionNeverShrinksWhenAuthoritativeSnapshotIsPartial() {
+        let owner = ProfileID("dev.partial-authoritative-posts")
+        let environment = CompositionRoot.bootstrap()
+        var existingPosts: [Post] = (0..<8).map { index in
+            var post = CreatePostFixtures.samplePost(author: owner, body: "post-\(index)")
+            post.id = PostID("post-\(index)")
+            return post
+        }
+        let postsVM = PostsContainerViewModel(
+            profileID: owner,
+            profiles: environment.data.profiles,
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: DetailPresentationCache()
+        )
+        var loadedSnapshot = ProfileState()
+        loadedSnapshot.profileID = owner
+        loadedSnapshot.posts = existingPosts
+        loadedSnapshot.didLoadPosts = true
+        loadedSnapshot.didBootstrap = true
+        loadedSnapshot.phase = .loaded
+        postsVM.applyBootstrap(loadedSnapshot)
+        XCTAssertEqual(postsVM.items.count, 8)
+
+        let created = CreatePostFixtures.samplePost(author: owner, body: "new")
+        postsVM.notePublishSucceeded(created, preservingExisting: existingPosts)
+        XCTAssertEqual(postsVM.items.count, 9)
+        XCTAssertEqual(postsVM.items.first?.id, created.id)
+
+        var partialAuthoritative = ProfileState()
+        partialAuthoritative.profileID = owner
+        partialAuthoritative.posts = [created]
+        partialAuthoritative.didLoadPosts = true
+        partialAuthoritative.didBootstrap = true
+        partialAuthoritative.phase = .loaded
+        postsVM.applyBootstrap(partialAuthoritative)
+        XCTAssertEqual(postsVM.items.count, 9)
+        XCTAssertTrue(postsVM.items.contains { $0.id == existingPosts[0].id })
+    }
+
+    func testAuthoritativeRefreshNeverShrinksVisiblePosts() async {
+        let owner = ProfileID("dev.shrink-guard")
+        let environment = CompositionRoot.bootstrap()
+        var existingPosts: [Post] = (0..<8).map { index in
+            var post = CreatePostFixtures.samplePost(author: owner, body: "post-\(index)")
+            post.id = PostID("visible-\(index)")
+            return post
+        }
+        let postsVM = PostsContainerViewModel(
+            profileID: owner,
+            profiles: environment.data.profiles,
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: DetailPresentationCache()
+        )
+        postsVM.notePublishSucceeded(
+            CreatePostFixtures.samplePost(author: owner, body: "new"),
+            preservingExisting: existingPosts
+        )
+        XCTAssertEqual(postsVM.items.count, 9)
+
+        var stalePage = ProfileState()
+        stalePage.profileID = owner
+        stalePage.posts = [CreatePostFixtures.samplePost(author: owner, body: "new")]
+        stalePage.didLoadPosts = true
+        stalePage.didBootstrap = true
+        stalePage.phase = .loaded
+        postsVM.applyBootstrap(stalePage)
+        XCTAssertEqual(postsVM.items.count, 9)
+    }
 }

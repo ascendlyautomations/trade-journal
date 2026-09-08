@@ -143,7 +143,9 @@ final class RoomConversationViewModel {
     }
 
     var memberCountLabel: String {
-        guard let count = room?.memberCount else { return "" }
+        let count = inboxStore.rooms.first(where: { $0.id == resolvedRoomID })?.memberCount
+            ?? room?.memberCount
+        guard let count else { return "" }
         return "\(ProfileDisplay.compactCount(count)) members"
     }
 
@@ -155,6 +157,8 @@ final class RoomConversationViewModel {
         guard let viewerID, let room else { return false }
         return room.ownerProfileID == viewerID
     }
+
+    private var tagStore: SessionRoomMemberTagsStore { .shared }
 
     var canCompose: Bool {
         guard selectedChannel != nil else { return false }
@@ -276,6 +280,54 @@ final class RoomConversationViewModel {
         channelCaches = [:]
         channelMetadataCached = false
         loadTask = Task { await performInitialLoad() }
+    }
+
+    /// Applies room metadata edits from Manage Room / Room Information without reloading messages.
+    func reloadRoomMetadataIfNeeded() async {
+        guard phase == .loaded else { return }
+        do {
+            let loaded = try await rooms.room(id: resolvedRoomID)
+            room = loaded
+            await reconcileMemberCount(source: .mutation)
+        } catch {
+            // Soft-fail — stale header is acceptable until next full load.
+        }
+    }
+
+    /// Refreshes channel list after owner CRUD; preserves selection when possible.
+    func reloadChannelsIfNeeded() async {
+        guard phase == .loaded else { return }
+        do {
+            let previousSelected = selectedChannelID
+            let loaded = try await rooms.channels(roomID: resolvedRoomID)
+                .sorted { $0.position < $1.position }
+            let removedIDs = Set(channels.map(\.id)).subtracting(loaded.map(\.id))
+            for channelID in removedIDs {
+                channelCaches.removeValue(forKey: channelID)
+                channelLoadTasks[channelID]?.cancel()
+                channelLoadTasks.removeValue(forKey: channelID)
+            }
+            channels = loaded
+            if let previousSelected,
+               loaded.contains(where: { $0.id == previousSelected })
+            {
+                selectedChannelID = previousSelected
+            } else if let first = loaded.first {
+                selectedChannelID = first.id
+                if channelCaches[first.id]?.isLoaded != true {
+                    replaceMessages([])
+                    nextOlderCursor = nil
+                    hasMoreOlder = true
+                    pendingScrollMessageID = nil
+                    loadChannelMessagesIfNeeded(first.id)
+                }
+            } else {
+                selectedChannelID = nil
+                replaceMessages([])
+            }
+        } catch {
+            // Soft-fail — channel switcher may be stale until next full load.
+        }
     }
 
     /// Switch channel without recreating the room shell — swaps message list + cache only.
@@ -549,19 +601,11 @@ final class RoomConversationViewModel {
             if membership == nil {
                 membership = try await rooms.join(roomID: roomID, profileID: viewerID)
                 GettingStartedRefreshCenter.noteEligibleUserAction()
-                if var room {
-                    room.memberCount = (room.memberCount ?? 0) + 1
-                    self.room = room
-                    inboxStore.updateRoomMemberCount(roomID: roomID, count: room.memberCount)
-                }
+                await reconcileMemberCount(source: .mutation)
             } else {
                 try await rooms.leave(roomID: roomID, profileID: viewerID)
                 membership = nil
-                if var room {
-                    room.memberCount = max(0, (room.memberCount ?? 1) - 1)
-                    self.room = room
-                    inboxStore.updateRoomMemberCount(roomID: roomID, count: room.memberCount)
-                }
+                await reconcileMemberCount(source: .mutation)
             }
             ExperienceHaptics.play(.success)
         } catch {
@@ -577,6 +621,12 @@ final class RoomConversationViewModel {
     func openRoomInfo() {
         ExperienceHaptics.play(.selection)
         navigationCoordinator?.open(navigationHost.info(roomID))
+    }
+
+    func openManageRoom() {
+        guard isOwner else { return }
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator?.open(navigationHost.manageRoom(roomID))
     }
 
     func openProfile(_ profileID: ProfileID) {
@@ -621,6 +671,7 @@ final class RoomConversationViewModel {
             }
             // Web waits until messages finished loading, then `mark_room_read`.
             await markRoomSeenIfNeeded(force: false)
+            await reconcileMemberCount(source: .network)
             phase = .loaded
             startRealtime()
         } catch {
@@ -790,6 +841,14 @@ final class RoomConversationViewModel {
             if let last = cache.messages.last {
                 patchInboxPreview(with: last)
             }
+            RoomMemberCountProbe.record(
+                roomID: applied.room.id,
+                displayedMemberCount: applied.room.memberCount,
+                activeMembershipCount: applied.room.memberCount,
+                loadedMemberListCount: nil,
+                source: .bootstrap
+            )
+            await reconcileMemberCount(source: .bootstrap)
             return true
         } catch RoomBootstrapLoader.LoaderError.flagOff,
                 RoomBootstrapLoader.LoaderError.rpcUnavailable {
@@ -820,6 +879,11 @@ final class RoomConversationViewModel {
             }
             channels = try await rooms.channels(roomID: activeRoomID)
             channelMetadataCached = true
+            if isMember || isOwner,
+               let management = rooms as? any RoomManagementRepository
+            {
+                try? await tagStore.hydrate(roomID: activeRoomID, repository: management)
+            }
             applyPendingDeepLinkFocusSelectingChannel()
             if selectedChannelID == nil || !channels.contains(where: { $0.id == selectedChannelID }) {
                 selectedChannelID = channels.first?.id
@@ -833,6 +897,35 @@ final class RoomConversationViewModel {
         }
         try await fetchChannelMessages(channelID)
         applyPendingDeepLinkFocusHighlight()
+    }
+
+    private func reconcileMemberCount(source: RoomMemberCountProbe.Source) async {
+        let id = resolvedRoomID
+        let count: Int
+        if let authoritative = try? await rooms.activeMemberCounts(for: [id])[id] {
+            count = authoritative
+        } else if let fallback = room?.memberCount {
+            count = fallback
+        } else {
+            return
+        }
+        if var updated = room {
+            updated.memberCount = count
+            room = updated
+        }
+        RoomMemberCountSync.apply(
+            roomID: id,
+            count: count,
+            inboxStore: inboxStore,
+            viewerID: viewerID
+        )
+        RoomMemberCountProbe.record(
+            roomID: id,
+            displayedMemberCount: count,
+            activeMembershipCount: count,
+            loadedMemberListCount: nil,
+            source: source
+        )
     }
 
     /// Selects the deep-linked channel before the first message fetch.
@@ -1534,7 +1627,12 @@ final class RoomConversationViewModel {
                         showsTimestamp: showsTimestamp,
                         sendState: sendStates[message.id] ?? .sent,
                         authorProfile: senderProfiles[message.senderProfileID],
-                        showsAuthorName: showsAvatar
+                        showsAuthorName: showsAvatar,
+                        authorTags: tagStore.tags(
+                            for: message.senderProfileID,
+                            roomID: roomID
+                        ),
+                        showsOwnerBadge: room?.ownerProfileID == message.senderProfileID
                     )
                 )
             )

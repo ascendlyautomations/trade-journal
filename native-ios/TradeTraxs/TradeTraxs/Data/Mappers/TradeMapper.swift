@@ -69,7 +69,10 @@ nonisolated enum TradeMapper: DTOMapper {
             sessionLabel: dto.session,
             visibility: visibility,
             publicCaption: dto.public_description,
-            thumbnail: imageURL.flatMap { $0.isEmpty ? nil : MediaReference(id: $0, kind: .image, altText: nil) },
+            thumbnail: ContentImagePresentation.mediaReference(
+                url: imageURL,
+                crop: dto.image_crop
+            ),
             imageDisplayMode: TradeScreenshotDisplayMode.resolve(dto.image_display_mode),
             notePreview: note.flatMap { $0.isEmpty ? nil : String($0.prefix(360)) },
             notes: note.flatMap { $0.isEmpty ? nil : $0 },
@@ -234,6 +237,7 @@ nonisolated enum TradeMapper: DTOMapper {
             strategy: Self.nilIfEmpty(draft.strategy),
             notes: Self.nilIfEmpty(draft.noteBody),
             image_url: Self.nilIfEmpty(draft.imageURL),
+            image_crop: ContentImagePresentationCodec.encodeJSONValue(draft.imageCrop),
             is_public: draft.visibility == .public,
             public_description: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             confidence: psychology.confidence,
@@ -297,6 +301,7 @@ nonisolated enum TradeMapper: DTOMapper {
             strategy: Self.nilIfEmpty(draft.strategy),
             notes: Self.nilIfEmpty(draft.noteBody),
             image_url: draft.imageURL,
+            image_crop: ContentImagePresentationCodec.encodeJSONValue(draft.imageCrop),
             is_public: draft.visibility == .public,
             public_description: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             confidence: psychology.confidence,
@@ -451,6 +456,14 @@ nonisolated enum MessageMapper: DTOMapper {
                 ),
             ]
         }()
+        let sharedContent = SharedContentReference.resolve(
+            type: dto.type,
+            postID: dto.post_id,
+            profilePostID: dto.profile_post_id,
+            achievementPostID: dto.achievement_post_id,
+            reelID: dto.reel_id,
+            tradeID: dto.trade_id
+        )
         let kind: MessageKind = {
             if isTrade { return .tradeShare }
             if isVoice { return .voice }
@@ -466,8 +479,23 @@ nonisolated enum MessageMapper: DTOMapper {
             ) {
                 return .storyShare
             }
+            if let sharedContent,
+               sharedContent.messageKind != .tradeShare
+            {
+                return sharedContent.messageKind
+            }
             if let raw = dto.kind, let parsed = MessageKind(rawValue: raw) { return parsed }
             return attachments.isEmpty ? .text : .media
+        }()
+
+        let resolvedSharedContent: SharedContentReference? = {
+            if isTrade, let tradeID { return .trade(tradeID) }
+            if kind == .feedPostShare || kind == .profilePostShare
+                || kind == .achievementPostShare || kind == .reelShare
+            {
+                return sharedContent
+            }
+            return nil
         }()
 
         return Message(
@@ -479,7 +507,8 @@ nonisolated enum MessageMapper: DTOMapper {
             attachments: attachments,
             replyToMessageID: nil,
             createdAt: createdAt,
-            isReadByViewer: dto.is_read ?? false
+            isReadByViewer: dto.is_read ?? false,
+            sharedContent: resolvedSharedContent
         )
     }
 
@@ -888,6 +917,62 @@ nonisolated enum ProfileAccountInsightMapper {
         case "sim": return .sim
         case "backtest": return .backtest
         default: return .live
+        }
+    }
+}
+
+nonisolated enum AccountPayoutCycleMapper {
+    static let selectFields =
+        "id,account_id,started_at,ended_at,cycle_start_balance,payout_amount,note,balance_before_payout,balance_after_payout,drawdown_behavior,drawdown_floor_after_payout,cycle_number"
+
+    struct Row: Codable, Sendable {
+        var id: String?
+        var account_id: String?
+        var started_at: String?
+        var ended_at: String?
+        var cycle_start_balance: FlexibleNumber?
+        var payout_amount: FlexibleNumber?
+        var note: String?
+        var balance_before_payout: FlexibleNumber?
+        var balance_after_payout: FlexibleNumber?
+        var drawdown_behavior: String?
+        var drawdown_floor_after_payout: FlexibleNumber?
+        var cycle_number: FlexibleNumber?
+    }
+
+    static func mapToDomain(_ row: Row) throws -> AccountPayoutCycle {
+        guard let id = row.id else { throw MappingError.missingField("id") }
+        guard let accountID = row.account_id else { throw MappingError.missingField("account_id") }
+        guard let startedRaw = row.started_at, let startedAt = ISO8601.date(from: startedRaw) else {
+            throw MappingError.missingField("started_at")
+        }
+        let cycleStart = DecimalParser.parseFlexible(row.cycle_start_balance) ?? 0
+        let behavior = row.drawdown_behavior.flatMap { PayoutDrawdownBehavior(rawValue: $0) }
+        return AccountPayoutCycle(
+            id: id,
+            accountID: TradingAccountID(accountID),
+            startedAt: startedAt,
+            endedAt: row.ended_at.flatMap { ISO8601.date(from: $0) },
+            cycleStartBalance: cycleStart,
+            payoutAmount: DecimalParser.parseFlexible(row.payout_amount),
+            note: row.note,
+            balanceBeforePayout: DecimalParser.parseFlexible(row.balance_before_payout),
+            balanceAfterPayout: DecimalParser.parseFlexible(row.balance_after_payout),
+            drawdownBehavior: behavior,
+            drawdownFloorAfterPayout: DecimalParser.parseFlexible(row.drawdown_floor_after_payout),
+            cycleNumber: DecimalParser.parseFlexible(row.cycle_number).map {
+                NSDecimalNumber(decimal: $0).intValue
+            }
+        )
+    }
+
+    static func mapCycles(from values: [JSONValue]) -> [AccountPayoutCycle] {
+        values.compactMap { value in
+            guard let data = try? JSONEncoder().encode(value),
+                  let row = try? JSONDecoder().decode(Row.self, from: data),
+                  let mapped = try? mapToDomain(row)
+            else { return nil }
+            return mapped
         }
     }
 }

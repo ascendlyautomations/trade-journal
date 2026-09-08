@@ -8,6 +8,7 @@ struct CreatePostView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var showsDiscardConfirm = false
     @State private var didApplyScreenshotPrefill = false
+    @State private var cropSourceImage: UIImage?
 
     private let imagePipeline: (any ImagePipeline)?
 
@@ -72,8 +73,7 @@ struct CreatePostView: View {
             Button("Discard", role: .destructive) { viewModel.dismissRequested() }
             Button("Keep Editing", role: .cancel) {}
         }
-        .experienceSwipeToDismiss { requestDismiss() }
-        .interactiveDismissDisabled()
+        .experienceProtectedFormDismiss()
         .task { viewModel.loadIfNeeded() }
         .onChange(of: viewModel.phase) { _, phase in
             #if DEBUG
@@ -81,8 +81,17 @@ struct CreatePostView: View {
             #endif
         }
         .onChange(of: photoItem) { _, item in
-            Task { await loadPhoto(item) }
+            Task { await presentCrop(for: item) }
         }
+        .imageCropSelection(
+            sourceImage: $cropSourceImage,
+            preset: .socialContent,
+            onConfirm: { result in
+                viewModel.setImage(result)
+                cropSourceImage = nil
+            },
+            onCancel: { photoItem = nil }
+        )
         .accessibilityIdentifier("createPost.root")
     }
 
@@ -91,8 +100,9 @@ struct CreatePostView: View {
             VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                 composerHeader
 
-                if let preview = viewModel.imagePreview {
-                    attachedImagePreview(preview)
+                if let preview = viewModel.imagePreview,
+                   let presentation = viewModel.feedPresentation {
+                    attachedImagePreview(preview, presentation: presentation)
                 }
 
                 if viewModel.imagePreview == nil {
@@ -140,11 +150,13 @@ struct CreatePostView: View {
                     }
 
                     TextEditor(text: $viewModel.bodyText)
+                        .id("createPostCaption")
                         .focused($isComposerFocused)
                         .font(ExperienceTypography.body)
                         .foregroundStyle(colors.primaryText)
                         .frame(minHeight: composerTextMinHeight, alignment: .top)
                         .scrollContentBackground(.hidden)
+                        .scrollDisabled(true)
                         .background(Color.clear)
                         .accessibilityLabel("Post text")
                         .accessibilityIdentifier("createPost.body")
@@ -172,14 +184,12 @@ struct CreatePostView: View {
         }
     }
 
-    private func attachedImagePreview(_ preview: UIImage) -> some View {
+    private func attachedImagePreview(
+        _ preview: UIImage,
+        presentation: FeedMediaPresentation
+    ) -> some View {
         ZStack(alignment: .topTrailing) {
-            Image(uiImage: preview)
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity)
-                .frame(maxHeight: 240)
-                .clipped()
+            AdaptiveMediaPreviewImage(image: preview, presentation: presentation)
                 .clipShape(
                     RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
                 )
@@ -195,6 +205,7 @@ struct CreatePostView: View {
             }
             .padding(ExperienceSpacing.sm)
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.leading, 36 + ExperienceSpacing.sm)
     }
 
@@ -261,13 +272,9 @@ struct CreatePostView: View {
         }
     }
 
-    private func loadPhoto(_ item: PhotosPickerItem?) async {
-        guard let item else { return }
-        if let data = try? await item.loadTransferable(type: Data.self),
-           let image = UIImage(data: data)
-        {
-            viewModel.setImage(image)
-        }
+    private func presentCrop(for item: PhotosPickerItem?) async {
+        guard let image = await ImageCropSelectionSupport.loadUIImage(from: item) else { return }
+        cropSourceImage = image
     }
 
     #if DEBUG

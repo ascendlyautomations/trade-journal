@@ -17,6 +17,29 @@ final class TradeJournalCardTests: XCTestCase {
         XCTAssertEqual(TradeDisplay.contractsText(2), "2")
     }
 
+    func testCardDurationFormattingUsesEntryExitOnly() {
+        let entry = Date(timeIntervalSince1970: 1_700_000_000)
+        XCTAssertEqual(TradeDisplay.cardDurationText(entryAt: entry, exitAt: entry.addingTimeInterval(8)), "8s")
+        XCTAssertEqual(
+            TradeDisplay.cardDurationText(entryAt: entry, exitAt: entry.addingTimeInterval(134)),
+            "2m 14s"
+        )
+        XCTAssertEqual(
+            TradeDisplay.cardDurationText(entryAt: entry, exitAt: entry.addingTimeInterval(14 * 60 + 22)),
+            "14m"
+        )
+        XCTAssertEqual(
+            TradeDisplay.cardDurationText(entryAt: entry, exitAt: entry.addingTimeInterval(4_320)),
+            "1h 12m"
+        )
+        XCTAssertEqual(
+            TradeDisplay.cardDurationText(entryAt: entry, exitAt: entry.addingTimeInterval(9_240)),
+            "2h 34m"
+        )
+        XCTAssertNil(TradeDisplay.cardDurationText(entryAt: entry, exitAt: nil))
+        XCTAssertNil(TradeDisplay.cardDurationText(entryAt: entry, exitAt: entry))
+    }
+
     func testStrategyMappedFromHistoryDTO() throws {
         let dto = TradeDTO.Trade(
             id: "t1",

@@ -104,15 +104,30 @@ final class PushNotificationCenter: NSObject {
     /// Call after authentication succeeds / session restore.
     func syncRegistrationForAuthenticatedSession() {
         bindIfNeeded()
-        Task {
+        AppLog.notifications.info("Push pipeline: sync started")
+        Task { [self] in
             await refreshAuthorizationStatus()
-            if authorizationStatus == .notDetermined {
+            AppLog.notifications.info(
+                "Push pipeline: authorization status=\(Self.diagnosticLabel(for: self.authorizationStatus), privacy: .public)"
+            )
+            if self.authorizationStatus == .notDetermined {
+                AppLog.notifications.info("Push pipeline: requesting system authorization")
                 let granted = await SystemNotificationAuthorization.requestAuthorization()
-                authorizationStatus = granted ? .authorized : .denied
+                self.authorizationStatus = granted ? .authorized : .denied
+                AppLog.notifications.info(
+                    "Push pipeline: authorization prompt result=\(granted ? "granted" : "denied", privacy: .public)"
+                )
             }
-            guard authorizationStatus.isEnabled else { return }
+            guard self.authorizationStatus.isEnabled else {
+                AppLog.notifications.info(
+                    "Push pipeline: skipping APNs — status=\(Self.diagnosticLabel(for: self.authorizationStatus), privacy: .public)"
+                )
+                return
+            }
+            AppLog.notifications.info("Push pipeline: calling registerForRemoteNotifications")
             UIApplication.shared.registerForRemoteNotifications()
             if let token = deviceTokenHex {
+                AppLog.notifications.info("Push pipeline: re-uploading cached device token")
                 await uploadToken(token)
             }
         }
@@ -155,13 +170,16 @@ final class PushNotificationCenter: NSObject {
         let previous = UserDefaults.standard.string(forKey: tokenDefaultsKey)
         deviceTokenHex = hex
         UserDefaults.standard.set(hex, forKey: tokenDefaultsKey)
+        AppLog.notifications.info(
+            "Push pipeline: APNs device token received length=\(hex.count, privacy: .public)"
+        )
         Task { await uploadToken(hex, previousDeviceToken: previous == hex ? nil : previous) }
     }
 
     func applicationDidFailToRegisterForRemoteNotifications(error: Error) {
         lastRegistrationError = error.localizedDescription
         AppLog.notifications.error(
-            "APNs registration failed: \(error.localizedDescription, privacy: .public)"
+            "Push pipeline: APNs registration failed — \(error.localizedDescription, privacy: .public)"
         )
     }
 
@@ -198,12 +216,22 @@ final class PushNotificationCenter: NSObject {
             )
             lastRegisteredToken = token
             lastRegistrationError = nil
-            AppLog.notifications.info("APNs device token registered with BFF")
+            AppLog.notifications.info("Push pipeline: BFF token registration succeeded")
         } catch {
             lastRegistrationError = error.localizedDescription
             AppLog.notifications.error(
-                "APNs token upload failed: \(error.localizedDescription, privacy: .public)"
+                "Push pipeline: BFF token registration failed — \(error.localizedDescription, privacy: .public)"
             )
+        }
+    }
+
+    private static func diagnosticLabel(for status: SystemNotificationAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: return "notDetermined"
+        case .denied: return "denied"
+        case .authorized: return "authorized"
+        case .provisional: return "provisional"
+        case .ephemeral: return "ephemeral"
         }
     }
 

@@ -113,6 +113,12 @@ nonisolated struct RoomChannelID: Hashable, Codable, Sendable, RawRepresentable 
     init(_ rawValue: String) { self.rawValue = rawValue }
 }
 
+nonisolated struct RoomMemberTagID: Hashable, Codable, Sendable, RawRepresentable {
+    let rawValue: String
+    init(rawValue: String) { self.rawValue = rawValue }
+    init(_ rawValue: String) { self.rawValue = rawValue }
+}
+
 nonisolated struct NotificationID: Hashable, Codable, Sendable, RawRepresentable {
     let rawValue: String
     init(rawValue: String) { self.rawValue = rawValue }

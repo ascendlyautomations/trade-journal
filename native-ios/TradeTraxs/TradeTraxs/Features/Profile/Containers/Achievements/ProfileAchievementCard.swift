@@ -4,7 +4,10 @@ struct ProfileAchievementCard: View {
     let achievement: Achievement
     let imagePipeline: any ImagePipeline
     let engagementStore: EngagementStore
+    let vaultStore: VaultStore
     let onOpen: () -> Void
+    var isOwner: Bool = true
+    var onReport: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
@@ -15,10 +18,15 @@ struct ProfileAchievementCard: View {
         ExperienceCard {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                    TradeImageView(
+                    TradeTraxsContentImage(
+                        mediaID: achievement.id.rawValue,
                         reference: achievement.image,
-                        imagePipeline: imagePipeline
+                        purpose: .postImage,
+                        imagePipeline: imagePipeline,
+                        surface: .profile,
+                        fixedSize: CGSize(width: 96, height: 96)
                     )
+                    .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
                     .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
@@ -81,9 +89,22 @@ struct ProfileAchievementCard: View {
                 EngagementBar(
                     target: target,
                     store: engagementStore,
-                    onCommentTap: onOpen
+                    vaultStore: vaultStore,
+                    onCommentTap: onOpen,
+                    vaultRef: ProfileCardMediaPresence.engagementVaultRef(
+                        for: target,
+                        profileIsOwner: isOwner
+                    )
                 )
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            ContentOverflowMenu(
+                isOwner: isOwner,
+                onReport: onReport,
+                accessibilityIdentifier: "profile.achievement.overflow.\(achievement.id.rawValue)"
+            )
+            .padding(ExperienceSpacing.xxs)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("profile.achievements.card.\(achievement.id.rawValue)")

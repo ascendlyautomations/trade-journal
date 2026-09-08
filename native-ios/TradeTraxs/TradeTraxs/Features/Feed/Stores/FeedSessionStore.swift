@@ -23,11 +23,50 @@ final class FeedSessionStore {
         contentFilter: FeedContentFilter,
         cursor: String?
     ) -> String {
-        "\(viewerID.rawValue)|\(scope.rawValue)|\(contentFilter.rawValue)|\(cursor ?? "-")"
+        "\(viewerID.rawValue)|\(scope.rawValue)|\(contentFilter.rpcValue)|\(cursor ?? "-")"
     }
 
     func restore(key: String) -> Snapshot? {
         snapshots[key]
+    }
+
+    /// All first-page snapshots for a viewer + scope (any content filter).
+    func firstPageSnapshots(viewerID: ProfileID, scope: FeedScope) -> [Snapshot] {
+        let prefix = "\(viewerID.rawValue)|\(scope.rawValue)|"
+        return snapshots.values.filter { snapshot in
+            snapshot.cacheKey.hasPrefix(prefix) && snapshot.cacheKey.hasSuffix("|-")
+        }
+    }
+
+    /// Exact filter cache or merged rows from sibling filter caches in this session.
+    func resolvedEntries(
+        viewerID: ProfileID,
+        scope: FeedScope,
+        contentFilter: FeedContentFilter
+    ) -> (entries: [FeedTimelineEntry], source: FeedFilterCacheSource) {
+        let exactKey = Self.cacheKey(
+            viewerID: viewerID,
+            scope: scope,
+            contentFilter: contentFilter,
+            cursor: nil
+        )
+        if let cached = restore(key: exactKey) {
+            return (cached.entries, .exactFilterCache)
+        }
+
+        var seen = Set<String>()
+        var merged: [FeedTimelineEntry] = []
+        for snapshot in firstPageSnapshots(viewerID: viewerID, scope: scope) {
+            for entry in snapshot.entries where entry.matches(filter: contentFilter) {
+                if seen.insert(entry.id).inserted {
+                    merged.append(entry)
+                }
+            }
+        }
+        if merged.isEmpty {
+            return ([], .none)
+        }
+        return (FeedSupport.sortDescending(merged), .siblingFilterCache)
     }
 
     func save(_ snapshot: Snapshot) {

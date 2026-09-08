@@ -86,6 +86,30 @@ final class CreateExperienceTests: XCTestCase {
         )
     }
 
+    func testImageCropJSONEncodesNumericCoordinatesNotBooleans() throws {
+        let presentation = ContentImagePresentation.make(
+            aspectOption: .portrait,
+            imagePixelSize: CGSize(width: 1206, height: 2622),
+            viewportSize: CGSize(width: 390, height: 487.5),
+            transform: .default
+        )
+        let jsonValue = try XCTUnwrap(ContentImagePresentationCodec.encodeJSONValue(presentation))
+        let wire = try JSONEncoder().encode(jsonValue)
+        let object = try JSONSerialization.jsonObject(with: wire) as? [String: Any]
+        let crop = object?["normalized_crop"] as? [String: Any]
+        XCTAssertEqual(crop?["x"] as? Double, 0, accuracy: 0.0001)
+        XCTAssertEqual(crop?["y"] as? Double, 0, accuracy: 0.0001)
+        XCTAssertEqual(crop?["width"] as? Double, 1, accuracy: 0.0001)
+        XCTAssertEqual(crop?["height"] as? Double, 1, accuracy: 0.0001)
+
+        let legacyCorrupt = """
+        {"presentation_aspect_ratio":0.8,"normalized_crop":{"x":false,"y":false,"width":true,"height":true},"aspect_mode":"portrait"}
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ContentImagePresentation.self, from: legacyCorrupt)
+        XCTAssertEqual(decoded.normalizedCrop?.x, 0, accuracy: 0.0001)
+        XCTAssertEqual(decoded.normalizedCrop?.width, 1, accuracy: 0.0001)
+    }
+
     func testCreateReelRequiresVideo() async {
         var dismissed = false
         let viewModel = CreateReelViewModel(
@@ -252,12 +276,18 @@ private struct CreateStubProfileRepository: ProfileRepository {
         CursorPage(items: [], nextCursor: nil)
     }
     func wallPost(id: PostID) async throws -> Post { throw AppError.unknown(message: "stub") }
-    func createWallPost(authorID: ProfileID, content: String, imageURL: String?) async throws -> Post {
+    func createWallPost(
+        authorID: ProfileID,
+        content: String,
+        imageURL: String?,
+        imageCrop: ContentImagePresentation?
+    ) async throws -> Post {
         Post(
             id: PostID("wall-1"),
             authorProfileID: authorID,
             body: content,
-            media: imageURL.map { [MediaReference(id: $0, kind: .image, altText: nil)] } ?? [],
+            media: ContentImagePresentation.mediaReference(url: imageURL, crop: imageCrop)
+                .map { [$0] } ?? [],
             visibility: .public,
             linkedTradeID: nil,
             isPinned: false,
@@ -289,7 +319,12 @@ private struct CreateFailingProfileRepository: ProfileRepository {
         CursorPage(items: [], nextCursor: nil)
     }
     func wallPost(id: PostID) async throws -> Post { throw AppError.unknown(message: "stub") }
-    func createWallPost(authorID: ProfileID, content: String, imageURL: String?) async throws -> Post {
+    func createWallPost(
+        authorID: ProfileID,
+        content: String,
+        imageURL: String?,
+        imageCrop: ContentImagePresentation?
+    ) async throws -> Post {
         throw AppError.unknown(message: "network down")
     }
     func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState { .none }
@@ -335,7 +370,7 @@ private struct CreateStubTradeRepository: TradeRepository {
 }
 
 private struct CreateStubFeedRepository: FeedRepository {
-    func feed(scope: FeedScope, page: PageRequest) async throws -> FeedPageResult {
+    func feed(scope: FeedScope, contentFilter: FeedContentFilter, page: PageRequest) async throws -> FeedPageResult {
         FeedPageResult(items: [], nextCursor: nil, embeddedTrades: [])
     }
     func post(id: PostID) async throws -> Post { throw AppError.unknown(message: "stub") }
@@ -360,11 +395,13 @@ private struct CreateStubFeedRepository: FeedRepository {
             viewerHasSeen: false
         )
     }
-    func reel(id: ReelID) async throws -> Reel { throw AppError.unknown(message: "stub") }
+    func reel(id: ReelID) async throws -> ReelLoadResult { throw AppError.unknown(message: "stub") }
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
         CursorPage(items: [], nextCursor: nil)
     }
-    func profileReels(for profileID: ProfileID) async throws -> [Reel] { [] }
+    func profileReels(for profileID: ProfileID) async throws -> ProfileReelsResult {
+        ProfileReelsResult(reels: [], embeddedTrades: [])
+    }
     func createReel(_ reel: Reel) async throws -> Reel { reel }
     func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] { [] }
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {}
@@ -374,7 +411,7 @@ private struct CreateStubFeedRepository: FeedRepository {
 private final class CreateCountingFeedRepository: FeedRepository, @unchecked Sendable {
     private(set) var createCalls = 0
 
-    func feed(scope: FeedScope, page: PageRequest) async throws -> FeedPageResult {
+    func feed(scope: FeedScope, contentFilter: FeedContentFilter, page: PageRequest) async throws -> FeedPageResult {
         FeedPageResult(items: [], nextCursor: nil, embeddedTrades: [])
     }
     func post(id: PostID) async throws -> Post { throw AppError.unknown(message: "stub") }
@@ -399,11 +436,13 @@ private final class CreateCountingFeedRepository: FeedRepository, @unchecked Sen
             viewerHasSeen: false
         )
     }
-    func reel(id: ReelID) async throws -> Reel { throw AppError.unknown(message: "stub") }
+    func reel(id: ReelID) async throws -> ReelLoadResult { throw AppError.unknown(message: "stub") }
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
         CursorPage(items: [], nextCursor: nil)
     }
-    func profileReels(for profileID: ProfileID) async throws -> [Reel] { [] }
+    func profileReels(for profileID: ProfileID) async throws -> ProfileReelsResult {
+        ProfileReelsResult(reels: [], embeddedTrades: [])
+    }
     func createReel(_ reel: Reel) async throws -> Reel {
         createCalls += 1
         try await Task.sleep(nanoseconds: 80_000_000)

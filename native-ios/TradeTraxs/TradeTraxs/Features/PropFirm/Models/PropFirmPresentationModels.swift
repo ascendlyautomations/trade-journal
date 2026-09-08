@@ -26,6 +26,7 @@ nonisolated struct PropFirmStatusSnapshot: Hashable, Sendable, Identifiable {
     var payoutReady: Bool
     var distanceDanger: Bool
     var dailyDrawdownBreached: Bool
+    var completedPayoutHistory: [AccountPayoutCycle] = []
 
     var riskTone: DashboardMetricTone {
         if isFailed || dailyDrawdownBreached { return .negative }
@@ -36,17 +37,23 @@ nonisolated struct PropFirmStatusSnapshot: Hashable, Sendable, Identifiable {
 
     static func build(
         account: TradingAccount,
-        trades: [Trade]
+        trades: [Trade],
+        payoutCycles: [AccountPayoutCycle] = []
     ) -> PropFirmStatusSnapshot? {
         guard account.isPropFirmAccount else { return nil }
         let rules = account.propFirmRules ?? PropFirmAccountRules()
         let size = PropFirmMetrics.parseAccountSize(account.size)
-        // Prop metrics use the account trade universe — not Dashboard date range.
         let accountTrades = trades.filter { $0.accountID == account.id }
+        let activeCycle = PropFirmPayoutCycleSupport.selectActivePayoutCycle(payoutCycles)
+        let cycleContext = PropFirmPayoutCycleSupport.buildPayoutCycleContext(
+            activeCycle: activeCycle,
+            accountStartingBalance: size
+        )
         let metrics = PropFirmMetrics.computeAccountMetrics(
             trades: PropFirmMetrics.tradeInputs(from: accountTrades),
             accountSize: size,
-            rules: rules
+            rules: rules,
+            payoutCycle: cycleContext
         )
 
         let phaseLabel: String = {
@@ -90,7 +97,8 @@ nonisolated struct PropFirmStatusSnapshot: Hashable, Sendable, Identifiable {
             isPassed: metrics.cycleProgress.isPassed,
             payoutReady: metrics.payoutReady,
             distanceDanger: metrics.cycleProgress.distanceDanger,
-            dailyDrawdownBreached: metrics.dailyDrawdownBreached
+            dailyDrawdownBreached: metrics.dailyDrawdownBreached,
+            completedPayoutHistory: PropFirmPayoutCycleSupport.selectCompletedPayoutHistory(payoutCycles)
         )
     }
 }

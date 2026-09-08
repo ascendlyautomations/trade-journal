@@ -1,9 +1,48 @@
 import SwiftUI
 
+/// Completed payout cycles from `account_payout_cycles` — funded prop-firm history.
+struct FundedPayoutCycleHistoryContent: View {
+    let cycles: [AccountPayoutCycle]
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        if cycles.isEmpty {
+            Text("No recorded payouts yet")
+                .experienceStyle(.footnote, color: colors.secondaryText)
+                .padding(.top, ExperienceSpacing.xxs)
+        } else {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                ForEach(cycles) { cycle in
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                        HStack {
+                            if let amount = cycle.payoutAmount {
+                                Text(TradeDisplay.pnlText(Money(amount: amount)))
+                                    .experienceStyle(.body, color: colors.primaryText)
+                            }
+                            Spacer(minLength: 0)
+                            if let endedAt = cycle.endedAt {
+                                Text(TradeDisplay.dateText(endedAt))
+                                    .experienceStyle(.caption, color: colors.secondaryText)
+                            }
+                        }
+                        if let after = cycle.balanceAfterPayout {
+                            Text("Balance after: \(DashboardViewModel.money(after))")
+                                .experienceStyle(.caption, color: colors.tertiaryText)
+                        }
+                    }
+                }
+            }
+            .padding(.top, ExperienceSpacing.xxs)
+        }
+    }
+}
+
 /// Owner-only manual payout rows — shared by Manage Accounts and Dashboard Payouts.
 struct AccountPayoutListContent: View {
     @Bindable var viewModel: ManageAccountsViewModel
     let accountID: TradingAccountID
+    var addButtonTitle: String = "Add Payout"
     var onAdd: () -> Void
     var onEdit: (AccountPayoutEntry) -> Void
 
@@ -57,7 +96,7 @@ struct AccountPayoutListContent: View {
             }
 
             Button(action: onAdd) {
-                Label("Add Payout", systemImage: "plus.circle")
+                Label(addButtonTitle, systemImage: "plus.circle")
             }
         }
     }
@@ -97,6 +136,7 @@ struct AccountPayoutEditorSheet: View {
             }
         }
         .presentationDetents([.medium])
+        .experienceProtectedFormDismiss()
     }
 
     private func save() async {

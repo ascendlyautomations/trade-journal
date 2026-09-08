@@ -292,6 +292,7 @@ final class MessagesInboxStore {
         let preservedCounts = Dictionary(uniqueKeysWithValues: rooms.map { ($0.id, $0.memberCount) })
         rooms = items.map { item in
             var room = item
+            // Member-room list rows omit counts; preserve only until activeMemberCounts reconciles.
             if room.memberCount == nil, let preserved = preservedCounts[item.id] {
                 room.memberCount = preserved
             }
@@ -330,6 +331,17 @@ final class MessagesInboxStore {
     func updateRoomMemberCount(roomID: RoomID, count: Int?) {
         guard let index = rooms.firstIndex(where: { $0.id == roomID }) else { return }
         rooms[index].memberCount = count
+    }
+
+    /// Patches authoritative room metadata in the member-room inbox list.
+    func applyRoomMetadata(_ room: TradeRoom) {
+        guard let index = rooms.firstIndex(where: { $0.id == room.id }) else { return }
+        var updated = room
+        if updated.memberCount == nil {
+            updated.memberCount = rooms[index].memberCount
+        }
+        rooms[index] = updated
+        rooms.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     func applyConversationUpdate(_ conversation: Conversation) {

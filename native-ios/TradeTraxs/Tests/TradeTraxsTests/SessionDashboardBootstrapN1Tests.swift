@@ -252,7 +252,7 @@ private final class CountingProfileRepository: ProfileRepository, @unchecked Sen
         )
     }
 
-    func onboardingSnapshot(for profileID: ProfileID) async throws -> ProfileOnboardingSnapshot {
+    func onboardingSnapshot(for profileID: ProfileID, authoritative: Bool) async throws -> ProfileOnboardingSnapshot {
         incrementOnboardingSnapshot()
         return ProfileOnboardingSnapshot(
             profileID: profileID,

@@ -110,4 +110,64 @@ enum ContentReportSupport {
             )
         )
     }
+
+    @MainActor
+    static func presentTrade(
+        _ tradeID: TradeID,
+        ownerID: ProfileID,
+        presenter: ContentReportPresenter
+    ) {
+        presenter.present(
+            ContentReportRequest(
+                target: .trade(tradeID, ownerID: ownerID),
+                subjectTitle: "this trade",
+                blockUserOffer: ownerID
+            )
+        )
+    }
+
+    @MainActor
+    static func presentPost(
+        _ postID: PostID,
+        ownerID: ProfileID,
+        presenter: ContentReportPresenter
+    ) {
+        presenter.present(
+            ContentReportRequest(
+                target: .post(postID, ownerID: ownerID),
+                subjectTitle: "this post",
+                blockUserOffer: ownerID
+            )
+        )
+    }
+
+    @MainActor
+    static func presentReel(
+        _ reelID: ReelID,
+        ownerID: ProfileID,
+        presenter: ContentReportPresenter
+    ) {
+        presenter.present(
+            ContentReportRequest(
+                target: .reel(reelID, ownerID: ownerID),
+                subjectTitle: "this clip",
+                blockUserOffer: ownerID
+            )
+        )
+    }
+
+    @MainActor
+    static func presentAchievement(
+        _ achievementID: AchievementID,
+        ownerID: ProfileID,
+        presenter: ContentReportPresenter
+    ) {
+        presenter.present(
+            ContentReportRequest(
+                target: .achievement(achievementID, ownerID: ownerID),
+                subjectTitle: "this achievement",
+                blockUserOffer: ownerID
+            )
+        )
+    }
 }

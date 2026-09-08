@@ -44,6 +44,24 @@ enum RoomMessageMapping {
             )
         }
 
+        if let reference = SharedContentRoomMessageSupport.decode(from: body),
+           SharedContentRoomMessageSupport.isStructuredShare(type: roomMessage.shareType, content: body)
+        {
+            return Message(
+                id: MessageID(roomMessage.id.rawValue),
+                conversationID: conversationID,
+                senderProfileID: roomMessage.senderProfileID,
+                kind: reference.messageKind,
+                body: nil,
+                attachments: [],
+                replyToMessageID: roomMessage.parentMessageID.map { MessageID($0.rawValue) },
+                createdAt: roomMessage.createdAt,
+                isReadByViewer: true,
+                sharedContent: reference,
+                roomReactions: roomMessage.reactions
+            )
+        }
+
         var attachments: [MessageAttachment] = roomMessage.media.enumerated().map { index, media in
             MessageAttachment(
                 id: media.id.isEmpty ? "\(roomMessage.id.rawValue)-\(index)" : media.id,
@@ -88,13 +106,14 @@ enum RoomMessageMapping {
             id: RoomMessageID(display.id.rawValue),
             roomID: roomID,
             senderProfileID: display.senderProfileID,
-            body: display.body,
+            body: display.body ?? display.sharedContent.map { SharedContentRoomMessageSupport.encode(reference: $0) },
             attachedTradeID: display.attachments.first?.tradeID,
             media: display.attachments.map(\.media),
             parentMessageID: display.replyToMessageID.map { RoomMessageID($0.rawValue) },
             channelID: channelID ?? RoomChannelID(display.conversationID.rawValue),
             isPinned: isPinned,
-            createdAt: display.createdAt
+            createdAt: display.createdAt,
+            shareType: display.sharedContent?.messageType
         )
     }
 

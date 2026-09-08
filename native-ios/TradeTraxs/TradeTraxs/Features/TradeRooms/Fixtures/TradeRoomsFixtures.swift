@@ -232,4 +232,5 @@ struct RoomMemberItem: Identifiable, Hashable, Sendable {
     var role: RoomMemberRole
     var joinedAt: Date?
     var isOnline: Bool
+    var tags: [RoomMemberTag] = []
 }

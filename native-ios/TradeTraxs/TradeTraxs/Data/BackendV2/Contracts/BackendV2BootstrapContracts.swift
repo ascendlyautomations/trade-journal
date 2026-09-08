@@ -403,6 +403,8 @@ nonisolated struct RoomsBootstrapV1: Codable, Sendable {
         var sections: [RoomSectionWire]
         var active_section_id: String?
         var channel_preferences: [String: Bool]?
+        /// Active memberships (`left_at IS NULL`) — available to all active members.
+        var active_member_count: Int?
         var member_stats: MemberStatsWire?
         var unread_count: Int
         var mark_read: MarkReadWire
@@ -742,10 +744,10 @@ nonisolated enum JSONValue: Codable, Sendable, Equatable {
         let container = try decoder.singleValueContainer()
         if container.decodeNil() {
             self = .null
-        } else if let value = try? container.decode(Bool.self) {
-            self = .bool(value)
         } else if let value = try? container.decode(Double.self) {
             self = .number(value)
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
         } else if let value = try? container.decode(String.self) {
             self = .string(value)
         } else if let value = try? container.decode([String: JSONValue].self) {

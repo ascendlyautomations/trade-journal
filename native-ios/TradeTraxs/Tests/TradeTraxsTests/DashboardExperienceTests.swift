@@ -3,6 +3,264 @@ import XCTest
 
 @MainActor
 final class DashboardExperienceTests: XCTestCase {
+    func testInitialDateRangeFallbackSelectsWiderPresetWhen30DEmpty() {
+        let profileID = ProfileID("dev.dashboard.fallback")
+        let now = Date()
+        let trade45DaysAgo = Trade(
+            id: TradeID("fallback-old"),
+            ownerProfileID: profileID,
+            accountID: TradingAccountID("dev-account"),
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 1,
+            exitPrice: 2,
+            entryAt: now.addingTimeInterval(-45 * 86_400),
+            exitAt: now.addingTimeInterval(-45 * 86_400 + 3_600),
+            realizedPnL: Money(amount: 0),
+            riskReward: 1,
+            points: nil,
+            sessionLabel: "NY",
+            visibility: .private,
+            publicCaption: nil,
+            thumbnail: nil,
+            notePreview: nil,
+            createdAt: now.addingTimeInterval(-45 * 86_400),
+            updatedAt: now.addingTimeInterval(-45 * 86_400)
+        )
+        let input = DashboardChartMetrics.Input(trade: trade45DaysAgo, accountType: "eval")
+        let singleTradeResolved = DashboardDateRangeFallback.initialEffectiveRange(
+            tradeInputs: [input],
+            accountFilter: .all,
+            now: now
+        )
+        XCTAssertEqual(singleTradeResolved, .all, "Single trade across history should land on All Time")
+
+        let trade90DayWindow = (0..<3).map { index in
+            DashboardChartMetrics.Input(
+                trade: Trade(
+                    id: TradeID("fallback-90d-\(index)"),
+                    ownerProfileID: profileID,
+                    accountID: TradingAccountID("dev-account"),
+                    symbol: Symbol(ticker: "ES"),
+                    side: .long,
+                    mode: .live,
+                    quantity: 1,
+                    entryPrice: 1,
+                    exitPrice: 2,
+                    entryAt: now.addingTimeInterval(-45 * 86_400 - TimeInterval(index * 3_600)),
+                    exitAt: now.addingTimeInterval(-45 * 86_400 + 3_600),
+                    realizedPnL: Money(amount: 100),
+                    riskReward: 1,
+                    points: nil,
+                    sessionLabel: "NY",
+                    visibility: .private,
+                    publicCaption: nil,
+                    thumbnail: nil,
+                    notePreview: nil,
+                    createdAt: now.addingTimeInterval(-45 * 86_400),
+                    updatedAt: now.addingTimeInterval(-45 * 86_400)
+                ),
+                accountType: "eval"
+            )
+        }
+        let multiTradeResolved = DashboardDateRangeFallback.initialEffectiveRange(
+            tradeInputs: trade90DayWindow,
+            accountFilter: .all,
+            now: now
+        )
+        XCTAssertEqual(multiTradeResolved, .ninetyDays, "Three trades in 90D should prefer 90D over empty 30D")
+    }
+
+    func testInitialDateRangeFallbackPrefersFirstRangeWithTwoOrMoreTrades() {
+        let profileID = ProfileID("dev.dashboard.two-plus")
+        let now = Date()
+        let accountID = TradingAccountID("dev-account")
+
+        func trade(_ id: String, dayOffset: Int) -> DashboardChartMetrics.Input {
+            let stamp = now.addingTimeInterval(TimeInterval(dayOffset * 86_400))
+            return DashboardChartMetrics.Input(
+                trade: Trade(
+                    id: TradeID(id),
+                    ownerProfileID: profileID,
+                    accountID: accountID,
+                    symbol: Symbol(ticker: "ES"),
+                    side: .long,
+                    mode: .live,
+                    quantity: 1,
+                    entryPrice: 1,
+                    exitPrice: 2,
+                    entryAt: stamp,
+                    exitAt: stamp.addingTimeInterval(3_600),
+                    realizedPnL: Money(amount: 100),
+                    riskReward: 1,
+                    points: nil,
+                    sessionLabel: "NY",
+                    visibility: .private,
+                    publicCaption: nil,
+                    thumbnail: nil,
+                    notePreview: nil,
+                    createdAt: stamp,
+                    updatedAt: stamp
+                ),
+                accountType: "eval"
+            )
+        }
+
+        let sparseThenYTD = [
+            trade("30d-one", dayOffset: -5),
+            trade("90d-one", dayOffset: -45),
+            trade("ytd-1", dayOffset: -120),
+            trade("ytd-2", dayOffset: -121),
+            trade("ytd-3", dayOffset: -122),
+            trade("ytd-4", dayOffset: -123),
+            trade("ytd-5", dayOffset: -124),
+            trade("ytd-6", dayOffset: -125),
+            trade("ytd-7", dayOffset: -126),
+        ]
+        XCTAssertEqual(
+            DashboardDateRangeFallback.initialEffectiveRange(
+                tradeInputs: sparseThenYTD,
+                accountFilter: .all,
+                now: now
+            ),
+            .ytd
+        )
+
+        let allTimeOnly = (0..<15).map { trade("all-\($0)", dayOffset: -400 - $0) }
+        let oneEachUntilAll = [
+            trade("30d-one", dayOffset: -5),
+            trade("90d-one", dayOffset: -45),
+            trade("ytd-one", dayOffset: -120),
+        ] + allTimeOnly
+        XCTAssertEqual(
+            DashboardDateRangeFallback.initialEffectiveRange(
+                tradeInputs: oneEachUntilAll,
+                accountFilter: .all,
+                now: now
+            ),
+            .all
+        )
+    }
+
+    func testInitialDateRangeFallbackResolvesIndependentlyPerAccount() {
+        let profileID = ProfileID("dev.dashboard.per-account")
+        let now = Date()
+        let accountA = TradingAccountID("account-a")
+        let accountB = TradingAccountID("account-b")
+        let accountC = TradingAccountID("account-c")
+
+        func trade(
+            _ id: String,
+            accountID: TradingAccountID,
+            dayOffset: Int,
+            pnl: Decimal = 100
+        ) -> DashboardChartMetrics.Input {
+            let stamp = now.addingTimeInterval(TimeInterval(dayOffset * 86_400))
+            return DashboardChartMetrics.Input(
+                trade: Trade(
+                    id: TradeID(id),
+                    ownerProfileID: profileID,
+                    accountID: accountID,
+                    symbol: Symbol(ticker: "ES"),
+                    side: .long,
+                    mode: .live,
+                    quantity: 1,
+                    entryPrice: 1,
+                    exitPrice: 2,
+                    entryAt: stamp,
+                    exitAt: stamp.addingTimeInterval(3_600),
+                    realizedPnL: Money(amount: pnl),
+                    riskReward: 1,
+                    points: nil,
+                    sessionLabel: "NY",
+                    visibility: .private,
+                    publicCaption: nil,
+                    thumbnail: nil,
+                    notePreview: nil,
+                    createdAt: stamp,
+                    updatedAt: stamp
+                ),
+                accountType: "eval"
+            )
+        }
+
+        let inputs = [
+            trade("a-recent", accountID: accountA, dayOffset: -5),
+            trade("b-ytd", accountID: accountB, dayOffset: -120),
+            trade("c-90d", accountID: accountC, dayOffset: -45, pnl: 0),
+        ]
+
+        XCTAssertEqual(
+            DashboardDateRangeFallback.initialEffectiveRange(
+                tradeInputs: inputs,
+                accountFilter: .account(accountA),
+                now: now
+            ),
+            .all,
+            "Single-trade account should land on All Time"
+        )
+        XCTAssertEqual(
+            DashboardDateRangeFallback.initialEffectiveRange(
+                tradeInputs: inputs,
+                accountFilter: .account(accountB),
+                now: now
+            ),
+            .all,
+            "Single-trade account should land on All Time"
+        )
+        XCTAssertEqual(
+            DashboardDateRangeFallback.initialEffectiveRange(
+                tradeInputs: inputs,
+                accountFilter: .account(accountC),
+                now: now
+            ),
+            .all,
+            "Single-trade account should land on All Time"
+        )
+    }
+
+    func testViewModelResolvesDateRangeWhenSwitchingAccounts() async {
+        let profileID = ProfileID("00000000-0000-4000-8000-0000000000aa")
+        let now = Date()
+        let accountA = TradingAccountID("account-a")
+        let accountB = TradingAccountID("account-b")
+        let tradesRepo = DashboardPerAccountFallbackTradeRepository(
+            profileID: profileID,
+            now: now,
+            accountA: accountA,
+            accountB: accountB
+        )
+        let viewModel = DashboardViewModel(
+            home: DashboardStubHomeRepository(),
+            trades: tradesRepo,
+            achievements: DashboardStubAchievementRepository(),
+            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
+            session: DashboardStubSession(userID: profileID.rawValue),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        XCTAssertEqual(viewModel.dateRange, .ytd, "All accounts: two trades in YTD")
+
+        viewModel.setAccountFilter(.account(accountB))
+        await waitFor { viewModel.dateRange == .all }
+
+        viewModel.setAccountFilter(.account(accountA))
+        await waitFor { viewModel.dateRange == .all }
+
+        viewModel.setDateRange(.all)
+        XCTAssertEqual(viewModel.dateRange, .all, "Manual selection respected on current account")
+
+        viewModel.setAccountFilter(.account(accountB))
+        await waitFor { viewModel.dateRange == .all }
+        XCTAssertEqual(viewModel.dateRange, .all, "Switching accounts re-runs automatic resolution")
+    }
+
     func testChartMetricsExcludeBacktestAndHonorDateRange() {
         let profileID = ProfileID("dev.dashboard")
         let now = Date()
@@ -330,6 +588,109 @@ private struct DashboardStubTradeRepository: TradeRepository {
     }
 
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] { [] }
+}
+
+private struct DashboardPerAccountFallbackTradeRepository: TradeRepository {
+    let profileID: ProfileID
+    let now: Date
+    let accountA: TradingAccountID
+    let accountB: TradingAccountID
+
+    func trade(id: TradeID) async throws -> Trade {
+        throw AppError.unknown(message: "not found")
+    }
+
+    func trades(
+        ownedBy profileID: ProfileID,
+        accountID: TradingAccountID?,
+        page: PageRequest,
+        publicOnly: Bool
+    ) async throws -> CursorPage<Trade> {
+        CursorPage(items: sampleTrades(), nextCursor: nil)
+    }
+
+    func save(_ draft: TradeDraft) async throws -> Trade {
+        throw AppError.unknown(message: "stub")
+    }
+
+    func update(_ trade: Trade) async throws -> Trade { trade }
+    func delete(id: TradeID) async throws {}
+    func images(for tradeID: TradeID) async throws -> [TradeImage] { [] }
+    func notes(for tradeID: TradeID) async throws -> [TradeNote] { [] }
+
+    func statistics(
+        for profileID: ProfileID,
+        interval: DateIntervalValue
+    ) async throws -> TradeStatistics {
+        TradeStatistics(
+            tradeCount: 2,
+            winCount: 2,
+            lossCount: 0,
+            totalPnL: Money(amount: 200),
+            averagePnL: Money(amount: 100),
+            averageRiskReward: nil,
+            winRate: 1
+        )
+    }
+
+    func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
+        [
+            TradingAccount(
+                id: accountA,
+                ownerProfileID: self.profileID,
+                name: "Account A",
+                category: .personal,
+                mode: .live,
+                size: Money(amount: 25_000),
+                isActive: true,
+                canAddTrades: true
+            ),
+            TradingAccount(
+                id: accountB,
+                ownerProfileID: self.profileID,
+                name: "Account B",
+                category: .personal,
+                mode: .live,
+                size: Money(amount: 25_000),
+                isActive: true,
+                canAddTrades: true
+            ),
+        ]
+    }
+
+    private func sampleTrades() -> [Trade] {
+        [
+            makeTrade(id: "a-recent", accountID: accountA, dayOffset: -5),
+            makeTrade(id: "b-ytd", accountID: accountB, dayOffset: -120),
+        ]
+    }
+
+    private func makeTrade(id: String, accountID: TradingAccountID, dayOffset: Int) -> Trade {
+        let stamp = now.addingTimeInterval(TimeInterval(dayOffset * 86_400))
+        return Trade(
+            id: TradeID(id),
+            ownerProfileID: profileID,
+            accountID: accountID,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 1,
+            exitPrice: 2,
+            entryAt: stamp,
+            exitAt: stamp.addingTimeInterval(3_600),
+            realizedPnL: Money(amount: 100),
+            riskReward: 1,
+            points: nil,
+            sessionLabel: "NY",
+            visibility: .private,
+            publicCaption: nil,
+            thumbnail: nil,
+            notePreview: nil,
+            createdAt: stamp,
+            updatedAt: stamp
+        )
+    }
 }
 
 private struct DashboardStubAchievementRepository: AchievementRepository {

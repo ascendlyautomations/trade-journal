@@ -8,6 +8,7 @@ struct TradeDetailView: View {
     @State private var tradeAI: TradeAISectionViewModel?
     @State private var showsDeleteConfirm = false
     @State private var showsShareSheet = false
+    @State private var showsVaultSheet = false
     @State private var contentRevealed = false
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment
@@ -81,6 +82,9 @@ struct TradeDetailView: View {
             if experience == .social {
                 data.engagementStore.prefetch([socialEngagementTarget(for: viewModel.tradeID)])
             }
+            data.vaultStore.prefetch([
+                VaultContentRef(contentType: .trade, contentID: viewModel.tradeID.rawValue),
+            ])
             if let tradeAI {
                 tradeAI.updateContext(trade: viewModel.trade, notes: viewModel.notes)
                 await tradeAI.loadHistoryIfNeeded()
@@ -126,6 +130,9 @@ struct TradeDetailView: View {
             if let trade = viewModel.trade, let url = DetailContentLink.trade(trade.id).url {
                 DetailShareSheet(items: [shareText(for: trade), url])
             }
+        }
+        .sheet(isPresented: $showsVaultSheet) {
+            VaultDestinationSheet(ref: tradeVaultRef, store: data.vaultStore)
         }
         .accessibilityIdentifier(
             experience == .journal ? "detail.trade.journal" : "detail.trade.social"
@@ -200,8 +207,17 @@ struct TradeDetailView: View {
                 ExperienceHaptics.play(.warning)
                 showsDeleteConfirm = true
             } : nil,
+            vaultRef: VaultContentRef(contentType: .trade, contentID: trade.id.rawValue),
             accessibilityIdentifier: "detail.trade.identity"
         )
+    }
+
+    private var tradeVaultRef: VaultContentRef {
+        VaultContentRef(contentType: .trade, contentID: viewModel.tradeID.rawValue)
+    }
+
+    private var isTradeVaulted: Bool {
+        data.vaultStore.state(for: tradeVaultRef).isVaulted
     }
 
     private var ownerOverflowMenu: some View {
@@ -211,6 +227,8 @@ struct TradeDetailView: View {
             onCopyLink: viewModel.trade.map { trade in
                 { DetailOverflowActions.copyLink(.trade(trade.id)) }
             },
+            onAddToVault: isTradeVaulted ? nil : { openVaultSheet() },
+            onManageInVault: isTradeVaulted ? { openVaultSheet() } : nil,
             deleteTitle: "Delete Trade",
             onDelete: {
                 ExperienceHaptics.play(.warning)
@@ -218,6 +236,11 @@ struct TradeDetailView: View {
             },
             accessibilityIdentifier: "detail.trade.overflow"
         )
+    }
+
+    private func openVaultSheet() {
+        data.vaultStore.loadFoldersIfNeeded()
+        showsVaultSheet = true
     }
 
     private func shareText(for trade: Trade) -> String {
@@ -242,6 +265,7 @@ struct TradeDetailView: View {
 
         if let media = viewModel.mediaReference {
             TradeDetailMediaView(
+                mediaID: trade.id.rawValue,
                 reference: media,
                 imagePipeline: imagePipeline
             )
@@ -276,6 +300,7 @@ struct TradeDetailView: View {
     private func socialTradeContent(_ trade: Trade, scrollProxy: ScrollViewProxy) -> some View {
         if let media = viewModel.mediaReference {
             TradeDetailMediaView(
+                mediaID: trade.id.rawValue,
                 reference: media,
                 imagePipeline: imagePipeline
             )
@@ -292,10 +317,6 @@ struct TradeDetailView: View {
 
         TradeDetailQuickStatsSection(trade: trade)
 
-        if !viewModel.isOwner {
-            ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.pastPerformance)
-        }
-
         if let description = trade.publicCaption?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !description.isEmpty
@@ -310,6 +331,7 @@ struct TradeDetailView: View {
         EngagementBar(
             target: socialEngagementTarget(for: trade.id),
             store: data.engagementStore,
+            vaultStore: data.vaultStore,
             onCommentTap: {
                 withAnimation(
                     ExperienceMotion.preferred(
@@ -319,7 +341,8 @@ struct TradeDetailView: View {
                 ) {
                     scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
                 }
-            }
+            },
+            vaultRef: VaultContentRef(contentType: .trade, contentID: trade.id.rawValue)
         )
         CommentsSectionView(
             target: socialEngagementTarget(for: trade.id),

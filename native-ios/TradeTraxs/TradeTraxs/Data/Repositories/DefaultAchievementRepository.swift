@@ -108,26 +108,9 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
     }
 
     func save(_ achievement: Achievement) async throws -> Achievement {
-        // Web `AchievementUploadModal` insert — omit client id; trigger creates `achievement_posts`.
-        struct Body: Encodable {
-            var user_id: String
-            var achievement_type: String
-            var title: String
-            var description: String?
-            var badge_key: String
-            var category: String
-            var value_numeric: Double?
-            var value_text: String?
-            var currency: String?
-            var account_id: String?
-            var firm: String?
-            var image_url: String?
-            var achieved_at: String
-            var is_public: Bool
-            var is_featured: Bool
-        }
         let kind = achievement.kind.rawValue
-        let body = Body(
+        let imageCrop = achievement.image?.imagePresentation
+        let body = AchievementInsertBody(
             user_id: achievement.ownerProfileID.rawValue,
             achievement_type: kind,
             title: achievement.title.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -143,14 +126,15 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
             account_id: achievement.accountID?.rawValue,
             firm: achievement.firm,
             image_url: achievement.image?.id,
+            image_crop: ContentImagePresentationCodec.encodeJSONValue(imageCrop),
             achieved_at: ISO8601.string(from: achievement.achievedAt),
             is_public: achievement.isPublic,
-            is_featured: achievement.isFeatured
+            is_featured: achievement.isFeatured,
+            includeImageCropKey: imageCrop != nil
         )
-        let dto: AchievementDTO.Achievement = try await supabase.database.insert(
-            body,
-            into: "achievements",
-            returning: AchievementDTO.Achievement.self
+        let dto = try await ImageCropWireInsert.insertAchievement(
+            supabase: supabase,
+            body: body
         )
         return (try? Self.mapAchievement(dto)) ?? achievement
     }
@@ -186,7 +170,7 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
             valueText: dto.value_text,
             firm: dto.firm,
             accountID: dto.account_id.map { TradingAccountID($0) },
-            image: imageURL.flatMap { $0.isEmpty ? nil : MediaReference(id: $0, kind: .image, altText: nil) },
+            image: ContentImagePresentation.mediaReference(url: imageURL, crop: dto.image_crop),
             isPublic: dto.is_public ?? true,
             isFeatured: dto.is_featured ?? false,
             sortOrder: dto.sort_order ?? 0,

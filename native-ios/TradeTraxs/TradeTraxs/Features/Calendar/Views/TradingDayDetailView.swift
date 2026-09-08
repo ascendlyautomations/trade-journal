@@ -5,6 +5,7 @@ struct TradingDayDetailView: View {
     @State private var viewModel: CalendarDayDetailLoader
     private let imagePipeline: any ImagePipeline
     private let engagementStore: EngagementStore
+    private let vaultStore: VaultStore
     private let navigationCoordinator: NavigationCoordinator
 
     @Environment(\.themeColors) private var colors
@@ -22,6 +23,7 @@ struct TradingDayDetailView: View {
         )
         self.imagePipeline = data.imagePipeline
         self.engagementStore = data.engagementStore
+        self.vaultStore = data.vaultStore
         self.navigationCoordinator = navigationCoordinator
     }
 
@@ -30,12 +32,14 @@ struct TradingDayDetailView: View {
         viewModel: CalendarDayDetailLoader,
         imagePipeline: any ImagePipeline,
         engagementStore: EngagementStore,
+        vaultStore: VaultStore,
         navigationCoordinator: NavigationCoordinator
     ) {
         self.dayKey = dayKey
         _viewModel = State(initialValue: viewModel)
         self.imagePipeline = imagePipeline
         self.engagementStore = engagementStore
+        self.vaultStore = vaultStore
         self.navigationCoordinator = navigationCoordinator
     }
 
@@ -137,6 +141,7 @@ struct TradingDayDetailView: View {
                         trade: trade,
                         imagePipeline: imagePipeline,
                         engagementStore: engagementStore,
+                        vaultStore: vaultStore,
                         showsOwnerActions: false,
                         onOpen: {
                             viewModel.openTrade(trade, navigation: navigationCoordinator)

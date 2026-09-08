@@ -1,0 +1,131 @@
+import CoreGraphics
+import UIKit
+
+/// Web-parity aspect presets for the shared crop editor.
+enum ImageCropAspectOption: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case original
+    case square
+    case portrait
+    case landscape
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .original: return "Original"
+        case .square: return "1:1"
+        case .portrait: return "4:5"
+        case .landscape: return "16:9"
+        }
+    }
+
+    /// Picker label — clarifies when Original is capped to the Feed 4:5 maximum.
+    func pickerLabel(originalExceedsFeedLimit: Bool) -> String {
+        if self == .original, originalExceedsFeedLimit {
+            return "Original · 4:5 max"
+        }
+        return title
+    }
+
+    /// `nil` uses the source image's natural aspect ratio (subject to Feed 4:5 cap).
+    func aspectRatio(for imageSize: CGSize) -> CGFloat {
+        switch self {
+        case .original:
+            guard imageSize.width > 0, imageSize.height > 0 else { return 1 }
+            return imageSize.width / imageSize.height
+        case .square: return 1
+        case .portrait: return 4 / 5
+        case .landscape: return 16 / 9
+        }
+    }
+}
+
+enum ImageCropMask: Sendable {
+    case none
+    /// Dim everything outside the Feed/Profile viewport rectangle.
+    case feedViewport
+    case circle
+}
+
+enum ImageCropEditorPreset: Sendable {
+    /// Feed posts, achievements, and general social uploads.
+    case socialContent
+    /// Trade screenshots — defaults to original aspect.
+    case tradeScreenshot
+    /// Profile onboarding avatar.
+    case avatar
+    /// Trade room image.
+    case room
+
+    var title: String {
+        switch self {
+        case .socialContent: return "Adjust image"
+        case .tradeScreenshot: return "Adjust screenshot"
+        case .avatar: return "Profile picture"
+        case .room: return "Room picture"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .socialContent:
+            return "Drag and zoom to choose what appears in your post."
+        case .tradeScreenshot:
+            return "Drag and zoom to frame your chart. Original aspect is recommended."
+        case .avatar:
+            return "Drag and zoom to position your photo."
+        case .room:
+            return "Drag and zoom to position your room image."
+        }
+    }
+
+    var allowedAspectOptions: [ImageCropAspectOption] {
+        switch self {
+        case .socialContent, .tradeScreenshot:
+            return ImageCropAspectOption.allCases
+        case .avatar, .room:
+            return [.square]
+        }
+    }
+
+    var defaultAspectOption: ImageCropAspectOption {
+        switch self {
+        case .socialContent: return .original
+        case .tradeScreenshot: return .original
+        case .avatar, .room: return .square
+        }
+    }
+
+    var mask: ImageCropMask {
+        switch self {
+        case .avatar, .room: return .circle
+        case .socialContent, .tradeScreenshot: return .feedViewport
+        }
+    }
+
+    var outputWidth: CGFloat {
+        switch self {
+        case .socialContent, .tradeScreenshot: return 1_200
+        case .avatar, .room: return 512
+        }
+    }
+
+    var maxZoom: CGFloat { ImageCropMath.maxZoom }
+}
+
+struct ImageCropTransform: Equatable, Sendable {
+    var zoom: CGFloat
+    var offset: CGSize
+
+    static let `default` = ImageCropTransform(zoom: 1, offset: .zero)
+}
+
+struct ImageCropFrameSize: Equatable, Sendable {
+    let width: CGFloat
+    let height: CGFloat
+
+    init(outputWidth: CGFloat, aspectRatio: CGFloat) {
+        width = outputWidth
+        height = max(1, round(outputWidth / max(aspectRatio, 0.01)))
+    }
+}

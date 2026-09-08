@@ -43,6 +43,10 @@ final class ConversationViewModel {
     private(set) var tradePickerTrades: [Trade] = []
     private(set) var isLoadingTradePicker = false
     private(set) var sharedTrades: [TradeID: Trade] = [:]
+    private(set) var sharedPosts: [PostID: Post] = [:]
+    private(set) var sharedReels: [ReelID: Reel] = [:]
+    private(set) var sharedAchievements: [AchievementID: Achievement] = [:]
+    private(set) var unavailableSharedContentKeys: Set<String> = []
     let scrollCoordinator = ConversationScrollCoordinator()
 
     enum InitialScrollPhase: Equatable {
@@ -71,6 +75,8 @@ final class ConversationViewModel {
     private let profiles: any ProfileRepository
     private let notifications: (any NotificationRepository)?
     private let tradesRepo: (any TradeRepository)?
+    private let feedRepo: (any FeedRepository)?
+    private let achievementsRepo: (any AchievementRepository)?
     private let session: any SessionProviding
     private let uploadService: any UploadService
     private let objectStorage: any ObjectStorageProviding
@@ -98,6 +104,8 @@ final class ConversationViewModel {
         objectStorage: any ObjectStorageProviding,
         detailCache: DetailPresentationCache,
         trades: (any TradeRepository)? = nil,
+        feed: (any FeedRepository)? = nil,
+        achievements: (any AchievementRepository)? = nil,
         notifications: (any NotificationRepository)? = nil,
         realtimeHub: RealtimeHub? = nil,
         inboxStore: MessagesInboxStore? = nil,
@@ -108,6 +116,8 @@ final class ConversationViewModel {
         self.profiles = profiles
         self.notifications = notifications
         self.tradesRepo = trades
+        self.feedRepo = feed
+        self.achievementsRepo = achievements
         self.session = session
         self.uploadService = uploadService
         self.objectStorage = objectStorage
@@ -310,6 +320,7 @@ final class ConversationViewModel {
                 nextOlderCursor = result.applied.nextCursor
                 hasMoreOlder = result.applied.hasMoreMessages
                 await hydrateSharedTrades(from: result.applied.messages)
+                await hydrateSharedContent(from: result.applied.messages)
             } else {
                 var page = PageRequest(limit: 40)
                 page.cursor = nextOlderCursor
@@ -476,8 +487,45 @@ final class ConversationViewModel {
     }
 
     func sharedTrade(for message: Message) -> Trade? {
-        guard let tradeID = message.attachments.first?.tradeID else { return nil }
-        return sharedTrades[tradeID]
+        if let tradeID = message.attachments.first?.tradeID {
+            return sharedTrades[tradeID]
+        }
+        if case .trade(let tradeID) = message.sharedContent {
+            return sharedTrades[tradeID]
+        }
+        if let post = sharedPost(for: message), let tradeID = post.linkedTradeID {
+            return sharedTrades[tradeID]
+        }
+        return nil
+    }
+
+    func sharedPost(for message: Message) -> Post? {
+        guard let reference = message.sharedContent else { return nil }
+        switch reference {
+        case .feedPost(let id), .profilePost(let id):
+            return sharedPosts[id]
+        default:
+            return nil
+        }
+    }
+
+    func sharedReel(for message: Message) -> Reel? {
+        guard case .reel(let id) = message.sharedContent else { return nil }
+        return sharedReels[id]
+    }
+
+    func sharedAchievement(for message: Message) -> Achievement? {
+        guard case .achievementPost(let id) = message.sharedContent else { return nil }
+        return sharedAchievements[AchievementID(id.rawValue)]
+    }
+
+    func isSharedContentUnavailable(_ message: Message) -> Bool {
+        guard let reference = message.sharedContent else { return false }
+        return unavailableSharedContentKeys.contains(reference.stableKey)
+    }
+
+    func authorProfile(for profileID: ProfileID) -> Profile? {
+        detailCache.profile(id: profileID)
     }
 
     func retry(_ item: ConversationBubbleItem) async {
@@ -898,6 +946,7 @@ final class ConversationViewModel {
         nextOlderCursor = page.nextCursor
         hasMoreOlder = page.nextCursor != nil
         await hydrateSharedTrades(from: messages)
+        await hydrateSharedContent(from: messages)
     }
 
     private func loadFromV2Bootstrap(
@@ -974,12 +1023,14 @@ final class ConversationViewModel {
         if result.cacheHit {
             applyBootstrapApplied(result.applied)
             await hydrateSharedTrades(from: result.applied.messages)
+            await hydrateSharedContent(from: result.applied.messages)
             return
         }
 
         applyBootstrapApplied(result.applied)
         bootstrapMarkReadApplied = result.applied.markReadApplied
         await hydrateSharedTrades(from: result.applied.messages)
+        await hydrateSharedContent(from: result.applied.messages)
     }
 
     private func applyBootstrapApplied(
@@ -1064,6 +1115,7 @@ final class ConversationViewModel {
             )
             commitReconciledPage(page.items)
             await hydrateSharedTrades(from: page.items)
+            await hydrateSharedContent(from: page.items)
             if let newest = ConversationMessageMerge.sortByCreatedAt(messages).last {
                 patchInbox(with: newest, source: "legacyRealtime")
             }
@@ -1115,6 +1167,7 @@ final class ConversationViewModel {
             guard generation == self.loadGeneration else { return }
             applyBootstrapApplied(result.applied)
             await hydrateSharedTrades(from: result.applied.messages)
+            await hydrateSharedContent(from: result.applied.messages)
             if let newest = ConversationMessageMerge.sortByCreatedAt(messages).last {
                 inboxStore.patchFromMessage(
                     newest,
@@ -1240,6 +1293,7 @@ final class ConversationViewModel {
             hasMoreOlder = result.applied.hasMoreMessages
             syncThreadSessionCache(context: "delete.backfill")
             await hydrateSharedTrades(from: result.applied.messages)
+            await hydrateSharedContent(from: result.applied.messages)
         } catch {
             // Soft-fail — synced local state remains authoritative for non-deleted rows.
         }
@@ -1310,8 +1364,21 @@ final class ConversationViewModel {
         let ids = Array(
             Set(
                 messages.compactMap { message -> TradeID? in
-                    guard let id = message.attachments.first?.tradeID else { return nil }
-                    return sharedTrades[id] == nil ? id : nil
+                    if let id = message.attachments.first?.tradeID {
+                        return sharedTrades[id] == nil ? id : nil
+                    }
+                    if case .trade(let id) = message.sharedContent {
+                        return sharedTrades[id] == nil ? id : nil
+                    }
+                    if let post = message.sharedContent.flatMap({ ref -> PostID? in
+                        switch ref {
+                        case .feedPost(let id): return id
+                        default: return nil
+                        }
+                    }), let cached = sharedPosts[post], let tradeID = cached.linkedTradeID {
+                        return sharedTrades[tradeID] == nil ? tradeID : nil
+                    }
+                    return nil
                 }
             )
         )
@@ -1325,6 +1392,91 @@ final class ConversationViewModel {
         )) ?? []
         for trade in fetched {
             sharedTrades[trade.id] = trade
+        }
+        let missing = Set(ids).subtracting(fetched.map(\.id))
+        for id in missing {
+            unavailableSharedContentKeys.insert("trade:\(id.rawValue)")
+        }
+    }
+
+    private func hydrateSharedContent(from messages: [Message]) async {
+        let references = messages.compactMap(\.sharedContent).filter { reference in
+            !unavailableSharedContentKeys.contains(reference.stableKey)
+        }
+        guard !references.isEmpty else { return }
+
+        richContentHydrationCount += 1
+        defer { richContentHydrationCount -= 1 }
+
+        for reference in references {
+            switch reference {
+            case .feedPost(let id):
+                guard sharedPosts[id] == nil else { continue }
+                if let cached = detailCache.post(id: id) {
+                    sharedPosts[id] = cached
+                    continue
+                }
+                guard let feedRepo else {
+                    unavailableSharedContentKeys.insert(reference.stableKey)
+                    continue
+                }
+                if let post = try? await feedRepo.post(id: id) {
+                    sharedPosts[id] = post
+                    detailCache.seed(post)
+                } else {
+                    unavailableSharedContentKeys.insert(reference.stableKey)
+                }
+            case .profilePost(let id):
+                guard sharedPosts[id] == nil else { continue }
+                if let cached = detailCache.post(id: id) {
+                    sharedPosts[id] = cached
+                    continue
+                }
+                if let post = try? await profiles.wallPost(id: id) {
+                    sharedPosts[id] = post
+                    detailCache.seed(post)
+                } else {
+                    unavailableSharedContentKeys.insert(reference.stableKey)
+                }
+            case .reel(let id):
+                guard sharedReels[id] == nil else { continue }
+                if let cached = detailCache.reel(id: id) {
+                    sharedReels[id] = cached
+                    continue
+                }
+                guard let feedRepo else {
+                    unavailableSharedContentKeys.insert(reference.stableKey)
+                    continue
+                }
+                if let result = try? await feedRepo.reel(id: id) {
+                    sharedReels[id] = result.reel
+                    detailCache.seed(result.reel)
+                    if let embeddedTrade = result.embeddedTrade {
+                        detailCache.seed(embeddedTrade)
+                    }
+                } else {
+                    unavailableSharedContentKeys.insert(reference.stableKey)
+                }
+            case .achievementPost(let id):
+                let achievementID = AchievementID(id.rawValue)
+                guard sharedAchievements[achievementID] == nil else { continue }
+                if let cached = detailCache.achievement(id: achievementID) {
+                    sharedAchievements[achievementID] = cached
+                    continue
+                }
+                guard let achievementsRepo else {
+                    unavailableSharedContentKeys.insert(reference.stableKey)
+                    continue
+                }
+                if let achievement = try? await achievementsRepo.achievement(id: achievementID) {
+                    sharedAchievements[achievementID] = achievement
+                    detailCache.seed(achievement)
+                } else {
+                    unavailableSharedContentKeys.insert(reference.stableKey)
+                }
+            case .trade:
+                break
+            }
         }
     }
 

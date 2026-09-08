@@ -56,6 +56,9 @@ struct ConversationBubbleItem: Identifiable, Hashable {
     var authorProfile: Profile? = nil
     /// Optional display name above incoming bubbles in rooms.
     var showsAuthorName: Bool = false
+    /// Room-scoped member tags for Trade Room senders.
+    var authorTags: [RoomMemberTag] = []
+    var showsOwnerBadge: Bool = false
 
     enum SendState: Hashable {
         case sent

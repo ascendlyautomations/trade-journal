@@ -7,7 +7,8 @@ final class ClipsContainerViewModel {
     private(set) var state: ProfileSectionLoadState = .idle
     private(set) var items: [Reel] = []
 
-    private let profileID: ProfileID
+    let profileOwnerID: ProfileID
+    private(set) var isOwner: Bool
     private let feed: any FeedRepository
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
@@ -16,14 +17,18 @@ final class ClipsContainerViewModel {
     private var hasLoaded = false
     private var isScreenOwned = false
 
+    var hasAuthoritativePayload: Bool { hasLoaded }
+
     init(
         profileID: ProfileID,
         feed: any FeedRepository,
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
-        engagementStore: EngagementStore? = nil
+        engagementStore: EngagementStore? = nil,
+        isOwner: Bool = true
     ) {
-        self.profileID = profileID
+        self.profileOwnerID = profileID
+        self.isOwner = isOwner
         self.feed = feed
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
@@ -45,8 +50,14 @@ final class ClipsContainerViewModel {
             }
             return
         }
-        hasLoaded = true
-        items = snapshot.clips
+        let reconciled = ProfileSectionSupport.reconcileSectionItems(
+            snapshotItems: snapshot.clips,
+            loadedItems: items,
+            hasLoaded: hasLoaded,
+            didLoadAuthoritative: snapshot.didLoadClips
+        )
+        items = reconciled.items
+        hasLoaded = reconciled.hasLoaded
         detailCache.seed(reels: items)
         state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
         prefetchEngagement(for: items.map(\.id))
@@ -73,10 +84,11 @@ final class ClipsContainerViewModel {
     }
 
     private func performLoad() async {
-        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+        if ProfileSectionSupport.isLocalDevelopmentProfile(profileOwnerID) {
             hasLoaded = true
-            items = ProfileClipFixtures.samples(owner: profileID)
+            items = ProfileClipFixtures.samples(owner: profileOwnerID)
             detailCache.seed(reels: items)
+            detailCache.seed(trades: ProfileClipFixtures.linkedTrades(for: items))
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
             prefetchEngagement(for: items.map(\.id))
             loadTask = nil
@@ -86,10 +98,17 @@ final class ClipsContainerViewModel {
         state = items.isEmpty ? .loading : state
         do {
             // Web `fetchUserProfileReels` — full list + trade-linked visibility filter.
-            let reels = try await feed.profileReels(for: profileID)
+            let result = try await feed.profileReels(for: profileOwnerID)
             guard !Task.isCancelled else { return }
-            items = reels
+            let overlay = OwnerProfileOptimisticStore.shared.reels.filter {
+                $0.authorProfileID == profileOwnerID
+                    && OwnerProfileOptimisticStore.isListedOnOwnerProfile($0)
+            }
+            items = OwnerProfileOptimisticStore.merging(overlay: overlay, into: result.reels)
             detailCache.seed(reels: items)
+            if !result.embeddedTrades.isEmpty {
+                detailCache.seed(trades: result.embeddedTrades)
+            }
             hasLoaded = true
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
             prefetchEngagement(for: items.map(\.id))
