@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 import UIKit
 
 @Observable
@@ -19,9 +20,7 @@ final class CreateRoomViewModel {
     private(set) var existingOwnedRoom: TradeRoom?
     private(set) var isUploadingImage = false
 
-    var name = ""
-    var descriptionText = ""
-    var showsOnProfile = true
+    var configuration = TradeRoomConfiguration.defaultDraft(username: nil)
     var imageData: Data?
     var imagePreview: UIImage?
 
@@ -59,7 +58,7 @@ final class CreateRoomViewModel {
     }
 
     var canCreate: Bool {
-        phase == .ready && existingOwnedRoom == nil && !trimmedName.isEmpty
+        phase == .ready && existingOwnedRoom == nil && !configuration.trimmedName.isEmpty
     }
 
     var isSubmitting: Bool {
@@ -67,18 +66,11 @@ final class CreateRoomViewModel {
     }
 
     var hasUnsavedChanges: Bool {
-        !trimmedName.isEmpty
-            || !trimmedDescription.isEmpty
-            || imageData != nil
-            || showsOnProfile == false
+        configuration.hasUnsavedDraftChanges || imageData != nil
     }
 
-    private var trimmedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var trimmedDescription: String {
-        descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+    var showsJoinPolicy: Bool {
+        configuration.visibility == .public
     }
 
     func loadIfNeeded() {
@@ -93,19 +85,44 @@ final class CreateRoomViewModel {
         loadIfNeeded()
     }
 
-    func setImage(_ image: UIImage?) {
-        guard let image else {
-            imageData = nil
-            imagePreview = nil
-            return
-        }
-        imagePreview = image
-        imageData = MediaImagePreparation.jpegData(from: image)
+    func setCroppedImage(_ result: ImageCropSelectionResult) {
+        guard let applied = ComposerCropImageState.apply(result) else { return }
+        imagePreview = applied.finalImage
+        imageData = applied.uploadData
     }
 
     func clearImage() {
         imageData = nil
         imagePreview = nil
+    }
+
+    func setVisibility(_ visibility: TradeRoomVisibility) {
+        configuration.visibility = visibility
+        if visibility == .private {
+            configuration.joinPolicy = .open
+        }
+    }
+
+    func toggleDiscoveryTag(_ tag: String) {
+        if configuration.discoveryTags.contains(tag) {
+            configuration.discoveryTags.removeAll { $0 == tag }
+        } else if configuration.discoveryTags.count < TradeRoomConfigurationValidation.maxDiscoveryTags {
+            configuration.discoveryTags.append(tag)
+        }
+    }
+
+    func addSubRoom() {
+        guard configuration.channels.count < TradeRoomConfigurationValidation.maxChannels else { return }
+        configuration.channels.append(TradeRoomDraftChannel(name: ""))
+    }
+
+    func removeSubRoom(id: UUID) {
+        guard configuration.channels.count > 1 else { return }
+        configuration.channels.removeAll { $0.id == id }
+    }
+
+    func moveSubRooms(from source: IndexSet, to destination: Int) {
+        configuration.channels.move(fromOffsets: source, toOffset: destination)
     }
 
     func create() {
@@ -138,18 +155,19 @@ final class CreateRoomViewModel {
         } catch {
             existingOwnedRoom = nil
         }
-        if name.isEmpty {
-            let username = viewerProfile?.username.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !username.isEmpty {
-                name = "\(username)'s Room"
-            }
+        if configuration.trimmedName.isEmpty {
+            configuration = TradeRoomConfiguration.defaultDraft(username: viewerProfile?.username)
         }
         phase = .ready
     }
 
     private func performCreate() async {
         formError = nil
-        guard validate() else {
+        if imageData != nil {
+            configuration.imageURL = nil
+        }
+        if let validationError = TradeRoomConfigurationValidation.validate(configuration) {
+            formError = validationError
             createTask = nil
             return
         }
@@ -168,7 +186,6 @@ final class CreateRoomViewModel {
         }
 
         do {
-            var imageURL: String?
             if let imageData {
                 isUploadingImage = true
                 defer { isUploadingImage = false }
@@ -182,16 +199,11 @@ final class CreateRoomViewModel {
                         purpose: .profileAvatar
                     )
                 )
-                imageURL = reference.id
+                configuration.imageURL = reference.id
             }
 
             let room = try await rooms.createRoom(
-                request: RoomCreateRequest(
-                    name: trimmedName,
-                    description: trimmedDescription.isEmpty ? nil : trimmedDescription,
-                    imageURL: imageURL,
-                    showsOnProfile: showsOnProfile
-                ),
+                request: RoomCreateRequest(configuration: configuration),
                 ownerProfileID: viewerID,
                 ownerUsername: viewerProfile.username
             )
@@ -207,25 +219,9 @@ final class CreateRoomViewModel {
         }
     }
 
-    private func validate() -> Bool {
-        if trimmedName.isEmpty {
-            formError = "Room name is required."
-            return false
-        }
-        if trimmedName.count > RoomCreateRequest.Validation.nameMaxLength {
-            formError = "Room name must be \(RoomCreateRequest.Validation.nameMaxLength) characters or fewer."
-            return false
-        }
-        if trimmedDescription.count > RoomCreateRequest.Validation.descriptionMaxLength {
-            formError = "Description must be \(RoomCreateRequest.Validation.descriptionMaxLength) characters or fewer."
-            return false
-        }
-        formError = nil
-        return true
-    }
-
     private func applyCreatedRoomLocally(_ room: TradeRoom, viewerID: ProfileID) {
         detailCache.seedOwnedTradeRoom(room, for: viewerID)
+        TradeRoomCreationIntent.shared.noteCreatedRoom(room)
 
         var rooms = inboxStore.rooms
         if !rooms.contains(where: { $0.id == room.id }) {

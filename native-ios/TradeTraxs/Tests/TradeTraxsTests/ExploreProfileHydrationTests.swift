@@ -98,6 +98,7 @@ final class ExploreProfileHydrationTests: XCTestCase {
             explore: ExploreProfileHydrationStubExploreRepository(),
             search: ExploreProfileHydrationStubSearchRepository(),
             profiles: AvatarBatchProfileRepository(profilesByID: [:]),
+            rooms: ExploreStubRoomRepository(),
             session: ExploreProfileHydrationStubSession(userID: "viewer"),
             detailCache: cache,
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
@@ -233,4 +234,44 @@ private struct ExploreProfileHydrationStubSearchRepository: SearchRepository {
     ) async throws -> CursorPage<SearchResult> {
         CursorPage(items: [], nextCursor: nil)
     }
+}
+
+private struct ExploreStubRoomRepository: RoomRepository {
+    func room(id: RoomID) async throws -> TradeRoom { throw DomainError.notFound }
+    func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func memberRooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] { [:] }
+    func markRead(roomID: RoomID) async throws {}
+    func channels(roomID: RoomID) async throws -> [RoomChannel] { [] }
+    func membership(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership? { nil }
+    func join(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership {
+        RoomMembership(roomID: roomID, profileID: profileID, role: .member, joinedAt: .now, notificationsEnabled: true)
+    }
+    func leave(roomID: RoomID, profileID: ProfileID) async throws {}
+    func messages(roomID: RoomID, page: PageRequest) async throws -> CursorPage<RoomMessage> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func messages(roomID: RoomID, channel: RoomChannel?, page: PageRequest) async throws -> CursorPage<RoomMessage> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func send(_ message: RoomMessage) async throws -> RoomMessage { message }
+    func insertMessageReaction(
+        roomID: RoomID,
+        messageID: RoomMessageID,
+        userID: ProfileID,
+        reaction: String
+    ) async throws -> RoomMessageReaction {
+        RoomMessageReaction(id: "r1", messageID: messageID, userID: userID, reaction: reaction, createdAt: nil)
+    }
+    func deleteMessageReaction(id: String) async throws {}
+    func moderate(
+        roomID: RoomID,
+        messageID: RoomMessageID?,
+        targetProfileID: ProfileID?,
+        action: RoomModerationAction
+    ) async throws {}
 }

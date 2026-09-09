@@ -298,6 +298,9 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
 
     func rpcData(functionName: String, parametersJSON: Data?) async throws -> Data {
         let correlation = BackendV2RpcStageTracer.begin(functionName)
+        let preparedAt = ContinuousClock.now
+        BackendV2RpcStageTracer.trace(functionName, stage: "request.prepared", correlation: correlation)
+        let taskStartedAt = ContinuousClock.now
         BackendV2RpcStageTracer.trace(functionName, stage: "urlsession.task.started", correlation: correlation)
         let response = try await transport.send(
             host: .supabase,
@@ -305,11 +308,20 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
             method: .post,
             body: parametersJSON ?? Data("{}".utf8)
         )
+        let responseReceivedAt = ContinuousClock.now
         BackendV2RpcStageTracer.trace(
             functionName,
             stage: "http.response.received",
             correlation: correlation,
             detail: "status=\(response.statusCode) bytes=\(response.data.count)"
+        )
+        BackendV2RpcStageTracer.trace(functionName, stage: "body.completed", correlation: correlation)
+        RPCTransportTiming.log(
+            rpc: functionName,
+            taskStartToHeadersMs: RPCTransportTiming.milliseconds(from: taskStartedAt, to: responseReceivedAt),
+            headersToBodyMs: 0,
+            decodeMs: nil,
+            totalMs: RPCTransportTiming.milliseconds(from: preparedAt, to: responseReceivedAt)
         )
         return response.data
     }

@@ -29,11 +29,31 @@ final class VaultHomeViewModel {
     }
 
     func onAppear(store: VaultStore) {
-        Task { await refresh(store: store) }
+        let renderStarted = CFAbsoluteTimeGetCurrent()
+        if let cached = store.cachedHome(filter: filter, folderID: selectedFolderID) {
+            items = cached.items
+            folders = cached.folders
+            nextCursor = cached.nextCursor
+            phase = .loaded
+            VaultLoadDiagnostics.logCacheHit(items: cached.items.count, folders: cached.folders.count)
+            VaultLoadDiagnostics.logFirstRenderable(
+                dtMs: Int((CFAbsoluteTimeGetCurrent() - renderStarted) * 1000)
+            )
+            if store.isHomeSoftStale(filter: filter, folderID: selectedFolderID) {
+                Task { await refresh(store: store, reason: "softStale") }
+            }
+            return
+        }
+        Task { await refresh(store: store, reason: "cold") }
     }
 
-    func refresh(store: VaultStore) async {
-        phase = items.isEmpty ? .loading : phase
+    func refresh(store: VaultStore, reason: String = "explicit") async {
+        VaultLoadDiagnostics.logRefresh(reason: reason)
+        let renderStarted = CFAbsoluteTimeGetCurrent()
+        let hadItems = !items.isEmpty
+        if !hadItems {
+            phase = .loading
+        }
         do {
             async let folderLoad = repository.folders()
             async let page = repository.listItems(
@@ -42,12 +62,24 @@ final class VaultHomeViewModel {
                 cursor: nil,
                 limit: 30
             )
-            folders = try await folderLoad
+            let loadedFolders = try await folderLoad
             let loaded = try await page
             items = loaded.items
+            folders = loadedFolders
             nextCursor = loaded.nextCursor
             phase = .loaded
-            await store.refreshFolders()
+            store.seedHome(
+                items: loaded.items,
+                folders: loadedFolders,
+                nextCursor: loaded.nextCursor,
+                filter: filter,
+                folderID: selectedFolderID
+            )
+            if !hadItems {
+                VaultLoadDiagnostics.logFirstRenderable(
+                    dtMs: Int((CFAbsoluteTimeGetCurrent() - renderStarted) * 1000)
+                )
+            }
         } catch {
             if items.isEmpty {
                 phase = .failed(FeedSupport.message(for: error))
@@ -119,7 +151,8 @@ final class VaultHomeViewModel {
             if selectedFolderID == folder.id {
                 selectedFolderID = nil
             }
-            await refresh(store: store)
+            store.invalidateHomeList()
+            await refresh(store: store, reason: "folderDeleted")
         } catch {
             ExperienceHaptics.play(.warning)
         }
@@ -137,6 +170,7 @@ final class VaultHomeViewModel {
                 folders[index] = updated
             }
             folders.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            store.invalidateHomeList()
             await store.refreshFolders()
             return nil
         } catch let error as AppError {

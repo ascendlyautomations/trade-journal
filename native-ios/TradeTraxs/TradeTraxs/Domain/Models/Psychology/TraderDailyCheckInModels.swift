@@ -98,7 +98,7 @@ nonisolated enum TraderDailyCheckInStressScale {
 
     static func averageDisplayText(for average: Double) -> String {
         let rounded = min(5, max(1, Int(average.rounded())))
-        return String(format: "%.1f/5 · %@", average, label(for: rounded))
+        return "\(NumberDisplay.ratingOutOfFive(average)) · \(label(for: rounded))"
     }
 
     /// True when the trader reported elevated stress (1–2 on the calmness scale).

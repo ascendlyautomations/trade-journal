@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 /// Feed/Profile card framing — full width, maximum 4:5 portrait, aspect-fill when cropping.
-enum FeedMediaLayout {
+nonisolated enum FeedMediaLayout {
     /// Tallest allowed Feed/Profile portrait ratio (width / height). 4:5 = 0.8.
     static let minimumFeedAspectRatio: CGFloat = 4.0 / 5.0
 
@@ -69,7 +69,7 @@ enum FeedMediaLayout {
         let safeAspect = max(imageAspect, 0.01)
         let presentationAspect = presentation.presentationAspectRatio
 
-        if presentation.usesFillCrop {
+        if presentation.requiresFramedViewport {
             let height = max(containerWidth / max(presentationAspect, 0.01), minHeight)
             return FrameMetrics(
                 containerWidth: containerWidth,
@@ -210,13 +210,13 @@ struct AdaptiveInlineMediaContainer<Content: View>: View {
         displayMode: AdaptiveMediaDisplayMode
     ) {
         guard case .feedCard(let presentation) = displayMode else { return }
-        ImageRenderProbe.log(
+        CropRenderProbe.log(
             surface: renderSurface,
-            availableWidth: metrics.containerWidth,
+            selectedMode: presentation.aspectMode.rawValue,
             presentationAspectRatio: presentation.presentationAspectRatio,
-            calculatedHeight: metrics.containerHeight,
             cropRect: presentation.normalizedCrop,
-            mediaID: renderMediaID
+            containerWidth: metrics.containerWidth,
+            containerHeight: metrics.containerHeight
         )
     }
 }

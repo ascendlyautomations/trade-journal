@@ -5,6 +5,7 @@ enum ManageRoomSection: Hashable {
     case details
     case channels
     case members
+    case joinRequests
     case tags
     case banned
 }
@@ -17,6 +18,7 @@ struct ManageRoomView: View {
     @State private var navigationSection: ManageRoomSection?
     @State private var selectedMember: RoomManagedMember?
     @State private var photoItem: PhotosPickerItem?
+    @State private var cropSourceImage: UIImage?
     @State private var editingTag: RoomMemberTag?
     @State private var editingChannel: RoomChannel?
     @State private var showsCreateChannel = false
@@ -71,6 +73,7 @@ struct ManageRoomView: View {
             case .details: detailsScreen
             case .channels: channelsScreen
             case .members: membersScreen
+            case .joinRequests: joinRequestsScreen
             case .tags: tagsScreen
             case .banned: bannedScreen
             }
@@ -122,12 +125,25 @@ struct ManageRoomView: View {
             channelEditorSheet(channel: channel)
         }
         .accessibilityIdentifier("tradeRooms.manage")
+        .onChange(of: photoItem) { _, item in
+            Task { await presentRoomImageCrop(for: item) }
+        }
+        .imageCropSelection(
+            sourceImage: $cropSourceImage,
+            preset: .room,
+            onConfirm: { result in
+                viewModel.setCroppedRoomImage(result)
+                cropSourceImage = nil
+                photoItem = nil
+            },
+            onCancel: { photoItem = nil }
+        )
     }
 
     private var hub: some View {
         List {
             Section {
-                hubRow("Room Details", systemImage: "square.and.pencil") {
+                hubRow("Edit Room Details", systemImage: "square.and.pencil") {
                     navigationSection = .details
                 }
                 hubRow("Channels", systemImage: "number") {
@@ -135,6 +151,16 @@ struct ManageRoomView: View {
                 }
                 hubRow("Members", systemImage: "person.2") {
                     navigationSection = .members
+                }
+                if viewModel.showsJoinRequestsSection {
+                    hubRow(
+                        viewModel.pendingJoinRequestCount > 0
+                            ? "Join Requests (\(viewModel.pendingJoinRequestCount))"
+                            : "Join Requests",
+                        systemImage: "person.badge.plus"
+                    ) {
+                        navigationSection = .joinRequests
+                    }
                 }
                 hubRow("Tags", systemImage: "tag") {
                     navigationSection = .tags
@@ -156,21 +182,75 @@ struct ManageRoomView: View {
 
     private var detailsScreen: some View {
         Form {
-            Section("Room Name") {
-                TextField("Room name", text: $viewModel.editName)
-            }
-            Section("Description") {
-                TextField("Description", text: $viewModel.editDescription, axis: .vertical)
-                    .lineLimit(3...6)
-            }
-            Section("Picture") {
+            Section("Basic Info") {
+                TextField("Room name", text: $viewModel.editConfiguration.name)
+                TextField("Description", text: Binding(
+                    get: { viewModel.editConfiguration.description ?? "" },
+                    set: { viewModel.editConfiguration.description = $0.isEmpty ? nil : $0 }
+                ), axis: .vertical)
+                .lineLimit(3...6)
+                EditRoomDetailsImageSection(
+                    pendingPreview: viewModel.pendingImagePreview,
+                    savedReference: viewModel.savedImageReference,
+                    marksForRemoval: viewModel.marksImageForRemoval,
+                    imagePipeline: imagePipeline
+                )
                 PhotosPicker(selection: $photoItem, matching: .images) {
-                    Label("Choose New Picture", systemImage: "photo")
+                    Label(editRoomPhotoPickerLabel, systemImage: "photo")
+                }
+                if viewModel.hasDisplayImage {
+                    Button("Remove Photo", role: .destructive) {
+                        viewModel.clearPendingRoomImage()
+                        photoItem = nil
+                    }
                 }
             }
-            Section("Privacy") {
-                Toggle("Show on my profile", isOn: $viewModel.editShowsOnProfile)
+
+            Section("Discovery") {
+                Picker("Category", selection: Binding(
+                    get: { viewModel.editConfiguration.category ?? .general },
+                    set: { viewModel.editConfiguration.category = $0 }
+                )) {
+                    ForEach(TradeRoomCategory.allCases, id: \.self) { category in
+                        Text(category.displayName).tag(category)
+                    }
+                }
+                NavigationLink("Tags") {
+                    manageTagsEditor
+                }
             }
+
+            Section("Access") {
+                Picker("Room Visibility", selection: Binding(
+                    get: { viewModel.editConfiguration.visibility },
+                    set: { viewModel.editConfiguration.visibility = $0 }
+                )) {
+                    Text("Public").tag(TradeRoomVisibility.public)
+                    Text("Private").tag(TradeRoomVisibility.private)
+                }
+                if viewModel.editConfiguration.visibility == .public {
+                    Picker("Join Policy", selection: $viewModel.editConfiguration.joinPolicy) {
+                        Text("Anyone can join").tag(TradeRoomJoinPolicy.open)
+                        Text("Request to join").tag(TradeRoomJoinPolicy.approval)
+                    }
+                }
+                Toggle("Show on my profile", isOn: $viewModel.editConfiguration.showsOnProfile)
+            }
+
+            Section("Room Rules") {
+                TextField("Optional guidelines", text: Binding(
+                    get: { viewModel.editConfiguration.rules ?? "" },
+                    set: { viewModel.editConfiguration.rules = $0.isEmpty ? nil : $0 }
+                ), axis: .vertical)
+                .lineLimit(4...8)
+            }
+
+            Section("Member Permissions") {
+                Toggle("Members can send messages", isOn: $viewModel.editConfiguration.membersCanMessage)
+                Toggle("Members can share trades", isOn: $viewModel.editConfiguration.membersCanShareTrades)
+                Toggle("Members can share images/media", isOn: $viewModel.editConfiguration.membersCanShareMedia)
+            }
+
             Section {
                 Button {
                     Task { await viewModel.saveDetails() }
@@ -185,13 +265,46 @@ struct ManageRoomView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .experienceNavigationTitle("Room Details")
+        .experienceNavigationTitle("Edit Room Details")
         .experienceProtectedFormDismiss(viewModel.isSavingDetails)
-        .task(id: photoItem?.itemIdentifier) {
-            guard let photoItem else { return }
-            if let data = try? await photoItem.loadTransferable(type: Data.self) {
-                viewModel.pendingImageData = data
+    }
+
+    private func presentRoomImageCrop(for item: PhotosPickerItem?) async {
+        guard let image = await ImageCropSelectionSupport.loadUIImage(from: item) else { return }
+        cropSourceImage = image
+    }
+
+    private var editRoomPhotoPickerLabel: String {
+        viewModel.hasDisplayImage ? "Change Photo" : "Add Photo"
+    }
+
+    private var manageTagsEditor: some View {
+        List {
+            ForEach(TradeRoomConfigurationValidation.presetDiscoveryTags, id: \.self) { tag in
+                Button {
+                    toggleManageTag(tag)
+                } label: {
+                    HStack {
+                        Text(tag)
+                        Spacer()
+                        if viewModel.editConfiguration.discoveryTags.contains(tag) {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(colors.accent)
+                        }
+                    }
+                }
             }
+        }
+        .experienceNavigationTitle("Tags")
+    }
+
+    private func toggleManageTag(_ tag: String) {
+        if viewModel.editConfiguration.discoveryTags.contains(tag) {
+            viewModel.editConfiguration.discoveryTags.removeAll { $0 == tag }
+        } else if viewModel.editConfiguration.discoveryTags.count
+            < TradeRoomConfigurationValidation.maxDiscoveryTags
+        {
+            viewModel.editConfiguration.discoveryTags.append(tag)
         }
     }
 
@@ -210,6 +323,54 @@ struct ManageRoomView: View {
         .scrollContentBackground(.hidden)
         .experienceNavigationTitle("Members")
         .refreshable { await viewModel.refreshMembersAndBans() }
+    }
+
+    private var joinRequestsScreen: some View {
+        List {
+            if viewModel.joinRequests.isEmpty {
+                Text("No pending join requests.")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            } else {
+                ForEach(viewModel.joinRequests) { request in
+                    HStack(spacing: ExperienceSpacing.sm) {
+                        if let profile = request.profile {
+                            FollowListAvatarView(profile: profile, imagePipeline: imagePipeline)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(request.profile?.displayName ?? "Trader")
+                                .experienceStyle(.body, color: colors.primaryText)
+                            if let username = request.profile?.username {
+                                Text("@\(username)")
+                                    .experienceStyle(.caption, color: colors.secondaryText)
+                            }
+                            if let createdAt = request.createdAt {
+                                Text(createdAt.formatted(date: .abbreviated, time: .omitted))
+                                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        HStack(spacing: ExperienceSpacing.xs) {
+                            Button("Decline") {
+                                Task { await viewModel.declineJoinRequest(request) }
+                            }
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(colors.loss)
+                            .disabled(viewModel.isMutatingJoinRequest)
+                            Button("Approve") {
+                                Task { await viewModel.approveJoinRequest(request) }
+                            }
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(colors.accent)
+                            .disabled(viewModel.isMutatingJoinRequest)
+                        }
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .experienceNavigationTitle("Join Requests")
+        .refreshable { await viewModel.refreshJoinRequests() }
     }
 
     private var tagsScreen: some View {
@@ -532,6 +693,93 @@ struct ManageRoomView: View {
         switch action {
         case .remove: return "Remove Member"
         case .ban: return "Ban Member"
+        }
+    }
+}
+
+/// Shows the authoritative saved room image, an in-progress crop preview, or the empty placeholder.
+private struct EditRoomDetailsImageSection: View {
+    let pendingPreview: UIImage?
+    let savedReference: MediaReference?
+    let marksForRemoval: Bool
+    let imagePipeline: any ImagePipeline
+
+    @Environment(\.themeColors) private var colors
+    @State private var savedPreview: UIImage?
+
+    var body: some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            Group {
+                if let pendingPreview {
+                    Image(uiImage: pendingPreview)
+                        .resizable()
+                        .scaledToFill()
+                } else if marksForRemoval {
+                    placeholder
+                } else if let savedPreview {
+                    Image(uiImage: savedPreview)
+                        .resizable()
+                        .scaledToFill()
+                } else if savedReference != nil {
+                    placeholder
+                        .overlay {
+                            ProgressView()
+                        }
+                } else {
+                    placeholder
+                }
+            }
+            .frame(width: 56, height: 56)
+            .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Room Photo")
+                    .experienceStyle(.subheadline, color: colors.primaryText)
+                Text(savedReference != nil && !marksForRemoval && pendingPreview == nil
+                    ? "Current room image"
+                    : pendingPreview != nil
+                        ? "New photo selected"
+                        : "No room photo")
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            }
+            Spacer(minLength: 0)
+        }
+        .task(id: savedReference?.id) {
+            await loadSavedPreview()
+        }
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            colors.fillSecondary
+            ExperienceIcon(icon: .rooms, size: .md, color: colors.accent)
+        }
+    }
+
+    private func loadSavedPreview() async {
+        guard !marksForRemoval, pendingPreview == nil else {
+            savedPreview = nil
+            return
+        }
+        guard let reference = savedReference else {
+            savedPreview = nil
+            return
+        }
+        do {
+            let data = try await imagePipeline.data(
+                for: ImageRequest(
+                    reference: reference,
+                    purpose: .profileAvatar,
+                    maxPixelSize: 160
+                )
+            )
+            if let ui = UIImage(data: data) {
+                savedPreview = ui
+            } else {
+                savedPreview = nil
+            }
+        } catch {
+            savedPreview = nil
         }
     }
 }

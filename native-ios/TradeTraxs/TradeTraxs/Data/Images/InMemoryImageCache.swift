@@ -48,6 +48,13 @@ nonisolated final class InMemoryImageCache: ImageCaching, @unchecked Sendable {
         }
     }
 
+    func removeAllImages() async {
+        state.withLock { cache in
+            cache.storage.removeAll()
+            cache.order.removeAll()
+        }
+    }
+
     private func touch(_ key: String, in cache: inout CacheState) {
         cache.order.removeAll { $0 == key }
         cache.order.append(key)

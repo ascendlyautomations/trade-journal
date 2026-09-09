@@ -77,6 +77,11 @@ final class RoomInfoViewModel {
         return room.ownerProfileID == viewerID
     }
 
+    var canManageRoom: Bool {
+        guard let room else { return false }
+        return TradeRoomManagementPermission.canManage(room: room, viewerID: viewerID)
+    }
+
     var rulesText: String {
         """
         Be respectful. No spam, no financial advice guarantees, and keep screenshots \
@@ -102,13 +107,13 @@ final class RoomInfoViewModel {
     }
 
     func openManageRoom() {
-        guard isOwner else { return }
+        guard canManageRoom else { return }
         ExperienceHaptics.play(.selection)
         navigationCoordinator?.open(navigationHost.manageRoom(roomID))
     }
 
     func saveDetails() async {
-        guard isOwner, let management = rooms as? any RoomManagementRepository else { return }
+        guard canManageRoom, let management = rooms as? any RoomManagementRepository else { return }
         isSavingDetails = true
         defer { isSavingDetails = false }
         do {
@@ -129,14 +134,20 @@ final class RoomInfoViewModel {
             }
             let trimmedName = editName.trimmingCharacters(in: .whitespacesAndNewlines)
             let trimmedDescription = editDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let baseRoom = room else { return }
+            let channels = (try? await rooms.channels(roomID: roomID)) ?? []
+            var configuration = TradeRoomConfiguration(room: baseRoom, channels: channels)
+            if !trimmedName.isEmpty {
+                configuration.name = trimmedName
+            }
+            configuration.description = trimmedDescription.isEmpty ? nil : trimmedDescription
+            configuration.showsOnProfile = editShowsOnProfile
+            if let imageURL {
+                configuration.imageURL = imageURL
+            }
             let updated = try await management.updateRoom(
                 roomID: roomID,
-                request: RoomUpdateRequest(
-                    name: trimmedName.isEmpty ? nil : trimmedName,
-                    description: trimmedDescription.isEmpty ? nil : trimmedDescription,
-                    imageURL: imageURL,
-                    showsOnProfile: editShowsOnProfile
-                )
+                request: RoomUpdateRequest(configuration: configuration)
             )
             room = updated
             RoomMetadataSync.apply(

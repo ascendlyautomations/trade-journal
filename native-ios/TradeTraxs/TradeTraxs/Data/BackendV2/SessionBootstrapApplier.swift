@@ -8,18 +8,15 @@ nonisolated enum SessionBootstrapApplier {
         var onboardingSnapshot: ProfileOnboardingSnapshot
     }
 
-    @MainActor
-    static func apply(
+    static func mapApplied(
         _ bootstrap: SessionBootstrapV1,
-        expectedViewerID: String,
-        detailCache: DetailPresentationCache?
-    ) async throws -> Applied {
+        expectedViewerID: String
+    ) throws -> Applied {
         let viewer = bootstrap.meta.viewer_id ?? bootstrap.data.viewer.id
         guard viewer == expectedViewerID else {
             throw BackendV2RPCError.decode("viewer_id mismatch")
         }
         try bootstrap.validateContractVersion()
-
         let profile = mapProfile(bootstrap, viewerID: expectedViewerID)
         let stats = mapStats(bootstrap, profileID: profile.id)
         let onboardingSnapshot = ProfileOnboardingSnapshot.from(
@@ -27,8 +24,17 @@ nonisolated enum SessionBootstrapApplier {
             viewer: bootstrap.data.viewer,
             viewerID: expectedViewerID
         )
+        return Applied(profile: profile, stats: stats, onboardingSnapshot: onboardingSnapshot)
+    }
 
-        detailCache?.seed(profile)
+    @MainActor
+    static func apply(
+        _ bootstrap: SessionBootstrapV1,
+        expectedViewerID: String,
+        detailCache: DetailPresentationCache?
+    ) async throws -> Applied {
+        let applied = try mapApplied(bootstrap, expectedViewerID: expectedViewerID)
+        detailCache?.seed(applied.profile)
         // Session RPC does not include overview stats — fetch via REST in SessionBootstrapLoader.
 
         let following = Set(bootstrap.data.following_ids.map { ProfileID($0) })
@@ -40,7 +46,7 @@ nonisolated enum SessionBootstrapApplier {
 
         SessionBootstrapStore.shared.seed(bootstrap, source: "rpc")
 
-        return Applied(profile: profile, stats: stats, onboardingSnapshot: onboardingSnapshot)
+        return applied
     }
 
     private static func mapProfile(_ bootstrap: SessionBootstrapV1, viewerID: String) -> Profile {

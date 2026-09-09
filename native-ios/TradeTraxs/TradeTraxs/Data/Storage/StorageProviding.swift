@@ -2,10 +2,33 @@ import Foundation
 
 /// Object-storage abstraction over Supabase Storage.
 nonisolated protocol ObjectStorageProviding: Sendable {
-    func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String
+    func upload(
+        bucket: String,
+        path: String,
+        data: Data,
+        contentType: String,
+        cacheControl: String?
+    ) async throws -> String
     func download(bucket: String, path: String) async throws -> Data
     func delete(bucket: String, path: String) async throws
     func publicURL(bucket: String, path: String) -> URL?
+}
+
+extension ObjectStorageProviding {
+    func upload(
+        bucket: String,
+        path: String,
+        data: Data,
+        contentType: String
+    ) async throws -> String {
+        try await upload(
+            bucket: bucket,
+            path: path,
+            data: data,
+            contentType: contentType,
+            cacheControl: nil
+        )
+    }
 }
 
 /// Well-known buckets used by TradeTraxs media.
@@ -29,8 +52,20 @@ nonisolated struct SupabaseObjectStorageProvider: ObjectStorageProviding {
         self.storage = storage
     }
 
-    func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String {
-        try await storage.upload(bucket: bucket, path: path, data: data, contentType: contentType)
+    func upload(
+        bucket: String,
+        path: String,
+        data: Data,
+        contentType: String,
+        cacheControl: String? = nil
+    ) async throws -> String {
+        try await storage.upload(
+            bucket: bucket,
+            path: path,
+            data: data,
+            contentType: contentType,
+            cacheControl: cacheControl
+        )
     }
 
     func download(bucket: String, path: String) async throws -> Data {

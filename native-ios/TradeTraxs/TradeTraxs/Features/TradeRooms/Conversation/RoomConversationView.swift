@@ -30,6 +30,8 @@ struct RoomConversationView: View {
                 objectStorage: data.objectStorage,
                 detailCache: data.detailCache,
                 trades: data.trades,
+                feed: data.feed,
+                achievements: data.achievements,
                 notifications: data.notifications,
                 rpc: data.rpc,
                 navigationCoordinator: navigationCoordinator,
@@ -108,22 +110,30 @@ struct RoomConversationView: View {
                 .accessibilityIdentifier("tradeRooms.conversation.title")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    if viewModel.isOwner {
-                        Button("Manage Room", systemImage: "gearshape") {
-                            viewModel.openManageRoom()
+                if viewModel.canManageRoom {
+                    Button {
+                        viewModel.openManageRoom()
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(colors.primaryText)
+                    }
+                    .experienceTouchTarget()
+                    .accessibilityLabel("Manage Room")
+                    .accessibilityIdentifier("tradeRooms.conversation.manage")
+                } else {
+                    Menu {
+                        Button(
+                            viewModel.isMuted ? "Unmute notifications" : "Mute notifications",
+                            systemImage: viewModel.isMuted ? "bell.fill" : "bell.slash"
+                        ) {
+                            viewModel.toggleMute()
                         }
+                    } label: {
+                        ExperienceIcon(icon: .more, size: .md, color: colors.primaryText)
                     }
-                    Button(
-                        viewModel.isMuted ? "Unmute notifications" : "Mute notifications",
-                        systemImage: viewModel.isMuted ? "bell.fill" : "bell.slash"
-                    ) {
-                        viewModel.toggleMute()
-                    }
-                } label: {
-                    ExperienceIcon(icon: .more, size: .md, color: colors.primaryText)
+                    .accessibilityIdentifier("tradeRooms.conversation.menu")
                 }
-                .accessibilityIdentifier("tradeRooms.conversation.menu")
             }
         }
         .sheet(isPresented: $viewModel.showsTradePicker) {
@@ -208,7 +218,13 @@ struct RoomConversationView: View {
                 messageList
             }
         case .loaded:
-            if viewModel.channels.isEmpty {
+            if viewModel.showsJoinPreviewPlaceholder {
+                ExperienceEmptyState(
+                    icon: .rooms,
+                    title: "Members only",
+                    message: viewModel.joinPreviewMessage
+                )
+            } else if viewModel.channels.isEmpty {
                 ExperienceEmptyState(
                     icon: .rooms,
                     title: "No channels yet",
@@ -226,7 +242,8 @@ struct RoomConversationView: View {
             channelTitle: viewModel.selectedChannel?.displayTitle,
             memberCountLabel: viewModel.memberCountLabel,
             joinButtonTitle: viewModel.joinButtonTitle,
-            isJoinEnabled: !viewModel.isOwner && !viewModel.isJoining,
+            showsJoinButton: viewModel.showsJoinButton,
+            isJoinEnabled: viewModel.isJoinButtonEnabled,
             isJoining: viewModel.isJoining,
             onJoinTap: {
                 Task { await viewModel.toggleMembership() }
@@ -269,6 +286,16 @@ struct RoomConversationView: View {
                                 peerProfile: bubble.authorProfile,
                                 imagePipeline: imagePipeline,
                                 sharedTrade: viewModel.sharedTrade(for: bubble.message),
+                                sharedPost: viewModel.sharedPost(for: bubble.message),
+                                sharedPostAuthor: viewModel.sharedPost(for: bubble.message)
+                                    .map { viewModel.authorProfile(for: $0.authorProfileID) } ?? nil,
+                                sharedReel: viewModel.sharedReel(for: bubble.message),
+                                sharedReelAuthor: viewModel.sharedReel(for: bubble.message)
+                                    .map { viewModel.authorProfile(for: $0.authorProfileID) } ?? nil,
+                                sharedAchievement: viewModel.sharedAchievement(for: bubble.message),
+                                sharedAchievementAuthor: viewModel.sharedAchievement(for: bubble.message)
+                                    .map { viewModel.authorProfile(for: $0.ownerProfileID) } ?? nil,
+                                isSharedContentUnavailable: viewModel.isSharedContentUnavailable(bubble.message),
                                 reactionConfiguration: viewModel.reactionConfiguration(for: bubble.message),
                                 onRetry: {
                                     Task { await viewModel.retry(bubble) }

@@ -29,10 +29,16 @@ struct ExploreRoomCard: View {
                     }
                 }
 
-                Text(room.name)
-                    .experienceStyle(.subheadline, color: colors.primaryText)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(room.name)
+                        .experienceStyle(.subheadline, color: colors.primaryText)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                    if room.isOfficial {
+                        TradeRoomOfficialBadge(style: .checkmark)
+                    }
+                }
+
                 if let memberCount = room.memberCount {
                     Text("\(ProfileDisplay.compactCount(memberCount)) members")
                         .experienceStyle(.caption2, color: colors.secondaryText)

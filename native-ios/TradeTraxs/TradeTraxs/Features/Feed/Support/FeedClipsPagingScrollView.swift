@@ -8,7 +8,7 @@ struct FeedClipsVerticalPager: UIViewRepresentable {
     let clipIDs: [String]
     var isScrollEnabled: Bool = true
     let makePage: (Int) -> AnyView
-    var onPageSettled: ((Int) -> Void)?
+    var onPageSettled: ((Int, Int) -> Void)?
 
     func makeUIView(context: Context) -> FeedClipsPagingContainerView {
         let view = FeedClipsPagingContainerView()
@@ -54,21 +54,36 @@ struct FeedClipsVerticalPager: UIViewRepresentable {
             parent.activeIndex = index
         }
 
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            containerView?.userDidBeginDragging()
+        }
+
+        func scrollViewWillEndDragging(
+            _ scrollView: UIScrollView,
+            withVelocity velocity: CGPoint,
+            targetContentOffset: UnsafeMutablePointer<CGPoint>
+        ) {
+            containerView?.userWillEndDragging(
+                velocityY: velocity.y,
+                targetContentOffset: targetContentOffset
+            )
+        }
+
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
             containerView?.handleScroll()
         }
 
         func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
-            containerView?.finishScrollInteraction()
+            containerView?.finishScrollInteraction(decelerated: true)
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
             guard !decelerate else { return }
-            containerView?.finishScrollInteraction()
+            containerView?.finishScrollInteraction(decelerated: false)
         }
 
         func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
-            containerView?.finishScrollInteraction()
+            containerView?.finishProgrammaticScrollAnimation()
         }
     }
 }
@@ -84,12 +99,16 @@ final class FeedClipsPagingContainerView: UIView {
     private var pageCount = 0
     private var activeIndex = 0
     private var clipIDs: [String] = []
+    private var lastAppliedClipIDs: [String] = []
     private var makePage: ((Int) -> AnyView)?
-    private var onPageSettled: ((Int) -> Void)?
+    private var onPageSettled: ((Int, Int) -> Void)?
     private weak var coordinator: FeedClipsVerticalPager.Coordinator?
     private var isProgrammaticScroll = false
+    private var isUserInteracting = false
     private var lastViewportSize: CGSize = .zero
     private var hostedClipIDs: [Int: String] = [:]
+    private var lastScrollOffsetY: CGFloat = 0
+    private var lastScrollDirection: Int = 1
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -107,6 +126,7 @@ final class FeedClipsPagingContainerView: UIView {
         scrollView.clipsToBounds = true
         scrollView.backgroundColor = .clear
         scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.decelerationRate = .fast
         addSubview(scrollView)
 
         NSLayoutConstraint.activate([
@@ -135,11 +155,17 @@ final class FeedClipsPagingContainerView: UIView {
         if viewportChanged {
             lastViewportSize = bounds.size
         }
+
+        // During an active user drag/deceleration, UIKit owns contentOffset — do not relayout/correct.
+        if isUserInteracting, !viewportChanged {
+            return
+        }
+
         relayoutAllPages(preserveScrollPosition: !viewportChanged)
         if viewportChanged, pageCount > 0 {
-            scrollToPage(activeIndex, animated: false)
-        } else {
-            normalizeScrollOffsetToActiveIndex()
+            scrollToPage(activeIndex, animated: false, reason: "viewportResize")
+        } else if !isUserInteracting {
+            normalizeScrollOffsetToActiveIndex(reason: "layoutSubviews")
         }
     }
 
@@ -149,12 +175,15 @@ final class FeedClipsPagingContainerView: UIView {
         clipIDs: [String],
         isScrollEnabled: Bool,
         makePage: @escaping (Int) -> AnyView,
-        onPageSettled: ((Int) -> Void)?,
+        onPageSettled: ((Int, Int) -> Void)?,
         coordinator: FeedClipsVerticalPager.Coordinator
     ) {
         let previousCount = self.pageCount
+        let dataChanged = previousCount != max(0, pageCount) || clipIDs != lastAppliedClipIDs
+
         self.pageCount = max(0, pageCount)
         self.clipIDs = clipIDs
+        self.lastAppliedClipIDs = clipIDs
         self.makePage = makePage
         self.onPageSettled = onPageSettled
         self.coordinator = coordinator
@@ -169,24 +198,67 @@ final class FeedClipsPagingContainerView: UIView {
         let indexChanged = self.activeIndex != clamped
         self.activeIndex = clamped
 
-        if bounds.height > 0 {
-            let preserveScroll = previousCount <= pageCount && !indexChanged
-            relayoutAllPages(preserveScrollPosition: preserveScroll)
-            if indexChanged {
-                scrollToPage(clamped, animated: false)
-            } else {
-                normalizeScrollOffsetToActiveIndex()
-            }
+        guard bounds.height > 0 else { return }
+
+        // SwiftUI updates during a user swipe must not re-scroll or relayout the pager.
+        if isUserInteracting {
+            return
         }
+
+        if dataChanged {
+            relayoutAllPages(preserveScrollPosition: !indexChanged)
+        }
+
+        if indexChanged {
+            scrollToPage(clamped, animated: false, reason: "externalIndexChange")
+        } else if dataChanged {
+            normalizeScrollOffsetToActiveIndex(reason: "applyDataChanged")
+        }
+    }
+
+    func userDidBeginDragging() {
+        isUserInteracting = true
+        ClipsPagerScrollProbe.dragBegin(
+            index: activeIndex,
+            offset: scrollView.contentOffset.y,
+            viewportHeight: bounds.height
+        )
+    }
+
+    func userWillEndDragging(
+        velocityY: CGFloat,
+        targetContentOffset: UnsafeMutablePointer<CGPoint>
+    ) {
+        let pageHeight = bounds.height
+        guard pageHeight > 0, pageCount > 0 else { return }
+        let targetIndex = clampedIndex(Int(round(targetContentOffset.pointee.y / pageHeight)))
+        ClipsPagerScrollProbe.willEndDragging(
+            velocityY: velocityY,
+            currentOffset: scrollView.contentOffset.y,
+            targetOffset: targetContentOffset.pointee.y,
+            targetIndex: targetIndex,
+            viewportHeight: pageHeight
+        )
     }
 
     func handleScroll() {
         guard !isProgrammaticScroll else { return }
+        let currentOffset = scrollView.contentOffset.y
+        if currentOffset != lastScrollOffsetY {
+            lastScrollDirection = currentOffset >= lastScrollOffsetY ? 1 : -1
+            lastScrollOffsetY = currentOffset
+        }
     }
 
-    func finishScrollInteraction() {
+    func finishScrollInteraction(decelerated: Bool) {
         isProgrammaticScroll = false
-        settleToNearestPage()
+        settleToNearestPage(decelerated: decelerated)
+        isUserInteracting = false
+    }
+
+    func finishProgrammaticScrollAnimation() {
+        isProgrammaticScroll = false
+        reportMetrics(settledIndex: currentPageIndex())
     }
 
     // MARK: Layout
@@ -237,14 +309,12 @@ final class FeedClipsPagingContainerView: UIView {
         if preserveScrollPosition, pageCount > 0 {
             let pageHeight = viewport.height
             let maxY = max(0, scrollView.contentSize.height - pageHeight)
-            let snappedIndex = clampedIndex(Int(round(preservedOffset.y / pageHeight)))
-            let restoredY = min(CGFloat(snappedIndex) * pageHeight, maxY)
-            if abs(scrollView.contentOffset.y - restoredY) > 0.5 {
-                scrollView.contentOffset = CGPoint(x: 0, y: restoredY)
-                activeIndex = snappedIndex
+            let clampedY = min(max(0, preservedOffset.y), maxY)
+            if abs(scrollView.contentOffset.y - clampedY) > 0.5 {
+                scrollView.contentOffset = CGPoint(x: 0, y: clampedY)
             }
-        } else {
-            normalizeScrollOffsetToActiveIndex()
+        } else if !isUserInteracting {
+            normalizeScrollOffsetToActiveIndex(reason: "relayoutAllPages")
         }
 
         reportMetrics(settledIndex: currentPageIndex())
@@ -262,15 +332,13 @@ final class FeedClipsPagingContainerView: UIView {
         }
     }
 
-    private func normalizeScrollOffsetToActiveIndex() {
-        guard pageCount > 0, bounds.height > 0 else { return }
+    private func normalizeScrollOffsetToActiveIndex(reason: String) {
+        guard pageCount > 0, bounds.height > 0, !isUserInteracting else { return }
         scrollView.contentInset = .zero
         scrollView.scrollIndicatorInsets = .zero
         let expectedY = CGFloat(clampedIndex(activeIndex)) * bounds.height
         guard abs(scrollView.contentOffset.y - expectedY) > 0.5 else { return }
-        isProgrammaticScroll = true
-        scrollView.contentOffset = CGPoint(x: 0, y: expectedY)
-        isProgrammaticScroll = false
+        programmaticallyScroll(toOffsetY: expectedY, animated: false, reason: reason)
     }
 
     private func logClipPage(index: Int, containerFrame: CGRect, host: UIHostingController<AnyView>) {
@@ -338,8 +406,9 @@ final class FeedClipsPagingContainerView: UIView {
 
     // MARK: Scrolling
 
-    private func scrollToPage(_ index: Int, animated: Bool) {
+    private func scrollToPage(_ index: Int, animated: Bool, reason: String) {
         let clamped = clampedIndex(index)
+        let from = activeIndex
         activeIndex = clamped
         let pageHeight = bounds.height
         guard pageHeight > 0, pageCount > 0 else { return }
@@ -350,15 +419,26 @@ final class FeedClipsPagingContainerView: UIView {
             return
         }
 
+        ClipsPagerScrollProbe.programmaticScroll(
+            from: from,
+            to: clamped,
+            animated: animated,
+            reason: reason
+        )
+        programmaticallyScroll(toOffsetY: targetY, animated: animated, reason: reason)
+        reportMetrics(settledIndex: clamped)
+    }
+
+    private func programmaticallyScroll(toOffsetY targetY: CGFloat, animated: Bool, reason: String) {
         isProgrammaticScroll = true
         scrollView.setContentOffset(CGPoint(x: 0, y: targetY), animated: animated)
         if !animated {
             isProgrammaticScroll = false
-            reportMetrics(settledIndex: clamped)
         }
+        _ = reason
     }
 
-    private func settleToNearestPage() {
+    private func settleToNearestPage(decelerated: Bool) {
         let pageHeight = bounds.height
         guard pageHeight > 0, pageCount > 0 else { return }
 
@@ -366,15 +446,27 @@ final class FeedClipsPagingContainerView: UIView {
         let clamped = clampedIndex(index)
         let expectedY = CGFloat(clamped) * pageHeight
 
-        if abs(scrollView.contentOffset.y - expectedY) > 0.5 {
-            isProgrammaticScroll = true
-            scrollView.setContentOffset(CGPoint(x: 0, y: expectedY), animated: true)
+        ClipsPagerScrollProbe.decelerationEnded(
+            offset: scrollView.contentOffset.y,
+            resolvedIndex: clamped,
+            viewportHeight: pageHeight
+        )
+
+        // `isPagingEnabled` already snaps — only correct genuine drift without a second animation.
+        if abs(scrollView.contentOffset.y - expectedY) > 1.0 {
+            ClipsPagerScrollProbe.programmaticScroll(
+                from: activeIndex,
+                to: clamped,
+                animated: false,
+                reason: decelerated ? "postDecelerationDriftCorrection" : "postDragDriftCorrection"
+            )
+            programmaticallyScroll(toOffsetY: expectedY, animated: false, reason: "driftCorrection")
         }
 
-        commitPageChange(clamped)
+        commitPageChange(clamped, scrollDirection: lastScrollDirection)
     }
 
-    private func commitPageChange(_ index: Int) {
+    private func commitPageChange(_ index: Int, scrollDirection: Int = 1) {
         let clamped = clampedIndex(index)
         let changed = activeIndex != clamped
         activeIndex = clamped
@@ -382,7 +474,7 @@ final class FeedClipsPagingContainerView: UIView {
         reportMetrics(settledIndex: clamped)
 
         if changed {
-            onPageSettled?(clamped)
+            onPageSettled?(clamped, scrollDirection)
         }
     }
 

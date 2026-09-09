@@ -299,16 +299,7 @@ enum ProfileDisplay {
     }
 
     static func compactCount(_ value: Int) -> String {
-        let absolute = abs(value)
-        if absolute >= 1_000_000 {
-            let scaled = Double(absolute) / 1_000_000
-            return trimmedCompact(scaled) + "M"
-        }
-        if absolute >= 1_000 {
-            let scaled = Double(absolute) / 1_000
-            return trimmedCompact(scaled) + "K"
-        }
-        return "\(value)"
+        NumberDisplay.compactCount(value)
     }
 
     /// Social line for the identity block — followers / following only.
@@ -400,42 +391,17 @@ enum ProfileDisplay {
 
     static func formatWinRate(_ rate: Decimal?) -> String {
         guard let rate else { return ProfileHeaderMetric.placeholderValue }
-        let percent = NSDecimalNumber(decimal: rate * 100).doubleValue
-        // Web overview uses formatDecimal; keep a compact locale-stable percent.
-        if percent.rounded() == percent {
-            return "\(Int(percent))%"
-        }
-        let tenths = Int((percent * 10).rounded())
-        return "\(tenths / 10).\(tenths % 10)%"
+        return NumberDisplay.winRate(rate)
     }
 
     static func formatProfitFactor(_ factor: Decimal?) -> String {
         guard let factor else { return ProfileHeaderMetric.placeholderValue }
-        let value = NSDecimalNumber(decimal: factor).doubleValue
-        return trimmedCompact(value)
+        return NumberDisplay.factor(factor)
     }
 
     static func formatMoney(_ amount: Decimal?) -> String {
-        guard let amount else { return ProfileHeaderMetric.placeholderValue }
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.usesGroupingSeparator = true
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 2
-        let absAmount = abs(amount)
-        let body = formatter.string(from: NSDecimalNumber(decimal: absAmount)) ?? "\(absAmount)"
-        return amount < 0 ? "-$\(body)" : "$\(body)"
-    }
-
-    private static func trimmedCompact(_ value: Double) -> String {
-        // Locale-stable formatting (avoids "1,3K" vs "1.3K").
-        if value.rounded() == value {
-            return String(Int(value))
-        }
-        let tenths = Int((value * 10).rounded())
-        let whole = tenths / 10
-        let fraction = tenths % 10
-        return fraction == 0 ? "\(whole)" : "\(whole).\(fraction)"
+        guard amount != nil else { return ProfileHeaderMetric.placeholderValue }
+        return NumberDisplay.money(amount)
     }
 }
 

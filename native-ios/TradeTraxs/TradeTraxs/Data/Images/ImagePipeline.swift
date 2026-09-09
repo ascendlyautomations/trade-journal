@@ -34,6 +34,13 @@ nonisolated protocol ImagePipeline: Sendable {
     func invalidate(reference: MediaReference) async
 }
 
+extension ImagePipeline {
+    /// Memory-cache lookup without triggering a download — used for instant Feed display.
+    func cachedImageData(for request: ImageRequest) async -> Data? {
+        nil
+    }
+}
+
 nonisolated struct PlaceholderImagePipeline: ImagePipeline {
     private let cache: any ImageCaching
 
@@ -46,6 +53,10 @@ nonisolated struct PlaceholderImagePipeline: ImagePipeline {
             return cached
         }
         throw DataPlaceholder.unimplemented("ImagePipeline.data")
+    }
+
+    func cachedImageData(for request: ImageRequest) async -> Data? {
+        await cache.imageData(forKey: request.reference.id)
     }
 
     func prefetch(_ requests: [ImageRequest]) async {

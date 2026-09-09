@@ -10,9 +10,13 @@ struct ProfilePostCard: View {
     let onOpen: () -> Void
     var isOwner: Bool = true
     var onReport: (() -> Void)? = nil
+    var profilePin: ProfilePinCallbacks? = nil
+
+    private var isPinnedToProfile: Bool {
+        profilePin?.isPinned(.profilePost, post.id.rawValue) ?? false
+    }
 
     private var target: InteractionTarget { .profilePost(post.id) }
-    private let thumbnailSide: CGFloat = 96
 
     private var caption: String {
         let trimmed = post.body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -28,25 +32,20 @@ struct ProfilePostCard: View {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 Group {
                     if let mediaReference {
-                        HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                            TradeTraxsContentImage(
-                                mediaID: post.id.rawValue,
+                        ProfileCompactCardMediaSection {
+                            ProfileCompactMediaThumbnail(
                                 reference: mediaReference,
                                 purpose: .postImage,
-                                imagePipeline: imagePipeline,
-                                surface: .profile,
-                                fixedSize: CGSize(width: thumbnailSide, height: thumbnailSide)
+                                imagePipeline: imagePipeline
                             )
-                            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
                             .accessibilityHidden(true)
-
+                        } metadata: {
                             PostCardTextPreview(
                                 text: caption,
-                                maxHeight: thumbnailSide,
+                                maxHeight: nil,
                                 isPinned: post.isPinned,
                                 dateText: TradeDisplay.dateText(post.createdAt)
                             )
-                            .frame(maxWidth: .infinity, maxHeight: thumbnailSide, alignment: .topLeading)
                         }
                     } else {
                         PostCardTextPreview(
@@ -81,6 +80,25 @@ struct ProfilePostCard: View {
             ContentOverflowMenu(
                 isOwner: isOwner,
                 onReport: onReport,
+                onPin: profilePin.map { pin in
+                    {
+                        pin.requestPin(
+                            .profilePost,
+                            post.id.rawValue,
+                            ProfilePinnedPreviewBuilder.from(post: post)
+                        )
+                    }
+                },
+                onUnpin: profilePin.map { pin in
+                    {
+                        pin.requestPin(
+                            .profilePost,
+                            post.id.rawValue,
+                            ProfilePinnedPreviewBuilder.from(post: post)
+                        )
+                    }
+                },
+                isPinnedToProfile: isPinnedToProfile,
                 accessibilityIdentifier: "profile.post.overflow.\(post.id.rawValue)"
             )
             .padding(ExperienceSpacing.xxs)

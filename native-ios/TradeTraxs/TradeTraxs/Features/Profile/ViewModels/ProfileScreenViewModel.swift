@@ -20,6 +20,13 @@ final class ProfileScreenViewModel {
 
     private var bootstrapTask: Task<Void, Never>?
 
+    var pinnedContent: [ProfilePinnedItem] { state.pinnedContent }
+    var showsPinReplaceSheet = false
+    var showsManagePinnedSheet = false
+    private(set) var pendingPinRequest: ProfilePinRequest?
+    private(set) var pendingPinPreview: ProfilePinnedPreview?
+    private var pinnedMutationInFlight = false
+
     init(
         target: ProfileContentStore.Target,
         currentUserProfile _: CurrentUserProfileStore,
@@ -159,6 +166,172 @@ final class ProfileScreenViewModel {
         headerViewModel.openSettings()
     }
 
+    func isPinned(contentType: ProfilePinnedContentType, contentID: String) -> Bool {
+        state.pinnedContent.contains {
+            $0.contentType == contentType && $0.contentID == contentID
+        }
+    }
+
+    func requestPin(
+        contentType: ProfilePinnedContentType,
+        contentID: String,
+        preview: ProfilePinnedPreview
+    ) {
+        guard contentStore.isOwner, !pinnedMutationInFlight else { return }
+        let request = ProfilePinRequest(
+            contentType: contentType,
+            contentID: contentID,
+            replacePosition: nil
+        )
+        if isPinned(contentType: contentType, contentID: contentID) {
+            Task { await unpin(contentType: contentType, contentID: contentID) }
+            return
+        }
+        if state.pinnedContent.count >= 3 {
+            pendingPinRequest = request
+            pendingPinPreview = preview
+            showsPinReplaceSheet = true
+            return
+        }
+        Task { await performPin(request: request, preview: preview, replacePosition: nil) }
+    }
+
+    func confirmReplacePin(at position: Int) {
+        guard let request = pendingPinRequest, let preview = pendingPinPreview else { return }
+        showsPinReplaceSheet = false
+        pendingPinRequest = nil
+        pendingPinPreview = nil
+        Task { await performPin(request: request, preview: preview, replacePosition: position) }
+    }
+
+    func cancelReplacePin() {
+        showsPinReplaceSheet = false
+        pendingPinRequest = nil
+        pendingPinPreview = nil
+    }
+
+    func unpin(contentType: ProfilePinnedContentType, contentID: String) async {
+        guard contentStore.isOwner, !pinnedMutationInFlight else { return }
+        let previous = state.pinnedContent
+        applyPinnedContentOptimistic(
+            ProfilePinnedMutation.remove(
+                contentType: contentType,
+                contentID: contentID,
+                from: previous
+            )
+        )
+        pinnedMutationInFlight = true
+        defer { pinnedMutationInFlight = false }
+        do {
+            let authoritative = try await ProfilePinnedContentRepository.unpin(
+                contentType: contentType,
+                contentID: contentID,
+                supabase: data.supabase
+            )
+            applyPinnedContent(authoritative)
+            ExperienceHaptics.play(.success)
+        } catch {
+            applyPinnedContent(previous)
+            ExperienceHaptics.play(.warning)
+        }
+    }
+
+    func openPinnedItem(_ item: ProfilePinnedItem) {
+        ExperienceHaptics.play(.selection)
+        switch item.contentType {
+        case .trade:
+            if let id = item.tradeID {
+                navigationCoordinator.open(.profile(.trade(id)))
+            }
+        case .profilePost:
+            if let id = item.postID {
+                navigationCoordinator.open(.profile(.post(id)))
+            }
+        case .achievement:
+            if let id = item.achievementID {
+                navigationCoordinator.open(.profile(.achievement(id)))
+            }
+        }
+    }
+
+    func movePinnedItemUp(_ item: ProfilePinnedItem) {
+        guard item.position > 1 else { return }
+        Task { await reorderPinned(from: item.position, to: item.position - 1) }
+    }
+
+    func movePinnedItemDown(_ item: ProfilePinnedItem) {
+        guard item.position < state.pinnedContent.count else { return }
+        Task { await reorderPinned(from: item.position, to: item.position + 1) }
+    }
+
+    private func performPin(
+        request: ProfilePinRequest,
+        preview: ProfilePinnedPreview,
+        replacePosition: Int?
+    ) async {
+        guard contentStore.isOwner else { return }
+        let previous = state.pinnedContent
+        var optimisticRequest = request
+        optimisticRequest.replacePosition = replacePosition
+        applyPinnedContentOptimistic(
+            ProfilePinnedMutation.insert(
+                request: optimisticRequest,
+                preview: preview,
+                into: previous
+            )
+        )
+        pinnedMutationInFlight = true
+        defer { pinnedMutationInFlight = false }
+        do {
+            let authoritative = try await ProfilePinnedContentRepository.pin(
+                request: optimisticRequest,
+                supabase: data.supabase
+            )
+            applyPinnedContent(authoritative)
+            ExperienceHaptics.play(.success)
+        } catch {
+            applyPinnedContent(previous)
+            ExperienceHaptics.play(.warning)
+        }
+    }
+
+    private func reorderPinned(from: Int, to: Int) async {
+        guard contentStore.isOwner, !pinnedMutationInFlight else { return }
+        let previous = state.pinnedContent
+        applyPinnedContentOptimistic(
+            ProfilePinnedMutation.swapPositions(from: from, to: to, in: previous)
+        )
+        pinnedMutationInFlight = true
+        defer { pinnedMutationInFlight = false }
+        do {
+            let authoritative = try await ProfilePinnedContentRepository.reorder(
+                fromPosition: from,
+                toPosition: to,
+                supabase: data.supabase
+            )
+            applyPinnedContent(authoritative)
+            ExperienceHaptics.play(.success)
+        } catch {
+            applyPinnedContent(previous)
+            ExperienceHaptics.play(.warning)
+        }
+    }
+
+    private func applyPinnedContent(_ items: [ProfilePinnedItem]) {
+        guard state.pinnedContent != items else { return }
+        var next = state
+        next.pinnedContent = items
+        state = next
+        contentStore.applyPinnedContent(items)
+    }
+
+    private func applyPinnedContentOptimistic(_ items: [ProfilePinnedItem]) {
+        var next = state
+        next.pinnedContent = items
+        state = next
+        contentStore.applyPinnedContent(items)
+    }
+
     // MARK: - Optimistic owner mutations (no network)
 
     /// Called by ``OwnerProfileOptimisticStore`` when the owner Profile screen is registered.
@@ -167,9 +340,13 @@ final class ProfileScreenViewModel {
         let merged = OwnerProfileOptimisticStore.shared.merging(into: state)
         guard merged != state else { return }
         let skipPosts = shellViewModel?.posts?.hasAuthoritativePayload == true
-        applyLocalState(merged, skipPostsBootstrap: skipPosts)
+        let skipClips = shellViewModel?.clips?.hasAuthoritativePayload == true
+        applyLocalState(merged, skipPostsBootstrap: skipPosts, skipClipsBootstrap: skipClips)
         if skipPosts, let visible = shellViewModel?.posts?.items {
             syncPostsFromSection(visible)
+        }
+        if skipClips, let visible = shellViewModel?.clips?.items {
+            syncClipsFromSection(visible)
         }
     }
 
@@ -225,6 +402,29 @@ final class ProfileScreenViewModel {
         }
     }
 
+    /// Keeps ``ProfileState.clips`` aligned with the section VM after authoritative refresh.
+    func syncClipsFromSection(_ clips: [Reel]) {
+        guard isOwnerTarget else { return }
+        guard state.clips != clips else { return }
+        var next = state
+        next.clips = clips
+        next.lastUpdated = Date()
+        state = next
+    }
+
+    private func preferredClipsBase() -> [Reel] {
+        if let clipsVM = shellViewModel?.clips, !clipsVM.items.isEmpty {
+            return clipsVM.items
+        }
+        if !state.clips.isEmpty {
+            return state.clips
+        }
+        return OwnerProfileOptimisticStore.shared.reels.filter {
+            matchesOwner($0.authorProfileID)
+                && OwnerProfileOptimisticStore.isListedOnOwnerProfile($0)
+        }
+    }
+
     private func syncSectionSnapshotsIntoState() {
         guard let postsVM = shellViewModel?.posts, postsVM.hasAuthoritativePayload else { return }
         guard state.posts != postsVM.items else { return }
@@ -252,21 +452,30 @@ final class ProfileScreenViewModel {
         guard matchesOwner(reel.authorProfileID) else { return }
         guard OwnerProfileOptimisticStore.isListedOnOwnerProfile(reel) else { return }
         data.detailCache.seed(reel)
+
+        syncShellIfNeeded()
+        shellViewModel?.ensureClipsSection()
+
+        let baseClips = preferredClipsBase()
         var next = state
-        let baseClips: [Reel]
-        if let clipsVM = shellViewModel?.clips, clipsVM.hasAuthoritativePayload {
-            baseClips = clipsVM.items
-        } else {
-            baseClips = next.clips
-        }
         next.clips = OwnerProfileOptimisticStore.upserting(reel, into: baseClips)
+
+        shellViewModel?.clips?.notePublishSucceeded(
+            reel,
+            preservingExisting: baseClips
+        )
+
         if next.phase == .idle || next.phase == .loading {
-            applyLocalState(next)
-            return
+            applyLocalState(next, skipClipsBootstrap: true)
+        } else {
+            next.phase = .loaded
+            next.didBootstrap = true
+            applyLocalState(next, skipClipsBootstrap: true)
         }
-        next.phase = .loaded
-        next.didBootstrap = true
-        applyLocalState(next)
+
+        if let visible = shellViewModel?.clips?.items {
+            syncClipsFromSection(visible)
+        }
     }
 
     func applyOptimisticAchievement(_ achievement: Achievement) {
@@ -304,7 +513,26 @@ final class ProfileScreenViewModel {
         data.detailCache.removePost(id: id)
         var next = state
         next.posts.removeAll { $0.id == id }
+        next.pinnedContent = ProfilePinnedMutation.remove(
+            contentType: .profilePost,
+            contentID: id.rawValue,
+            from: next.pinnedContent
+        )
         applyLocalState(next)
+    }
+
+    func applyOptimisticPinnedRemoval(
+        contentType: ProfilePinnedContentType,
+        contentID: String
+    ) {
+        guard isOwnerTarget, isPinned(contentType: contentType, contentID: contentID) else { return }
+        applyPinnedContentOptimistic(
+            ProfilePinnedMutation.remove(
+                contentType: contentType,
+                contentID: contentID,
+                from: state.pinnedContent
+            )
+        )
     }
 
     func applyOptimisticReelRemoval(id: ReelID) {
@@ -330,7 +558,11 @@ final class ProfileScreenViewModel {
         return isOwnerTarget
     }
 
-    private func applyLocalState(_ next: ProfileState, skipPostsBootstrap: Bool = false) {
+    private func applyLocalState(
+        _ next: ProfileState,
+        skipPostsBootstrap: Bool = false,
+        skipClipsBootstrap: Bool = false
+    ) {
         var next = next
         next.lastUpdated = Date()
         next.isRefreshing = state.isRefreshing
@@ -338,8 +570,12 @@ final class ProfileScreenViewModel {
         contentStore.applyBootstrap(next)
         if shellViewModel == nil {
             syncShellIfNeeded()
+        } else if skipPostsBootstrap && skipClipsBootstrap {
+            shellViewModel?.applyExcludingPostsAndClips(state: next)
         } else if skipPostsBootstrap {
             shellViewModel?.applyExcludingPosts(state: next)
+        } else if skipClipsBootstrap {
+            shellViewModel?.applyExcludingClips(state: next)
         } else {
             shellViewModel?.apply(state: next)
         }

@@ -312,7 +312,7 @@ final class TradeDetailExperienceTests: XCTestCase {
 private struct RecordingObjectStorage: ObjectStorageProviding {
     let publicBase: URL
 
-    func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String {
+    func upload(bucket: String, path: String, data: Data, contentType: String, cacheControl: String? = nil) async throws -> String {
         path
     }
 

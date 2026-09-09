@@ -69,7 +69,9 @@ final class NetworkingEnvironment {
         let requestBuilder = RequestBuilder(configuration: networkConfiguration)
 
         let session = URLSession(
-            configuration: networkConfiguration.makeURLSessionConfiguration()
+            configuration: networkConfiguration.makeURLSessionConfiguration(),
+            delegate: URLSessionTaskMetricsCollector.shared,
+            delegateQueue: nil
         )
 
         let requestInterceptor = CompositeRequestInterceptor(

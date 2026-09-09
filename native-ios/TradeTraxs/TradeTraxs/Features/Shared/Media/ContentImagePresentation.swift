@@ -5,7 +5,7 @@ import UIKit
 // MARK: - Normalized crop (orientation-normalized source image, 0…1)
 
 /// Visible region in the orientation-normalized source image bitmap.
-struct NormalizedImageCrop: Equatable, Hashable, Sendable {
+nonisolated struct NormalizedImageCrop: Equatable, Hashable, Sendable {
     var x: CGFloat
     var y: CGFloat
     var width: CGFloat
@@ -52,7 +52,7 @@ extension NormalizedImageCrop: Codable {
 // MARK: - Authoritative presentation model
 
 /// Single source of truth for Posts / Trades / Achievements Feed + Profile rendering.
-struct ContentImagePresentation: Equatable, Hashable, Codable, Sendable {
+nonisolated struct ContentImagePresentation: Equatable, Hashable, Codable, Sendable {
     /// Viewport width / height (e.g. 0.8 for 4:5 portrait cap).
     var presentationAspectRatio: CGFloat
     /// When set, aspect-fill this region into the viewport. `nil` = show full image (natural aspect).
@@ -62,7 +62,54 @@ struct ContentImagePresentation: Equatable, Hashable, Codable, Sendable {
     var sourceWidth: Int?
     var sourceHeight: Int?
 
-    var usesFillCrop: Bool { normalizedCrop != nil }
+    var usesFillCrop: Bool { requiresFramedViewport }
+
+    /// True when the saved presentation should aspect-fill into a fixed viewport (not show full image fit).
+    var requiresFramedViewport: Bool {
+        if normalizedCrop != nil { return true }
+        switch aspectMode {
+        case .square, .portrait, .landscape:
+            return true
+        case .original:
+            if let w = sourceWidth, let h = sourceHeight, h > 0 {
+                let imageAspect = CGFloat(w) / CGFloat(h)
+                return FeedMediaLayout.exceedsFeedPortraitLimit(imageAspect: imageAspect)
+            }
+            return false
+        }
+    }
+
+    /// Crop rect used for rendering — falls back to a centered crop when metadata is partial.
+    func resolvedCrop(imagePixelSize: CGSize) -> NormalizedImageCrop? {
+        if let normalizedCrop { return normalizedCrop }
+        guard requiresFramedViewport else { return nil }
+        let imageAspect = max(imagePixelSize.width / max(imagePixelSize.height, 1), 0.01)
+        return Self.centerCrop(
+            imageAspect: imageAspect,
+            presentationAspect: presentationAspectRatio
+        )
+    }
+
+    static func centerCrop(imageAspect: CGFloat, presentationAspect: CGFloat) -> NormalizedImageCrop {
+        let safeImageAspect = max(imageAspect, 0.01)
+        let safePresentationAspect = max(presentationAspect, 0.01)
+        if safeImageAspect > safePresentationAspect {
+            let width = safePresentationAspect / safeImageAspect
+            return NormalizedImageCrop(
+                x: max(0, (1 - width) / 2),
+                y: 0,
+                width: width,
+                height: 1
+            )
+        }
+        let height = safeImageAspect / safePresentationAspect
+        return NormalizedImageCrop(
+            x: 0,
+            y: max(0, (1 - height) / 2),
+            width: 1,
+            height: height
+        )
+    }
 
     enum CodingKeys: String, CodingKey {
         case presentationAspectRatio = "presentation_aspect_ratio"
@@ -148,6 +195,13 @@ extension ContentImagePresentation {
             presentationAspectRatio: presentationAspect,
             cropRect: crop,
             focalPoint: nil
+        )
+        CropPipelineProbe.logSaved(
+            selectedMode: aspectOption.rawValue,
+            presentationAspectRatio: presentationAspect,
+            normalizedCropRect: crop,
+            zoom: transform.zoom,
+            offset: transform.offset
         )
         #endif
 
@@ -276,7 +330,7 @@ extension ContentImagePresentation {
 }
 
 /// Decoding shim for pre-normalized UserDefaults payloads.
-struct LegacyFeedMediaPresentationV1: Decodable {
+nonisolated struct LegacyFeedMediaPresentationV1: Decodable {
     var aspectOption: ImageCropAspectOption
     var transform: ImageCropTransform
     var usesFillCrop: Bool
@@ -302,22 +356,23 @@ struct LegacyFeedMediaPresentationV1: Decodable {
 
 typealias FeedMediaPresentation = ContentImagePresentation
 
-struct ImageCropSelectionResult: Sendable {
-    let originalImage: UIImage
-    let presentation: ContentImagePresentation
-    var previewImage: UIImage { originalImage }
+/// Result from the shared crop editor — `image` contains the physically cropped pixels.
+nonisolated struct ImageCropSelectionResult: Sendable {
+    let image: UIImage
+    let aspectMode: ImageCropAspectOption
+    let sourcePixelSize: CGSize
 }
 
 // MARK: - Layout + draw
 
 extension ContentImagePresentation {
-    static func drawRect(
+    nonisolated static func drawRect(
         imagePixelSize: CGSize,
         containerSize: CGSize,
         presentation: ContentImagePresentation
     ) -> ImageCropMath.DrawRect? {
-        guard presentation.usesFillCrop,
-              let crop = presentation.normalizedCrop,
+        guard presentation.requiresFramedViewport,
+              let crop = presentation.resolvedCrop(imagePixelSize: imagePixelSize),
               containerSize.width > 0,
               containerSize.height > 0
         else { return nil }
@@ -431,7 +486,7 @@ extension ImageCropTransform: Codable {
 
 // MARK: - JSON helpers (Feed bootstrap / REST)
 
-enum ContentImagePresentationCodec {
+nonisolated enum ContentImagePresentationCodec {
     static func decode(from value: JSONValue?) -> ContentImagePresentation? {
         guard let value else { return nil }
         guard let data = try? JSONEncoder().encode(value) else { return nil }
@@ -508,7 +563,7 @@ enum ContentImagePresentationCodec {
 }
 
 /// Insert body for `profile_posts` — omits `image_crop` when the column is not deployed yet.
-struct ProfileWallPostInsertBody: Encodable, Sendable {
+nonisolated struct ProfileWallPostInsertBody: Encodable, Sendable {
     var user_id: String
     var content: String
     var image_url: String?
@@ -531,7 +586,7 @@ struct ProfileWallPostInsertBody: Encodable, Sendable {
 }
 
 /// Insert body for `achievements` — omits `image_crop` when the column is not deployed yet.
-struct AchievementInsertBody: Encodable, Sendable {
+nonisolated struct AchievementInsertBody: Encodable, Sendable {
     var user_id: String
     var achievement_type: String
     var title: String
@@ -582,6 +637,61 @@ struct AchievementInsertBody: Encodable, Sendable {
 // MARK: - DEBUG probes
 
 #if DEBUG
+enum CropPipelineProbe {
+    static func log(_ message: String) {
+        print("[CropPipeline] \(message)")
+    }
+
+    static func logSaved(
+        selectedMode: String,
+        presentationAspectRatio: CGFloat,
+        normalizedCropRect: NormalizedImageCrop?,
+        zoom: CGFloat,
+        offset: CGSize
+    ) {
+        log("selectedMode=\(selectedMode)")
+        log("selectedAspectRatio=\(String(format: "%.4f", presentationAspectRatio))")
+        log("normalizedCropRect=\(cropText(normalizedCropRect))")
+        log("zoom=\(String(format: "%.3f", zoom))")
+        log("offset=(\(Int(offset.width)),\(Int(offset.height)))")
+        log("savedPresentationAspectRatio=\(String(format: "%.4f", presentationAspectRatio))")
+    }
+
+    private static func cropText(_ crop: NormalizedImageCrop?) -> String {
+        guard let crop else { return "nil" }
+        return String(
+            format: "x=%.3f y=%.3f w=%.3f h=%.3f",
+            crop.x, crop.y, crop.width, crop.height
+        )
+    }
+}
+
+enum CropRenderProbe {
+    static func log(
+        surface: String,
+        selectedMode: String,
+        presentationAspectRatio: CGFloat,
+        cropRect: NormalizedImageCrop?,
+        containerWidth: CGFloat,
+        containerHeight: CGFloat
+    ) {
+        let cropText: String
+        if let cropRect {
+            cropText = String(
+                format: "x=%.3f y=%.3f w=%.3f h=%.3f",
+                cropRect.x, cropRect.y, cropRect.width, cropRect.height
+            )
+        } else {
+            cropText = "nil"
+        }
+        print("[CropRender] surface=\(surface) selectedMode=\(selectedMode) "
+            + "presentationAspectRatio=\(String(format: "%.4f", presentationAspectRatio)) "
+            + "cropRect=\(cropText) "
+            + "containerWidth=\(String(format: "%.1f", containerWidth)) "
+            + "containerHeight=\(String(format: "%.1f", containerHeight))")
+    }
+}
+
 enum ImagePipelineProbe {
     static func log(
         sourcePixels: CGSize,
@@ -640,6 +750,26 @@ enum ImageRenderProbe {
     }
 }
 #else
+enum CropPipelineProbe {
+    static func log(_ message: String) {}
+    static func logSaved(
+        selectedMode: String,
+        presentationAspectRatio: CGFloat,
+        normalizedCropRect: NormalizedImageCrop?,
+        zoom: CGFloat,
+        offset: CGSize
+    ) {}
+}
+enum CropRenderProbe {
+    static func log(
+        surface: String,
+        selectedMode: String,
+        presentationAspectRatio: CGFloat,
+        cropRect: NormalizedImageCrop?,
+        containerWidth: CGFloat,
+        containerHeight: CGFloat
+    ) {}
+}
 enum ImagePipelineProbe {
     static func log(
         sourcePixels: CGSize,

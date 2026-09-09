@@ -93,6 +93,9 @@ enum PushNotificationPayloadParser {
         if let roomSlug = firstNonEmpty(strings["roomSlug"], strings["room_slug"]) {
             raw["room_slug"] = roomSlug
         }
+        if let joinRequestID = firstNonEmpty(strings["joinRequestId"], strings["join_request_id"]) {
+            raw["join_request_id"] = joinRequestID
+        }
 
         let category = category(for: type, conversationID: conversationID, roomID: roomID, reportID: reportID)
 
@@ -144,6 +147,7 @@ enum PushNotificationPayloadParser {
             return .dailyCheckIn
         case "like", "like_batch", "like_milestone", "comment", "follow",
              "follow_request_accepted", "follow_batch", "room_join",
+             "trade_room_join_request", "trade_room_join_accepted", "trade_room_join_declined",
              "affiliate_referral", "affiliate_commission_earned",
              "announcement", "announcements", "product_update", "maintenance":
             return .activity

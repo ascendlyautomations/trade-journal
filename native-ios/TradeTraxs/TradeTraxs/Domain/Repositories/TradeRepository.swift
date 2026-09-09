@@ -53,6 +53,7 @@ nonisolated protocol TradeRepository: Sendable {
         customPublicStatus: String?
     ) async throws -> TradingAccount
     func payoutEntries(for accountID: TradingAccountID) async throws -> [AccountPayoutEntry]
+    func payoutEntries(for accountIDs: [TradingAccountID]) async throws -> [AccountPayoutEntry]
     func createPayoutEntry(
         ownerID: ProfileID,
         accountID: TradingAccountID,
@@ -65,6 +66,7 @@ nonisolated protocol TradeRepository: Sendable {
     func deletePayoutEntry(id: AccountPayoutEntryID) async throws
     /// Prop-firm payout cycle history — `account_payout_cycles`.
     func payoutCycleHistory(for accountID: TradingAccountID) async throws -> [AccountPayoutCycle]
+    func payoutCycleHistory(for accountIDs: [TradingAccountID]) async throws -> [AccountPayoutCycle]
     /// Web `record_account_payout` — closes open cycle and starts the next.
     func recordAccountPayout(
         accountID: TradingAccountID,
@@ -155,6 +157,10 @@ extension TradeRepository {
     }
 
     func payoutEntries(for accountID: TradingAccountID) async throws -> [AccountPayoutEntry] {
+        try await payoutEntries(for: [accountID]).filter { $0.accountID == accountID }
+    }
+
+    func payoutEntries(for accountIDs: [TradingAccountID]) async throws -> [AccountPayoutEntry] {
         throw AppError.notImplemented(feature: "payoutEntries")
     }
 
@@ -178,6 +184,10 @@ extension TradeRepository {
     }
 
     func payoutCycleHistory(for accountID: TradingAccountID) async throws -> [AccountPayoutCycle] {
+        try await payoutCycleHistory(for: [accountID]).filter { $0.accountID == accountID }
+    }
+
+    func payoutCycleHistory(for accountIDs: [TradingAccountID]) async throws -> [AccountPayoutCycle] {
         throw AppError.notImplemented(feature: "payoutCycleHistory")
     }
 

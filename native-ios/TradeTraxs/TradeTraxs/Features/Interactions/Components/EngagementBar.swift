@@ -8,6 +8,7 @@ struct EngagementBar: View {
     var onCommentTap: () -> Void
     var onShareTap: (() -> Void)? = nil
     var vaultRef: VaultContentRef?
+    var visualStyle: EngagementBarVisualStyle = .standard
 
     @State private var showsVaultSheet = false
 
@@ -29,6 +30,7 @@ struct EngagementBar: View {
             }
         }
         .frame(height: EngagementActionRowMetrics.rowHeight, alignment: .center)
+        .environment(\.engagementBarVisualStyle, visualStyle)
         .sheet(isPresented: $showsVaultSheet) {
             if let vaultRef {
                 VaultDestinationSheet(ref: vaultRef, store: vaultStore)

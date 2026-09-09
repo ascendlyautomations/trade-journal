@@ -159,7 +159,6 @@ final class PostsContainerViewModel {
             let overlay = OwnerProfileOptimisticStore.shared.posts.filter {
                 $0.authorProfileID == profileOwnerID
             }
-            let beforeCount = items.count
             let serverMerged = OwnerProfileOptimisticStore.merging(
                 overlay: overlay,
                 into: ProfilePostFixtures.samples(owner: profileOwnerID)

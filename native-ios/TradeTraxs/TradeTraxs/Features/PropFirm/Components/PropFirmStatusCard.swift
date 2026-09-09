@@ -59,7 +59,7 @@ struct PropFirmStatusCard: View {
                 ExperienceTag(title: snapshot.phaseLabel, tone: .info)
                 if let required = snapshot.winningDaysRequired, required > 0 {
                     ExperienceTag(
-                        title: "Days \(snapshot.winningDays)/\(required)",
+                        title: "Days \(NumberDisplay.integer(snapshot.winningDays))/\(NumberDisplay.integer(required))",
                         tone: snapshot.winningDays >= required ? .success : .info
                     )
                 }

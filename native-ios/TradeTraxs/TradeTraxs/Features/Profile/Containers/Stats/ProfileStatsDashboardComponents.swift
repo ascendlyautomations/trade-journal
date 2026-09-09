@@ -271,12 +271,12 @@ struct ProfileStatsLongShortCard: View {
 
     private var longPercentText: String {
         guard total > 0 else { return "—" }
-        return String(format: "%.0f%%", Double(longCount) / Double(total) * 100)
+        return NumberDisplay.percent(Double(longCount) / Double(total) * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)
     }
 
     private var shortPercentText: String {
         guard total > 0 else { return "—" }
-        return String(format: "%.0f%%", Double(shortCount) / Double(total) * 100)
+        return NumberDisplay.percent(Double(shortCount) / Double(total) * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)
     }
 
     var body: some View {

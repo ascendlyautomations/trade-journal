@@ -38,6 +38,7 @@ struct ProfileState: Equatable {
     var posts: [Post] = []
     var clips: [Reel] = []
     var achievements: [Achievement] = []
+    var pinnedContent: [ProfilePinnedItem] = []
 
     /// Stage-1 header ready (profile / stats / follow / room). Section lists may still be deferred.
     var didBootstrap = false

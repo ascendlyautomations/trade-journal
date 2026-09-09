@@ -400,6 +400,7 @@ final class MessagesExperienceTests: XCTestCase {
         let roomsVM = TradeRoomsHomeViewModel(
             messages: MessagesStubMessageRepository(),
             rooms: MessagesStubRoomRepository(),
+            explore: MessagesStubExploreRepository(),
             profiles: MessagesStubProfileRepository(),
             session: MessagesStubSession(userID: MessagesInboxFixtures.viewerID.rawValue),
             detailCache: cache,

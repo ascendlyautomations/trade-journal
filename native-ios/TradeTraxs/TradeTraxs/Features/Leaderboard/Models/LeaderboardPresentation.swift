@@ -193,7 +193,7 @@ enum LeaderboardPresentation {
         case .rr:
             return LeaderboardMetricFormat.riskReward(row.averageRiskReward)
         case .winStreak:
-            return "\(row.winStreak)"
+            return NumberDisplay.integer(row.winStreak)
         case .profitPercent:
             return LeaderboardMetricFormat.percent(row.profitPercent)
         case .consistency:
@@ -212,15 +212,15 @@ enum LeaderboardPresentation {
         case .winRate, .profitFactor, .expectancy, .profitPercent, .consistency:
             return TradeDisplay.pnlText(row.totalPnL)
         case .rr, .winStreak:
-            return "\(row.tradeCount) trades"
+            return NumberDisplay.tradeCount(row.tradeCount)
         }
     }
 
     private static func tradeDetailLine(for row: LeaderboardRow) -> String {
         if let rr = row.averageRiskReward {
-            return String(format: "%d trades · %.1f RR", row.tradeCount, NSDecimalNumber(decimal: rr).doubleValue)
+            return "\(NumberDisplay.tradeCount(row.tradeCount)) · \(NumberDisplay.decimal(rr, minimumFractionDigits: 1, maximumFractionDigits: 1)) RR"
         }
-        return "\(row.tradeCount) trades"
+        return NumberDisplay.tradeCount(row.tradeCount)
     }
 
     /// Resolve display profile from the shared userID-keyed dictionary.
@@ -281,13 +281,15 @@ enum LeaderboardPresentation {
 enum LeaderboardMetricFormat {
     static func winRate(_ rate: Decimal?) -> String {
         guard let rate else { return "—" }
-        let percent = NSDecimalNumber(decimal: rate * 100).doubleValue
-        return String(format: "%.1f%%", percent)
+        return NumberDisplay.percent(
+            NSDecimalNumber(decimal: rate * 100).doubleValue,
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1
+        )
     }
 
     static func profitFactor(_ factor: Decimal?) -> String {
-        guard let factor else { return "—" }
-        return String(format: "%.2f", NSDecimalNumber(decimal: factor).doubleValue)
+        NumberDisplay.factor(factor)
     }
 
     static func expectancy(_ value: Decimal?) -> String {
@@ -297,11 +299,15 @@ enum LeaderboardMetricFormat {
 
     static func riskReward(_ value: Decimal?) -> String {
         guard let value else { return "—" }
-        return String(format: "%.2f", NSDecimalNumber(decimal: value).doubleValue)
+        return NumberDisplay.ratio(value, fractionDigits: 2)
     }
 
     static func percent(_ value: Decimal?) -> String {
         guard let value else { return "—" }
-        return String(format: "%.1f%%", NSDecimalNumber(decimal: value).doubleValue)
+        return NumberDisplay.percent(
+            NSDecimalNumber(decimal: value).doubleValue,
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1
+        )
     }
 }

@@ -75,16 +75,16 @@ nonisolated enum TradeDetailAnalytics {
         if let tradeRR = trade.riskReward, let avgRR, avgRR > 0 {
             let delta = NSDecimalNumber(decimal: tradeRR - avgRR).doubleValue
             if abs(delta) >= 0.3 {
-                findings.append(String(format: "%.1fR %@ your average trade", abs(delta), delta >= 0 ? "better than" : "worse than"))
+                findings.append("\(NumberDisplay.rMultiple(abs(delta), fractionDigits: 1)) \(delta >= 0 ? "better than" : "worse than") your average trade")
             }
         }
 
         if let tradePnL = trade.realizedPnL?.amount {
             let percentile = percentileRank(value: tradePnL, in: pnls, higherIsBetter: true)
             if percentile >= 88 {
-                findings.append(String(format: "Top %.0f%% of your trades by P&L", 100 - percentile))
+                findings.append("Top \(NumberDisplay.percent(100 - percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades by P&L")
             } else if percentile <= 12, tradePnL < 0 {
-                findings.append(String(format: "Bottom %.0f%% of your trades by P&L", percentile))
+                findings.append("Bottom \(NumberDisplay.percent(percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades by P&L")
             }
         }
 
@@ -96,9 +96,9 @@ nonisolated enum TradeDetailAnalytics {
                 let holdPercent = Double(shorterCount) / Double(holdSamples.count) * 100
                 holdShorterThanPercent = holdPercent
                 if holdPercent >= 60 {
-                    findings.append(String(format: "Shorter hold time than %.0f%% of your trades", holdPercent))
+                    findings.append("Shorter hold time than \(NumberDisplay.percent(holdPercent, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades")
                 } else if holdPercent <= 25 {
-                    findings.append(String(format: "Longer hold time than %.0f%% of your trades", 100 - holdPercent))
+                    findings.append("Longer hold time than \(NumberDisplay.percent(100 - holdPercent, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades")
                 }
             }
         }
@@ -175,7 +175,7 @@ nonisolated enum TradeDetailAnalytics {
             return QuickInsight(
                 symbol: "🔥",
                 title: "Strong Trade",
-                message: String(format: "Top %.0f%% of your trades by RR", 100 - percentile)
+                message: "Top \(NumberDisplay.percent(100 - percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades by RR"
             )
         }
 
@@ -192,7 +192,7 @@ nonisolated enum TradeDetailAnalytics {
                     return QuickInsight(
                         symbol: "⚠️",
                         title: "Larger Than Normal Loss",
-                        message: String(format: "This loss was %.1f× your average losing trade", ratio)
+                        message: "This loss was \(NumberDisplay.multiple(ratio, fractionDigits: 1)) your average losing trade"
                     )
                 }
             }
@@ -222,7 +222,7 @@ nonisolated enum TradeDetailAnalytics {
             return QuickInsight(
                 symbol: "🔥",
                 title: "Strong Trade",
-                message: String(format: "Top %.0f%% of your trades by P&L", 100 - percentile)
+                message: "Top \(NumberDisplay.percent(100 - percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades by P&L"
             )
         }
 
@@ -239,21 +239,21 @@ nonisolated enum TradeDetailAnalytics {
                 let avgRRDecimal = Decimal(string: String(avgRR)) ?? 0
                 let delta = NSDecimalNumber(decimal: tradeRR - avgRRDecimal).doubleValue
                 if abs(delta) >= 0.3 {
-                    findings.append(String(format: "%.1fR %@ your average trade", abs(delta), delta >= 0 ? "better than" : "worse than"))
+                    findings.append("\(NumberDisplay.rMultiple(abs(delta), fractionDigits: 1)) \(delta >= 0 ? "better than" : "worse than") your average trade")
                 }
             }
             if let percentile = wire.pnl_percentile {
                 if percentile >= 88, TradeDetailComparisonScope.netPnL(for: trade) > 0 {
-                    findings.append(String(format: "Top %.0f%% of your trades by P&L", 100 - percentile))
+                    findings.append("Top \(NumberDisplay.percent(100 - percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades by P&L")
                 } else if percentile <= 12, TradeDetailComparisonScope.netPnL(for: trade) < 0 {
-                    findings.append(String(format: "Bottom %.0f%% of your trades by P&L", percentile))
+                    findings.append("Bottom \(NumberDisplay.percent(percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades by P&L")
                 }
             }
             if let holdPercent = wire.hold_shorter_than_percent {
                 if holdPercent >= 60 {
-                    findings.append(String(format: "Shorter hold time than %.0f%% of your trades", holdPercent))
+                    findings.append("Shorter hold time than \(NumberDisplay.percent(holdPercent, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades")
                 } else if holdPercent <= 25 {
-                    findings.append(String(format: "Longer hold time than %.0f%% of your trades", 100 - holdPercent))
+                    findings.append("Longer hold time than \(NumberDisplay.percent(100 - holdPercent, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades")
                 }
             }
             return CohortComparison(
@@ -315,7 +315,7 @@ nonisolated enum TradeDetailAnalytics {
             return QuickInsight(
                 symbol: "🔥",
                 title: "Strong Trade",
-                message: String(format: "Top %.0f%% of your trades by RR", 100 - percentile)
+                message: "Top \(NumberDisplay.percent(100 - percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades by RR"
             )
         }
 
@@ -327,7 +327,7 @@ nonisolated enum TradeDetailAnalytics {
             return QuickInsight(
                 symbol: "⚠️",
                 title: "Larger Than Normal Loss",
-                message: String(format: "Bottom %.0f%% of your trades by P&L", percentile)
+                message: "Bottom \(NumberDisplay.percent(percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades by P&L"
             )
         }
 
@@ -350,7 +350,7 @@ nonisolated enum TradeDetailAnalytics {
             return QuickInsight(
                 symbol: "🔥",
                 title: "Strong Trade",
-                message: String(format: "Top %.0f%% of your trades by P&L", 100 - percentile)
+                message: "Top \(NumberDisplay.percent(100 - percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) of your trades by P&L"
             )
         }
 

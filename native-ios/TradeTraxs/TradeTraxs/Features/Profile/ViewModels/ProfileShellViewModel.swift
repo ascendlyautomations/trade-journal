@@ -50,6 +50,21 @@ final class ProfileShellViewModel {
         posts?.applyBootstrap(latestState)
     }
 
+    /// Ensures the Clips section VM exists without changing the selected tab.
+    func ensureClipsSection() {
+        if clips == nil {
+            clips = ClipsContainerViewModel(
+                profileID: profileID,
+                feed: data.feed,
+                navigationCoordinator: navigationCoordinator,
+                detailCache: data.detailCache,
+                engagementStore: data.engagementStore,
+                isOwner: isOwner
+            )
+        }
+        clips?.applyBootstrap(latestState)
+    }
+
     /// Applies bootstrap to every created section VM except Posts (mutation-owned).
     func applyExcludingPosts(state: ProfileState) {
         latestState = state
@@ -59,6 +74,31 @@ final class ProfileShellViewModel {
         }
         trades?.applyBootstrap(state)
         clips?.applyBootstrap(state)
+        stats?.applyBootstrap(state)
+        achievements?.applyBootstrap(state)
+    }
+
+    /// Applies bootstrap to every created section VM except Posts and Clips (mutation-owned).
+    func applyExcludingPostsAndClips(state: ProfileState) {
+        latestState = state
+        isOwner = state.isOwner
+        if let profileID = state.profileID {
+            self.profileID = profileID
+        }
+        trades?.applyBootstrap(state)
+        stats?.applyBootstrap(state)
+        achievements?.applyBootstrap(state)
+    }
+
+    /// Applies bootstrap to every created section VM except Clips (mutation-owned).
+    func applyExcludingClips(state: ProfileState) {
+        latestState = state
+        isOwner = state.isOwner
+        if let profileID = state.profileID {
+            self.profileID = profileID
+        }
+        trades?.applyBootstrap(state)
+        posts?.applyBootstrap(state)
         stats?.applyBootstrap(state)
         achievements?.applyBootstrap(state)
     }

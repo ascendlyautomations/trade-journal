@@ -148,8 +148,27 @@ final class ActivityHomeViewModel {
     }
 
     func markRead(row: ActivityRowModel) {
-        for id in row.groupedNotificationIDs {
-            markRead(id: id)
+        ExperienceHaptics.play(.selection)
+        let unreadIDs = row.groupedNotificationIDs.filter { id in
+            inboxStore.items.first(where: { $0.id == id })?.isRead == false
+        }
+        guard !unreadIDs.isEmpty else { return }
+
+        let started = CFAbsoluteTimeGetCurrent()
+        inboxStore.markReadLocally(ids: unreadIDs)
+        Task {
+            do {
+                _ = try await notifications.markRead(ids: unreadIDs)
+                NotificationReadDiagnostics.logBulkMarkRead(
+                    ids: unreadIDs.count,
+                    requests: 1,
+                    dtMs: Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+                )
+            } catch {
+                for id in unreadIDs {
+                    inboxStore.markUnreadLocally(id: id)
+                }
+            }
         }
     }
 

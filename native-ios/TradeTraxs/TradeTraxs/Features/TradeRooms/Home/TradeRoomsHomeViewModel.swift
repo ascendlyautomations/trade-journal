@@ -17,8 +17,21 @@ final class TradeRoomsHomeViewModel {
     var showsLeaveRoomConfirmation = false
     var showsCreateRoom = false
 
+    private let presentCreateOnAppear: Bool
+    private var didAutoPresentCreate = false
+
+    private(set) var discoveryMode: TradeRoomDiscoveryMode = .suggested
+    private(set) var discoveryScope: TradeRoomDiscoveryScope = .all
+    private var didApplyInitialDiscoveryMode = false
+    private(set) var yourRoomsItems: [ExploreRoomSuggestion] = []
+    private(set) var suggestedItems: [ExploreRoomSuggestion] = []
+    private(set) var popularItems: [ExploreRoomSuggestion] = []
+    private(set) var discoveryPhase: Phase = .idle
+    private(set) var discoveryErrorMessage: String?
+
     private let messages: any MessageRepository
     private let rooms: any RoomRepository
+    private let explore: any ExploreRepository
     private let profiles: any ProfileRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
@@ -27,12 +40,14 @@ final class TradeRoomsHomeViewModel {
     private let inboxStore: MessagesInboxStore
     private let realtimeHub: RealtimeHub?
     private let domain: MessagingDomain
+    private let joinCoordinator: TradeRoomJoinActionCoordinator
 
     private var loadTask: Task<Void, Never>?
 
     init(
         messages: any MessageRepository,
         rooms: any RoomRepository,
+        explore: any ExploreRepository,
         profiles: any ProfileRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
@@ -40,10 +55,13 @@ final class TradeRoomsHomeViewModel {
         navigationHost: TradeRoomNavigationHost = .messages,
         realtimeHub: RealtimeHub? = nil,
         inboxStore: MessagesInboxStore? = nil,
-        domain: MessagingDomain? = nil
+        domain: MessagingDomain? = nil,
+        presentCreateOnAppear: Bool = false,
+        joinCoordinator: TradeRoomJoinActionCoordinator? = nil
     ) {
         self.messages = messages
         self.rooms = rooms
+        self.explore = explore
         self.profiles = profiles
         self.session = session
         self.detailCache = detailCache
@@ -52,6 +70,8 @@ final class TradeRoomsHomeViewModel {
         self.realtimeHub = realtimeHub
         self.inboxStore = inboxStore ?? .shared
         self.domain = domain ?? .shared
+        self.presentCreateOnAppear = presentCreateOnAppear
+        self.joinCoordinator = joinCoordinator ?? .shared
         self.domain.configure(
             messages: messages,
             rooms: rooms,
@@ -86,6 +106,174 @@ final class TradeRoomsHomeViewModel {
         phase == .loaded && !items.isEmpty && filteredItems.isEmpty
     }
 
+    var joinedRoomIDs: Set<RoomID> {
+        Set(items.map(\.id))
+    }
+
+    var discoverableRooms: [ExploreRoomSuggestion] {
+        let source = discoveryMode == .popular ? popularItems : suggestedItems
+        return source.filter { !joinedRoomIDs.contains($0.id) }
+    }
+
+    /// Authoritative Your Rooms rows from home bootstrap RPC (`is_owner` / `is_member`).
+    var yourRooms: [ExploreRoomSuggestion] {
+        yourRoomsItems
+    }
+
+    var displayedDiscoveryRooms: [ExploreRoomSuggestion] {
+        switch discoveryMode {
+        case .yourRooms:
+            return yourRoomsItems
+        case .suggested, .popular:
+            return discoverableRooms
+        }
+    }
+
+    var showsDiscoverySection: Bool {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var hasDiscoverableRooms: Bool {
+        !displayedDiscoveryRooms.isEmpty
+    }
+
+    var showsYourRoomsEmptyState: Bool {
+        discoveryMode == .yourRooms && yourRooms.isEmpty && discoveryPhase == .loaded
+    }
+
+    func consumePresentCreateIfNeeded(phase: Phase) {
+        guard presentCreateOnAppear, !didAutoPresentCreate, phase == .loaded else { return }
+        didAutoPresentCreate = true
+        presentCreateRoom()
+    }
+
+    func selectDiscoveryMode(_ mode: TradeRoomDiscoveryMode) {
+        guard discoveryMode != mode else { return }
+        ExperienceHaptics.play(.selection)
+        discoveryMode = mode
+        discoveryErrorMessage = nil
+        if mode != .yourRooms {
+            Task { await loadHomeBootstrap(forceNetwork: true) }
+        }
+        reconcileDiscoveryModeAfterMembershipChange()
+    }
+
+    func browseSuggestedRooms() {
+        selectDiscoveryMode(.suggested)
+    }
+
+    func selectDiscoveryScope(_ scope: TradeRoomDiscoveryScope) {
+        guard discoveryScope != scope else { return }
+        ExperienceHaptics.play(.selection)
+        discoveryScope = scope
+        Task { await loadHomeBootstrap(forceNetwork: true) }
+    }
+
+    func openDiscoveryRoom(_ room: ExploreRoomSuggestion) {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.open(navigationHost.room(room.id))
+    }
+
+    func joinDiscoveryRoom(_ room: ExploreRoomSuggestion) async {
+        guard let viewerID else { return }
+        let prior = joinState(for: room.id)
+        guard TradeRoomJoinPresentation.isInteractive(prior) else { return }
+
+        let result = await joinCoordinator.performJoinAction(
+            room: room,
+            viewerID: viewerID,
+            rooms: rooms,
+            inboxStore: inboxStore,
+            onDirectJoinSucceeded: { [weak self] in
+                guard let self else { return }
+                SessionMemberRoomsStore.shared.invalidate(viewerID: viewerID)
+                await self.domain.refreshRooms()
+            }
+        )
+
+        if result == .joined {
+            patchDiscoveryRoomJoined(room.id)
+            SessionTradeRoomsDiscoveryStore.shared.invalidate(viewerID: viewerID)
+            await loadHomeBootstrap(forceNetwork: true)
+            reconcileDiscoveryModeAfterMembershipChange()
+        } else if result == .requested {
+            patchDiscoveryRoomRequested(room.id)
+        }
+
+        if let message = joinCoordinator.lastErrorMessage {
+            discoveryErrorMessage = message
+        }
+    }
+
+    func retryDiscovery() {
+        Task { await loadHomeBootstrap(forceNetwork: true) }
+    }
+
+    func joinState(for roomID: RoomID) -> TradeRoomDiscoveryJoinState {
+        if joinedRoomIDs.contains(roomID) { return .joined }
+        let pool = suggestedItems + popularItems
+        guard let room = pool.first(where: { $0.id == roomID }) else {
+            return joinCoordinator.mutationStates[roomID] ?? .idle
+        }
+        return joinCoordinator.effectiveState(
+            for: room,
+            isJoined: false
+        )
+    }
+
+    /// Authoritative ownership from Trade Rooms RPC — never inferred client-side.
+    func isViewerOwner(of room: ExploreRoomSuggestion) -> Bool {
+        room.viewerIsOwner
+    }
+
+    private func patchDiscoveryRoomJoined(_ roomID: RoomID) {
+        patchDiscoverableCollections(roomID: roomID) { room in
+            var updated = room
+            updated.isJoined = true
+            updated.isMember = true
+            updated.viewerJoinRequestState = nil
+            return updated
+        }
+    }
+
+    private func patchDiscoveryRoomRequested(_ roomID: RoomID) {
+        patchDiscoverableCollections(roomID: roomID) { room in
+            var updated = room
+            updated.viewerJoinRequestState = .pending
+            return updated
+        }
+    }
+
+    func applyRoomMetadata(_ room: TradeRoom) {
+        patchAllDiscoveryCollections(roomID: room.id) { suggestion in
+            var updated = suggestion
+            updated.applyMetadata(from: room)
+            return updated
+        }
+    }
+
+    private func patchDiscoverableCollections(
+        roomID: RoomID,
+        transform: (ExploreRoomSuggestion) -> ExploreRoomSuggestion
+    ) {
+        if let index = suggestedItems.firstIndex(where: { $0.id == roomID }) {
+            suggestedItems[index] = transform(suggestedItems[index])
+        }
+        if let index = popularItems.firstIndex(where: { $0.id == roomID }) {
+            popularItems[index] = transform(popularItems[index])
+        }
+    }
+
+    private func patchAllDiscoveryCollections(
+        roomID: RoomID,
+        transform: (ExploreRoomSuggestion) -> ExploreRoomSuggestion
+    ) {
+        if let index = yourRoomsItems.firstIndex(where: { $0.id == roomID }) {
+            yourRoomsItems[index] = transform(yourRoomsItems[index])
+        }
+        patchDiscoverableCollections(roomID: roomID, transform: transform)
+    }
+
     func loadIfNeeded() {
         guard loadTask == nil, phase != .loaded else { return }
         loadTask = Task { await performLoad(forceNetwork: false) }
@@ -109,7 +297,14 @@ final class TradeRoomsHomeViewModel {
     func handleRoomCreated(_ room: TradeRoom) {
         showsCreateRoom = false
         Task {
+            if let viewerID {
+                SessionTradeRoomsDiscoveryStore.shared.invalidate(viewerID: viewerID)
+            }
             await domain.refreshRooms()
+            await loadHomeBootstrap(forceNetwork: true)
+            didApplyInitialDiscoveryMode = false
+            applyInitialDiscoveryModeIfNeeded()
+            discoveryMode = .yourRooms
             openRoom(
                 TradeRoomInboxItem(
                     room: room,
@@ -151,15 +346,21 @@ final class TradeRoomsHomeViewModel {
         ExperienceHaptics.play(.warning)
         guard let viewerID else {
             inboxStore.removeRoom(id: id)
+            reconcileDiscoveryModeAfterMembershipChange()
             return
         }
         if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || id.rawValue.hasPrefix("dev-") {
             inboxStore.removeRoom(id: id)
+            reconcileDiscoveryModeAfterMembershipChange()
             return
         }
         do {
             try await rooms.leave(roomID: id, profileID: viewerID)
             inboxStore.removeRoom(id: id)
+            SessionTradeRoomsDiscoveryStore.shared.invalidate(viewerID: viewerID)
+            yourRoomsItems.removeAll { $0.id == id }
+            await loadHomeBootstrap(forceNetwork: true)
+            reconcileDiscoveryModeAfterMembershipChange()
             ExperienceHaptics.play(.success)
         } catch {
             ExperienceHaptics.play(.warning)
@@ -170,15 +371,112 @@ final class TradeRoomsHomeViewModel {
         if phase != .loaded {
             phase = .loading
         }
-        if forceNetwork {
-            await domain.refreshRooms()
-        } else {
-            await domain.bootstrapRoomsIfNeeded(forceNetwork: false)
+        async let roomsLoad: Void = {
+            if forceNetwork {
+                await domain.refreshRooms()
+            } else {
+                await domain.bootstrapRoomsIfNeeded(forceNetwork: false)
+            }
+        }()
+        async let bootstrapLoad: Void = loadHomeBootstrap(forceNetwork: forceNetwork)
+        _ = await (roomsLoad, bootstrapLoad)
+
+        if viewerID == nil {
+            viewerID = domain.state.viewerID
         }
-        viewerID = domain.state.viewerID
         phase = domain.state.phase
+        applyInitialDiscoveryModeIfNeeded()
+        reconcileDiscoveryModeAfterMembershipChange()
         await domain.retainRealtime()
         loadTask = nil
+    }
+
+    private func applyInitialDiscoveryModeIfNeeded() {
+        guard !didApplyInitialDiscoveryMode else { return }
+        didApplyInitialDiscoveryMode = true
+        discoveryMode = yourRoomsItems.isEmpty ? .suggested : .yourRooms
+        #if DEBUG
+        TradeRoomsHomeBootstrapProbe.initialCategory(discoveryMode)
+        #endif
+    }
+
+    private func reconcileDiscoveryModeAfterMembershipChange() {
+        if discoveryMode == .yourRooms, yourRoomsItems.isEmpty {
+            discoveryMode = .suggested
+        }
+    }
+
+    private func loadHomeBootstrap(forceNetwork: Bool) async {
+        let sessionViewer = await session.currentUserID.map { ProfileID($0.rawValue) }
+        guard let sessionViewer else {
+            discoveryPhase = .loaded
+            return
+        }
+        viewerID = sessionViewer
+
+        if !forceNetwork,
+           discoveryPhase == .loaded,
+           !yourRoomsItems.isEmpty || !suggestedItems.isEmpty || !popularItems.isEmpty
+        {
+            return
+        }
+
+        if MessagesInboxSupport.isLocalDevelopmentProfile(sessionViewer) {
+            let bootstrap: TradeRoomsHomeBootstrap
+            if inboxStore.rooms.isEmpty {
+                bootstrap = TradeRoomsHomeBootstrap(
+                    viewerID: sessionViewer,
+                    scope: discoveryScope,
+                    yourRooms: [],
+                    suggested: [],
+                    popular: []
+                )
+            } else {
+                bootstrap = (try? await explore.tradeRoomsHomeBootstrap(scope: discoveryScope, limit: 20))
+                    ?? TradeRoomsFixtures.homeBootstrap(viewerID: sessionViewer, scope: discoveryScope)
+            }
+            SessionTradeRoomsDiscoveryStore.shared.seed(bootstrap, for: sessionViewer)
+            applyHomeBootstrap(bootstrap, viewerID: sessionViewer)
+            discoveryPhase = .loaded
+            #if DEBUG
+            TradeRoomsHomeBootstrapProbe.bootstrapReturned(bootstrap)
+            #endif
+            return
+        }
+
+        if yourRoomsItems.isEmpty, suggestedItems.isEmpty, popularItems.isEmpty {
+            discoveryPhase = .loading
+        }
+        discoveryErrorMessage = nil
+
+        do {
+            let bootstrap = try await SessionTradeRoomsDiscoveryStore.shared.coalesce(
+                viewerID: sessionViewer,
+                scope: discoveryScope,
+                forceNetwork: forceNetwork
+            ) { [explore, discoveryScope] in
+                try await explore.tradeRoomsHomeBootstrap(scope: discoveryScope, limit: 20)
+            }
+            applyHomeBootstrap(bootstrap, viewerID: sessionViewer)
+            discoveryPhase = .loaded
+            #if DEBUG
+            TradeRoomsHomeBootstrapProbe.bootstrapReturned(bootstrap)
+            #endif
+        } catch {
+            discoveryPhase = .loaded
+            discoveryErrorMessage = ProfileSectionSupport.message(for: error)
+        }
+    }
+
+    private func applyHomeBootstrap(_ bootstrap: TradeRoomsHomeBootstrap, viewerID: ProfileID) {
+        if let bootstrapViewer = bootstrap.viewerID {
+            self.viewerID = bootstrapViewer
+        } else {
+            self.viewerID = viewerID
+        }
+        yourRoomsItems = bootstrap.yourRooms
+        suggestedItems = bootstrap.suggested
+        popularItems = bootstrap.popular
     }
 
     private func buildItems() -> [TradeRoomInboxItem] {

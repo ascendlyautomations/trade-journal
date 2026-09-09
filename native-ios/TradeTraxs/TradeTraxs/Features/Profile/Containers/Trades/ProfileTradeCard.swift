@@ -11,8 +11,13 @@ struct ProfileTradeCard: View {
     let onEdit: () -> Void
     let onDelete: () -> Void
     var onReport: (() -> Void)? = nil
+    var profilePin: ProfilePinCallbacks? = nil
 
     @Environment(\.themeColors) private var colors
+
+    private var isPinnedToProfile: Bool {
+        profilePin?.isPinned(.trade, trade.id.rawValue) ?? false
+    }
 
     private var target: InteractionTarget { .trade(trade.id) }
 
@@ -25,23 +30,34 @@ struct ProfileTradeCard: View {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 Group {
                     if let mediaReference {
-                        HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                            TradeTraxsContentImage(
-                                mediaID: trade.id.rawValue,
+                        ProfileCompactCardMediaSection {
+                            ProfileCompactMediaThumbnail(
                                 reference: mediaReference,
                                 purpose: .tradeScreenshot,
-                                imagePipeline: imagePipeline,
-                                surface: .profile,
-                                fixedSize: CGSize(width: 96, height: 96)
+                                imagePipeline: imagePipeline
                             )
-                            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
                             .accessibilityHidden(true)
+                        } metadata: {
+                            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                                tradeSummaryColumn
 
-                            tradeSummaryColumn
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                if let note = trade.notePreview, !note.isEmpty {
+                                    Text(note)
+                                        .experienceStyle(.footnote, color: colors.secondaryText)
+                                        .lineLimit(2)
+                                }
+                            }
                         }
                     } else {
-                        tradeSummaryColumn
+                        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                            tradeSummaryColumn
+
+                            if let note = trade.notePreview, !note.isEmpty {
+                                Text(note)
+                                    .experienceStyle(.footnote, color: colors.secondaryText)
+                                    .lineLimit(2)
+                            }
+                        }
                     }
                 }
                 .contentShape(Rectangle())
@@ -50,18 +66,6 @@ struct ProfileTradeCard: View {
                     store: engagementStore,
                     onSingleTap: onOpen
                 )
-
-                if let note = trade.notePreview, !note.isEmpty {
-                    Text(note)
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                        .lineLimit(2)
-                        .contentShape(Rectangle())
-                        .experienceDoubleTapLike(
-                            target: target,
-                            store: engagementStore,
-                            onSingleTap: onOpen
-                        )
-                }
 
                 EngagementBar(
                     target: target,
@@ -81,6 +85,25 @@ struct ProfileTradeCard: View {
                 onReport: onReport,
                 onEdit: showsOwnerActions ? onEdit : nil,
                 onDelete: showsOwnerActions ? onDelete : nil,
+                onPin: profilePin.map { pin in
+                    {
+                        pin.requestPin(
+                            .trade,
+                            trade.id.rawValue,
+                            ProfilePinnedPreviewBuilder.from(trade: trade)
+                        )
+                    }
+                },
+                onUnpin: profilePin.map { pin in
+                    {
+                        pin.requestPin(
+                            .trade,
+                            trade.id.rawValue,
+                            ProfilePinnedPreviewBuilder.from(trade: trade)
+                        )
+                    }
+                },
+                isPinnedToProfile: isPinnedToProfile,
                 accessibilityIdentifier: "profile.trade.overflow.\(trade.id.rawValue)"
             )
             .padding(ExperienceSpacing.xxs)

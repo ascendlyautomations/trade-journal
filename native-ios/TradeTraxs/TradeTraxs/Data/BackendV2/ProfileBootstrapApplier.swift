@@ -82,6 +82,10 @@ nonisolated enum ProfileBootstrapApplier {
             ViewerActiveStoryStore.shared.sync(viewerID: profileID, stories: mappedStories)
         }
 
+        state.pinnedContent = ProfilePinnedContentRepository.mapPins(
+            from: bootstrap.data.pinned_content
+        )
+
         state.phase = .loaded
         state.didBootstrap = true
         state.errorMessage = nil

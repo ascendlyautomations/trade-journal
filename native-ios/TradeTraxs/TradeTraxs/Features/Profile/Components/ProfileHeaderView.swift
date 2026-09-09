@@ -47,6 +47,9 @@ struct ProfileHeaderView: View {
                 viewModel.pendingUnfollowConfirm = false
             }
         }
+        .onAppear {
+            store.consumeCreatedRoomFromIntent()
+        }
     }
 
     @ViewBuilder

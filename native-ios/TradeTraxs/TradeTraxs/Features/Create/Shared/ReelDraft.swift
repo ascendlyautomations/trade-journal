@@ -3,6 +3,10 @@ import UIKit
 
 /// Local-only clip draft. Upload + `reels` insert happen on publish / Save Trade.
 struct ReelDraft: Equatable {
+    var selectionID: String
+    /// App-owned source kept until publish / replace / dismiss.
+    var ownedSourceURL: URL?
+    /// Transcoded delivery file used for upload + preview.
     var localVideoURL: URL
     var contentType: String
     var byteCount: Int
@@ -22,7 +26,9 @@ struct ReelDraft: Equatable {
     }
 
     static func == (lhs: ReelDraft, rhs: ReelDraft) -> Bool {
-        lhs.localVideoURL == rhs.localVideoURL
+        lhs.selectionID == rhs.selectionID
+            && lhs.ownedSourceURL == rhs.ownedSourceURL
+            && lhs.localVideoURL == rhs.localVideoURL
             && lhs.contentType == rhs.contentType
             && lhs.byteCount == rhs.byteCount
             && lhs.durationSeconds == rhs.durationSeconds

@@ -6,6 +6,7 @@ import UIKit
 /// Optional double-tap Like uses a non-cancelling recognizer so controls keep working.
 struct ClipPlayerView: UIViewControllerRepresentable {
     let player: AVPlayer
+    var videoGravity: AVLayerVideoGravity = .resizeAspect
     var onDoubleTapLike: (() -> Void)? = nil
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
@@ -13,7 +14,7 @@ struct ClipPlayerView: UIViewControllerRepresentable {
         controller.player = player
         controller.showsPlaybackControls = true
         controller.allowsPictureInPicturePlayback = true
-        controller.videoGravity = .resizeAspect
+        controller.videoGravity = videoGravity
         context.coordinator.attachDoubleTap(to: controller)
         return controller
     }
@@ -21,6 +22,9 @@ struct ClipPlayerView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
         if controller.player !== player {
             controller.player = player
+        }
+        if controller.videoGravity != videoGravity {
+            controller.videoGravity = videoGravity
         }
         context.coordinator.onDoubleTapLike = onDoubleTapLike
         context.coordinator.attachDoubleTap(to: controller)

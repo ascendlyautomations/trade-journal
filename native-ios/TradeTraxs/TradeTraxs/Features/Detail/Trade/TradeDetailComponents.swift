@@ -373,12 +373,12 @@ struct TradeDetailTickerHistorySection: View {
     }
 
     private var summaryMetricsLine: String {
-        var parts: [String] = ["\(history.previousTradeCount) Previous Trades"]
+        var parts: [String] = ["\(NumberDisplay.integer(history.previousTradeCount)) Previous Trades"]
         if let winRate = history.winRate {
-            parts.append(String(format: "%.0f%% Win", NSDecimalNumber(decimal: winRate * 100).doubleValue))
+            parts.append("\(NumberDisplay.percent(NSDecimalNumber(decimal: winRate * 100).doubleValue, minimumFractionDigits: 0, maximumFractionDigits: 0)) Win")
         }
         if let profitFactor = history.profitFactor {
-            parts.append(String(format: "%.1f PF", NSDecimalNumber(decimal: profitFactor).doubleValue))
+            parts.append("\(NumberDisplay.decimal(profitFactor, minimumFractionDigits: 1, maximumFractionDigits: 1)) PF")
         }
         parts.append(TradeDisplay.pnlText(Money(amount: history.totalPnL)))
         return parts.joined(separator: " · ")

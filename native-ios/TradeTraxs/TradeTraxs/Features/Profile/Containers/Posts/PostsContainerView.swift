@@ -5,6 +5,7 @@ struct PostsContainerView: View {
     let imagePipeline: any ImagePipeline
     @Bindable var engagementStore: EngagementStore
     @Bindable var vaultStore: VaultStore
+    var profilePin: ProfilePinCallbacks? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
@@ -24,7 +25,8 @@ struct PostsContainerView: View {
                         vaultStore: vaultStore,
                         onOpen: { viewModel.openPost(post) },
                         isOwner: viewModel.isOwner,
-                        onReport: reportAction(for: post)
+                        onReport: reportAction(for: post),
+                        profilePin: profilePin
                     )
                     .transition(
                         reduceMotion

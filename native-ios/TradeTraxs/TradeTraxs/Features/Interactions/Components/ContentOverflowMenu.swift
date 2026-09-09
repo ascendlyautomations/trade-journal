@@ -10,6 +10,9 @@ struct ContentOverflowMenu: View {
     var deleteTitle: String = "Delete"
     var onEdit: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
+    var onPin: (() -> Void)? = nil
+    var onUnpin: (() -> Void)? = nil
+    var isPinnedToProfile = false
     var foregroundColor: Color? = nil
     var accessibilityIdentifier: String = "content.overflow"
 
@@ -18,7 +21,7 @@ struct ContentOverflowMenu: View {
     private var showsMenu: Bool {
         if onAddToVault != nil || onManageInVault != nil { return true }
         if !isOwner, onReport != nil { return true }
-        if isOwner, onEdit != nil || onDelete != nil { return true }
+        if isOwner, onEdit != nil || onDelete != nil || onPin != nil || onUnpin != nil { return true }
         return false
     }
 
@@ -45,6 +48,17 @@ struct ContentOverflowMenu: View {
                 }
 
                 if isOwner {
+                    if isPinnedToProfile, let onUnpin {
+                        Button("Unpin from Profile", systemImage: "pin.slash") {
+                            ExperienceHaptics.play(.selection)
+                            onUnpin()
+                        }
+                    } else if let onPin {
+                        Button("Pin to Profile", systemImage: "pin") {
+                            ExperienceHaptics.play(.selection)
+                            onPin()
+                        }
+                    }
                     if let onEdit {
                         Button(editTitle, systemImage: "pencil", action: onEdit)
                     }

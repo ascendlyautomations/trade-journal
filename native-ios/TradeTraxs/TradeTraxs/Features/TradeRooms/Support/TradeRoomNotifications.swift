@@ -6,3 +6,13 @@ extension Notification.Name {
     /// Posted when channel list or channel metadata changes. Object: `RoomID`.
     static let tradeRoomChannelsDidChange = Notification.Name("tradeRoomChannelsDidChange")
 }
+
+enum TradeRoomNotificationKey {
+    static let metadataRoom = "tradeRoomMetadataRoom"
+}
+
+extension Notification {
+    var tradeRoomMetadataPayload: TradeRoom? {
+        userInfo?[TradeRoomNotificationKey.metadataRoom] as? TradeRoom
+    }
+}

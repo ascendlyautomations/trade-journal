@@ -65,6 +65,8 @@ enum FeedBootstrapLoader {
     enum LoaderError: Error, Sendable {
         case flagOff
         case rpcUnavailable
+        /// Filter reload cache-only pass — no session snapshot for this filter yet.
+        case cacheMissSkipped
     }
 
     @MainActor
@@ -80,12 +82,15 @@ enum FeedBootstrapLoader {
         profiles: any ProfileRepository,
         achievements: any AchievementRepository,
         detailCache: DetailPresentationCache,
-        forceNetwork: Bool
+        forceNetwork: Bool,
+        allowNetwork: Bool = true
     ) async throws -> (
         entries: [FeedTimelineEntry],
         nextCursor: String?,
         stories: [Story],
-        engagement: [InteractionTarget: EngagementSnapshot]
+        engagement: [InteractionTarget: EngagementSnapshot],
+        pendingHydrationItems: [FeedItem],
+        feedItemOrder: [String]
     ) {
         guard BackendV2FeatureFlags.isEnabled(.feed) else {
             throw LoaderError.flagOff
@@ -108,7 +113,7 @@ enum FeedBootstrapLoader {
             )
             #endif
             await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
-            return (cached.entries, cached.nextCursor, cached.stories, [:])
+            return (cached.entries, cached.nextCursor, cached.stories, [:], [], [])
         }
 
         #if DEBUG
@@ -122,6 +127,10 @@ enum FeedBootstrapLoader {
             )
         }
         #endif
+
+        guard allowNetwork else {
+            throw LoaderError.cacheMissSkipped
+        }
 
         let rpcName = BackendV2Versioning.RPCName.feed.rawValue
         if await BackendV2RpcAvailability.shared.isUnavailable(rpcName: rpcName, viewerID: viewerID.rawValue) {
@@ -137,18 +146,26 @@ enum FeedBootstrapLoader {
 
         let bootstrap: FeedBootstrapV1
         do {
-            let data = try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
-                let repo = FeedRpcBootstrapRepository(rpc: rpc)
-                let value = try await repo.loadFeedBootstrap(
-                    scope: scope.rawValue,
-                    contentFilter: contentFilter.rpcValue,
-                    cursor: cursor,
-                    limit: limit
-                )
-                return try JSONEncoder().encode(value)
+            let data = try await BootstrapTransportTimeout.run {
+                try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
+                    let repo = FeedRpcBootstrapRepository(rpc: rpc)
+                    let value = try await repo.loadFeedBootstrap(
+                        scope: scope.rawValue,
+                        contentFilter: contentFilter.rpcValue,
+                        cursor: cursor,
+                        limit: limit
+                    )
+                    return try JSONEncoder().encode(value)
+                }
             }
             bootstrap = try JSONDecoder().decode(FeedBootstrapV1.self, from: data)
         } catch {
+            if cursor == nil,
+               let cached = FeedSessionStore.shared.restore(key: cacheKey)
+            {
+                await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
+                return (cached.entries, cached.nextCursor, cached.stories, [:], [], [])
+            }
             if BackendV2RpcCompat.isRpcUnavailable(error, rpcName: rpcName) {
                 await BackendV2RpcAvailability.shared.markUnavailable(rpcName: rpcName, viewerID: viewerID.rawValue)
                 throw LoaderError.rpcUnavailable
@@ -168,27 +185,22 @@ enum FeedBootstrapLoader {
             ids: followingIDs,
             viewer: viewerID
         )
+        #if DEBUG
+        FeedProgressiveRenderProbe.recordBootstrapDecoded(count: applied.items.count)
+        #endif
+
+        let feedItemOrder = applied.items.filter { $0.kind != .story }.map(\.id)
         var entries = FeedSupport.sortDescending(
             FeedBootstrap.buildEntriesFromSeededItems(applied.items, detailCache: detailCache)
         )
 
-        if entries.count < applied.items.count {
-            let builtIDs = Set(entries.map(\.id))
-            let missing = applied.items.filter { !builtIDs.contains($0.id) }
-            if !missing.isEmpty {
-                #if DEBUG
-                FeedRpcLoadProbe.recordNetworkHydrate()
-                #endif
-                let hydrated = await FeedBootstrap.hydrate(
-                    missing,
-                    feed: feed,
-                    trades: trades,
-                    profiles: profiles,
-                    achievements: achievements,
-                    detailCache: detailCache
-                )
-                entries = FeedSupport.sortDescending(entries + hydrated)
-            }
+        #if DEBUG
+        FeedProgressiveRenderProbe.recordRowsPublished(count: entries.count)
+        #endif
+
+        let builtIDs = Set(entries.map(\.id))
+        let pendingHydrationItems = applied.items.filter {
+            $0.kind != .story && !builtIDs.contains($0.id)
         }
 
         if cursor == nil {
@@ -203,6 +215,13 @@ enum FeedBootstrapLoader {
             )
         }
 
-        return (entries, applied.nextCursor, applied.stories, applied.engagementByTarget)
+        return (
+            entries,
+            applied.nextCursor,
+            applied.stories,
+            applied.engagementByTarget,
+            pendingHydrationItems,
+            feedItemOrder
+        )
     }
 }

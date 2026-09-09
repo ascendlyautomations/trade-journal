@@ -23,7 +23,44 @@ enum ActivityNotificationRouting {
                 rawUserInfo: ["type": notification.kind.rawValue]
             )
 
-        case .roomJoin, .roomMention:
+        case .tradeRoomJoinRequest:
+            return NotificationDestination(
+                category: .activity,
+                threadID: nil,
+                tradeID: nil,
+                postID: nil,
+                reelID: nil,
+                profileID: notification.actorProfileID,
+                conversationID: nil,
+                roomID: notification.roomID,
+                reportID: nil,
+                rawUserInfo: [
+                    "type": notification.kind.rawValue,
+                    "join_request_id": notification.joinRequestID ?? "",
+                    "room_slug": notification.roomSlug ?? "",
+                    "room_name": notification.roomName ?? "",
+                ]
+            )
+
+        case .tradeRoomJoinDeclined:
+            return NotificationDestination(
+                category: .activity,
+                threadID: nil,
+                tradeID: nil,
+                postID: nil,
+                reelID: nil,
+                profileID: notification.actorProfileID,
+                conversationID: nil,
+                roomID: notification.roomID,
+                reportID: nil,
+                rawUserInfo: [
+                    "type": notification.kind.rawValue,
+                    "room_slug": notification.roomSlug ?? "",
+                    "room_name": notification.roomName ?? "",
+                ]
+            )
+
+        case .roomJoin, .roomMention, .tradeRoomJoinAccepted:
             return NotificationDestination(
                 category: notification.kind == .roomMention ? .roomMention : .roomMessage,
                 threadID: notification.roomMessageID?.rawValue,
@@ -146,6 +183,18 @@ enum ActivityNotificationRouting {
         switch notification.kind {
         case .followRequest:
             return .profile(.followRequests)
+
+        case .tradeRoomJoinRequest:
+            if let joinRequestID = notification.joinRequestID, !joinRequestID.isEmpty {
+                return .profile(.tradeRoomJoinRequest(joinRequestID))
+            }
+            return .profile(.activity)
+
+        case .tradeRoomJoinAccepted, .tradeRoomJoinDeclined:
+            if let roomID = notification.roomID {
+                return .profile(.room(roomID))
+            }
+            return .profile(.rooms)
 
         case .follow, .followRequestAccepted:
             if let profileID = notification.actorProfileID {

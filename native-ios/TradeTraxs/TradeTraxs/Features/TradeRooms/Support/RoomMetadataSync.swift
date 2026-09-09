@@ -12,7 +12,12 @@ enum RoomMetadataSync {
         if let viewerID, room.ownerProfileID == viewerID {
             detailCache.seedOwnedTradeRoom(room, for: viewerID)
         }
-        NotificationCenter.default.post(name: .tradeRoomMetadataDidChange, object: room.id)
+        ExploreSessionStore.shared.applyRoomMetadata(from: room)
+        NotificationCenter.default.post(
+            name: .tradeRoomMetadataDidChange,
+            object: room.id,
+            userInfo: [TradeRoomNotificationKey.metadataRoom: room]
+        )
     }
 
     static func channelsDidChange(roomID: RoomID) {

@@ -47,7 +47,7 @@ struct DashboardWinLossRingView: View {
                         .accessibilityHidden(true)
 
                         VStack(spacing: 2) {
-                            Text(String(format: "%.0f%%", winRate * 100))
+                            Text(NumberDisplay.percent(winRate * 100, minimumFractionDigits: 0, maximumFractionDigits: 0))
                                 .font(.system(.title2, design: .rounded).weight(.bold).monospacedDigit())
                                 .foregroundStyle(colors.primaryText)
                                 .contentTransition(.numericText())
@@ -60,18 +60,18 @@ struct DashboardWinLossRingView: View {
                         legendButton(
                             symbol: "W",
                             title: "Wins",
-                            value: "\(winCount)",
+                            value: NumberDisplay.integer(winCount),
                             color: colors.profit,
                             action: onSelectWins
                         )
                         legendButton(
                             symbol: "L",
                             title: "Losses",
-                            value: "\(lossCount)",
+                            value: NumberDisplay.integer(lossCount),
                             color: colors.loss,
                             action: onSelectLosses
                         )
-                        Text("\(total) closed outcomes")
+                        Text("\(NumberDisplay.integer(total)) closed outcomes")
                             .experienceStyle(.caption2, color: colors.tertiaryText)
                     }
                     Spacer(minLength: 0)
@@ -228,11 +228,7 @@ struct DashboardWeekdayHeatmapView: View {
     }
 
     private func moneyLabel(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        NumberDisplay.chartCurrency(value)
     }
 }
 
@@ -391,22 +387,11 @@ struct DashboardHourTimelineView: View {
     }
 
     private func signedMoney(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 0
-        let absText = formatter.string(from: NSNumber(value: abs(value))) ?? "\(abs(value))"
-        if value > 0.01 { return "+\(absText)" }
-        if value < -0.01 { return "−\(absText)" }
-        return absText
+        NumberDisplay.chartSignedCurrency(value)
     }
 
     private func moneyLabel(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        NumberDisplay.chartCurrency(value)
     }
 }
 
@@ -456,7 +441,7 @@ struct DashboardLongShortDonutView: View {
                     .accessibilityHidden(true)
 
                     VStack(spacing: 2) {
-                        Text("\(total)")
+                        Text(NumberDisplay.integer(total))
                             .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
                             .foregroundStyle(colors.primaryText)
                             .contentTransition(.numericText())
@@ -501,7 +486,7 @@ struct DashboardLongShortDonutView: View {
                     Circle().fill(swatch).frame(width: 8, height: 8)
                     Text(title)
                         .experienceStyle(.callout, color: colors.primaryText)
-                    Text("· \(count)")
+                    Text("· \(NumberDisplay.integer(count))")
                         .experienceStyle(.caption, color: colors.secondaryText)
                         .contentTransition(.numericText())
                 }
@@ -520,14 +505,7 @@ struct DashboardLongShortDonutView: View {
     }
 
     private func signedMoney(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 0
-        let absStr = formatter.string(from: NSNumber(value: abs(value))) ?? "$0"
-        if value > 0 { return "+\(absStr)" }
-        if value < 0 { return "−\(absStr)" }
-        return absStr
+        NumberDisplay.chartSignedCurrency(value)
     }
 }
 
@@ -721,11 +699,7 @@ struct DashboardUnderwaterDrawdownView: View {
     }
 
     private func axisMoney(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        NumberDisplay.chartCurrency(value)
     }
 }
 

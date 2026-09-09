@@ -5,6 +5,7 @@ struct AchievementsContainerView: View {
     let imagePipeline: any ImagePipeline
     let engagementStore: EngagementStore
     let vaultStore: VaultStore
+    var profilePin: ProfilePinCallbacks? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
@@ -24,7 +25,8 @@ struct AchievementsContainerView: View {
                         vaultStore: vaultStore,
                         onOpen: { viewModel.openAchievement(achievement) },
                         isOwner: viewModel.isOwner,
-                        onReport: reportAction(for: achievement)
+                        onReport: reportAction(for: achievement),
+                        profilePin: profilePin
                     )
                     .transition(
                         reduceMotion

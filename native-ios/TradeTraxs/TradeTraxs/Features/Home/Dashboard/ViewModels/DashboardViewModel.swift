@@ -131,7 +131,7 @@ final class DashboardViewModel {
             DashboardMetricChip(
                 id: "rr",
                 label: "Avg RR",
-                value: summary.averageRR.map { String(format: "%.2f", NSDecimalNumber(decimal: $0).doubleValue) } ?? "—",
+                value: summary.averageRR.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—",
                 tone: .neutral
             ),
             DashboardMetricChip(
@@ -826,8 +826,10 @@ final class DashboardViewModel {
         let value = NSDecimalNumber(decimal: amount).doubleValue
         if value >= 1_000 {
             let k = value / 1_000
-            if k.rounded() == k { return "\(Int(k))K" }
-            return String(format: "%.1fK", k)
+            if k.rounded() == k {
+                return "\(NumberDisplay.integer(Int(k)))K"
+            }
+            return "\(NumberDisplay.decimal(k, minimumFractionDigits: 1, maximumFractionDigits: 1))K"
         }
         return DashboardViewModel.money(amount)
     }
@@ -1104,27 +1106,42 @@ final class DashboardViewModel {
         forceNetwork: Bool
     ) async {
         guard !accountIDs.isEmpty else { return }
-        let repository = trades
-        await withTaskGroup(of: (TradingAccountID, [AccountPayoutCycle]?).self) { group in
-            for accountID in accountIDs {
-                group.addTask { @MainActor in
-                    do {
-                        let cycles = try await SessionPayoutCyclesStore.shared.cycles(
-                            for: accountID,
-                            profileID: profileID,
-                            repository: repository,
-                            forceNetwork: forceNetwork
-                        )
-                        return (accountID, cycles)
-                    } catch {
-                        return (accountID, nil)
-                    }
-                }
+
+        var pending: [TradingAccountID] = []
+        for accountID in accountIDs {
+            if !forceNetwork,
+               let cached = SessionPayoutCyclesStore.shared.cached(for: accountID, profileID: profileID)
+            {
+                payoutCyclesByAccount[accountID] = cached
+            } else {
+                pending.append(accountID)
             }
-            for await (accountID, cycles) in group {
-                if let cycles {
-                    payoutCyclesByAccount[accountID] = cycles
-                }
+        }
+        guard !pending.isEmpty else { return }
+
+        let started = CFAbsoluteTimeGetCurrent()
+        do {
+            let cycles = try await trades.payoutCycleHistory(for: pending)
+            var grouped: [TradingAccountID: [AccountPayoutCycle]] = [:]
+            for accountID in pending {
+                grouped[accountID] = []
+            }
+            for cycle in cycles {
+                grouped[cycle.accountID, default: []].append(cycle)
+            }
+            for (accountID, accountCycles) in grouped {
+                payoutCyclesByAccount[accountID] = accountCycles
+                SessionPayoutCyclesStore.shared.seed(accountCycles, for: accountID, profileID: profileID)
+            }
+            PayoutBatchDiagnostics.logCycles(
+                accounts: pending.count,
+                requests: 1,
+                cycles: cycles.count,
+                dtMs: Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+            )
+        } catch {
+            for accountID in pending {
+                payoutCyclesByAccount[accountID] = []
             }
         }
     }
@@ -1232,7 +1249,6 @@ final class DashboardViewModel {
     }
 
     static func factor(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
-        return String(format: "%.2f", NSDecimalNumber(decimal: value).doubleValue)
+        NumberDisplay.factor(value)
     }
 }

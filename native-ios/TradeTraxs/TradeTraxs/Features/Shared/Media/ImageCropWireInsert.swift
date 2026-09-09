@@ -1,7 +1,7 @@
 import Foundation
 
 /// Shared insert fallback when `image_crop` jsonb columns are not deployed yet.
-enum ImageCropWireInsert {
+nonisolated enum ImageCropWireInsert {
     static let migrationHint = "Apply supabase/migrations/20260907160000_content_image_crop.sql"
 
     /// Feed post row created when a trade is shared publicly (`posts` insert).

@@ -30,6 +30,12 @@ final class FeedStoriesCatalogStore {
         catalog.removeAll { $0.id == id }
     }
 
+    func invalidate() {
+        catalog = []
+        viewerID = nil
+        hasFullCatalog = false
+    }
+
     var storiesByAuthor: [ProfileID: [Story]] {
         ActiveStorySemantics.groupByAuthor(catalog)
     }

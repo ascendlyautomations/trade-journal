@@ -73,6 +73,11 @@ final class SessionBootstrapStore {
         last = nil
         source = nil
     }
+
+    /// Authoritative platform admin flag from session bootstrap (`admin_users` → `entitlement.flags.is_admin`).
+    var isPlatformAdmin: Bool {
+        last?.data.viewer.entitlement.flags["is_admin"] == true
+    }
 }
 
 struct SessionBootstrapLoadResult: Sendable {
@@ -90,6 +95,10 @@ enum SessionBootstrapLoader {
         subsystem: "com.tradetraxs.TradeTraxs",
         category: "BackendV2.Session"
     )
+
+    /// Receives the single authoritative network refresh commit (not cache-only loads).
+    @MainActor
+    weak static var refreshCommitObserver: (any SessionBootstrapRefreshObserving)?
 
     /// Flag ON — cache → single RPC → controlled legacy fallback.
     @MainActor
@@ -113,21 +122,40 @@ enum SessionBootstrapLoader {
         }
 
         let uid = viewerID.rawValue
+        let cacheInspection = SessionWarmStartProbe.inspectSessionDiskCache(viewerID: uid)
+        SessionWarmStartProbe.log(cacheInspection, userID: uid, forceNetwork: forceNetwork)
 
         if !forceNetwork, let cached = BackendV2BootstrapDiskCache.loadSession(viewerID: uid) {
+            #if DEBUG
+            SessionWarmStartProbe.warmStartTrace("cacheValidated")
+            SessionWarmStartProbe.warmStartTrace("cacheApplyStarted")
+            #endif
             let applied = try await SessionBootstrapApplier.apply(
                 cached.bootstrap,
                 expectedViewerID: uid,
                 detailCache: detailCache
             )
-            let stats = try await resolveHeaderStats(
+            #if DEBUG
+            SessionWarmStartProbe.warmStartTrace("cacheApplyCompleted")
+            #endif
+            let stats = resolveHeaderStatsFromCacheOnly(
                 profileID: viewerID,
                 partial: applied.stats,
+                detailCache: detailCache
+            )
+            #if DEBUG
+            SessionWarmStartProbe.warmStartTrace("shellReleaseStarted")
+            #endif
+            logPath(cached.freshness == .fresh ? .cache_fresh : .cache_stale_revalidate)
+            scheduleBackgroundHeaderStatsHydration(
+                profileID: viewerID,
                 profiles: profiles,
                 detailCache: detailCache
             )
-            logPath(cached.freshness == .fresh ? .cache_fresh : .cache_stale_revalidate)
             if cached.freshness == .softStale {
+                #if DEBUG
+                SessionWarmStartProbe.warmStartTrace("revalidateScheduled")
+                #endif
                 Task { @MainActor in
                     await revalidateIfCurrent(
                         viewerID: viewerID,
@@ -139,6 +167,9 @@ enum SessionBootstrapLoader {
                     )
                 }
             }
+            #if DEBUG
+            SessionWarmStartProbe.warmStartTrace("shellReleased")
+            #endif
             return SessionBootstrapLoadResult(
                 profile: applied.profile,
                 stats: stats,
@@ -160,34 +191,49 @@ enum SessionBootstrapLoader {
         }
 
         do {
-            let bootstrap = try await fetchRPC(viewerID: uid, rpc: rpc)
+            let fetched = try await fetchRPC(viewerID: uid, rpc: rpc)
             guard currentGeneration() == loadGeneration, !Task.isCancelled else {
                 throw CancellationError()
             }
-            BackendV2RpcStageTracer.trace(rpcName, stage: "state.apply.started", correlation: uid.prefix(8).description)
-            let applied = try await SessionBootstrapApplier.apply(
-                bootstrap,
-                expectedViewerID: uid,
-                detailCache: detailCache
-            )
-            BackendV2RpcStageTracer.trace(rpcName, stage: "state.apply.completed", correlation: uid.prefix(8).description)
-            let stats = try await resolveHeaderStats(
-                profileID: viewerID,
-                partial: applied.stats,
+            guard await SessionBootstrapRefreshCommit.shared.shouldCommit(
+                slotID: fetched.slotID,
+                viewerID: uid
+            ) else {
+                #if DEBUG
+                logger.debug(
+                    "session bootstrap commit skipped slot=\(fetched.slotID.uuidString.prefix(8), privacy: .public)"
+                )
+                #endif
+                let applied = try SessionBootstrapApplier.mapApplied(
+                    fetched.bootstrap,
+                    expectedViewerID: uid
+                )
+                let stats = resolveHeaderStatsFromCacheOnly(
+                    profileID: viewerID,
+                    partial: applied.stats,
+                    detailCache: detailCache
+                )
+                scheduleBackgroundHeaderStatsHydration(
+                    profileID: viewerID,
+                    profiles: profiles,
+                    detailCache: detailCache
+                )
+                return SessionBootstrapLoadResult(
+                    profile: applied.profile,
+                    stats: stats,
+                    onboardingSnapshot: applied.onboardingSnapshot,
+                    path: .v2_rpc,
+                    rpcRequestCount: 0,
+                    usedLegacyREST: false
+                )
+            }
+            return try await commitNetworkBootstrap(
+                bootstrap: fetched.bootstrap,
+                viewerID: viewerID,
+                uid: uid,
                 profiles: profiles,
-                detailCache: detailCache
-            )
-            BackendV2RpcStageTracer.trace(rpcName, stage: "cache.write.started", correlation: uid.prefix(8).description)
-            BackendV2BootstrapDiskCache.saveSession(bootstrap, viewerID: uid)
-            BackendV2RpcStageTracer.trace(rpcName, stage: "cache.write.completed", correlation: uid.prefix(8).description)
-            logPath(.v2_rpc)
-            return SessionBootstrapLoadResult(
-                profile: applied.profile,
-                stats: stats,
-                onboardingSnapshot: applied.onboardingSnapshot,
-                path: .v2_rpc,
-                rpcRequestCount: 1,
-                usedLegacyREST: false
+                detailCache: detailCache,
+                notifyObserver: true
             )
         } catch {
             if BackendV2RpcCompat.isRpcUnavailable(error, rpcName: rpcName) {
@@ -206,9 +252,13 @@ enum SessionBootstrapLoader {
                     expectedViewerID: uid,
                     detailCache: detailCache
                 )
-                let stats = try await resolveHeaderStats(
+                let stats = resolveHeaderStatsFromCacheOnly(
                     profileID: viewerID,
                     partial: applied.stats,
+                    detailCache: detailCache
+                )
+                scheduleBackgroundHeaderStatsHydration(
+                    profileID: viewerID,
                     profiles: profiles,
                     detailCache: detailCache
                 )
@@ -251,17 +301,95 @@ enum SessionBootstrapLoader {
         }
     }
 
-    private static func fetchRPC(viewerID: String, rpc: any RPCClient) async throws -> SessionBootstrapV1 {
+    private struct FetchedRPC: Sendable {
+        var bootstrap: SessionBootstrapV1
+        var slotID: UUID
+    }
+
+    private static func fetchRPC(viewerID: String, rpc: any RPCClient) async throws -> FetchedRPC {
         let flightKey = BackendV2FlightKeys.session(viewerID: viewerID)
         let repo = SessionRpcBootstrapRepository(rpc: rpc)
-        let data = try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
-            let bootstrap = try await repo.loadSessionBootstrap()
-            return try JSONEncoder().encode(bootstrap)
+        let flight = try await BootstrapTransportTimeout.run {
+            try await BackendV2SingleFlight.shared.coalesceWithSlot(key: flightKey) {
+                let bootstrap = try await repo.loadSessionBootstrap()
+                return try JSONEncoder().encode(bootstrap)
+            }
         }
         do {
-            return try JSONDecoder().decode(SessionBootstrapV1.self, from: data)
+            let bootstrap = try JSONDecoder().decode(SessionBootstrapV1.self, from: flight.data)
+            return FetchedRPC(bootstrap: bootstrap, slotID: flight.slotID)
         } catch {
             throw BackendV2RPCError.decode("session bootstrap decode failed")
+        }
+    }
+
+    @MainActor
+    private static func commitNetworkBootstrap(
+        bootstrap: SessionBootstrapV1,
+        viewerID: ProfileID,
+        uid: String,
+        profiles: any ProfileRepository,
+        detailCache: DetailPresentationCache?,
+        notifyObserver: Bool
+    ) async throws -> SessionBootstrapLoadResult {
+        BackendV2RpcStageTracer.trace(rpcName, stage: "state.apply.started", correlation: uid.prefix(8).description)
+        let applied = try await SessionBootstrapApplier.apply(
+            bootstrap,
+            expectedViewerID: uid,
+            detailCache: detailCache
+        )
+        BackendV2RpcStageTracer.trace(rpcName, stage: "state.apply.completed", correlation: uid.prefix(8).description)
+        let stats = try await resolveHeaderStats(
+            profileID: viewerID,
+            partial: applied.stats,
+            profiles: profiles,
+            detailCache: detailCache
+        )
+        BackendV2RpcStageTracer.trace(rpcName, stage: "cache.write.started", correlation: uid.prefix(8).description)
+        BackendV2BootstrapDiskCache.saveSession(bootstrap, viewerID: uid)
+        BackendV2RpcStageTracer.trace(rpcName, stage: "cache.write.completed", correlation: uid.prefix(8).description)
+        logPath(.v2_rpc)
+        let result = SessionBootstrapLoadResult(
+            profile: applied.profile,
+            stats: stats,
+            onboardingSnapshot: applied.onboardingSnapshot,
+            path: .v2_rpc,
+            rpcRequestCount: 1,
+            usedLegacyREST: false
+        )
+        if notifyObserver, let refreshCommitObserver {
+            await refreshCommitObserver.sessionBootstrapDidCommitNetworkRefresh(result)
+        }
+        return result
+    }
+
+    /// Cache / in-memory only — never blocks warm-start on REST header aggregation.
+    @MainActor
+    private static func resolveHeaderStatsFromCacheOnly(
+        profileID: ProfileID,
+        partial: ProfileStats,
+        detailCache: DetailPresentationCache?
+    ) -> ProfileStats {
+        if partial.hasLoadedHeaderMetrics {
+            detailCache?.seed(stats: partial)
+            return partial
+        }
+        if let cached = detailCache?.stats(for: profileID), cached.hasLoadedHeaderMetrics {
+            return cached
+        }
+        detailCache?.seed(stats: partial)
+        return partial
+    }
+
+    @MainActor
+    private static func scheduleBackgroundHeaderStatsHydration(
+        profileID: ProfileID,
+        profiles: any ProfileRepository,
+        detailCache: DetailPresentationCache?
+    ) {
+        Task { @MainActor in
+            guard let loaded = try? await profiles.stats(for: profileID) else { return }
+            detailCache?.seed(stats: loaded)
         }
     }
 

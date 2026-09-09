@@ -168,7 +168,7 @@ final class DetailExperienceTests: XCTestCase {
 }
 
 private struct StubObjectStorage: ObjectStorageProviding {
-    func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String {
+    func upload(bucket: String, path: String, data: Data, contentType: String, cacheControl: String? = nil) async throws -> String {
         path
     }
 

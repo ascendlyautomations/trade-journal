@@ -292,8 +292,32 @@ struct PayoutsScreenView: View {
 
     private func reloadFundedCycleHistory() async {
         guard let data else { return }
-        for account in fundedAccounts {
-            await loadPayoutCycles(for: account.id, trades: data.trades)
+        let accountIDs = fundedAccounts.map(\.id)
+        guard !accountIDs.isEmpty else { return }
+        loadingCycleAccounts.formUnion(accountIDs)
+        defer { loadingCycleAccounts.subtract(accountIDs) }
+
+        let started = CFAbsoluteTimeGetCurrent()
+        do {
+            let cycles = try await data.trades.payoutCycleHistory(for: accountIDs)
+            var grouped: [TradingAccountID: [AccountPayoutCycle]] = [:]
+            for accountID in accountIDs {
+                grouped[accountID] = []
+            }
+            for cycle in cycles {
+                grouped[cycle.accountID, default: []].append(cycle)
+            }
+            payoutCyclesByAccount.merge(grouped) { _, new in new }
+            PayoutBatchDiagnostics.logCycles(
+                accounts: accountIDs.count,
+                requests: 1,
+                cycles: cycles.count,
+                dtMs: Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+            )
+        } catch {
+            for accountID in accountIDs {
+                payoutCyclesByAccount[accountID] = []
+            }
         }
     }
 

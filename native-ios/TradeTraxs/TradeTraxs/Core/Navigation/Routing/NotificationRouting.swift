@@ -40,6 +40,23 @@ nonisolated struct NotificationRouter: NotificationRouting {
 
         case .activity:
             let type = (notification.rawUserInfo["type"] ?? "").lowercased()
+            if type == "trade_room_join_request" {
+                let joinRequestID = notification.rawUserInfo["join_request_id"]?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if !joinRequestID.isEmpty {
+                    return .profile(.tradeRoomJoinRequest(joinRequestID))
+                }
+                return .profile(.activity)
+            }
+            if type == "trade_room_join_accepted" {
+                if let roomID = notification.roomID {
+                    return .messages(.room(roomID))
+                }
+                return .profile(.rooms)
+            }
+            if type == "trade_room_join_declined" {
+                return .profile(.activity)
+            }
             if type == "follow" || type == "follow_request_accepted" {
                 if let profileID = notification.profileID {
                     return .feed(.profile(profileID))

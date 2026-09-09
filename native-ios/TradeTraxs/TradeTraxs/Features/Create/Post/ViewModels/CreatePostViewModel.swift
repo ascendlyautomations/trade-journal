@@ -18,9 +18,8 @@ final class CreatePostViewModel {
     private(set) var viewerProfile: Profile?
 
     var bodyText = ""
-    var imageData: Data?
-    var imagePreview: UIImage?
-    var feedPresentation: ContentImagePresentation?
+    private(set) var finalImage: UIImage?
+    private(set) var finalImageData: Data?
 
     private let profiles: any ProfileRepository
     private let session: any SessionProviding
@@ -48,7 +47,7 @@ final class CreatePostViewModel {
 
     var hasUnsavedChanges: Bool {
         !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || imageData != nil
+            || finalImageData != nil
     }
 
     var canPublish: Bool {
@@ -57,7 +56,7 @@ final class CreatePostViewModel {
 
     /// True when the draft has text or an image — used to enable the Publish button.
     var hasValidDraft: Bool {
-        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || imageData != nil
+        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || finalImageData != nil
     }
 
     func loadIfNeeded() {
@@ -72,9 +71,9 @@ final class CreatePostViewModel {
     }
 
     func setImage(_ result: ImageCropSelectionResult) {
-        imagePreview = result.originalImage
-        imageData = MediaImagePreparation.jpegData(from: result.originalImage)
-        feedPresentation = result.presentation
+        guard let applied = ComposerCropImageState.apply(result) else { return }
+        finalImage = applied.finalImage
+        finalImageData = applied.uploadData
     }
 
     func setImage(_ image: UIImage?) {
@@ -82,21 +81,19 @@ final class CreatePostViewModel {
             clearImage()
             return
         }
-        let width = UIScreen.main.bounds.width - 32
         let pixelSize = MediaImageOrientation.pixelSize(of: image)
-        let presentation = ContentImagePresentation.make(
-            aspectOption: .original,
-            imagePixelSize: pixelSize,
-            viewportSize: CGSize(width: width, height: width / FeedMediaLayout.minimumFeedAspectRatio),
-            transform: .default
+        setImage(
+            ImageCropSelectionResult(
+                image: image,
+                aspectMode: .original,
+                sourcePixelSize: pixelSize
+            )
         )
-        setImage(ImageCropSelectionResult(originalImage: image, presentation: presentation))
     }
 
     func clearImage() {
-        imageData = nil
-        imagePreview = nil
-        feedPresentation = nil
+        finalImageData = nil
+        finalImage = nil
     }
 
     func publish() {
@@ -134,19 +131,20 @@ final class CreatePostViewModel {
             return
         }
 
-        let pixelSize = imagePreview.map { MediaImageOrientation.pixelSize(of: $0) }
+        let pixelSize = finalImage.map { MediaImageOrientation.pixelSize(of: $0) }
         let caption = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
         PostPublishProbe.logStarted(
             flow: "profile_post",
             captionLength: caption.count,
-            imagePresent: imagePreview != nil,
-            imageBytes: imageData?.count,
+            imagePresent: finalImage != nil,
+            imageBytes: finalImageData?.count,
             imagePixelSize: pixelSize,
-            cropMetadata: feedPresentation
+            cropMetadata: nil
         )
 
-        if imagePreview != nil {
-            guard let imageData, !imageData.isEmpty else {
+        if let finalImage, let finalImageData {
+            PostImageUploadProbe.log(finalImage: finalImage, uploadData: finalImageData)
+            guard !finalImageData.isEmpty else {
                 let error = AppError.unknown(message: "Image encoding produced empty JPEG data.")
                 PostPublishProbe.logFailed(stage: .imageEncode, error: error)
                 formError = PostPublishProbe.userFacingMessage(for: .imageEncode, error: error)
@@ -154,7 +152,7 @@ final class CreatePostViewModel {
                 return
             }
             PostPublishProbe.logImageEncode(
-                byteCount: imageData.count,
+                byteCount: finalImageData.count,
                 mimeType: "image/jpeg",
                 pixelSize: pixelSize
             )
@@ -168,7 +166,7 @@ final class CreatePostViewModel {
             let post: Post
             if viewerID.rawValue.hasPrefix("dev.") {
                 var fixture = CreatePostFixtures.samplePost(author: viewerID, body: content)
-                if imageData != nil {
+                if finalImageData != nil {
                     fixture.media = [
                         MediaReference(id: "dev/create-post.jpg", kind: .image, altText: nil)
                     ]
@@ -176,7 +174,7 @@ final class CreatePostViewModel {
                 post = fixture
             } else {
                 var imageURL: String?
-                if let imageData {
+                if let finalImageData {
                     failedStage = .upload
                     isUploadingMedia = true
                     let path = "\(viewerID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
@@ -184,13 +182,10 @@ final class CreatePostViewModel {
                         storagePath: path,
                         bucket: StorageBucket.profilePosts.rawValue
                     )
-                    let uploaded = try await uploadImage(imageData, viewerID: viewerID, path: path)
+                    let uploaded = try await uploadImage(finalImageData, viewerID: viewerID, path: path)
                     uploadedStoragePath = uploaded.storagePath
                     imageURL = uploaded.publicURL
                     PostPublishProbe.logUploadSucceeded(path: uploaded.storagePath)
-                    if let feedPresentation {
-                        FeedMediaPresentationStore.save(feedPresentation, forMediaURL: uploaded.publicURL)
-                    }
                     isUploadingMedia = false
                 }
                 failedStage = .databaseInsert
@@ -198,7 +193,7 @@ final class CreatePostViewModel {
                     authorID: viewerID,
                     content: content,
                     imageURL: imageURL,
-                    imageCrop: feedPresentation
+                    imageCrop: nil
                 )
             }
 
@@ -227,7 +222,7 @@ final class CreatePostViewModel {
 
     private func validate() -> Bool {
         let text = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.isEmpty && imageData == nil {
+        if text.isEmpty && finalImageData == nil {
             formError = "Add text or an image to publish."
             return false
         }

@@ -180,7 +180,7 @@ struct TradeImportPreviewContent: View {
             }
 
             HStack(spacing: ExperienceSpacing.sm) {
-                Text("\(NSDecimalNumber(decimal: trade.quantity).stringValue) Contracts")
+                Text("\(NumberDisplay.decimal(trade.quantity, minimumFractionDigits: 0, maximumFractionDigits: 8)) Contracts")
                     .experienceStyle(.caption, color: colors.tertiaryText)
                 if trade.realizedPnL != 0 || trade.warningMessages.contains("P&L missing") {
                     Text("P&L \(TradeDisplay.pnlText(Money(amount: trade.realizedPnL)))")
@@ -205,7 +205,7 @@ struct TradeImportPreviewContent: View {
             if let metadata, !metadata.fills.isEmpty {
                 DisclosureGroup("Executions (\(metadata.fills.count))") {
                     ForEach(metadata.fills) { fill in
-                        Text("\(fill.sideLabel) \(NSDecimalNumber(decimal: fill.quantity).stringValue) @ \(formatPrice(fill.price))")
+                        Text("\(fill.sideLabel) \(NumberDisplay.decimal(fill.quantity, minimumFractionDigits: 0, maximumFractionDigits: 8)) @ \(formatPrice(fill.price))")
                             .experienceStyle(.caption, color: colors.secondaryText)
                     }
                 }
@@ -262,7 +262,7 @@ struct TradeImportPreviewContent: View {
     }
 
     private func formatPrice(_ value: Decimal) -> String {
-        NSDecimalNumber(decimal: value).stringValue
+        TradeDisplay.priceText(value)
     }
 
     private func timeRange(_ trade: CSVParsedTrade) -> String {

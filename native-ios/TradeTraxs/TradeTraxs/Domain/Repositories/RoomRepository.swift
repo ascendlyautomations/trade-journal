@@ -49,6 +49,10 @@ nonisolated protocol RoomRepository: Sendable {
         targetProfileID: ProfileID?,
         action: RoomModerationAction
     ) async throws
+    /// `rpc_v1_request_trade_room_join` — approval-policy rooms only.
+    func requestJoin(roomID: RoomID) async throws -> TradeRoomJoinRequestState
+    /// `rpc_v1_viewer_trade_room_join_request` — current viewer request row.
+    func viewerJoinRequest(roomID: RoomID) async throws -> TradeRoomJoinRequestState?
 }
 
 extension RoomRepository {
@@ -68,5 +72,13 @@ extension RoomRepository {
     func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] { [:] }
     func activeMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember] {
         []
+    }
+
+    func requestJoin(roomID: RoomID) async throws -> TradeRoomJoinRequestState {
+        throw DomainError.businessRule(.message("Join requests are not supported by this repository."))
+    }
+
+    func viewerJoinRequest(roomID: RoomID) async throws -> TradeRoomJoinRequestState? {
+        nil
     }
 }

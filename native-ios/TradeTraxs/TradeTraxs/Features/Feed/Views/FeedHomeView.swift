@@ -17,6 +17,7 @@ struct FeedHomeView: View {
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @State private var scrollViewportFrame: CGRect = .zero
 
     init(
         data: DataEnvironment,
@@ -182,24 +183,21 @@ struct FeedHomeView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active {
-                playbackCoordinator.pauseAll()
+                playbackCoordinator.releaseAllPlayers()
             } else if viewModel.contentFilter == .clips {
                 playbackCoordinator.beginClipsExperience()
             }
         }
         .onChange(of: viewModel.contentFilter) { oldFilter, newFilter in
             if newFilter == .clips {
+                playbackCoordinator.releaseAllPlayers()
                 playbackCoordinator.beginClipsExperience()
             } else if oldFilter == .clips {
                 playbackCoordinator.endClipsExperience()
             }
         }
         .onDisappear {
-            if viewModel.contentFilter == .clips {
-                playbackCoordinator.endClipsExperience()
-            } else {
-                playbackCoordinator.pauseAll()
-            }
+            playbackCoordinator.releaseAllPlayers()
         }
         .sheet(item: $shareTarget) { target in
             SharedContentShareSheet(
@@ -220,18 +218,11 @@ struct FeedHomeView: View {
         .padding(.top, 4)
         .padding(.bottom, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(contentFilterBarBackground)
-        .accessibilityIdentifier("feed.header.contentFilter")
-    }
-
-    private var contentFilterBarBackground: some View {
-        Group {
-            if viewModel.contentFilter == .clips {
-                colors.navigationBackground
-            } else {
-                colors.backgroundPrimary.opacity(0.96)
-            }
+        .background {
+            colors.backgroundPrimary
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .accessibilityIdentifier("feed.header.contentFilter")
     }
 
     private var feedList: some View {
@@ -251,10 +242,13 @@ struct FeedHomeView: View {
                         vaultStore: vaultStore,
                         detailCache: detailCache,
                         playbackCoordinator: playbackCoordinator,
-                        onOpen: { viewModel.open(entry) },
+                        onOpen: { openFeedEntry(entry) },
                         onOpenAuthor: { viewModel.openAuthor(entry.authorProfileID) },
                         onOpenLinkedTrade: { viewModel.openLinkedTrade($0) },
-                        onOpenLinkedClip: { viewModel.openLinkedClip($0) },
+                        onOpenLinkedClip: { reelID in
+                            playbackCoordinator.releaseAllPlayers()
+                            viewModel.openLinkedClip(reelID)
+                        },
                         viewerID: viewModel.viewerID,
                         onReport: reportAction(for: entry),
                         onShare: {
@@ -266,6 +260,11 @@ struct FeedHomeView: View {
                     )
                     .onAppear {
                         Task { await viewModel.loadMoreIfNeeded(currentID: entry.id) }
+                        FeedImagePrefetch.prefetchNearby(
+                            entries: viewModel.visibleEntries,
+                            currentEntryID: entry.id,
+                            pipeline: imagePipeline
+                        )
                     }
                     .transition(
                         reduceMotion
@@ -283,6 +282,10 @@ struct FeedHomeView: View {
                 }
             }
             .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.visibleEntries.map(\.id))
+            .environment(\.feedScrollViewportFrame, scrollViewportFrame)
+        }
+        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
+            scrollViewportFrame = frame
         }
         .scrollContentBackground(.hidden)
         .accessibilityIdentifier("feed.list")
@@ -308,7 +311,7 @@ struct FeedHomeView: View {
                     author: viewModel.author(for: entry.authorProfileID)
                 )
             },
-            onOpenDetail: { viewModel.open($0) },
+            onOpenDetail: { openFeedEntry($0) },
             onLoadMore: { entryID in
                 Task { await viewModel.loadMoreIfNeeded(currentID: entryID) }
             }
@@ -354,6 +357,13 @@ struct FeedHomeView: View {
         case .global:
             return "New public activity will show up here."
         }
+    }
+
+    private func openFeedEntry(_ entry: FeedTimelineEntry) {
+        if case .clip = entry {
+            playbackCoordinator.releaseAllPlayers()
+        }
+        viewModel.open(entry)
     }
 
     private func reportAction(for entry: FeedTimelineEntry) -> (() -> Void)? {

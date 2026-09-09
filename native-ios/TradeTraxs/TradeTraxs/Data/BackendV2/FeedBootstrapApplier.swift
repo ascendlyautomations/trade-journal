@@ -81,6 +81,9 @@ enum FeedBootstrapApplier {
             authorAvatarURL: author?.avatar_url,
             mediaURL: stringPayload(row.payload, keys: ["image_url", "thumbnail_url", "media_url"])
         )
+        item.imageCrop = decodeImageCrop(row.payload["image_crop"])
+            ?? nestedImageCrop(row.payload, objectKey: "achievements")
+            ?? nestedImageCrop(row.payload, objectKey: "trades")
         switch kind {
         case .trade:
             item.tradeID = TradeID(stringPayload(row.payload, keys: ["trade_id"]) ?? row.id)
@@ -151,5 +154,17 @@ enum FeedBootstrapApplier {
     ) -> String? {
         guard case .object(let nested) = payload[objectKey] else { return nil }
         return stringPayload(nested, keys: keys)
+    }
+
+    private static func decodeImageCrop(_ value: JSONValue?) -> ContentImagePresentation? {
+        ContentImagePresentationCodec.decode(from: value)
+    }
+
+    private static func nestedImageCrop(
+        _ payload: [String: JSONValue],
+        objectKey: String
+    ) -> ContentImagePresentation? {
+        guard case .object(let nested) = payload[objectKey] else { return nil }
+        return decodeImageCrop(nested["image_crop"])
     }
 }

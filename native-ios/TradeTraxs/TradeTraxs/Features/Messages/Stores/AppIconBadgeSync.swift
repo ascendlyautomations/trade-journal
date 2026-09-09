@@ -8,9 +8,14 @@ import OSLog
 @MainActor
 enum AppIconBadgeSync {
     private static var client: (any AppIconBadgeClienting)?
+    private static var canFetchAuthenticatedBadge: (@Sendable () async -> Bool)?
 
-    static func configure(client: any AppIconBadgeClienting) {
+    static func configure(
+        client: any AppIconBadgeClienting,
+        canFetchAuthenticatedBadge: (@Sendable () async -> Bool)? = nil
+    ) {
         self.client = client
+        self.canFetchAuthenticatedBadge = canFetchAuthenticatedBadge
     }
 
     static func refresh(animated: Bool = true) {
@@ -19,9 +24,13 @@ enum AppIconBadgeSync {
             return
         }
 
+        let readinessCheck = canFetchAuthenticatedBadge
         Task {
             await AppIconBadgeRefreshFlight.shared.run {
                 await SessionNetworkGate.shared.awaitReady()
+                if let readinessCheck {
+                    guard await readinessCheck() else { return }
+                }
                 guard !Task.isCancelled else { return }
                 do {
                     let badge = try await client!.fetchBadge()

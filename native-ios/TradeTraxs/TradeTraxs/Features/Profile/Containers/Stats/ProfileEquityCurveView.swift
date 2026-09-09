@@ -230,15 +230,6 @@ struct ProfileEquityCurveView: View {
     }
 
     private func yLabel(_ value: Double) -> String {
-        let absValue = abs(value)
-        let formatted: String
-        if absValue >= 1_000 {
-            formatted = String(format: "%.1fK", absValue / 1_000)
-        } else if absValue.rounded() == absValue {
-            formatted = "\(Int(absValue))"
-        } else {
-            formatted = String(format: "%.0f", absValue)
-        }
-        return value < 0 ? "-$\(formatted)" : "$\(formatted)"
+        NumberDisplay.compactEquityAxis(value)
     }
 }

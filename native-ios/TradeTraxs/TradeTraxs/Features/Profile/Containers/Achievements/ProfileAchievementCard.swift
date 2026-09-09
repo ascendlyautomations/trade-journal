@@ -8,27 +8,28 @@ struct ProfileAchievementCard: View {
     let onOpen: () -> Void
     var isOwner: Bool = true
     var onReport: (() -> Void)? = nil
+    var profilePin: ProfilePinCallbacks? = nil
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
+
+    private var isPinnedToProfile: Bool {
+        profilePin?.isPinned(.achievement, achievement.id.rawValue) ?? false
+    }
 
     private var target: InteractionTarget { .achievement(achievement.id) }
 
     var body: some View {
         ExperienceCard {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                    TradeTraxsContentImage(
-                        mediaID: achievement.id.rawValue,
+                ProfileCompactCardMediaSection {
+                    ProfileCompactMediaThumbnail(
                         reference: achievement.image,
                         purpose: .postImage,
-                        imagePipeline: imagePipeline,
-                        surface: .profile,
-                        fixedSize: CGSize(width: 96, height: 96)
+                        imagePipeline: imagePipeline
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
                     .accessibilityHidden(true)
-
+                } metadata: {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                         HStack(spacing: ExperienceSpacing.xs) {
                             if achievement.isFeatured {
@@ -102,6 +103,25 @@ struct ProfileAchievementCard: View {
             ContentOverflowMenu(
                 isOwner: isOwner,
                 onReport: onReport,
+                onPin: profilePin.map { pin in
+                    {
+                        pin.requestPin(
+                            .achievement,
+                            achievement.id.rawValue,
+                            ProfilePinnedPreviewBuilder.from(achievement: achievement)
+                        )
+                    }
+                },
+                onUnpin: profilePin.map { pin in
+                    {
+                        pin.requestPin(
+                            .achievement,
+                            achievement.id.rawValue,
+                            ProfilePinnedPreviewBuilder.from(achievement: achievement)
+                        )
+                    }
+                },
+                isPinnedToProfile: isPinnedToProfile,
                 accessibilityIdentifier: "profile.achievement.overflow.\(achievement.id.rawValue)"
             )
             .padding(ExperienceSpacing.xxs)

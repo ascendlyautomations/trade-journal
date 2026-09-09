@@ -6,6 +6,12 @@ nonisolated protocol NotificationRepository: Sendable {
     func notification(id: NotificationID) async throws -> ActivityNotification?
     func unreadCount() async throws -> Int
     func markRead(id: NotificationID) async throws
+    /// Marks unread inbox rows by id in one update — RLS enforces `user_id = auth.uid()`.
+    func markRead(ids: [NotificationID]) async throws -> Int
+    /// Web `markMessageNotificationsRead` — all unread `type=message` rows for the viewer.
+    func markMessageNotificationsRead() async throws -> Int
+    /// Web `markNotificationsReadForTarget({ kind: "room" })`.
+    func markRoomNotificationsRead(roomID: RoomID, slug: String?) async throws -> Int
     func markAllRead() async throws
     /// Batch-load actor profiles for Activity rows (anti-N+1).
     func profiles(ids: [ProfileID]) async throws -> [Profile]

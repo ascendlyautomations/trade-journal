@@ -155,29 +155,78 @@ struct InteractiveImageView: View {
             didFail = false
             return
         }
+
+        let requestKey = reference.id
+        let request = ImageRequest(
+            reference: reference,
+            purpose: purpose,
+            maxPixelSize: nil,
+            allowsProgressiveLoading: true
+        )
+
         didFail = false
+        FeedImageProbe.log(id: mediaID, event: .requestStarted, url: requestKey)
+
+        if let cachedData = await imagePipeline.cachedImageData(for: request) {
+            FeedImageProbe.log(id: mediaID, event: .cacheHitMemory, url: requestKey)
+            await assignDisplayImage(from: cachedData, requestKey: requestKey, source: "memory")
+            return
+        }
+
+        FeedImageProbe.log(id: mediaID, event: .networkStarted, url: requestKey)
+
         do {
-            let data = try await imagePipeline.data(
-                for: ImageRequest(
-                    reference: reference,
-                    purpose: purpose,
-                    maxPixelSize: nil,
-                    allowsProgressiveLoading: true
-                )
-            )
-            let scale = displayScale
-            let decoded = await Task.detached(priority: .userInitiated) {
-                UIImage(data: data, scale: scale)
-            }.value
-            guard let decoded else {
-                didFail = true
-                displayImage = nil
-                return
-            }
-            displayImage = MediaImageOrientation.normalized(decoded)
+            let data = try await imagePipeline.data(for: request)
+            await assignDisplayImage(from: data, requestKey: requestKey, source: "network")
         } catch {
+            guard reference.id == requestKey else { return }
             didFail = true
             displayImage = nil
+        }
+    }
+
+    @MainActor
+    private func assignDisplayImage(from data: Data, requestKey: String, source: String) async {
+        guard reference?.id == requestKey else {
+            FeedImageProbe.log(id: mediaID, event: .staleCompletionDropped, url: requestKey)
+            return
+        }
+
+        let scale = displayScale
+        let decoded = await Task.detached(priority: .userInitiated) {
+            UIImage(data: data, scale: scale)
+        }.value
+
+        guard reference?.id == requestKey else {
+            FeedImageProbe.log(id: mediaID, event: .staleCompletionDropped, url: requestKey)
+            return
+        }
+
+        guard let decoded else {
+            didFail = true
+            displayImage = nil
+            return
+        }
+
+        let normalized = MediaImageOrientation.normalized(decoded)
+        let pixels = MediaImageOrientation.pixelSize(of: normalized)
+        FeedImageProbe.log(id: mediaID, event: .imageDecoded, pixels: pixels)
+
+        displayImage = normalized
+        FeedMediaReadyProbe.log(
+            itemID: mediaID,
+            kind: mediaReadyKind,
+            source: source
+        )
+    }
+
+    private var mediaReadyKind: String {
+        switch purpose {
+        case .tradeScreenshot: return "trade-image"
+        case .postImage: return "post-image"
+        case .reelThumbnail: return "clip-thumbnail"
+        case .profileAvatar: return "avatar"
+        case .storyMedia: return "story-image"
         }
     }
 
@@ -235,8 +284,11 @@ private struct InteractiveImageRepresentable: UIViewRepresentable {
         uiView.coordinator = context.coordinator
         uiView.backgroundFillColor = backgroundColor
         guard !uiView.isPinching else { return }
-        uiView.setImage(image)
         applyLayout(to: uiView)
+        uiView.setNeedsLayout()
+        if uiView.bounds.width > 0, uiView.bounds.height > 0 {
+            uiView.layoutIfNeeded()
+        }
     }
 
     private func applyLayout(to view: InteractiveImageUIView) {
@@ -244,8 +296,7 @@ private struct InteractiveImageRepresentable: UIViewRepresentable {
         case .feedCard(let presentation):
             view.applyFeedFraming(
                 image: image,
-                presentation: presentation,
-                containerSize: containerSize
+                presentation: presentation
             )
         case .originalDetail:
             view.applyDetailFit(image: image)
@@ -279,6 +330,15 @@ final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
 
     fileprivate weak var coordinator: InteractiveImageRepresentable.Coordinator?
 
+    private enum ImageLayoutMode: Equatable {
+        case detailFit
+        case feedCard(ContentImagePresentation)
+    }
+
+    private var layoutMode: ImageLayoutMode?
+    private var displayedImage: UIImage?
+    private var didLogImageAssigned = false
+
     var backgroundFillColor: UIColor = .clear {
         didSet {
             guard !isPinching else { return }
@@ -299,7 +359,6 @@ final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
     private var pinchStartMidpoint: CGPoint = .zero
     private var normalizedPinchAnchor = CGPoint(x: 0.5, y: 0.5)
     private var livePinchScale: CGFloat = 1
-    private var usesFeedFraming = false
 
     init(mediaID: String) {
         self.mediaID = mediaID
@@ -326,42 +385,81 @@ final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
 
     func setImage(_ image: UIImage) {
         guard !isPinching else { return }
+        displayedImage = image
         imageView.image = image
+        imageView.alpha = 1
+        imageView.isHidden = false
+        didLogImageAssigned = false
         setNeedsLayout()
     }
 
     func applyFeedFraming(
         image: UIImage,
-        presentation: ContentImagePresentation,
-        containerSize: CGSize
+        presentation: ContentImagePresentation
     ) {
-        usesFeedFraming = true
+        layoutMode = .feedCard(presentation)
         setImage(image)
-        let pixelSize = MediaImageOrientation.pixelSize(of: image)
-        if presentation.usesFillCrop,
-           let draw = ContentImagePresentation.drawRect(
-            imagePixelSize: pixelSize,
-            containerSize: containerSize,
-            presentation: presentation
-           ) {
-            imageView.contentMode = .scaleToFill
-            imageView.frame = CGRect(
-                x: draw.x,
-                y: draw.y,
-                width: draw.width,
-                height: draw.height
-            )
-        } else {
-            imageView.contentMode = .scaleAspectFit
-            imageView.frame = bounds
-        }
+        relayoutImageSubview()
     }
 
     func applyDetailFit(image: UIImage) {
-        usesFeedFraming = false
+        layoutMode = .detailFit
         setImage(image)
-        imageView.contentMode = .scaleAspectFit
-        imageView.frame = bounds
+        relayoutImageSubview()
+    }
+
+    private func relayoutImageSubview() {
+        guard !isPinching else { return }
+        guard bounds.width > 0, bounds.height > 0 else { return }
+
+        switch layoutMode {
+        case nil:
+            imageView.contentMode = .scaleAspectFit
+            imageView.frame = bounds
+        case .detailFit:
+            imageView.contentMode = .scaleAspectFit
+            imageView.frame = bounds
+        case .feedCard(let presentation):
+            guard let image = displayedImage ?? imageView.image else {
+                imageView.frame = bounds
+                return
+            }
+            let pixelSize = MediaImageOrientation.pixelSize(of: image)
+            if presentation.usesFillCrop,
+               let draw = ContentImagePresentation.drawRect(
+                imagePixelSize: pixelSize,
+                containerSize: bounds.size,
+                presentation: presentation
+               ) {
+                imageView.contentMode = .scaleToFill
+                imageView.frame = CGRect(
+                    x: draw.x,
+                    y: draw.y,
+                    width: draw.width,
+                    height: draw.height
+                )
+            } else {
+                imageView.contentMode = .scaleAspectFit
+                imageView.frame = bounds
+            }
+        }
+
+        logImageAssignedIfNeeded()
+    }
+
+    private func logImageAssignedIfNeeded() {
+        guard !didLogImageAssigned else { return }
+        guard imageView.image != nil else { return }
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        guard imageView.bounds.width > 0, imageView.bounds.height > 0 else { return }
+        didLogImageAssigned = true
+        FeedImageProbe.log(
+            id: mediaID,
+            event: .imageAssigned,
+            rootBounds: bounds,
+            imageBounds: imageView.bounds,
+            mainThread: Thread.isMainThread
+        )
     }
 
     func installTapRecognizersIfNeeded() {
@@ -398,15 +496,25 @@ final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
         installTapRecognizersIfNeeded()
         guard !didLogMount else { return }
         didLogMount = true
+        FeedImageProbe.log(
+            id: mediaID,
+            event: .mount,
+            rootBounds: bounds,
+            imageBounds: imageView.bounds
+        )
         InteractiveImageZoomProbe.log("mounted id=\(mediaID)")
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         guard !isPinching else { return }
-        if !usesFeedFraming {
-            imageView.frame = bounds
-        }
+        relayoutImageSubview()
+        FeedImageProbe.log(
+            id: mediaID,
+            event: .layoutSubviews,
+            rootBounds: bounds,
+            imageBounds: imageView.bounds
+        )
         logLayoutMetrics()
     }
 
@@ -575,6 +683,7 @@ final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
         imageView.transform = .identity
         scrollView?.isScrollEnabled = true
         setNeedsLayout()
+        layoutIfNeeded()
     }
 
     private func dismissOverlay(animated: Bool) {

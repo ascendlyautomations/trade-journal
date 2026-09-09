@@ -94,7 +94,6 @@ final class PushNotificationCenter: NSObject {
         isBound = true
         UNUserNotificationCenter.current().delegate = self
         Task { await refreshAuthorizationStatus() }
-        syncBadgeFromActivity()
     }
 
     func refreshAuthorizationStatus() async {
@@ -204,6 +203,7 @@ final class PushNotificationCenter: NSObject {
 
     private func uploadToken(_ token: String, previousDeviceToken: String? = nil) async {
         guard navigation.store.sessionPhase == .authenticated else { return }
+        await SessionNetworkGate.shared.awaitReady()
         if lastRegisteredToken == token { return }
         isRegistering = true
         defer { isRegistering = false }

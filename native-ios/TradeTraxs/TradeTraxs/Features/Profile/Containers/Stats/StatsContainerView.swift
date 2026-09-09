@@ -205,31 +205,23 @@ struct StatsContainerView: View {
     // MARK: - Formatting (web parity)
 
     static func currencyText(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
-        return signedCurrency(value, minFraction: 0, maxFraction: 2)
+        NumberDisplay.money(value)
     }
 
     static func pnlCurrencyText(_ value: Decimal) -> String {
-        signedCurrency(value, minFraction: 2, maxFraction: 2)
+        NumberDisplay.currency(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
     }
 
     static func positivePnlText(_ value: Decimal) -> String {
-        let text = pnlCurrencyText(value)
-        return value > 0 ? "+\(text)" : text
+        NumberDisplay.signedMoney(value)
     }
 
     static func equityMoneyText(_ value: Decimal) -> String {
-        signedCurrency(value, minFraction: 2, maxFraction: 2)
+        NumberDisplay.currency(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
     }
 
     static func factorText(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
-        let number = NSDecimalNumber(decimal: value)
-        let formatter = NumberFormatter()
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 2
-        formatter.numberStyle = .decimal
-        return formatter.string(from: number) ?? "\(value)"
+        NumberDisplay.factor(value)
     }
 
     static func winLossRatioText(winner: Decimal?, loser: Decimal?) -> String {
@@ -237,21 +229,6 @@ struct StatsContainerView: View {
         let lossMagnitude = abs(NSDecimalNumber(decimal: loser).doubleValue)
         guard lossMagnitude > 0 else { return "—" }
         let ratio = NSDecimalNumber(decimal: winner).doubleValue / lossMagnitude
-        return String(format: "%.2fx", ratio)
-    }
-
-    private static func signedCurrency(
-        _ value: Decimal,
-        minFraction: Int,
-        maxFraction: Int
-    ) -> String {
-        let absValue = abs(value)
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = minFraction
-        formatter.maximumFractionDigits = maxFraction
-        formatter.usesGroupingSeparator = true
-        let body = formatter.string(from: NSDecimalNumber(decimal: absValue)) ?? "\(absValue)"
-        return value < 0 ? "-$\(body)" : "$\(body)"
+        return "\(NumberDisplay.decimal(ratio, minimumFractionDigits: 2, maximumFractionDigits: 2))x"
     }
 }

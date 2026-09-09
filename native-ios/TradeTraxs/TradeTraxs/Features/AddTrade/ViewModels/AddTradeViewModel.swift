@@ -61,7 +61,6 @@ final class AddTradeViewModel {
     var publicCaptionText = ""
     var shareToProfile = false
     var screenshotData: Data?
-    var feedPresentation: ContentImagePresentation?
     var screenshotPreview: UIImage?
     var hasScreenshotPreview: Bool { screenshotPreview != nil }
 
@@ -298,13 +297,7 @@ final class AddTradeViewModel {
     }
 
     static func formatRiskReward(_ value: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: value)
-        let formatter = NumberFormatter()
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 2
-        formatter.decimalSeparator = "."
-        let formatted = formatter.string(from: number) ?? "\(value)"
-        return "1 : \(formatted)"
+        "1 : \(NumberDisplay.decimal(value, minimumFractionDigits: 0, maximumFractionDigits: 2))"
     }
 
     func loadIfNeeded() {
@@ -358,10 +351,10 @@ final class AddTradeViewModel {
     }
 
     func setScreenshot(_ result: ImageCropSelectionResult) {
-        screenshotPreview = result.originalImage
-        screenshotData = Self.prepareScreenshotJPEG(result.originalImage)
-        feedPresentation = result.presentation
-        screenshotDisplayMode = result.presentation.usesFillCrop ? .fill : .fit
+        guard let applied = ComposerCropImageState.apply(result) else { return }
+        screenshotPreview = applied.finalImage
+        screenshotData = applied.uploadData
+        screenshotDisplayMode = .fit
         removeExistingScreenshot = false
     }
 
@@ -370,21 +363,19 @@ final class AddTradeViewModel {
             clearScreenshot()
             return
         }
-        let width = UIScreen.main.bounds.width - 32
         let pixelSize = MediaImageOrientation.pixelSize(of: image)
-        let presentation = FeedMediaPresentation.make(
-            aspectOption: .original,
-            imagePixelSize: pixelSize,
-            containerWidth: width,
-            transform: .default
+        setScreenshot(
+            ImageCropSelectionResult(
+                image: image,
+                aspectMode: .original,
+                sourcePixelSize: pixelSize
+            )
         )
-        setScreenshot(ImageCropSelectionResult(originalImage: image, presentation: presentation))
     }
 
     func clearScreenshot() {
         screenshotData = nil
         screenshotPreview = nil
-        feedPresentation = nil
         if existingImageURL != nil {
             removeExistingScreenshot = true
         }
@@ -401,6 +392,8 @@ final class AddTradeViewModel {
                 )
                 linkedReel = nil
                 reelDraft = ReelDraft(
+                    selectionID: UUID().uuidString,
+                    ownedSourceURL: prepared.fileURL,
                     localVideoURL: prepared.fileURL,
                     contentType: prepared.contentType,
                     byteCount: prepared.byteCount,
@@ -420,6 +413,9 @@ final class AddTradeViewModel {
     }
 
     func clearReelDraft() {
+        if let url = reelDraft?.localVideoURL {
+            MediaVideoPreparation.cleanupTemporaryFile(at: url)
+        }
         reelDraft = nil
     }
 
@@ -721,14 +717,12 @@ final class AddTradeViewModel {
         var uploadedStoragePath: String?
         do {
             var imageURL: String?
-            if let screenshotData {
+            if let screenshotData, let screenshotPreview {
+                PostImageUploadProbe.log(finalImage: screenshotPreview, uploadData: screenshotData)
                 isUploadingMedia = true
                 let uploaded = try await uploadScreenshot(screenshotData)
                 uploadedStoragePath = uploaded.storagePath
                 imageURL = uploaded.publicURL
-                if let feedPresentation {
-                    FeedMediaPresentationStore.save(feedPresentation, forMediaURL: uploaded.publicURL)
-                }
                 isUploadingMedia = false
             } else if isEditing {
                 imageURL = removeExistingScreenshot ? nil : existingImageURL
@@ -781,7 +775,7 @@ final class AddTradeViewModel {
                 durationSeconds: holdDuration?.seconds,
                 durationText: holdDuration?.text,
                 imageURL: imageURL,
-                imageCrop: feedPresentation
+                imageCrop: nil
             )
 
             let trade: Trade
@@ -942,7 +936,13 @@ final class AddTradeViewModel {
             return
         }
 
+        if try await feed.tradeHasAttachedReel(tradeID) {
+            throw AppError.domain(.conflict(message: "This trade already has a clip attached."))
+        }
+
+        let publishID = UUID().uuidString
         let reel = try await ReelPublishPipeline.publish(
+            publishID: publishID,
             draft: draft,
             authorID: viewerID,
             tradeID: tradeID,
@@ -1092,8 +1092,8 @@ final class AddTradeViewModel {
         return DecimalParser.parse(cleaned)
     }
 
-    private static func prepareScreenshotJPEG(_ image: UIImage) -> Data? {
-        MediaImagePreparation.jpegData(from: image)
+    private static func prepareScreenshotJPEG(_ image: UIImage, logUpload: Bool = false) -> Data? {
+        MediaImagePreparation.jpegData(from: image, logUpload: logUpload)
     }
 
     private static func fixtureTrade(from draft: TradeDraft, owner: ProfileID) -> Trade {

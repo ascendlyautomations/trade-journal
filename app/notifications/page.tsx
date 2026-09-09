@@ -42,6 +42,9 @@ import {
   formatFollowRequestGroupMessage,
   formatLikeGroupMessage,
   formatRoomJoinMessage,
+  formatTradeRoomJoinAcceptedMessage,
+  formatTradeRoomJoinDeclinedMessage,
+  formatTradeRoomJoinRequestMessage,
   formatRoomMessageGroupSubtitle,
   formatRoomMessageGroupTitle,
   getGroupedNotificationHref,
@@ -57,6 +60,7 @@ import {
   type NotificationRecord,
   type SenderProfile,
 } from "@/lib/notificationsDisplay"
+import { parseTradeRoomJoinRequestContent } from "@/lib/tradeRoomJoinRequestContent"
 import {
   readNotificationsSession,
   writeNotificationsSession,
@@ -126,6 +130,12 @@ function cardStableKey(card: GroupedNotificationCard): string {
       return `follow_request_accepted:${card.notification.id}`
     case "room_join":
       return `room_join:${card.notification.id}`
+    case "trade_room_join_request":
+      return `trade_room_join_request:${card.notification.id}`
+    case "trade_room_join_accepted":
+      return `trade_room_join_accepted:${card.notification.id}`
+    case "trade_room_join_declined":
+      return `trade_room_join_declined:${card.notification.id}`
     case "room_message_group":
       return `room_message_group:${card.key}`
     case "affiliate_notification":
@@ -297,6 +307,22 @@ function GroupedNotificationCardView({
       : undefined
     title = formatRoomJoinMessage(senderDisplayName(sender))
     avatarUrl = sender?.avatar_url
+  } else if (card.kind === "trade_room_join_request") {
+    const sender = card.notification.sender_id
+      ? sendersById[card.notification.sender_id]
+      : undefined
+    const meta = parseTradeRoomJoinRequestContent(card.notification.content)
+    title = formatTradeRoomJoinRequestMessage(
+      senderDisplayName(sender),
+      meta?.room_name
+    )
+    avatarUrl = sender?.avatar_url
+  } else if (card.kind === "trade_room_join_accepted") {
+    const meta = parseTradeRoomJoinRequestContent(card.notification.content)
+    title = formatTradeRoomJoinAcceptedMessage(meta?.room_name)
+  } else if (card.kind === "trade_room_join_declined") {
+    const meta = parseTradeRoomJoinRequestContent(card.notification.content)
+    title = formatTradeRoomJoinDeclinedMessage(meta?.room_name)
   } else if (card.kind === "room_message_group") {
     expandable = card.messages.length > 0
     title = formatRoomMessageGroupTitle(card)
@@ -357,6 +383,7 @@ function GroupedNotificationCardView({
       <div className="flex items-start gap-2 sm:gap-3">
         {avatarUrl != null &&
         (card.kind === "room_join" ||
+          card.kind === "trade_room_join_request" ||
           card.kind === "follow_request_accepted" ||
           card.kind === "affiliate_notification") &&
         card.notification.sender_id ? (

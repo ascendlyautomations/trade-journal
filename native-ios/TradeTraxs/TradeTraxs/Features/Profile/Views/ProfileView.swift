@@ -71,6 +71,17 @@ struct ProfileView: View {
                     .experiencePadding(.horizontal, .lg)
                     .padding(.top, ExperienceSpacing.sm)
 
+                if !screen.pinnedContent.isEmpty {
+                    ProfilePinnedSectionView(
+                        items: screen.pinnedContent,
+                        isOwner: contentStore.isOwner,
+                        imagePipeline: appEnvironment.data.imagePipeline,
+                        onOpen: { screen.openPinnedItem($0) },
+                        onManage: { screen.showsManagePinnedSheet = true }
+                    )
+                    .experiencePadding(.horizontal, .lg)
+                }
+
                 if let shellViewModel = screen.shellViewModel {
                     ProfileSectionPicker(
                         selection: Binding(
@@ -169,6 +180,12 @@ struct ProfileView: View {
                 viewerStoryStore.reconcileExpired()
             }
         }
+        .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
+            guard contentStore.isOwner else { return }
+            if case .deleted(let id, _) = TradeJournalMutationStore.shared.latest {
+                screen.applyOptimisticPinnedRemoval(contentType: .trade, contentID: id.rawValue)
+            }
+        }
         .onChange(of: screen.state.profileID) { _, _ in
             screen.syncShellIfNeeded()
             screen.activateShellForLaunch()
@@ -180,6 +197,34 @@ struct ProfileView: View {
             ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
             value: screen.shellViewModel?.selectedSection
         )
+        .sheet(isPresented: $screen.showsPinReplaceSheet) {
+            ProfilePinReplaceSheet(
+                message: "Your Profile can have up to 3 pinned items.",
+                currentPins: screen.pinnedContent,
+                onReplace: { screen.confirmReplacePin(at: $0) },
+                onCancel: { screen.cancelReplacePin() }
+            )
+        }
+        .sheet(isPresented: $screen.showsManagePinnedSheet) {
+            ProfileManagePinnedSheet(
+                items: screen.pinnedContent,
+                onOpen: { item in
+                    screen.showsManagePinnedSheet = false
+                    screen.openPinnedItem(item)
+                },
+                onUnpin: { item in
+                    Task {
+                        await screen.unpin(
+                            contentType: item.contentType,
+                            contentID: item.contentID
+                        )
+                    }
+                },
+                onMoveUp: { screen.movePinnedItemUp($0) },
+                onMoveDown: { screen.movePinnedItemDown($0) },
+                onDismiss: { screen.showsManagePinnedSheet = false }
+            )
+        }
         .accessibilityIdentifier(contentStore.isOwner ? "profile.root.owner" : "profile.root.other")
     }
 
@@ -193,6 +238,7 @@ struct ProfileView: View {
 
     @ViewBuilder
     private func sectionBody(_ shell: ProfileShellViewModel) -> some View {
+        let profilePin = ownerProfilePinCallbacks
         switch shell.selectedSection {
         case .trades:
             if let viewModel = shell.trades {
@@ -200,7 +246,8 @@ struct ProfileView: View {
                     viewModel: viewModel,
                     imagePipeline: appEnvironment.data.imagePipeline,
                     engagementStore: appEnvironment.data.engagementStore,
-                    vaultStore: appEnvironment.data.vaultStore
+                    vaultStore: appEnvironment.data.vaultStore,
+                    profilePin: profilePin
                 )
             }
         case .posts:
@@ -209,7 +256,8 @@ struct ProfileView: View {
                     viewModel: viewModel,
                     imagePipeline: appEnvironment.data.imagePipeline,
                     engagementStore: appEnvironment.data.engagementStore,
-                    vaultStore: appEnvironment.data.vaultStore
+                    vaultStore: appEnvironment.data.vaultStore,
+                    profilePin: profilePin
                 )
             }
         case .clips:
@@ -231,9 +279,20 @@ struct ProfileView: View {
                     viewModel: viewModel,
                     imagePipeline: appEnvironment.data.imagePipeline,
                     engagementStore: appEnvironment.data.engagementStore,
-                    vaultStore: appEnvironment.data.vaultStore
+                    vaultStore: appEnvironment.data.vaultStore,
+                    profilePin: profilePin
                 )
             }
         }
+    }
+
+    private var ownerProfilePinCallbacks: ProfilePinCallbacks? {
+        guard screen.contentStore.isOwner else { return nil }
+        return ProfilePinCallbacks(
+            isPinned: { screen.isPinned(contentType: $0, contentID: $1) },
+            requestPin: { type, id, preview in
+                screen.requestPin(contentType: type, contentID: id, preview: preview)
+            }
+        )
     }
 }

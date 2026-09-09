@@ -135,6 +135,39 @@ export function buildPushAlertCopy(target: PushNotificationTarget): {
     return { title: who, body: `joined ${room}` }
   }
 
+  if (type === "trade_room_join_request") {
+    const json = parseJsonContent(target.content)
+    const room =
+      stringField(json, "room_name") ||
+      stringField(json, "room_slug") ||
+      "a Trade Room"
+    return { title: who, body: `requested to join ${room}` }
+  }
+
+  if (type === "trade_room_join_accepted") {
+    const json = parseJsonContent(target.content)
+    const room =
+      stringField(json, "room_name") ||
+      stringField(json, "room_slug") ||
+      "the Trade Room"
+    return {
+      title: "Join request accepted",
+      body: `Your request to join ${room} was accepted`,
+    }
+  }
+
+  if (type === "trade_room_join_declined") {
+    const json = parseJsonContent(target.content)
+    const room =
+      stringField(json, "room_name") ||
+      stringField(json, "room_slug") ||
+      "the Trade Room"
+    return {
+      title: "Join request declined",
+      body: `Your request to join ${room} was declined`,
+    }
+  }
+
   if (type === "room_message") {
     const meta = parseRoomMessageContent(target.content)
     const room = meta.room_name?.trim() || "Trade Room"
@@ -272,11 +305,27 @@ export function buildPushDeepLinkHref(target: PushNotificationTarget): string {
     return "/notifications"
   }
 
-  if (type === "room_join") {
+  if (type === "room_join" || type === "trade_room_join_accepted") {
     const meta = parseRoomJoinContent(target.content)
     const slug = meta.room_slug?.trim()
     if (slug) return buildTradeRoomHref(slug)
+    if (target.room_id) return `/community?room=${String(target.room_id)}`
     return "/community"
+  }
+
+  if (type === "trade_room_join_request") {
+    const json = parseJsonContent(target.content)
+    const href = stringField(json, "href")
+    if (href.startsWith("/")) return href
+    const joinRequestId = stringField(json, "join_request_id")
+    if (joinRequestId) {
+      return `/notifications?joinRequest=${encodeURIComponent(joinRequestId)}`
+    }
+    return "/notifications"
+  }
+
+  if (type === "trade_room_join_declined") {
+    return "/notifications"
   }
 
   if (type === "room_message" || type === "room_mention") {

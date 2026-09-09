@@ -6,7 +6,8 @@ enum MediaImagePreparation {
     static func jpegData(
         from image: UIImage,
         maxDimension: CGFloat = 2560,
-        quality: CGFloat = 0.92
+        quality: CGFloat = 0.92,
+        logUpload: Bool = false
     ) -> Data? {
         let normalized = MediaImageOrientation.normalized(image)
         let pixelSize = MediaImageOrientation.pixelSize(of: normalized)
@@ -18,7 +19,17 @@ enum MediaImagePreparation {
         let rendered = renderer.image { _ in
             normalized.draw(in: CGRect(origin: .zero, size: target))
         }
-        return rendered.jpegData(compressionQuality: quality)
+        let data = rendered.jpegData(compressionQuality: quality)
+        #if DEBUG
+        if logUpload {
+            ImageUploadProbe.log(
+                croppedImage: true,
+                pixelSize: MediaImageOrientation.pixelSize(of: rendered),
+                bytes: data?.count ?? 0
+            )
+        }
+        #endif
+        return data
     }
 
     /// Web `prepareStoryImageFile` — default compress preset (max width 1200).
@@ -26,3 +37,21 @@ enum MediaImagePreparation {
         jpegData(from: image, maxDimension: 1200, quality: 0.92)
     }
 }
+
+#if DEBUG
+enum ImageUploadProbe {
+    static func log(croppedImage: Bool, pixelSize: CGSize, bytes: Int) {
+        let aspect = pixelSize.width / max(pixelSize.height, 1)
+        print(
+            "[ImageUpload] croppedImage=\(croppedImage) "
+                + "uploadPixels=\(Int(pixelSize.width))x\(Int(pixelSize.height)) "
+                + "uploadAspectRatio=\(String(format: "%.4f", aspect)) "
+                + "bytes=\(bytes)"
+        )
+    }
+}
+#else
+enum ImageUploadProbe {
+    static func log(croppedImage: Bool, pixelSize: CGSize, bytes: Int) {}
+}
+#endif

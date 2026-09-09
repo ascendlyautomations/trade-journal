@@ -127,6 +127,7 @@ final class ScreenDataOrchestrationTests: XCTestCase {
         let viewModel = TradeRoomsHomeViewModel(
             messages: environment.data.messages,
             rooms: environment.data.rooms,
+            explore: environment.data.explore,
             profiles: environment.data.profiles,
             session: environment.data.session,
             detailCache: environment.data.detailCache,

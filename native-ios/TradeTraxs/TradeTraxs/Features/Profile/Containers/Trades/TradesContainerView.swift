@@ -5,6 +5,7 @@ struct TradesContainerView: View {
     let imagePipeline: any ImagePipeline
     @Bindable var engagementStore: EngagementStore
     @Bindable var vaultStore: VaultStore
+    var profilePin: ProfilePinCallbacks? = nil
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -51,7 +52,8 @@ struct TradesContainerView: View {
                             onShare: { viewModel.shareTrade(trade) },
                             onEdit: { viewModel.editTrade(trade) },
                             onDelete: { viewModel.requestDelete(trade) },
-                            onReport: reportAction(for: trade)
+                            onReport: reportAction(for: trade),
+                            profilePin: profilePin
                         )
                         .transition(
                             reduceMotion

@@ -21,6 +21,7 @@ nonisolated protocol ImageCaching: Sendable {
     func imageData(forKey key: String) async -> Data?
     func setImageData(_ data: Data, forKey key: String) async
     func removeImage(forKey key: String) async
+    func removeAllImages() async
 }
 
 /// Query / response cache keyed by logical request identity.
@@ -83,6 +84,8 @@ nonisolated struct PlaceholderImageCache: ImageCaching {
     func removeImage(forKey key: String) async {
         _ = key
     }
+
+    func removeAllImages() async {}
 }
 
 nonisolated struct PlaceholderQueryCache: QueryCaching {

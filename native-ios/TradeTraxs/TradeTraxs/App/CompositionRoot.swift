@@ -62,8 +62,14 @@ enum CompositionRoot {
             rooms: data.rooms,
             session: data.session
         )
+        let sessionManager = authentication.sessionManager
         AppIconBadgeSync.configure(
-            client: AppIconBadgeClient(transport: transport)
+            client: AppIconBadgeClient(transport: transport),
+            canFetchAuthenticatedBadge: {
+                await SessionNetworkGate.shared.awaitReady()
+                guard let token = sessionManager.accessToken, !token.isEmpty else { return false }
+                return true
+            }
         )
         let dependencies = DependencyContainer.make(
             configuration: configuration,
@@ -137,10 +143,17 @@ enum CompositionRoot {
             appBootstrapState.reset()
             profileOnboardingGate.reset()
         }
+        let authLifecycle = authentication.lifecycle
         authentication.coordinator.onAuthenticatedSessionBound = {
             Task {
+                while !authLifecycle.initialRestoreCompleted {
+                    try? await Task.sleep(nanoseconds: 25_000_000)
+                    if Task.isCancelled { return }
+                }
                 await authentication.manager.awaitNetworkReady()
+                guard sessionManager.accessToken?.isEmpty == false else { return }
                 pushNotifications.syncRegistrationForAuthenticatedSession()
+                pushNotifications.syncBadgeFromActivity()
                 await DailyCheckInReminderCoordinator.shared.sync()
             }
         }

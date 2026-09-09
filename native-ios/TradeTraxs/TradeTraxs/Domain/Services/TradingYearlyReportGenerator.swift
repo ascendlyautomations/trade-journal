@@ -232,10 +232,10 @@ nonisolated enum TradingYearlyReportGenerator {
 
         let winRateText: String = {
             guard let winRate = metrics.winRate else { return "no closed trades" }
-            return String(format: "%.1f%% win rate", NSDecimalNumber(decimal: winRate * 100).doubleValue)
+            return "\(NumberDisplay.percent(winRate * 100, minimumFractionDigits: 1, maximumFractionDigits: 1)) win rate"
         }()
 
-        return "\(year) was a \(tone) year with \(metrics.tradeCount) trades and \(formatMoney(metrics.netPnl)) net P&L. You finished with \(winRateText) across \(metrics.winningDays) winning days and \(metrics.losingDays) losing days."
+        return "\(year) was a \(tone) year with \(NumberDisplay.integer(metrics.tradeCount)) trades and \(formatMoney(metrics.netPnl)) net P&L. You finished with \(winRateText) across \(NumberDisplay.integer(metrics.winningDays)) winning days and \(NumberDisplay.integer(metrics.losingDays)) losing days."
     }
 
     private static func buildMonthExecutiveSummary(
@@ -247,7 +247,7 @@ nonisolated enum TradingYearlyReportGenerator {
         if metrics.tradesTaken == 0 {
             return "No trades matched your filters during \(label) \(ref.year)."
         }
-        return "\(label) \(ref.year): \(metrics.tradesTaken) trades and \(formatPnl(metrics.netPnl)) net P&L with \(String(format: "%.1f%%", metrics.winRate)) win rate."
+        return "\(label) \(ref.year): \(NumberDisplay.integer(metrics.tradesTaken)) trades and \(formatPnl(metrics.netPnl)) net P&L with \(NumberDisplay.percent(metrics.winRate, minimumFractionDigits: 1, maximumFractionDigits: 1)) win rate."
     }
 
     private static func buildMonthKeyTakeaway(metrics: TradingReportMetrics) -> String {
@@ -341,15 +341,11 @@ nonisolated enum TradingYearlyReportGenerator {
     }
 
     private static func formatMoney(_ value: Decimal) -> String {
-        formatPnl(NSDecimalNumber(decimal: value).doubleValue)
+        NumberDisplay.reportPnL(value)
     }
 
     private static func formatPnl(_ value: Double) -> String {
-        let absValue = abs(value)
-        let formatted = absValue.formatted(
-            .number.precision(.fractionLength(2)).grouping(.automatic)
-        )
-        return value < 0 ? "-$\(formatted)" : "$\(formatted)"
+        NumberDisplay.reportPnL(value)
     }
 }
 

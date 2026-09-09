@@ -49,6 +49,21 @@ nonisolated enum ActivityNotificationFormatting {
                 return "\(actorName) joined \(room)"
             }
             return "\(actorName) joined your room"
+        case .tradeRoomJoinRequest:
+            if let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines), !room.isEmpty {
+                return "\(actorName) requested to join \(room)"
+            }
+            return "\(actorName) requested to join a Trade Room"
+        case .tradeRoomJoinAccepted:
+            if let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines), !room.isEmpty {
+                return "Your request to join \(room) was accepted"
+            }
+            return "Your join request was accepted"
+        case .tradeRoomJoinDeclined:
+            if let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines), !room.isEmpty {
+                return "Your request to join \(room) was declined"
+            }
+            return "Your join request was declined"
         case .roomMention:
             let roomLabel = roomChannelTitle(
                 roomName: notification.roomName,
@@ -86,6 +101,9 @@ nonisolated enum ActivityNotificationFormatting {
 
     static func secondaryText(for notification: ActivityNotification) -> String? {
         switch notification.kind {
+        case .tradeRoomJoinRequest:
+            let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return room.isEmpty ? nil : room
         case .affiliateReferral, .affiliateCommissionEarned, .tradingReport:
             let body = notification.body.trimmingCharacters(in: .whitespacesAndNewlines)
             return body.isEmpty ? nil : body

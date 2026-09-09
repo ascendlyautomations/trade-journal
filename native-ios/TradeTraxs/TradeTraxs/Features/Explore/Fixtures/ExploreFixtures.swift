@@ -29,6 +29,16 @@ enum ExploreFixtures {
     static func rooms() -> [ExploreRoomSuggestion] {
         [
             ExploreRoomSuggestion(
+                id: RoomID("dev.explore.room.futures-official"),
+                name: "Futures Traders",
+                slug: "futures-traders",
+                description: "Global community for futures traders.",
+                memberCount: 2400,
+                imageURL: nil,
+                roomKind: .official,
+                discoveryTags: ["Futures", "Indices"]
+            ),
+            ExploreRoomSuggestion(
                 id: RoomID("dev.explore.room.futures"),
                 name: "Futures Desk",
                 slug: "futures-desk",

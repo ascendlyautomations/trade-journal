@@ -45,24 +45,35 @@ struct TradeTraxsContentImage: View {
 
         if let fixedSize {
             let presentation = resolvedPresentation(imageAspect: aspect, containerWidth: fixedSize.width)
+            let metrics = FeedMediaLayout.frameMetrics(
+                containerWidth: fixedSize.width,
+                imageAspect: aspect,
+                presentation: presentation
+            )
+            let containerSize = CGSize(
+                width: fixedSize.width,
+                height: presentation.requiresFramedViewport
+                    ? min(fixedSize.height, metrics.containerHeight)
+                    : fixedSize.height
+            )
             ZStack {
                 bg
                 ContentImageFramedImage(
                     image: image,
                     presentation: presentation,
-                    containerSize: fixedSize
+                    containerSize: containerSize
                 )
             }
             .frame(width: fixedSize.width, height: fixedSize.height)
             .clipped()
             .onAppear {
-                ImageRenderProbe.log(
+                CropRenderProbe.log(
                     surface: surface.rawValue,
-                    availableWidth: fixedSize.width,
-                    presentationAspectRatio: fixedSize.width / max(fixedSize.height, 1),
-                    calculatedHeight: fixedSize.height,
-                    cropRect: presentation.normalizedCrop,
-                    mediaID: mediaID
+                    selectedMode: presentation.aspectMode.rawValue,
+                    presentationAspectRatio: presentation.presentationAspectRatio,
+                    cropRect: presentation.resolvedCrop(imagePixelSize: MediaImageOrientation.pixelSize(of: image)),
+                    containerWidth: fixedSize.width,
+                    containerHeight: fixedSize.height
                 )
             }
         } else {

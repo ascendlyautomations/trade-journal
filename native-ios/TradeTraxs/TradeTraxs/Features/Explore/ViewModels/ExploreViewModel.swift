@@ -21,12 +21,15 @@ final class ExploreViewModel {
     private(set) var searchPhase: SearchPhase = .idle
     private(set) var searchPeople: [ExploreTraderSuggestion] = []
     private(set) var searchRooms: [ExploreRoomSuggestion] = []
+
+    private let joinCoordinator: TradeRoomJoinActionCoordinator
     private(set) var isLoadingMoreTraders = false
     var searchText = ""
 
     private let explore: any ExploreRepository
     private let search: any SearchRepository
     private let profiles: any ProfileRepository
+    private let rooms: any RoomRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator
@@ -48,20 +51,24 @@ final class ExploreViewModel {
         explore: any ExploreRepository,
         search: any SearchRepository,
         profiles: any ProfileRepository,
+        rooms: any RoomRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
         store: ExploreSessionStore? = nil,
-        rpc: (any RPCClient)? = nil
+        rpc: (any RPCClient)? = nil,
+        joinCoordinator: TradeRoomJoinActionCoordinator? = nil
     ) {
         self.explore = explore
         self.search = search
         self.profiles = profiles
+        self.rooms = rooms
         self.session = session
         self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
         self.store = store ?? .shared
         self.rpc = rpc
+        self.joinCoordinator = joinCoordinator ?? .shared
     }
 
     var suggestedTraders: [ExploreTraderSuggestion] { store.suggestedTraders }
@@ -244,6 +251,41 @@ final class ExploreViewModel {
     func openRoom(_ room: ExploreRoomSuggestion) {
         ExperienceHaptics.play(.selection)
         navigationCoordinator.open(.feed(.room(room.id)))
+    }
+
+    func joinSearchRoom(_ room: ExploreRoomSuggestion) async {
+        guard let viewerID else { return }
+        let prior = joinState(for: room.id)
+        guard TradeRoomJoinPresentation.isInteractive(prior) else { return }
+
+        let result = await joinCoordinator.performJoinAction(
+            room: room,
+            viewerID: viewerID,
+            rooms: rooms
+        )
+
+        if result == .joined {
+            patchSearchRoomJoined(room.id)
+            SessionMemberRoomsStore.shared.invalidate(viewerID: viewerID)
+        } else if result == .requested {
+            patchSearchRoomRequested(room.id)
+        }
+    }
+
+    func joinState(for roomID: RoomID) -> TradeRoomDiscoveryJoinState {
+        if let room = searchRooms.first(where: { $0.id == roomID }) {
+            let joined = room.isJoined == true
+                || joinCoordinator.isJoined(roomID: roomID, inboxStore: MessagesInboxStore.shared)
+            return joinCoordinator.effectiveState(for: room, isJoined: joined)
+        }
+        if joinCoordinator.isJoined(roomID: roomID, inboxStore: MessagesInboxStore.shared) { return .joined }
+        return joinCoordinator.mutationStates[roomID] ?? .idle
+    }
+
+    private func patchSearchRoomRequested(_ roomID: RoomID) {
+        if let index = searchRooms.firstIndex(where: { $0.id == roomID }) {
+            searchRooms[index].viewerJoinRequestState = .pending
+        }
     }
 
     func openLeaderboards() {
@@ -653,6 +695,18 @@ final class ExploreViewModel {
             return ids
         } catch {
             return []
+        }
+    }
+
+    private func patchSearchRoomJoined(_ roomID: RoomID) {
+        guard let index = searchRooms.firstIndex(where: { $0.id == roomID }) else { return }
+        searchRooms[index].isJoined = true
+    }
+
+    func applyRoomMetadata(_ room: TradeRoom) {
+        store.applyRoomMetadata(from: room)
+        if let index = searchRooms.firstIndex(where: { $0.id == room.id }) {
+            searchRooms[index].applyMetadata(from: room)
         }
     }
 

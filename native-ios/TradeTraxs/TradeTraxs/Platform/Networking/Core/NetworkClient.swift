@@ -67,7 +67,15 @@ actor URLSessionNetworkClient: NetworkClient {
             )
 
             do {
-                let (data, response) = try await session.data(for: current.urlRequest)
+                let (data, response, taskMetrics) = try await session.dataWithTaskMetrics(
+                    for: current.urlRequest
+                )
+                #if DEBUG
+                NetworkTaskMetricsProbe.logRPCIfPresent(
+                    path: current.url.path,
+                    metrics: taskMetrics
+                )
+                #endif
                 if let mapped = errorMapper.map(data: data, response: response, error: nil) {
                     metrics.endedAt = Date()
                     metrics.statusCode = (response as? HTTPURLResponse)?.statusCode

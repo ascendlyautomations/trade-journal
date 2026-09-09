@@ -26,9 +26,8 @@ final class CreateAchievementViewModel {
     var achievedAt: Date = .now
     var isPublic = true
     var selectedAccountID: TradingAccountID?
-    var imageData: Data?
-    var imagePreview: UIImage?
-    var feedPresentation: ContentImagePresentation?
+    private(set) var finalImage: UIImage?
+    private(set) var finalImageData: Data?
 
     private let achievements: any AchievementRepository
     private let trades: any TradeRepository
@@ -93,7 +92,7 @@ final class CreateAchievementViewModel {
         !titleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !payoutAmountText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || imageData != nil
+            || finalImageData != nil
             || selectedAccountID != nil
             || kind != .milestone
             || !isPublic
@@ -106,7 +105,7 @@ final class CreateAchievementViewModel {
     /// Mirrors ``validate()`` without mutating ``formError`` — drives submit button state.
     var isFormCompleteForSubmit: Bool {
         let title = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, imageData != nil else { return false }
+        guard !title.isEmpty, finalImageData != nil else { return false }
         if isPayoutKind {
             guard let amount = Self.parsePayout(payoutAmountText), amount > 0 else { return false }
         }
@@ -159,9 +158,9 @@ final class CreateAchievementViewModel {
     }
 
     func setImage(_ result: ImageCropSelectionResult) {
-        imagePreview = result.originalImage
-        imageData = MediaImagePreparation.jpegData(from: result.originalImage)
-        feedPresentation = result.presentation
+        guard let applied = ComposerCropImageState.apply(result) else { return }
+        finalImage = applied.finalImage
+        finalImageData = applied.uploadData
     }
 
     func setImage(_ image: UIImage?) {
@@ -169,21 +168,19 @@ final class CreateAchievementViewModel {
             clearImage()
             return
         }
-        let width = UIScreen.main.bounds.width - 32
         let pixelSize = MediaImageOrientation.pixelSize(of: image)
-        let presentation = FeedMediaPresentation.make(
-            aspectOption: .original,
-            imagePixelSize: pixelSize,
-            containerWidth: width,
-            transform: .default
+        setImage(
+            ImageCropSelectionResult(
+                image: image,
+                aspectMode: .original,
+                sourcePixelSize: pixelSize
+            )
         )
-        setImage(ImageCropSelectionResult(originalImage: image, presentation: presentation))
     }
 
     func clearImage() {
-        imageData = nil
-        imagePreview = nil
-        feedPresentation = nil
+        finalImageData = nil
+        finalImage = nil
     }
 
     #if DEBUG
@@ -262,11 +259,13 @@ final class CreateAchievementViewModel {
             publishTask = nil
             return
         }
-        guard let imageData else {
+        guard let finalImage, let finalImageData else {
             formError = "An image is required."
             publishTask = nil
             return
         }
+
+        PostImageUploadProbe.log(finalImage: finalImage, uploadData: finalImageData)
 
         phase = .publishing
         var uploadedStoragePath: String?
@@ -280,17 +279,13 @@ final class CreateAchievementViewModel {
                 imageRef = MediaReference(id: "dev/create-achievement.jpg", kind: .image, altText: nil)
             } else {
                 isUploadingMedia = true
-                let uploaded = try await uploadImage(imageData, viewerID: viewerID)
+                let uploaded = try await uploadImage(finalImageData, viewerID: viewerID)
                 uploadedStoragePath = uploaded.storagePath
                 imageRef = MediaReference(
                     id: uploaded.publicURL,
                     kind: .image,
-                    altText: nil,
-                    imagePresentation: feedPresentation
+                    altText: nil
                 )
-                if let feedPresentation {
-                    FeedMediaPresentationStore.save(feedPresentation, forMediaURL: uploaded.publicURL)
-                }
                 isUploadingMedia = false
             }
 
@@ -357,7 +352,7 @@ final class CreateAchievementViewModel {
         if isPayoutKind, payoutAmountText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             missing.append("Payout Amount")
         }
-        if imageData == nil { missing.append("Image") }
+        if finalImageData == nil { missing.append("Image") }
 
         if !missing.isEmpty {
             formError = "Please complete: \(missing.joined(separator: ", "))."
@@ -421,13 +416,7 @@ final class CreateAchievementViewModel {
     }
 
     private static func formatPayoutText(_ amount: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: amount.abs)
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 2
-        formatter.minimumFractionDigits = 0
-        let formatted = formatter.string(from: number) ?? "\(number)"
-        return "+$\(formatted)"
+        NumberDisplay.currency(amount.abs, minimumFractionDigits: 0, maximumFractionDigits: 2, explicitPlus: true)
     }
 }
 

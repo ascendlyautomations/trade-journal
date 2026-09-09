@@ -54,7 +54,7 @@ struct RoomInfoView: View {
             }
         }
         .experienceScreenBackground()
-        .experienceNavigationTitle(viewModel.isOwner ? "Room Information" : "Room Info")
+        .experienceNavigationTitle(viewModel.canManageRoom ? "Room Information" : "Room Info")
         .task {
             viewModel.loadIfNeeded()
         }
@@ -82,7 +82,7 @@ struct RoomInfoView: View {
 
     private var content: some View {
         List {
-            if viewModel.isOwner {
+            if viewModel.canManageRoom {
                 ownerEditorSections
             } else {
                 readOnlyHeaderSection
@@ -91,7 +91,7 @@ struct RoomInfoView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .experienceProtectedFormDismiss(viewModel.isOwner && viewModel.isSavingDetails)
+        .experienceProtectedFormDismiss(viewModel.canManageRoom && viewModel.isSavingDetails)
     }
 
     @ViewBuilder

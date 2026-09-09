@@ -39,6 +39,10 @@ final class OwnerProfileOptimisticStore {
         ownerScreen?.syncPostsFromSection(posts)
     }
 
+    func syncOwnerClipsState(_ clips: [Reel]) {
+        ownerScreen?.syncClipsFromSection(clips)
+    }
+
     func notePostCreated(_ post: Post) {
         posts = Self.upserting(post, into: posts)
         ownerScreen?.applyOptimisticPost(post)
@@ -47,6 +51,9 @@ final class OwnerProfileOptimisticStore {
     }
 
     func noteReelCreated(_ reel: Reel) {
+        RepositoryRequestFlight.shared.invalidate(
+            prefix: "feed.profileReels:\(reel.authorProfileID.rawValue)"
+        )
         guard Self.isListedOnOwnerProfile(reel) else {
             // Still notify Feed / other observers; Profile Clips skips private trade-linked.
             ContentMutationStore.shared.noteReelCreated(reel)

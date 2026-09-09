@@ -66,6 +66,7 @@ nonisolated enum NavigationPathProbeFormatter {
         case .checkInDay: return "checkInDay"
         case .activity: return "activity"
         case .followRequests: return "followRequests"
+        case .tradeRoomJoinRequest: return "tradeRoomJoinRequest"
         case .settings(let settings): return "settings(\(settings.rawValue))"
         }
     }
@@ -126,6 +127,7 @@ nonisolated enum NavigationPathProbeFormatter {
         case .referrals: return "referrals"
         case .activity: return "activity"
         case .followRequests: return "followRequests"
+        case .tradeRoomJoinRequest: return "tradeRoomJoinRequest"
         }
     }
 }

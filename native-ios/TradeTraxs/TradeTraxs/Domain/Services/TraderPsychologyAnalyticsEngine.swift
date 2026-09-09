@@ -978,16 +978,10 @@ nonisolated enum TraderPsychologyAnalyticsEngine {
 
     static func formatWinRate(_ rate: Decimal?) -> String {
         guard let rate else { return "—" }
-        let pct = NSDecimalNumber(decimal: rate * 100).doubleValue
-        return String(format: "%.0f%%", pct)
+        return NumberDisplay.percent(rate * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)
     }
 
     static func money(_ value: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: value).doubleValue
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: number)) ?? "$0"
+        NumberDisplay.currency(value, minimumFractionDigits: 0, maximumFractionDigits: 0)
     }
 }

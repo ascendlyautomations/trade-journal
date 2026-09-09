@@ -13,123 +13,130 @@ enum RoomMembersLoadProbe {
         case memberCount
     }
 
-    nonisolated static func begin(roomID: RoomID) {
-        print("[RoomMembersLoad] begin roomId=\(roomID.rawValue)")
+    nonisolated static func loadStarted(roomID: RoomID) {
+        print("[RoomMembers] loadStarted roomID=\(roomID.rawValue)")
     }
 
-    nonisolated static func memberships(httpStatus: Int?, count: Int) {
-        let statusLabel = httpStatus.map { String($0) } ?? "unknown"
-        print("[RoomMembersLoad] memberships status=\(statusLabel) count=\(count)")
+    nonisolated static func membershipsReturned(count: Int, httpStatus: Int? = nil) {
+        if let httpStatus {
+            print("[RoomMembers] membershipsReturned count=\(count) status=\(httpStatus)")
+        } else {
+            print("[RoomMembers] membershipsReturned count=\(count)")
+        }
     }
 
-    nonisolated static func profiles(count: Int) {
-        print("[RoomMembersLoad] profiles count=\(count)")
+    nonisolated static func profilesRequested(count: Int) {
+        print("[RoomMembers] profilesRequested count=\(count)")
+    }
+
+    nonisolated static func profilesReturned(count: Int) {
+        print("[RoomMembers] profilesReturned count=\(count)")
+    }
+
+    nonisolated static func decoded(count: Int) {
+        print("[RoomMembers] decoded count=\(count)")
+    }
+
+    nonisolated static func uiVisibleCount(_ count: Int) {
+        print("[RoomMembers] UIVisibleCount=\(count)")
     }
 
     nonisolated static func ensureDefaults(status: String) {
-        print("[RoomMembersLoad] ensureDefaults status=\(status)")
+        print("[RoomMembers] ensureDefaults status=\(status)")
     }
 
     nonisolated static func tags(count: Int) {
-        print("[RoomMembersLoad] tags count=\(count)")
+        print("[RoomMembers] tags count=\(count)")
     }
 
     nonisolated static func assignments(count: Int) {
-        print("[RoomMembersLoad] assignments count=\(count)")
-    }
-
-    nonisolated static func completed(roomID: RoomID, memberCount: Int) {
-        print("[RoomMembersLoad] completed roomId=\(roomID.rawValue) memberCount=\(memberCount)")
+        print("[RoomMembers] assignments count=\(count)")
     }
 
     nonisolated static func failed(stage: Stage, operation: String, error: Error) {
+        let detail = failureDetail(for: error)
         print(
-            "[RoomMembersLoad] FAILED stage=\(stage.rawValue) "
-                + "operation=\(operation) "
-                + errorDetail(error)
+            "[RoomMembers] failed stage=\(stage.rawValue) "
+                + "status=\(detail.status) "
+                + "errorType=\(detail.errorType) "
+                + "message=\(detail.message) "
+                + "operation=\(operation)"
         )
     }
 
     nonisolated static func tagEnrichmentFailed(operation: String, error: Error) {
+        let detail = failureDetail(for: error)
         print(
-            "[RoomMembersLoad] tagEnrichmentFailed operation=\(operation) "
-                + errorDetail(error)
+            "[RoomMembers] tagEnrichmentFailed "
+                + "status=\(detail.status) "
+                + "errorType=\(detail.errorType) "
+                + "message=\(detail.message) "
+                + "operation=\(operation)"
         )
     }
 
-    nonisolated private static func errorDetail(_ error: Error) -> String {
-        var parts: [String] = ["error=\(type(of: error))"]
+    nonisolated private static func failureDetail(for error: Error) -> (status: String, errorType: String, message: String) {
+        var status = "unknown"
+        var message = PostgRESTValidationDetail.safeField(error.localizedDescription, max: 160)
+        let errorType = String(describing: type(of: error))
 
         if let app = error as? AppError {
-            parts.append(contentsOf: appErrorParts(app))
+            switch app {
+            case .transport(let network):
+                let parts = networkErrorParts(network)
+                status = parts.status
+                message = parts.message
+            case .unknown(let text):
+                let parsed = PostgRESTValidationDetail.parse(httpStatus: nil, body: text)
+                status = parsed.httpStatus.map(String.init) ?? "unknown"
+                message = parsed.message ?? PostgRESTValidationDetail.safeField(text, max: 160)
+            case .cancelled:
+                status = "cancelled"
+                message = "cancelled"
+            case .authentication:
+                status = "401"
+            case .notImplemented(let feature):
+                message = "notImplemented:\(feature)"
+            }
         } else if let network = error as? NetworkError {
-            parts.append(contentsOf: networkErrorParts(network))
-        } else {
-            parts.append("message=\(PostgRESTValidationDetail.safeField(error.localizedDescription, max: 160))")
+            let parts = networkErrorParts(network)
+            status = parts.status
+            message = parts.message
         }
 
-        return parts.joined(separator: " ")
+        return (status, errorType, message)
     }
 
-    nonisolated private static func appErrorParts(_ error: AppError) -> [String] {
+    nonisolated private static func networkErrorParts(_ error: NetworkError) -> (status: String, message: String) {
         switch error {
-        case .transport(let network):
-            return networkErrorParts(network)
-        case .unknown(let message):
-            return postgrestParts(httpStatus: nil, body: message)
-        case .cancelled:
-            return ["kind=cancelled"]
-        case .authentication(let auth):
-            return ["kind=authentication message=\(PostgRESTValidationDetail.safeField(String(describing: auth), max: 96))"]
-        case .notImplemented(let feature):
-            return ["kind=notImplemented feature=\(feature)"]
-        }
-    }
-
-    nonisolated private static func networkErrorParts(_ error: NetworkError) -> [String] {
-        switch error {
-        case .decoding(let message):
-            return ["kind=decoding message=\(PostgRESTValidationDetail.safeField(message, max: 160))"]
-        case .validation(let statusCode, let message):
-            return postgrestParts(httpStatus: statusCode, body: message)
-        case .server(let statusCode, let message):
-            return postgrestParts(httpStatus: statusCode, body: message ?? "")
+        case .decoding(let text):
+            return ("decode", PostgRESTValidationDetail.safeField(text, max: 160))
+        case .validation(let statusCode, let text):
+            let parsed = PostgRESTValidationDetail.parse(httpStatus: statusCode, body: text)
+            return (
+                String(parsed.httpStatus ?? statusCode ?? 0),
+                parsed.message ?? PostgRESTValidationDetail.safeField(text, max: 160)
+            )
+        case .server(let statusCode, let text):
+            return (
+                String(statusCode),
+                PostgRESTValidationDetail.safeField(text ?? "", max: 160)
+            )
         case .unauthorized:
-            return ["httpStatus=401"]
+            return ("401", "unauthorized")
         case .forbidden:
-            return ["httpStatus=403"]
+            return ("403", "forbidden")
         case .connectivity:
-            return ["kind=connectivity"]
+            return ("offline", "connectivity")
         case .timeout:
-            return ["kind=timeout"]
+            return ("timeout", "timeout")
         case .cancelled:
-            return ["kind=cancelled"]
-        case .rateLimited(let retryAfter):
-            let retryLabel = retryAfter.map { String($0) } ?? "nil"
-            return ["kind=rateLimited retryAfter=\(retryLabel)"]
-        case .unknown(let message):
-            return ["kind=unknown message=\(PostgRESTValidationDetail.safeField(message, max: 160))"]
+            return ("cancelled", "cancelled")
+        case .rateLimited:
+            return ("429", "rateLimited")
+        case .unknown(let text):
+            return ("unknown", PostgRESTValidationDetail.safeField(text, max: 160))
         }
-    }
-
-    nonisolated private static func postgrestParts(httpStatus: Int?, body: String) -> [String] {
-        let parsed = PostgRESTValidationDetail.parse(httpStatus: httpStatus, body: body)
-        var parts: [String] = []
-        if let httpStatus = parsed.httpStatus ?? httpStatus {
-            parts.append("httpStatus=\(httpStatus)")
-        }
-        if let code = parsed.code { parts.append("code=\(PostgRESTValidationDetail.safeField(code, max: 48))") }
-        if let message = parsed.message {
-            parts.append("message=\(PostgRESTValidationDetail.safeField(message, max: 96))")
-        }
-        if let details = parsed.details {
-            parts.append("details=\(PostgRESTValidationDetail.safeField(details, max: 64))")
-        }
-        if let hint = parsed.hint { parts.append("hint=\(PostgRESTValidationDetail.safeField(hint, max: 64))") }
-        if parts.isEmpty {
-            parts.append("message=\(PostgRESTValidationDetail.safeField(body, max: 96))")
-        }
-        return parts
     }
 }
 #else
@@ -145,14 +152,22 @@ enum RoomMembersLoadProbe {
         case memberCount
     }
 
-    static func begin(roomID: RoomID) {}
-    static func memberships(httpStatus: Int?, count: Int) {}
-    static func profiles(count: Int) {}
+    static func loadStarted(roomID: RoomID) {}
+    static func membershipsReturned(count: Int, httpStatus: Int? = nil) {}
+    static func profilesRequested(count: Int) {}
+    static func profilesReturned(count: Int) {}
+    static func decoded(count: Int) {}
+    static func uiVisibleCount(_ count: Int) {}
     static func ensureDefaults(status: String) {}
     static func tags(count: Int) {}
     static func assignments(count: Int) {}
-    static func completed(roomID: RoomID, memberCount: Int) {}
     static func failed(stage: Stage, operation: String, error: Error) {}
     static func tagEnrichmentFailed(operation: String, error: Error) {}
+
+    // Legacy call sites during migration
+    static func begin(roomID: RoomID) { loadStarted(roomID: roomID) }
+    static func memberships(httpStatus: Int?, count: Int) { membershipsReturned(count: count, httpStatus: httpStatus) }
+    static func profiles(count: Int) { profilesReturned(count: count) }
+    static func completed(roomID: RoomID, memberCount: Int) { uiVisibleCount(memberCount) }
 }
 #endif

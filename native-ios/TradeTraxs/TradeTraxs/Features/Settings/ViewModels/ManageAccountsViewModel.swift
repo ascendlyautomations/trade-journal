@@ -224,8 +224,31 @@ final class ManageAccountsViewModel {
     }
 
     func loadAllPayoutEntries() async {
-        for account in accounts {
-            await loadPayoutEntries(for: account.id)
+        let accountIDs = accounts.map(\.id)
+        guard !accountIDs.isEmpty else { return }
+        isLoadingPayouts = payoutEntriesByAccount.isEmpty
+        payoutError = nil
+        defer { isLoadingPayouts = false }
+
+        let started = CFAbsoluteTimeGetCurrent()
+        do {
+            let rows = try await trades.payoutEntries(for: accountIDs)
+            var grouped: [TradingAccountID: [AccountPayoutEntry]] = [:]
+            for accountID in accountIDs {
+                grouped[accountID] = []
+            }
+            for entry in rows {
+                grouped[entry.accountID, default: []].append(entry)
+            }
+            payoutEntriesByAccount = grouped
+            PayoutBatchDiagnostics.logEntries(
+                accounts: accountIDs.count,
+                requests: 1,
+                entries: rows.count,
+                dtMs: Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+            )
+        } catch {
+            payoutError = UserFacingError.message(for: error)
         }
     }
 

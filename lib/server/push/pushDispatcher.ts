@@ -58,6 +58,9 @@ function preferenceKeyForType(
     case "room_mention":
       return "room_mentions_enabled"
     case "room_join":
+    case "trade_room_join_request":
+    case "trade_room_join_accepted":
+    case "trade_room_join_declined":
       return "room_joins_enabled"
     case "message":
       return "direct_messages_enabled"
@@ -194,6 +197,7 @@ function parseApnsMeta(content: string | null | undefined): {
   threadId?: string
   collapseId?: string
   followRequestId?: string
+  joinRequestId?: string
 } {
   if (!content?.trim()) return {}
   try {
@@ -206,6 +210,7 @@ function parseApnsMeta(content: string | null | undefined): {
       threadId?: string
       collapseId?: string
       followRequestId?: string
+      joinRequestId?: string
     } = {}
     if (typeof parsed.conversation_id === "string") {
       out.conversationId = parsed.conversation_id
@@ -218,6 +223,9 @@ function parseApnsMeta(content: string | null | undefined): {
     }
     if (typeof parsed.follow_request_id === "string") {
       out.followRequestId = parsed.follow_request_id
+    }
+    if (typeof parsed.join_request_id === "string") {
+      out.joinRequestId = parsed.join_request_id
     }
     return out
   } catch {
@@ -326,6 +334,7 @@ export async function dispatchPushNotification(
     let threadId: string | undefined
     let collapseId: string | undefined
     let followRequestId: string | undefined
+    let joinRequestId: string | undefined
 
     if (isMessaging) {
       conversationId = meta.conversationId
@@ -339,8 +348,8 @@ export async function dispatchPushNotification(
         threadId = `dm:${conversationId}`
       }
     } else {
-      // Activity path historically only forwarded follow_request_id from content.
       followRequestId = meta.followRequestId
+      joinRequestId = meta.joinRequestId
     }
 
     if (isFollow) {
@@ -381,6 +390,7 @@ export async function dispatchPushNotification(
           threadId,
           collapseId,
           followRequestId,
+          joinRequestId,
           senderId,
         })
         if (isFollow) {

@@ -179,32 +179,144 @@ enum FeedBootstrap: ScreenBootstrap {
         var result: [FeedTimelineEntry] = []
         result.reserveCapacity(items.count)
         for item in items {
-            switch item.kind {
-            case .trade:
-                guard let tradeID = item.tradeID,
-                      let trade = detailCache.trade(id: tradeID)
-                else { continue }
-                result.append(.trade(item, trade))
-            case .post:
-                guard let postID = item.postID,
-                      let post = detailCache.post(id: postID)
-                else { continue }
-                result.append(.post(item, post))
-            case .reel:
-                guard let reelID = item.reelID,
-                      let reel = detailCache.reel(id: reelID)
-                else { continue }
-                result.append(.clip(item, reel))
-            case .achievement:
-                guard let achievementID = item.achievementID,
-                      let achievement = detailCache.achievement(id: achievementID)
-                else { continue }
-                result.append(.achievement(item, achievement))
-            case .story:
-                continue
+            if let entry = buildEntryFromItemSync(item, detailCache: detailCache) {
+                result.append(entry)
             }
         }
         return result
+    }
+
+    /// Cache + inline embed stubs only — never awaits network.
+    static func buildEntryFromItemSync(
+        _ item: FeedItem,
+        detailCache: DetailPresentationCache
+    ) -> FeedTimelineEntry? {
+        switch item.kind {
+        case .trade:
+            guard let tradeID = item.tradeID,
+                  let trade = detailCache.trade(id: tradeID)
+            else { return nil }
+            return .trade(item, trade)
+
+        case .post:
+            guard let postID = item.postID else { return nil }
+            if let cached = detailCache.post(id: postID) {
+                return .post(item, cached)
+            }
+            if item.caption != nil || item.mediaURL != nil {
+                let media: [MediaReference] = {
+                    guard let url = item.mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          !url.isEmpty else { return [] }
+                    if let reference = ContentImagePresentation.mediaReference(
+                        url: url,
+                        crop: item.imageCrop
+                    ) {
+                        return [reference]
+                    }
+                    return [MediaReference(id: url, kind: .image, altText: nil)]
+                }()
+                let post = Post(
+                    id: postID,
+                    authorProfileID: item.authorProfileID,
+                    body: item.caption ?? "",
+                    media: media,
+                    visibility: .public,
+                    linkedTradeID: item.tradeID,
+                    isPinned: false,
+                    createdAt: item.createdAt,
+                    updatedAt: item.createdAt
+                )
+                detailCache.seed(post)
+                return .post(item, post)
+            }
+            return nil
+
+        case .reel:
+            guard let reelID = item.reelID else { return nil }
+            if let cached = detailCache.reel(id: reelID) {
+                return .clip(item, cached)
+            }
+            if let media = item.mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !media.isEmpty
+            {
+                let reel = Reel(
+                    id: reelID,
+                    authorProfileID: item.authorProfileID,
+                    video: MediaReference(id: media, kind: .video, altText: nil),
+                    thumbnail: MediaReference(id: media, kind: .image, altText: nil),
+                    caption: item.caption,
+                    visibility: .public,
+                    linkedTradeID: item.tradeID,
+                    durationSeconds: nil,
+                    createdAt: item.createdAt
+                )
+                detailCache.seed(reel)
+                return .clip(item, reel)
+            }
+            return nil
+
+        case .achievement:
+            guard let achievementID = item.achievementID else { return nil }
+            if let cached = detailCache.achievement(id: achievementID) {
+                return .achievement(item, cached)
+            }
+            if item.caption != nil || item.mediaURL != nil {
+                let image: MediaReference? = {
+                    guard let url = item.mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          !url.isEmpty else { return nil }
+                    return ContentImagePresentation.mediaReference(
+                        url: url,
+                        crop: item.imageCrop
+                    )
+                }()
+                let achievement = Achievement(
+                    id: achievementID,
+                    ownerProfileID: item.authorProfileID,
+                    kind: .milestone,
+                    title: item.caption ?? "Achievement",
+                    description: nil,
+                    tier: .bronze,
+                    value: nil,
+                    valueText: nil,
+                    firm: nil,
+                    accountID: nil,
+                    image: image,
+                    isPublic: true,
+                    isFeatured: false,
+                    sortOrder: 0,
+                    achievedAt: item.createdAt
+                )
+                detailCache.seed(achievement)
+                return .achievement(item, achievement)
+            }
+            return nil
+
+        case .story:
+            return nil
+        }
+    }
+
+    /// Inserts/upgrades hydrated rows without reordering the authoritative feed item list.
+    static func mergeHydratedEntries(
+        existing: [FeedTimelineEntry],
+        hydrated: [FeedTimelineEntry],
+        feedItemOrder: [String]
+    ) -> [FeedTimelineEntry] {
+        var byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
+        for entry in hydrated {
+            byID[entry.id] = entry
+        }
+        guard !feedItemOrder.isEmpty else {
+            return FeedSupport.sortDescending(Array(byID.values))
+        }
+        var ordered: [FeedTimelineEntry] = []
+        ordered.reserveCapacity(feedItemOrder.count)
+        for id in feedItemOrder {
+            if let entry = byID[id] {
+                ordered.append(entry)
+            }
+        }
+        return ordered
     }
 
     static func hydrate(
@@ -322,6 +434,12 @@ enum FeedBootstrap: ScreenBootstrap {
                 let media: [MediaReference] = {
                     guard let url = item.mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines),
                           !url.isEmpty else { return [] }
+                    if let reference = ContentImagePresentation.mediaReference(
+                        url: url,
+                        crop: item.imageCrop
+                    ) {
+                        return [reference]
+                    }
                     return [MediaReference(id: url, kind: .image, altText: nil)]
                 }()
                 let post = Post(
@@ -384,7 +502,10 @@ enum FeedBootstrap: ScreenBootstrap {
                 let image: MediaReference? = {
                     guard let url = item.mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines),
                           !url.isEmpty else { return nil }
-                    return MediaReference(id: url, kind: .image, altText: nil)
+                    return ContentImagePresentation.mediaReference(
+                        url: url,
+                        crop: item.imageCrop
+                    )
                 }()
                 let achievement = Achievement(
                     id: achievementID,

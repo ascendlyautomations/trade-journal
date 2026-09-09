@@ -501,6 +501,7 @@ nonisolated enum FeedDTO {
         var trade_id: String?
         var created_at: String?
         var image_url: String?
+        var image_crop: ContentImagePresentation?
         var profiles: ProfilesBox?
         var trades: TradeEmbedBox?
     }
@@ -529,6 +530,7 @@ nonisolated enum FeedDTO {
         var user_id: String?
         var content: String?
         var image_url: String?
+        var image_crop: ContentImagePresentation?
         var created_at: String?
         var profiles: ProfilesBox?
     }
@@ -746,6 +748,15 @@ nonisolated enum RoomDTO {
         var description: String?
         var member_count: Int?
         var show_on_profile: Bool?
+        var is_private: Bool?
+        var category: String?
+        var discovery_tags: [String]?
+        var join_policy: String?
+        var rules: String?
+        var members_can_message: Bool?
+        var members_can_share_trades: Bool?
+        var members_can_share_media: Bool?
+        var room_kind: String?
         var image_url: String?
         var created_at: String?
     }
@@ -855,12 +866,21 @@ nonisolated enum RoomDTO {
 
     struct ManagedMemberRow: Decodable, Sendable {
         var user_id: String?
+        /// Production `room_members.created_at` (web-authoritative).
+        var created_at: String?
+        /// Legacy dev schema fallback.
         var joined_at: String?
         var profiles: EmbeddedProfile?
+
+        /// Prefer `created_at`; fall back to legacy `joined_at` when present.
+        var membershipJoinedAt: String? {
+            created_at ?? joined_at
+        }
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             user_id = try container.decodeIfPresent(String.self, forKey: .user_id)
+            created_at = try container.decodeIfPresent(String.self, forKey: .created_at)
             joined_at = try container.decodeIfPresent(String.self, forKey: .joined_at)
             if let single = try? container.decodeIfPresent(EmbeddedProfile.self, forKey: .profiles) {
                 profiles = single
@@ -872,7 +892,7 @@ nonisolated enum RoomDTO {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case user_id, joined_at, profiles
+            case user_id, created_at, joined_at, profiles
         }
     }
 

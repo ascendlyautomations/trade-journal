@@ -12,7 +12,9 @@ enum ReelPublishPipeline {
 
     /// Uploads video (+ optional thumb) then inserts `reels`.
     /// Trade-linked: `caption` forced nil; visibility from trade public flag.
+    /// Linked-trade uniqueness must be validated by the caller before invoking this method.
     static func publish(
+        publishID: String,
         draft: ReelDraft,
         authorID: ProfileID,
         tradeID: TradeID?,
@@ -22,20 +24,31 @@ enum ReelPublishPipeline {
         objectStorage: any ObjectStorageProviding,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> Reel {
-        if let tradeID {
-            if try await feed.tradeHasAttachedReel(tradeID) {
-                throw AppError.domain(.conflict(message: "This trade already has a clip attached."))
-            }
-        }
+        ReelPublishDiagnostics.logPreparationCompleted(
+            publishID: publishID,
+            byteCount: draft.byteCount,
+            durationSeconds: draft.durationSeconds
+        )
 
         onProgress?(0.1)
-        let uploaded = try await uploadMedia(
-            draft: draft,
-            authorID: authorID,
-            uploadService: uploadService,
-            objectStorage: objectStorage,
-            onProgress: onProgress
-        )
+        let uploaded: UploadedMedia
+        do {
+            uploaded = try await uploadMedia(
+                publishID: publishID,
+                draft: draft,
+                authorID: authorID,
+                uploadService: uploadService,
+                objectStorage: objectStorage,
+                onProgress: onProgress
+            )
+        } catch {
+            ReelPublishDiagnostics.logFailed(
+                publishID: publishID,
+                stage: "upload",
+                error: error
+            )
+            throw error
+        }
         onProgress?(0.9)
 
         let visibility: ContentVisibility = {
@@ -65,11 +78,28 @@ enum ReelPublishPipeline {
             createdAt: .now
         )
 
+        ReelPublishDiagnostics.logDatabaseInsertStarted(publishID: publishID)
         do {
-            let created = try await feed.createReel(provisional)
+            let inserted = try await feed.createReel(provisional)
+            ReelPublishDiagnostics.logDatabaseInsertCompleted(
+                publishID: publishID,
+                reelID: inserted.id.rawValue
+            )
+
+            let verified = try await feed.reel(id: inserted.id)
+            guard verified.reel.authorProfileID == authorID else {
+                throw AppError.unknown(message: "Published clip could not be verified.")
+            }
+
             onProgress?(1)
-            return created
+            ReelPublishDiagnostics.logCompleted(publishID: publishID)
+            return verified.reel
         } catch {
+            ReelPublishDiagnostics.logFailed(
+                publishID: publishID,
+                stage: "databaseInsert",
+                error: error
+            )
             // Best-effort orphan cleanup (web does not; we try).
             try? await objectStorage.delete(
                 bucket: StorageBucket.reels.rawValue,
@@ -85,32 +115,54 @@ enum ReelPublishPipeline {
         }
     }
 
+    private static let reelVideoCacheControl = "31536000"
+
     private static func uploadMedia(
+        publishID: String,
         draft: ReelDraft,
         authorID: ProfileID,
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
         onProgress: ((Double) -> Void)?
     ) async throws -> UploadedMedia {
-        let videoData = try Data(contentsOf: draft.localVideoURL)
-        guard videoData.count <= MediaVideoPreparation.maxFileBytes else {
+        let videoData = try Data(contentsOf: draft.localVideoURL, options: [.mappedIfSafe])
+        guard videoData.count <= MediaVideoPreparation.maxFinalUploadBytes else {
             throw AppError.unknown(message: "Videos must be 100 MB or smaller.")
         }
 
         let stamp = Int(Date().timeIntervalSince1970 * 1000)
-        let ext = draft.localVideoURL.pathExtension.isEmpty ? "mov" : draft.localVideoURL.pathExtension
-        let videoPath = "\(authorID.rawValue)/videos/\(stamp)-clip.\(ext)"
+        let videoPath = "\(authorID.rawValue)/videos/\(stamp)-clip.mp4"
 
         onProgress?(0.25)
-        let videoRef = try await uploadService.upload(
-            UploadRequest(
-                bucket: StorageBucket.reels.rawValue,
-                path: videoPath,
-                data: videoData,
-                contentType: draft.contentType,
-                purpose: nil
-            )
+        ReelPublishDiagnostics.logVideoUploadStarted(
+            publishID: publishID,
+            objectIdentity: videoPath,
+            byteCount: videoData.count
         )
+        let videoRef: MediaReference
+        do {
+            videoRef = try await uploadService.upload(
+                UploadRequest(
+                    bucket: StorageBucket.reels.rawValue,
+                    path: videoPath,
+                    data: videoData,
+                    contentType: "video/mp4",
+                    purpose: nil,
+                    cacheControl: reelVideoCacheControl
+                )
+            )
+            ReelPublishDiagnostics.logVideoUploadCompleted(
+                publishID: publishID,
+                statusCode: 200
+            )
+        } catch {
+            ReelPublishDiagnostics.logFailed(
+                publishID: publishID,
+                stage: "uploadVideo",
+                error: error
+            )
+            throw error
+        }
         let videoURL = objectStorage.publicURL(
             bucket: StorageBucket.reels.rawValue,
             path: videoRef.id
@@ -121,6 +173,10 @@ enum ReelPublishPipeline {
         var thumbURL: String?
         if let jpeg = draft.thumbnailJPEG {
             let path = "\(authorID.rawValue)/thumbnails/\(stamp)-thumb.jpg"
+            ReelPublishDiagnostics.logThumbnailUploadStarted(
+                publishID: publishID,
+                objectIdentity: path
+            )
             let ref = try await uploadService.upload(
                 UploadRequest(
                     bucket: StorageBucket.reels.rawValue,
@@ -129,6 +185,10 @@ enum ReelPublishPipeline {
                     contentType: "image/jpeg",
                     purpose: .reelThumbnail
                 )
+            )
+            ReelPublishDiagnostics.logThumbnailUploadCompleted(
+                publishID: publishID,
+                statusCode: 200
             )
             thumbPath = ref.id
             thumbURL = objectStorage.publicURL(

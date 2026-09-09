@@ -219,6 +219,13 @@ struct HomeNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .tradeRoomJoinRequest(let requestID):
+            TradeRoomJoinRequestDetailView(
+                requestID: requestID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .profile
+            )
         case .psychologyAnalytics:
             if let report = PsychologyAnalyticsSessionStore.shared.report {
                 PsychologyAnalyticsDetailView(
@@ -294,6 +301,7 @@ struct HomeNavigationStack: View {
         case .checkInDay: return "Daily Check-In"
         case .activity: return "Activity"
         case .followRequests: return "Follow Requests"
+        case .tradeRoomJoinRequest: return "Join Request"
         case .settings(let route): return route.title
         }
     }
@@ -701,6 +709,13 @@ struct ProfileNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .tradeRoomJoinRequest(let requestID):
+            TradeRoomJoinRequestDetailView(
+                requestID: requestID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .profile
+            )
         }
     }
 
@@ -710,6 +725,7 @@ struct ProfileNavigationStack: View {
         case .followers: return "Followers"
         case .following: return "Following"
         case .followRequests: return "Follow Requests"
+        case .tradeRoomJoinRequest: return "Join Request"
         case .settings(let settingsRoute): return settingsRoute.title
         case .referrals: return "Referrals"
         case .affiliate: return "Affiliate"

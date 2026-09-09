@@ -72,13 +72,18 @@ final class RoomMembersViewModel {
         return room.ownerProfileID == viewerID
     }
 
+    var canManageRoom: Bool {
+        guard let room else { return false }
+        return TradeRoomManagementPermission.canManage(room: room, viewerID: viewerID)
+    }
+
     func requestMemberAction(_ action: ManageRoomViewModel.MemberAction) {
         pendingMemberAction = action
         showsMemberActionConfirmation = true
     }
 
     func confirmMemberAction() async {
-        guard isOwner,
+        guard canManageRoom,
               let management = rooms as? any RoomManagementRepository,
               let viewerID,
               let room,
@@ -125,12 +130,12 @@ final class RoomMembersViewModel {
     }
 
     func openManageRoom() {
-        guard isOwner else { return }
+        guard canManageRoom else { return }
         navigationCoordinator?.open(navigationHost.manageRoom(roomID))
     }
 
     func canManageMember(_ item: RoomMemberItem) -> Bool {
-        guard isOwner, let viewerID, let room else { return false }
+        guard canManageRoom, let viewerID, let room else { return false }
         return item.role != .owner
             && item.id != viewerID
             && item.id != room.ownerProfileID
@@ -173,7 +178,7 @@ final class RoomMembersViewModel {
     }
 
     private func performLoad(generation: UInt64) async {
-        RoomMembersLoadProbe.begin(roomID: roomID)
+        RoomMembersLoadProbe.loadStarted(roomID: roomID)
         phase = .loading
         defer { loadTask = nil }
 
@@ -203,7 +208,7 @@ final class RoomMembersViewModel {
                     viewerID: viewer
                 )
                 phase = .loaded
-                RoomMembersLoadProbe.completed(roomID: roomID, memberCount: members.count)
+                RoomMembersLoadProbe.uiVisibleCount(members.count)
                 return
             }
 
@@ -216,18 +221,34 @@ final class RoomMembersViewModel {
                 ownerProfileID: loaded.ownerProfileID
             )
             guard generation == loadGeneration else { return }
+            RoomMembersLoadProbe.decoded(count: activeRows.count)
 
             let profileIDs = activeRows.map(\.profile.id)
-            let fetchedProfiles = try? await SessionProfileStore.shared.profiles(
-                ids: profileIDs,
-                detailCache: detailCache,
-                repository: profiles
+            let missingProfileIDs = profileIDs.filter { id in
+                resolveProfile(id) == nil
+                    || activeRows.first(where: { $0.profile.id == id })?.profile.displayName == "Unknown User"
+            }
+            RoomMembersLoadProbe.profilesRequested(count: missingProfileIDs.count)
+
+            let fetchedProfiles: [Profile]
+            if missingProfileIDs.isEmpty {
+                fetchedProfiles = []
+            } else {
+                fetchedProfiles = (try? await SessionProfileStore.shared.profiles(
+                    ids: missingProfileIDs,
+                    detailCache: detailCache,
+                    repository: profiles
+                )) ?? []
+            }
+            RoomMembersLoadProbe.profilesReturned(count: fetchedProfiles.count)
+
+            let profileByID = Dictionary(
+                uniqueKeysWithValues: (fetchedProfiles + activeRows.map(\.profile)).map { ($0.id, $0) }
             )
-            RoomMembersLoadProbe.profiles(count: fetchedProfiles?.count ?? 0)
 
             members = activeRows.map { row in
                 RoomMemberItem(
-                    profile: resolveProfile(row.profile.id) ?? row.profile,
+                    profile: profileByID[row.profile.id] ?? resolveProfile(row.profile.id) ?? row.profile,
                     role: row.role,
                     joinedAt: row.joinedAt,
                     isOnline: false,
@@ -260,7 +281,7 @@ final class RoomMembersViewModel {
                 source: .network
             )
             phase = .loaded
-            RoomMembersLoadProbe.completed(roomID: roomID, memberCount: listCount)
+            RoomMembersLoadProbe.uiVisibleCount(listCount)
 
             await enrichMemberTagsIfNeeded(
                 generation: generation,

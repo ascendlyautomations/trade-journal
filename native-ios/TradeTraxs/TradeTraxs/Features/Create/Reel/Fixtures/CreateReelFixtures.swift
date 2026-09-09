@@ -71,6 +71,8 @@ enum CreateReelFixtures {
         }
         let thumb = placeholderThumbnail()
         return ReelDraft(
+            selectionID: "dev-fixture-\(UUID().uuidString)",
+            ownedSourceURL: url,
             localVideoURL: url,
             contentType: "video/quicktime",
             byteCount: 2,

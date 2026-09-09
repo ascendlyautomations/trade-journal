@@ -191,6 +191,34 @@ final class ProfileBootstrapV2Tests: XCTestCase {
         OwnerProfileOptimisticStore.shared.invalidate()
     }
 
+    func testClipsSectionReconcilePreservesLoadedItemsOnOptimisticSnapshot() {
+        let owner = ProfileID("dev.optimistic-clips")
+        let environment = CompositionRoot.bootstrap()
+        var existing = CreateReelFixtures.sampleReel(author: owner, tradeID: nil)
+        existing.id = ReelID("reel-existing")
+        let clipsVM = ClipsContainerViewModel(
+            profileID: owner,
+            feed: environment.data.feed,
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: DetailPresentationCache(),
+            isOwner: true
+        )
+        var loadedSnapshot = ProfileState()
+        loadedSnapshot.profileID = owner
+        loadedSnapshot.clips = [existing]
+        loadedSnapshot.didLoadClips = true
+        loadedSnapshot.didBootstrap = true
+        loadedSnapshot.phase = .loaded
+        clipsVM.applyBootstrap(loadedSnapshot)
+        XCTAssertEqual(clipsVM.items.count, 1)
+
+        let created = CreateReelFixtures.sampleReel(author: owner, tradeID: nil)
+        clipsVM.notePublishSucceeded(created, preservingExisting: [existing])
+        XCTAssertEqual(clipsVM.items.count, 2)
+        XCTAssertEqual(clipsVM.items.first?.id, created.id)
+        XCTAssertTrue(clipsVM.items.contains { $0.id == existing.id })
+    }
+
     func testOwnerOptimisticPostAndAchievementLandWithoutNetworkRefresh() {
         OwnerProfileOptimisticStore.shared.invalidate()
         let environment = CompositionRoot.bootstrap()

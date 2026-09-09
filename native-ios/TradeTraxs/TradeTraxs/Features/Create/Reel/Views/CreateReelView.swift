@@ -52,7 +52,7 @@ struct CreateReelView: View {
                     message: message,
                     onRetry: { viewModel.retryLoad() }
                 )
-            case .ready, .preparingVideo, .publishing:
+            case .ready, .importingVideo, .preparingVideo, .publishing:
                 composer
             }
         }
@@ -62,10 +62,12 @@ struct CreateReelView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { requestDismiss() }
                     .font(.body.weight(.regular))
+                    .disabled(viewModel.isPublishing)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if viewModel.phase == .ready
+                || viewModel.phase == .importingVideo
                 || viewModel.phase == .preparingVideo
                 || viewModel.phase == .publishing
             {
@@ -92,7 +94,7 @@ struct CreateReelView: View {
             CameraVideoPicker(
                 onPicked: { url in
                     showsCamera = false
-                    viewModel.applyLocalVideo(from: url, contentType: "video/quicktime")
+                    viewModel.importFromLocalFile(url, contentType: "video/quicktime")
                 },
                 onCancel: { showsCamera = false }
             )
@@ -120,6 +122,10 @@ struct CreateReelView: View {
         ) {
             Button("Discard", role: .destructive) { viewModel.dismissRequested() }
             Button("Keep Editing", role: .cancel) {}
+        } message: {
+            if viewModel.isPublishing {
+                Text("Publishing is in progress.")
+            }
         }
         .experienceProtectedFormDismiss()
         .task { viewModel.loadIfNeeded() }
@@ -129,7 +135,8 @@ struct CreateReelView: View {
             #endif
         }
         .onChange(of: videoItem) { _, item in
-            Task { await loadPickerVideo(item) }
+            guard let item else { return }
+            viewModel.importFromPhotosPicker(item)
         }
         .accessibilityIdentifier("createReel.root")
     }
@@ -157,7 +164,7 @@ struct CreateReelView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollDismissesKeyboard(.interactively)
-        .disabled(viewModel.phase == .publishing)
+        .disabled(viewModel.phase == .publishing || viewModel.isPreparingVideo)
     }
 
     private var videoPickerPrompt: some View {
@@ -165,7 +172,7 @@ struct CreateReelView: View {
             if viewModel.isPreparingVideo {
                 HStack(spacing: ExperienceSpacing.sm) {
                     ProgressView()
-                    Text("Preparing video…")
+                    Text(viewModel.phase == .importingVideo ? "Importing video…" : "Preparing video…")
                         .experienceStyle(.body, color: colors.secondaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -178,7 +185,7 @@ struct CreateReelView: View {
                             title: "Choose Video"
                         )
                     }
-                    .disabled(viewModel.phase == .publishing)
+                    .disabled(viewModel.isPreparingVideo || viewModel.isPublishing)
                     .accessibilityIdentifier("createReel.chooseVideo")
 
                     Spacer(minLength: 0)
@@ -250,6 +257,7 @@ struct CreateReelView: View {
                         viewModel.clearVideo()
                         videoItem = nil
                     }
+                    .disabled(viewModel.isPublishing)
                     .padding(ExperienceSpacing.sm)
                 }
 
@@ -259,6 +267,7 @@ struct CreateReelView: View {
                             .font(ExperienceTypography.subheadline.weight(.semibold))
                             .foregroundStyle(colors.accent)
                     }
+                    .disabled(viewModel.isPublishing)
                     Spacer(minLength: 0)
                 }
             }
@@ -350,7 +359,7 @@ struct CreateReelView: View {
             loadingTitle: "Publishing…",
             progress: viewModel.phase == .publishing ? viewModel.uploadProgress : nil,
             isEnabled: viewModel.canPublish && viewModel.draft != nil,
-            isLoading: viewModel.phase == .publishing,
+            isLoading: viewModel.phase == .publishing || viewModel.isPreparingVideo,
             accessibilityIdentifier: "createReel.publish"
         ) {
             viewModel.publish()
@@ -358,23 +367,11 @@ struct CreateReelView: View {
     }
 
     private func requestDismiss() {
+        guard !viewModel.isPublishing else { return }
         if viewModel.hasUnsavedChanges {
             showsDiscardConfirm = true
         } else {
             viewModel.dismissRequested()
-        }
-    }
-
-    private func loadPickerVideo(_ item: PhotosPickerItem?) async {
-        guard let item else { return }
-        do {
-            if let movie = try await item.loadTransferable(type: MovieFileTransferable.self) {
-                viewModel.applyLocalVideo(from: movie.url, contentType: "video/quicktime")
-            } else {
-                viewModel.formError = "Couldn't read that video. Try MP4 or MOV."
-            }
-        } catch {
-            viewModel.formError = "Couldn't read that video. Try MP4 or MOV."
         }
     }
 

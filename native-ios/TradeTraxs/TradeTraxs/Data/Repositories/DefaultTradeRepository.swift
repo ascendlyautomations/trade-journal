@@ -686,13 +686,15 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         return try TradingAccountMapper.mapToDomain(row)
     }
 
-    func payoutEntries(for accountID: TradingAccountID) async throws -> [AccountPayoutEntry] {
+    func payoutEntries(for accountIDs: [TradingAccountID]) async throws -> [AccountPayoutEntry] {
+        let unique = Array(Set(accountIDs.map(\.rawValue))).filter { !$0.isEmpty }
+        guard !unique.isEmpty else { return [] }
         let rows: [TradeDTO.AccountPayoutEntryRow] = try await supabase.database.select(
             TradeDTO.AccountPayoutEntryRow.self,
             from: "account_payout_entries",
             query: [
                 SupabaseQuery.select("id,account_id,user_id,amount,payout_date,note,created_at,updated_at"),
-                SupabaseQuery.eq("account_id", accountID.rawValue),
+                SupabaseQuery.isIn("account_id", unique),
                 URLQueryItem(name: "order", value: "payout_date.desc,id.desc"),
             ]
         )
@@ -738,13 +740,15 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         )
     }
 
-    func payoutCycleHistory(for accountID: TradingAccountID) async throws -> [AccountPayoutCycle] {
+    func payoutCycleHistory(for accountIDs: [TradingAccountID]) async throws -> [AccountPayoutCycle] {
+        let unique = Array(Set(accountIDs.map(\.rawValue))).filter { !$0.isEmpty }
+        guard !unique.isEmpty else { return [] }
         let rows: [AccountPayoutCycleMapper.Row] = try await supabase.database.select(
             AccountPayoutCycleMapper.Row.self,
             from: "account_payout_cycles",
             query: [
                 SupabaseQuery.select(AccountPayoutCycleMapper.selectFields),
-                SupabaseQuery.eq("account_id", accountID.rawValue),
+                SupabaseQuery.isIn("account_id", unique),
                 URLQueryItem(name: "order", value: "started_at.desc"),
             ]
         )

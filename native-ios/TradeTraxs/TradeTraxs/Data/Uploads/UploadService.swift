@@ -6,6 +6,8 @@ nonisolated struct UploadRequest: Sendable {
     var data: Data
     var contentType: String
     var purpose: ImagePurpose?
+    /// Immutable Storage objects may use a long-lived CDN cache TTL (e.g. reel videos).
+    var cacheControl: String?
 }
 
 nonisolated protocol UploadService: Sendable {
@@ -24,7 +26,8 @@ nonisolated struct DefaultUploadService: UploadService {
             bucket: request.bucket,
             path: request.path,
             data: request.data,
-            contentType: request.contentType
+            contentType: request.contentType,
+            cacheControl: request.cacheControl
         )
         let kind: MediaKind = request.contentType.hasPrefix("video") ? .video
             : request.contentType.hasPrefix("image") ? .image

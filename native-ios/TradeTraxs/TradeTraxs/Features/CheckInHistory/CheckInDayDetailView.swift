@@ -101,11 +101,11 @@ struct CheckInDayDetailView: View {
             } else {
                 metricGrid([
                     ("P&L", TraderPsychologyAnalyticsEngine.money(detail.metrics.totalPnL)),
-                    ("Trades", "\(detail.metrics.tradeCount)"),
+                    ("Trades", NumberDisplay.integer(detail.metrics.tradeCount)),
                     ("Win Rate", TraderPsychologyAnalyticsEngine.formatWinRate(detail.metrics.winRate)),
                     ("Avg Trade", TraderPsychologyAnalyticsEngine.money(detail.metrics.averagePnL ?? 0)),
                     ("Profit Factor", detail.metrics.profitFactor.map {
-                        String(format: "%.2f", NSDecimalNumber(decimal: $0).doubleValue)
+                        NumberDisplay.ratio($0, fractionDigits: 2)
                     } ?? "—"),
                 ])
             }
@@ -168,6 +168,6 @@ struct CheckInDayDetailView: View {
 
     private func sleepText(_ hours: Decimal?) -> String {
         guard let hours else { return "—" }
-        return String(format: "%.1fh", NSDecimalNumber(decimal: hours).doubleValue)
+        return NumberDisplay.hours(NSDecimalNumber(decimal: hours).doubleValue)
     }
 }

@@ -15,6 +15,7 @@ export type ApnsAlertPayload = {
   roomId?: string
   roomSlug?: string
   followRequestId?: string
+  joinRequestId?: string
   /** Actor profile UUID — native follow / social deep links resolve by id. */
   senderId?: string
   /**
@@ -191,6 +192,7 @@ export async function sendApnsAlert(
     ...(payload.followRequestId
       ? { followRequestId: payload.followRequestId }
       : {}),
+    ...(payload.joinRequestId ? { joinRequestId: payload.joinRequestId } : {}),
     ...(payload.senderId ? { senderId: payload.senderId } : {}),
   })
 

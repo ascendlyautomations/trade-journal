@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreGraphics
 import ImageIO
 import SwiftUI
@@ -74,6 +75,79 @@ final class MediaPresentationTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(correctDecodedWidth, needWidth)
     }
 
+    func testVideoPresentationClassifiesPortraitLandscapeAndSquare() {
+        let vertical = VideoPresentationInfo.from(
+            naturalSize: CGSize(width: 1080, height: 1920),
+            preferredTransform: .identity
+        )
+        XCTAssertEqual(vertical.orientation, .portrait)
+        XCTAssertEqual(vertical.orientedSize.width, 1080, accuracy: 0.1)
+        XCTAssertEqual(vertical.orientedSize.height, 1920, accuracy: 0.1)
+        XCTAssertEqual(vertical.playerGravity(for: .clipsPager), .resizeAspectFill)
+        XCTAssertEqual(vertical.playerGravity(for: .feedInline), .resizeAspect)
+
+        let horizontal = VideoPresentationInfo.from(
+            naturalSize: CGSize(width: 1920, height: 1080),
+            preferredTransform: .identity
+        )
+        XCTAssertEqual(horizontal.orientation, .landscape)
+        XCTAssertEqual(horizontal.playerGravity(for: .clipsPager), .resizeAspect)
+        XCTAssertEqual(horizontal.swiftUIPosterContentMode(for: .feedInline), .fit)
+
+        let square = VideoPresentationInfo.from(
+            naturalSize: CGSize(width: 1080, height: 1080),
+            preferredTransform: .identity
+        )
+        XCTAssertEqual(square.orientation, .square)
+        XCTAssertEqual(square.playerGravity(for: .clipsPager), .resizeAspect)
+    }
+
+    func testVideoPresentationAppliesPreferredTransformBeforeClassification() {
+        // iPhone portrait clip often stores 1920×1080 with a 90° transform.
+        let portraitTransform = CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: 1080, ty: 0)
+        let info = VideoPresentationInfo.from(
+            naturalSize: CGSize(width: 1920, height: 1080),
+            preferredTransform: portraitTransform
+        )
+        XCTAssertEqual(info.orientation, .portrait)
+        XCTAssertEqual(info.orientedSize.width, 1080, accuracy: 0.1)
+        XCTAssertEqual(info.orientedSize.height, 1920, accuracy: 0.1)
+    }
+
+    func testFeedInlinePortraitUsesCompactCappedContainer() {
+        let info = VideoPresentationInfo.from(
+            naturalSize: CGSize(width: 1080, height: 1920),
+            preferredTransform: .identity
+        )
+        let width: CGFloat = 390
+        let size = info.feedInlineContainerSize(containerWidth: width)
+        let naturalHeight = width / info.aspectRatio
+        XCTAssertEqual(size.width, width, accuracy: 0.1)
+        XCTAssertEqual(size.height, FeedInlineClipLayout.maxMediaHeight(), accuracy: 0.5)
+        XCTAssertLessThan(size.height, naturalHeight)
+        XCTAssertEqual(
+            info.containerAspectRatio(for: .feedInline),
+            info.aspectRatio,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(info.playerGravity(for: .feedInline), .resizeAspect)
+    }
+
+    func testProfileCompactThumbnailContainerMatchesImageAspect() {
+        let square = ProfileCompactThumbnailLayout.containerSize(forImageAspect: 1)
+        XCTAssertEqual(square.width, 96, accuracy: 0.1)
+        XCTAssertEqual(square.height, 96, accuracy: 0.1)
+
+        let portrait = ProfileCompactThumbnailLayout.containerSize(forImageAspect: 4.0 / 5.0)
+        XCTAssertEqual(portrait.height, 120, accuracy: 0.1)
+
+        let landscape = ProfileCompactThumbnailLayout.containerSize(forImageAspect: 16.0 / 9.0)
+        XCTAssertEqual(landscape.height, 96 / (16.0 / 9.0), accuracy: 0.1)
+
+        let tallLegacy = ProfileCompactThumbnailLayout.containerSize(forImageAspect: 9.0 / 16.0)
+        XCTAssertEqual(tallLegacy.height, ProfileCompactThumbnailLayout.maximumPortraitHeight, accuracy: 0.1)
+    }
+
     private static func makePNG(width: Int, height: Int) -> Data {
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let bitmapInfo = CGBitmapInfo.byteOrder32Big.union(
@@ -116,7 +190,7 @@ private struct StubMediaImagePipeline: ImagePipeline {
 }
 
 private struct StubMediaObjectStorage: ObjectStorageProviding {
-    func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String {
+    func upload(bucket: String, path: String, data: Data, contentType: String, cacheControl: String? = nil) async throws -> String {
         path
     }
 

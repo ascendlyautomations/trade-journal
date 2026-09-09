@@ -19,11 +19,11 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
 
     /// Feed trade cards — profiles + compact trade embed so list hydrate needs no per-row trade SELECT.
     private static let tradeFeedSelect =
-        "id,user_id,trade_id,created_at,image_url,profiles(username,avatar_url,name),trades(id,user_id,ticker,direction,pnl,rr,contracts,session,public_description,is_public,image_url,created_at,entry_time,exit_time,entry_price,exit_price,account_type,mode)"
+        "id,user_id,trade_id,created_at,image_url,image_crop,profiles(username,avatar_url,name),trades(id,user_id,ticker,direction,pnl,rr,contracts,session,public_description,is_public,image_url,image_crop,created_at,entry_time,exit_time,entry_price,exit_price,account_type,mode)"
 
     /// Web `FEED_PROFILE_POSTS_SELECT` (core columns + profiles embed).
     private static let profileFeedSelect =
-        "id,user_id,content,image_url,created_at,profiles(username,avatar_url,name)"
+        "id,user_id,content,image_url,image_crop,created_at,profiles(username,avatar_url,name)"
 
     /// Web `FEED_REELS_SELECT` without trade embed (list identity + profiles).
     private static let reelFeedSelect =
@@ -31,7 +31,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
 
     /// Web `FEED_ACHIEVEMENT_POSTS_SELECT` (identity + public achievement + profiles).
     private static let achievementFeedSelect =
-        "id,user_id,achievement_id,created_at,achievements(id,title,description,achievement_type,badge_key,tier,value_text,value_numeric,currency,image_url,achieved_at,is_public,is_featured,category,firm,metadata),profiles(username,avatar_url,name)"
+        "id,user_id,achievement_id,created_at,achievements(id,title,description,achievement_type,badge_key,tier,value_text,value_numeric,currency,image_url,image_crop,achieved_at,is_public,is_featured,category,firm,metadata),profiles(username,avatar_url,name)"
 
     init(
         supabase: SupabaseInfrastructure,
@@ -242,8 +242,13 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         var embeds: [Trade] = []
         let items: [FeedItem] = rows.compactMap { row in
             guard let id = row.id, let author = row.user_id else { return nil }
-            if let dto = row.trades?.trade, let trade = try? TradeMapper.mapToDomain(dto) {
-                embeds.append(trade)
+            if var dto = row.trades?.trade {
+                if dto.image_crop == nil {
+                    dto.image_crop = row.image_crop
+                }
+                if let trade = try? TradeMapper.mapToDomain(dto) {
+                    embeds.append(trade)
+                }
             }
             // Web `normalizeTradeFeedItem` — posts table rows are trade feed cards.
             return makeFeedItem(
@@ -294,6 +299,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                 achievementID: nil,
                 caption: row.content,
                 mediaURL: row.image_url,
+                imageCrop: row.image_crop,
                 profiles: row.profiles?.profile
             )
         }
@@ -369,6 +375,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                 achievementID: achievementID,
                 caption: row.achievements?.achievement?.title,
                 mediaURL: row.achievements?.achievement?.image_url,
+                imageCrop: row.achievements?.achievement?.image_crop,
                 profiles: row.profiles?.profile
             )
         }
@@ -385,6 +392,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         achievementID: String?,
         caption: String?,
         mediaURL: String?,
+        imageCrop: ContentImagePresentation? = nil,
         profiles: FeedDTO.EmbeddedAuthor?
     ) -> FeedItem {
         let username = profiles?.username?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -412,7 +420,8 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                 return nil
             }(),
             authorAvatarURL: (avatar?.isEmpty == false) ? avatar : nil,
-            mediaURL: (media?.isEmpty == false) ? media : nil
+            mediaURL: (media?.isEmpty == false) ? media : nil,
+            imageCrop: imageCrop
         )
     }
 
@@ -826,9 +835,17 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         let row: ProfileReelRow = try await supabase.database.insert(
             body,
             into: "reels",
+            query: [SupabaseQuery.select(Self.reelRowSelect)],
             returning: ProfileReelRow.self
         )
-        return mapReel(row) ?? reel
+        if let mapped = mapReel(row) {
+            return mapped
+        }
+        if let id = row.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty {
+            let loaded = try await self.reel(id: ReelID(id))
+            return loaded.reel
+        }
+        return reel
     }
 
     func deleteReel(id: ReelID) async throws {

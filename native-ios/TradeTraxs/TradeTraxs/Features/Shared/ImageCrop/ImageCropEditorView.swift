@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Shared pinch/drag crop editor — exports feed metadata + original, or a baked avatar image.
+/// Shared pinch/drag crop editor — WYSIWYG aspect-fill viewport; preview and export share one transform.
 struct ImageCropEditorView: View {
     let sourceImage: UIImage
     let preset: ImageCropEditorPreset
@@ -12,9 +12,11 @@ struct ImageCropEditorView: View {
     @Environment(\.themeColors) private var colors
     @State private var aspectOption: ImageCropAspectOption
     @State private var transform = ImageCropTransform.default
-    @State private var viewportWidth: CGFloat = 0
-    @State private var dragStartOffset = CGSize.zero
-    @State private var pinchStartZoom: CGFloat = 1
+    @State private var activeViewportSize: CGSize = .zero
+    @State private var panSessionStartTranslation: CGSize = .zero
+    @State private var pinchSessionStartZoom: CGFloat = 1
+    @State private var pinchSessionStartTranslation: CGSize = .zero
+    @State private var isPinchActive = false
     @State private var isSaving = false
 
     init(
@@ -57,6 +59,13 @@ struct ImageCropEditorView: View {
         FeedMediaLayout.exceedsFeedPortraitLimit(imageAspect: imageAspect)
     }
 
+    private var usesInteractiveCrop: Bool {
+        FeedMediaLayout.requiresFillCrop(
+            imageAspect: imageAspect,
+            aspectOption: aspectOption
+        )
+    }
+
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
@@ -66,12 +75,16 @@ struct ImageCropEditorView: View {
 
                 if preset.allowedAspectOptions.count > 1 {
                     aspectPicker
+                    if aspectOption == .original, originalExceedsFeedLimit {
+                        Text("Original is capped to 4:5 in the Feed.")
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                    }
                 }
 
                 cropViewport
                     .frame(maxWidth: .infinity)
 
-                if allowsReposition {
+                if usesInteractiveCrop {
                     Text("This is how your image will appear in the Feed.")
                         .experienceStyle(.caption, color: colors.secondaryText)
                     zoomControl
@@ -93,7 +106,7 @@ struct ImageCropEditorView: View {
                         .disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Use Photo") {
+                    Button("Choose Photo") {
                         Task { await confirmCrop() }
                     }
                     .disabled(isSaving)
@@ -101,9 +114,7 @@ struct ImageCropEditorView: View {
                 ToolbarItem(placement: .bottomBar) {
                     Button("Reset") {
                         withAnimation(.easeOut(duration: 0.2)) {
-                            transform = .default
-                            dragStartOffset = .zero
-                            pinchStartZoom = 1
+                            resetTransform()
                         }
                     }
                     .disabled(isSaving)
@@ -114,53 +125,65 @@ struct ImageCropEditorView: View {
         .accessibilityIdentifier("imageCrop.editor")
     }
 
-    private var allowsReposition: Bool {
-        FeedMediaLayout.requiresFillCrop(
-            imageAspect: imageAspect,
-            aspectOption: aspectOption
-        )
-    }
-
     private var aspectPicker: some View {
-        Picker("Aspect", selection: $aspectOption) {
+        HStack(spacing: 2) {
             ForEach(preset.allowedAspectOptions) { option in
-                Text(option.pickerLabel(originalExceedsFeedLimit: originalExceedsFeedLimit))
-                    .tag(option)
+                Button {
+                    guard aspectOption != option else { return }
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        aspectOption = option
+                        resetTransform()
+                    }
+                } label: {
+                    Text(option.segmentTitle)
+                        .font(.caption.weight(aspectOption == option ? .semibold : .regular))
+                        .foregroundStyle(aspectOption == option ? colors.primaryText : colors.secondaryText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .background {
+                            if aspectOption == option {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(colors.backgroundPrimary)
+                                    .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.pickerLabel(originalExceedsFeedLimit: originalExceedsFeedLimit))
+                .accessibilityAddTraits(aspectOption == option ? .isSelected : [])
             }
         }
-        .pickerStyle(.segmented)
-        .onChange(of: aspectOption) { _, _ in
-            transform = .default
-            dragStartOffset = .zero
-            pinchStartZoom = 1
-        }
+        .padding(3)
+        .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityIdentifier("imageCrop.aspectPicker")
     }
 
     private var cropViewport: some View {
         GeometryReader { proxy in
-            let width = proxy.size.width
             let frameSize = FeedMediaLayout.editorViewportSize(
-                containerWidth: width,
+                containerWidth: proxy.size.width,
                 imagePixelSize: imagePixelSize,
                 aspectOption: aspectOption
             )
 
             cropViewportContent(frameSize: frameSize)
-                .onAppear { viewportWidth = width }
-                .onChange(of: proxy.size.width) { _, newWidth in
-                    viewportWidth = newWidth
-                }
+                .preference(key: CropViewportSizePreferenceKey.self, value: frameSize)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: editorViewportHeightEstimate)
+        .frame(height: editorViewportHeightEstimate(forWidth: max(UIScreen.main.bounds.width - 32, 1)))
+        .onPreferenceChange(CropViewportSizePreferenceKey.self) { size in
+            if size.width > 0, size.height > 0 {
+                activeViewportSize = size
+            }
+        }
     }
 
-    private var editorViewportHeightEstimate: CGFloat {
-        guard viewportWidth > 0 else {
-            return UIScreen.main.bounds.width * (5 / 4)
+    private func editorViewportHeightEstimate(forWidth width: CGFloat) -> CGFloat {
+        if activeViewportSize.height > 0 {
+            return activeViewportSize.height
         }
         return FeedMediaLayout.editorViewportSize(
-            containerWidth: viewportWidth,
+            containerWidth: width,
             imagePixelSize: imagePixelSize,
             aspectOption: aspectOption
         ).height
@@ -170,31 +193,78 @@ struct ImageCropEditorView: View {
     private func cropViewportContent(frameSize: CGSize) -> some View {
         let width = frameSize.width
         let height = frameSize.height
-        let presentation = previewPresentation(containerWidth: width)
 
-        let viewport = ZStack {
+        ZStack(alignment: .topLeading) {
             colors.fillSecondary
 
-            if presentation.usesFillCrop,
-               let draw = FeedMediaLayout.drawRect(
-                imagePixelSize: imagePixelSize,
-                frameSize: frameSize,
-                presentation: presentation
-               ) {
-                Image(uiImage: sourceImage)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: draw.width, height: draw.height)
-                    .offset(x: draw.x, y: draw.y)
+            if usesInteractiveCrop {
+                let geometry = cropGeometry(viewportSize: frameSize)
+                CropEditorImagePreview(image: sourceImage, geometry: geometry)
+                    .frame(width: width, height: height)
+
+                #if DEBUG
+                CropEditorDebugOverlay(viewportSize: frameSize)
+                #endif
+
+                cropMask(width: width, height: height)
+
+                ImageCropViewportInteraction(
+                    onPanBegan: {
+                        panSessionStartTranslation = transform.offset
+                    },
+                    onPan: { delta in
+                        let proposed = CGSize(
+                            width: panSessionStartTranslation.width + delta.width,
+                            height: panSessionStartTranslation.height + delta.height
+                        )
+                        commitTransform(
+                            userScale: transform.zoom,
+                            translation: proposed,
+                            viewportSize: frameSize
+                        )
+                    },
+                    onPanEnded: {
+                        panSessionStartTranslation = transform.offset
+                    },
+                    onPinchBegan: { _ in
+                        isPinchActive = true
+                        pinchSessionStartZoom = transform.zoom
+                        pinchSessionStartTranslation = transform.offset
+                    },
+                    onPinch: { magnification, anchor in
+                        transform = ImageCropViewportMath.zoomAroundAnchor(
+                            anchor: anchor,
+                            imagePixelSize: imagePixelSize,
+                            viewportSize: frameSize,
+                            startUserScale: pinchSessionStartZoom,
+                            startTranslation: pinchSessionStartTranslation,
+                            magnification: magnification,
+                            maxUserScale: preset.maxZoom
+                        )
+                        #if DEBUG
+                        CropTransformProbe.log(
+                            layout: cropGeometry(viewportSize: frameSize).layout,
+                            viewport: frameSize,
+                            pinchAnchor: anchor
+                        )
+                        #endif
+                    },
+                    onPinchEnded: {
+                        isPinchActive = false
+                        panSessionStartTranslation = transform.offset
+                        pinchSessionStartZoom = transform.zoom
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Image(uiImage: sourceImage)
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
                     .frame(width: width, height: height)
-            }
 
-            cropMask(width: width, height: height)
+                cropMask(width: width, height: height)
+            }
         }
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
@@ -203,27 +273,15 @@ struct ImageCropEditorView: View {
                 .stroke(colors.accent.opacity(0.85), lineWidth: 1.5)
         }
         .contentShape(Rectangle())
-
-        if allowsReposition {
-            viewport
-                .gesture(dragGesture(frameSize: frameSize))
-                .simultaneousGesture(pinchGesture(frameSize: frameSize))
-        } else {
-            viewport
-        }
     }
 
-    private func previewPresentation(containerWidth: CGFloat) -> ContentImagePresentation {
-        let viewport = FeedMediaLayout.editorViewportSize(
-            containerWidth: containerWidth,
-            imagePixelSize: imagePixelSize,
-            aspectOption: aspectOption
-        )
-        return ContentImagePresentation.make(
-            aspectOption: aspectOption,
-            imagePixelSize: imagePixelSize,
-            viewportSize: viewport,
-            transform: transform
+    private func cropGeometry(viewportSize: CGSize) -> CropViewportGeometry {
+        CropViewportGeometry(
+            sourcePixelSize: imagePixelSize,
+            viewportSize: viewportSize,
+            userScale: transform.zoom,
+            translation: transform.offset,
+            maxUserScale: preset.maxZoom
         )
     }
 
@@ -235,66 +293,49 @@ struct ImageCropEditorView: View {
                 value: Binding(
                     get: { transform.zoom },
                     set: { newValue in
-                        applyTransform(
-                            zoom: newValue,
-                            offset: transform.offset,
-                            frameSize: editorFrameSize
+                        guard activeViewportSize.width > 0, activeViewportSize.height > 0 else { return }
+                        let anchor = CGPoint(
+                            x: activeViewportSize.width / 2,
+                            y: activeViewportSize.height / 2
                         )
+                        let magnification = newValue / max(transform.zoom, 0.01)
+                        transform = ImageCropViewportMath.zoomAroundAnchor(
+                            anchor: anchor,
+                            imagePixelSize: imagePixelSize,
+                            viewportSize: activeViewportSize,
+                            startUserScale: transform.zoom,
+                            startTranslation: transform.offset,
+                            magnification: magnification,
+                            maxUserScale: preset.maxZoom
+                        )
+                        panSessionStartTranslation = transform.offset
                     }
                 ),
-                in: ImageCropMath.minZoom...preset.maxZoom
+                in: ImageCropViewportMath.minUserScale...preset.maxZoom
             )
         }
     }
 
-    private var editorFrameSize: CGSize {
-        FeedMediaLayout.editorViewportSize(
-            containerWidth: viewportWidth,
+    private func commitTransform(
+        userScale: CGFloat,
+        translation: CGSize,
+        viewportSize: CGSize
+    ) {
+        transform = ImageCropViewportMath.clampedTransform(
             imagePixelSize: imagePixelSize,
-            aspectOption: aspectOption
+            viewportSize: viewportSize,
+            userScale: userScale,
+            translation: translation,
+            maxUserScale: preset.maxZoom
         )
     }
 
-    private func dragGesture(frameSize: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                let next = CGSize(
-                    width: dragStartOffset.width + value.translation.width,
-                    height: dragStartOffset.height + value.translation.height
-                )
-                applyTransform(zoom: transform.zoom, offset: next, frameSize: frameSize)
-            }
-            .onEnded { _ in
-                dragStartOffset = transform.offset
-            }
-    }
-
-    private func pinchGesture(frameSize: CGSize) -> some Gesture {
-        MagnificationGesture()
-            .onChanged { value in
-                applyTransform(
-                    zoom: pinchStartZoom * value,
-                    offset: transform.offset,
-                    frameSize: frameSize
-                )
-            }
-            .onEnded { _ in
-                pinchStartZoom = transform.zoom
-            }
-    }
-
-    private func applyTransform(zoom: CGFloat, offset: CGSize, frameSize: CGSize) {
-        let pixelSize = imagePixelSize
-        let clampedZoom = ImageCropMath.clampZoom(zoom, maxZoom: preset.maxZoom)
-        let clampedOffset = ImageCropMath.clampOffset(
-            imageWidth: pixelSize.width,
-            imageHeight: pixelSize.height,
-            frameWidth: frameSize.width,
-            frameHeight: frameSize.height,
-            zoom: clampedZoom,
-            offset: offset
-        )
-        transform = ImageCropTransform(zoom: clampedZoom, offset: clampedOffset)
+    private func resetTransform() {
+        transform = .default
+        panSessionStartTranslation = .zero
+        pinchSessionStartZoom = 1
+        pinchSessionStartTranslation = .zero
+        isPinchActive = false
     }
 
     @ViewBuilder
@@ -328,23 +369,24 @@ struct ImageCropEditorView: View {
         isSaving = true
         defer { isSaving = false }
 
+        let viewport = resolvedViewportSize()
+        let geometry = cropGeometry(viewportSize: viewport)
+
+        #if DEBUG
+        CropGeometryProbe.logPreview(geometry)
+        #endif
+
         if let onConfirmFeed {
-            let width = max(viewportWidth, 1)
-            let viewport = FeedMediaLayout.editorViewportSize(
-                containerWidth: width,
-                imagePixelSize: imagePixelSize,
-                aspectOption: aspectOption
-            )
-            let presentation = ContentImagePresentation.make(
+            guard let exported = ImageCropRenderer.exportFeedCrop(
+                sourceImage: sourceImage,
                 aspectOption: aspectOption,
-                imagePixelSize: imagePixelSize,
-                viewportSize: viewport,
-                transform: transform
-            )
+                geometry: geometry
+            ) else { return }
             onConfirmFeed(
                 ImageCropSelectionResult(
-                    originalImage: sourceImage,
-                    presentation: presentation
+                    image: exported,
+                    aspectMode: aspectOption,
+                    sourcePixelSize: imagePixelSize
                 )
             )
             return
@@ -360,32 +402,30 @@ struct ImageCropEditorView: View {
             onConfirmBaked(rendered)
         }
     }
+
+    private func resolvedViewportSize() -> CGSize {
+        if activeViewportSize.width > 0, activeViewportSize.height > 0 {
+            return activeViewportSize
+        }
+        let width = max(UIScreen.main.bounds.width - 32, 1)
+        return FeedMediaLayout.editorViewportSize(
+            containerWidth: width,
+            imagePixelSize: imagePixelSize,
+            aspectOption: aspectOption
+        )
+    }
 }
 
-/// Create-flow preview that matches Feed/Profile rendering.
+/// Create-flow preview — displays the physically cropped UIImage only.
 struct AdaptiveMediaPreviewImage: View {
     let image: UIImage
-    let presentation: ContentImagePresentation
-
-    @Environment(\.themeColors) private var colors
 
     var body: some View {
-        let aspect = MediaImageOrientation.aspectRatio(of: image)
-
-        AdaptiveInlineMediaContainer(
-            imageAspect: aspect,
-            feedPresentationForWidth: { _ in presentation },
-            background: colors.fillSecondary
-        ) { metrics in
-            FeedMediaFramedImage(
-                image: image,
-                presentation: presentation,
-                containerSize: CGSize(
-                    width: metrics.containerWidth,
-                    height: metrics.containerHeight
-                )
-            )
-        }
-        .allowsHitTesting(false)
+        Image(uiImage: image)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .accessibilityAddTraits(.isImage)
     }
 }

@@ -212,7 +212,11 @@ struct AddTradeView: View {
         .imageCropSelection(
             sourceImage: $cropSourceImage,
             preset: .tradeScreenshot,
-            onConfirm: { viewModel.setScreenshot($0) },
+            onConfirm: { result in
+                viewModel.setScreenshot(result)
+                cropSourceImage = nil
+                photoItem = nil
+            },
             onCancel: { photoItem = nil }
         )
         .onChange(of: clipVideoItem) { _, item in
@@ -563,9 +567,8 @@ struct AddTradeView: View {
 
     private var mediaContentSection: some View {
         Section("Media & Content") {
-            if let preview = viewModel.screenshotPreview,
-               let presentation = viewModel.feedPresentation {
-                AdaptiveMediaPreviewImage(image: preview, presentation: presentation)
+            if let preview = viewModel.screenshotPreview {
+                AdaptiveMediaPreviewImage(image: preview)
                     .accessibilityLabel("Trade screenshot preview")
                 Button("Remove Screenshot", role: .destructive) {
                     viewModel.clearScreenshot()
@@ -684,9 +687,8 @@ struct AddTradeView: View {
 
     private var screenshotSection: some View {
         Section("Screenshot") {
-            if let preview = viewModel.screenshotPreview,
-               let presentation = viewModel.feedPresentation {
-                AdaptiveMediaPreviewImage(image: preview, presentation: presentation)
+            if let preview = viewModel.screenshotPreview {
+                AdaptiveMediaPreviewImage(image: preview)
                 Button("Remove Screenshot", role: .destructive) {
                     viewModel.clearScreenshot()
                     photoItem = nil

@@ -3,6 +3,12 @@ export const NOTIFICATION_ENGAGEMENT_TYPES = [
   "like",
   "comment",
   "room_join",
+  /** Approval-policy room join request awaiting owner/admin action. */
+  "trade_room_join_request",
+  /** Requester notification when a join request is approved. */
+  "trade_room_join_accepted",
+  /** Requester notification when a join request is declined. */
+  "trade_room_join_declined",
   /** Trade Room @mentions only — ordinary room chat is Messaging-only (no Activity row). */
   "room_mention",
   "follow",

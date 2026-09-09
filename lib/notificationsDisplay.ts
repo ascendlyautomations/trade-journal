@@ -1,6 +1,10 @@
 import { profilePath } from "./profileRoutes"
 import { buildFeedDeepLinkHref } from "./feedDeepLink"
 import {
+  buildTradeRoomJoinRequestHref,
+  parseTradeRoomJoinRequestContent,
+} from "./tradeRoomJoinRequestContent"
+import {
   getNotificationTimeSection,
   NOTIFICATION_TIME_SECTION_ORDER,
   NOTIFICATION_TIME_SECTION_LABELS,
@@ -100,6 +104,21 @@ export type RoomJoinNotificationItem = {
   notification: NotificationRecord
 }
 
+export type TradeRoomJoinRequestNotificationItem = {
+  kind: "trade_room_join_request"
+  notification: NotificationRecord
+}
+
+export type TradeRoomJoinAcceptedNotificationItem = {
+  kind: "trade_room_join_accepted"
+  notification: NotificationRecord
+}
+
+export type TradeRoomJoinDeclinedNotificationItem = {
+  kind: "trade_room_join_declined"
+  notification: NotificationRecord
+}
+
 export type FollowRequestAcceptedNotificationItem = {
   kind: "follow_request_accepted"
   notification: NotificationRecord
@@ -152,6 +171,9 @@ export type GroupedNotificationCard =
   | FollowRequestNotificationGroup
   | FollowRequestAcceptedNotificationItem
   | RoomJoinNotificationItem
+  | TradeRoomJoinRequestNotificationItem
+  | TradeRoomJoinAcceptedNotificationItem
+  | TradeRoomJoinDeclinedNotificationItem
   | RoomMessageNotificationGroup
   | AffiliateNotificationItem
   | TradingReportNotificationItem
@@ -535,6 +557,15 @@ export function buildGroupedNotificationCards(
     (row) => row.type === "follow_request_accepted"
   )
   const roomJoins = rows.filter((row) => row.type === "room_join")
+  const tradeRoomJoinRequests = rows.filter(
+    (row) => row.type === "trade_room_join_request"
+  )
+  const tradeRoomJoinAccepted = rows.filter(
+    (row) => row.type === "trade_room_join_accepted"
+  )
+  const tradeRoomJoinDeclined = rows.filter(
+    (row) => row.type === "trade_room_join_declined"
+  )
   // Legacy `room_message` rows may still exist; new Activity path uses `room_mention` only.
   const roomMessages = rows.filter(
     (row) => row.type === "room_message" || row.type === "room_mention"
@@ -561,6 +592,24 @@ export function buildGroupedNotificationCards(
     ...roomJoins.map(
       (notification): RoomJoinNotificationItem => ({
         kind: "room_join",
+        notification,
+      })
+    ),
+    ...tradeRoomJoinRequests.map(
+      (notification): TradeRoomJoinRequestNotificationItem => ({
+        kind: "trade_room_join_request",
+        notification,
+      })
+    ),
+    ...tradeRoomJoinAccepted.map(
+      (notification): TradeRoomJoinAcceptedNotificationItem => ({
+        kind: "trade_room_join_accepted",
+        notification,
+      })
+    ),
+    ...tradeRoomJoinDeclined.map(
+      (notification): TradeRoomJoinDeclinedNotificationItem => ({
+        kind: "trade_room_join_declined",
         notification,
       })
     ),
@@ -605,7 +654,14 @@ export function filterGroupedCardsByTab(
           card.kind === "follow_request_accepted"
       )
     case "rooms":
-      return cards.filter((card) => card.kind === "room_message_group")
+      return cards.filter(
+        (card) =>
+          card.kind === "room_message_group" ||
+          card.kind === "room_join" ||
+          card.kind === "trade_room_join_request" ||
+          card.kind === "trade_room_join_accepted" ||
+          card.kind === "trade_room_join_declined"
+      )
     default:
       return cards
   }
@@ -649,6 +705,9 @@ export function groupCardsByTimeSection(cards: GroupedNotificationCard[]) {
 
 export function groupedCardCreatedAt(card: GroupedNotificationCard): string {
   if (card.kind === "room_join") return card.notification.created_at
+  if (card.kind === "trade_room_join_request") return card.notification.created_at
+  if (card.kind === "trade_room_join_accepted") return card.notification.created_at
+  if (card.kind === "trade_room_join_declined") return card.notification.created_at
   if (card.kind === "follow_request_accepted") return card.notification.created_at
   if (card.kind === "affiliate_notification") return card.notification.created_at
   if (card.kind === "trading_report_notification") return card.notification.created_at
@@ -658,6 +717,9 @@ export function groupedCardCreatedAt(card: GroupedNotificationCard): string {
 
 export function groupedCardIsUnread(card: GroupedNotificationCard): boolean {
   if (card.kind === "room_join") return !card.notification.read
+  if (card.kind === "trade_room_join_request") return !card.notification.read
+  if (card.kind === "trade_room_join_accepted") return !card.notification.read
+  if (card.kind === "trade_room_join_declined") return !card.notification.read
   if (card.kind === "follow_request_accepted") return !card.notification.read
   if (card.kind === "affiliate_notification") return !card.notification.read
   if (card.kind === "trading_report_notification") return !card.notification.read
@@ -667,6 +729,9 @@ export function groupedCardIsUnread(card: GroupedNotificationCard): boolean {
 
 export function groupedCardNotificationIds(card: GroupedNotificationCard): string[] {
   if (card.kind === "room_join") return [card.notification.id]
+  if (card.kind === "trade_room_join_request") return [card.notification.id]
+  if (card.kind === "trade_room_join_accepted") return [card.notification.id]
+  if (card.kind === "trade_room_join_declined") return [card.notification.id]
   if (card.kind === "follow_request_accepted") return [card.notification.id]
   if (card.kind === "affiliate_notification") return [card.notification.id]
   if (card.kind === "trading_report_notification") return [card.notification.id]
@@ -928,6 +993,28 @@ export function formatRoomJoinMessage(username: string): string {
   return `${username} joined your room`
 }
 
+export function formatTradeRoomJoinRequestMessage(
+  username: string,
+  roomName: string | null | undefined
+): string {
+  const room = roomName?.trim() || "a Trade Room"
+  return `${username} requested to join ${room}`
+}
+
+export function formatTradeRoomJoinAcceptedMessage(
+  roomName: string | null | undefined
+): string {
+  const room = roomName?.trim() || "the Trade Room"
+  return `Your request to join ${room} was accepted`
+}
+
+export function formatTradeRoomJoinDeclinedMessage(
+  roomName: string | null | undefined
+): string {
+  const room = roomName?.trim() || "the Trade Room"
+  return `Your request to join ${room} was declined`
+}
+
 /** @deprecated Use formatRoomMessageGroupTitle for grouped room notifications. */
 export function formatRoomMessageNotification(
   username: string,
@@ -1089,6 +1176,28 @@ export function getGroupedNotificationHref(
       })
     }
     return "/community"
+  }
+
+  if (card.kind === "trade_room_join_request") {
+    const meta = parseTradeRoomJoinRequestContent(card.notification.content)
+    if (meta?.join_request_id) {
+      return buildTradeRoomJoinRequestHref(meta.join_request_id)
+    }
+    return "/notifications"
+  }
+
+  if (card.kind === "trade_room_join_accepted") {
+    const meta = parseRoomJoinContent(card.notification.content)
+    const slug = meta.room_slug?.trim()
+    if (slug) return buildTradeRoomHref(slug)
+    if (card.notification.room_id) {
+      return `/community?room=${card.notification.room_id}`
+    }
+    return "/community"
+  }
+
+  if (card.kind === "trade_room_join_declined") {
+    return "/notifications"
   }
 
   const n = card.notification

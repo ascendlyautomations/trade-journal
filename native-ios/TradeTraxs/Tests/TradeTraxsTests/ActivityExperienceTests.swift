@@ -439,9 +439,41 @@ private final class ActivityStubNotificationRepository: NotificationRepository, 
     }
 
     func markRead(id: NotificationID) async throws {
-        if let index = items.firstIndex(where: { $0.id == id }) {
+        _ = try await markRead(ids: [id])
+    }
+
+    func markRead(ids: [NotificationID]) async throws -> Int {
+        var count = 0
+        for id in ids {
+            if let index = items.firstIndex(where: { $0.id == id && !items[index].isRead }) {
+                items[index].isRead = true
+                count += 1
+            }
+        }
+        return count
+    }
+
+    func markMessageNotificationsRead() async throws -> Int {
+        let targets = items.indices.filter { !items[$0].isRead && items[$0].kind == .message }
+        for index in targets {
             items[index].isRead = true
         }
+        return targets.count
+    }
+
+    func markRoomNotificationsRead(roomID: RoomID, slug: String?) async throws -> Int {
+        let targets = items.indices.filter { index in
+            guard !items[index].isRead else { return false }
+            let item = items[index]
+            let isRoomKind = item.kind == .roomJoin || item.kind == .roomMention
+            let mentionsRoom = item.body.contains(roomID.rawValue)
+                || (slug.map { item.body.contains($0) } ?? false)
+            return isRoomKind || mentionsRoom
+        }
+        for index in targets {
+            items[index].isRead = true
+        }
+        return targets.count
     }
 
     func markAllRead() async throws {

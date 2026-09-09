@@ -97,7 +97,7 @@ struct CheckInHistoryDayRow: View {
         guard let checkIn = summary.checkIn else { return nil }
         var parts: [String] = []
         if let hours = checkIn.sleepHours {
-            parts.append(String(format: "%.1fh Sleep", NSDecimalNumber(decimal: hours).doubleValue))
+            parts.append("\(NumberDisplay.hours(NSDecimalNumber(decimal: hours).doubleValue)) Sleep")
         }
         if let focus = checkIn.focusLevel {
             parts.append("Focus \(focus)/5")

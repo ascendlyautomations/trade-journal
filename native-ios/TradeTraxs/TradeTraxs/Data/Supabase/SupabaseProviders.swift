@@ -13,9 +13,32 @@ nonisolated protocol SupabaseAuthProviding: Sendable {
 
 nonisolated protocol SupabaseStorageProviding: Sendable {
     func publicURL(bucket: String, path: String) -> URL?
-    func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String
+    func upload(
+        bucket: String,
+        path: String,
+        data: Data,
+        contentType: String,
+        cacheControl: String?
+    ) async throws -> String
     func download(bucket: String, path: String) async throws -> Data
     func delete(bucket: String, path: String) async throws
+}
+
+extension SupabaseStorageProviding {
+    func upload(
+        bucket: String,
+        path: String,
+        data: Data,
+        contentType: String
+    ) async throws -> String {
+        try await upload(
+            bucket: bucket,
+            path: path,
+            data: data,
+            contentType: contentType,
+            cacheControl: nil
+        )
+    }
 }
 
 nonisolated protocol SupabaseRealtimeProviding: Sendable {
@@ -77,16 +100,27 @@ nonisolated struct LiveSupabaseStorageProvider: SupabaseStorageProviding {
         return URL(string: "\(root)/storage/v1/object/public/\(bucket)/\(cleaned)")
     }
 
-    func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String {
+    func upload(
+        bucket: String,
+        path: String,
+        data: Data,
+        contentType: String,
+        cacheControl: String? = nil
+    ) async throws -> String {
         let cleaned = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        var headers = [
+            "Content-Type": contentType,
+            "x-upsert": "true",
+        ]
+        if let cacheControl, !cacheControl.isEmpty {
+            // Supabase Storage expects `cache-control: max-age=<seconds>` (matches supabase-js upload options).
+            headers["cache-control"] = "max-age=\(cacheControl)"
+        }
         _ = try await transport.send(
             host: .supabaseStorage,
             path: "/storage/v1/object/\(bucket)/\(cleaned)",
             method: .post,
-            headers: [
-                "Content-Type": contentType,
-                "x-upsert": "true",
-            ],
+            headers: headers,
             body: data
         )
         return cleaned
@@ -1518,8 +1552,14 @@ private nonisolated struct UnconfiguredObjectStorageAdapter: SupabaseStorageProv
         return nil
     }
 
-    func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String {
-        _ = (bucket, path, data, contentType)
+    func upload(
+        bucket: String,
+        path: String,
+        data: Data,
+        contentType: String,
+        cacheControl: String? = nil
+    ) async throws -> String {
+        _ = (bucket, path, data, contentType, cacheControl)
         throw AppError.authentication(.notConfigured)
     }
 

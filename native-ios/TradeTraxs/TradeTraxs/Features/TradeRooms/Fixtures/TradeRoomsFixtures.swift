@@ -224,6 +224,46 @@ enum TradeRoomsFixtures {
     static func seedInbox(_ store: MessagesInboxStore, viewerID: ProfileID = viewerID) {
         MessagesInboxFixtures.seedStore(store, viewerID: viewerID)
     }
+
+    /// Dev bootstrap mirroring authoritative RPC relationship flags.
+    static func homeBootstrap(
+        viewerID: ProfileID = viewerID,
+        scope: TradeRoomDiscoveryScope = .all
+    ) -> TradeRoomsHomeBootstrap {
+        let peerOwner = ProfileID("dev.follower.ada")
+        let owned = ExploreRoomSuggestion(
+            id: deskRoomID,
+            name: "NQ Desk Room",
+            slug: "nq-desk",
+            description: "Live levels and session notes.",
+            memberCount: 248,
+            ownerProfileID: viewerID,
+            roomKind: .community,
+            isJoined: true,
+            isOwner: true,
+            isMember: true
+        )
+        let joined = ExploreRoomSuggestion(
+            id: riskRoomID,
+            name: "Risk First",
+            slug: "risk-first",
+            description: "Position sizing and journal review.",
+            memberCount: 86,
+            ownerProfileID: peerOwner,
+            roomKind: .community,
+            isJoined: true,
+            isOwner: false,
+            isMember: true
+        )
+        let yourRooms = [owned, joined]
+        return TradeRoomsHomeBootstrap(
+            viewerID: viewerID,
+            scope: scope,
+            yourRooms: yourRooms,
+            suggested: [],
+            popular: []
+        )
+    }
 }
 
 struct RoomMemberItem: Identifiable, Hashable, Sendable {

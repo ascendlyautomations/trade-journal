@@ -97,7 +97,11 @@ struct CreateAchievementView: View {
         .imageCropSelection(
             sourceImage: $cropSourceImage,
             preset: .socialContent,
-            onConfirm: { viewModel.setImage($0) },
+            onConfirm: { result in
+                viewModel.setImage(result)
+                cropSourceImage = nil
+                photoItem = nil
+            },
             onCancel: { photoItem = nil }
         )
         .accessibilityIdentifier("createAchievement.root")
@@ -148,9 +152,8 @@ struct CreateAchievementView: View {
             }
 
             Section {
-                if let preview = viewModel.imagePreview,
-                   let presentation = viewModel.feedPresentation {
-                    AdaptiveMediaPreviewImage(image: preview, presentation: presentation)
+                if let preview = viewModel.finalImage {
+                    AdaptiveMediaPreviewImage(image: preview)
                         .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
                         .accessibilityLabel("Achievement image preview")
                         .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
@@ -183,7 +186,7 @@ struct CreateAchievementView: View {
             } header: {
                 sectionHeader("Media")
             } footer: {
-                if viewModel.imagePreview == nil {
+                if viewModel.finalImage == nil {
                     sectionFooter("Screenshot or proof image required.")
                 }
             }

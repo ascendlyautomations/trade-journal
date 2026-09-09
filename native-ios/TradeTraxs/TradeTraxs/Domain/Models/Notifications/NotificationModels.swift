@@ -6,6 +6,9 @@ nonisolated enum NotificationInboxType {
         "like",
         "comment",
         "room_join",
+        "trade_room_join_request",
+        "trade_room_join_accepted",
+        "trade_room_join_declined",
         "room_mention",
         "follow",
         "follow_request",
@@ -26,6 +29,9 @@ nonisolated enum ActivityNotificationKind: String, Hashable, Codable, Sendable {
     case followRequest = "follow_request"
     case followRequestAccepted = "follow_request_accepted"
     case roomJoin = "room_join"
+    case tradeRoomJoinRequest = "trade_room_join_request"
+    case tradeRoomJoinAccepted = "trade_room_join_accepted"
+    case tradeRoomJoinDeclined = "trade_room_join_declined"
     case roomMention = "room_mention"
     case affiliateReferral = "affiliate_referral"
     case affiliateCommissionEarned = "affiliate_commission_earned"
@@ -72,6 +78,9 @@ nonisolated struct ActivityNotification: Hashable, Codable, Sendable, Identifiab
     var roomID: RoomID?
     var roomMessageID: RoomMessageID?
     var followRequestID: String?
+    var joinRequestID: String?
+    /// Cached join-request resolution from notification content (`pending`, `approved`, `rejected`).
+    var joinRequestStatus: String?
     var roomSlug: String?
     var roomName: String?
     var sectionID: String?

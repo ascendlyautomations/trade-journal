@@ -603,7 +603,7 @@ private struct AddTradeStubUpload: UploadService {
 }
 
 private struct AddTradeStubStorage: ObjectStorageProviding {
-    func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String { path }
+    func upload(bucket: String, path: String, data: Data, contentType: String, cacheControl: String? = nil) async throws -> String { path }
     func download(bucket: String, path: String) async throws -> Data { Data() }
     func delete(bucket: String, path: String) async throws {}
     func publicURL(bucket: String, path: String) -> URL? {

@@ -54,6 +54,91 @@ final class MediaImageOrientationTests: XCTestCase {
         XCTAssertGreaterThan(pixels.height, 0)
     }
 
+    func testExportFeedCropSquareFromTallSource() {
+        let source = makeSolidImage(width: 1179, height: 2556, orientation: .up)
+        let viewport = FeedMediaLayout.editorViewportSize(
+            containerWidth: 390,
+            imagePixelSize: CGSize(width: 1179, height: 2556),
+            aspectOption: .square
+        )
+        let exported = ImageCropRenderer.exportFeedCrop(
+            sourceImage: source,
+            aspectOption: .square,
+            viewportSize: viewport,
+            transform: .default
+        )
+        XCTAssertNotNil(exported)
+        let pixels = MediaImageOrientation.pixelSize(of: exported!)
+        XCTAssertEqual(pixels.width, pixels.height, accuracy: 1)
+        let aspect = pixels.width / pixels.height
+        XCTAssertEqual(aspect, 1, accuracy: 0.01)
+    }
+
+    func testExportFeedCropPortraitAspectRatio() {
+        let source = makeSolidImage(width: 1200, height: 2400, orientation: .up)
+        let viewport = FeedMediaLayout.editorViewportSize(
+            containerWidth: 390,
+            imagePixelSize: CGSize(width: 1200, height: 2400),
+            aspectOption: .portrait
+        )
+        let exported = ImageCropRenderer.exportFeedCrop(
+            sourceImage: source,
+            aspectOption: .portrait,
+            viewportSize: viewport,
+            transform: .default
+        )
+        XCTAssertNotNil(exported)
+        let pixels = MediaImageOrientation.pixelSize(of: exported!)
+        let aspect = pixels.width / pixels.height
+        XCTAssertEqual(aspect, 4.0 / 5.0, accuracy: 0.02)
+    }
+
+    func testExportFeedCropTopBiasDiffersFromBottomBias() {
+        let source = makeSolidImage(width: 1179, height: 2556, orientation: .up)
+        let viewport = FeedMediaLayout.editorViewportSize(
+            containerWidth: 390,
+            imagePixelSize: CGSize(width: 1179, height: 2556),
+            aspectOption: .square
+        )
+        let topCrop = ImageCropRenderer.exportFeedCrop(
+            sourceImage: source,
+            aspectOption: .square,
+            viewportSize: viewport,
+            transform: ImageCropTransform(zoom: 1, offset: CGSize(width: 0, height: 120))
+        )
+        let bottomCrop = ImageCropRenderer.exportFeedCrop(
+            sourceImage: source,
+            aspectOption: .square,
+            viewportSize: viewport,
+            transform: ImageCropTransform(zoom: 1, offset: CGSize(width: 0, height: -120))
+        )
+        XCTAssertNotNil(topCrop)
+        XCTAssertNotNil(bottomCrop)
+        let topPixels = MediaImageOrientation.pixelSize(of: topCrop!)
+        let bottomPixels = MediaImageOrientation.pixelSize(of: bottomCrop!)
+        XCTAssertEqual(topPixels.width, topPixels.height, accuracy: 2)
+        XCTAssertNotEqual(topPixels, bottomPixels)
+    }
+
+    func testExportFeedCropOriginalWideUsesFullImage() {
+        let source = makeSolidImage(width: 1600, height: 900, orientation: .up)
+        let viewport = FeedMediaLayout.editorViewportSize(
+            containerWidth: 390,
+            imagePixelSize: CGSize(width: 1600, height: 900),
+            aspectOption: .original
+        )
+        let exported = ImageCropRenderer.exportFeedCrop(
+            sourceImage: source,
+            aspectOption: .original,
+            viewportSize: viewport,
+            transform: .default
+        )
+        XCTAssertNotNil(exported)
+        let pixels = MediaImageOrientation.pixelSize(of: exported!)
+        XCTAssertEqual(pixels.width, 1600, accuracy: 1)
+        XCTAssertEqual(pixels.height, 900, accuracy: 1)
+    }
+
     private func makeSolidImage(
         width: Int,
         height: Int,

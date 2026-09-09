@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 /// Permanent Clip detail destination — same hierarchy as Trade Detail.
@@ -208,6 +209,7 @@ struct ClipDetailView: View {
         if let player = viewModel.player {
             ClipPlayerView(
                 player: player,
+                videoGravity: viewModel.videoPresentation?.playerGravity(for: .clipsPager) ?? .resizeAspect,
                 onDoubleTapLike: {
                     presentLikeFeedback()
                     Task { await data.engagementStore.ensureLiked(on: .reel(viewModel.reelID)) }

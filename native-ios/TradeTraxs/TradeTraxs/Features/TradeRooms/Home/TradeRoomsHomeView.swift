@@ -12,18 +12,22 @@ struct TradeRoomsHomeView: View {
     init(
         data: DataEnvironment,
         navigationCoordinator: NavigationCoordinator,
-        navigationHost: TradeRoomNavigationHost = .messages
+        navigationHost: TradeRoomNavigationHost = .messages,
+        presentCreateOnAppear: Bool = false
     ) {
         _viewModel = State(
             initialValue: TradeRoomsHomeViewModel(
                 messages: data.messages,
                 rooms: data.rooms,
+                explore: data.explore,
                 profiles: data.profiles,
                 session: data.session,
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
                 navigationHost: navigationHost,
-                realtimeHub: data.realtimeHub
+                realtimeHub: data.realtimeHub,
+                presentCreateOnAppear: presentCreateOnAppear
+                    || TradeRoomCreationIntent.shared.consumePresentCreate()
             )
         )
         self.data = data
@@ -56,7 +60,7 @@ struct TradeRoomsHomeView: View {
                         onRetry: { Task { await viewModel.refresh() } }
                     )
                 }
-            case .loaded where viewModel.showsEmpty:
+            case .loaded where viewModel.showsEmpty && !viewModel.hasDiscoverableRooms && viewModel.discoveryPhase != .loading:
                 ExperienceEmptyState(
                     icon: .rooms,
                     title: "No Trade Rooms yet",
@@ -91,6 +95,13 @@ struct TradeRoomsHomeView: View {
         }
         .task {
             viewModel.loadIfNeeded()
+        }
+        .onChange(of: viewModel.phase) { _, phase in
+            viewModel.consumePresentCreateIfNeeded(phase: phase)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tradeRoomMetadataDidChange)) { notification in
+            guard let room = notification.tradeRoomMetadataPayload else { return }
+            viewModel.applyRoomMetadata(room)
         }
         .confirmationDialog(
             "Leave this Trade Room?",
@@ -131,6 +142,10 @@ struct TradeRoomsHomeView: View {
         let _ = roomUnreadObservation
         return ScrollView {
             LazyVStack(spacing: ExperienceSpacing.sm) {
+                if viewModel.showsDiscoverySection {
+                    discoverySection
+                }
+
                 if viewModel.showsFilteredEmpty {
                     ExperienceEmptyState(
                         icon: .search,
@@ -140,7 +155,8 @@ struct TradeRoomsHomeView: View {
                     .padding(.top, ExperienceSpacing.xl)
                 }
 
-                ForEach(viewModel.filteredItems) { item in
+                if !viewModel.filteredItems.isEmpty, !viewModel.showsDiscoverySection {
+                    ForEach(viewModel.filteredItems) { item in
                     Button {
                         viewModel.openRoom(item)
                     } label: {
@@ -172,6 +188,7 @@ struct TradeRoomsHomeView: View {
                             .frame(width: 320)
                             .padding()
                     }
+                    }
                 }
             }
             .padding(.horizontal, ExperienceSpacing.md)
@@ -180,5 +197,108 @@ struct TradeRoomsHomeView: View {
         }
         .scrollContentBackground(.hidden)
         .accessibilityIdentifier("tradeRooms.list")
+    }
+
+    @ViewBuilder
+    private var discoverySection: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            TradeRoomDiscoveryModeToggle(
+                mode: viewModel.discoveryMode,
+                onSelect: { viewModel.selectDiscoveryMode($0) }
+            )
+
+            TradeRoomDiscoveryScopeToggle(
+                scope: viewModel.discoveryScope,
+                onSelect: { viewModel.selectDiscoveryScope($0) }
+            )
+
+            if viewModel.discoveryMode != .yourRooms {
+                Text("Discover rooms")
+                    .experienceStyle(.subheadline, color: colors.secondaryText)
+            }
+
+            if viewModel.discoveryPhase == .loading, viewModel.displayedDiscoveryRooms.isEmpty {
+                discoverySkeleton
+            } else if let message = viewModel.discoveryErrorMessage,
+                      viewModel.displayedDiscoveryRooms.isEmpty,
+                      viewModel.discoveryMode != .yourRooms
+            {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                    Text(message)
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                    Button("Retry") {
+                        viewModel.retryDiscovery()
+                    }
+                    .font(.footnote.weight(.semibold))
+                }
+                .padding(.vertical, ExperienceSpacing.xs)
+            } else if viewModel.showsYourRoomsEmptyState {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    Text(viewModel.discoveryMode.emptyMessage)
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                    Button("Browse Suggested Rooms") {
+                        viewModel.browseSuggestedRooms()
+                    }
+                    .font(.footnote.weight(.semibold))
+                }
+                .padding(.vertical, ExperienceSpacing.xs)
+            } else if viewModel.displayedDiscoveryRooms.isEmpty {
+                Text(viewModel.discoveryMode.emptyMessage)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .padding(.vertical, ExperienceSpacing.xs)
+            } else {
+                ForEach(viewModel.displayedDiscoveryRooms) { room in
+                    TradeRoomDiscoveryRow(
+                        room: room,
+                        joinState: viewModel.joinState(for: room.id),
+                        isYourRoomsContext: viewModel.discoveryMode == .yourRooms,
+                        isOwner: viewModel.isViewerOwner(of: room),
+                        imagePipeline: imagePipeline,
+                        onOpen: { viewModel.openDiscoveryRoom(room) },
+                        onJoin: { Task { await viewModel.joinDiscoveryRoom(room) } }
+                    )
+                }
+            }
+        }
+        .padding(.bottom, ExperienceSpacing.sm)
+        .accessibilityIdentifier("tradeRooms.discovery.section")
+    }
+
+    private var discoverySkeleton: some View {
+        VStack(spacing: ExperienceSpacing.sm) {
+            ForEach(0..<2, id: \.self) { _ in
+                HStack(spacing: ExperienceSpacing.sm) {
+                    Circle()
+                        .fill(colors.fillSecondary)
+                        .frame(width: 52, height: 52)
+                    VStack(alignment: .leading, spacing: 8) {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(colors.fillSecondary)
+                            .frame(width: 160, height: 14)
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(colors.fillSecondary)
+                            .frame(height: 12)
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(colors.fillSecondary)
+                            .frame(width: 100, height: 10)
+                    }
+                    Spacer(minLength: 0)
+                    Capsule()
+                        .fill(colors.fillSecondary)
+                        .frame(width: 64, height: 32)
+                }
+                .padding(ExperienceSpacing.sm)
+                .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.lg))
+                .redacted(reason: .placeholder)
+            }
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .experienceStyle(.subheadline, color: colors.secondaryText)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, ExperienceSpacing.xs)
+            .accessibilityAddTraits(.isHeader)
     }
 }

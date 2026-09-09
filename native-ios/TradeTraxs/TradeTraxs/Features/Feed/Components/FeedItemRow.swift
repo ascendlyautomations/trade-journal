@@ -48,12 +48,10 @@ struct FeedItemRow: View {
                 onManageInVault: vaultRef == nil || !isVaulted ? nil : { openVaultSheet() }
             )
             .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.vertical, ExperienceSpacing.sm)
+            .padding(.vertical, isClipRow ? ExperienceSpacing.xs : ExperienceSpacing.sm)
 
-            if isImagePostRow {
-                imagePostLayout
-            } else if entry.hasDisplayMedia {
-                mediaLayout
+            if entry.hasDisplayMedia {
+                standardMediaLayout
             } else {
                 textLayout
             }
@@ -105,45 +103,29 @@ struct FeedItemRow: View {
         showsVaultSheet = true
     }
 
-    // MARK: - Layout A (media)
+    private var isClipRow: Bool {
+        if case .clip = entry { return true }
+        return false
+    }
 
-    /// Profile posts with image media — trade-style hierarchy without trade stats.
-    private var imagePostLayout: some View {
+    /// Media-first rows — engagement attached directly under media, caption below.
+    private var standardMediaLayout: some View {
         VStack(alignment: .leading, spacing: 0) {
             feedImageMedia
-
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                engagement
-                if case .post = entry, let caption = entry.feedCaptionText {
-                    FeedCaptionPreview(
-                        text: caption,
-                        lineLimit: FeedCaptionLineLimit.post,
-                        onSeeMore: onOpen,
-                        seeMoreAccessibilityIdentifier: "feed.post.seeMore"
-                    )
-                }
-                linkedEmbeds
-            }
-            .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.top, ExperienceSpacing.sm)
-            .padding(.bottom, ExperienceSpacing.md)
+            mediaFooter
         }
     }
 
-    private var mediaLayout: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            feedImageMedia
-
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                engagement
-                summary
-                feedCaptionPreview
-                linkedEmbeds
-            }
-            .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.top, ExperienceSpacing.sm)
-            .padding(.bottom, ExperienceSpacing.md)
+    private var mediaFooter: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            engagement
+            summary
+            feedCaptionPreview
+            linkedEmbeds
         }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.top, ExperienceSpacing.xxs)
+        .padding(.bottom, ExperienceSpacing.sm)
     }
 
     // MARK: - Layout B (text-only — engagement outside open target)
@@ -208,21 +190,18 @@ struct FeedItemRow: View {
 
         case .clip(_, let reel):
             FeedClipMediaView(
+                feedItemID: entry.id,
                 reel: reel,
                 imagePipeline: imagePipeline,
-                playbackCoordinator: playbackCoordinator
+                playbackCoordinator: playbackCoordinator,
+                onTogglePlayPause: {
+                    playbackCoordinator.togglePlayPause(for: reel)
+                },
+                onDoubleTapLike: {
+                    Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
+                }
             )
-            .overlay {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .experienceDoubleTapLike(
-                        target: entry.interactionTarget,
-                        store: engagementStore,
-                        onSingleTap: {
-                            playbackCoordinator.togglePlayPause(for: reel)
-                        }
-                    )
-            }
+            .fixedSize(horizontal: false, vertical: true)
 
         case .achievement(_, let achievement):
             InteractiveImageView(
@@ -283,7 +262,8 @@ struct FeedItemRow: View {
             vaultStore: vaultStore,
             onCommentTap: onOpen,
             onShareTap: onShare,
-            vaultRef: vaultRef
+            vaultRef: vaultRef,
+            visualStyle: .feedCard
         )
     }
 
@@ -329,7 +309,10 @@ struct FeedItemRow: View {
             FeedCaptionPreview(
                 text: text,
                 lineLimit: lineLimit,
-                onSeeMore: onOpen
+                onSeeMore: onOpen,
+                seeMoreAccessibilityIdentifier: isImagePostRow
+                    ? "feed.post.seeMore"
+                    : "feed.caption.seeMore"
             )
         }
     }

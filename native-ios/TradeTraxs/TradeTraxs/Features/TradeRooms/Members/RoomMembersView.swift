@@ -54,7 +54,7 @@ struct RoomMembersView: View {
                 List {
                     ForEach(viewModel.filteredMembers) { item in
                         RoomMemberRowView(item: item, imagePipeline: imagePipeline) {
-                            if viewModel.isOwner, viewModel.canManageMember(item) {
+                            if viewModel.canManageRoom, viewModel.canManageMember(item) {
                                 selectedMember = item
                             } else {
                                 viewModel.openProfile(item.id)
@@ -80,15 +80,18 @@ struct RoomMembersView: View {
         .experienceScreenBackground()
         .experienceNavigationTitle("Members")
         .toolbar {
-            if viewModel.isOwner {
+            if viewModel.canManageRoom {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Manage Room", systemImage: "gearshape") {
-                            viewModel.openManageRoom()
-                        }
+                    Button {
+                        viewModel.openManageRoom()
                     } label: {
-                        ExperienceIcon(icon: .more, size: .md, color: colors.primaryText)
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(colors.primaryText)
                     }
+                    .experienceTouchTarget()
+                    .accessibilityLabel("Manage Room")
+                    .accessibilityIdentifier("tradeRooms.members.manage")
                 }
             }
         }

@@ -14,6 +14,46 @@ nonisolated protocol ExploreRepository: Sendable {
     /// Public rooms ordered by member count via `popular_trade_rooms`.
     func popularRooms(limit: Int) async throws -> [ExploreRoomSuggestion]
 
+    /// Suggested / Popular / Your Rooms via `rpc_v1_trade_room_discovery` (falls back to popular).
+    func discoverRooms(
+        mode: TradeRoomDiscoveryMode,
+        scope: TradeRoomDiscoveryScope,
+        limit: Int
+    ) async throws -> [ExploreRoomSuggestion]
+
+    /// Single-call home bootstrap — Your Rooms + Suggested + Popular with is_owner/is_member.
+    func tradeRoomsHomeBootstrap(
+        scope: TradeRoomDiscoveryScope,
+        limit: Int
+    ) async throws -> TradeRoomsHomeBootstrap
+
     /// Public room name/slug search via `search_public_trade_rooms`.
     func searchRooms(query: String, limit: Int) async throws -> [ExploreRoomSuggestion]
+}
+
+extension ExploreRepository {
+    func discoverRooms(mode: TradeRoomDiscoveryMode, limit: Int) async throws -> [ExploreRoomSuggestion] {
+        try await discoverRooms(mode: mode, scope: .all, limit: limit)
+    }
+
+    func discoverRooms(
+        mode: TradeRoomDiscoveryMode,
+        scope: TradeRoomDiscoveryScope,
+        limit: Int
+    ) async throws -> [ExploreRoomSuggestion] {
+        try await popularRooms(limit: limit)
+    }
+
+    func tradeRoomsHomeBootstrap(
+        scope: TradeRoomDiscoveryScope,
+        limit: Int
+    ) async throws -> TradeRoomsHomeBootstrap {
+        TradeRoomsHomeBootstrap(
+            viewerID: nil,
+            scope: scope,
+            yourRooms: [],
+            suggested: try await popularRooms(limit: limit),
+            popular: try await popularRooms(limit: limit)
+        )
+    }
 }

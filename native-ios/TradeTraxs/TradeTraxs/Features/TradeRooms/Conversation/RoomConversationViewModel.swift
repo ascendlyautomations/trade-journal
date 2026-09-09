@@ -17,6 +17,7 @@ final class RoomConversationViewModel {
     private(set) var phase: Phase = .idle
     private(set) var room: TradeRoom?
     private(set) var membership: RoomMembership?
+    private(set) var joinRequestState: TradeRoomJoinRequestState?
     private(set) var ownerProfile: Profile?
     private(set) var channels: [RoomChannel] = []
     private(set) var selectedChannelID: RoomChannelID?
@@ -37,6 +38,10 @@ final class RoomConversationViewModel {
     private(set) var tradePickerTrades: [Trade] = []
     private(set) var isLoadingTradePicker = false
     private(set) var sharedTrades: [TradeID: Trade] = [:]
+    private(set) var sharedPosts: [PostID: Post] = [:]
+    private(set) var sharedReels: [ReelID: Reel] = [:]
+    private(set) var sharedAchievements: [AchievementID: Achievement] = [:]
+    private(set) var unavailableSharedContentKeys: Set<String> = []
     private(set) var activePresenceMembers: [RoomActivePresenceMember] = []
     var showsActivePresenceSheet = false
 
@@ -48,6 +53,8 @@ final class RoomConversationViewModel {
     private let profiles: any ProfileRepository
     private let notifications: (any NotificationRepository)?
     private let tradesRepo: (any TradeRepository)?
+    private let feedRepo: (any FeedRepository)?
+    private let achievementsRepo: (any AchievementRepository)?
     private let rpc: (any RPCClient)?
     private let session: any SessionProviding
     private let uploadService: any UploadService
@@ -80,6 +87,8 @@ final class RoomConversationViewModel {
         objectStorage: any ObjectStorageProviding,
         detailCache: DetailPresentationCache,
         trades: (any TradeRepository)? = nil,
+        feed: (any FeedRepository)? = nil,
+        achievements: (any AchievementRepository)? = nil,
         notifications: (any NotificationRepository)? = nil,
         rpc: (any RPCClient)? = nil,
         navigationCoordinator: NavigationCoordinator? = nil,
@@ -92,6 +101,8 @@ final class RoomConversationViewModel {
         self.profiles = profiles
         self.notifications = notifications
         self.tradesRepo = trades
+        self.feedRepo = feed
+        self.achievementsRepo = achievements
         self.rpc = rpc
         self.session = session
         self.uploadService = uploadService
@@ -153,9 +164,35 @@ final class RoomConversationViewModel {
         membership != nil
     }
 
+    /// Approval-policy rooms hide member-only content until membership is granted.
+    var canViewMessages: Bool {
+        if isOwner || isMember { return true }
+        guard let room else { return false }
+        if room.joinPolicy == .approval { return false }
+        if joinRequestState == .pending { return false }
+        return true
+    }
+
+    var showsJoinPreviewPlaceholder: Bool {
+        guard phase == .loaded, let room else { return false }
+        return !canViewMessages && room.joinPolicy == .approval
+    }
+
+    var joinPreviewMessage: String {
+        if joinRequestState == .pending || joinPresentationState == .requested {
+            return "Your request is pending. You'll see messages after the owner approves."
+        }
+        return "Request to join this room to read and send messages."
+    }
+
     var isOwner: Bool {
         guard let viewerID, let room else { return false }
         return room.ownerProfileID == viewerID
+    }
+
+    var canManageRoom: Bool {
+        guard let room else { return false }
+        return TradeRoomManagementPermission.canManage(room: room, viewerID: viewerID)
     }
 
     private var tagStore: SessionRoomMemberTagsStore { .shared }
@@ -261,8 +298,36 @@ final class RoomConversationViewModel {
 
     var joinButtonTitle: String {
         if isOwner { return "Owner" }
-        if isMember { return "Joined" }
-        return "Join"
+        guard let room else { return "Join" }
+        return TradeRoomJoinPresentation.previewButtonTitle(
+            joinPolicy: room.joinPolicy,
+            state: joinPresentationState
+        )
+    }
+
+    var joinPresentationState: TradeRoomDiscoveryJoinState {
+        if isOwner || isMember { return .joined }
+        if isJoining {
+            return room?.joinPolicy == .approval ? .requesting : .joining
+        }
+        if joinRequestState == .pending { return .requested }
+        if let roomID = room?.id,
+           TradeRoomJoinActionCoordinator.shared.mutationStates[roomID] == .requested
+        {
+            return .requested
+        }
+        return .idle
+    }
+
+    var isJoinButtonEnabled: Bool {
+        !isOwner && TradeRoomJoinPresentation.isInteractive(joinPresentationState) && !isJoining
+    }
+
+    var showsJoinButton: Bool {
+        TradeRoomJoinPresentation.showsButton(
+            isOwner: isOwner,
+            state: joinPresentationState
+        )
     }
 
     var isMuted: Bool {
@@ -370,7 +435,7 @@ final class RoomConversationViewModel {
             nextOlderCursor = result.nextCursor
             hasMoreOlder = result.nextCursor != nil
             persistActiveChannelCache(scrollAnchor: nil)
-            await hydrateSharedTrades(from: mapped)
+            await hydrateSharedContent(from: mapped)
         } catch {
             // Soft-fail older page.
         }
@@ -560,8 +625,45 @@ final class RoomConversationViewModel {
     }
 
     func sharedTrade(for message: Message) -> Trade? {
-        guard let tradeID = message.attachments.first?.tradeID else { return nil }
-        return sharedTrades[tradeID]
+        if let tradeID = message.attachments.first?.tradeID {
+            return sharedTrades[tradeID]
+        }
+        if case .trade(let tradeID) = message.sharedContent {
+            return sharedTrades[tradeID]
+        }
+        if let post = sharedPost(for: message), let tradeID = post.linkedTradeID {
+            return sharedTrades[tradeID]
+        }
+        return nil
+    }
+
+    func sharedPost(for message: Message) -> Post? {
+        guard let reference = message.sharedContent else { return nil }
+        switch reference {
+        case .feedPost(let id), .profilePost(let id):
+            return sharedPosts[id]
+        default:
+            return nil
+        }
+    }
+
+    func sharedReel(for message: Message) -> Reel? {
+        guard case .reel(let id) = message.sharedContent else { return nil }
+        return sharedReels[id]
+    }
+
+    func sharedAchievement(for message: Message) -> Achievement? {
+        guard case .achievementPost(let id) = message.sharedContent else { return nil }
+        return sharedAchievements[AchievementID(id.rawValue)]
+    }
+
+    func isSharedContentUnavailable(_ message: Message) -> Bool {
+        guard let reference = message.sharedContent else { return false }
+        return unavailableSharedContentKeys.contains(reference.stableKey)
+    }
+
+    func authorProfile(for profileID: ProfileID) -> Profile? {
+        detailCache.profile(id: profileID)
     }
 
     func retry(_ item: ConversationBubbleItem) async {
@@ -599,17 +701,55 @@ final class RoomConversationViewModel {
         }
         do {
             if membership == nil {
+                if room?.joinPolicy == .approval {
+                    let priorRequestState = joinRequestState
+                    joinRequestState = .pending
+                    TradeRoomJoinActionCoordinator.shared.patchRequested(resolvedRoomID)
+                    do {
+                        let status = try await rooms.requestJoin(roomID: roomID)
+                        joinRequestState = status == .approved ? nil : .pending
+                        if status == .approved {
+                            membership = try? await rooms.membership(roomID: roomID, profileID: viewerID)
+                            TradeRoomJoinActionCoordinator.shared.patchJoined(resolvedRoomID)
+                            await reconcileMemberCount(source: .mutation)
+                            try? await reloadMessagesAfterMembershipGranted()
+                        }
+                        ExperienceHaptics.play(.success)
+                        return
+                    } catch {
+                        joinRequestState = priorRequestState
+                        if isAlreadyPendingJoinError(error) {
+                            joinRequestState = .pending
+                            TradeRoomJoinActionCoordinator.shared.patchRequested(resolvedRoomID)
+                            ExperienceHaptics.play(.success)
+                            return
+                        }
+                        TradeRoomJoinActionCoordinator.shared.clearMutation(for: resolvedRoomID)
+                        ExperienceHaptics.play(.error)
+                        return
+                    }
+                }
                 membership = try await rooms.join(roomID: roomID, profileID: viewerID)
                 GettingStartedRefreshCenter.noteEligibleUserAction()
+                TradeRoomJoinActionCoordinator.shared.patchJoined(resolvedRoomID)
                 await reconcileMemberCount(source: .mutation)
             } else {
                 try await rooms.leave(roomID: roomID, profileID: viewerID)
                 membership = nil
+                joinRequestState = nil
                 await reconcileMemberCount(source: .mutation)
             }
             ExperienceHaptics.play(.success)
         } catch {
-            ExperienceHaptics.play(.error)
+            if room?.joinPolicy == .approval,
+               let status = try? await rooms.viewerJoinRequest(roomID: roomID),
+               status == .pending
+            {
+                joinRequestState = .pending
+                TradeRoomJoinActionCoordinator.shared.patchRequested(resolvedRoomID)
+            } else {
+                ExperienceHaptics.play(.error)
+            }
         }
     }
 
@@ -624,7 +764,7 @@ final class RoomConversationViewModel {
     }
 
     func openManageRoom() {
-        guard isOwner else { return }
+        guard canManageRoom else { return }
         ExperienceHaptics.play(.selection)
         navigationCoordinator?.open(navigationHost.manageRoom(roomID))
     }
@@ -700,18 +840,21 @@ final class RoomConversationViewModel {
     /// Web `markNotificationsReadForTarget({ kind: "room" })`.
     private func markRoomNotificationsRead() async {
         guard let notifications else { return }
-        guard let page = try? await notifications.notifications(page: PageRequest(limit: 100)) else {
-            return
-        }
+        let started = CFAbsoluteTimeGetCurrent()
         let slug = room?.slug
-        for item in page.items where !item.isRead {
-            let isRoomKind = item.kind == .roomJoin || item.kind == .roomMention
-            let mentionsRoom = item.body.contains(roomID.rawValue)
-                || (slug.map { item.body.contains($0) } ?? false)
-            // DB `room_message` often maps to `.system` — content match covers it.
-            if isRoomKind || mentionsRoom {
-                try? await notifications.markRead(id: item.id)
-            }
+        let markedLocally = ActivityInboxStore.shared.markRoomNotificationsReadLocally(
+            roomID: roomID,
+            slug: slug
+        )
+        do {
+            _ = try await notifications.markRoomNotificationsRead(roomID: roomID, slug: slug)
+            NotificationReadDiagnostics.logBulkMarkRead(
+                ids: markedLocally,
+                requests: 1,
+                dtMs: Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+            )
+        } catch {
+            // Activity reconciles on next bootstrap.
         }
     }
 
@@ -831,15 +974,23 @@ final class RoomConversationViewModel {
                 isLoaded: applied.channelCache.isLoaded
             )
             channelCaches[applied.selectedChannelID] = cache
-            apply(cache: cache)
+            if canViewMessages {
+                apply(cache: cache)
+                await hydrateSenders(for: cache.messages)
+                await hydrateSharedContent(from: cache.messages)
+                applyPendingDeepLinkFocusHighlight()
+                if let last = cache.messages.last {
+                    patchInboxPreview(with: last)
+                }
+            } else {
+                replaceMessages([])
+                hasMoreOlder = false
+                if membership == nil, applied.room.joinPolicy == .approval {
+                    joinRequestState = try? await rooms.viewerJoinRequest(roomID: applied.room.id)
+                }
+            }
             if applied.markReadApplied {
                 didMarkReadThisOpen = true
-            }
-            await hydrateSenders(for: cache.messages)
-            await hydrateSharedTrades(from: cache.messages)
-            applyPendingDeepLinkFocusHighlight()
-            if let last = cache.messages.last {
-                patchInboxPreview(with: last)
             }
             RoomMemberCountProbe.record(
                 roomID: applied.room.id,
@@ -865,6 +1016,11 @@ final class RoomConversationViewModel {
             let activeRoomID = loaded.id
             if let viewerID {
                 membership = try? await rooms.membership(roomID: activeRoomID, profileID: viewerID)
+                if membership == nil, loaded.joinPolicy == .approval {
+                    joinRequestState = try? await rooms.viewerJoinRequest(roomID: activeRoomID)
+                } else {
+                    joinRequestState = nil
+                }
             }
             if let cached = detailCache.profile(id: loaded.ownerProfileID) {
                 ownerProfile = cached
@@ -891,6 +1047,11 @@ final class RoomConversationViewModel {
         }
 
         guard let channelID = selectedChannelID else {
+            replaceMessages([])
+            hasMoreOlder = false
+            return
+        }
+        guard canViewMessages else {
             replaceMessages([])
             hasMoreOlder = false
             return
@@ -964,6 +1125,7 @@ final class RoomConversationViewModel {
     }
 
     private func loadChannelMessagesIfNeeded(_ channelID: RoomChannelID) {
+        guard canViewMessages else { return }
         if channelCaches[channelID]?.isLoaded == true { return }
         if channelLoadTasks[channelID] != nil { return }
         channelLoadTasks[channelID] = Task { [weak self] in
@@ -1031,7 +1193,7 @@ final class RoomConversationViewModel {
             apply(cache: cache)
         }
         await hydrateSenders(for: sorted)
-        await hydrateSharedTrades(from: sorted)
+        await hydrateSharedContent(from: sorted)
         if let last = sorted.last, channelID == selectedChannelID {
             patchInboxPreview(with: last)
         }
@@ -1062,25 +1224,48 @@ final class RoomConversationViewModel {
         channelCaches[selectedChannelID] = existing
     }
 
-    private func hydrateSharedTrades(from messages: [Message]) async {
-        guard let tradesRepo else { return }
-        let ids = Array(
-            Set(
-                messages.compactMap { message -> TradeID? in
-                    guard let id = message.attachments.first?.tradeID else { return nil }
-                    return sharedTrades[id] == nil ? id : nil
-                }
-            )
-        )
-        guard !ids.isEmpty else { return }
-        let fetched = (try? await SessionTradeEntityStore.shared.trades(
-            ids: ids,
+    private func hydrateSharedContent(from messages: [Message]) async {
+        guard !messages.isEmpty else { return }
+
+        let probe = SharedContentHydrationProbe.Session(surface: .tradeRoom)
+        let context = SharedContentHydrator.Context(
             detailCache: detailCache,
-            repository: tradesRepo
-        )) ?? []
-        for trade in fetched {
-            sharedTrades[trade.id] = trade
-        }
+            feedSessionStore: FeedSessionStore.shared,
+            viewerID: viewerID,
+            tradesRepo: tradesRepo,
+            feedRepo: feedRepo,
+            achievementsRepo: achievementsRepo,
+            profilesRepo: profiles
+        )
+
+        SharedContentHydrator.primeFromCaches(
+            messages: messages,
+            sharedTrades: &sharedTrades,
+            sharedPosts: &sharedPosts,
+            sharedReels: &sharedReels,
+            sharedAchievements: &sharedAchievements,
+            unavailableSharedContentKeys: &unavailableSharedContentKeys,
+            context: context,
+            probe: probe
+        )
+
+        let hydrated = await SharedContentHydrator.hydrateMissing(
+            messages: messages,
+            snapshot: SharedContentHydrator.Snapshot(
+                sharedTrades: sharedTrades,
+                sharedPosts: sharedPosts,
+                sharedReels: sharedReels,
+                sharedAchievements: sharedAchievements,
+                unavailableSharedContentKeys: unavailableSharedContentKeys
+            ),
+            context: context,
+            probe: probe
+        )
+        sharedTrades = hydrated.sharedTrades
+        sharedPosts = hydrated.sharedPosts
+        sharedReels = hydrated.sharedReels
+        sharedAchievements = hydrated.sharedAchievements
+        unavailableSharedContentKeys = hydrated.unavailableSharedContentKeys
     }
 
     /// Incremental apply from Realtime — never reloads the whole room.
@@ -1120,7 +1305,7 @@ final class RoomConversationViewModel {
             }
             await hydrateSenders(for: mapped)
             persistActiveChannelCache(scrollAnchor: messages.last?.id)
-            await hydrateSharedTrades(from: mapped)
+            await hydrateSharedContent(from: mapped)
             if let last = messages.last {
                 patchInboxPreview(with: last)
             }
@@ -1638,6 +1823,17 @@ final class RoomConversationViewModel {
             )
         }
         return items
+    }
+
+    private func reloadMessagesAfterMembershipGranted() async throws {
+        guard canViewMessages, let channelID = selectedChannelID else { return }
+        channelCaches.removeValue(forKey: channelID)
+        try await fetchChannelMessages(channelID)
+    }
+
+    private func isAlreadyPendingJoinError(_ error: Error) -> Bool {
+        let message = ConversationThreadSupport.message(for: error).lowercased()
+        return message.contains("pending") || message.contains("already")
     }
 }
 

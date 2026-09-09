@@ -262,6 +262,8 @@ final class PushNotificationExperienceTests: XCTestCase {
             roomID: nil,
             roomMessageID: nil,
             followRequestID: nil,
+            joinRequestID: nil,
+            joinRequestStatus: nil,
             roomSlug: nil,
             roomName: nil,
             sectionID: nil,

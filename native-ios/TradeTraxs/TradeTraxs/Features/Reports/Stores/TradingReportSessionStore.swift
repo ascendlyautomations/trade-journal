@@ -8,4 +8,8 @@ final class TradingReportSessionStore {
     var filters = TradingReportFilters()
 
     private init() {}
+
+    func invalidate() {
+        filters = TradingReportFilters()
+    }
 }

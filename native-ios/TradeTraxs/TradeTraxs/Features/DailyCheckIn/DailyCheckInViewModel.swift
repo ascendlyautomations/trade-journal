@@ -15,7 +15,7 @@ final class DailyCheckInViewModel {
             if number.doubleValue.truncatingRemainder(dividingBy: 1) == 0 {
                 return number.stringValue
             }
-            return String(format: "%.1f", number.doubleValue)
+            return NumberDisplay.decimal(number.doubleValue, minimumFractionDigits: 1, maximumFractionDigits: 1)
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)

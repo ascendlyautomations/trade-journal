@@ -46,7 +46,7 @@ nonisolated enum PsychologyGuardrailEngine {
         let wrBase = facts.guardrailFacts.consecutiveLossBaselineWinRate
         let wrText: String
         if let wrAfter, let wrBase {
-            wrText = String(format: "Historically your win rate drops to %.0f%% after this point vs %.0f%% baseline.", wrAfter * 100, wrBase * 100)
+            wrText = "Historically your win rate drops to \(NumberDisplay.percent(wrAfter * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)) after this point vs \(NumberDisplay.percent(wrBase * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)) baseline."
         } else {
             wrText = "Historically your performance declines after this point."
         }
@@ -54,7 +54,7 @@ nonisolated enum PsychologyGuardrailEngine {
         return PsychologyGuardrailNotice(
             id: "guardrail.consecutiveLoss.\(checkpoint)",
             title: "Psychology Check",
-            message: "You've taken \(checkpoint) consecutive losses. \(wrText)",
+            message: "You've taken \(NumberDisplay.integer(checkpoint)) consecutive losses. \(wrText)",
             kind: .consecutiveLosses
         )
     }

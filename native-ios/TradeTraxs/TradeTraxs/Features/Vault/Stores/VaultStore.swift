@@ -18,6 +18,18 @@ final class VaultStore {
     private var foldersLoaded = false
     private var foldersTask: Task<Void, Never>?
 
+    struct HomeSnapshot {
+        var items: [VaultItem]
+        var folders: [VaultFolder]
+        var nextCursor: String?
+        var filter: VaultContentFilter
+        var folderID: VaultFolderID?
+        var loadedAt: Date
+    }
+
+    private var homeSnapshot: HomeSnapshot?
+    private static let homeSoftStaleInterval: TimeInterval = 300
+
     private static let recentFolderKey = "vault.recentFolderID"
 
     init(repository: any VaultRepository) {
@@ -57,9 +69,50 @@ final class VaultStore {
         do {
             folders = try await repository.folders()
             foldersLoaded = true
+            if var snapshot = homeSnapshot {
+                snapshot.folders = folders
+                snapshot.loadedAt = .now
+                homeSnapshot = snapshot
+            }
         } catch {
             ExperienceHaptics.play(.warning)
         }
+    }
+
+    func cachedHome(filter: VaultContentFilter, folderID: VaultFolderID?) -> HomeSnapshot? {
+        guard let snapshot = homeSnapshot,
+              snapshot.filter == filter,
+              snapshot.folderID == folderID
+        else { return nil }
+        return snapshot
+    }
+
+    func isHomeSoftStale(filter: VaultContentFilter, folderID: VaultFolderID?, now: Date = .now) -> Bool {
+        guard let snapshot = cachedHome(filter: filter, folderID: folderID) else { return true }
+        return now.timeIntervalSince(snapshot.loadedAt) > Self.homeSoftStaleInterval
+    }
+
+    func seedHome(
+        items: [VaultItem],
+        folders: [VaultFolder],
+        nextCursor: String?,
+        filter: VaultContentFilter,
+        folderID: VaultFolderID?
+    ) {
+        self.folders = folders
+        foldersLoaded = true
+        homeSnapshot = HomeSnapshot(
+            items: items,
+            folders: folders,
+            nextCursor: nextCursor,
+            filter: filter,
+            folderID: folderID,
+            loadedAt: .now
+        )
+    }
+
+    func invalidateHomeList() {
+        homeSnapshot = nil
     }
 
     func quickSave(_ ref: VaultContentRef) async -> Bool {
@@ -91,6 +144,7 @@ final class VaultStore {
                 Self.storeRecentFolderID(folderID)
             }
             lastConfirmationMessage = confirmation
+            invalidateHomeList()
             return true
         } catch {
             states[ref] = previous
@@ -120,6 +174,7 @@ final class VaultStore {
             commitSuccessfulMutation(ref: ref, state: optimistic)
             Self.storeRecentFolderID(folderID)
             lastConfirmationMessage = "Added to \(folderName)"
+            invalidateHomeList()
             return true
         } catch {
             states[ref] = previous
@@ -143,6 +198,7 @@ final class VaultStore {
             try await repository.removeFromFolder(vaultItemID: vaultItemID, folderID: folderID)
             commitSuccessfulMutation(ref: ref, state: optimistic)
             lastConfirmationMessage = "Removed from folder"
+            invalidateHomeList()
             return true
         } catch {
             states[ref] = previous
@@ -164,6 +220,7 @@ final class VaultStore {
             try await repository.removeFromVault(vaultItemID: vaultItemID)
             commitSuccessfulMutation(ref: ref, state: .notVaulted)
             lastConfirmationMessage = "Removed from Vault"
+            invalidateHomeList()
             return true
         } catch {
             states[ref] = previous
@@ -179,6 +236,7 @@ final class VaultStore {
             folders.append(folder)
             folders.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             foldersLoaded = true
+            invalidateHomeList()
             return folder
         } catch {
             ExperienceHaptics.play(.warning)
@@ -207,6 +265,7 @@ final class VaultStore {
         pendingRefs = []
         inFlightRefs = []
         foldersLoaded = false
+        homeSnapshot = nil
         lastConfirmationMessage = nil
     }
 

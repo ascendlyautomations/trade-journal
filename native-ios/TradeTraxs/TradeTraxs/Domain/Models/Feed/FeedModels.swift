@@ -42,6 +42,8 @@ nonisolated struct FeedItem: Hashable, Codable, Sendable, Identifiable {
     var authorAvatarURL: String? = nil
     /// Card media for profile posts / reel thumbs / achievement images when present on the row.
     var mediaURL: String? = nil
+    /// Authoritative Feed/Profile crop metadata when present on the row.
+    var imageCrop: ContentImagePresentation? = nil
 }
 
 nonisolated struct Post: Hashable, Codable, Sendable, Identifiable {

@@ -74,7 +74,7 @@ struct DashboardEquityHero: View {
                 Text(periodTitle)
                     .experienceStyle(.subheadline, color: colors.secondaryText)
                 Spacer(minLength: ExperienceSpacing.sm)
-                Text("\(summary.tradeCount) trades")
+                Text(NumberDisplay.tradeCount(summary.tradeCount))
                     .experienceStyle(.caption, color: colors.tertiaryText)
                     .contentTransition(.numericText())
             }
@@ -117,16 +117,16 @@ struct DashboardEquityHero: View {
         guard base > 0.009 else { return nil }
         let delta = NSDecimalNumber(decimal: last - first).doubleValue
         let pct = (delta / base) * 100
-        let formatted = String(format: "%.\(abs(pct) >= 10 ? 0 : 1)f%%", abs(pct))
-        let sign = pct >= 0 ? "+" : "−"
-        return "\(sign)\(formatted)"
+        return NumberDisplay.percent(
+            pct,
+            minimumFractionDigits: 0,
+            maximumFractionDigits: abs(pct) >= 10 ? 0 : 1,
+            explicitPlus: pct >= 0
+        )
     }
 
     private func signedMoney(_ value: Decimal) -> String {
-        let formatted = DashboardViewModel.money(abs(value))
-        if value > 0 { return "+\(formatted)" }
-        if value < 0 { return "−\(formatted)" }
-        return formatted
+        NumberDisplay.signedMoney(value)
     }
 
     private func toneColor(for value: Decimal) -> Color {

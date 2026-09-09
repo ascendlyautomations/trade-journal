@@ -56,6 +56,11 @@ final class ExploreSessionStore {
         popularRooms = rooms
     }
 
+    func applyRoomMetadata(from room: TradeRoom) {
+        guard let index = popularRooms.firstIndex(where: { $0.id == room.id }) else { return }
+        popularRooms[index].applyMetadata(from: room)
+    }
+
     func updateAvatarConfirmedAbsent(_ ids: Set<ProfileID>) {
         avatarConfirmedAbsentIDs = ids
     }

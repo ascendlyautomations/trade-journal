@@ -73,7 +73,7 @@ final class CreateExperienceTests: XCTestCase {
         viewModel.publish()
         await waitFor { dismissed || viewModel.formError == nil }
         // Dev path should dismiss after valid publish when image fixture applied.
-        if viewModel.imageData != nil {
+        if viewModel.finalImageData != nil {
             XCTAssertTrue(dismissed)
         }
     }
@@ -198,11 +198,42 @@ final class CreateExperienceTests: XCTestCase {
         XCTAssertEqual(ContentMutationStore.shared.revision, 1)
     }
 
+    func testCreateReelPreflightBlocksTradeWithExistingClip() async {
+        let trade = CreateReelFixtures.sampleTrade()
+        let feed = CreatePreflightBlockingFeedRepository(blockedTradeID: trade.id)
+        var dismissed = false
+        let viewModel = CreateReelViewModel(
+            feed: feed,
+            trades: CreateStubTradeRepository(),
+            session: CreateStubSession(userID: "user.real"),
+            detailCache: DetailPresentationCache(),
+            uploadService: CreateStubUpload(),
+            objectStorage: CreateStubStorage(),
+            onDismiss: { dismissed = true }
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .ready }
+        var draft = CreateReelFixtures.screenshotDraft(linkedTrade: trade)
+        draft.linkedTradeID = trade.id
+        viewModel.draft = draft
+        viewModel.publish()
+        await waitFor { viewModel.formError != nil }
+        XCTAssertFalse(dismissed)
+        XCTAssertEqual(feed.createCalls, 0)
+        XCTAssertEqual(feed.preflightCalls, 1)
+        XCTAssertEqual(
+            viewModel.formError,
+            "This trade already has a clip attached."
+        )
+    }
+
     func testMediaVideoDurationFormattingAndLimits() {
         XCTAssertEqual(MediaVideoPreparation.formatDuration(12), "0:12")
         XCTAssertEqual(MediaVideoPreparation.formatDuration(90), "1:30")
         XCTAssertEqual(MediaVideoPreparation.maxDurationSeconds, 90)
         XCTAssertEqual(MediaVideoPreparation.maxFileBytes, 100 * 1024 * 1024)
+        XCTAssertEqual(MediaVideoPreparation.maxFinalUploadBytes, 100 * 1024 * 1024)
+        XCTAssertEqual(MediaVideoPreparation.maxSourceFileBytes, 500 * 1024 * 1024)
         XCTAssertEqual(MediaVideoPreparation.maxCaptionLength, 2200)
     }
 
@@ -233,7 +264,7 @@ private struct CreateStubUpload: UploadService {
 }
 
 private struct CreateStubStorage: ObjectStorageProviding {
-    func upload(bucket: String, path: String, data: Data, contentType: String) async throws -> String { path }
+    func upload(bucket: String, path: String, data: Data, contentType: String, cacheControl: String? = nil) async throws -> String { path }
     func download(bucket: String, path: String) async throws -> Data { Data() }
     func delete(bucket: String, path: String) async throws {}
     func publicURL(bucket: String, path: String) -> URL? {
@@ -410,6 +441,64 @@ private struct CreateStubFeedRepository: FeedRepository {
 
 private final class CreateCountingFeedRepository: FeedRepository, @unchecked Sendable {
     private(set) var createCalls = 0
+    private var lastCreatedReel: Reel?
+
+    func feed(scope: FeedScope, contentFilter: FeedContentFilter, page: PageRequest) async throws -> FeedPageResult {
+        FeedPageResult(items: [], nextCursor: nil, embeddedTrades: [])
+    }
+    func post(id: PostID) async throws -> Post { throw AppError.unknown(message: "stub") }
+    func posts(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func createPost(_ post: Post) async throws -> Post { post }
+    func deletePost(id: PostID) async throws {}
+    func comments(for postID: PostID, page: PageRequest) async throws -> CursorPage<Comment> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func addComment(_ comment: Comment) async throws -> Comment { comment }
+    func setReaction(on item: FeedItem, kind: ReactionKind, isActive: Bool) async throws {}
+    func stories(for viewer: ProfileID) async throws -> [Story] { [] }
+    func createStory(userID: ProfileID, imageURL: String) async throws -> Story {
+        Story(
+            id: StoryID("stub-story"),
+            authorProfileID: userID,
+            media: MediaReference(id: imageURL, kind: .image, altText: nil),
+            expiresAt: Date().addingTimeInterval(ActiveStorySemantics.window),
+            createdAt: Date(),
+            viewerHasSeen: false
+        )
+    }
+    func reel(id: ReelID) async throws -> ReelLoadResult {
+        guard let lastCreatedReel, lastCreatedReel.id == id else {
+            throw AppError.domain(.notFound(entity: "reel", id: id.rawValue))
+        }
+        return ReelLoadResult(reel: lastCreatedReel, embeddedTrade: nil)
+    }
+    func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func profileReels(for profileID: ProfileID) async throws -> ProfileReelsResult {
+        ProfileReelsResult(reels: [], embeddedTrades: [])
+    }
+    func createReel(_ reel: Reel) async throws -> Reel {
+        createCalls += 1
+        try await Task.sleep(nanoseconds: 80_000_000)
+        lastCreatedReel = reel
+        return reel
+    }
+    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] { [] }
+    func attachReel(id: ReelID, to tradeID: TradeID) async throws {}
+    func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool { false }
+}
+
+private final class CreatePreflightBlockingFeedRepository: FeedRepository, @unchecked Sendable {
+    let blockedTradeID: TradeID
+    private(set) var createCalls = 0
+    private(set) var preflightCalls = 0
+
+    init(blockedTradeID: TradeID) {
+        self.blockedTradeID = blockedTradeID
+    }
 
     func feed(scope: FeedScope, contentFilter: FeedContentFilter, page: PageRequest) async throws -> FeedPageResult {
         FeedPageResult(items: [], nextCursor: nil, embeddedTrades: [])
@@ -445,10 +534,12 @@ private final class CreateCountingFeedRepository: FeedRepository, @unchecked Sen
     }
     func createReel(_ reel: Reel) async throws -> Reel {
         createCalls += 1
-        try await Task.sleep(nanoseconds: 80_000_000)
         return reel
     }
     func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] { [] }
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {}
-    func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool { false }
+    func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool {
+        preflightCalls += 1
+        return tradeID == blockedTradeID
+    }
 }

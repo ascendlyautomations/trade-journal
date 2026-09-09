@@ -517,15 +517,6 @@ final class TradesContainerViewModel {
 }
 
 nonisolated enum TradeDisplay {
-    private static let currency: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 0
-        formatter.minimumFractionDigits = 0
-        return formatter
-    }()
-
     /// Trading-platform price — `$20,153.25` (USD grouping, preserved decimals).
     private static let priceFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
@@ -556,11 +547,7 @@ nonisolated enum TradeDisplay {
     }()
 
     static func pnlText(_ money: Money?) -> String {
-        guard let amount = money?.amount else { return "—" }
-        let number = NSDecimalNumber(decimal: amount)
-        let formatted = currency.string(from: number) ?? "\(amount)"
-        if amount > 0 { return "+\(formatted)" }
-        return formatted
+        NumberDisplay.pnlWholeDollars(money)
     }
 
     /// Web parity — null/empty tickers render as em dash (`ProfileTradeCard`).
@@ -581,14 +568,13 @@ nonisolated enum TradeDisplay {
 
     static func rrText(_ value: Decimal?) -> String {
         guard let value else { return "—" }
-        let number = NSDecimalNumber(decimal: value)
-        return String(format: "RR %.1f", number.doubleValue)
+        return "RR \(NumberDisplay.decimal(value, minimumFractionDigits: 1, maximumFractionDigits: 1))"
     }
 
     /// Compact R multiple — `+7.1R`.
     static func compactRRText(_ value: Decimal?) -> String? {
         guard let value else { return nil }
-        let formatted = String(format: "%.1fR", abs(NSDecimalNumber(decimal: value).doubleValue))
+        let formatted = "\(NumberDisplay.decimal(abs(value), minimumFractionDigits: 1, maximumFractionDigits: 1))R"
         if value > 0 { return "+\(formatted)" }
         if value < 0 { return "-\(formatted)" }
         return formatted
@@ -602,14 +588,12 @@ nonisolated enum TradeDisplay {
     /// Journal-style R:R — `1:2.9` when value is the reward multiple.
     static func journalRRText(_ value: Decimal?) -> String? {
         guard let value else { return nil }
-        let number = NSDecimalNumber(decimal: value)
-        return String(format: "1:%.1f", number.doubleValue)
+        return NumberDisplay.journalRewardMultiple(value)
     }
 
     static func pointsText(_ value: Decimal?) -> String? {
         guard let value else { return nil }
-        let number = NSDecimalNumber(decimal: value)
-        let formatted = String(format: "%g", abs(number.doubleValue))
+        let formatted = NumberDisplay.decimal(abs(value), minimumFractionDigits: 0, maximumFractionDigits: 2)
         if value > 0 { return "+\(formatted)" }
         if value < 0 { return "-\(formatted)" }
         return formatted
@@ -618,9 +602,9 @@ nonisolated enum TradeDisplay {
     static func contractsText(_ value: Decimal) -> String {
         let number = NSDecimalNumber(decimal: value)
         if number == number.rounding(accordingToBehavior: nil) {
-            return "\(number.intValue)"
+            return NumberDisplay.integer(number.intValue)
         }
-        return number.stringValue
+        return NumberDisplay.decimal(value, minimumFractionDigits: 0, maximumFractionDigits: 8)
     }
 
     static func durationText(entryAt: Date, exitAt: Date?) -> String? {
@@ -707,11 +691,7 @@ nonisolated enum TradeDisplay {
     }()
 
     static func quantityBadgeText(_ value: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: value)
-        if number == number.rounding(accordingToBehavior: nil) {
-            return "Qty \(number.intValue)"
-        }
-        return "Qty \(number.stringValue)"
+        "Qty \(contractsText(value))"
     }
 
     static func dateText(_ date: Date) -> String {

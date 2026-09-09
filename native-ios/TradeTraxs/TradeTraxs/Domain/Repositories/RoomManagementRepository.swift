@@ -29,4 +29,19 @@ nonisolated protocol RoomManagementRepository: RoomRepository, Sendable {
         profileID: ProfileID,
         tagID: RoomMemberTagID
     ) async throws
+    /// Owner — `rpc_v1_list_trade_room_join_requests`.
+    func pendingJoinRequests(roomID: RoomID) async throws -> [RoomJoinRequestRecord]
+    /// Owner — `rpc_v1_resolve_trade_room_join_request`.
+    func resolveJoinRequest(requestID: String, action: TradeRoomJoinRequestResolution) async throws
+}
+
+extension RoomManagementRepository {
+    func pendingJoinRequests(roomID: RoomID) async throws -> [RoomJoinRequestRecord] { [] }
+
+    func resolveJoinRequest(
+        requestID: String,
+        action: TradeRoomJoinRequestResolution
+    ) async throws {
+        throw DomainError.businessRule(.message("Join request management is not supported by this repository."))
+    }
 }

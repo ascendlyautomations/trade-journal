@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -24,6 +25,7 @@ struct FeedClipsPagerView: View {
     @State private var commentsSheetContext: ClipsCommentsSheetContext?
     @Environment(\.themeColors) private var colors
     @Environment(\.appEnvironment) private var appEnvironment
+    @Environment(\.scenePhase) private var scenePhase
 
     private var clipEntries: [FeedTimelineEntry] {
         entries.filter {
@@ -42,8 +44,8 @@ struct FeedClipsPagerView: View {
                 makePage: { index in
                     AnyView(pageView(for: index))
                 },
-                onPageSettled: { index in
-                    handlePageSettled(index: index)
+                onPageSettled: { index, scrollDirection in
+                    handlePageBecameActive(index: index, scrollDirection: scrollDirection)
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -85,7 +87,7 @@ struct FeedClipsPagerView: View {
                 activeClipEntryID = nil
             } else {
                 restoreActiveClipIndex()
-                handlePageSettled(index: activeClipIndex)
+                handlePageBecameActive(index: activeClipIndex, scrollDirection: 1)
             }
         }
         .onChange(of: clipEntries.map(\.id)) { _, ids in
@@ -95,6 +97,10 @@ struct FeedClipsPagerView: View {
                 return
             }
             restoreActiveClipIndex()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            handlePageBecameActive(index: activeClipIndex, scrollDirection: 1)
         }
         .accessibilityIdentifier("feed.clips.pager")
     }
@@ -137,15 +143,25 @@ struct FeedClipsPagerView: View {
         activeClipIndex = min(activeClipIndex, max(0, ids.count - 1))
     }
 
-    private func handlePageSettled(index: Int) {
+    private func handlePageBecameActive(index: Int, scrollDirection: Int) {
         guard clipEntries.indices.contains(index) else { return }
         let entry = clipEntries[index]
         activeClipEntryID = entry.id
-        activateEntry(entry, index: index)
+        activateEntry(entry, atIndex: index)
+        prefetchNeighborClip(from: index, scrollDirection: scrollDirection)
         onLoadMore(entry.id)
         if index >= clipEntries.count - 2 {
             onLoadMore(clipEntries.last?.id ?? entry.id)
         }
+    }
+
+    private func prefetchNeighborClip(from index: Int, scrollDirection: Int) {
+        let direction = scrollDirection >= 0 ? 1 : -1
+        let neighborIndex = index + direction
+        guard clipEntries.indices.contains(neighborIndex),
+              case .clip(_, let reel) = clipEntries[neighborIndex]
+        else { return }
+        playbackCoordinator.prepareNeighborClip(reel, atIndex: neighborIndex)
     }
 
     private func presentCommentsSheet(for entry: FeedTimelineEntry) {
@@ -161,21 +177,9 @@ struct FeedClipsPagerView: View {
         playbackCoordinator.syncPlayback(for: reel.id)
     }
 
-    private func activateEntry(_ entry: FeedTimelineEntry, index: Int) {
+    private func activateEntry(_ entry: FeedTimelineEntry, atIndex index: Int) {
         guard case .clip(_, let reel) = entry else { return }
-        let neighbors = neighborReels(around: index)
-        playbackCoordinator.setActiveClip(reel, neighborReels: neighbors)
-    }
-
-    private func neighborReels(around index: Int) -> [Reel] {
-        var reels: [Reel] = []
-        let offsets = [index - 1, index + 1]
-        for offset in offsets where clipEntries.indices.contains(offset) {
-            if case .clip(_, let reel) = clipEntries[offset] {
-                reels.append(reel)
-            }
-        }
-        return reels
+        playbackCoordinator.setActiveClip(reel, atIndex: index)
     }
 }
 
@@ -197,7 +201,7 @@ private enum FeedClipsOverlayLayout {
     static let actionItemSpacing: CGFloat = 18
     static let actionIconPointSize: CGFloat = 24
     /// Single tunable lift for the entire Clip overlay — metadata + action rail move together.
-    static let clipOverlayBottomPadding: CGFloat = 50
+    static let clipOverlayBottomPadding: CGFloat = 15
     static let gradientHeight: CGFloat = 280
 }
 
@@ -297,16 +301,23 @@ private struct FeedClipsPageView: View {
 
     @ViewBuilder
     private func clipMedia(reel: Reel) -> some View {
+        let presentation = playbackCoordinator.presentation(for: reel.id)
+        let gravity = presentation?.playerGravity(for: .clipsPager) ?? .resizeAspectFill
+        let posterMode = presentation?.swiftUIPosterContentMode(for: .clipsPager) ?? .fill
+
         ZStack {
-            FeedClipsFillPoster(
+            FeedClipPosterImage(
                 reference: reel.thumbnail ?? reel.video,
-                imagePipeline: imagePipeline
+                imagePipeline: imagePipeline,
+                contentMode: posterMode
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black)
 
             if playbackCoordinator.isActive(reel.id),
-               let player = playbackCoordinator.player(for: reel)
+               let player = playbackCoordinator.player(for: reel.id)
             {
-                FeedInlineVideoSurface(player: player)
+                FeedInlineVideoSurface(player: player, videoGravity: gravity)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .allowsHitTesting(false)
             }
@@ -631,58 +642,4 @@ private struct ActivityShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
-/// Full-bleed clip poster — aspect-fill inside the page viewport; never changes page height.
-private struct FeedClipsFillPoster: View {
-    let reference: MediaReference?
-    let imagePipeline: any ImagePipeline
-
-    @Environment(\.displayScale) private var displayScale
-    @State private var displayImage: UIImage?
-
-    var body: some View {
-        Group {
-            if let displayImage {
-                Image(uiImage: displayImage)
-                    .resizable()
-                    .interpolation(.high)
-                    .antialiased(true)
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-            } else {
-                Color.black
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityIdentifier("feed.clips.poster")
-        .task(id: reference?.id) {
-            await loadDisplayImage()
-        }
-    }
-
-    private func loadDisplayImage() async {
-        guard let reference else {
-            displayImage = nil
-            return
-        }
-
-        do {
-            let data = try await imagePipeline.data(
-                for: ImageRequest(
-                    reference: reference,
-                    purpose: .reelThumbnail,
-                    maxPixelSize: nil,
-                    allowsProgressiveLoading: true
-                )
-            )
-            let scale = displayScale
-            displayImage = await Task.detached(priority: .userInitiated) {
-                UIImage(data: data, scale: scale)
-            }.value
-        } catch {
-            displayImage = nil
-        }
-    }
 }

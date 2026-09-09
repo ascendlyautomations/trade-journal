@@ -35,6 +35,8 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case activity
     /// Pending follow requests opened from Activity.
     case followRequests
+    /// Trade Room join request detail opened from Activity / push.
+    case tradeRoomJoinRequest(String)
     /// Hierarchical Settings — owned by the Home tab stack that opened Settings.
     case settings(SettingsRoute)
 }
@@ -83,6 +85,7 @@ enum ProfileRoute: Hashable, Codable, Sendable {
     /// Following list for a profile (own or other).
     case following(ProfileID)
     case followRequests
+    case tradeRoomJoinRequest(String)
     /// Hierarchical Settings destination — push multiple cases for nested stacks.
     case settings(SettingsRoute)
     case referrals

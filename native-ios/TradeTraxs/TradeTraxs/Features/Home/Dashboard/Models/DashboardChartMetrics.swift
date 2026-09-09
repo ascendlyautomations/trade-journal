@@ -555,11 +555,6 @@ nonisolated enum DashboardChartMetrics {
     }
 
     private static func money(_ value: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: value).doubleValue
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 2
-        return formatter.string(from: NSNumber(value: number)) ?? "$0"
+        NumberDisplay.currency(value, minimumFractionDigits: 0, maximumFractionDigits: 2)
     }
 }

@@ -303,6 +303,7 @@ nonisolated struct ProfileBootstrapV1: Codable, Sendable, Equatable {
         var active_tab: String?
         var trades_page: TradesPageWire?
         var trade_engagement: [String: TradeEngagementWire]?
+        var pinned_content: [ProfilePinnedWireV1]?
     }
 
     func validateContractVersion() throws {

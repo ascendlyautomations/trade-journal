@@ -20,6 +20,7 @@ enum SessionScopedCaches {
         Task { await LeaderboardTradeRowsCache.shared.invalidate() }
         TradeHistorySessionStore.shared.invalidate()
         FeedSessionStore.shared.invalidate()
+        FeedStoriesCatalogStore.shared.invalidate()
         FeedBlockedAuthorsFilter.shared.clear()
         ViewerActiveStoryStore.shared.invalidate()
         ConversationThreadSessionStore.shared.invalidate()
@@ -32,6 +33,7 @@ enum SessionScopedCaches {
         SessionTradeEntityStore.shared.invalidate()
         SessionOwnerTradesStore.shared.invalidate()
         SessionMemberRoomsStore.shared.invalidate()
+        SessionTradeRoomsDiscoveryStore.shared.invalidate()
         SessionRoomMemberTagsStore.shared.invalidate()
         ProfileRequestFlight.shared.invalidate()
         RepositoryRequestFlight.shared.invalidate()
@@ -41,6 +43,7 @@ enum SessionScopedCaches {
         Task {
             await BackendV2SingleFlight.shared.clear()
             await BackendV2RpcAvailability.shared.clear()
+            await SessionBootstrapRefreshCommit.shared.reset()
         }
         SessionDiskCache.clearAll()
         TradeJournalMutationStore.shared.invalidate()
@@ -57,6 +60,9 @@ enum SessionScopedCaches {
         PsychologyGuardrailDismissStore.shared.resetSession()
         PsychologyReportSessionStore.shared.invalidate()
         CheckInHistorySessionStore.shared.invalidate()
+        TradingReportSessionStore.shared.invalidate()
+        CreateAchievementPrefillStore.shared.clear()
+        Task { await data.cache.images.removeAllImages() }
         data.detailCache.removeAll()
         data.engagementStore.removeAll()
         data.vaultStore.removeAll()

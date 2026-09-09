@@ -65,13 +65,73 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
     }
 
     func markRead(id: NotificationID) async throws {
+        _ = try await markRead(ids: [id])
+    }
+
+    func markRead(ids: [NotificationID]) async throws -> Int {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let unique = Array(Set(ids.map(\.rawValue))).filter { !$0.isEmpty }
+        guard !unique.isEmpty else { return 0 }
+
         struct Body: Encodable { var read: Bool }
-        _ = try await supabase.database.update(
+        try await supabase.database.update(
             Body(read: true),
             table: "notifications",
-            query: [SupabaseQuery.eq("id", id.rawValue)],
-            returning: NotificationDTO.Item.self
+            query: [
+                SupabaseQuery.eq("user_id", userID.rawValue),
+                URLQueryItem(name: "read", value: "eq.false"),
+                SupabaseQuery.isIn("id", unique),
+            ]
         )
+        return unique.count
+    }
+
+    func markMessageNotificationsRead() async throws -> Int {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        struct Body: Encodable { var read: Bool }
+        try await supabase.database.update(
+            Body(read: true),
+            table: "notifications",
+            query: [
+                SupabaseQuery.eq("user_id", userID.rawValue),
+                SupabaseQuery.eq("type", ActivityNotificationKind.message.rawValue),
+                URLQueryItem(name: "read", value: "eq.false"),
+            ]
+        )
+        return 1
+    }
+
+    func markRoomNotificationsRead(roomID: RoomID, slug: String?) async throws -> Int {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        struct Body: Encodable { var read: Bool }
+        var query: [URLQueryItem] = [
+            SupabaseQuery.eq("user_id", userID.rawValue),
+            URLQueryItem(name: "read", value: "eq.false"),
+            SupabaseQuery.isIn("type", ["room_message", "room_mention", "room_join"]),
+        ]
+        let roomToken = roomID.rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !roomToken.isEmpty {
+            query.append(
+                URLQueryItem(
+                    name: "or",
+                    value: "(room_id.eq.\(roomToken),content.ilike.*\(roomToken)*)"
+                )
+            )
+        } else if let slug = slug?.trimmingCharacters(in: .whitespacesAndNewlines), !slug.isEmpty {
+            query.append(URLQueryItem(name: "content", value: "ilike.*\(slug)*"))
+        }
+        try await supabase.database.update(
+            Body(read: true),
+            table: "notifications",
+            query: query
+        )
+        return 1
     }
 
     func markAllRead() async throws {
@@ -161,6 +221,8 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
             roomID: roomID,
             roomMessageID: (dto.room_message_id ?? parsed.messageID).map { RoomMessageID($0) },
             followRequestID: parsed.followRequestID,
+            joinRequestID: parsed.joinRequestID,
+            joinRequestStatus: parsed.joinRequestStatus,
             roomSlug: parsed.roomSlug,
             roomName: parsed.roomName,
             sectionID: parsed.sectionID,
@@ -188,6 +250,8 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
         var body: String?
         var href: String?
         var followRequestID: String?
+        var joinRequestID: String?
+        var joinRequestStatus: String?
         var roomID: String?
         var roomSlug: String?
         var roomName: String?
@@ -236,6 +300,8 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
                 body: string("body"),
                 href: string("href"),
                 followRequestID: string("follow_request_id"),
+                joinRequestID: string("join_request_id"),
+                joinRequestStatus: string("request_status"),
                 roomID: string("room_id"),
                 roomSlug: string("room_slug"),
                 roomName: string("room_name"),

@@ -1,0 +1,167 @@
+import AVFoundation
+import SwiftUI
+
+/// Inline Feed clip layout — compact capped media region; full video visible via aspectFit.
+struct VideoFeedInlineContainer<Overlay: View>: View {
+    let reel: Reel
+    var feedItemID: String? = nil
+    let presentation: VideoPresentationInfo?
+    let imagePipeline: any ImagePipeline
+    let playbackCoordinator: FeedVideoPlaybackCoordinator
+    @ViewBuilder let overlay: () -> Overlay
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        ZStack {
+            colors.fillPrimary
+
+            if shouldShowPoster {
+                FeedClipPosterImage(
+                    reference: reel.thumbnail ?? reel.video,
+                    imagePipeline: imagePipeline,
+                    feedItemID: feedItemID ?? reel.id.rawValue,
+                    contentMode: .fit
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            if let frozenFrame = playbackCoordinator.frozenFrame(for: reel.id),
+               !playbackCoordinator.shouldShowLivePlayer(for: reel.id)
+            {
+                Image(uiImage: frozenFrame)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            if playbackCoordinator.shouldShowLivePlayer(for: reel.id),
+               let player = playbackCoordinator.player(for: reel.id)
+            {
+                FeedInlineVideoSurface(
+                    clipID: reel.id.rawValue,
+                    player: player,
+                    containerSize: layoutMetrics,
+                    videoGravity: resolvedGravity
+                )
+                .frame(width: layoutMetrics.width, height: layoutMetrics.height)
+                .allowsHitTesting(false)
+            }
+
+            overlay()
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: layoutMetrics.height)
+        .fixedSize(horizontal: false, vertical: true)
+        .onAppear {
+            logPresentationOnce()
+        }
+        .onChange(of: layoutMetrics.height) { _, _ in
+            logPresentationOnce()
+        }
+    }
+
+    private var shouldShowPoster: Bool {
+        !playbackCoordinator.shouldShowLivePlayer(for: reel.id)
+            && playbackCoordinator.frozenFrame(for: reel.id) == nil
+    }
+
+    private var resolvedGravity: AVLayerVideoGravity {
+        presentation?.playerGravity(for: .feedInline) ?? .resizeAspect
+    }
+
+    private var layoutMetrics: CGSize {
+        let width = UIScreen.main.bounds.width
+        if let presentation {
+            return presentation.feedInlineContainerSize(containerWidth: width)
+        }
+        return FeedInlineClipLayout.containerSize(
+            containerWidth: width,
+            videoAspectRatio: FeedInlineClipLayout.placeholderAspectRatio
+        )
+    }
+
+    @State private var didLogPresentation = false
+
+    private func logPresentationOnce() {
+        guard !didLogPresentation, let presentation else { return }
+        didLogPresentation = true
+        let width = UIScreen.main.bounds.width
+        let metrics = presentation.feedInlineContainerSize(containerWidth: width)
+        InlineClipPresentationDiagnostics.log(
+            clipID: reel.id.rawValue,
+            sourceSize: "\(Int(presentation.rawSize.width))x\(Int(presentation.rawSize.height))",
+            orientedSize: "\(Int(presentation.orientedSize.width))x\(Int(presentation.orientedSize.height))",
+            aspectRatio: presentation.aspectRatio,
+            containerWidth: metrics.width,
+            containerHeight: metrics.height,
+            gravity: presentation.gravityLabel(for: .feedInline)
+        )
+    }
+}
+
+/// Poster frame for inline / pager clip surfaces.
+struct FeedClipPosterImage: View {
+    let reference: MediaReference?
+    let imagePipeline: any ImagePipeline
+    var feedItemID: String? = nil
+    var contentMode: ContentMode = .fill
+
+    @Environment(\.displayScale) private var displayScale
+    @State private var displayImage: UIImage?
+
+    var body: some View {
+        Group {
+            if let displayImage {
+                Image(uiImage: displayImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: contentMode)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: reference?.id) {
+            await loadDisplayImage()
+        }
+    }
+
+    private func loadDisplayImage() async {
+        guard let reference else {
+            displayImage = nil
+            return
+        }
+        let request = ImageRequest(
+            reference: reference,
+            purpose: .reelThumbnail,
+            maxPixelSize: nil,
+            allowsProgressiveLoading: true
+        )
+        let itemID = feedItemID ?? reference.id
+        do {
+            let source: String
+            let data: Data
+            if let cached = await imagePipeline.cachedImageData(for: request) {
+                source = "memory"
+                data = cached
+            } else {
+                source = "network"
+                data = try await imagePipeline.data(for: request)
+            }
+            let scale = displayScale
+            let image = await Task.detached(priority: .userInitiated) {
+                UIImage(data: data, scale: scale)
+            }.value
+            guard let image else {
+                displayImage = nil
+                return
+            }
+            displayImage = image
+            FeedMediaReadyProbe.log(itemID: itemID, kind: "clip-thumbnail", source: source)
+        } catch is CancellationError {
+            // Keep poster during transient cancellation.
+        } catch {
+            displayImage = nil
+        }
+    }
+}

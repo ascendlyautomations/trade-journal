@@ -200,7 +200,7 @@ struct YearlyReportSummaryMetricsView: View {
                 spacing: ExperienceSpacing.sm
             ) {
                 metricCell("Net P&L", formatMoney(metrics.netPnl), tone: pnlTone(metrics.netPnl))
-                metricCell("Total Trades", "\(metrics.tradeCount)")
+                metricCell("Total Trades", NumberDisplay.integer(metrics.tradeCount))
                 metricCell("Win Rate", formatWinRate(metrics.winRate))
                 metricCell("Profit Factor", formatOptionalDecimal(metrics.profitFactor))
                 metricCell("Average Winner", formatOptionalMoney(metrics.averageWinner))
@@ -263,25 +263,21 @@ struct YearlyReportSummaryMetricsView: View {
     }
 
     private func formatMoney(_ value: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: value).doubleValue
-        let absValue = abs(number)
-        let formatted = absValue.formatted(.number.precision(.fractionLength(2)).grouping(.automatic))
-        return number < 0 ? "-$\(formatted)" : "$\(formatted)"
+        NumberDisplay.currency(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
     }
 
     private func formatOptionalMoney(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
-        return formatMoney(value)
+        NumberDisplay.money(value)
     }
 
     private func formatOptionalDecimal(_ value: Decimal?) -> String {
         guard let value else { return "—" }
-        return value.formatted(.number.precision(.fractionLength(0...2)))
+        return NumberDisplay.ratio(value, fractionDigits: 2)
     }
 
     private func formatWinRate(_ value: Decimal?) -> String {
         guard let value else { return "—" }
-        return String(format: "%.1f%%", NSDecimalNumber(decimal: value * 100).doubleValue)
+        return NumberDisplay.percent(value * 100, minimumFractionDigits: 1, maximumFractionDigits: 1)
     }
 }
 
@@ -372,10 +368,7 @@ struct YearlyReportChartsSection: View {
     }
 
     private func formatMoney(_ value: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: value).doubleValue
-        let absValue = abs(number)
-        let formatted = absValue.formatted(.number.precision(.fractionLength(2)).grouping(.automatic))
-        return number < 0 ? "-$\(formatted)" : "$\(formatted)"
+        NumberDisplay.currency(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
     }
 }
 
@@ -405,7 +398,7 @@ struct YearlyMonthlyPnLBarsView: View {
                             .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity)
-                    .accessibilityLabel("\(point.label), \(point.value)")
+                    .accessibilityLabel("\(point.label), \(NumberDisplay.reportPnL(point.value))")
                 }
             }
             .frame(height: 120, alignment: .bottom)
@@ -472,7 +465,7 @@ struct YearlyReportMonthBreakdownView: View {
                         Text(formatMoney(metrics.netPnl))
                             .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
                             .foregroundStyle(pnlColor(metrics.netPnl))
-                        Text("\(metrics.tradeCount) trades · \(formatWinRate(metrics.winRate)) WR")
+                        Text("\(NumberDisplay.integer(metrics.tradeCount)) trades · \(formatWinRate(metrics.winRate)) WR")
                             .experienceStyle(.caption2, color: colors.tertiaryText)
                     }
                     Spacer()
@@ -497,14 +490,11 @@ struct YearlyReportMonthBreakdownView: View {
     }
 
     private func formatMoney(_ value: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: value).doubleValue
-        let absValue = abs(number)
-        let formatted = absValue.formatted(.number.precision(.fractionLength(2)).grouping(.automatic))
-        return number < 0 ? "-$\(formatted)" : "$\(formatted)"
+        NumberDisplay.currency(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
     }
 
     private func formatWinRate(_ value: Decimal?) -> String {
         guard let value else { return "—" }
-        return String(format: "%.0f%%", NSDecimalNumber(decimal: value * 100).doubleValue)
+        return NumberDisplay.percent(value * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)
     }
 }

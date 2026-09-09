@@ -275,7 +275,7 @@ nonisolated enum TradingReportGenerator {
         }()
 
         let tradeWord = metrics.tradesTaken == 1 ? "trade" : "trades"
-        return "Overall, you had a \(tone) \(periodLabel) with \(metrics.tradesTaken) \(tradeWord) and \(formatPnl(metrics.netPnl)) net P&L. You posted \(execution) with \(risk) and \(rr)."
+        return "Overall, you had a \(tone) \(periodLabel) with \(NumberDisplay.integer(metrics.tradesTaken)) \(tradeWord) and \(formatPnl(metrics.netPnl)) net P&L. You posted \(execution) with \(risk) and \(rr)."
     }
 
     private static func buildStrengths(
@@ -295,20 +295,13 @@ nonisolated enum TradingReportGenerator {
 
         if metrics.winRate >= 55, metrics.tradesTaken >= 3 {
             strengths.append(
-                String(
-                    format: "Your win rate was %.1f%% across %d trades.",
-                    metrics.winRate,
-                    metrics.tradesTaken
-                )
+                "Your win rate was \(NumberDisplay.percent(metrics.winRate, minimumFractionDigits: 1, maximumFractionDigits: 1)) across \(NumberDisplay.integer(metrics.tradesTaken)) trades."
             )
         }
 
         if let pf = metrics.profitFactor, pf >= 1.5 {
             strengths.append(
-                String(
-                    format: "Profit factor reached %.2f, showing winners outweighed losers.",
-                    pf
-                )
+                "Profit factor reached \(NumberDisplay.ratio(pf, fractionDigits: 2)), showing winners outweighed losers."
             )
         }
 
@@ -321,7 +314,7 @@ nonisolated enum TradingReportGenerator {
            let prior = averageRr(comparisonTrades),
            current > prior * 1.05 {
             let pct = Int((((current - prior) / prior) * 100).rounded())
-            strengths.append("Your average RR improved by \(pct)% versus the prior period.")
+            strengths.append("Your average RR improved by \(NumberDisplay.integer(pct))% versus the prior period.")
         }
 
         let strategies = computeStrategyPnl(trades)
@@ -362,7 +355,7 @@ nonisolated enum TradingReportGenerator {
         let lossesAfterWins = detectLossesAfterWinStreak(trades)
         if lossesAfterWins >= 2 {
             opportunities.append(
-                "\(lossesAfterWins) losing trades followed consecutive winners. Watch for overconfidence."
+                "\(NumberDisplay.integer(lossesAfterWins)) losing trades followed consecutive winners. Watch for overconfidence."
             )
         }
 
@@ -385,7 +378,7 @@ nonisolated enum TradingReportGenerator {
 
         if let pf = metrics.profitFactor, pf < 1, metrics.tradesTaken >= 3 {
             opportunities.append(
-                String(format: "Profit factor was %.2f. Losses exceeded gains.", pf)
+                "Profit factor was \(NumberDisplay.ratio(pf, fractionDigits: 2)). Losses exceeded gains."
             )
         }
 
@@ -524,15 +517,11 @@ nonisolated enum TradingReportGenerator {
     }
 
     private static func formatPnl(_ value: Double) -> String {
-        let absValue = abs(value)
-        let formatted = absValue.formatted(
-            .number.precision(.fractionLength(2)).grouping(.automatic)
-        )
-        return value < 0 ? "-$\(formatted)" : "$\(formatted)"
+        NumberDisplay.reportPnL(value)
     }
 
     private static func formatRR(_ value: Double) -> String {
-        value.formatted(.number.precision(.fractionLength(0...2)))
+        NumberDisplay.decimal(value, minimumFractionDigits: 0, maximumFractionDigits: 2)
     }
 
     private static func isoString(_ date: Date) -> String {

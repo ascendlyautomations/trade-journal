@@ -8,7 +8,8 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     /// Do not request `member_count` — that column does not exist on `rooms`.
     private static let memberRoomSelect = """
     room_id,room:rooms!room_members_room_id_fkey(\
-    id,name,description,slug,image_url,owner_user_id,show_on_profile)
+    id,name,description,slug,image_url,owner_user_id,show_on_profile,is_private,category,discovery_tags,join_policy,rules,\
+    members_can_message,members_can_share_trades,members_can_share_media,room_kind)
     """
 
     /// Web `lib/roomMessageSelect.ts` — explicit embed hint avoids PGRST201.
@@ -58,75 +59,58 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         ownerProfileID: ProfileID,
         ownerUsername: String
     ) async throws -> TradeRoom {
-        struct RoomInsert: Encodable {
+        struct ChannelWire: Encodable, Sendable {
             var name: String
-            var description: String
-            var owner_user_id: String
-            var slug: String
-            var show_on_profile: Bool?
-            var image_url: String?
         }
 
-        struct SectionInsert: Encodable {
-            var room_id: String
-            var name: String
-            var position: Int
+        struct Params: Encodable, Sendable {
+            var p_name: String
+            var p_description: String?
+            var p_image_url: String?
+            var p_show_on_profile: Bool
+            var p_is_private: Bool
+            var p_category: String?
+            var p_discovery_tags: [String]
+            var p_join_policy: String
+            var p_rules: String?
+            var p_members_can_message: Bool
+            var p_members_can_share_trades: Bool
+            var p_members_can_share_media: Bool
+            var p_channels: [ChannelWire]
         }
 
-        struct MemberInsert: Encodable {
-            var room_id: String
-            var user_id: String
-            var notification_enabled: Bool
+        let configuration = request.configuration
+        if let validationError = TradeRoomConfigurationValidation.validate(configuration) {
+            throw DomainError.businessRule(.message(validationError))
         }
 
-        let trimmedName = request.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else {
-            throw DomainError.businessRule(.message("Room name is required."))
+        let channels = configuration.channels.map {
+            ChannelWire(name: TradeRoomConfigurationValidation.normalizedChannelName($0.name))
         }
 
-        let username = ownerUsername.trimmingCharacters(in: .whitespacesAndNewlines)
-        let slugUsername = username.isEmpty ? "user" : username
-        let slug = "\(slugUsername)-\(Int(Date().timeIntervalSince1970 * 1000))"
-
-        let trimmedDescription = request.description?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let description = (trimmedDescription?.isEmpty ?? true)
-            ? "Personal Trade Room"
-            : trimmedDescription!
-
-        let roomDTO: RoomDTO.Room = try await supabase.database.insert(
-            RoomInsert(
-                name: trimmedName,
-                description: description,
-                owner_user_id: ownerProfileID.rawValue,
-                slug: slug,
-                show_on_profile: request.showsOnProfile,
-                image_url: request.imageURL
-            ),
-            into: "rooms",
-            returning: RoomDTO.Room.self
-        )
-        guard let roomID = roomDTO.id else {
-            throw MappingError.missingField("id")
-        }
-
-        let sections = [
-            SectionInsert(room_id: roomID, name: "general", position: 1),
-            SectionInsert(room_id: roomID, name: "trades", position: 2),
-        ]
-        try await supabase.database.insert(sections, into: "room_sections")
-
-        try await supabase.database.insert(
-            MemberInsert(
-                room_id: roomID,
-                user_id: ownerProfileID.rawValue,
-                notification_enabled: true
-            ),
-            into: "room_members"
+        let params = Params(
+            p_name: configuration.trimmedName,
+            p_description: configuration.trimmedDescription,
+            p_image_url: configuration.imageURL,
+            p_show_on_profile: configuration.showsOnProfile,
+            p_is_private: configuration.visibility == .private,
+            p_category: configuration.category?.rawValue,
+            p_discovery_tags: configuration.discoveryTags,
+            p_join_policy: configuration.effectiveJoinPolicy.rawValue,
+            p_rules: configuration.trimmedRules,
+            p_members_can_message: configuration.membersCanMessage,
+            p_members_can_share_trades: configuration.membersCanShareTrades,
+            p_members_can_share_media: configuration.membersCanShareMedia,
+            p_channels: channels
         )
 
-        var room = try mapRoom(roomDTO)
-        room.memberCount = 1
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_create_trade_room",
+            parametersJSON: try JSONEncoder().encode(params)
+        )
+        let dto = try JSONDecoder().decode(RoomDTO.Room.self, from: data)
+        var room = try mapRoom(dto)
+        room.memberCount = dto.member_count ?? 1
         return room
     }
 
@@ -251,6 +235,40 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 SupabaseQuery.eq("user_id", profileID.rawValue),
             ]
         )
+    }
+
+    func requestJoin(roomID: RoomID) async throws -> TradeRoomJoinRequestState {
+        struct Params: Encodable { var p_room_id: String }
+        struct Response: Decodable {
+            var id: String?
+            var status: String?
+        }
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_request_trade_room_join",
+            parametersJSON: try JSONEncoder().encode(Params(p_room_id: roomID.rawValue))
+        )
+        let response = try JSONDecoder().decode(Response.self, from: data)
+        guard let status = TradeRoomJoinRequestState.parse(response.status) else {
+            throw MappingError.missingField("status")
+        }
+        if status == .pending, let requestID = response.id {
+            await TradeRoomJoinRequestNotificationClient(transport: supabase.transport)
+                .notifyAfterJoinRequest(roomID: roomID, requestID: requestID)
+        }
+        return status
+    }
+
+    func viewerJoinRequest(roomID: RoomID) async throws -> TradeRoomJoinRequestState? {
+        struct Params: Encodable { var p_room_id: String }
+        struct Response: Decodable {
+            var status: String?
+        }
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_viewer_trade_room_join_request",
+            parametersJSON: try JSONEncoder().encode(Params(p_room_id: roomID.rawValue))
+        )
+        let response = try JSONDecoder().decode(Response.self, from: data)
+        return TradeRoomJoinRequestState.parse(response.status)
     }
 
     func channels(roomID: RoomID) async throws -> [RoomChannel] {
@@ -516,18 +534,38 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
 
     private func mapRoom(_ dto: RoomDTO.Room) throws -> TradeRoom {
         guard let id = dto.id else { throw MappingError.missingField("id") }
-        let owner = dto.owner_user_id ?? dto.owner_id ?? dto.owner_profile_id
-        guard let owner else { throw MappingError.missingField("owner_user_id") }
         guard let name = dto.name else { throw MappingError.missingField("name") }
+        let roomKind = TradeRoomKind.parse(dto.room_kind)
+        let owner = dto.owner_user_id ?? dto.owner_id ?? dto.owner_profile_id
+        let ownerProfileID: ProfileID
+        if let owner {
+            ownerProfileID = ProfileID(owner)
+        } else if roomKind == .official {
+            // System-owned official rooms have no profile owner — use stable room-scoped placeholder.
+            ownerProfileID = ProfileID("official.\(id)")
+        } else {
+            throw MappingError.missingField("owner_user_id")
+        }
+        let category = dto.category.flatMap { TradeRoomCategory(rawValue: $0) }
+        let joinPolicy = TradeRoomJoinPolicy(rawValue: dto.join_policy ?? "") ?? .open
         return TradeRoom(
             id: RoomID(id),
-            ownerProfileID: ProfileID(owner),
+            ownerProfileID: ownerProfileID,
             name: name,
             slug: dto.slug ?? id,
             description: dto.description,
-            image: dto.image_url.map { MediaReference(id: $0, kind: .image, altText: nil) },
+            image: Self.nonEmptyImageReference(dto.image_url),
             memberCount: dto.member_count,
             showsOnProfile: dto.show_on_profile ?? true,
+            isPrivate: dto.is_private ?? false,
+            category: category,
+            discoveryTags: dto.discovery_tags ?? [],
+            joinPolicy: joinPolicy,
+            rules: dto.rules,
+            membersCanMessage: dto.members_can_message ?? true,
+            membersCanShareTrades: dto.members_can_share_trades ?? true,
+            membersCanShareMedia: dto.members_can_share_media ?? true,
+            roomKind: roomKind,
             createdAt: ISO8601.date(from: dto.created_at) ?? Date()
         )
     }
@@ -688,8 +726,9 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         )
     }
 
+    /// Web parity: `loadManageMembers` in `app/community/page.tsx`.
     private static let managedMemberSelect = """
-    user_id,joined_at,profiles!room_members_user_id_fkey(id,username,name,avatar_url)
+    user_id,created_at,profiles(id,username,name,avatar_url)
     """
 
     private static let banSelect = """
@@ -809,12 +848,28 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             var description: String?
             var image_url: String?
             var show_on_profile: Bool?
+            var is_private: Bool?
+            var category: String?
+            var discovery_tags: [String]?
+            var join_policy: String?
+            var rules: String?
+            var members_can_message: Bool?
+            var members_can_share_trades: Bool?
+            var members_can_share_media: Bool?
         }
         let body = Body(
             name: request.name,
             description: request.description,
             image_url: request.imageURL,
-            show_on_profile: request.showsOnProfile
+            show_on_profile: request.showsOnProfile,
+            is_private: request.isPrivate,
+            category: request.category?.rawValue,
+            discovery_tags: request.discoveryTags,
+            join_policy: request.joinPolicy?.rawValue,
+            rules: request.rules,
+            members_can_message: request.membersCanMessage,
+            members_can_share_trades: request.membersCanShareTrades,
+            members_can_share_media: request.membersCanShareMedia
         )
         let dto: RoomDTO.Room = try await supabase.database.update(
             body,
@@ -851,44 +906,13 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 SupabaseQuery.eq("room_id", roomID.rawValue),
                 URLQueryItem(name: "left_at", value: "is.null"),
             ]
-            if let transport = supabase.transport {
-                let response = try await transport.send(
-                    host: .supabase,
-                    path: "/rest/v1/room_members",
-                    method: .get,
-                    queryItems: query,
-                    headers: ["Accept": "application/json"]
-                )
-                do {
-                    let rows = try transport.decoder.decode(
-                        [RoomDTO.ManagedMemberRow].self,
-                        from: response
-                    )
-                    #if DEBUG
-                    RoomMembersLoadProbe.memberships(
-                        httpStatus: response.statusCode,
-                        count: rows.count
-                    )
-                    #endif
-                    return rows
-                } catch {
-                    #if DEBUG
-                    RoomMembersLoadProbe.failed(
-                        stage: .memberships,
-                        operation: "DefaultRoomRepository.fetchActiveMemberRows.decode",
-                        error: error
-                    )
-                    #endif
-                    throw error
-                }
-            }
             let rows: [RoomDTO.ManagedMemberRow] = try await supabase.database.select(
                 RoomDTO.ManagedMemberRow.self,
                 from: "room_members",
                 query: query
             )
             #if DEBUG
-            RoomMembersLoadProbe.memberships(httpStatus: nil, count: rows.count)
+            RoomMembersLoadProbe.membershipsReturned(count: rows.count)
             #endif
             return rows
         }
@@ -907,7 +931,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             return RoomManagedMember(
                 profile: profile,
                 role: role,
-                joinedAt: ISO8601.date(from: row.joined_at),
+                joinedAt: ISO8601.date(from: row.membershipJoinedAt),
                 tags: tagsByUser[profileID] ?? []
             )
         }
@@ -1137,6 +1161,99 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         )
     }
 
+    func pendingJoinRequests(roomID: RoomID) async throws -> [RoomJoinRequestRecord] {
+        struct Params: Encodable {
+            var p_room_id: String
+            var p_status: String
+        }
+        struct ProfileWire: Decodable {
+            var id: String?
+            var username: String?
+            var name: String?
+            var avatar_url: String?
+        }
+        struct RequestWire: Decodable {
+            var id: String?
+            var room_id: String?
+            var user_id: String?
+            var status: String?
+            var created_at: String?
+            var profile: ProfileWire?
+        }
+        struct Payload: Decodable {
+            var requests: [RequestWire]?
+        }
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_list_trade_room_join_requests",
+            parametersJSON: try JSONEncoder().encode(
+                Params(p_room_id: roomID.rawValue, p_status: "pending")
+            )
+        )
+        let payload = try JSONDecoder().decode(Payload.self, from: data)
+        return (payload.requests ?? []).compactMap { wire in
+            guard let id = wire.id,
+                  let roomRaw = wire.room_id,
+                  let userRaw = wire.user_id,
+                  let status = TradeRoomJoinRequestState.parse(wire.status)
+            else { return nil }
+            var profile: Profile?
+            if let p = wire.profile,
+               let username = p.username?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !username.isEmpty,
+               let pid = p.id
+            {
+                let displayName = p.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                profile = Profile(
+                    id: ProfileID(pid),
+                    userID: UserID(pid),
+                    username: username,
+                    displayName: (displayName?.isEmpty == false) ? displayName! : username,
+                    bio: nil,
+                    avatar: p.avatar_url.map { MediaReference(id: $0, kind: .image, altText: nil) },
+                    traderType: nil,
+                    tradingStyle: nil,
+                    primaryMarket: nil,
+                    startedTradingAt: nil,
+                    isPrivate: false,
+                    isCreator: false,
+                    createdAt: .now
+                )
+            }
+            return RoomJoinRequestRecord(
+                id: id,
+                roomID: RoomID(roomRaw),
+                profileID: ProfileID(userRaw),
+                status: status,
+                createdAt: ISO8601.date(from: wire.created_at),
+                profile: profile
+            )
+        }
+    }
+
+    func resolveJoinRequest(
+        requestID: String,
+        action: TradeRoomJoinRequestResolution
+    ) async throws {
+        guard let transport = supabase.transport else {
+            throw AppError.unknown(message: "Network transport unavailable")
+        }
+        struct Body: Encodable { var requestId: String }
+        let path = action == .approve
+            ? "/api/trade-room-join-requests/approve"
+            : "/api/trade-room-join-requests/decline"
+        let data = try transport.encodeJSON(Body(requestId: requestID))
+        let response = try await transport.send(
+            host: .bff,
+            path: path,
+            method: .post,
+            body: data,
+            requiresAuthentication: true
+        )
+        guard (200 ... 299).contains(response.statusCode) else {
+            throw AppError.unknown(message: "Join request action failed (\(response.statusCode))")
+        }
+    }
+
     private func mapMemberTag(_ dto: RoomDTO.MemberTag) -> RoomMemberTag? {
         guard let id = dto.id,
               let roomID = dto.room_id,
@@ -1203,5 +1320,12 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         case .admin: return 1
         case .member: return 2
         }
+    }
+
+    private static func nonEmptyImageReference(_ raw: String?) -> MediaReference? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return MediaReference(id: trimmed, kind: .image, altText: nil)
     }
 }

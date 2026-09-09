@@ -58,6 +58,10 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
         return data
     }
 
+    func cachedImageData(for request: ImageRequest) async -> Data? {
+        await cache.imageData(forKey: cacheKey(for: request))
+    }
+
     func prefetch(_ requests: [ImageRequest]) async {
         for request in requests {
             _ = try? await data(for: request)

@@ -31,8 +31,21 @@ actor BackendV2SingleFlight {
 
     private var inFlight: [String: Slot] = [:]
 
+    struct CoalescedResult: Sendable {
+        var data: Data
+        var slotID: UUID
+    }
+
     /// Runs `fetch` once per key; concurrent callers await the same detached task.
     func coalesce(key: String, fetch: @escaping @Sendable () async throws -> Data) async throws -> Data {
+        try await coalesceWithSlot(key: key, fetch: fetch).data
+    }
+
+    /// Same as ``coalesce`` but returns the shared slot identity for commit-once consumers.
+    func coalesceWithSlot(
+        key: String,
+        fetch: @escaping @Sendable () async throws -> Data
+    ) async throws -> CoalescedResult {
         let slotID: UUID
         let task: Task<Data, Error>
 
@@ -60,9 +73,10 @@ actor BackendV2SingleFlight {
             leaveWaiter(key: key, slotID: slotID)
         }
 
-        return try await UncancelledWait.run {
+        let data = try await UncancelledWait.run {
             try await task.value
         }
+        return CoalescedResult(data: data, slotID: slotID)
     }
 
     func clear(viewerID: String? = nil) {

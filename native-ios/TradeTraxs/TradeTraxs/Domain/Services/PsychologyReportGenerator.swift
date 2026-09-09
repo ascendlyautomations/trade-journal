@@ -210,7 +210,7 @@ nonisolated enum PsychologyReportGenerator {
             comparisons.append(
                 PsychologyReportComparison(
                     headline: curPlan > prevPlan ? "Plan adherence improved" : "Plan adherence slipped",
-                    detail: String(format: "This month: %.0f%% vs prior month: %.0f%%", curPlan * 100, prevPlan * 100),
+                    detail: "This month: \(NumberDisplay.percent(curPlan * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)) vs prior month: \(NumberDisplay.percent(prevPlan * 100, minimumFractionDigits: 0, maximumFractionDigits: 0))",
                     reliability: PsychologySampleReliability.developing.rawValue
                 )
             )
@@ -222,7 +222,7 @@ nonisolated enum PsychologyReportGenerator {
             comparisons.append(
                 PsychologyReportComparison(
                     headline: curSleep > prevSleep ? "Average sleep increased" : "Average sleep decreased",
-                    detail: String(format: "This month: %.1fh vs prior: %.1fh", curSleep, prevSleep),
+                    detail: "This month: \(NumberDisplay.hours(curSleep)) vs prior: \(NumberDisplay.hours(prevSleep))",
                     reliability: PsychologySampleReliability.developing.rawValue
                 )
             )
@@ -234,7 +234,7 @@ nonisolated enum PsychologyReportGenerator {
             comparisons.append(
                 PsychologyReportComparison(
                     headline: curFocus > prevFocus ? "Focus ratings improved" : "Focus ratings declined",
-                    detail: String(format: "This month avg: %.1f/5 vs prior: %.1f/5", curFocus, prevFocus),
+                    detail: "This month avg: \(NumberDisplay.ratingOutOfFive(curFocus)) vs prior: \(NumberDisplay.ratingOutOfFive(prevFocus))",
                     reliability: PsychologySampleReliability.developing.rawValue
                 )
             )
@@ -365,7 +365,7 @@ nonisolated enum PsychologyReportGenerator {
         PsychologyReportSection(
             id: "performance",
             title: "Performance Overview",
-            subtitle: "\(baseline.tradeCount) trades in period",
+            subtitle: "\(NumberDisplay.integer(baseline.tradeCount)) trades in period",
             bullets: [],
             metrics: [
                 PsychologyReportMetricRow(label: "P&L", value: TraderPsychologyAnalyticsEngine.money(baseline.totalPnL)),
@@ -374,7 +374,7 @@ nonisolated enum PsychologyReportGenerator {
                 PsychologyReportMetricRow(label: "Avg Trade", value: TraderPsychologyAnalyticsEngine.money(baseline.averagePnL ?? 0)),
                 PsychologyReportMetricRow(
                     label: "Profit Factor",
-                    value: baseline.profitFactor.map { String(format: "%.2f", NSDecimalNumber(decimal: $0).doubleValue) } ?? "—"
+                    value: baseline.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—"
                 ),
             ]
         )
@@ -382,13 +382,13 @@ nonisolated enum PsychologyReportGenerator {
 
     private static func checkInSection(_ summary: PsychologyReportCheckInSummary) -> PsychologyReportSection {
         var metrics: [PsychologyReportMetricRow] = [
-            PsychologyReportMetricRow(label: "Check-ins", value: "\(summary.checkInCount)"),
+            PsychologyReportMetricRow(label: "Check-ins", value: NumberDisplay.integer(summary.checkInCount)),
         ]
         if let v = summary.averageSleepHours {
-            metrics.append(PsychologyReportMetricRow(label: "Avg Sleep", value: String(format: "%.1fh", v)))
+            metrics.append(PsychologyReportMetricRow(label: "Avg Sleep", value: NumberDisplay.hours(v)))
         }
         if let v = summary.averageFocus {
-            metrics.append(PsychologyReportMetricRow(label: "Avg Focus", value: String(format: "%.1f/5", v)))
+            metrics.append(PsychologyReportMetricRow(label: "Avg Focus", value: NumberDisplay.ratingOutOfFive(v)))
         }
         if let v = summary.averageStress {
             metrics.append(
@@ -410,13 +410,13 @@ nonisolated enum PsychologyReportGenerator {
     private static func disciplineSection(_ psych: PsychologyReportTradingPsychology) -> PsychologyReportSection {
         var metrics: [PsychologyReportMetricRow] = []
         if let rate = psych.followedPlanRate {
-            metrics.append(PsychologyReportMetricRow(label: "Followed Plan", value: String(format: "%.0f%%", rate * 100)))
+            metrics.append(PsychologyReportMetricRow(label: "Followed Plan", value: NumberDisplay.percent(rate * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)))
         }
         if let conv = psych.averageConviction {
-            metrics.append(PsychologyReportMetricRow(label: "Avg Conviction", value: String(format: "%.1f/5", conv)))
+            metrics.append(PsychologyReportMetricRow(label: "Avg Conviction", value: NumberDisplay.ratingOutOfFive(conv)))
         }
         if let exec = psych.averageExecutionRating {
-            metrics.append(PsychologyReportMetricRow(label: "Avg Execution", value: String(format: "%.1f/5", exec)))
+            metrics.append(PsychologyReportMetricRow(label: "Avg Execution", value: NumberDisplay.ratingOutOfFive(exec)))
         }
         return PsychologyReportSection(id: "discipline", title: "Discipline", subtitle: nil, bullets: [], metrics: metrics)
     }
@@ -427,10 +427,10 @@ nonisolated enum PsychologyReportGenerator {
             metrics.append(PsychologyReportMetricRow(label: "Most Common", value: emotion))
         }
         if psych.fomoTradeCount > 0 {
-            metrics.append(PsychologyReportMetricRow(label: "FOMO Trades", value: "\(psych.fomoTradeCount)"))
+            metrics.append(PsychologyReportMetricRow(label: "FOMO Trades", value: NumberDisplay.integer(psych.fomoTradeCount)))
         }
         if psych.frustratedTradeCount > 0 {
-            metrics.append(PsychologyReportMetricRow(label: "Frustrated Trades", value: "\(psych.frustratedTradeCount)"))
+            metrics.append(PsychologyReportMetricRow(label: "Frustrated Trades", value: NumberDisplay.integer(psych.frustratedTradeCount)))
         }
         return PsychologyReportSection(id: "emotion", title: "Emotions", subtitle: nil, bullets: [], metrics: metrics)
     }
@@ -438,10 +438,10 @@ nonisolated enum PsychologyReportGenerator {
     private static func mentalStateMetrics(_ summary: PsychologyReportCheckInSummary) -> [PsychologyReportMetricRow] {
         var rows: [PsychologyReportMetricRow] = []
         if let v = summary.averageEnergy {
-            rows.append(PsychologyReportMetricRow(label: "Avg Energy", value: String(format: "%.1f/5", v)))
+            rows.append(PsychologyReportMetricRow(label: "Avg Energy", value: NumberDisplay.ratingOutOfFive(v)))
         }
         if let v = summary.averageMorningRating {
-            rows.append(PsychologyReportMetricRow(label: "Avg Morning", value: String(format: "%.1f/5", v)))
+            rows.append(PsychologyReportMetricRow(label: "Avg Morning", value: NumberDisplay.ratingOutOfFive(v)))
         }
         return rows
     }
@@ -449,7 +449,7 @@ nonisolated enum PsychologyReportGenerator {
     private static func afterLossesSection(_ behavior: PsychologyReportBehaviorSummary) -> PsychologyReportSection {
         var bullets: [String] = []
         if let after = behavior.afterTwoLossesWinRate, let base = behavior.afterTwoLossesBaselineWinRate {
-            bullets.append(String(format: "Win rate after 2+ losses: %.0f%% vs %.0f%% baseline", after * 100, base * 100))
+            bullets.append("Win rate after 2+ losses: \(NumberDisplay.percent(after * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)) vs \(NumberDisplay.percent(base * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)) baseline")
         }
         return PsychologyReportSection(id: "afterLosses", title: "After Losses", subtitle: nil, bullets: bullets, metrics: [])
     }
@@ -457,11 +457,11 @@ nonisolated enum PsychologyReportGenerator {
     private static func tradeFrequencySection(_ behavior: PsychologyReportBehaviorSummary) -> PsychologyReportSection {
         var metrics: [PsychologyReportMetricRow] = []
         if let avg = behavior.averageTradesPerDay {
-            metrics.append(PsychologyReportMetricRow(label: "Trades/Day", value: String(format: "%.1f", avg)))
+            metrics.append(PsychologyReportMetricRow(label: "Trades/Day", value: NumberDisplay.decimal(avg, minimumFractionDigits: 1, maximumFractionDigits: 1)))
         }
         if let early = behavior.earlyTradeAvgPnL, let late = behavior.lateTradeAvgPnL {
-            metrics.append(PsychologyReportMetricRow(label: "Trades 1–3 Avg", value: String(format: "$%.0f", early)))
-            metrics.append(PsychologyReportMetricRow(label: "Trade #5+ Avg", value: String(format: "$%.0f", late)))
+            metrics.append(PsychologyReportMetricRow(label: "Trades 1–3 Avg", value: NumberDisplay.currency(early, minimumFractionDigits: 0, maximumFractionDigits: 0)))
+            metrics.append(PsychologyReportMetricRow(label: "Trade #5+ Avg", value: NumberDisplay.currency(late, minimumFractionDigits: 0, maximumFractionDigits: 0)))
         }
         return PsychologyReportSection(id: "tradeFrequency", title: "Trade Frequency", subtitle: nil, bullets: [], metrics: metrics)
     }

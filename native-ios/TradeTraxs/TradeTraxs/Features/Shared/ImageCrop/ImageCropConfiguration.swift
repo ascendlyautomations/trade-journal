@@ -2,7 +2,7 @@ import CoreGraphics
 import UIKit
 
 /// Web-parity aspect presets for the shared crop editor.
-enum ImageCropAspectOption: String, CaseIterable, Identifiable, Hashable, Sendable {
+nonisolated enum ImageCropAspectOption: String, CaseIterable, Identifiable, Hashable, Sendable {
     case original
     case square
     case portrait
@@ -18,6 +18,14 @@ enum ImageCropAspectOption: String, CaseIterable, Identifiable, Hashable, Sendab
         case .landscape: return "16:9"
         }
     }
+
+    /// Feed / trade / achievement crop editor order — Original first.
+    static let feedAspectOptions: [ImageCropAspectOption] = [
+        .original, .square, .portrait, .landscape
+    ]
+
+    /// Compact segmented-control label (always short — no truncation on iPhone).
+    var segmentTitle: String { title }
 
     /// Picker label — clarifies when Original is capped to the Feed 4:5 maximum.
     func pickerLabel(originalExceedsFeedLimit: Bool) -> String {
@@ -40,14 +48,14 @@ enum ImageCropAspectOption: String, CaseIterable, Identifiable, Hashable, Sendab
     }
 }
 
-enum ImageCropMask: Sendable {
+nonisolated enum ImageCropMask: Sendable {
     case none
     /// Dim everything outside the Feed/Profile viewport rectangle.
     case feedViewport
     case circle
 }
 
-enum ImageCropEditorPreset: Sendable {
+nonisolated enum ImageCropEditorPreset: Sendable {
     /// Feed posts, achievements, and general social uploads.
     case socialContent
     /// Trade screenshots — defaults to original aspect.
@@ -82,7 +90,7 @@ enum ImageCropEditorPreset: Sendable {
     var allowedAspectOptions: [ImageCropAspectOption] {
         switch self {
         case .socialContent, .tradeScreenshot:
-            return ImageCropAspectOption.allCases
+            return ImageCropAspectOption.feedAspectOptions
         case .avatar, .room:
             return [.square]
         }
@@ -113,14 +121,14 @@ enum ImageCropEditorPreset: Sendable {
     var maxZoom: CGFloat { ImageCropMath.maxZoom }
 }
 
-struct ImageCropTransform: Equatable, Sendable {
+nonisolated struct ImageCropTransform: Equatable, Sendable {
     var zoom: CGFloat
     var offset: CGSize
 
     static let `default` = ImageCropTransform(zoom: 1, offset: .zero)
 }
 
-struct ImageCropFrameSize: Equatable, Sendable {
+nonisolated struct ImageCropFrameSize: Equatable, Sendable {
     let width: CGFloat
     let height: CGFloat
 

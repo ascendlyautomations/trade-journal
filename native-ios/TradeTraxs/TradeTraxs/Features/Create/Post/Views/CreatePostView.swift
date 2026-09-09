@@ -89,6 +89,7 @@ struct CreatePostView: View {
             onConfirm: { result in
                 viewModel.setImage(result)
                 cropSourceImage = nil
+                photoItem = nil
             },
             onCancel: { photoItem = nil }
         )
@@ -100,12 +101,11 @@ struct CreatePostView: View {
             VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                 composerHeader
 
-                if let preview = viewModel.imagePreview,
-                   let presentation = viewModel.feedPresentation {
-                    attachedImagePreview(preview, presentation: presentation)
+                if let preview = viewModel.finalImage {
+                    attachedImagePreview(preview)
                 }
 
-                if viewModel.imagePreview == nil {
+                if viewModel.finalImage == nil {
                     attachmentToolbar
                 }
 
@@ -184,12 +184,9 @@ struct CreatePostView: View {
         }
     }
 
-    private func attachedImagePreview(
-        _ preview: UIImage,
-        presentation: FeedMediaPresentation
-    ) -> some View {
+    private func attachedImagePreview(_ preview: UIImage) -> some View {
         ZStack(alignment: .topTrailing) {
-            AdaptiveMediaPreviewImage(image: preview, presentation: presentation)
+            AdaptiveMediaPreviewImage(image: preview)
                 .clipShape(
                     RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
                 )

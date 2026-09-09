@@ -1,5 +1,35 @@
 import SwiftUI
 
+enum EngagementBarVisualStyle: Equatable {
+    case standard
+    case feedCard
+
+    var iconPointSize: CGFloat {
+        switch self {
+        case .standard: return 18
+        case .feedCard: return 20
+        }
+    }
+
+    var iconWeight: Font.Weight {
+        switch self {
+        case .standard: return .regular
+        case .feedCard: return .medium
+        }
+    }
+}
+
+private struct EngagementBarVisualStyleKey: EnvironmentKey {
+    static let defaultValue: EngagementBarVisualStyle = .standard
+}
+
+extension EnvironmentValues {
+    var engagementBarVisualStyle: EngagementBarVisualStyle {
+        get { self[EngagementBarVisualStyleKey.self] }
+        set { self[EngagementBarVisualStyleKey.self] = newValue }
+    }
+}
+
 enum EngagementActionRowMetrics {
     static let iconPointSize: CGFloat = 18
     static let actionContainerSide: CGFloat = 32
@@ -43,9 +73,11 @@ struct EngagementActionIcon: View {
     let kind: EngagementActionIconKind
     var color: Color
 
+    @Environment(\.engagementBarVisualStyle) private var visualStyle
+
     var body: some View {
         Image(systemName: kind.systemImage)
-            .font(.system(size: EngagementActionRowMetrics.iconPointSize, weight: .regular))
+            .font(.system(size: visualStyle.iconPointSize, weight: visualStyle.iconWeight))
             .foregroundStyle(color)
             .offset(y: kind.referenceEdgeYOffset)
             .frame(

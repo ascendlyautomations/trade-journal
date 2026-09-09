@@ -17,6 +17,7 @@ struct ExploreHomeView: View {
                 explore: data.explore,
                 search: data.search,
                 profiles: data.profiles,
+                rooms: data.rooms,
                 session: data.session,
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
@@ -75,6 +76,10 @@ struct ExploreHomeView: View {
             Button("Cancel", role: .cancel) {
                 viewModel.pendingUnfollow = nil
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tradeRoomMetadataDidChange)) { notification in
+            guard let room = notification.tradeRoomMetadataPayload else { return }
+            viewModel.applyRoomMetadata(room)
         }
         .accessibilityIdentifier("explore.home")
     }
@@ -297,28 +302,21 @@ struct ExploreHomeView: View {
                 if !viewModel.searchRooms.isEmpty {
                     Section("Trade Rooms") {
                         ForEach(viewModel.searchRooms) { room in
-                            Button {
-                                viewModel.openRoom(room)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(room.name)
-                                        .experienceStyle(.body, color: colors.primaryText)
-                                    if let memberCount = room.memberCount {
-                                        Text("\(ProfileDisplay.compactCount(memberCount)) members")
-                                            .experienceStyle(.caption, color: colors.secondaryText)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
+                            TradeRoomDiscoveryRow(
+                                room: room,
+                                joinState: viewModel.joinState(for: room.id),
+                                imagePipeline: imagePipeline,
+                                onOpen: { viewModel.openRoom(room) },
+                                onJoin: { Task { await viewModel.joinSearchRoom(room) } }
+                            )
+                            .listRowInsets(EdgeInsets(
+                                top: ExperienceSpacing.xs,
+                                leading: ExperienceSpacing.md,
+                                bottom: ExperienceSpacing.xs,
+                                trailing: ExperienceSpacing.md
+                            ))
                             .listRowBackground(colors.backgroundPrimary)
-                            .contextMenu {
-                                Button {
-                                    viewModel.openRoom(room)
-                                } label: {
-                                    Label("Open", systemImage: "person.3")
-                                }
-                            }
+                            .listRowSeparator(.hidden)
                             .accessibilityIdentifier("explore.search.room.\(room.id.rawValue)")
                         }
                     }

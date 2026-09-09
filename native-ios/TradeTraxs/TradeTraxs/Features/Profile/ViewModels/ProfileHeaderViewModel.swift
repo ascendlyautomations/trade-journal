@@ -197,7 +197,7 @@ final class ProfileHeaderViewModel {
 
     func createTradeRoom() {
         ExperienceHaptics.play(.selection)
-        // Create UI arrives with Rooms feature — rooms root is the permanent gateway.
+        TradeRoomCreationIntent.shared.requestCreateFromProfile()
         navigationCoordinator.open(.profile(.rooms))
     }
 

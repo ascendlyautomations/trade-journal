@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 @Observable
 @MainActor
@@ -49,6 +50,7 @@ final class ManageRoomViewModel {
     private(set) var members: [RoomManagedMember] = []
     private(set) var tags: [RoomMemberTag] = []
     private(set) var bans: [RoomBanRecord] = []
+    private(set) var joinRequests: [RoomJoinRequestRecord] = []
     private(set) var viewerID: ProfileID?
     var statusMessage: String?
     var pendingMemberAction: MemberAction?
@@ -57,12 +59,46 @@ final class ManageRoomViewModel {
     var isMutatingMember = false
     var isMutatingTag = false
     var isMutatingChannel = false
+    var isMutatingJoinRequest = false
 
-    // Editable room details
-    var editName = ""
-    var editDescription = ""
-    var editShowsOnProfile = true
+    // Editable room details (shared model with create flow)
+    var editConfiguration = TradeRoomConfiguration.defaultDraft(username: nil)
     var pendingImageData: Data?
+    var pendingImagePreview: UIImage?
+    /// Authoritative saved image from the current room model (not cleared while refreshing).
+    private(set) var savedImageReference: MediaReference?
+    /// User chose to remove the saved room image on next save.
+    var marksImageForRemoval = false
+
+    var hasDisplayImage: Bool {
+        pendingImagePreview != nil
+            || (savedImageReference != nil && !marksImageForRemoval)
+    }
+
+    func setCroppedRoomImage(_ result: ImageCropSelectionResult) {
+        guard let applied = ComposerCropImageState.apply(result) else { return }
+        pendingImagePreview = applied.finalImage
+        pendingImageData = applied.uploadData
+        marksImageForRemoval = false
+    }
+
+    func clearPendingRoomImage() {
+        if pendingImagePreview != nil || pendingImageData != nil {
+            pendingImagePreview = nil
+            pendingImageData = nil
+            marksImageForRemoval = false
+            return
+        }
+        if savedImageReference != nil {
+            marksImageForRemoval = true
+        }
+    }
+
+    func applyRoomSnapshot(_ loaded: TradeRoom, channels: [RoomChannel]) {
+        room = loaded
+        editConfiguration = TradeRoomConfiguration(room: loaded, channels: channels)
+        savedImageReference = loaded.image
+    }
 
     private let rooms: any RoomManagementRepository
     private let uploadService: any UploadService
@@ -95,11 +131,74 @@ final class ManageRoomViewModel {
         self.navigationHost = navigationHost
         self.tagStore = tagStore ?? .shared
         self.inboxStore = inboxStore ?? .shared
+        hydrateFromCacheIfAvailable()
+    }
+
+    private func hydrateFromCacheIfAvailable() {
+        guard room == nil, let cached = inboxStore.rooms.first(where: { $0.id == roomID }) else { return }
+        applyRoomSnapshot(cached, channels: [])
     }
 
     var isOwner: Bool {
         guard let viewerID, let room else { return false }
         return room.ownerProfileID == viewerID
+    }
+
+    var canManageRoom: Bool {
+        guard let room else { return false }
+        return TradeRoomManagementPermission.canManage(room: room, viewerID: viewerID)
+    }
+
+    var showsJoinRequestsSection: Bool {
+        guard canManageRoom, let room else { return false }
+        return room.joinPolicy == .approval && !room.isPrivate
+    }
+
+    var pendingJoinRequestCount: Int {
+        joinRequests.count
+    }
+
+    func refreshJoinRequests() async {
+        guard showsJoinRequestsSection else {
+            joinRequests = []
+            return
+        }
+        do {
+            joinRequests = try await rooms.pendingJoinRequests(roomID: roomID)
+        } catch {
+            statusMessage = ConversationThreadSupport.message(for: error)
+        }
+    }
+
+    func approveJoinRequest(_ request: RoomJoinRequestRecord) async {
+        guard canManageRoom else { return }
+        isMutatingJoinRequest = true
+        defer { isMutatingJoinRequest = false }
+        do {
+            try await rooms.resolveJoinRequest(requestID: request.id, action: .approve)
+            joinRequests.removeAll { $0.id == request.id }
+            await refreshMembersAndBans()
+            statusMessage = "Join request approved."
+            ExperienceHaptics.play(.success)
+        } catch {
+            statusMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.error)
+        }
+    }
+
+    func declineJoinRequest(_ request: RoomJoinRequestRecord) async {
+        guard canManageRoom else { return }
+        isMutatingJoinRequest = true
+        defer { isMutatingJoinRequest = false }
+        do {
+            try await rooms.resolveJoinRequest(requestID: request.id, action: .decline)
+            joinRequests.removeAll { $0.id == request.id }
+            statusMessage = "Join request declined."
+            ExperienceHaptics.play(.success)
+        } catch {
+            statusMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.error)
+        }
     }
 
     func loadIfNeeded() {
@@ -159,11 +258,23 @@ final class ManageRoomViewModel {
     }
 
     func saveDetails() async {
-        guard isOwner else { return }
+        guard canManageRoom else { return }
         isSavingDetails = true
+
+        let rollbackConfiguration = editConfiguration
+        let rollbackPendingPreview = pendingImagePreview
+        let rollbackPendingData = pendingImageData
+        let rollbackMarksRemoval = marksImageForRemoval
+        let rollbackSavedReference = savedImageReference
+
         defer { isSavingDetails = false }
         do {
-            var imageURL: String?
+            var configuration = editConfiguration
+
+            if marksImageForRemoval, pendingImageData == nil {
+                configuration.imageURL = ""
+            }
+
             if let imageData = pendingImageData {
                 let path = "room-images/\(Int(Date().timeIntervalSince1970))-avatar.jpg"
                 let reference = try await uploadService.upload(
@@ -175,21 +286,18 @@ final class ManageRoomViewModel {
                         purpose: .profileAvatar
                     )
                 )
-                imageURL = reference.id
-                pendingImageData = nil
+                configuration.imageURL = reference.id
             }
-            let trimmedName = editName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let trimmedDescription = editDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+
             let updated = try await rooms.updateRoom(
                 roomID: roomID,
-                request: RoomUpdateRequest(
-                    name: trimmedName.isEmpty ? nil : trimmedName,
-                    description: trimmedDescription.isEmpty ? nil : trimmedDescription,
-                    imageURL: imageURL,
-                    showsOnProfile: editShowsOnProfile
-                )
+                request: RoomUpdateRequest(configuration: configuration)
             )
-            room = updated
+            applyRoomSnapshot(updated, channels: channels)
+            pendingImageData = nil
+            pendingImagePreview = nil
+            marksImageForRemoval = false
+            editConfiguration = TradeRoomConfiguration(room: updated, channels: channels)
             RoomMetadataSync.apply(
                 updated,
                 inboxStore: inboxStore,
@@ -199,13 +307,18 @@ final class ManageRoomViewModel {
             statusMessage = "Room details saved."
             ExperienceHaptics.play(.success)
         } catch {
+            editConfiguration = rollbackConfiguration
+            pendingImagePreview = rollbackPendingPreview
+            pendingImageData = rollbackPendingData
+            marksImageForRemoval = rollbackMarksRemoval
+            savedImageReference = rollbackSavedReference
             statusMessage = ConversationThreadSupport.message(for: error)
             ExperienceHaptics.play(.error)
         }
     }
 
     func confirmMemberAction(_ action: MemberAction) async {
-        guard isOwner, let viewerID, let room else { return }
+        guard canManageRoom, let viewerID, let room else { return }
         let targetID: ProfileID
         switch action {
         case .remove(let profileID), .ban(let profileID):
@@ -240,7 +353,7 @@ final class ManageRoomViewModel {
     }
 
     func unban(_ ban: RoomBanRecord) async {
-        guard isOwner else { return }
+        guard canManageRoom else { return }
         isMutatingMember = true
         defer { isMutatingMember = false }
         do {
@@ -255,7 +368,7 @@ final class ManageRoomViewModel {
     }
 
     func createTag(name: String, colorKey: String) async {
-        guard isOwner, let viewerID else { return }
+        guard canManageRoom, let viewerID else { return }
         isMutatingTag = true
         defer { isMutatingTag = false }
         do {
@@ -275,7 +388,7 @@ final class ManageRoomViewModel {
     }
 
     func updateTag(_ tag: RoomMemberTag) async {
-        guard isOwner else { return }
+        guard canManageRoom else { return }
         isMutatingTag = true
         defer { isMutatingTag = false }
         do {
@@ -290,7 +403,7 @@ final class ManageRoomViewModel {
     }
 
     func deleteTag(_ tag: RoomMemberTag) async {
-        guard isOwner else { return }
+        guard canManageRoom else { return }
         isMutatingTag = true
         defer { isMutatingTag = false }
         do {
@@ -305,7 +418,7 @@ final class ManageRoomViewModel {
     }
 
     func toggleTag(_ tag: RoomMemberTag, for member: RoomManagedMember) async {
-        guard isOwner else { return }
+        guard canManageRoom else { return }
         isMutatingTag = true
         defer { isMutatingTag = false }
         do {
@@ -344,7 +457,7 @@ final class ManageRoomViewModel {
     }
 
     func createChannel(name: String, allowMembersChat: Bool) async -> Bool {
-        guard isOwner else { return false }
+        guard canManageRoom else { return false }
         isMutatingChannel = true
         defer { isMutatingChannel = false }
         do {
@@ -370,7 +483,7 @@ final class ManageRoomViewModel {
         name: String,
         allowMembersChat: Bool
     ) async -> Bool {
-        guard isOwner else { return false }
+        guard canManageRoom else { return false }
         isMutatingChannel = true
         defer { isMutatingChannel = false }
         do {
@@ -398,7 +511,7 @@ final class ManageRoomViewModel {
     }
 
     func requestDeleteChannel(_ channel: RoomChannel) async {
-        guard isOwner, channels.count > RoomChannelValidation.minCount else {
+        guard canManageRoom, channels.count > RoomChannelValidation.minCount else {
             statusMessage = "You must have at least one channel."
             return
         }
@@ -419,7 +532,7 @@ final class ManageRoomViewModel {
     }
 
     func confirmDeleteChannel(_ channelID: RoomChannelID) async {
-        guard isOwner, let channel = channels.first(where: { $0.id == channelID }) else { return }
+        guard canManageRoom, let channel = channels.first(where: { $0.id == channelID }) else { return }
         isMutatingChannel = true
         defer {
             isMutatingChannel = false
@@ -442,7 +555,7 @@ final class ManageRoomViewModel {
     }
 
     func moveChannel(_ channel: RoomChannel, direction: Int) async {
-        guard isOwner else { return }
+        guard canManageRoom else { return }
         let sorted = channels.sorted { $0.position < $1.position }
         guard let index = sorted.firstIndex(where: { $0.id == channel.id }) else { return }
         let targetIndex = index + direction
@@ -473,21 +586,27 @@ final class ManageRoomViewModel {
     private func performLoad() async {
         phase = .loading
         viewerID = await session.currentUserID.map { ProfileID($0.rawValue) }
+        let priorPendingPreview = pendingImagePreview
+        let priorPendingData = pendingImageData
+        let priorMarksRemoval = marksImageForRemoval
         do {
             let loaded = try await rooms.room(id: roomID)
-            room = loaded
-            editName = loaded.name
-            editDescription = loaded.description ?? ""
-            editShowsOnProfile = loaded.showsOnProfile
-            guard isOwner else {
-                phase = .failed("Only the room owner can manage this Trade Room.")
+            await refreshChannels()
+            applyRoomSnapshot(loaded, channels: channels)
+            if priorPendingPreview != nil {
+                pendingImagePreview = priorPendingPreview
+                pendingImageData = priorPendingData
+                marksImageForRemoval = priorMarksRemoval
+            }
+            guard canManageRoom else {
+                phase = .failed("You don't have permission to manage this Trade Room.")
                 loadTask = nil
                 return
             }
             try await tagStore.hydrate(roomID: roomID, repository: rooms)
             tags = tagStore.tags(for: roomID)
-            await refreshChannels()
             await refreshMembersAndBans()
+            await refreshJoinRequests()
             phase = .loaded
         } catch {
             phase = .failed(ConversationThreadSupport.message(for: error))

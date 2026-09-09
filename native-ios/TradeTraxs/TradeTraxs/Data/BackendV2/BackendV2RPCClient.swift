@@ -84,16 +84,20 @@ nonisolated struct BackendV2RPCClient: Sendable {
         BackendV2RpcStageTracer.trace(name, stage: "request.started", correlation: correlation)
 
         let execStart = ContinuousClock.now
+        var transportStart: ContinuousClock.Instant?
+        var transportEnd: ContinuousClock.Instant?
         var decodeMs: Double?
         var payloadBytes: Int?
         var errorCode: String?
 
         do {
             BackendV2RpcStageTracer.trace(name, stage: "transport.await", correlation: correlation)
+            transportStart = ContinuousClock.now
             let data = try await transport.call(
                 functionName: name,
                 jsonBody: argumentsJSON
             )
+            transportEnd = ContinuousClock.now
             BackendV2RpcStageTracer.trace(
                 name,
                 stage: "body.read.completed",
@@ -123,6 +127,15 @@ nonisolated struct BackendV2RPCClient: Sendable {
             BackendV2RpcStageTracer.trace(name, stage: "decoder.completed", correlation: correlation)
             BackendV2RpcStageTracer.trace(name, stage: "single-flight.completed", correlation: correlation)
             let executionMs = durationMilliseconds(from: execStart)
+            if let transportStart, let transportEnd {
+                RPCTransportTiming.log(
+                    rpc: name,
+                    taskStartToHeadersMs: RPCTransportTiming.milliseconds(from: transportStart, to: transportEnd),
+                    headersToBodyMs: 0,
+                    decodeMs: decodeMs,
+                    totalMs: executionMs
+                )
+            }
             BackendV2Telemetry.record(
                 BackendV2TelemetryEvent(
                     rpcName: name,

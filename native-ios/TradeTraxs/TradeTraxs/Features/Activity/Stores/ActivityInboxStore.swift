@@ -103,12 +103,68 @@ final class ActivityInboxStore {
     }
 
     func markReadLocally(id: NotificationID) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        guard !items[index].isRead else { return }
-        items[index].isRead = true
-        // Reassign for Observation.
-        items = items
-        unreadCount = max(0, unreadCount - 1)
+        _ = markReadLocally(ids: [id])
+    }
+
+    @discardableResult
+    func markReadLocally(ids: [NotificationID]) -> Int {
+        let targets = Set(ids)
+        guard !targets.isEmpty else { return 0 }
+        var marked = 0
+        var next = items
+        for index in next.indices where targets.contains(next[index].id) && !next[index].isRead {
+            next[index].isRead = true
+            marked += 1
+        }
+        guard marked > 0 else { return 0 }
+        items = next
+        unreadCount = max(0, unreadCount - marked)
+        AppIconBadgeSync.refresh(animated: true)
+        return marked
+    }
+
+    @discardableResult
+    func markMessageNotificationsReadLocally() -> Int {
+        var marked = 0
+        var next = items
+        for index in next.indices where next[index].kind == .message && !next[index].isRead {
+            next[index].isRead = true
+            marked += 1
+        }
+        guard marked > 0 else { return 0 }
+        items = next
+        unreadCount = max(0, unreadCount - marked)
+        AppIconBadgeSync.refresh(animated: true)
+        return marked
+    }
+
+    @discardableResult
+    func markRoomNotificationsReadLocally(roomID: RoomID, slug: String?) -> Int {
+        let roomToken = roomID.rawValue
+        let slugToken = slug?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var marked = 0
+        var next = items
+        for index in next.indices where !next[index].isRead && matchesRoomNotification(next[index], roomID: roomToken, slug: slugToken) {
+            next[index].isRead = true
+            marked += 1
+        }
+        guard marked > 0 else { return 0 }
+        items = next
+        unreadCount = max(0, unreadCount - marked)
+        AppIconBadgeSync.refresh(animated: true)
+        return marked
+    }
+
+    private func matchesRoomNotification(
+        _ notification: ActivityNotification,
+        roomID: String,
+        slug: String
+    ) -> Bool {
+        let isRoomKind = notification.kind == .roomJoin || notification.kind == .roomMention
+        let mentionsRoom = notification.roomID?.rawValue == roomID
+            || (!roomID.isEmpty && notification.body.contains(roomID))
+            || (!slug.isEmpty && notification.body.contains(slug))
+        return isRoomKind || mentionsRoom
     }
 
     /// Rolls back a failed optimistic ``markReadLocally``.

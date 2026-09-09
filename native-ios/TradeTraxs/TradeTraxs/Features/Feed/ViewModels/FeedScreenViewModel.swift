@@ -110,6 +110,7 @@ final class FeedScreenViewModel {
     /// Exactly one bootstrap on first presentation.
     func loadIfNeeded() {
         guard bootstrapTask == nil, !state.didBootstrap else { return }
+        hydrateFilterSnapshotFromSessionStore()
         bootstrapGeneration &+= 1
         let generation = bootstrapGeneration
         bootstrapTask = Task {
@@ -525,13 +526,26 @@ final class FeedScreenViewModel {
         let resolvedFilter = queryFilter ?? state.contentFilter
         let resolvedCursor = resetting ? nil : (queryCursor ?? state.nextCursor)
 
+        if resetting, !forceNetwork {
+            hydrateFilterSnapshotFromSessionStore()
+        }
+
+        let blockPeerSync: Task<Void, Never>?
         if resetting {
-            await syncBlockedAuthorsFromServer(force: forceNetwork)
+            if forceNetwork || !FeedBlockedAuthorsFilter.shared.hasSyncedFromServer {
+                blockPeerSync = Task {
+                    await syncBlockedAuthorsFromServer(force: forceNetwork)
+                }
+            } else {
+                blockPeerSync = nil
+            }
             if state.visibleEntries.isEmpty, state.entries.isEmpty {
                 state.phase = .loading
             }
             state.nextCursor = nil
             state.hasMore = false
+        } else {
+            blockPeerSync = nil
         }
 
         if BackendV2FeatureFlags.isEnabled(.feed), let rpc {
@@ -593,6 +607,18 @@ final class FeedScreenViewModel {
                     state.phase = .loaded
                     state.didBootstrap = true
                     state.lastUpdated = Date()
+                    scheduleBackgroundEntryHydration(
+                        items: loaded.pendingHydrationItems,
+                        feedItemOrder: loaded.feedItemOrder,
+                        generation: activeGeneration,
+                        resetting: resetting,
+                        queryScope: resolvedScope,
+                        queryFilter: resolvedFilter,
+                        queryCursor: resolvedCursor,
+                        viewerID: viewerID
+                    )
+                    await blockPeerSync?.value
+                    applyBlockedAuthorsToLoadedFeed()
                     await startRealtimeIfNeeded()
                     return
                 } catch is FeedBootstrapLoader.LoaderError {
@@ -605,6 +631,8 @@ final class FeedScreenViewModel {
                         queryFilter: resolvedFilter,
                         queryCursor: resolvedCursor
                     ) else { return }
+                    await blockPeerSync?.value
+                    applyBlockedAuthorsToLoadedFeed()
                     if state.entries.isEmpty {
                         state.phase = .failed(FeedSupport.message(for: error))
                     }
@@ -693,6 +721,8 @@ final class FeedScreenViewModel {
             if let viewerID = page.viewerID {
                 await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
             }
+            await blockPeerSync?.value
+            applyBlockedAuthorsToLoadedFeed()
             await startRealtimeIfNeeded()
         } catch {
             guard shouldApplyBootstrapResult(
@@ -702,6 +732,8 @@ final class FeedScreenViewModel {
                 queryFilter: resolvedFilter,
                 queryCursor: resolvedCursor
             ) else { return }
+            await blockPeerSync?.value
+            applyBlockedAuthorsToLoadedFeed()
             if state.entries.isEmpty {
                 state.phase = .failed(FeedSupport.message(for: error))
             } else {
@@ -715,6 +747,72 @@ final class FeedScreenViewModel {
         engagementStore.prefetch(targets)
         let vaultRefs = state.visibleEntries.compactMap { VaultContentRef.from($0.interactionTarget) }
         vaultStore.prefetch(vaultRefs)
+    }
+
+    /// Network hydration for rows that could not be built from bootstrap embeds alone.
+    private func scheduleBackgroundEntryHydration(
+        items: [FeedItem],
+        feedItemOrder: [String],
+        generation: UInt64,
+        resetting: Bool,
+        queryScope: FeedScope,
+        queryFilter: FeedContentFilter,
+        queryCursor: String?,
+        viewerID: ProfileID
+    ) {
+        guard !items.isEmpty else { return }
+        Task {
+            #if DEBUG
+            FeedRpcLoadProbe.recordNetworkHydrate()
+            #endif
+            let hydrated = await FeedBootstrap.hydrate(
+                items,
+                feed: feed,
+                trades: trades,
+                profiles: profiles,
+                achievements: achievements,
+                detailCache: detailCache
+            )
+            guard shouldApplyBootstrapResult(
+                generation: generation,
+                resetting: resetting,
+                queryScope: queryScope,
+                queryFilter: queryFilter,
+                queryCursor: queryCursor
+            ), !hydrated.isEmpty else { return }
+
+            let merged = FeedBootstrap.mergeHydratedEntries(
+                existing: state.entries,
+                hydrated: hydrated,
+                feedItemOrder: feedItemOrder
+            )
+            state.entries = FeedBlockedAuthorsFilter.shared.filterEntries(merged)
+            state.lastUpdated = Date()
+            prefetchEngagement()
+
+            if queryCursor == nil {
+                noteFilterLoadResult(
+                    entries: state.entries,
+                    scope: queryScope,
+                    filter: queryFilter,
+                    viewerID: viewerID
+                )
+                FeedSessionStore.shared.save(
+                    FeedSessionStore.Snapshot(
+                        cacheKey: FeedSessionStore.cacheKey(
+                            viewerID: viewerID,
+                            scope: queryScope,
+                            contentFilter: queryFilter,
+                            cursor: nil
+                        ),
+                        entries: state.entries,
+                        stories: state.stories,
+                        nextCursor: state.nextCursor,
+                        loadedAt: Date()
+                    )
+                )
+            }
+        }
     }
 
     private func syncViewerStoryStoreIfNeeded() {

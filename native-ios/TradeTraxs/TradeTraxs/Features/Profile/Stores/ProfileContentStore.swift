@@ -41,6 +41,7 @@ final class ProfileContentStore {
     private(set) var ownedTradeRoom: TradeRoom?
     private(set) var didResolveTradeRoom = false
     private(set) var activeStories: [Story] = []
+    private(set) var pinnedContent: [ProfilePinnedItem] = []
 
     private let profiles: any ProfileRepository
     private let rooms: any RoomRepository
@@ -76,6 +77,24 @@ final class ProfileContentStore {
 
     var hasTradeRoom: Bool { ownedTradeRoom != nil }
 
+    /// After create — flip Profile CTA without a full reload.
+    func applyOwnedTradeRoom(_ room: TradeRoom) {
+        ownedTradeRoom = room
+        didResolveTradeRoom = true
+        if let profileID = resolvedProfileID {
+            detailCache.seedOwnedTradeRoom(room, for: profileID)
+        }
+    }
+
+    func applyPinnedContent(_ items: [ProfilePinnedItem]) {
+        pinnedContent = items
+    }
+
+    func consumeCreatedRoomFromIntent() {
+        guard let room = TradeRoomCreationIntent.shared.consumeCreatedRoomForProfile() else { return }
+        applyOwnedTradeRoom(room)
+    }
+
     /// Newest active story for avatar ring — from bootstrap, not a follow-up fetch.
     var activeStory: Story? {
         StoryBootstrapMapping.newestActive(activeStories)
@@ -109,6 +128,7 @@ final class ProfileContentStore {
         ownedTradeRoom = state.ownedTradeRoom
         didResolveTradeRoom = state.didResolveTradeRoom
         applyActiveStories(from: state.activeStories, isOwner: state.isOwner)
+        pinnedContent = state.pinnedContent
         errorMessage = state.errorMessage
         // Follow must work as soon as Stage 1 publishes — capture viewer for toggle.
         Task { [weak self] in

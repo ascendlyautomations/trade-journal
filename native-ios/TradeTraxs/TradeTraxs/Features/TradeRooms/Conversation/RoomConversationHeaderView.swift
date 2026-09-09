@@ -7,6 +7,7 @@ struct RoomConversationHeaderView: View {
     let channelTitle: String?
     let memberCountLabel: String
     let joinButtonTitle: String
+    let showsJoinButton: Bool
     let isJoinEnabled: Bool
     let isJoining: Bool
     let onJoinTap: () -> Void
@@ -54,7 +55,7 @@ struct RoomConversationHeaderView: View {
                     accessibilityIdentifier: "tradeRooms.conversation.info",
                     action: onInfoTap
                 )
-                if isJoinEnabled || joinButtonTitle == "Joined" || joinButtonTitle == "Owner" {
+                if showsJoinButton {
                     Button(action: onJoinTap) {
                         Group {
                             if isJoining {

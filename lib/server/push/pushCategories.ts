@@ -4,6 +4,7 @@ export const PUSH_CATEGORY = {
   ROOM: "TT_ROOM",
   COMMENT: "TT_COMMENT",
   FOLLOW_REQUEST: "TT_FOLLOW_REQUEST",
+  TRADE_ROOM_JOIN_REQUEST: "TT_TRADE_ROOM_JOIN_REQUEST",
 } as const
 
 export const PUSH_ACTION = {
@@ -26,6 +27,8 @@ export function categoryForNotificationType(type: string): string | undefined {
       return PUSH_CATEGORY.COMMENT
     case "follow_request":
       return PUSH_CATEGORY.FOLLOW_REQUEST
+    case "trade_room_join_request":
+      return PUSH_CATEGORY.TRADE_ROOM_JOIN_REQUEST
     default:
       return undefined
   }

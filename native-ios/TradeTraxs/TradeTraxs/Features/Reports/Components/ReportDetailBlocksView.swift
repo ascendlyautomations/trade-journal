@@ -119,7 +119,7 @@ struct ReportDetailBlocksView: View {
             metricCell(
                 "Win Rate",
                 metrics.tradesTaken > 0
-                    ? String(format: "%.1f%%", metrics.winRate)
+                    ? NumberDisplay.percent(metrics.winRate, minimumFractionDigits: 1, maximumFractionDigits: 1)
                     : "—"
             )
             metricCell(
@@ -128,9 +128,9 @@ struct ReportDetailBlocksView: View {
             )
             metricCell(
                 "Profit Factor",
-                metrics.profitFactor.map { String(format: "%.2f", $0) } ?? "—"
+                metrics.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—"
             )
-            metricCell("Trades Taken", "\(metrics.tradesTaken)")
+            metricCell("Trades Taken", NumberDisplay.integer(metrics.tradesTaken))
             metricCell(
                 "Best Day",
                 metrics.bestDayLabel.map {
@@ -189,15 +189,11 @@ struct ReportDetailBlocksView: View {
     }
 
     private func formatPnl(_ value: Double) -> String {
-        let absValue = abs(value)
-        let formatted = absValue.formatted(
-            .number.precision(.fractionLength(2)).grouping(.automatic)
-        )
-        return value < 0 ? "-$\(formatted)" : "$\(formatted)"
+        NumberDisplay.reportPnL(value)
     }
 
     private func formatRR(_ value: Double) -> String {
-        value.formatted(.number.precision(.fractionLength(0...2)))
+        NumberDisplay.decimal(value, minimumFractionDigits: 0, maximumFractionDigits: 2)
     }
 
     private func formatHold(_ seconds: Int) -> String {

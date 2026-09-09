@@ -133,17 +133,11 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
     }
 
     private static func chipMoney(_ value: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: value)
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 2
-        return formatter.string(from: number) ?? "\(value)"
+        NumberDisplay.currency(value, minimumFractionDigits: 0, maximumFractionDigits: 2)
     }
 
     private static func chipRR(_ value: Decimal) -> String {
-        let formatted = NSDecimalNumber(decimal: value).stringValue
-        return "\(formatted)R"
+        "\(NumberDisplay.decimal(value, minimumFractionDigits: 0, maximumFractionDigits: 2))R"
     }
 }
 

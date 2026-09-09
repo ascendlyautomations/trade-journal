@@ -233,7 +233,7 @@ struct PsychologyReportPeriodPickerView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(report.dateRangeLabel)
                                 .experienceStyle(.headline, color: colors.primaryText)
-                            Text("\(report.performance.tradeCount) trades")
+                            Text(NumberDisplay.tradeCount(report.performance.tradeCount))
                                 .experienceStyle(.footnote, color: colors.secondaryText)
                         }
                     } else {

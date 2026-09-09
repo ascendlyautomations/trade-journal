@@ -23,7 +23,69 @@ nonisolated struct TradeRoom: Hashable, Codable, Sendable, Identifiable {
     /// Active members (`left_at IS NULL`). Nil until batch-loaded or room detail fetch.
     var memberCount: Int?
     var showsOnProfile: Bool
+    /// Hidden from public discovery when true (`rooms.is_private`).
+    var isPrivate: Bool
+    var category: TradeRoomCategory?
+    var discoveryTags: [String]
+    var joinPolicy: TradeRoomJoinPolicy
+    var rules: String?
+    var membersCanMessage: Bool
+    var membersCanShareTrades: Bool
+    var membersCanShareMedia: Bool
+    var roomKind: TradeRoomKind
     var createdAt: Date
+
+    init(
+        id: RoomID,
+        ownerProfileID: ProfileID,
+        name: String,
+        slug: String,
+        description: String?,
+        image: MediaReference?,
+        memberCount: Int?,
+        showsOnProfile: Bool,
+        isPrivate: Bool = false,
+        category: TradeRoomCategory? = nil,
+        discoveryTags: [String] = [],
+        joinPolicy: TradeRoomJoinPolicy = .open,
+        rules: String? = nil,
+        membersCanMessage: Bool = true,
+        membersCanShareTrades: Bool = true,
+        membersCanShareMedia: Bool = true,
+        roomKind: TradeRoomKind = .community,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.ownerProfileID = ownerProfileID
+        self.name = name
+        self.slug = slug
+        self.description = description
+        self.image = image
+        self.memberCount = memberCount
+        self.showsOnProfile = showsOnProfile
+        self.isPrivate = isPrivate
+        self.category = category
+        self.discoveryTags = discoveryTags
+        self.joinPolicy = joinPolicy
+        self.rules = rules
+        self.membersCanMessage = membersCanMessage
+        self.membersCanShareTrades = membersCanShareTrades
+        self.membersCanShareMedia = membersCanShareMedia
+        self.roomKind = roomKind
+        self.createdAt = createdAt
+    }
+}
+
+nonisolated enum TradeRoomKind: String, Codable, Sendable, Hashable {
+    case community
+    case official
+
+    static func parse(_ raw: String?) -> TradeRoomKind {
+        switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "official": return .official
+        default: return .community
+        }
+    }
 }
 
 nonisolated struct RoomMembership: Hashable, Codable, Sendable {
@@ -123,6 +185,57 @@ nonisolated struct RoomUpdateRequest: Sendable {
     var description: String?
     var imageURL: String?
     var showsOnProfile: Bool?
+    var isPrivate: Bool?
+    var category: TradeRoomCategory?
+    var discoveryTags: [String]?
+    var joinPolicy: TradeRoomJoinPolicy?
+    var rules: String?
+    var membersCanMessage: Bool?
+    var membersCanShareTrades: Bool?
+    var membersCanShareMedia: Bool?
+
+    init(
+        name: String? = nil,
+        description: String? = nil,
+        imageURL: String? = nil,
+        showsOnProfile: Bool? = nil,
+        isPrivate: Bool? = nil,
+        category: TradeRoomCategory? = nil,
+        discoveryTags: [String]? = nil,
+        joinPolicy: TradeRoomJoinPolicy? = nil,
+        rules: String? = nil,
+        membersCanMessage: Bool? = nil,
+        membersCanShareTrades: Bool? = nil,
+        membersCanShareMedia: Bool? = nil
+    ) {
+        self.name = name
+        self.description = description
+        self.imageURL = imageURL
+        self.showsOnProfile = showsOnProfile
+        self.isPrivate = isPrivate
+        self.category = category
+        self.discoveryTags = discoveryTags
+        self.joinPolicy = joinPolicy
+        self.rules = rules
+        self.membersCanMessage = membersCanMessage
+        self.membersCanShareTrades = membersCanShareTrades
+        self.membersCanShareMedia = membersCanShareMedia
+    }
+
+    init(configuration: TradeRoomConfiguration) {
+        name = configuration.trimmedName
+        description = configuration.trimmedDescription
+        imageURL = configuration.imageURL
+        showsOnProfile = configuration.showsOnProfile
+        isPrivate = configuration.visibility == .private
+        category = configuration.category
+        discoveryTags = configuration.discoveryTags
+        joinPolicy = configuration.effectiveJoinPolicy
+        rules = configuration.trimmedRules
+        membersCanMessage = configuration.membersCanMessage
+        membersCanShareTrades = configuration.membersCanShareTrades
+        membersCanShareMedia = configuration.membersCanShareMedia
+    }
 }
 
 nonisolated struct RoomChannelCreateRequest: Sendable {
@@ -142,16 +255,16 @@ nonisolated enum RoomChannelValidation {
     static let nameMaxLength = 64
 }
 
-/// Web `createUserRoom` parity — inserts `rooms`, default sections, and owner membership.
+/// Authoritative create payload — `rpc_v1_create_trade_room`.
 nonisolated struct RoomCreateRequest: Sendable {
-    var name: String
-    var description: String?
-    var imageURL: String?
-    /// Maps to `rooms.show_on_profile` (public discovery vs invite-link-only).
-    var showsOnProfile: Bool
+    var configuration: TradeRoomConfiguration
+
+    init(configuration: TradeRoomConfiguration) {
+        self.configuration = configuration
+    }
 
     enum Validation {
-        static let nameMaxLength = 100
-        static let descriptionMaxLength = 500
+        static let nameMaxLength = TradeRoomConfigurationValidation.nameMaxLength
+        static let descriptionMaxLength = TradeRoomConfigurationValidation.descriptionMaxLength
     }
 }

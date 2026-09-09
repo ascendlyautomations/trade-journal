@@ -4,7 +4,7 @@ import Observation
 /// Resolves session bootstrap onboarding state before the authenticated shell appears.
 @Observable
 @MainActor
-final class ProfileOnboardingGateStore {
+final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     enum Phase: Equatable, Sendable {
         case idle
         case resolving
@@ -43,6 +43,7 @@ final class ProfileOnboardingGateStore {
         self.detailCache = detailCache
         self.realtimeHub = realtimeHub
         self.profileStore = profileStore
+        SessionBootstrapLoader.refreshCommitObserver = self
     }
 
     var needsOnboarding: Bool {
@@ -87,7 +88,6 @@ final class ProfileOnboardingGateStore {
     }
 
     private func performResolve(forceNetwork: Bool, generation: UInt64) async {
-        phase = .resolving
         await SessionNetworkGate.shared.awaitReady()
 
         guard let userID = await session.currentUserID else {
@@ -102,29 +102,49 @@ final class ProfileOnboardingGateStore {
         }
 
         let profileID = ProfileID(userID.rawValue)
-        let authoritative = requiresAuthoritativeResolve || forceNetwork
+        let uid = userID.rawValue
+        let cacheInspection = SessionWarmStartProbe.inspectSessionDiskCache(viewerID: uid)
+        let cacheWarmPath = !forceNetwork && cacheInspection.usable
+        SessionWarmStartProbe.log(cacheInspection, userID: uid, forceNetwork: forceNetwork)
+        if cacheWarmPath {
+            SessionWarmStartProbe.warmStartTrace("cacheValidated")
+        }
+
+        if !cacheWarmPath {
+            phase = .resolving
+        }
 
         do {
             let onboardingSnapshot: ProfileOnboardingSnapshot
             let profile: Profile
 
             if BackendV2FeatureFlags.isEnabled(.session), let rpc {
+                if cacheWarmPath {
+                    SessionWarmStartProbe.warmStartTrace("cacheApplyStarted")
+                }
                 let result = try await SessionBootstrapLoader.load(
                     viewerID: profileID,
                     rpc: rpc,
                     profiles: profiles,
                     detailCache: detailCache,
-                    forceNetwork: authoritative,
+                    forceNetwork: forceNetwork,
                     loadGeneration: generation,
                     currentGeneration: { [weak self] in self?.loadGeneration ?? generation }
                 )
                 profile = result.profile
                 onboardingSnapshot = result.onboardingSnapshot
                 profileStore.applyBootstrapResult(profile: profile, stats: result.stats)
+
+                if result.rpcRequestCount == 0 {
+                    SessionWarmStartProbe.warmStartTrace("cacheApplyCompleted")
+                    SessionWarmStartProbe.warmStartTrace("shellReleaseStarted")
+                    SessionWarmStartProbe.logShellRenderedFromCache(true, userID: uid)
+                    SessionWarmStartProbe.warmStartTrace("shellReleased")
+                }
             } else {
                 onboardingSnapshot = try await profiles.onboardingSnapshot(
                     for: profileID,
-                    authoritative: authoritative
+                    authoritative: forceNetwork
                 )
                 profile = try await profiles.profile(id: profileID)
                 let stats = try await profiles.stats(for: profileID)
@@ -150,6 +170,22 @@ final class ProfileOnboardingGateStore {
             if case .resolving = phase { phase = .idle }
         } catch {
             phase = .failed(UserFacingError.message(for: error))
+        }
+    }
+
+    func sessionBootstrapDidCommitNetworkRefresh(_ result: SessionBootstrapLoadResult) async {
+        profileStore.applyBootstrapResult(profile: result.profile, stats: result.stats)
+        snapshot = result.onboardingSnapshot
+        if ProfileOnboardingPolicy.profileNeedsOnboarding(result.onboardingSnapshot) {
+            if case .complete = phase {
+                phase = .required(result.onboardingSnapshot)
+                if let userID = await session.currentUserID {
+                    startRealtime(viewerID: userID.rawValue)
+                }
+            }
+        } else if case .required = phase {
+            phase = .complete
+            stopRealtime()
         }
     }
 

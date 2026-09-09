@@ -20,6 +20,7 @@ final class ClipDetailViewModel {
     private(set) var isDeleting = false
     private(set) var deleteErrorMessage: String?
     private(set) var player: AVPlayer?
+    private(set) var videoPresentation: VideoPresentationInfo?
     private(set) var didReachEnd = false
 
     let reelID: ReelID
@@ -190,5 +191,14 @@ final class ClipDetailViewModel {
         }
 
         newPlayer.play()
+
+        Task {
+            guard let info = await VideoPresentationInfo.load(url: url) else { return }
+            videoPresentation = info
+            VideoPresentationProbe.log(
+                surface: .clipsPager,
+                info: info
+            )
+        }
     }
 }
