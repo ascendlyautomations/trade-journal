@@ -28,8 +28,9 @@ export const REFUND_POLICY_SECTIONS: LegalSection[] = [
     content: (
       <>
         <p>
-          TradeTraxs subscriptions are billed in advance on a recurring basis according to the plan
-          you select (for example, monthly, six-month, or yearly).
+          TraxPro subscriptions are billed in advance on a recurring basis according to the plan
+          you select (for example, monthly, six-month, or yearly). On iOS, purchases are processed
+          by Apple through the App Store. On the website, Stripe processes web subscription payments.
         </p>
         <p>
           Because users receive immediate access to premium features upon subscribing,{" "}
@@ -51,8 +52,9 @@ export const REFUND_POLICY_SECTIONS: LegalSection[] = [
           current billing period. Your subscription will not renew after that period.
         </p>
         <p>
-          Deleting your account does not automatically cancel your subscription. Cancel billing
-          through the Stripe Customer Portal or the cancellation method provided in the Service if
+          Deleting your account does not automatically cancel your subscription. Apple subscribers
+          should cancel in iOS Settings → Apple ID → Subscriptions. Web subscribers should cancel
+          through the Stripe Customer Portal or the cancellation method provided on the website if
           you wish to stop future charges.
         </p>
       </>
@@ -64,9 +66,11 @@ export const REFUND_POLICY_SECTIONS: LegalSection[] = [
     content: (
       <>
         <p>
-          If you believe you were charged in error, please contact TradeTraxs Support at{" "}
-          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> before initiating a chargeback so
-          we can investigate and resolve the issue.
+          For web (Stripe) charges, if you believe you were billed in error, contact TradeTraxs
+          Support at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> before initiating a
+          chargeback so we can investigate. For Apple App Store purchases, refund requests are
+          handled by Apple according to Apple&apos;s policies (for example, through Report a Problem
+          in your Apple account).
         </p>
       </>
     ),

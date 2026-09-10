@@ -1,15 +1,10 @@
 import Foundation
 import ImageIO
 
-/// Production image pipeline: memory cache → public storage URL or HTTPS → optional downsample.
+/// Production image pipeline: memory cache → Supabase render URL (feed) or original → optional downsample.
 ///
-/// Mirrors web `postImageSrc` / `tradeScreenshotPublicUrl`:
-/// `/storage/v1/object/public/{bucket}/{path}` (not authenticated object GET).
-///
-/// Web feed display uses storage transforms when available and **falls back to this
-/// original object URL**. Feed/detail should request `maxPixelSize: nil` so native
-/// renders the same bytes — longest-edge client downsampling under-fills portrait
-/// width on 3× screens and SwiftUI upscales → blur.
+/// Feed surfaces use `/storage/v1/render/image/public/` transforms (web parity).
+/// Detail/zoom passes `deliveryQuality: .fullResolution` for original object bytes.
 nonisolated struct DefaultImagePipeline: ImagePipeline {
     private let cache: any ImageCaching
     private let storage: any ObjectStorageProviding
@@ -31,10 +26,26 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
     func data(for request: ImageRequest) async throws -> Data {
         let key = cacheKey(for: request)
         if let cached = await cache.imageData(forKey: key) {
+            #if DEBUG
+            let mediaID = request.reference.id.split(separator: "/").last.map(String.init)
+                ?? request.reference.id
+            MediaLoadDiagnostics.log(
+                contentType: "image/\(request.purpose.rawValue)",
+                mediaID: String(mediaID.prefix(48)),
+                source: .feedImage,
+                role: .image,
+                cacheHit: true
+            )
+            logFetchAudit(request: request, cacheKey: key, cacheHit: true, data: cached)
+            #endif
             return cached
         }
 
-        let raw = try await fetch(reference: request.reference, purpose: request.purpose)
+        let raw = try await fetch(
+            request: request,
+            cacheKey: key,
+            cacheHit: false
+        )
         let data = Self.downsampleIfNeeded(raw, maxPixelSize: request.maxPixelSize)
         if ImageFidelityTrace.isEnabled {
             let before = ImageFidelityTrace.pixelSize(of: raw)
@@ -79,10 +90,17 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
     // MARK: - Private
 
     private func cacheKey(for request: ImageRequest) -> String {
-        "\(request.reference.id)|\(request.purpose.rawValue)|\(request.maxPixelSize ?? 0)"
+        "\(request.reference.id)|\(request.purpose.rawValue)|\(request.deliveryQuality.rawValue)|\(request.maxPixelSize ?? 0)"
     }
 
-    private func fetch(reference: MediaReference, purpose: ImagePurpose) async throws -> Data {
+    private func fetch(
+        request: ImageRequest,
+        cacheKey: String,
+        cacheHit: Bool
+    ) async throws -> Data {
+        let reference = request.reference
+        let purpose = request.purpose
+        let deliveryQuality = request.deliveryQuality
         let identifier = reference.id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !identifier.isEmpty else {
             throw AppError.network(.validation(statusCode: nil, message: "Empty media reference"))
@@ -94,17 +112,125 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
             bucket: Self.storageBucket(for: purpose),
             storage: storage
         ) {
-            return try await fetchURLWithTransientRetry(url)
+            let preset = StorageImageTransform.preset(for: purpose, delivery: deliveryQuality)
+            let fetchURL: URL
+            if let preset {
+                fetchURL = StorageImageTransform.optimizedURL(for: url, preset: preset)
+            } else {
+                fetchURL = url
+            }
+
+            do {
+                let data = try await fetchURLWithTransientRetry(fetchURL, request: request)
+                #if DEBUG
+                let mediaID = reference.id.split(separator: "/").last.map(String.init) ?? reference.id
+                MediaLoadDiagnostics.log(
+                    contentType: "image/\(purpose.rawValue)",
+                    mediaID: String(mediaID.prefix(48)),
+                    source: .feedImage,
+                    role: .image,
+                    urlIdentity: StorageImageTransform.urlIdentity(for: fetchURL),
+                    byteCount: data.count,
+                    cacheHit: false
+                )
+                logFetchAudit(
+                    request: request,
+                    cacheKey: cacheKey,
+                    cacheHit: cacheHit,
+                    data: data,
+                    objectURL: url,
+                    fetchURL: fetchURL.absoluteString,
+                    preset: preset
+                )
+                #endif
+                return data
+            } catch {
+                // Transform unavailable — fall back to original only on genuine transform failure.
+                // Never fall back on cancellation (SwiftUI task teardown would double-fetch).
+                if fetchURL != url, !Self.shouldSkipTransformFallback(for: error) {
+                    let data = try await fetchURLWithTransientRetry(url, request: request)
+                    #if DEBUG
+                    logFetchAudit(
+                        request: request,
+                        cacheKey: cacheKey,
+                        cacheHit: cacheHit,
+                        data: data,
+                        objectURL: url,
+                        fetchURL: url.absoluteString,
+                        preset: nil,
+                        transformFallback: true
+                    )
+                    #endif
+                    return data
+                }
+                throw error
+            }
         }
 
         // Last resort — authenticated download (private buckets / unconfigured public URL).
-        return try await downloadService.download(
+        let data = try await downloadService.download(
             DownloadRequest(bucket: Self.storageBucket(for: purpose).rawValue, path: identifier)
         )
+        #if DEBUG
+        MediaEgressTracker.recordNetworkTransfer(
+            type: MediaEgressTracker.mediaType(for: purpose),
+            surface: MediaEgressTracker.surface(for: request),
+            mediaID: request.auditMediaID,
+            bytes: data.count
+        )
+        logFetchAudit(
+            request: request,
+            cacheKey: cacheKey,
+            cacheHit: cacheHit,
+            data: data,
+            objectURL: nil,
+            fetchURL: "download://\(Self.storageBucket(for: purpose).rawValue)/\(identifier)",
+            preset: nil
+        )
+        #endif
+        return data
     }
 
+    #if DEBUG
+    private func logFetchAudit(
+        request: ImageRequest,
+        cacheKey: String,
+        cacheHit: Bool,
+        data: Data,
+        objectURL: URL? = nil,
+        fetchURL: String? = nil,
+        preset: StorageImageTransform.Preset? = nil,
+        transformFallback: Bool = false
+    ) {
+        let encoded = MediaPipelineAudit.encodedPixelSize(of: data)
+        let presetInfo = preset.map { MediaPipelineAudit.describePreset($0) }
+        var params = presetInfo?.params
+        if transformFallback {
+            params = (params ?? "none") + " FALLBACK=originalObject"
+        }
+        MediaPipelineAudit.logFetch(
+            MediaPipelineAudit.FetchReport(
+                surface: request.auditSurface.isEmpty ? "unknown" : request.auditSurface,
+                mediaID: request.auditMediaID,
+                storageReference: request.reference.id,
+                purpose: request.purpose.rawValue,
+                deliveryQuality: request.deliveryQuality.rawValue,
+                cacheKey: cacheKey,
+                cacheHit: cacheHit,
+                objectURL: objectURL?.absoluteString,
+                fetchURL: fetchURL ?? objectURL?.absoluteString ?? request.reference.id,
+                transformPreset: presetInfo?.name,
+                transformParams: params,
+                byteCount: data.count,
+                encodedPixelWidth: encoded?.width,
+                encodedPixelHeight: encoded?.height
+            )
+        )
+    }
+    #endif
+
     /// Short bounded retry for flaky cellular / brief outages (idempotent GET).
-    private func fetchURLWithTransientRetry(_ url: URL) async throws -> Data {
+    private func fetchURLWithTransientRetry(_ url: URL, request: ImageRequest) async throws -> Data {
         let maximumAttempts = 3
         var lastError: Error?
         for attempt in 1...maximumAttempts {
@@ -133,6 +259,14 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
                         )
                     )
                 }
+                #if DEBUG
+                MediaEgressTracker.recordNetworkTransfer(
+                    type: MediaEgressTracker.mediaType(for: request.purpose),
+                    surface: MediaEgressTracker.surface(for: request),
+                    mediaID: request.auditMediaID,
+                    bytes: data.count
+                )
+                #endif
                 return data
             } catch let error as URLError where Self.isTransientURLError(error) {
                 lastError = error
@@ -145,6 +279,12 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
             throw lastError
         }
         throw AppError.network(.connectivity)
+    }
+
+    private static func shouldSkipTransformFallback(for error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        return false
     }
 
     private static func isTransientURLError(_ error: URLError) -> Bool {

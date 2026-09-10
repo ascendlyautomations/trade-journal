@@ -248,8 +248,10 @@ final class FeedExperienceTests: XCTestCase {
         let ownViewer = FeedStoryViewerViewModel(
             storyID: ownStory.id,
             feed: FeedStubFeedRepository(),
+            messages: FeedStubMessageRepository(),
             session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
             cache: cache,
+            objectStorage: FeedStubObjectStorage(),
             onDismiss: {}
         )
         await ownViewer.loadIfNeeded()
@@ -258,8 +260,10 @@ final class FeedExperienceTests: XCTestCase {
         let otherViewer = FeedStoryViewerViewModel(
             storyID: otherStory.id,
             feed: FeedStubFeedRepository(),
+            messages: FeedStubMessageRepository(),
             session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
             cache: cache,
+            objectStorage: FeedStubObjectStorage(),
             onDismiss: {}
         )
         await otherViewer.loadIfNeeded()
@@ -853,6 +857,58 @@ private struct FeedStubAchievementRepository: AchievementRepository {
     }
 
     func save(_ achievement: Achievement) async throws -> Achievement { achievement }
+}
+
+private struct FeedStubMessageRepository: MessageRepository {
+    func conversations(page: PageRequest) async throws -> ConversationListResult {
+        ConversationListResult(items: [], nextCursor: nil, embeddedProfiles: [])
+    }
+
+    func conversation(id: ConversationID) async throws -> Conversation {
+        throw AppError.notImplemented(feature: "conversation")
+    }
+
+    func messages(in conversationID: ConversationID, page: PageRequest) async throws -> CursorPage<Message> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func send(_ message: Message) async throws -> Message { message }
+    func markRead(conversationID: ConversationID) async throws {}
+    func markUnread(conversationID: ConversationID) async throws {}
+    func createConversation(participantIDs: [ProfileID]) async throws -> Conversation {
+        throw AppError.notImplemented(feature: "createConversation")
+    }
+
+    func findExistingDirectConversationID(viewerID: ProfileID, recipientID: ProfileID) async throws -> ConversationID? {
+        nil
+    }
+
+    func usersHaveActiveBlock(viewerID: ProfileID, otherID: ProfileID) async -> Bool { false }
+
+    func createDirectConversation(viewerID: ProfileID, recipient: Profile) async throws -> Conversation {
+        throw AppError.notImplemented(feature: "createDirectConversation")
+    }
+
+    func createGroupConversation(viewerID: ProfileID, recipients: [Profile], name: String?) async throws -> Conversation {
+        throw AppError.notImplemented(feature: "createGroupConversation")
+    }
+
+    func deleteConversation(id: ConversationID) async throws {}
+    func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws {}
+    func setConversationNotificationsEnabled(conversationID: ConversationID, enabled: Bool) async throws {}
+    func fetchActiveBlockPeerIDs() async throws -> Set<ProfileID> { [] }
+}
+
+private struct FeedStubObjectStorage: ObjectStorageProviding {
+    func upload(bucket: String, path: String, data: Data, contentType: String, cacheControl: String?) async throws -> String {
+        path
+    }
+
+    func download(bucket: String, path: String) async throws -> Data { Data() }
+    func delete(bucket: String, path: String) async throws {}
+    func publicURL(bucket: String, path: String) -> URL? {
+        URL(string: "https://example.com/\(path)")
+    }
 }
 
 private struct FeedStubInteractionRepository: InteractionRepository {

@@ -337,6 +337,7 @@ final class ConversationViewModel {
         realtimeTask?.cancel()
         realtimeTask = Task { [weak self] in
             guard let self else { return }
+            await realtimeHub?.stopWatchingConversationMessages(conversationID: conversationID)
             // Register topic + join web-equivalent messages postgres_changes. Remain idle — no polling.
             let channel = RealtimeChannelID(
                 kind: .conversation,

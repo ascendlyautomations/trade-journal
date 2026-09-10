@@ -29,6 +29,7 @@ export type NotificationRecord = {
   achievement_post_id: string | null
   reel_id: string | null
   comment_id: string | null
+  room_id: string | null
   content: string | null
   read: boolean
   created_at: string

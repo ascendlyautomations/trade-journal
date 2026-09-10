@@ -2,6 +2,14 @@ import { describe, it } from "node:test"
 import { ANALYZE_TRADE_SYSTEM_PROMPT, buildAnalyzeTradeHistoryContext, buildTradeAnalysisPrompt, formatTradeDataSection, } from "./analyzeTradePrompt.ts"
 import assert from "node:assert/strict"
 
+describe("ANALYZE_TRADE_SYSTEM_PROMPT", () => {
+  it("instructs the model not to provide investment advice or guarantees", () => {
+    assert.match(ANALYZE_TRADE_SYSTEM_PROMPT, /NOT a licensed financial adviser/i)
+    assert.match(ANALYZE_TRADE_SYSTEM_PROMPT, /Do NOT guarantee profits/i)
+    assert.match(ANALYZE_TRADE_SYSTEM_PROMPT, /Do NOT provide personalized investment advice/i)
+  })
+})
+
 describe("formatTradeDataSection", () => {
   it("includes only populated fields", () => {
     const section = formatTradeDataSection({

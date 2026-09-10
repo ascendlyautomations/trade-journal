@@ -17,6 +17,7 @@ import { devLog, devWarn } from "@/lib/devLog"
 import { deleteUserTrade } from "@/lib/deleteTrade"
 import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
 import { compressImage } from "@/lib/compressImage"
+import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "@/lib/storageCacheControl"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
   createMonotonicReporter,
@@ -1816,21 +1817,52 @@ function ProfilePageContent() {
       })
       setMetaLoading(true)
       try {
-        const meta = await applyProfileMetadata(segment, ownHeader, uid)
-        writeProfileSession(segment, {
-          profile: ownHeader,
-          room: null,
-          roomReady: false,
-          followersCount: meta.followersN,
-          followingCount: meta.followingN,
-          isFollowing: meta.following,
-          isRequested: meta.requested,
-          followsYou: meta.profileFollowsYou,
-          allTrades: [],
-          wallPosts: [],
-          visibleTradeCount: PAGE_SIZE,
-          scrollY: 0,
-        })
+        const viewerKey = profileBootstrapViewerKey(uid)
+        const bootstrapCached = readProfileBootstrapCache(viewerKey, segment)
+        if (bootstrapCached.entry?.loadResult?.profile) {
+          applyBootstrapLoadResult(bootstrapCached.entry.loadResult, segment)
+        } else if (isBackendV2Enabled("profile")) {
+          const loaded = await loadProfileBootstrapWithResilience(supabase, {
+            identifier: segment,
+            viewerId: uid,
+            signal,
+          })
+          if (loaded.result?.profile) {
+            applyBootstrapLoadResult(loaded.result, segment)
+          } else {
+            const meta = await applyProfileMetadata(segment, ownHeader, uid)
+            writeProfileSession(segment, {
+              profile: ownHeader,
+              room: null,
+              roomReady: false,
+              followersCount: meta.followersN,
+              followingCount: meta.followingN,
+              isFollowing: meta.following,
+              isRequested: meta.requested,
+              followsYou: meta.profileFollowsYou,
+              allTrades: [],
+              wallPosts: [],
+              visibleTradeCount: PAGE_SIZE,
+              scrollY: 0,
+            })
+          }
+        } else {
+          const meta = await applyProfileMetadata(segment, ownHeader, uid)
+          writeProfileSession(segment, {
+            profile: ownHeader,
+            room: null,
+            roomReady: false,
+            followersCount: meta.followersN,
+            followingCount: meta.followingN,
+            isFollowing: meta.following,
+            isRequested: meta.requested,
+            followsYou: meta.profileFollowsYou,
+            allTrades: [],
+            wallPosts: [],
+            visibleTradeCount: PAGE_SIZE,
+            scrollY: 0,
+          })
+        }
       } finally {
         setMetaLoading(false)
       }
@@ -2082,7 +2114,8 @@ function ProfilePageContent() {
                 bucket: "profile_posts",
                 path: fileName,
                 file: uploadFile,
-                upsert: true,
+                upsert: false,
+                cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
                 onProgress: (loaded, total) => {
                   mediaReport({
                     percent: mapUploadBytesToPercent(loaded, total, {

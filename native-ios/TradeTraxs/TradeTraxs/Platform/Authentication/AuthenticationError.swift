@@ -8,6 +8,7 @@ nonisolated enum AuthenticationError: Error, Sendable, Equatable {
     case invalidPassword
     case sessionExpired
     case sessionMissing
+    case emailConfirmationRequired(email: String)
     case refreshFailed
     case providerUnavailable(AuthenticationProviderKind)
     case providerMisconfigured(AuthenticationProviderKind)

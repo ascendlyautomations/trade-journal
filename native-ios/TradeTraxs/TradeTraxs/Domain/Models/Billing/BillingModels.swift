@@ -35,6 +35,7 @@ nonisolated struct BillingStatus: Hashable, Codable, Sendable {
     var profileID: ProfileID
     var plan: SubscriptionPlan
     var lifecycle: SubscriptionLifecycle
+    /// Legacy Stripe-only flag — prefer ``hasTraxProAccess`` / ``entitlementSource``.
     var isProEntitled: Bool
     var dailyTradeLimit: Int?
     var dailyPostLimit: Int?
@@ -44,4 +45,17 @@ nonisolated struct BillingStatus: Hashable, Codable, Sendable {
     var currentPeriodEndsAt: Date? = nil
     var billingInterval: BillingInterval? = nil
     var cancelAtPeriodEnd: Bool = false
+    var creatorAccess: Bool = false
+    var subscriptionStatusRaw: String? = nil
+    var earlyAccessStatus: String? = nil
+    var earlyAccessCampaignID: String? = nil
+    var earlyAccessEnrollmentSource: String? = nil
+    var earlyAccessEnrolledAt: Date? = nil
+    var earlyAccessStartedAt: Date? = nil
+    var earlyAccessEndsAt: Date? = nil
+    var appleSubscriptionStatus: String? = nil
+    var appleExpiresAt: Date? = nil
+    var appleRevokedAt: Date? = nil
+    var appleProductID: String? = nil
+    var entitlementSource: TraxProEntitlementSource = .none
 }

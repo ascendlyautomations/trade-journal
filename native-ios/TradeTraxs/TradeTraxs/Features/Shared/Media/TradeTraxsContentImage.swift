@@ -44,62 +44,54 @@ struct TradeTraxsContentImage: View {
         let bg = backgroundColor ?? colors.fillSecondary
 
         if let fixedSize {
-            let presentation = resolvedPresentation(imageAspect: aspect, containerWidth: fixedSize.width)
-            let metrics = FeedMediaLayout.frameMetrics(
-                containerWidth: fixedSize.width,
-                imageAspect: aspect,
-                presentation: presentation
-            )
-            let containerSize = CGSize(
-                width: fixedSize.width,
-                height: presentation.requiresFramedViewport
-                    ? min(fixedSize.height, metrics.containerHeight)
-                    : fixedSize.height
-            )
+            let legacyCrop = explicitLegacyCropPresentation
             ZStack {
                 bg
-                ContentImageFramedImage(
-                    image: image,
-                    presentation: presentation,
-                    containerSize: containerSize
-                )
+                if let legacyCrop {
+                    ContentImageFramedImage(
+                        image: image,
+                        presentation: legacyCrop,
+                        containerSize: fixedSize
+                    )
+                } else {
+                    Image(uiImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(aspect, contentMode: .fit)
+                        .frame(width: fixedSize.width, height: fixedSize.height)
+                }
             }
             .frame(width: fixedSize.width, height: fixedSize.height)
             .clipped()
-            .onAppear {
-                CropRenderProbe.log(
-                    surface: surface.rawValue,
-                    selectedMode: presentation.aspectMode.rawValue,
-                    presentationAspectRatio: presentation.presentationAspectRatio,
-                    cropRect: presentation.resolvedCrop(imagePixelSize: MediaImageOrientation.pixelSize(of: image)),
-                    containerWidth: fixedSize.width,
-                    containerHeight: fixedSize.height
-                )
-            }
         } else {
+            let legacyCrop = explicitLegacyCropPresentation
+            let usesDetailLikeLayout = usesDetailLayout || legacyCrop == nil
             AdaptiveInlineMediaContainer(
                 imageAspect: aspect,
-                feedPresentationForWidth: usesDetailLayout
-                    ? nil
-                    : { width in
-                        resolvedPresentation(imageAspect: aspect, containerWidth: width)
-                    },
+                feedPresentationForWidth: usesDetailLikeLayout ? nil : { _ in legacyCrop! },
                 renderSurface: surface.rawValue,
                 renderMediaID: mediaID,
                 background: bg
             ) { metrics in
-                let presentation = resolvedPresentation(
-                    imageAspect: aspect,
-                    containerWidth: metrics.containerWidth
-                )
-                ContentImageFramedImage(
-                    image: image,
-                    presentation: presentation,
-                    containerSize: CGSize(
-                        width: metrics.containerWidth,
-                        height: metrics.containerHeight
+                if usesDetailLikeLayout {
+                    Image(uiImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(aspect, contentMode: .fit)
+                        .frame(
+                            width: metrics.containerWidth,
+                            height: metrics.containerHeight
+                        )
+                } else {
+                    ContentImageFramedImage(
+                        image: image,
+                        presentation: legacyCrop!,
+                        containerSize: CGSize(
+                            width: metrics.containerWidth,
+                            height: metrics.containerHeight
+                        )
                     )
-                )
+                }
             }
         }
     }
@@ -126,17 +118,13 @@ struct TradeTraxsContentImage: View {
         return false
     }
 
-    private func resolvedPresentation(
-        imageAspect: CGFloat,
-        containerWidth: CGFloat
-    ) -> ContentImagePresentation {
-        if let presentationOverride { return presentationOverride }
-        if let fromReference = reference?.imagePresentation { return fromReference }
-        if let reference,
-           let stored = ContentImagePresentationStore.presentation(forMediaURL: reference.id) {
-            return stored
+    private var explicitLegacyCropPresentation: ContentImagePresentation? {
+        if let presentationOverride {
+            return ContentImagePresentation.explicitLegacyCrop(from: presentationOverride)
         }
-        return ContentImagePresentation.inferredLegacy(imageAspect: imageAspect)
+        return ContentImagePresentation.explicitLegacyCrop(
+            from: ContentImagePresentation.storedPresentation(for: reference)
+        )
     }
 
     private func loadDisplayImage() async {
@@ -150,7 +138,8 @@ struct TradeTraxsContentImage: View {
                     reference: reference,
                     purpose: purpose,
                     maxPixelSize: nil,
-                    allowsProgressiveLoading: true
+                    allowsProgressiveLoading: true,
+                    deliveryQuality: usesDetailLayout ? .fullResolution : .feedDisplay
                 )
             )
             let scale = displayScale

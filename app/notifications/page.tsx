@@ -69,7 +69,7 @@ import {
 const NOTIFICATIONS_TABLE = "notifications"
 
 const NOTIFICATION_SELECT =
-  "id, user_id, sender_id, type, post_id, trade_id, profile_post_id, achievement_post_id, reel_id, comment_id, content, read, created_at"
+  "id, user_id, sender_id, type, post_id, trade_id, profile_post_id, achievement_post_id, reel_id, comment_id, room_id, content, read, created_at"
 
 const INBOX_TYPES = NOTIFICATION_INBOX_TYPES
 

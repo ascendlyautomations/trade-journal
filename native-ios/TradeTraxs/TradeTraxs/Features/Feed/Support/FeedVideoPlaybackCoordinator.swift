@@ -16,6 +16,11 @@ final class FeedVideoPlaybackCoordinator {
         static let minimumPlaybackSeconds: Double = 0.15
     }
 
+    private enum PrefetchBufferPolicy {
+        /// Neighbor clip — warm start without downloading the full object.
+        static let forwardBufferSeconds: TimeInterval = 3
+    }
+
     private struct InlineClipSessionState {
         var lastPlaybackTime: CMTime = .zero
         var frozenFrame: UIImage?
@@ -496,6 +501,7 @@ final class FeedVideoPlaybackCoordinator {
         let prepToken = preparationGeneration[reelID]!
 
         let item = AVPlayerItem(url: url)
+        configurePrefetchItem(item)
         let player = AVPlayer(playerItem: item)
         applyAudioState(to: player)
         player.actionAtItemEnd = .pause
@@ -524,6 +530,17 @@ final class FeedVideoPlaybackCoordinator {
             isVisible: false,
             isCurrentPage: false
         )
+        #if DEBUG
+        MediaLoadDiagnostics.log(
+            contentType: "video/mp4",
+            mediaID: reelID.rawValue,
+            source: .clipsPrefetch,
+            role: .prefetch,
+            urlIdentity: reel.playbackURLIdentity,
+            playerCreated: true,
+            playerReused: false
+        )
+        #endif
     }
 
     private func prepareAndPlay(_ reel: Reel, isCurrentPage: Bool? = nil, reason: String = "becameActive") {
@@ -539,6 +556,20 @@ final class FeedVideoPlaybackCoordinator {
         let prepToken = preparationGeneration[reelID]!
 
         if let existing = players[reelID] {
+            if let item = existing.currentItem {
+                configureActiveItem(item)
+            }
+            #if DEBUG
+            MediaLoadDiagnostics.log(
+                contentType: "video/mp4",
+                mediaID: reelID.rawValue,
+                source: isClipsExperience ? .clipsPager : .feedInline,
+                role: .active,
+                urlIdentity: reel.playbackURLIdentity,
+                playerCreated: false,
+                playerReused: true
+            )
+            #endif
             playPlayer(
                 existing,
                 reelID: reelID,
@@ -559,6 +590,7 @@ final class FeedVideoPlaybackCoordinator {
         }
 
         let item = AVPlayerItem(url: url)
+        configureActiveItem(item)
         let player = AVPlayer(playerItem: item)
         applyAudioState(to: player)
         player.actionAtItemEnd = .pause
@@ -581,6 +613,17 @@ final class FeedVideoPlaybackCoordinator {
             isVisible: isClipsExperience ? (activeReelID == reelID) : ((clipVisibilityFractions[reelID] ?? 0) > 0),
             isCurrentPage: isCurrentPage
         )
+        #if DEBUG
+        MediaLoadDiagnostics.log(
+            contentType: "video/mp4",
+            mediaID: reelID.rawValue,
+            source: isClipsExperience ? .clipsPager : .feedInline,
+            role: .active,
+            urlIdentity: reel.playbackURLIdentity,
+            playerCreated: true,
+            playerReused: false
+        )
+        #endif
 
         warmPresentation(for: reel, prepToken: prepToken, asset: item.asset)
         startPlayback(
@@ -807,8 +850,34 @@ final class FeedVideoPlaybackCoordinator {
             transferDuration: event.transferDuration,
             observedBitrate: event.observedBitrate
         )
+        if delta > 0 {
+            MediaEgressTracker.recordNetworkTransfer(
+                type: .video,
+                surface: isClipsExperience ? "clips" : "feed",
+                mediaID: reelID.rawValue,
+                bytes: Int(delta)
+            )
+        }
+        MediaLoadDiagnostics.log(
+            contentType: "video/mp4",
+            mediaID: reelID.rawValue,
+            source: isClipsExperience ? .clipsPager : .feedInline,
+            role: activeReelID == reelID ? .active : .prefetch,
+            byteCount: Int(cumulative),
+            cacheHit: delta == 0 && cumulative > 0
+        )
     }
     #endif
+
+    private func configurePrefetchItem(_ item: AVPlayerItem) {
+        item.preferredForwardBufferDuration = PrefetchBufferPolicy.forwardBufferSeconds
+        item.canUseNetworkResourcesForLiveStreamingWhilePaused = false
+    }
+
+    private func configureActiveItem(_ item: AVPlayerItem) {
+        item.preferredForwardBufferDuration = 0
+        item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
+    }
 
     private func hardReleasePlayer(for reelID: ReelID, reason: String) {
         preparationGeneration[reelID, default: 0] &+= 1

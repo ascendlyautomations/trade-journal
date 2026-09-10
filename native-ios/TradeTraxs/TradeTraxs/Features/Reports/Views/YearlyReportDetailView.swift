@@ -65,6 +65,9 @@ struct YearlyReportDetailView: View {
                         onOpenMonth: { viewModel.openMonth($0) }
                     )
                     .padding(.horizontal, ExperienceSpacing.md)
+
+                    ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.performanceReport)
+                        .padding(.horizontal, ExperienceSpacing.md)
                 }
             }
             .padding(.bottom, ExperienceSpacing.xxxl)

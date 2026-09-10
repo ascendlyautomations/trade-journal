@@ -139,6 +139,13 @@ final class StoryPlaybackController {
         let newPlayer = AVPlayer(playerItem: item)
         newPlayer.actionAtItemEnd = .pause
         player = newPlayer
+        #if DEBUG
+        MediaEgressTracker.installVideoAccessLog(
+            on: item,
+            mediaID: storyID.rawValue,
+            surface: "stories"
+        )
+        #endif
 
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,

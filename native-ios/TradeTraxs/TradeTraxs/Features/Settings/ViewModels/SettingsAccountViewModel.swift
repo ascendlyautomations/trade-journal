@@ -167,11 +167,21 @@ final class SettingsAccountViewModel {
 
     private var subscriptionNoticeForDeletion: String? {
         guard let billingStatus else { return nil }
+        guard billingStatus.hasTraxProAccess else { return nil }
+
+        if billingStatus.entitlementSource == .apple {
+            return """
+            You have an active TraxPro subscription through the Apple App Store. Deleting your TradeTraxs account \
+            removes your profile and data here, but does not cancel your Apple subscription. Manage or cancel it in \
+            Settings → Apple ID → Subscriptions, or use Manage Subscription in TradeTraxs Settings.
+            """
+        }
+
         switch billingStatus.lifecycle {
         case .active, .trialing, .pastDue:
             break
         case .canceled, .expired, .none:
-            guard billingStatus.isProEntitled else { return nil }
+            return nil
         }
 
         let planLabel: String = {
@@ -186,8 +196,9 @@ final class SettingsAccountViewModel {
 
         return """
         You currently have an active \(planLabel). Deleting your TradeTraxs account removes your profile and data. \
-        Stripe billing tied to this account is cancelled when deletion succeeds, but deleting here does not replace \
-        any separate subscription-management requirements with your payment provider.
+        Web (Stripe) billing tied to this account is cancelled when deletion succeeds. Deleting here does not \
+        automatically cancel an Apple App Store subscription—manage Apple billing separately in Settings → Apple ID \
+        → Subscriptions.
         """
     }
 }

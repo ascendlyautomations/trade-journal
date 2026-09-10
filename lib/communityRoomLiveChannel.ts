@@ -58,8 +58,15 @@ export function subscribeCommunityRoomLiveChannel(
     presence,
   } = options
 
+  const topic = `room-live-${roomId}`
+  supabase.getChannels().forEach((c) => {
+    if (c.topic === topic) {
+      void supabase.removeChannel(c)
+    }
+  })
+
   const channel = presence
-    ? supabase.channel(`room-live-${roomId}`, {
+    ? supabase.channel(topic, {
         config: {
           presence: {
             key: presence.presenceKey,
@@ -67,7 +74,7 @@ export function subscribeCommunityRoomLiveChannel(
           },
         },
       })
-    : supabase.channel(`room-live-${roomId}`)
+    : supabase.channel(topic)
 
   channel.on(
     "postgres_changes",

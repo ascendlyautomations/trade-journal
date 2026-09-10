@@ -209,6 +209,25 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         lock.withLock { _ in body() }
     }
 
+    private struct RouteLifecycleSnapshot: Sendable {
+        var activeRoutes: Int
+        var joinedTopics: Int
+        var messageConsumers: Int
+        var consumerCount: (String) -> Int
+    }
+
+    private func routeLifecycleSnapshot(routeKey: String? = nil) -> RouteLifecycleSnapshot {
+        withLocked {
+            let messageContinuations = continuations
+            return RouteLifecycleSnapshot(
+                activeRoutes: specsByRouteKey.count,
+                joinedTopics: joinedTopics.count,
+                messageConsumers: messageContinuations.values.reduce(0) { $0 + $1.count },
+                consumerCount: { key in messageContinuations[key]?.count ?? 0 }
+            )
+        }
+    }
+
     var isConnected: Bool {
         withLocked { _isConnected }
     }
@@ -249,6 +268,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         }
         startReceiveLoopIfNeeded()
         startHeartbeat()
+        RealtimeLifecycleDebugLog.connect()
     }
 
     func disconnect() async {
@@ -256,6 +276,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         reconnectTask = nil
         heartbeatTask?.cancel()
         heartbeatTask = nil
+        let routesBeforeDisconnect = routeLifecycleSnapshot().activeRoutes
         withLocked {
         intentionalDisconnect = true
         webSocketTask?.cancel(with: .goingAway, reason: nil)
@@ -294,6 +315,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         }
         commentPinContinuations.removeAll()
         }
+        RealtimeLifecycleDebugLog.disconnect(activeRoutes: routesBeforeDisconnect)
     }
 
     /// Foreground / network recovery — reconnect and rejoin active watches without
@@ -302,6 +324,11 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         let (connected, hasSpecs) = withLocked {
             (_isConnected, !specsByRouteKey.isEmpty)
         }
+        let snapshot = routeLifecycleSnapshot()
+        RealtimeLifecycleDebugLog.foregroundResume(
+            connected: connected,
+            activeRoutes: snapshot.activeRoutes
+        )
         if connected { return }
         if hasSpecs {
             await reconnectAndRejoin()
@@ -350,7 +377,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         let messages = AsyncStream<MessageRealtimeSignal> { continuation in
             Task {
                 try? await self.ensureConnected()
-                let needsJoin = self.withLocked {
+                let startState = self.withLocked { () -> (needsJoin: Bool, consumers: Int) in
                     self.continuations[routeKey, default: []].append(continuation)
                     self.specsByRouteKey[routeKey] = spec
                     self.accessTokensByRouteKey[routeKey] = accessToken
@@ -359,13 +386,23 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                     } else {
                         self.presenceTrackConfigByRouteKey.removeValue(forKey: routeKey)
                     }
+                    let consumers = self.continuations[routeKey]?.count ?? 0
                     let needsJoin = !self.joinedTopics.contains(spec.topic)
                     if needsJoin {
                         self.joinedTopics.insert(spec.topic)
                     }
-                    return needsJoin
+                    return (needsJoin, consumers)
                 }
-                if needsJoin {
+                let snapshot = self.routeLifecycleSnapshot(routeKey: routeKey)
+                RealtimeLifecycleDebugLog.start(
+                    routeKey: routeKey,
+                    topic: spec.topic,
+                    consumers: startState.consumers,
+                    activeRoutes: snapshot.activeRoutes,
+                    joinedTopics: snapshot.joinedTopics,
+                    newJoin: startState.needsJoin
+                )
+                if startState.needsJoin {
                     await self.joinChannel(spec, accessToken: accessToken)
                 } else if presenceTrack != nil {
                     await self.trackRoomPresenceIfNeeded(routeKey: routeKey, topic: spec.topic)
@@ -727,18 +764,28 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                         ),
                     ]
                 )
-                let needsJoin = self.withLocked {
+                let startState = self.withLocked { () -> (needsJoin: Bool, consumers: Int) in
                     self.commentLikeContinuations[routeKey, default: []].append(continuation)
                     self.commentLikeSpecsByRouteKey[routeKey] = spec
                     self.specsByRouteKey[routeKey] = joinSpec
                     self.accessTokensByRouteKey[routeKey] = accessToken
+                    let consumers = self.commentLikeContinuations[routeKey]?.count ?? 0
                     let needsJoin = !self.joinedTopics.contains(topic)
                     if needsJoin {
                         self.joinedTopics.insert(topic)
                     }
-                    return needsJoin
+                    return (needsJoin, consumers)
                 }
-                if needsJoin {
+                let snapshot = self.routeLifecycleSnapshot(routeKey: routeKey)
+                RealtimeLifecycleDebugLog.start(
+                    routeKey: routeKey,
+                    topic: topic,
+                    consumers: startState.consumers,
+                    activeRoutes: snapshot.activeRoutes,
+                    joinedTopics: snapshot.joinedTopics,
+                    newJoin: startState.needsJoin
+                )
+                if startState.needsJoin {
                     await self.joinChannel(joinSpec, accessToken: accessToken)
                 }
                 continuation.onTermination = { _ in }
@@ -770,11 +817,20 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         }
         let conts = cleanup.0
         let spec = cleanup.1
+        let snapshot = routeLifecycleSnapshot(routeKey: routeKey)
+        RealtimeLifecycleDebugLog.stop(
+            routeKey: routeKey,
+            topic: spec?.topic,
+            consumersRemoved: conts.count,
+            activeRoutes: snapshot.activeRoutes,
+            joinedTopics: snapshot.joinedTopics,
+            willLeave: spec != nil
+        )
         for continuation in conts {
             continuation.finish()
         }
         if let spec {
-            await leaveChannel(topic: spec.topic)
+            await leaveChannel(topic: spec.topic, routeKey: routeKey)
         }
     }
 
@@ -805,17 +861,27 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                         ),
                     ]
                 )
-                let needsJoin = self.withLocked {
+                let startState = self.withLocked { () -> (needsJoin: Bool, consumers: Int) in
                     self.commentPinContinuations[routeKey, default: []].append(continuation)
                     self.specsByRouteKey[routeKey] = joinSpec
                     self.accessTokensByRouteKey[routeKey] = accessToken
+                    let consumers = self.commentPinContinuations[routeKey]?.count ?? 0
                     let needsJoin = !self.joinedTopics.contains(topic)
                     if needsJoin {
                         self.joinedTopics.insert(topic)
                     }
-                    return needsJoin
+                    return (needsJoin, consumers)
                 }
-                if needsJoin {
+                let snapshot = self.routeLifecycleSnapshot(routeKey: routeKey)
+                RealtimeLifecycleDebugLog.start(
+                    routeKey: routeKey,
+                    topic: topic,
+                    consumers: startState.consumers,
+                    activeRoutes: snapshot.activeRoutes,
+                    joinedTopics: snapshot.joinedTopics,
+                    newJoin: startState.needsJoin
+                )
+                if startState.needsJoin {
                     await self.joinChannel(joinSpec, accessToken: accessToken)
                 }
                 continuation.onTermination = { _ in }
@@ -836,11 +902,20 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         }
         let conts = cleanup.0
         let spec = cleanup.1
+        let snapshot = routeLifecycleSnapshot(routeKey: routeKey)
+        RealtimeLifecycleDebugLog.stop(
+            routeKey: routeKey,
+            topic: spec?.topic,
+            consumersRemoved: conts.count,
+            activeRoutes: snapshot.activeRoutes,
+            joinedTopics: snapshot.joinedTopics,
+            willLeave: spec != nil
+        )
         for continuation in conts {
             continuation.finish()
         }
         if let spec {
-            await leaveChannel(topic: spec.topic)
+            await leaveChannel(topic: spec.topic, routeKey: routeKey)
         }
     }
 
@@ -871,17 +946,27 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         AsyncStream { continuation in
             Task {
                 try? await self.ensureConnected()
-                let needsJoin = self.withLocked {
+                let startState = self.withLocked { () -> (needsJoin: Bool, consumers: Int) in
                     self.continuations[spec.routeKey, default: []].append(continuation)
                     self.specsByRouteKey[spec.routeKey] = spec
                     self.accessTokensByRouteKey[spec.routeKey] = accessToken
+                    let consumers = self.continuations[spec.routeKey]?.count ?? 0
                     let needsJoin = !self.joinedTopics.contains(spec.topic)
                     if needsJoin {
                         self.joinedTopics.insert(spec.topic)
                     }
-                    return needsJoin
+                    return (needsJoin, consumers)
                 }
-                if needsJoin {
+                let snapshot = self.routeLifecycleSnapshot(routeKey: spec.routeKey)
+                RealtimeLifecycleDebugLog.start(
+                    routeKey: spec.routeKey,
+                    topic: spec.topic,
+                    consumers: startState.consumers,
+                    activeRoutes: snapshot.activeRoutes,
+                    joinedTopics: snapshot.joinedTopics,
+                    newJoin: startState.needsJoin
+                )
+                if startState.needsJoin {
                     await self.joinChannel(spec, accessToken: accessToken)
                 }
                 continuation.onTermination = { _ in }
@@ -910,6 +995,15 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         let messageContinuations = cleanup.0
         let presenceConts = cleanup.1
         let spec = cleanup.2
+        let snapshot = routeLifecycleSnapshot(routeKey: routeKey)
+        RealtimeLifecycleDebugLog.stop(
+            routeKey: routeKey,
+            topic: spec?.topic,
+            consumersRemoved: messageContinuations.count + presenceConts.count,
+            activeRoutes: snapshot.activeRoutes,
+            joinedTopics: snapshot.joinedTopics,
+            willLeave: spec != nil
+        )
         for continuation in messageContinuations {
             continuation.finish()
         }
@@ -920,7 +1014,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             if spec.presenceKey != nil {
                 await untrackRoomPresence(topic: spec.topic)
             }
-            await leaveChannel(topic: spec.topic)
+            await leaveChannel(topic: spec.topic, routeKey: routeKey)
         }
     }
 
@@ -962,6 +1056,13 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         if let accessToken, !accessToken.isEmpty {
             payload["access_token"] = accessToken
         }
+        let snapshot = routeLifecycleSnapshot(routeKey: spec.routeKey)
+        RealtimeLifecycleDebugLog.join(
+            topic: spec.topic,
+            routeKey: spec.routeKey,
+            activeRoutes: snapshot.activeRoutes,
+            joinedTopics: snapshot.joinedTopics
+        )
         await sendJSON([
             "topic": spec.topic,
             "event": "phx_join",
@@ -971,7 +1072,14 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         ])
     }
 
-    private func leaveChannel(topic: String) async {
+    private func leaveChannel(topic: String, routeKey: String? = nil) async {
+        let snapshot = routeLifecycleSnapshot(routeKey: routeKey)
+        RealtimeLifecycleDebugLog.leave(
+            topic: topic,
+            routeKey: routeKey,
+            activeRoutes: snapshot.activeRoutes,
+            joinedTopics: snapshot.joinedTopics
+        )
         let ref = nextRef()
         await sendJSON([
             "topic": topic,
@@ -1046,6 +1154,8 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             return !intentionalDisconnect && !specsByRouteKey.isEmpty
         }
         if shouldReconnect {
+            let snapshot = routeLifecycleSnapshot()
+            RealtimeLifecycleDebugLog.socketDropped(activeRoutes: snapshot.activeRoutes)
             scheduleReconnectAndRejoin()
         }
     }
@@ -1069,6 +1179,11 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             let tokens = snapshot.2
             guard !intentional, !specs.isEmpty else { return }
 
+            RealtimeLifecycleDebugLog.reconnectBegin(
+                activeRoutes: specs.count,
+                attempt: attempt
+            )
+
             do {
                 try await connect()
                 for spec in specs {
@@ -1082,12 +1197,25 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                         presenceStateByTopic.removeValue(forKey: spec.topic)
                         return needsJoin
                     }
+                    let snapshot = routeLifecycleSnapshot(routeKey: spec.routeKey)
+                    RealtimeLifecycleDebugLog.rejoin(
+                        routeKey: spec.routeKey,
+                        topic: spec.topic,
+                        skipped: !needsJoin,
+                        activeRoutes: snapshot.activeRoutes,
+                        joinedTopics: snapshot.joinedTopics
+                    )
                     if needsJoin {
                         await joinChannel(spec, accessToken: tokens[spec.routeKey] ?? nil)
                     } else if spec.presenceKey != nil {
                         await trackRoomPresenceIfNeeded(routeKey: spec.routeKey, topic: spec.topic)
                     }
                 }
+                let endSnapshot = routeLifecycleSnapshot()
+                RealtimeLifecycleDebugLog.reconnectEnd(
+                    activeRoutes: endSnapshot.activeRoutes,
+                    joinedTopics: endSnapshot.joinedTopics
+                )
                 return
             } catch {
                 let delay = policy.delay(forAttempt: attempt)

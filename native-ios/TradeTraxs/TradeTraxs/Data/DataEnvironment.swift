@@ -32,6 +32,7 @@ final class DataEnvironment {
     let explore: any ExploreRepository
     let search: any SearchRepository
     let billing: any BillingRepository
+    let storeKitSubscriptions: any StoreKitSubscriptionServicing
     let account: any AccountRepository
     let analytics: any AnalyticsRepository
     let achievements: any AchievementRepository
@@ -80,6 +81,7 @@ final class DataEnvironment {
         explore: any ExploreRepository,
         search: any SearchRepository,
         billing: any BillingRepository,
+        storeKitSubscriptions: any StoreKitSubscriptionServicing,
         account: any AccountRepository,
         analytics: any AnalyticsRepository,
         achievements: any AchievementRepository,
@@ -122,6 +124,7 @@ final class DataEnvironment {
         self.explore = explore
         self.search = search
         self.billing = billing
+        self.storeKitSubscriptions = storeKitSubscriptions
         self.account = account
         self.analytics = analytics
         self.achievements = achievements
@@ -221,6 +224,21 @@ final class DataEnvironment {
             realtimeHub: realtimeHub
         )
 
+        let transport = supabase.transport ?? SupabaseTransport(
+            client: networking.client,
+            requestBuilder: networking.requestBuilder,
+            configuration: appConfiguration
+        )
+        let appleSubscriptionSync = AppleSubscriptionSyncClient(transport: transport)
+        let storeKitSubscriptions: any StoreKitSubscriptionServicing = StoreKitSubscriptionService(
+            syncClient: appleSubscriptionSync
+        )
+        let billing: any BillingRepository = DefaultBillingRepository(
+            supabase: supabase,
+            cache: cache,
+            storeKitSync: storeKitSubscriptions
+        )
+
         return DataEnvironment(
             configuration: configuration,
             supabase: supabase,
@@ -253,7 +271,8 @@ final class DataEnvironment {
             leaderboard: DefaultLeaderboardRepository(supabase: supabase, cache: cache),
             explore: DefaultExploreRepository(supabase: supabase),
             search: DefaultSearchRepository(supabase: supabase, cache: cache),
-            billing: DefaultBillingRepository(supabase: supabase, cache: cache),
+            billing: billing,
+            storeKitSubscriptions: storeKitSubscriptions,
             account: DefaultAccountRepository(supabase: supabase),
             analytics: DefaultAnalyticsRepository(supabase: supabase),
             achievements: DefaultAchievementRepository(supabase: supabase, cache: cache),

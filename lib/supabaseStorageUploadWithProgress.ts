@@ -7,6 +7,8 @@ export type SupabaseStorageUploadOptions = {
   file: File | Blob
   contentType?: string
   upsert?: boolean
+  /** Supabase `cacheControl` — e.g. `31536000` for immutable timestamped paths. */
+  cacheControl?: string
   onProgress?: (loaded: number, total: number) => void
 }
 
@@ -53,6 +55,9 @@ export async function uploadToSupabaseStorageWithProgress(
     )
     if (options.upsert) {
       xhr.setRequestHeader("x-upsert", "true")
+    }
+    if (options.cacheControl) {
+      xhr.setRequestHeader("cache-control", `max-age=${options.cacheControl}`)
     }
 
     xhr.upload.onprogress = (event) => {

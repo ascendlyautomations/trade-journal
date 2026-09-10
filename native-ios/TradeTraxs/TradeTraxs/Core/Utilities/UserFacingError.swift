@@ -78,6 +78,9 @@ nonisolated struct UserFacingError: Sendable, Equatable {
         {
             return "Please try again."
         }
+        if ProEntitlementResponseSanitizer.containsPurchaseSteering(trimmed) {
+            return TraxProFeatureMessaging.featureRequired
+        }
         return trimmed
     }
 
@@ -94,6 +97,12 @@ nonisolated struct UserFacingError: Sendable, Equatable {
                 title: "Signed out",
                 message: "Please sign in again to continue.",
                 action: .custom(identifier: "auth.reauthenticate")
+            )
+        case .emailConfirmationRequired:
+            return UserFacingError(
+                title: "Confirm your email",
+                message: "Check your inbox for a confirmation link, then sign in.",
+                action: .dismiss
             )
         case .notConfigured, .providerUnavailable:
             return UserFacingError(

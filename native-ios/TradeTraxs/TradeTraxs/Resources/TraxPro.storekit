@@ -1,0 +1,109 @@
+{
+  "identifier" : "TraxPro",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "traxpro",
+      "localizations" : [
+
+      ],
+      "name" : "TraxPro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "23.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "monthly",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "TraxPro monthly subscription",
+              "displayName" : "TraxPro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.tradetraxs.traxpro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "TraxPro Monthly",
+          "subscriptionGroupID" : "traxpro",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "136.74",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "sixmonth",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "TraxPro 6-month subscription",
+              "displayName" : "TraxPro 6-Month",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.tradetraxs.traxpro.sixmonth",
+          "recurringSubscriptionPeriod" : "P6M",
+          "referenceName" : "TraxPro 6-Month",
+          "subscriptionGroupID" : "traxpro",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "244.70",
+          "familyShareable" : false,
+          "groupNumber" : 3,
+          "internalID" : "yearly",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "TraxPro yearly subscription",
+              "displayName" : "TraxPro Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.tradetraxs.traxpro.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "TraxPro Yearly",
+          "subscriptionGroupID" : "traxpro",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

@@ -189,7 +189,7 @@ struct AdaptiveInlineMediaContainer<Content: View>: View {
             } else {
                 Color.clear
                     .aspectRatio(
-                        max(imageAspect, FeedMediaLayout.minimumFeedAspectRatio),
+                        max(imageAspect, 0.01),
                         contentMode: .fit
                     )
                     .frame(maxWidth: .infinity)

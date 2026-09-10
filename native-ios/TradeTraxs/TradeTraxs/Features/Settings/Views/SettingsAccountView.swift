@@ -84,6 +84,8 @@ struct SettingsAccountView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.isDeletingAccount)
+                .accessibilityLabel("Delete Account")
+                .accessibilityHint("Permanently deletes your TradeTraxs account and associated data")
             } header: {
                 Text("Delete Account")
             } footer: {

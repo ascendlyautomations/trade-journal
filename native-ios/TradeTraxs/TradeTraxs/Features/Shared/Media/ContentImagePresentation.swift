@@ -234,12 +234,34 @@ extension ContentImagePresentation {
         )
     }
 
+    /// Feed card — show the full decoded bitmap at its natural aspect (no display-time crop).
+    static func naturalFit(imageAspect: CGFloat) -> ContentImagePresentation {
+        ContentImagePresentation(
+            presentationAspectRatio: max(imageAspect, 0.01),
+            normalizedCrop: nil,
+            aspectMode: .original
+        )
+    }
+
+    /// Stored presentation from a media reference or local cache.
+    static func storedPresentation(for reference: MediaReference?) -> ContentImagePresentation? {
+        guard let reference else { return nil }
+        if let fromReference = reference.imagePresentation { return fromReference }
+        return ContentImagePresentationStore.presentation(forMediaURL: reference.id)
+    }
+
+    /// Legacy metadata-only rows that require display-time crop via an explicit normalized rect.
+    static func explicitLegacyCrop(from stored: ContentImagePresentation?) -> ContentImagePresentation? {
+        guard let stored, stored.normalizedCrop != nil else { return nil }
+        return stored
+    }
+
     /// Legacy rows without stored metadata — centered 4:5 fallback only when taller than 4:5.
     static func inferredLegacy(imageAspect: CGFloat) -> ContentImagePresentation {
         let safeAspect = max(imageAspect, 0.01)
         if FeedMediaLayout.exceedsFeedPortraitLimit(imageAspect: safeAspect) {
             let presentationAspect = FeedMediaLayout.minimumFeedAspectRatio
-            let nh = presentationAspect / safeAspect
+            let nh = min(1, presentationAspect / safeAspect)
             let ny = max(0, (1 - nh) / 2)
             return ContentImagePresentation(
                 presentationAspectRatio: presentationAspect,
@@ -247,11 +269,7 @@ extension ContentImagePresentation {
                 aspectMode: .original
             )
         }
-        return ContentImagePresentation(
-            presentationAspectRatio: safeAspect,
-            normalizedCrop: nil,
-            aspectMode: .original
-        )
+        return naturalFit(imageAspect: safeAspect)
     }
 
     static func normalizedCropFromEditor(
@@ -723,6 +741,73 @@ enum ImagePipelineProbe {
     }
 }
 
+enum FeedImageRenderProbe {
+    static func log(
+        mediaID: String,
+        surface: String,
+        decodedPixels: CGSize,
+        containerSize: CGSize,
+        contentMode: String,
+        imageViewFrame: CGRect?,
+        layoutMode: String
+    ) {
+        let decodedAspect = decodedPixels.width / max(decodedPixels.height, 1)
+        let containerAspect = containerSize.width / max(containerSize.height, 1)
+        let frameText: String
+        if let imageViewFrame {
+            frameText = String(
+                format: "(%.1f,%.1f,%.1fx%.1f)",
+                imageViewFrame.origin.x,
+                imageViewFrame.origin.y,
+                imageViewFrame.width,
+                imageViewFrame.height
+            )
+        } else {
+            frameText = "pending"
+        }
+        print(
+            "[FEED_IMAGE_RENDER] mediaID=\(mediaID) surface=\(surface) "
+                + "decoded=\(Int(decodedPixels.width))x\(Int(decodedPixels.height)) "
+                + "container=\(Int(containerSize.width))x\(Int(containerSize.height)) "
+                + "decodedAspect=\(String(format: "%.4f", decodedAspect)) "
+                + "containerAspect=\(String(format: "%.4f", containerAspect)) "
+                + "contentMode=\(contentMode) layoutMode=\(layoutMode) imageViewFrame=\(frameText)"
+        )
+    }
+}
+
+enum FeedImageDisplayProbe {
+    static func log(
+        mediaID: String,
+        decodedAspect: CGFloat,
+        containerWidth: CGFloat,
+        storedHadCropRect: Bool,
+        presentation: ContentImagePresentation,
+        usesDetailLikeLayout: Bool
+    ) {
+        let cropText: String
+        if let crop = presentation.normalizedCrop {
+            cropText = String(
+                format: "x=%.3f y=%.3f w=%.3f h=%.3f",
+                crop.x, crop.y, crop.width, crop.height
+            )
+        } else {
+            cropText = "nil"
+        }
+        let containerHeight = usesDetailLikeLayout
+            ? max(containerWidth / max(decodedAspect, 0.01), FeedMediaLayout.minHeight)
+            : max(containerWidth / max(presentation.presentationAspectRatio, 0.01), FeedMediaLayout.minHeight)
+        print(
+            "[FeedImageDisplay] mediaID=\(mediaID) "
+                + "decodedAspect=\(String(format: "%.4f", decodedAspect)) "
+                + "detailLikeLayout=\(usesDetailLikeLayout) "
+                + "storedHadCropRect=\(storedHadCropRect) "
+                + "cropRect=\(cropText) "
+                + "container=\(Int(containerWidth))x\(Int(containerHeight))"
+        )
+    }
+}
+
 enum ImageRenderProbe {
     static func log(
         surface: String,
@@ -779,6 +864,27 @@ enum ImagePipelineProbe {
         presentationAspectRatio: CGFloat,
         cropRect: NormalizedImageCrop?,
         focalPoint: CGPoint?
+    ) {}
+}
+enum FeedImageRenderProbe {
+    static func log(
+        mediaID: String,
+        surface: String,
+        decodedPixels: CGSize,
+        containerSize: CGSize,
+        contentMode: String,
+        imageViewFrame: CGRect?,
+        layoutMode: String
+    ) {}
+}
+enum FeedImageDisplayProbe {
+    static func log(
+        mediaID: String,
+        decodedAspect: CGFloat,
+        containerWidth: CGFloat,
+        storedHadCropRect: Bool,
+        presentation: ContentImagePresentation,
+        usesDetailLikeLayout: Bool
     ) {}
 }
 enum ImageRenderProbe {

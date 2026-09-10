@@ -21,6 +21,7 @@ final class ActivityExperienceTests: XCTestCase {
     func testInboxTypesMatchWebAllowlist() {
         let expected: Set<String> = [
             "like", "comment", "room_join", "room_mention",
+            "trade_room_join_request", "trade_room_join_accepted", "trade_room_join_declined",
             "follow", "follow_request", "follow_request_accepted",
             "affiliate_referral", "affiliate_commission_earned", "trading_report",
         ]
@@ -267,6 +268,7 @@ final class ActivityExperienceTests: XCTestCase {
             session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
             detailCache: DetailPresentationCache(),
             navigationCoordinator: coordinator,
+            navigationHost: .profile,
             inboxStore: .shared,
             router: NotificationRouter()
         )
@@ -445,7 +447,7 @@ private final class ActivityStubNotificationRepository: NotificationRepository, 
     func markRead(ids: [NotificationID]) async throws -> Int {
         var count = 0
         for id in ids {
-            if let index = items.firstIndex(where: { $0.id == id && !items[index].isRead }) {
+            if let index = items.firstIndex(where: { $0.id == id && !$0.isRead }) {
                 items[index].isRead = true
                 count += 1
             }

@@ -47,7 +47,11 @@ nonisolated struct DefaultAIRepository: AIRepository {
             throw AppError.domain(.permission(.notAuthenticated))
         case 403:
             return TradeAIAnalyzeResponse(
-                reply: reply ?? decoded?.error ?? TraxProFeatureMessaging.tradeAIUnavailable
+                reply: ProEntitlementResponseSanitizer.message(
+                    statusCode: 403,
+                    error: decoded?.error,
+                    reply: reply
+                )
             )
         case 429:
             throw AppError.unknown(message: decoded?.error ?? "Slow down — try again in a moment.")
@@ -136,11 +140,21 @@ nonisolated struct DefaultAIRepository: AIRepository {
             return PsychologyCoachAIResponse(reply: reply)
         case 401:
             throw AppError.domain(.permission(.notAuthenticated))
+        case 403:
+            throw AppError.unknown(
+                message: ProEntitlementResponseSanitizer.message(
+                    statusCode: 403,
+                    error: decoded?.error,
+                    reply: reply
+                )
+            )
         case 429:
             throw AppError.unknown(message: decoded?.error ?? "Slow down — try again in a moment.")
         default:
             throw AppError.unknown(
-                message: decoded?.error ?? "Psychology coach unavailable. Your analytics still work offline."
+                message: ProEntitlementResponseSanitizer.sanitizedOrNeutral(
+                    decoded?.error ?? "Psychology coach unavailable. Your analytics still work offline."
+                )
             )
         }
     }
@@ -169,13 +183,22 @@ nonisolated struct DefaultAIRepository: AIRepository {
             return ScreenshotAIExtractResponse(extraction: extraction, error: nil)
         case 401:
             throw AppError.domain(.permission(.notAuthenticated))
+        case 403:
+            throw AppError.unknown(
+                message: ProEntitlementResponseSanitizer.message(
+                    statusCode: 403,
+                    error: decoded?.error
+                )
+            )
         case 429:
             throw AppError.unknown(message: decoded?.error ?? "Slow down — try again in a moment.")
         case 400:
             throw AppError.unknown(message: decoded?.error ?? "Unsupported screenshot")
         default:
             throw AppError.unknown(
-                message: decoded?.error ?? "Screenshot extraction failed. Please try again."
+                message: ProEntitlementResponseSanitizer.sanitizedOrNeutral(
+                    decoded?.error ?? "Screenshot extraction failed. Please try again."
+                )
             )
         }
     }

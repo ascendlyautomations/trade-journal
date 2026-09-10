@@ -475,6 +475,7 @@ final class MessagingDomain {
     }
 
     private func stopRealtime() {
+        let viewerID = state.viewerID?.rawValue
         readCursorTask?.cancel()
         roomUnreadTask?.cancel()
         roomReadCursorTask?.cancel()
@@ -492,7 +493,13 @@ final class MessagingDomain {
             try? await realtimeHub?.subscriptions.unsubscribe(
                 RealtimeChannelID(kind: .room, topic: "trade-rooms-home")
             )
+            if let viewerID {
+                await realtimeHub?.stopWatchingConversationReadCursors(userID: viewerID)
+                await realtimeHub?.stopWatchingRoomReadCursors(userID: viewerID)
+            }
+            await realtimeHub?.stopWatchingMemberRoomMessages()
             await realtimeHub?.stopWatchingMemberRoomMembership()
+            await realtimeHub?.stopWatchingInboxConversationMessages()
         }
     }
 

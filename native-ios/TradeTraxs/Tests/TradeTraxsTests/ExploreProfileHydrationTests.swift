@@ -237,7 +237,9 @@ private struct ExploreProfileHydrationStubSearchRepository: SearchRepository {
 }
 
 private struct ExploreStubRoomRepository: RoomRepository {
-    func room(id: RoomID) async throws -> TradeRoom { throw DomainError.notFound }
+    func room(id: RoomID) async throws -> TradeRoom {
+        throw DomainError.notFound(entity: "room", id: id.rawValue)
+    }
     func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
         CursorPage(items: [], nextCursor: nil)
     }

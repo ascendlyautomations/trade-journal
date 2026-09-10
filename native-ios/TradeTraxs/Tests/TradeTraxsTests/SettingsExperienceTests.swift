@@ -116,6 +116,7 @@ final class SettingsExperienceTests: XCTestCase {
         let billing = SettingsStubBillingRepository(status: SettingsFixtures.billingStatus())
         let viewModel = SettingsSubscriptionViewModel(
             billing: billing,
+            storeKit: SettingsStubStoreKit(),
             session: SettingsStubSession(userID: SettingsFixtures.viewerID.rawValue),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
@@ -225,6 +226,14 @@ private final class SettingsStubNotificationPreferencesRepository: NotificationP
         stored.userID = userID
         return stored
     }
+}
+
+private struct SettingsStubStoreKit: StoreKitSubscriptionServicing {
+    func loadProducts() async throws -> [StoreKitTraxProProduct] { [] }
+    func purchase(productID: String) async -> StoreKitPurchaseOutcome { .userCancelled }
+    func restorePurchases() async throws -> Bool { false }
+    func syncVerifiedTransactionsToServer() async throws {}
+    func startTransactionListenerIfNeeded() async {}
 }
 
 private struct SettingsStubBillingRepository: BillingRepository {

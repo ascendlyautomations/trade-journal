@@ -93,6 +93,14 @@ nonisolated enum NetworkTaskMetricsProbe {
 #else
 final class URLSessionTaskMetricsCollector: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     static let shared = URLSessionTaskMetricsCollector()
+
+    func consumeMetrics(for task: URLSessionTask) -> URLSessionTaskMetrics? {
+        consumeMetrics(taskIdentifier: task.taskIdentifier)
+    }
+
+    func consumeMetrics(taskIdentifier: Int) -> URLSessionTaskMetrics? {
+        nil
+    }
 }
 
 nonisolated enum NetworkTaskMetricsProbe {

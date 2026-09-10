@@ -1,14 +1,20 @@
 import SwiftUI
 
 enum ComplianceDisclaimerCopy {
+    /// Shared App Store–safe financial/education disclaimer (Terms § No Financial Advice).
+    static let financialEducation =
+        "TradeTraxs provides journaling, analytics, and educational information only. It is not financial or investment advice. Past performance does not guarantee future results."
+
     static let tradeAI =
-        "AI-generated insights may be inaccurate and are for educational and journaling purposes only. Nothing provided by TradeTraxs is financial or investment advice."
+        "\(financialEducation) AI-generated insights may be inaccurate."
 
     static let psychologyCoach =
         "Coach responses are AI-generated, may contain mistakes, and are for educational and informational purposes only — not financial or investment advice."
 
     static let leaderboard =
-        "Performance shown is for informational purposes only."
+        "\(financialEducation) Rankings reflect in-app activity only."
+
+    static let performanceReport = financialEducation
 
     static let screenshotAI =
         "AI extraction may be inaccurate. Review all fields before importing."

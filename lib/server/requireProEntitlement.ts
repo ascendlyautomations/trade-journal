@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server"
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-import { isProActive } from "@/lib/subscription"
+import { loadActiveAppleSubscriptionForUser } from "@/lib/appleSubscription"
+import {
+  isTraxProActive,
+  TRAXPRO_ENTITLEMENT_PROFILE_COLUMNS,
+  type TraxProEntitlementProfile,
+} from "@/lib/traxProEntitlement"
 
-export const PRO_ENTITLEMENT_PROFILE_COLUMNS =
-  "is_pro,creator_access,subscription_status,trial_end,early_access_enrolled_at,early_access_started_at,early_access_status,early_access_ends_at,early_access_campaign_id,early_access_enrollment_source"
+export { TRAXPRO_ENTITLEMENT_PROFILE_COLUMNS as PRO_ENTITLEMENT_PROFILE_COLUMNS }
 
-export type ProEntitlementProfile = Parameters<typeof isProActive>[0]
+export type ProEntitlementProfile = TraxProEntitlementProfile
 
 export type ProEntitlementCheck =
   | { ok: true; profile: NonNullable<ProEntitlementProfile> }
@@ -19,7 +23,7 @@ export async function loadProEntitlementProfile(
 > {
   const { data: profile, error } = await supabaseServiceRole
     .from("profiles")
-    .select(PRO_ENTITLEMENT_PROFILE_COLUMNS)
+    .select(TRAXPRO_ENTITLEMENT_PROFILE_COLUMNS)
     .eq("id", userId)
     .single<ProEntitlementProfile>()
 
@@ -46,7 +50,12 @@ export async function requireProEntitlement(
   const loaded = await loadProEntitlementProfile(userId)
   if (!loaded.ok) return loaded
 
-  if (!isProActive(loaded.profile)) {
+  const appleSubscription = await loadActiveAppleSubscriptionForUser(
+    supabaseServiceRole,
+    userId
+  )
+
+  if (!isTraxProActive(loaded.profile, appleSubscription)) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -54,7 +63,7 @@ export async function requireProEntitlement(
           error: options?.error ?? "Pro required",
           reply:
             options?.reply ??
-            "This AI feature is available on TraxPro. Upgrade your plan on the web to unlock it.",
+            "This feature requires TraxPro.",
         },
         { status: 403 }
       ),

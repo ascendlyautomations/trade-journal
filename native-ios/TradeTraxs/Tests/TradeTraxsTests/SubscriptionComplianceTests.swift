@@ -29,14 +29,15 @@ final class SubscriptionComplianceTests: XCTestCase {
                 plan: .free,
                 lifecycle: .none,
                 isProEntitled: false,
-                dailyTradeLimit: 10,
-                dailyPostLimit: 5,
-                dailyMessageLimit: 50,
-                maxTradeEntryAccounts: 3
+                dailyTradeLimit: FreeTierPolicy.dailyTradeLimit,
+                dailyPostLimit: FreeTierPolicy.dailyPostLimit,
+                dailyMessageLimit: FreeTierPolicy.dailyDirectMessageLimit,
+                maxTradeEntryAccounts: FreeTierPolicy.maxTradeEntryAccounts
             )
         )
         let viewModel = SettingsSubscriptionViewModel(
             billing: billing,
+            storeKit: SubscriptionComplianceStubStoreKit(),
             session: SubscriptionComplianceStubSession(userID: SettingsFixtures.viewerID.rawValue),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
@@ -66,6 +67,7 @@ final class SubscriptionComplianceTests: XCTestCase {
         )
         let viewModel = SettingsSubscriptionViewModel(
             billing: billing,
+            storeKit: SubscriptionComplianceStubStoreKit(),
             session: SubscriptionComplianceStubSession(userID: SettingsFixtures.viewerID.rawValue),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
@@ -82,9 +84,12 @@ final class SubscriptionComplianceTests: XCTestCase {
     }
 
     func testProSubscriptionViewModelShowsActiveMembership() async {
-        let billing = SubscriptionComplianceStubBilling(status: SettingsFixtures.billingStatus())
+        var stripeStatus = SettingsFixtures.billingStatus()
+        stripeStatus.entitlementSource = .stripe
+        let billing = SubscriptionComplianceStubBilling(status: stripeStatus)
         let viewModel = SettingsSubscriptionViewModel(
             billing: billing,
+            storeKit: SubscriptionComplianceStubStoreKit(),
             session: SubscriptionComplianceStubSession(userID: SettingsFixtures.viewerID.rawValue),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
@@ -93,10 +98,10 @@ final class SubscriptionComplianceTests: XCTestCase {
 
         XCTAssertTrue(viewModel.showsProMembership)
         XCTAssertFalse(viewModel.showsFreePlanDetails)
-        XCTAssertEqual(
-            viewModel.membershipSummaryFooter,
-            "Your account has access to TraxPro features."
+        XCTAssertTrue(
+            viewModel.membershipSummaryFooter.localizedCaseInsensitiveContains("active")
         )
+        XCTAssertFalse(viewModel.showsApplePurchaseSection)
     }
 
     func testTraxProEntitlementPolicyMatchesWebIsProActiveBaselines() {
@@ -126,6 +131,15 @@ final class SubscriptionComplianceTests: XCTestCase {
             maxTradeEntryAccounts: 3
         )
         XCTAssertFalse(free.hasTraxProAccess)
+    }
+
+    func testProEntitlementSanitizerBlocksUpgradeOnWebCopy() {
+        let sanitized = ProEntitlementResponseSanitizer.message(
+            statusCode: 403,
+            reply: "Upgrade your plan on the web to unlock it."
+        )
+        XCTAssertEqual(sanitized, TraxProFeatureMessaging.featureRequired)
+        XCTAssertFalse(sanitized.localizedCaseInsensitiveContains("web"))
     }
 
     func testTraxProFeatureMessagingAvoidsExternalPurchaseSteering() {
@@ -164,6 +178,14 @@ private struct SubscriptionComplianceStubBilling: BillingRepository {
     func refreshEntitlements(for profileID: ProfileID) async throws -> BillingStatus {
         try await status(for: profileID)
     }
+}
+
+private struct SubscriptionComplianceStubStoreKit: StoreKitSubscriptionServicing {
+    func loadProducts() async throws -> [StoreKitTraxProProduct] { [] }
+    func purchase(productID: String) async -> StoreKitPurchaseOutcome { .userCancelled }
+    func restorePurchases() async throws -> Bool { false }
+    func syncVerifiedTransactionsToServer() async throws {}
+    func startTransactionListenerIfNeeded() async {}
 }
 
 private struct SubscriptionComplianceStubSession: SessionProviding {

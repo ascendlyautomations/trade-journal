@@ -29,6 +29,46 @@ final class ImageCropMathTests: XCTestCase {
         XCTAssertEqual(metrics.containerHeight, 390 / (16 / 9), accuracy: 0.5)
     }
 
+    func testFeedWithoutExplicitCropUsesDetailLikeMetrics() {
+        let imageAspect = 4.0 / 5.0
+        let metrics = AdaptiveMediaLayout.frameMetrics(
+            containerWidth: 390,
+            imageAspect: imageAspect,
+            displayMode: .originalDetail
+        )
+        XCTAssertFalse(metrics.usesFillCrop)
+        XCTAssertEqual(metrics.containerHeight, 390 / imageAspect, accuracy: 0.5)
+    }
+
+    func testExplicitLegacyCropRequiresMetadataRect() {
+        let withRect = ContentImagePresentation(
+            presentationAspectRatio: 4.0 / 5.0,
+            normalizedCrop: NormalizedImageCrop(x: 0, y: 0.1, width: 1, height: 0.8),
+            aspectMode: .portrait
+        )
+        XCTAssertNotNil(ContentImagePresentation.explicitLegacyCrop(from: withRect))
+
+        let withoutRect = ContentImagePresentation(
+            presentationAspectRatio: 4.0 / 5.0,
+            normalizedCrop: nil,
+            aspectMode: .portrait,
+            sourceWidth: 1179,
+            sourceHeight: 2556
+        )
+        XCTAssertNil(ContentImagePresentation.explicitLegacyCrop(from: withoutRect))
+    }
+
+    func testTallImageUsesNaturalHeightInDetailLikeLayout() {
+        let imageAspect = 1179.0 / 2556.0
+        let metrics = AdaptiveMediaLayout.frameMetrics(
+            containerWidth: 390,
+            imageAspect: imageAspect,
+            displayMode: .originalDetail
+        )
+        XCTAssertFalse(metrics.usesFillCrop)
+        XCTAssertEqual(metrics.containerHeight, 390 / imageAspect, accuracy: 0.5)
+    }
+
     func testFeedCardCapsTallOriginalAtFourToFive() {
         let imageAspect = 1179.0 / 2556.0
         let presentation = ContentImagePresentation.inferredLegacy(imageAspect: imageAspect)

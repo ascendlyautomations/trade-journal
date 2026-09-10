@@ -22,6 +22,9 @@ final class AppLifecycleHandler {
 
     func applicationDidBecomeActive() {
         AppLog.application.info("Lifecycle: foreground / active")
+        #if DEBUG
+        MediaEgressTracker.startPeriodicSummaries()
+        #endif
         Task { @MainActor in
             await pushNotifications?.refreshAuthorizationStatus()
             pushNotifications?.syncBadgeFromActivity()
@@ -36,6 +39,10 @@ final class AppLifecycleHandler {
 
     func applicationDidEnterBackground() {
         AppLog.application.info("Lifecycle: background")
+        #if DEBUG
+        MediaEgressTracker.stopPeriodicSummaries()
+        MediaEgressTracker.printSummary()
+        #endif
         // Future: flush analytics breadcrumbs, suspend channels.
     }
 

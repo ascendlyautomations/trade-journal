@@ -30,64 +30,23 @@ export async function findExistingDmConversationId(
     return null
   }
 
-  if (skipGroupFilter) {
-    return findExistingDmConversationIdProfileStyle(
-      client,
-      currentUserId,
-      otherUserId
-    )
-  }
-
-  return findExistingDmConversationIdMessagesStyle(
+  return findExistingDmConversationIdBatched(
     client,
     currentUserId,
-    otherUserId
+    otherUserId,
+    { skipGroupFilter }
   )
 }
 
-/** Inbox DM modal: skip group conversations. */
-async function findExistingDmConversationIdMessagesStyle(
-  client: SupabaseClient,
-  currentUserId: string,
-  otherUserId: string
-): Promise<string | null> {
-  const { data: myRows } = await client
-    .from("conversation_participants")
-    .select("conversation_id")
-    .eq("user_id", currentUserId)
-
-  const ids = [...new Set(myRows?.map((r) => r.conversation_id) || [])]
-  for (const convoId of ids) {
-    const { data: meta } = await client
-      .from("conversations")
-      .select("id, is_group")
-      .eq("id", convoId)
-      .maybeSingle()
-
-    if (!meta || meta.is_group) continue
-
-    const { data: parts } = await client
-      .from("conversation_participants")
-      .select("user_id")
-      .eq("conversation_id", convoId)
-
-    const uidSet = new Set(parts?.map((p) => p.user_id))
-    if (
-      uidSet.size === 2 &&
-      uidSet.has(currentUserId) &&
-      uidSet.has(otherUserId)
-    ) {
-      return convoId
-    }
-  }
-  return null
-}
-
-/** Profile Message button: batch lookup, no is_group filter (legacy behavior). */
-async function findExistingDmConversationIdProfileStyle(
+/**
+ * Batched 1:1 lookup: membership rows → participant sets → optional is_group filter.
+ * Replaces per-conversation N+1 participant/conversation queries.
+ */
+async function findExistingDmConversationIdBatched(
   client: SupabaseClient,
   me: string,
-  them: string
+  them: string,
+  options: { skipGroupFilter: boolean }
 ): Promise<string | null> {
   const { data: mine } = await client
     .from("conversation_participants")
@@ -110,10 +69,26 @@ async function findExistingDmConversationIdProfileStyle(
     byConvo.get(row.conversation_id)!.add(row.user_id)
   }
 
+  const candidates: string[] = []
   for (const [cid, users] of byConvo) {
-    if (users.size === 2 && users.has(me) && users.has(them)) return cid
+    if (users.size === 2 && users.has(me) && users.has(them)) {
+      candidates.push(cid)
+    }
+  }
+  if (candidates.length === 0) return null
+
+  if (options.skipGroupFilter) {
+    return candidates[0] ?? null
   }
 
+  const { data: meta } = await client
+    .from("conversations")
+    .select("id, is_group")
+    .in("id", candidates)
+
+  for (const conv of meta ?? []) {
+    if (!conv.is_group) return conv.id
+  }
   return null
 }
 

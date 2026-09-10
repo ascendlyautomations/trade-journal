@@ -9,6 +9,7 @@ import {
 import type { UploadProgressReporter } from "./uploadProgress/types"
 import { validateImageUpload } from "./uploadValidation"
 import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "./userFacingError"
+import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "./storageCacheControl"
 
 /** Shared crop preset for trades, posts, achievements, and other content images. */
 export const CONTENT_IMAGE_CROP_PRESET: ImageCropPresetId = "content"
@@ -68,6 +69,7 @@ export async function uploadContentImageToStorage(
       path: fileName,
       file: uploadFile,
       contentType: uploadFile.type || "image/jpeg",
+      cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
       onProgress: (loaded, total) => {
         report({
           percent: mapUploadBytesToPercent(loaded, total, uploadRange),
@@ -88,7 +90,9 @@ export async function uploadContentImageToStorage(
   } else {
     const { error: upErr } = await client.storage
       .from("screenshots")
-      .upload(fileName, uploadFile)
+      .upload(fileName, uploadFile, {
+        cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
+      })
     if (upErr) {
       console.error("[uploadContentImage] upload error:", upErr)
       return {

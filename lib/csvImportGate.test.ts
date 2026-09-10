@@ -7,11 +7,25 @@ import {
 } from "./csvImportGate.ts"
 
 describe("csvImportGate", () => {
-  it("allows Pro users regardless of last import", () => {
-    const status = evaluateCsvImportGate({
-      is_pro: true,
-      last_csv_import_at: new Date().toISOString(),
-    })
+  it("allows TraxPro users regardless of last import", () => {
+    const status = evaluateCsvImportGate(
+      {
+        is_pro: false,
+        last_csv_import_at: new Date().toISOString(),
+      },
+      true
+    )
+    assert.equal(status.allowed, true)
+  })
+
+  it("allows manual Pro when traxProActive is true", () => {
+    const status = evaluateCsvImportGate(
+      {
+        is_pro: true,
+        last_csv_import_at: new Date().toISOString(),
+      },
+      true
+    )
     assert.equal(status.allowed, true)
   })
 

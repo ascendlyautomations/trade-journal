@@ -48,7 +48,6 @@ import {
   fetchDemoRoomMessages,
   fetchDemoRoomOwnerUserId,
   fetchDemoRoomSections,
-  getDemoActivePresence,
   getDemoChannelNotificationPrefs,
   getDemoRoomUnreadByRoomIds,
   getDemoRoomMemberStats,
@@ -100,10 +99,8 @@ import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStarte
 import { isUserAdmin } from "@/lib/adminUsers"
 import { isProfileUuidSegment } from "@/lib/profileRoutes"
 import { isBetaAnnouncementsSection } from "@/lib/betaHub"
-import { createRoomPresenceSession } from "@/lib/roomPresence"
 import { subscribeCommunityRoomLiveChannel } from "@/lib/communityRoomLiveChannel"
 import { subscribeCommunityRoomUnreadRealtime } from "@/lib/communityRoomUnread"
-import { isRoomRealtimePresenceEnabled } from "@/lib/roomRealtimePresence"
 import {
   patchRoomMessageReactions,
   type RoomMessageReactionEmoji,
@@ -211,15 +208,6 @@ type RoomMessage = {
 
 const ROOM_MESSAGE_PAGE_SIZE = 25
 const ROOM_MESSAGE_REALTIME_SELECT = ROOM_MESSAGE_SELECT_SHAPE
-
-type ActivePresence = {
-  user_id: string
-  profiles?: {
-    id?: string
-    username?: string | null
-    avatar_url?: string | null
-  } | null
-}
 
 type RoomMemberManage = {
   user_id: string
@@ -387,7 +375,6 @@ function CommunityContent() {
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false)
   const [hasOlderMessages, setHasOlderMessages] = useState(false)
   const [draft, setDraft] = useState("")
-  const [activeUsers, setActiveUsers] = useState<ActivePresence[]>([])
   const [typingUsers, setTypingUsers] = useState<string[]>([])
   const [selectTrade, setSelectTrade] = useState(false)
   const [userTrades, setUserTrades] = useState<any[]>([])
@@ -498,12 +485,6 @@ function CommunityContent() {
   const roomLoadGenRef = useRef(0)
   const roomSectionLoadGenRef = useRef(0)
   const roomBootstrapEffectsSkipRef = useRef<string | null>(null)
-  const presenceSessionKeyRef = useRef<string>(
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `presence-${Date.now()}`
-  )
-  const presenceRoomIdRef = useRef<string | null>(null)
   const selectedRoomIdRef = useRef<string | null>(null)
   const roomAppNotificationMarkedRef = useRef<string | null>(null)
   const pendingScrollMessageIdRef = useRef<string | null>(null)
@@ -779,7 +760,6 @@ function CommunityContent() {
   const usernameRef = useRef("")
   const reactionBusyRef = useRef(new Set<string>())
   const roomMessageIdsRef = useRef(new Set<string>())
-  const presenceStopRef = useRef<(() => Promise<void>) | null>(null)
   userIdRef.current = user?.id ?? null
   roomsRef.current = rooms
   needsJoinRef.current = needsJoin
@@ -2656,19 +2636,12 @@ function CommunityContent() {
     const prevActiveMembers = activeMembers
     const prevLeftMembers = leftMembers
 
-    const stopPresence = presenceStopRef.current
-    presenceStopRef.current = null
-    if (stopPresence) {
-      await stopPresence()
-    }
-
     setRooms((prev) => {
       const next = prev.filter((r) => r.id !== leftRoomId)
       writeRoomSession(authUser.id, { rooms: next })
       return next
     })
     setSelectedRoomId(null)
-    setActiveUsers([])
     setActiveMembers((prev) => Math.max(0, prev - 1))
     setLeftMembers((prev) => prev + 1)
     router.push("/community")
@@ -2939,7 +2912,6 @@ function CommunityContent() {
       setPinnedMessages([])
       setSections([])
       setSelectedSectionId(null)
-      setActiveUsers([])
       return
     }
 
@@ -3093,58 +3065,10 @@ function CommunityContent() {
   ])
 
   useEffect(() => {
-    if (!selectedRoomId || needsJoin || !user?.id) {
-      const stopPresence = presenceStopRef.current
-      presenceStopRef.current = null
-      if (stopPresence) void stopPresence()
-      if (!isRoomRealtimePresenceEnabled()) {
-        setActiveUsers([])
-      }
-      return
-    }
-
-    if (isDemoSupabaseBlocked()) {
-      setActiveUsers(getDemoActivePresence(selectedRoomId) as ActivePresence[])
-      return
-    }
-
-    if (isRoomRealtimePresenceEnabled()) {
-      return
-    }
-
-    const roomId = selectedRoomId
-    const userId = user.id
-    presenceRoomIdRef.current = roomId
-
-    const session = createRoomPresenceSession(supabase, {
-      roomId,
-      userId,
-      onActiveUsers: (users) => {
-        if (presenceRoomIdRef.current !== roomId) return
-        setActiveUsers(users as ActivePresence[])
-      },
-      onError: (error) => {
-        console.error("room_presence:", error)
-      },
-    })
-
-    presenceStopRef.current = session.stop
-
-    return () => {
-      presenceRoomIdRef.current = null
-      presenceStopRef.current = null
-      void session.stop()
-    }
-  }, [selectedRoomId, needsJoin, user?.id])
-
-  useEffect(() => {
     if (!selectedRoomId || needsJoin) return
     if (isDemoSupabaseBlocked()) return
 
     const roomId = selectedRoomId
-    presenceRoomIdRef.current = roomId
-    const useRealtimePresence =
-      isRoomRealtimePresenceEnabled() && Boolean(user?.id)
 
     const detach = subscribeCommunityRoomLiveChannel({
       supabase,
@@ -3163,42 +3087,12 @@ function CommunityContent() {
       onMessageInsert: ({ id, new: partial }) => {
         void reconcileAndApplyRealtimeMessage(roomId, id, partial)
       },
-      presence: useRealtimePresence
-        ? {
-            presenceKey: presenceSessionKeyRef.current,
-            userId: user!.id,
-            username: usernameRef.current,
-            avatarUrl: profile?.avatar_url ?? null,
-            onActiveUsers: (users) => {
-              if (presenceRoomIdRef.current !== roomId) return
-              setActiveUsers(
-                users.map((u) => ({
-                  user_id: u.user_id,
-                  profiles: {
-                    id: u.user_id,
-                    username: u.username,
-                    avatar_url: u.avatar_url,
-                  },
-                })) as ActivePresence[]
-              )
-            },
-            onError: (error) => {
-              console.error("room_presence realtime:", error)
-            },
-          }
-        : undefined,
     })
 
     return () => {
-      if (presenceRoomIdRef.current === roomId) {
-        presenceRoomIdRef.current = null
-      }
       detach()
-      if (useRealtimePresence) {
-        setActiveUsers([])
-      }
     }
-  }, [selectedRoomId, needsJoin, user?.id, profile?.avatar_url, patchMessageReaction])
+  }, [selectedRoomId, needsJoin, patchMessageReaction])
 
   useEffect(() => {
     if (!selectedRoomId || needsJoin || !user?.id) {
@@ -3211,7 +3105,14 @@ function CommunityContent() {
       return
     }
 
-    const channel = supabase.channel(`typing-room-${selectedRoomId}`)
+    const topic = `typing-room-${selectedRoomId}`
+    supabase.getChannels().forEach((c) => {
+      if (c.topic === topic) {
+        supabase.removeChannel(c)
+      }
+    })
+
+    const channel = supabase.channel(topic)
     typingChannelRef.current = channel
 
     channel.on("broadcast", { event: "typing" }, (payload: any) => {
@@ -4213,29 +4114,6 @@ function CommunityContent() {
                 </div>
               </div>
 
-              {selectedRoomId && !needsJoin ? (
-                <div className="mt-2 flex items-center">
-                  <div className="flex items-center space-x-[-8px]">
-                    {activeUsers.slice(0, 3).map((u) => (
-                      <ProfileAvatarLink
-                        key={u.user_id}
-                        userId={u.user_id}
-                        username={u.profiles?.username}
-                        src={u.profiles?.avatar_url}
-                        imgClassName="h-8 w-8 rounded-full border-2 border-[#0B1120] object-cover"
-                      />
-                    ))}
-                  </div>
-                  {activeUsers.length > 3 ? (
-                    <div className="ml-1 text-xs text-gray-400">
-                      +{activeUsers.length - 3}
-                    </div>
-                  ) : null}
-                  <span className="ml-2 text-sm text-gray-400">
-                    {activeUsers.length} active traders
-                  </span>
-                </div>
-              ) : null}
             </div>
 
             {setupMode && isOwner && selectedRoomId ? (

@@ -74,9 +74,6 @@ final class RoomConversationViewModel {
     private var isApplyingRealtime = false
     private var didMarkReadThisOpen = false
     private var reactionBusyKeys: Set<String> = []
-    private let presenceSessionKey = "presence-\(UUID().uuidString)"
-    private var presenceRoomID: RoomID?
-    private var presenceProfileHydrateTask: Task<Void, Never>?
 
     init(
         roomID: RoomID,
@@ -208,9 +205,7 @@ final class RoomConversationViewModel {
     }
 
     var showsActivePresence: Bool {
-        BackendV2FeatureFlags.isEnabled(.roomPresence)
-            && (isMember || isOwner)
-            && showsRoomChrome
+        false
     }
 
     func openActivePresence() {
@@ -446,54 +441,27 @@ final class RoomConversationViewModel {
         realtimeTask?.cancel()
         realtimeTask = Task { [weak self] in
             guard let self else { return }
+            await realtimeHub?.stopWatchingRoomLive(roomID: roomID)
             let channel = RealtimeChannelID(kind: .room, topic: roomID.rawValue)
             try? await realtimeHub?.subscriptions.subscribe(channel)
             let token = await session.accessToken
             guard let realtimeHub else { return }
 
-            let presenceTrack = await makePresenceTrackConfig(accessToken: token)
-            if presenceTrack != nil || shouldUseDevPresenceFixtures {
-                presenceRoomID = roomID
-            }
-
-            if shouldUseDevPresenceFixtures {
-                await applyPresenceWireUsers(
-                    TradeRoomsFixtures.activePresenceWireUsers(viewerID: viewerID)
-                )
-            }
-
             let streams = realtimeHub.watchRoomLive(
                 roomID: roomID,
                 accessToken: token,
-                presenceTrack: presenceTrack
+                presenceTrack: nil
             )
 
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask { [weak self] in
-                    guard let self else { return }
-                    for await signal in streams.messages {
-                        guard !Task.isCancelled else { break }
-                        await applyRealtimeSignal(signal)
-                    }
-                }
-                if presenceTrack != nil {
-                    group.addTask { [weak self] in
-                        guard let self else { return }
-                        for await users in streams.presence {
-                            guard !Task.isCancelled else { break }
-                            await applyPresenceWireUsers(users)
-                        }
-                    }
-                }
+            for await signal in streams.messages {
+                guard !Task.isCancelled else { break }
+                await applyRealtimeSignal(signal)
             }
         }
     }
 
     func stopRealtime() {
         VoiceMessagePlaybackController.shared.stopAll()
-        presenceRoomID = nil
-        presenceProfileHydrateTask?.cancel()
-        presenceProfileHydrateTask = nil
         activePresenceMembers = []
         if inboxStore.activeRoomID == roomID {
             inboxStore.setActiveRoom(nil)
@@ -1669,112 +1637,6 @@ final class RoomConversationViewModel {
             updated.messages = patchList(cache.messages)
             channelCaches[channelID] = updated
         }
-    }
-
-    private var shouldUseDevPresenceFixtures: Bool {
-        guard BackendV2FeatureFlags.isEnabled(.roomPresence) else { return false }
-        guard isMember || isOwner, let viewerID else { return false }
-        return MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
-            || roomID.rawValue.hasPrefix("dev-")
-    }
-
-    private func makePresenceTrackConfig(accessToken: String?) async -> RoomPresenceTrackConfig? {
-        guard BackendV2FeatureFlags.isEnabled(.roomPresence) else { return nil }
-        guard isMember || isOwner, let viewerID else { return nil }
-        guard !shouldUseDevPresenceFixtures else { return nil }
-        guard accessToken != nil else { return nil }
-
-        let profile = await resolveViewerProfileForPresence()
-        let username = ProfileIdentitySanitizer.sanitizedPublicField(profile?.username)
-            ?? ProfileIdentitySanitizer.neutralFallbackName
-        return RoomPresenceTrackConfig(
-            presenceKey: presenceSessionKey,
-            userID: viewerID.rawValue,
-            username: username,
-            avatarURL: profile?.avatar?.id
-        )
-    }
-
-    private func resolveViewerProfileForPresence() async -> Profile? {
-        guard let viewerID else { return nil }
-        if let cached = detailCache.profile(id: viewerID) { return cached }
-        if viewerID.rawValue.hasPrefix("dev."),
-           let fixture = FollowListFixtures.profile(id: viewerID)
-        {
-            return fixture
-        }
-        let fetched = try? await SessionProfileStore.shared.profiles(
-            ids: [viewerID],
-            detailCache: detailCache,
-            repository: profiles
-        )
-        return fetched?.first
-    }
-
-    private func applyPresenceWireUsers(_ users: [RoomPresenceWireUser]) async {
-        guard showsActivePresence else { return }
-        guard presenceRoomID == roomID else { return }
-
-        let scopedRoom = roomID
-        presenceProfileHydrateTask?.cancel()
-        presenceProfileHydrateTask = Task {
-            let ids = users.map { ProfileID($0.userID) }
-            var resolved: [ProfileID: Profile] = [:]
-            for id in ids {
-                if let cached = detailCache.profile(id: id) {
-                    resolved[id] = cached
-                } else if id.rawValue.hasPrefix("dev."),
-                          let fixture = FollowListFixtures.profile(id: id)
-                {
-                    detailCache.seed(fixture)
-                    resolved[id] = fixture
-                }
-            }
-            let missing = ids.filter { resolved[$0] == nil }
-            if !missing.isEmpty {
-                let fetched = (try? await SessionProfileStore.shared.profiles(
-                    ids: missing,
-                    detailCache: detailCache,
-                    repository: profiles
-                )) ?? []
-                for profile in fetched {
-                    resolved[profile.id] = profile
-                }
-            }
-            guard !Task.isCancelled, presenceRoomID == scopedRoom else { return }
-            activePresenceMembers = users.map { wire in
-                let id = ProfileID(wire.userID)
-                let profile = resolved[id] ?? profileFromPresenceWire(wire)
-                return RoomActivePresenceMember(profileID: id, profile: profile)
-            }
-            .sorted {
-                $0.profile.username.localizedCaseInsensitiveCompare($1.profile.username)
-                    == .orderedAscending
-            }
-        }
-    }
-
-    private func profileFromPresenceWire(_ wire: RoomPresenceWireUser) -> Profile {
-        let username = ProfileIdentitySanitizer.sanitizedPublicField(wire.username)
-            ?? ProfileIdentitySanitizer.neutralFallbackName
-        let avatar = wire.avatarURL.flatMap { url in
-            MediaReference(id: url, kind: .image, altText: nil)
-        }
-        return Profile(
-            id: ProfileID(wire.userID),
-            userID: UserID(wire.userID),
-            username: username,
-            displayName: username,
-            bio: nil,
-            avatar: avatar,
-            traderType: nil,
-            tradingStyle: nil,
-            primaryMarket: nil,
-            startedTradingAt: nil,
-            isPrivate: false,
-            isCreator: false,
-            createdAt: Date()
-        )
     }
 
     private func buildTimeline(from messages: [Message]) -> [ConversationTimelineItem] {

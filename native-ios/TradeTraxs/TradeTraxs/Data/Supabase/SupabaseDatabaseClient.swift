@@ -92,6 +92,7 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
         query: [URLQueryItem] = [],
         headers: [String: String] = [:]
     ) async throws -> [T] {
+        DatabaseRequestDebugLog.table(table, query: query)
         var merged = headers
         if merged["Accept"] == nil {
             merged["Accept"] = "application/json"
@@ -111,6 +112,7 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
         from table: String,
         query: [URLQueryItem]
     ) async throws -> T {
+        DatabaseRequestDebugLog.table(table, query: query)
         let response = try await transport.send(
             host: .supabase,
             path: "/rest/v1/\(table)",
@@ -128,6 +130,7 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
     }
 
     func count(from table: String, query: [URLQueryItem]) async throws -> Int {
+        DatabaseRequestDebugLog.table(table, query: query)
         var items = query
         if !items.contains(where: { $0.name == "select" }) {
             items.insert(SupabaseQuery.select("id"), at: 0)
@@ -168,6 +171,7 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
         query: [URLQueryItem],
         returning type: T.Type
     ) async throws -> T {
+        DatabaseRequestDebugLog.write(operation: "INSERT", target: table, reason: "insert-returning")
         let data = try transport.encodeJSON(body)
         let response = try await transport.send(
             host: .supabase,
@@ -192,6 +196,7 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
     }
 
     func insert<Body: Encodable>(_ body: Body, into table: String) async throws {
+        DatabaseRequestDebugLog.write(operation: "INSERT", target: table, reason: "insert-minimal")
         let data = try transport.encodeJSON(body)
         _ = try await transport.send(
             host: .supabase,
@@ -211,6 +216,7 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
         query: [URLQueryItem],
         returning type: T.Type
     ) async throws -> T {
+        DatabaseRequestDebugLog.write(operation: "UPDATE", target: table, reason: "update-returning")
         let data = try transport.encodeJSON(body)
         let response = try await transport.send(
             host: .supabase,
@@ -239,6 +245,7 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
         table: String,
         query: [URLQueryItem]
     ) async throws {
+        DatabaseRequestDebugLog.write(operation: "UPDATE", target: table, reason: "update-minimal")
         let data = try transport.encodeJSON(body)
         _ = try await transport.send(
             host: .supabase,
@@ -260,6 +267,7 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
         returning type: T.Type,
         select: String
     ) async throws -> T {
+        DatabaseRequestDebugLog.write(operation: "UPSERT", target: table, reason: "upsert-returning")
         let data = try transport.encodeJSON(body)
         let response = try await transport.send(
             host: .supabase,
@@ -287,6 +295,7 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
     }
 
     func delete(from table: String, query: [URLQueryItem]) async throws {
+        DatabaseRequestDebugLog.write(operation: "DELETE", target: table, reason: "delete")
         _ = try await transport.send(
             host: .supabase,
             path: "/rest/v1/\(table)",
@@ -297,6 +306,8 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
     }
 
     func rpcData(functionName: String, parametersJSON: Data?) async throws -> Data {
+        DatabaseRequestDebugLog.write(operation: "RPC", target: functionName, reason: "rpc")
+        DatabaseRequestDebugLog.rpc(functionName)
         let correlation = BackendV2RpcStageTracer.begin(functionName)
         let preparedAt = ContinuousClock.now
         BackendV2RpcStageTracer.trace(functionName, stage: "request.prepared", correlation: correlation)

@@ -5,7 +5,7 @@
  * Alternate (MCP): generate_typescript_types(project_id)
  * Schema: public
  * Source: remote TradeTraxs project fobudrkniacatvilbofw (us-east-2)
- * Generated: 2026-08-24 (content_reports + psychology_coach_snapshots appended 2026-09-04 from migrations 20260903230000, 20260902180000)
+ * Generated: 2026-09-09 (regenerated from live schema; includes room_join_requests + Apple subscription tables)
  *
  * Requires SUPABASE_ACCESS_TOKEN or `supabase login` for CLI regeneration.
  * Set SUPABASE_PROJECT_ID to the linked project ref (not a secret).
@@ -23,7 +23,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -79,6 +79,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "account_payout_cycles_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      account_payout_entries: {
+        Row: {
+          account_id: string
+          amount: number
+          created_at: string
+          id: string
+          note: string | null
+          payout_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          amount: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          payout_date: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          amount?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          payout_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_payout_entries_account_id_fkey"
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
@@ -153,6 +194,7 @@ export type Database = {
           category: string | null
           consistency: number | null
           created_at: string | null
+          custom_public_status: string | null
           daily_drawdown: number | null
           id: string
           is_active: boolean | null
@@ -163,6 +205,7 @@ export type Database = {
           payout_drawdown_behavior: string | null
           profit_target: number | null
           remember_payout_drawdown_behavior: boolean
+          show_in_account_dropdowns: boolean
           user_id: string
           winning_day_threshold: number | null
           winning_days: number | null
@@ -174,6 +217,7 @@ export type Database = {
           category?: string | null
           consistency?: number | null
           created_at?: string | null
+          custom_public_status?: string | null
           daily_drawdown?: number | null
           id?: string
           is_active?: boolean | null
@@ -184,6 +228,7 @@ export type Database = {
           payout_drawdown_behavior?: string | null
           profit_target?: number | null
           remember_payout_drawdown_behavior?: boolean
+          show_in_account_dropdowns?: boolean
           user_id: string
           winning_day_threshold?: number | null
           winning_days?: number | null
@@ -195,6 +240,7 @@ export type Database = {
           category?: string | null
           consistency?: number | null
           created_at?: string | null
+          custom_public_status?: string | null
           daily_drawdown?: number | null
           id?: string
           is_active?: boolean | null
@@ -205,6 +251,7 @@ export type Database = {
           payout_drawdown_behavior?: string | null
           profit_target?: number | null
           remember_payout_drawdown_behavior?: boolean
+          show_in_account_dropdowns?: boolean
           user_id?: string
           winning_day_threshold?: number | null
           winning_days?: number | null
@@ -346,6 +393,7 @@ export type Database = {
           description: string | null
           firm: string | null
           id: string
+          image_crop: Json | null
           image_url: string | null
           is_featured: boolean
           is_public: boolean
@@ -373,6 +421,7 @@ export type Database = {
           description?: string | null
           firm?: string | null
           id?: string
+          image_crop?: Json | null
           image_url?: string | null
           is_featured?: boolean
           is_public?: boolean
@@ -400,6 +449,7 @@ export type Database = {
           description?: string | null
           firm?: string | null
           id?: string
+          image_crop?: Json | null
           image_url?: string | null
           is_featured?: boolean
           is_public?: boolean
@@ -747,6 +797,90 @@ export type Database = {
           },
         ]
       }
+      apple_subscription_notifications: {
+        Row: {
+          environment: string | null
+          id: string
+          notification_type: string
+          notification_uuid: string
+          original_transaction_id: string | null
+          processed_at: string
+          signed_date: string | null
+          subtype: string | null
+        }
+        Insert: {
+          environment?: string | null
+          id?: string
+          notification_type: string
+          notification_uuid: string
+          original_transaction_id?: string | null
+          processed_at?: string
+          signed_date?: string | null
+          subtype?: string | null
+        }
+        Update: {
+          environment?: string | null
+          id?: string
+          notification_type?: string
+          notification_uuid?: string
+          original_transaction_id?: string | null
+          processed_at?: string
+          signed_date?: string | null
+          subtype?: string | null
+        }
+        Relationships: []
+      }
+      apple_subscriptions: {
+        Row: {
+          billing_interval: string | null
+          created_at: string
+          environment: string
+          expires_at: string | null
+          id: string
+          last_verified_at: string
+          latest_transaction_id: string
+          original_transaction_id: string
+          product_id: string
+          purchased_at: string | null
+          revoked_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          billing_interval?: string | null
+          created_at?: string
+          environment: string
+          expires_at?: string | null
+          id?: string
+          last_verified_at?: string
+          latest_transaction_id: string
+          original_transaction_id: string
+          product_id: string
+          purchased_at?: string | null
+          revoked_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          billing_interval?: string | null
+          created_at?: string
+          environment?: string
+          expires_at?: string | null
+          id?: string
+          last_verified_at?: string
+          latest_transaction_id?: string
+          original_transaction_id?: string
+          product_id?: string
+          purchased_at?: string | null
+          revoked_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       billing_accounts: {
         Row: {
           created_at: string
@@ -934,29 +1068,7 @@ export type Database = {
           target_id?: string
           target_type?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "content_reports_reported_user_id_fkey"
-            columns: ["reported_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "content_reports_reporter_user_id_fkey"
-            columns: ["reporter_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "content_reports_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       conversation_member_preferences: {
         Row: {
@@ -2012,6 +2124,7 @@ export type Database = {
           caption: string | null
           created_at: string | null
           id: string
+          image_crop: Json | null
           image_url: string | null
           pnl: number | null
           rr: number | null
@@ -2022,6 +2135,7 @@ export type Database = {
           caption?: string | null
           created_at?: string | null
           id?: string
+          image_crop?: Json | null
           image_url?: string | null
           pnl?: number | null
           rr?: number | null
@@ -2032,6 +2146,7 @@ export type Database = {
           caption?: string | null
           created_at?: string | null
           id?: string
+          image_crop?: Json | null
           image_url?: string | null
           pnl?: number | null
           rr?: number | null
@@ -2140,6 +2255,41 @@ export type Database = {
           },
         ]
       }
+      profile_pinned_content: {
+        Row: {
+          content_id: string
+          content_type: string
+          created_at: string
+          id: string
+          position: number
+          user_id: string
+        }
+        Insert: {
+          content_id: string
+          content_type: string
+          created_at?: string
+          id?: string
+          position: number
+          user_id: string
+        }
+        Update: {
+          content_id?: string
+          content_type?: string
+          created_at?: string
+          id?: string
+          position?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_pinned_content_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_post_comments: {
         Row: {
           content: string
@@ -2226,6 +2376,7 @@ export type Database = {
           content: string | null
           created_at: string | null
           id: string
+          image_crop: Json | null
           image_url: string | null
           is_pinned: boolean | null
           room_description: string | null
@@ -2238,6 +2389,7 @@ export type Database = {
           content?: string | null
           created_at?: string | null
           id?: string
+          image_crop?: Json | null
           image_url?: string | null
           is_pinned?: boolean | null
           room_description?: string | null
@@ -2250,6 +2402,7 @@ export type Database = {
           content?: string | null
           created_at?: string | null
           id?: string
+          image_crop?: Json | null
           image_url?: string | null
           is_pinned?: boolean | null
           room_description?: string | null
@@ -2291,6 +2444,7 @@ export type Database = {
           creator_code: string | null
           creator_granted_at: string | null
           current_period_end: string | null
+          dm_privacy: string
           early_access_campaign_id: string | null
           early_access_ends_at: string | null
           early_access_enrolled_at: string | null
@@ -2352,6 +2506,7 @@ export type Database = {
           creator_code?: string | null
           creator_granted_at?: string | null
           current_period_end?: string | null
+          dm_privacy?: string
           early_access_campaign_id?: string | null
           early_access_ends_at?: string | null
           early_access_enrolled_at?: string | null
@@ -2413,6 +2568,7 @@ export type Database = {
           creator_code?: string | null
           creator_granted_at?: string | null
           current_period_end?: string | null
+          dm_privacy?: string
           early_access_campaign_id?: string | null
           early_access_ends_at?: string | null
           early_access_enrolled_at?: string | null
@@ -2499,6 +2655,38 @@ export type Database = {
             foreignKeyName: "psychology_coach_snapshots_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      psychology_report_ai_cache: {
+        Row: {
+          ai_summary: string
+          facts_hash: string
+          generated_at: string
+          report_id: string
+          user_id: string
+        }
+        Insert: {
+          ai_summary: string
+          facts_hash: string
+          generated_at?: string
+          report_id: string
+          user_id: string
+        }
+        Update: {
+          ai_summary?: string
+          facts_hash?: string
+          generated_at?: string
+          report_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "psychology_report_ai_cache_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -2826,6 +3014,58 @@ export type Database = {
           },
         ]
       }
+      room_join_requests: {
+        Row: {
+          created_at: string
+          id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          room_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          room_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          room_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_join_requests_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_join_requests_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_join_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_member_channel_preferences: {
         Row: {
           created_at: string
@@ -2871,6 +3111,94 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_member_tag_assignments: {
+        Row: {
+          created_at: string
+          room_id: string
+          tag_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          room_id: string
+          tag_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          room_id?: string
+          tag_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_member_tag_assignments_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_member_tag_assignments_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "room_member_tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_member_tag_assignments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_member_tags: {
+        Row: {
+          color_key: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_preset: boolean
+          name: string
+          room_id: string
+        }
+        Insert: {
+          color_key?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_preset?: boolean
+          name: string
+          room_id: string
+        }
+        Update: {
+          color_key?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_preset?: boolean
+          name?: string
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_member_tags_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_member_tags_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
             referencedColumns: ["id"]
           },
         ]
@@ -2981,12 +3309,12 @@ export type Database = {
       }
       room_messages: {
         Row: {
+          audio_duration_ms: number | null
+          audio_url: string | null
           content: string | null
           created_at: string | null
           id: string
           image_url: string | null
-          audio_duration_ms: number | null
-          audio_url: string | null
           parent_message_id: string | null
           pinned: boolean | null
           pinned_trade_id: string | null
@@ -2998,12 +3326,12 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          audio_duration_ms?: number | null
+          audio_url?: string | null
           content?: string | null
           created_at?: string | null
           id?: string
           image_url?: string | null
-          audio_duration_ms?: number | null
-          audio_url?: string | null
           parent_message_id?: string | null
           pinned?: boolean | null
           pinned_trade_id?: string | null
@@ -3015,12 +3343,12 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          audio_duration_ms?: number | null
+          audio_url?: string | null
           content?: string | null
           created_at?: string | null
           id?: string
           image_url?: string | null
-          audio_duration_ms?: number | null
-          audio_url?: string | null
           parent_message_id?: string | null
           pinned?: boolean | null
           pinned_trade_id?: string | null
@@ -3150,37 +3478,61 @@ export type Database = {
       rooms: {
         Row: {
           allow_members_chat: boolean | null
+          category: string | null
           created_at: string | null
           description: string | null
+          discovery_tags: string[]
           id: string
           image_url: string | null
           is_private: boolean | null
+          join_policy: string
+          members_can_message: boolean
+          members_can_share_media: boolean
+          members_can_share_trades: boolean
           name: string
           owner_user_id: string | null
+          room_kind: string
+          rules: string | null
           show_on_profile: boolean | null
           slug: string | null
         }
         Insert: {
           allow_members_chat?: boolean | null
+          category?: string | null
           created_at?: string | null
           description?: string | null
+          discovery_tags?: string[]
           id?: string
           image_url?: string | null
           is_private?: boolean | null
+          join_policy?: string
+          members_can_message?: boolean
+          members_can_share_media?: boolean
+          members_can_share_trades?: boolean
           name: string
           owner_user_id?: string | null
+          room_kind?: string
+          rules?: string | null
           show_on_profile?: boolean | null
           slug?: string | null
         }
         Update: {
           allow_members_chat?: boolean | null
+          category?: string | null
           created_at?: string | null
           description?: string | null
+          discovery_tags?: string[]
           id?: string
           image_url?: string | null
           is_private?: boolean | null
+          join_policy?: string
+          members_can_message?: boolean
+          members_can_share_media?: boolean
+          members_can_share_trades?: boolean
           name?: string
           owner_user_id?: string | null
+          room_kind?: string
+          rules?: string | null
           show_on_profile?: boolean | null
           slug?: string | null
         }
@@ -3489,6 +3841,59 @@ export type Database = {
           },
         ]
       }
+      trader_daily_check_ins: {
+        Row: {
+          check_in_date: string
+          created_at: string
+          energy_level: number | null
+          focus_level: number | null
+          id: string
+          morning_rating: number | null
+          notes: string | null
+          sleep_hours: number | null
+          sleep_quality: number | null
+          stress_level: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          check_in_date: string
+          created_at?: string
+          energy_level?: number | null
+          focus_level?: number | null
+          id?: string
+          morning_rating?: number | null
+          notes?: string | null
+          sleep_hours?: number | null
+          sleep_quality?: number | null
+          stress_level?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          check_in_date?: string
+          created_at?: string
+          energy_level?: number | null
+          focus_level?: number | null
+          id?: string
+          morning_rating?: number | null
+          notes?: string | null
+          sleep_hours?: number | null
+          sleep_quality?: number | null
+          stress_level?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trader_daily_check_ins_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trades: {
         Row: {
           account_category: string | null
@@ -3510,13 +3915,18 @@ export type Database = {
           emotion: string | null
           entry_price: number | null
           entry_time: string | null
+          execution_rating: number | null
+          exit_emotion: string | null
           exit_price: number | null
           exit_time: string | null
           first_published_at: string | null
           followed_plan: boolean | null
           id: string
+          image_crop: Json | null
           image_display_mode: string
           image_url: string | null
+          import_fingerprint: string | null
+          import_source: string | null
           is_initial_import: boolean | null
           is_pinned: boolean | null
           is_public: boolean | null
@@ -3541,8 +3951,6 @@ export type Database = {
           trade_mode: string | null
           trade_type: string | null
           user_id: string | null
-          import_source: string | null
-          import_fingerprint: string | null
         }
         Insert: {
           account_category?: string | null
@@ -3564,13 +3972,18 @@ export type Database = {
           emotion?: string | null
           entry_price?: number | null
           entry_time?: string | null
+          execution_rating?: number | null
+          exit_emotion?: string | null
           exit_price?: number | null
           exit_time?: string | null
           first_published_at?: string | null
           followed_plan?: boolean | null
           id?: string
+          image_crop?: Json | null
           image_display_mode?: string
           image_url?: string | null
+          import_fingerprint?: string | null
+          import_source?: string | null
           is_initial_import?: boolean | null
           is_pinned?: boolean | null
           is_public?: boolean | null
@@ -3595,8 +4008,6 @@ export type Database = {
           trade_mode?: string | null
           trade_type?: string | null
           user_id?: string | null
-          import_source?: string | null
-          import_fingerprint?: string | null
         }
         Update: {
           account_category?: string | null
@@ -3618,13 +4029,18 @@ export type Database = {
           emotion?: string | null
           entry_price?: number | null
           entry_time?: string | null
+          execution_rating?: number | null
+          exit_emotion?: string | null
           exit_price?: number | null
           exit_time?: string | null
           first_published_at?: string | null
           followed_plan?: boolean | null
           id?: string
+          image_crop?: Json | null
           image_display_mode?: string
           image_url?: string | null
+          import_fingerprint?: string | null
+          import_source?: string | null
           is_initial_import?: boolean | null
           is_pinned?: boolean | null
           is_public?: boolean | null
@@ -3649,8 +4065,6 @@ export type Database = {
           trade_mode?: string | null
           trade_type?: string | null
           user_id?: string | null
-          import_source?: string | null
-          import_fingerprint?: string | null
         }
         Relationships: [
           {
@@ -3785,6 +4199,87 @@ export type Database = {
           },
         ]
       }
+      vault_folder_items: {
+        Row: {
+          created_at: string
+          folder_id: string
+          vault_item_id: string
+        }
+        Insert: {
+          created_at?: string
+          folder_id: string
+          vault_item_id: string
+        }
+        Update: {
+          created_at?: string
+          folder_id?: string
+          vault_item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_folder_items_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "vault_folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vault_folder_items_vault_item_id_fkey"
+            columns: ["vault_item_id"]
+            isOneToOne: false
+            referencedRelation: "vault_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vault_folders: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      vault_items: {
+        Row: {
+          content_id: string
+          content_type: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          content_id: string
+          content_type: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          content_id?: string
+          content_type?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -3831,6 +4326,17 @@ export type Database = {
           p_row_ts: string
         }
         Returns: boolean
+      }
+      _v2_messaging_inbox_preview_text: {
+        Args: {
+          p_content: string
+          p_deleted_for_everyone: boolean
+          p_image_url: string
+          p_is_system: boolean
+          p_trade_id: string
+          p_type: string
+        }
+        Returns: string
       }
       _v2_messaging_parse_cursor: {
         Args: { p_cursor: string }
@@ -3906,6 +4412,16 @@ export type Database = {
       admin_recent_audit: { Args: { p_limit?: number }; Returns: Json }
       admin_user_activity_counts: { Args: { p_target: string }; Returns: Json }
       affiliate_payout_balance: { Args: { p_user_id: string }; Returns: Json }
+      apple_subscription_is_active: {
+        Args: {
+          p_row: Database["public"]["Tables"]["apple_subscriptions"]["Row"]
+        }
+        Returns: boolean
+      }
+      can_manage_trade_room: {
+        Args: { p_room_id: string; p_user_id: string }
+        Returns: boolean
+      }
       claim_pro_for_life: {
         Args: { p_environment: string; p_user_id: string }
         Returns: {
@@ -3918,6 +4434,17 @@ export type Database = {
         }[]
       }
       consume_app_rate_limit: { Args: { p_action: string }; Returns: undefined }
+      conversations_preview_from_message_row: {
+        Args: { p_message: Database["public"]["Tables"]["messages"]["Row"] }
+        Returns: {
+          activity_at: string
+          preview: string
+        }[]
+      }
+      default_public_account_label: {
+        Args: { p_category: string; p_mode: string }
+        Returns: string
+      }
       delete_own_trade: { Args: { p_trade_id: string }; Returns: undefined }
       early_access_environment_valid: {
         Args: { p_environment: string }
@@ -3934,6 +4461,10 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      ensure_room_member_tags_defaults: {
+        Args: { p_room_id: string }
+        Returns: undefined
       }
       expire_early_access: { Args: { p_user_id: string }; Returns: boolean }
       expire_early_access_batch: { Args: never; Returns: number }
@@ -3991,6 +4522,7 @@ export type Database = {
         Returns: number
       }
       free_plan_utc_day_start: { Args: never; Returns: string }
+      get_active_block_peer_ids: { Args: never; Returns: string[] }
       get_app_icon_badge: { Args: { p_user_id?: string }; Returns: number }
       get_conversation_shared_media: {
         Args: {
@@ -4059,6 +4591,14 @@ export type Database = {
           unread_count: number
         }[]
       }
+      get_user_block_status: {
+        Args: { p_other_user_id: string }
+        Returns: {
+          blocked_by_me: boolean
+          blocked_by_other: boolean
+          other_user_id: string
+        }[]
+      }
       is_active_room_member: {
         Args: { p_room_id: string; p_user_id: string }
         Returns: boolean
@@ -4101,6 +4641,16 @@ export type Database = {
           user_id: string
         }[]
       }
+      list_muted_dm_peers: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          conversation_id: string
+          name: string
+          peer_id: string
+          username: string
+        }[]
+      }
       list_public_user_reviews: {
         Args: never
         Returns: {
@@ -4131,6 +4681,7 @@ export type Database = {
         Args: { p_sender_id: string; p_trade_id: string; p_type: string }
         Returns: undefined
       }
+      normalize_trade_ticker: { Args: { p_raw: string }; Returns: string }
       popular_trade_rooms: {
         Args: { p_limit?: number }
         Returns: {
@@ -4141,13 +4692,41 @@ export type Database = {
           slug: string
         }[]
       }
+      profile_has_active_apple_subscription: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
       profile_is_pro_user: { Args: { p_user_id: string }; Returns: boolean }
+      profile_pinned_content_bootstrap: {
+        Args: {
+          p_can_view: boolean
+          p_is_own: boolean
+          p_profile_id: string
+          p_viewer_id: string
+        }
+        Returns: Json
+      }
+      profile_pinned_item_visible: {
+        Args: {
+          p_can_view: boolean
+          p_content_id: string
+          p_content_type: string
+          p_is_own: boolean
+          p_profile_id: string
+          p_viewer_id: string
+        }
+        Returns: boolean
+      }
       rate_limit_cleanup_counters: {
         Args: { p_retain?: string }
         Returns: number
       }
       rate_limit_hit: { Args: { p_action: string }; Returns: undefined }
       rate_limit_is_service_role: { Args: never; Returns: boolean }
+      recipient_allows_dm: {
+        Args: { p_recipient: string; p_sender: string }
+        Returns: boolean
+      }
       record_account_payout: {
         Args: {
           p_account_id: string
@@ -4164,9 +4743,43 @@ export type Database = {
         Args: { p_code: string; p_user_id: string }
         Returns: string
       }
+      room_message_insert_allowed: {
+        Args: {
+          p_audio_url: string
+          p_image_url: string
+          p_message_type: string
+          p_room_id: string
+          p_section_id: string
+          p_trade_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
       room_message_insert_section_allowed: {
         Args: { p_room_id: string; p_section_id: string; p_user_id: string }
         Returns: boolean
+      }
+      rpc_v1_activity_bootstrap: {
+        Args: { p_cursor?: string; p_limit?: number }
+        Returns: Json
+      }
+      rpc_v1_calendar_bootstrap: {
+        Args: {
+          p_account_id?: string
+          p_entry_from?: string
+          p_entry_to?: string
+          p_month: number
+          p_year: number
+        }
+        Returns: Json
+      }
+      rpc_v1_check_in_history_bootstrap: {
+        Args: {
+          p_account_id?: string
+          p_end_date: string
+          p_start_date: string
+        }
+        Returns: Json
       }
       rpc_v1_conversation_thread_bootstrap: {
         Args: {
@@ -4181,8 +4794,34 @@ export type Database = {
         Args: { p_message_id: string }
         Returns: Json
       }
+      rpc_v1_create_trade_room: {
+        Args: {
+          p_category?: string
+          p_channels?: Json
+          p_description?: string
+          p_discovery_tags?: string[]
+          p_image_url?: string
+          p_is_private?: boolean
+          p_join_policy?: string
+          p_members_can_message?: boolean
+          p_members_can_share_media?: boolean
+          p_members_can_share_trades?: boolean
+          p_name: string
+          p_rules?: string
+          p_show_on_profile?: boolean
+        }
+        Returns: Json
+      }
       rpc_v1_dashboard_bootstrap: {
         Args: { p_account_id?: string; p_trade_limit?: number }
+        Returns: Json
+      }
+      rpc_v1_explore_bootstrap: {
+        Args: {
+          p_room_limit?: number
+          p_trader_limit?: number
+          p_trader_offset?: number
+        }
         Returns: Json
       }
       rpc_v1_feed_bootstrap: {
@@ -4195,8 +4834,16 @@ export type Database = {
         Returns: Json
       }
       rpc_v1_getting_started_signals: { Args: never; Returns: Json }
+      rpc_v1_list_trade_room_join_requests: {
+        Args: { p_room_id: string; p_status?: string }
+        Returns: Json
+      }
       rpc_v1_messaging_bootstrap: {
         Args: { p_cursor?: string; p_limit?: number }
+        Returns: Json
+      }
+      rpc_v1_profile_account_insights: {
+        Args: { p_identifier: string }
         Returns: Json
       }
       rpc_v1_profile_bootstrap: {
@@ -4208,7 +4855,35 @@ export type Database = {
         }
         Returns: Json
       }
+      rpc_v1_profile_pin_content: {
+        Args: {
+          p_content_id: string
+          p_content_type: string
+          p_replace_position?: number
+        }
+        Returns: Json
+      }
+      rpc_v1_profile_reorder_pinned: {
+        Args: { p_from_position: number; p_to_position: number }
+        Returns: Json
+      }
+      rpc_v1_profile_unpin_content: {
+        Args: { p_content_id: string; p_content_type: string }
+        Returns: Json
+      }
       rpc_v1_prop_firm_bootstrap: { Args: never; Returns: Json }
+      rpc_v1_psychology_check_in_window: {
+        Args: { p_account_id?: string }
+        Returns: Json
+      }
+      rpc_v1_request_trade_room_join: {
+        Args: { p_room_id: string }
+        Returns: Json
+      }
+      rpc_v1_resolve_trade_room_join_request: {
+        Args: { p_action: string; p_request_id: string }
+        Returns: Json
+      }
       rpc_v1_room_bootstrap: {
         Args: {
           p_mark_read?: boolean
@@ -4222,7 +4897,71 @@ export type Database = {
         Args: { p_message_id: string }
         Returns: Json
       }
+      rpc_v1_search_trade_rooms: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: Json
+      }
       rpc_v1_session_bootstrap: { Args: never; Returns: Json }
+      rpc_v1_trade_detail_owner_comparison: {
+        Args: { p_trade_id: string }
+        Returns: Json
+      }
+      rpc_v1_trade_room_discovery: {
+        Args: { p_limit?: number; p_mode?: string; p_scope?: string }
+        Returns: Json
+      }
+      rpc_v1_trade_room_join_request_detail: {
+        Args: { p_request_id: string }
+        Returns: Json
+      }
+      rpc_v1_trade_rooms_home_bootstrap: {
+        Args: { p_limit?: number; p_scope?: string }
+        Returns: Json
+      }
+      rpc_v1_trades_list_bootstrap:
+        | {
+            Args: {
+              p_account_id?: string
+              p_created_from?: string
+              p_created_to?: string
+              p_cursor?: string
+              p_direction?: string
+              p_limit?: number
+              p_pnl_max?: number
+              p_pnl_min?: number
+              p_result?: string
+              p_search?: string
+              p_sort?: string
+              p_visibility?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_account_id?: string
+              p_account_mode?: string
+              p_created_from?: string
+              p_created_to?: string
+              p_cursor?: string
+              p_direction?: string
+              p_limit?: number
+              p_pnl_max?: number
+              p_pnl_min?: number
+              p_result?: string
+              p_rr_max?: number
+              p_rr_min?: number
+              p_search?: string
+              p_session?: string
+              p_sort?: string
+              p_visibility?: string
+            }
+            Returns: Json
+          }
+      rpc_v1_vault_state_batch: { Args: { p_items: Json }; Returns: Json }
+      rpc_v1_viewer_trade_room_join_request: {
+        Args: { p_room_id: string }
+        Returns: Json
+      }
       rpc_v2_messaging_bootstrap: {
         Args: {
           p_cursor: string
@@ -4230,6 +4969,15 @@ export type Database = {
           p_mark_message_notifications_read: boolean
         }
         Returns: Json
+      }
+      safe_public_account_display_name: {
+        Args: {
+          p_account_number: string
+          p_category: string
+          p_mode: string
+          p_name: string
+        }
+        Returns: string
       }
       search_public_trade_rooms: {
         Args: { p_limit?: number; p_query: string }
@@ -4254,6 +5002,14 @@ export type Database = {
           other_user_id: string
         }[]
       }
+      set_user_block: {
+        Args: { p_blocked: boolean; p_blocked_id: string }
+        Returns: {
+          blocked_by_me: boolean
+          blocked_by_other: boolean
+          other_user_id: string
+        }[]
+      }
       should_deliver_notification: {
         Args: {
           p_achievement_post_id?: string
@@ -4261,6 +5017,18 @@ export type Database = {
           p_type: string
         }
         Returns: boolean
+      }
+      sync_trade_room_join_request_notifications: {
+        Args: { p_request_id: string; p_status: string }
+        Returns: undefined
+      }
+      trade_room_join_request_recipient_ids: {
+        Args: { p_room_id: string }
+        Returns: string[]
+      }
+      trade_room_suggested_official_slug: {
+        Args: { p_user_id: string }
+        Returns: string
       }
       try_story_reply_image_url: {
         Args: { p_content: string }
@@ -4301,12 +5069,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4330,11 +5098,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4355,11 +5123,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4380,11 +5148,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4397,11 +5165,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

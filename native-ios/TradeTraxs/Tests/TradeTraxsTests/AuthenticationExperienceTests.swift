@@ -14,6 +14,46 @@ final class AuthenticationExperienceTests: XCTestCase {
         XCTAssertFalse(auth.manager.state.isAuthenticated)
     }
 
+    func testLoginViewModelSignUpEmailConfirmationPending() async {
+        let navigation = CompositionRoot.bootstrapNavigation()
+        let backend = InMemoryAuthenticationBackend()
+        backend.signUpRequiresEmailConfirmation = true
+        let auth = CompositionRoot.bootstrapAuthenticationForTests(
+            navigation: navigation,
+            backend: backend
+        )
+        _ = auth.manager.prepareColdLaunch()
+        let viewModel = LoginViewModel(
+            authenticationCoordinator: auth.coordinator,
+            allowsDevelopmentBypass: false
+        )
+        viewModel.mode = .signUp
+        viewModel.email = "pending@tradetraxs.com"
+        viewModel.password = "password1"
+        await viewModel.submit()
+        XCTAssertFalse(auth.manager.state.isAuthenticated)
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertEqual(viewModel.pendingConfirmationEmail, "pending@tradetraxs.com")
+        XCTAssertEqual(viewModel.mode, .signIn)
+        XCTAssertNotNil(viewModel.informationalMessage)
+    }
+
+    func testLoginViewModelSignUpImmediateSession() async {
+        let auth = CompositionRoot.bootstrapAuthenticationForTests()
+        _ = auth.manager.prepareColdLaunch()
+        let viewModel = LoginViewModel(
+            authenticationCoordinator: auth.coordinator,
+            allowsDevelopmentBypass: false
+        )
+        viewModel.mode = .signUp
+        viewModel.email = "new@tradetraxs.com"
+        viewModel.password = "password1"
+        await viewModel.submit()
+        XCTAssertTrue(auth.manager.state.isAuthenticated)
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertNil(viewModel.pendingConfirmationEmail)
+    }
+
     func testLoginViewModelSignInSuccess() async throws {
         let auth = CompositionRoot.bootstrapAuthenticationForTests()
         _ = auth.manager.prepareColdLaunch()

@@ -155,6 +155,8 @@ enum CompositionRoot {
                 pushNotifications.syncRegistrationForAuthenticatedSession()
                 pushNotifications.syncBadgeFromActivity()
                 await DailyCheckInReminderCoordinator.shared.sync()
+                await data.storeKitSubscriptions.startTransactionListenerIfNeeded()
+                try? await data.storeKitSubscriptions.syncVerifiedTransactionsToServer()
             }
         }
 

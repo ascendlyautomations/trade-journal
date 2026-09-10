@@ -98,7 +98,8 @@ struct AchievementDetailView: View {
                             imagePipeline: imagePipeline,
                             emptyIcon: .leaderboard,
                             accessibilityIdentifier: "detail.achievement.media",
-                            displayMode: .originalDetail,
+                            deliveryQuality: .fullResolution,
+                            auditSurface: "detail",
                             onDoubleTapLike: {
                                 Task {
                                     if let achievement = viewModel.achievement {

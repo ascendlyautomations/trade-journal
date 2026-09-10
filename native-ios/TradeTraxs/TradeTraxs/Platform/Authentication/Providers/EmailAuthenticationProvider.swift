@@ -39,4 +39,9 @@ nonisolated struct EmailAuthenticationProvider: AuthenticationProviding {
         if let error = validator.validateEmail(email) { throw error }
         try await backend.requestPasswordReset(email: email)
     }
+
+    func resendSignupConfirmation(email: String) async throws {
+        if let error = validator.validateEmail(email) { throw error }
+        try await backend.resendSignupConfirmation(email: email)
+    }
 }

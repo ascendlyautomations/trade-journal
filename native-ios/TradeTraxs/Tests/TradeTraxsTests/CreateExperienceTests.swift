@@ -97,17 +97,17 @@ final class CreateExperienceTests: XCTestCase {
         let wire = try JSONEncoder().encode(jsonValue)
         let object = try JSONSerialization.jsonObject(with: wire) as? [String: Any]
         let crop = object?["normalized_crop"] as? [String: Any]
-        XCTAssertEqual(crop?["x"] as? Double, 0, accuracy: 0.0001)
-        XCTAssertEqual(crop?["y"] as? Double, 0, accuracy: 0.0001)
-        XCTAssertEqual(crop?["width"] as? Double, 1, accuracy: 0.0001)
-        XCTAssertEqual(crop?["height"] as? Double, 1, accuracy: 0.0001)
+        XCTAssertEqual(crop?["x"] as? Double ?? -1, 0, accuracy: 0.0001)
+        XCTAssertEqual(crop?["y"] as? Double ?? -1, 0, accuracy: 0.0001)
+        XCTAssertEqual(crop?["width"] as? Double ?? -1, 1, accuracy: 0.0001)
+        XCTAssertEqual(crop?["height"] as? Double ?? -1, 1, accuracy: 0.0001)
 
         let legacyCorrupt = """
         {"presentation_aspect_ratio":0.8,"normalized_crop":{"x":false,"y":false,"width":true,"height":true},"aspect_mode":"portrait"}
         """.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(ContentImagePresentation.self, from: legacyCorrupt)
-        XCTAssertEqual(decoded.normalizedCrop?.x, 0, accuracy: 0.0001)
-        XCTAssertEqual(decoded.normalizedCrop?.width, 1, accuracy: 0.0001)
+        XCTAssertEqual(Double(decoded.normalizedCrop?.x ?? -1), 0, accuracy: 0.0001)
+        XCTAssertEqual(Double(decoded.normalizedCrop?.width ?? -1), 1, accuracy: 0.0001)
     }
 
     func testCreateReelRequiresVideo() async {

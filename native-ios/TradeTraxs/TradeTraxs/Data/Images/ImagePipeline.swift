@@ -1,5 +1,13 @@
 import Foundation
 
+/// Controls whether feed-sized Supabase render URLs are used at fetch time.
+nonisolated enum ImageDeliveryQuality: String, Sendable {
+    /// Supabase `/render/image/` transforms matching web feed presets.
+    case feedDisplay
+    /// Original object bytes — detail/zoom surfaces only.
+    case fullResolution
+}
+
 nonisolated enum ImagePurpose: String, Sendable {
     case profileAvatar
     case tradeScreenshot
@@ -13,17 +21,28 @@ nonisolated struct ImageRequest: Sendable {
     var purpose: ImagePurpose
     var maxPixelSize: Int?
     var allowsProgressiveLoading: Bool
+    var deliveryQuality: ImageDeliveryQuality
+    /// DEBUG audit label — `feed` vs `detail` for pipeline comparison logs.
+    var auditSurface: String
+    /// DEBUG row/item id (may differ from ``reference.id``).
+    var auditMediaID: String
 
     init(
         reference: MediaReference,
         purpose: ImagePurpose,
         maxPixelSize: Int? = nil,
-        allowsProgressiveLoading: Bool = true
+        allowsProgressiveLoading: Bool = true,
+        deliveryQuality: ImageDeliveryQuality = .feedDisplay,
+        auditSurface: String = "",
+        auditMediaID: String = ""
     ) {
         self.reference = reference
         self.purpose = purpose
         self.maxPixelSize = maxPixelSize
         self.allowsProgressiveLoading = allowsProgressiveLoading
+        self.deliveryQuality = deliveryQuality
+        self.auditSurface = auditSurface
+        self.auditMediaID = auditMediaID.isEmpty ? reference.id : auditMediaID
     }
 }
 

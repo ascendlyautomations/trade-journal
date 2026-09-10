@@ -25,6 +25,8 @@ final class ActivityInboxStore {
     private(set) var hasMore = true
 
     private var realtimeTask: Task<Void, Never>?
+    private var activeRealtimeUserID: String?
+    private weak var activeRealtimeHub: RealtimeHub?
     private var startedForUserID: String?
     private var isStarting = false
     private var isBootstrappingUnread = false
@@ -519,6 +521,17 @@ final class ActivityInboxStore {
     private func invalidateRealtimeOnly() {
         realtimeTask?.cancel()
         realtimeTask = nil
+        let userID = activeRealtimeUserID
+        let hub = activeRealtimeHub
+        activeRealtimeUserID = nil
+        activeRealtimeHub = nil
+        guard let userID, let hub else { return }
+        Task {
+            await hub.stopWatchingNotifications(userID: userID)
+            try? await hub.subscriptions.unsubscribe(
+                RealtimeChannelID(kind: .notifications, topic: "user:\(userID)")
+            )
+        }
     }
 
     private func startRealtime(
@@ -529,8 +542,11 @@ final class ActivityInboxStore {
     ) {
         guard let realtimeHub else { return }
         invalidateRealtimeOnly()
+        activeRealtimeUserID = userID
+        activeRealtimeHub = realtimeHub
         let channel = RealtimeChannelID(kind: .notifications, topic: "user:\(userID)")
         realtimeTask = Task { [weak self] in
+            await realtimeHub.stopWatchingNotifications(userID: userID)
             try? await realtimeHub.subscriptions.subscribe(channel)
             let token = await session.accessToken
             for await signal in realtimeHub.watchNotifications(

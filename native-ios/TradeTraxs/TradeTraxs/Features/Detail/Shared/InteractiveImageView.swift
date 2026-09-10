@@ -27,7 +27,11 @@ enum InteractiveImageZoomProbe {
 
 // MARK: - SwiftUI entry (Feed + detail image renderer with interactive zoom)
 
-/// Shared interactive image — UIKit owns pixels, bounds, pinch/tap, and window overlay zoom.
+/// Shared interactive image for Feed and detail — identical aspect-fit presentation.
+///
+/// Feed and Post/Trade detail use the same container sizing and `scaleAspectFit` UIKit
+/// renderer. Only ``deliveryQuality`` differs (640px feed egress vs full-resolution detail).
+/// Stored crop metadata is never reapplied — the baked/uploaded bitmap is shown as-is.
 struct InteractiveImageView: View {
     let mediaID: String
     let reference: MediaReference?
@@ -35,8 +39,10 @@ struct InteractiveImageView: View {
     let imagePipeline: any ImagePipeline
     var emptyIcon: AppIcon = .photo
     var accessibilityIdentifier: String = "interactive.media"
-    var displayMode: AdaptiveMediaDisplayMode? = nil
-    var feedPresentationOverride: ContentImagePresentation? = nil
+    /// Feed uses `.feedDisplay` (640px transform). Detail passes `.fullResolution`.
+    var deliveryQuality: ImageDeliveryQuality = .feedDisplay
+    /// DEBUG pipeline audit label — `feed` or `detail`.
+    var auditSurface: String = ""
     var onSingleTap: (() -> Void)?
     var onDoubleTapLike: (() -> Void)?
 
@@ -51,33 +57,22 @@ struct InteractiveImageView: View {
         Group {
             if let displayImage {
                 let aspect = MediaImageOrientation.aspectRatio(of: displayImage)
+                let pixels = MediaImageOrientation.pixelSize(of: displayImage)
+                // Feed and detail share aspect-fit rendering; only URL delivery differs.
                 AdaptiveInlineMediaContainer(
                     imageAspect: aspect,
-                    feedPresentationForWidth: usesDetailLayout
-                        ? nil
-                        : { width in
-                            resolvedFeedPresentation(
-                                imageAspect: aspect,
-                                containerWidth: width
-                            )
-                        },
-                    renderSurface: "feed",
+                    feedPresentationForWidth: nil,
+                    renderSurface: "detail-parity",
                     renderMediaID: mediaID,
                     background: colors.fillSecondary
                 ) { metrics in
-                    let presentation = resolvedFeedPresentation(
-                        imageAspect: aspect,
-                        containerWidth: metrics.containerWidth
-                    )
-                    let mode: AdaptiveMediaDisplayMode = usesDetailLayout
-                        ? .originalDetail
-                        : .feedCard(presentation)
                     InteractiveImageRepresentable(
                         mediaID: mediaID,
+                        storageReference: reference?.id ?? "",
+                        deliveryQuality: deliveryQuality,
+                        auditSurface: auditSurface,
                         image: displayImage,
                         backgroundColor: .clear,
-                        displayMode: mode,
-                        feedPresentation: presentation,
                         containerSize: CGSize(
                             width: metrics.containerWidth,
                             height: metrics.containerHeight
@@ -90,6 +85,30 @@ struct InteractiveImageView: View {
                             }
                         }
                     )
+                    .onAppear {
+                        #if DEBUG
+                        FeedImageRenderProbe.log(
+                            mediaID: mediaID,
+                            surface: deliveryQuality == .fullResolution ? "detail" : "feed",
+                            decodedPixels: pixels,
+                            containerSize: CGSize(
+                                width: metrics.containerWidth,
+                                height: metrics.containerHeight
+                            ),
+                            contentMode: "scaleAspectFit",
+                            imageViewFrame: nil,
+                            layoutMode: "detailFit"
+                        )
+                        FeedImageDisplayProbe.log(
+                            mediaID: mediaID,
+                            decodedAspect: aspect,
+                            containerWidth: metrics.containerWidth,
+                            storedHadCropRect: false,
+                            presentation: .naturalFit(imageAspect: aspect),
+                            usesDetailLikeLayout: true
+                        )
+                        #endif
+                    }
                 }
             } else if didFail || reference == nil {
                 placeholder
@@ -100,7 +119,7 @@ struct InteractiveImageView: View {
         .overlay {
             LikeFeedbackOverlay(isVisible: showLikeHeart, reduceMotion: reduceMotion)
         }
-        .task(id: "\(reference?.id ?? "")|\(purpose.rawValue)|\(displayScale)") {
+        .task(id: "\(reference?.id ?? "")|\(purpose.rawValue)|\(deliveryQuality.rawValue)|\(displayScale)") {
             await loadDisplayImage()
         }
         .accessibilityIdentifier(accessibilityIdentifier)
@@ -161,7 +180,16 @@ struct InteractiveImageView: View {
             reference: reference,
             purpose: purpose,
             maxPixelSize: nil,
-            allowsProgressiveLoading: true
+            allowsProgressiveLoading: true,
+            deliveryQuality: deliveryQuality,
+            auditSurface: auditSurface,
+            auditMediaID: mediaID
+        )
+        let cacheKey = MediaPipelineAudit.cacheKey(
+            referenceID: reference.id,
+            purpose: purpose,
+            deliveryQuality: deliveryQuality,
+            maxPixelSize: nil
         )
 
         didFail = false
@@ -169,7 +197,12 @@ struct InteractiveImageView: View {
 
         if let cachedData = await imagePipeline.cachedImageData(for: request) {
             FeedImageProbe.log(id: mediaID, event: .cacheHitMemory, url: requestKey)
-            await assignDisplayImage(from: cachedData, requestKey: requestKey, source: "memory")
+            await assignDisplayImage(
+                from: cachedData,
+                requestKey: requestKey,
+                cacheKey: cacheKey,
+                source: "memory"
+            )
             return
         }
 
@@ -177,7 +210,12 @@ struct InteractiveImageView: View {
 
         do {
             let data = try await imagePipeline.data(for: request)
-            await assignDisplayImage(from: data, requestKey: requestKey, source: "network")
+            await assignDisplayImage(
+                from: data,
+                requestKey: requestKey,
+                cacheKey: cacheKey,
+                source: "network"
+            )
         } catch {
             guard reference.id == requestKey else { return }
             didFail = true
@@ -186,7 +224,12 @@ struct InteractiveImageView: View {
     }
 
     @MainActor
-    private func assignDisplayImage(from data: Data, requestKey: String, source: String) async {
+    private func assignDisplayImage(
+        from data: Data,
+        requestKey: String,
+        cacheKey: String,
+        source: String
+    ) async {
         guard reference?.id == requestKey else {
             FeedImageProbe.log(id: mediaID, event: .staleCompletionDropped, url: requestKey)
             return
@@ -212,6 +255,31 @@ struct InteractiveImageView: View {
         let pixels = MediaImageOrientation.pixelSize(of: normalized)
         FeedImageProbe.log(id: mediaID, event: .imageDecoded, pixels: pixels)
 
+        #if DEBUG
+        let prePixels = MediaPipelineAudit.cgPixelSize(of: decoded)
+        let postPixels = MediaPipelineAudit.cgPixelSize(of: normalized)
+        MediaPipelineAudit.logDecode(
+            MediaPipelineAudit.DecodeReport(
+                surface: auditSurface.isEmpty ? "unknown" : auditSurface,
+                mediaID: mediaID,
+                storageReference: requestKey,
+                deliveryQuality: deliveryQuality.rawValue,
+                cacheKey: cacheKey,
+                source: source,
+                preNormalizeOrientation: MediaPipelineAudit.orientationLabel(decoded.imageOrientation),
+                preNormalizePixelWidth: prePixels.width,
+                preNormalizePixelHeight: prePixels.height,
+                preNormalizeSize: MediaPipelineAudit.uiImagePointSizeLabel(decoded),
+                preNormalizeScale: decoded.scale,
+                postNormalizePixelWidth: postPixels.width,
+                postNormalizePixelHeight: postPixels.height,
+                postNormalizeSize: MediaPipelineAudit.uiImagePointSizeLabel(normalized),
+                postNormalizeScale: normalized.scale,
+                postNormalizeOrientation: MediaPipelineAudit.orientationLabel(normalized.imageOrientation)
+            )
+        )
+        #endif
+
         displayImage = normalized
         FeedMediaReadyProbe.log(
             itemID: mediaID,
@@ -230,33 +298,17 @@ struct InteractiveImageView: View {
         }
     }
 
-    private var usesDetailLayout: Bool {
-        if case .some(.originalDetail) = displayMode { return true }
-        return false
-    }
-
-    private func resolvedFeedPresentation(
-        imageAspect: CGFloat,
-        containerWidth: CGFloat
-    ) -> ContentImagePresentation {
-        if let feedPresentationOverride { return feedPresentationOverride }
-        if let fromReference = reference?.imagePresentation { return fromReference }
-        if let reference,
-           let stored = ContentImagePresentationStore.presentation(forMediaURL: reference.id) {
-            return stored
-        }
-        return ContentImagePresentation.inferredLegacy(imageAspect: imageAspect)
-    }
 }
 
 // MARK: - UIViewRepresentable
 
 private struct InteractiveImageRepresentable: UIViewRepresentable {
     let mediaID: String
+    let storageReference: String
+    let deliveryQuality: ImageDeliveryQuality
+    let auditSurface: String
     let image: UIImage
     let backgroundColor: UIColor
-    let displayMode: AdaptiveMediaDisplayMode
-    let feedPresentation: ContentImagePresentation
     let containerSize: CGSize
     let onSingleTap: (() -> Void)?
     let onDoubleTapLike: (() -> Void)?
@@ -270,7 +322,12 @@ private struct InteractiveImageRepresentable: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> InteractiveImageUIView {
-        let view = InteractiveImageUIView(mediaID: mediaID)
+        let view = InteractiveImageUIView(
+            mediaID: mediaID,
+            storageReference: storageReference,
+            deliveryQuality: deliveryQuality,
+            auditSurface: auditSurface
+        )
         view.coordinator = context.coordinator
         view.backgroundFillColor = backgroundColor
         applyLayout(to: view)
@@ -292,15 +349,7 @@ private struct InteractiveImageRepresentable: UIViewRepresentable {
     }
 
     private func applyLayout(to view: InteractiveImageUIView) {
-        switch displayMode {
-        case .feedCard(let presentation):
-            view.applyFeedFraming(
-                image: image,
-                presentation: presentation
-            )
-        case .originalDetail:
-            view.applyDetailFit(image: image)
-        }
+        view.applyDetailFit(image: image, containerSize: containerSize)
     }
 
     final class Coordinator: NSObject {
@@ -326,17 +375,15 @@ private struct InteractiveImageRepresentable: UIViewRepresentable {
 /// Root interactive surface — `UIImageView` displays pixels; root owns recognizers.
 final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
     let mediaID: String
+    let storageReference: String
+    let deliveryQuality: ImageDeliveryQuality
+    let auditSurface: String
     let imageView = UIImageView()
 
     fileprivate weak var coordinator: InteractiveImageRepresentable.Coordinator?
 
-    private enum ImageLayoutMode: Equatable {
-        case detailFit
-        case feedCard(ContentImagePresentation)
-    }
-
-    private var layoutMode: ImageLayoutMode?
     private var displayedImage: UIImage?
+    private var lastAppliedMediaID: String?
     private var didLogImageAssigned = false
 
     var backgroundFillColor: UIColor = .clear {
@@ -360,8 +407,16 @@ final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
     private var normalizedPinchAnchor = CGPoint(x: 0.5, y: 0.5)
     private var livePinchScale: CGFloat = 1
 
-    init(mediaID: String) {
+    init(
+        mediaID: String,
+        storageReference: String,
+        deliveryQuality: ImageDeliveryQuality,
+        auditSurface: String
+    ) {
         self.mediaID = mediaID
+        self.storageReference = storageReference
+        self.deliveryQuality = deliveryQuality
+        self.auditSurface = auditSurface
         super.init(frame: .zero)
         isUserInteractionEnabled = true
         isMultipleTouchEnabled = true
@@ -387,62 +442,64 @@ final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
         guard !isPinching else { return }
         displayedImage = image
         imageView.image = image
+        imageView.transform = .identity
         imageView.alpha = 1
         imageView.isHidden = false
         didLogImageAssigned = false
         setNeedsLayout()
     }
 
-    func applyFeedFraming(
-        image: UIImage,
-        presentation: ContentImagePresentation
-    ) {
-        layoutMode = .feedCard(presentation)
+    func applyDetailFit(image: UIImage, containerSize: CGSize) {
+        if lastAppliedMediaID != mediaID {
+            imageView.transform = .identity
+            lastAppliedMediaID = mediaID
+        }
         setImage(image)
-        relayoutImageSubview()
+        relayoutImageSubview(expectedContainerSize: containerSize)
     }
 
-    func applyDetailFit(image: UIImage) {
-        layoutMode = .detailFit
-        setImage(image)
-        relayoutImageSubview()
-    }
-
-    private func relayoutImageSubview() {
+    private func relayoutImageSubview(expectedContainerSize: CGSize? = nil) {
         guard !isPinching else { return }
         guard bounds.width > 0, bounds.height > 0 else { return }
 
-        switch layoutMode {
-        case nil:
-            imageView.contentMode = .scaleAspectFit
-            imageView.frame = bounds
-        case .detailFit:
-            imageView.contentMode = .scaleAspectFit
-            imageView.frame = bounds
-        case .feedCard(let presentation):
-            guard let image = displayedImage ?? imageView.image else {
-                imageView.frame = bounds
-                return
+        imageView.contentMode = .scaleAspectFit
+        imageView.frame = bounds
+
+        #if DEBUG
+        if let image = displayedImage ?? imageView.image {
+            let pixels = MediaImageOrientation.pixelSize(of: image)
+            let contentModeLabel: String
+            switch imageView.contentMode {
+            case .scaleAspectFit: contentModeLabel = "scaleAspectFit"
+            case .scaleToFill: contentModeLabel = "scaleToFill"
+            case .scaleAspectFill: contentModeLabel = "scaleAspectFill"
+            default: contentModeLabel = String(describing: imageView.contentMode)
             }
-            let pixelSize = MediaImageOrientation.pixelSize(of: image)
-            if presentation.usesFillCrop,
-               let draw = ContentImagePresentation.drawRect(
-                imagePixelSize: pixelSize,
-                containerSize: bounds.size,
-                presentation: presentation
-               ) {
-                imageView.contentMode = .scaleToFill
-                imageView.frame = CGRect(
-                    x: draw.x,
-                    y: draw.y,
-                    width: draw.width,
-                    height: draw.height
+            MediaPipelineAudit.logRender(
+                MediaPipelineAudit.RenderReport(
+                    surface: auditSurface.isEmpty ? "unknown" : auditSurface,
+                    mediaID: mediaID,
+                    storageReference: storageReference,
+                    deliveryQuality: deliveryQuality.rawValue,
+                    decodedPixelWidth: Int(pixels.width),
+                    decodedPixelHeight: Int(pixels.height),
+                    containerBounds: MediaPipelineAudit.describeRect(bounds),
+                    imageViewBounds: MediaPipelineAudit.describeRect(imageView.bounds),
+                    imageViewFrame: MediaPipelineAudit.describeRect(imageView.frame),
+                    contentMode: contentModeLabel
                 )
-            } else {
-                imageView.contentMode = .scaleAspectFit
-                imageView.frame = bounds
-            }
+            )
+            FeedImageRenderProbe.log(
+                mediaID: mediaID,
+                surface: auditSurface.isEmpty ? "interactive" : auditSurface,
+                decodedPixels: pixels,
+                containerSize: expectedContainerSize ?? bounds.size,
+                contentMode: contentModeLabel,
+                imageViewFrame: imageView.frame,
+                layoutMode: "detailFit"
+            )
         }
+        #endif
 
         logImageAssignedIfNeeded()
     }

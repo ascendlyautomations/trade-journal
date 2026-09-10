@@ -17,6 +17,7 @@ import {
   toUserFacingErrorMessage,
   USER_FACING_ERROR_MESSAGES,
 } from "@/lib/userFacingError"
+import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "@/lib/storageCacheControl"
 
 export const REEL_MAX_DURATION_SECONDS = 90
 export const REEL_MAX_FILE_BYTES = 100 * 1024 * 1024
@@ -429,6 +430,7 @@ export async function uploadReelVideoFile(
       path: storagePath,
       file,
       contentType: file.type || "video/mp4",
+      cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
       onProgress: (loaded, total) => {
         report({
           percent: mapUploadBytesToPercent(loaded, total, {
@@ -445,6 +447,7 @@ export async function uploadReelVideoFile(
       .from("reels")
       .upload(storagePath, file, {
         contentType: file.type || "video/mp4",
+        cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
         upsert: false,
       })
 
@@ -482,6 +485,7 @@ export async function uploadReelThumbnailBlob(
       path: storagePath,
       file: uploadFile,
       contentType: uploadFile.type || "image/jpeg",
+      cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
       onProgress: (loaded, total) => {
         report({
           percent: mapUploadBytesToPercent(loaded, total, {
@@ -498,6 +502,7 @@ export async function uploadReelThumbnailBlob(
       .from("reels")
       .upload(storagePath, uploadFile, {
         contentType: uploadFile.type || "image/jpeg",
+        cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
         upsert: false,
       })
 

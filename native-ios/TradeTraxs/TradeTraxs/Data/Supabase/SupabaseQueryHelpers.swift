@@ -37,6 +37,14 @@ nonisolated enum SupabaseQuery {
         URLQueryItem(name: "select", value: columns)
     }
 
+    static func order(_ column: String, ascending: Bool) -> URLQueryItem {
+        URLQueryItem(name: "order", value: "\(column).\(ascending ? "asc" : "desc")")
+    }
+
+    static func limit(_ count: Int) -> URLQueryItem {
+        URLQueryItem(name: "limit", value: String(count))
+    }
+
     static func nextCursor<T>(
         items: [T],
         limit: Int,

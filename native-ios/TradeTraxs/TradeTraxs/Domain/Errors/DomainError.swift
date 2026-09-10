@@ -116,7 +116,11 @@ extension AppError {
         fallback: String = "Something went wrong. Please try again."
     ) -> String {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? fallback : trimmed
+        if trimmed.isEmpty { return fallback }
+        if ProEntitlementResponseSanitizer.containsPurchaseSteering(trimmed) {
+            return TraxProFeatureMessaging.featureRequired
+        }
+        return trimmed
     }
 
     private static func tradeValidationMessage(_ error: TradeValidationError) -> String {

@@ -1,5 +1,6 @@
 "use client"
 
+import { installDbRequestDebugInterceptor } from "./dbRequestDebugLog"
 import {
   createContext,
   useCallback,
@@ -387,6 +388,10 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       setMembershipReconciling(false)
     }
   }, [user?.id])
+
+  useEffect(() => {
+    installDbRequestDebugInterceptor()
+  }, [])
 
   useEffect(() => {
     let mounted = true

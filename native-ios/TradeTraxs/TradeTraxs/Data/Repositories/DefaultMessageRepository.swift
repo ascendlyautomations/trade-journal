@@ -749,28 +749,14 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         let ids = Array(Set(mine.compactMap(\.conversation_id).filter { !$0.isEmpty }))
         guard !ids.isEmpty else { return nil }
 
-        var matches: [String] = []
+        var candidates: [String] = []
         for chunk in ids.chunked(into: 80) {
-            let meta: [MessageDTO.Conversation] = try await supabase.database.select(
-                MessageDTO.Conversation.self,
-                from: "conversations",
-                query: [
-                    SupabaseQuery.select("id,is_group"),
-                    SupabaseQuery.isIn("id", chunk),
-                ]
-            )
-            let dmIDs = meta.compactMap { dto -> String? in
-                guard let id = dto.id, dto.is_group != true else { return nil }
-                return id
-            }
-            guard !dmIDs.isEmpty else { continue }
-
             let parts: [MessageDTO.MembershipRow] = try await supabase.database.select(
                 MessageDTO.MembershipRow.self,
                 from: "conversation_participants",
                 query: [
                     SupabaseQuery.select("conversation_id,user_id"),
-                    SupabaseQuery.isIn("conversation_id", dmIDs),
+                    SupabaseQuery.isIn("conversation_id", chunk),
                 ]
             )
             var byConvo: [String: Set<String>] = [:]
@@ -780,11 +766,30 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             }
             for (cid, users) in byConvo {
                 if users.count == 2, users.contains(me), users.contains(them) {
-                    matches.append(cid)
+                    candidates.append(cid)
                 }
             }
         }
-        return matches.sorted().first
+        guard !candidates.isEmpty else { return nil }
+
+        var nonGroupMatches: [String] = []
+        for chunk in candidates.chunked(into: 80) {
+            let meta: [MessageDTO.Conversation] = try await supabase.database.select(
+                MessageDTO.Conversation.self,
+                from: "conversations",
+                query: [
+                    SupabaseQuery.select("id,is_group"),
+                    SupabaseQuery.isIn("id", chunk),
+                ]
+            )
+            nonGroupMatches.append(
+                contentsOf: meta.compactMap { dto -> String? in
+                    guard let id = dto.id, dto.is_group != true else { return nil }
+                    return id
+                }
+            )
+        }
+        return nonGroupMatches.sorted().first
     }
 
     private func usersHaveActiveBlock(me: String, them: String) async -> Bool {

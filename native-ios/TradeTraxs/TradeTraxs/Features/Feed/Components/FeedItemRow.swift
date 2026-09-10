@@ -164,6 +164,8 @@ struct FeedItemRow: View {
                 imagePipeline: imagePipeline,
                 emptyIcon: .chart,
                 accessibilityIdentifier: "feed.trade.media",
+                deliveryQuality: .fullResolution,
+                auditSurface: "feed",
                 onSingleTap: onOpen,
                 onDoubleTapLike: {
                     Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
@@ -181,6 +183,8 @@ struct FeedItemRow: View {
                     imagePipeline: imagePipeline,
                     emptyIcon: .photo,
                     accessibilityIdentifier: "feed.post.media",
+                    deliveryQuality: .fullResolution,
+                    auditSurface: "feed",
                     onSingleTap: onOpen,
                     onDoubleTapLike: {
                         Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
@@ -211,6 +215,8 @@ struct FeedItemRow: View {
                 imagePipeline: imagePipeline,
                 emptyIcon: .leaderboard,
                 accessibilityIdentifier: "feed.achievement.media",
+                deliveryQuality: .fullResolution,
+                auditSurface: "feed",
                 onSingleTap: onOpen,
                 onDoubleTapLike: {
                     Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }

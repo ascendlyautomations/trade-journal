@@ -26,6 +26,7 @@
     "export:marketing-ads": "node scripts/export-marketing-ads.mjs"
   },
   "dependencies": {
+    "@apple/app-store-server-library": "^1.6.0",
     "@sentry/nextjs": "^10.57.0",
     "@stripe/stripe-js": "^9.0.1",
     "@supabase/ssr": "^0.10.2",

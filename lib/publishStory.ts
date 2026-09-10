@@ -7,6 +7,7 @@ import {
 } from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
 import { validateImageUpload } from "@/lib/uploadValidation"
+import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "@/lib/storageCacheControl"
 
 export async function publishStory(
   supabase: SupabaseClient,
@@ -39,6 +40,7 @@ export async function publishStory(
         path: fileName,
         file,
         upsert: true,
+        cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
         onProgress: (loaded, total) => {
           report({
             percent: mapUploadBytesToPercent(loaded, total, {
@@ -62,7 +64,10 @@ export async function publishStory(
   } else {
     const { error: uploadError } = await supabase.storage
       .from("stories")
-      .upload(fileName, file, { upsert: true })
+      .upload(fileName, file, {
+        upsert: true,
+        cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
+      })
 
     if (uploadError) {
       console.error("[publishStory] upload failed", uploadError)

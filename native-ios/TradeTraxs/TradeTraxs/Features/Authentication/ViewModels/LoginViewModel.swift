@@ -17,6 +17,9 @@ final class LoginViewModel {
     var isSubmitting: Bool = false
     var errorMessage: String?
     var informationalMessage: String?
+    var pendingConfirmationEmail: String?
+    var isResendingConfirmation = false
+    var confirmationResentMessage: String?
 
     private let authenticationCoordinator: AuthenticationCoordinator
     private let allowsDevelopmentBypass: Bool
@@ -47,6 +50,8 @@ final class LoginViewModel {
         mode = mode == .signIn ? .signUp : .signIn
         errorMessage = nil
         informationalMessage = nil
+        pendingConfirmationEmail = nil
+        confirmationResentMessage = nil
     }
 
     func submit() async {
@@ -100,6 +105,8 @@ final class LoginViewModel {
         isSubmitting = true
         errorMessage = nil
         informationalMessage = nil
+        pendingConfirmationEmail = nil
+        confirmationResentMessage = nil
 
         let task = Task {
             defer {
@@ -122,11 +129,39 @@ final class LoginViewModel {
         await task.value
     }
 
+    func resendConfirmationEmail() async {
+        guard let pendingConfirmationEmail,
+              !pendingConfirmationEmail.isEmpty,
+              !isResendingConfirmation
+        else { return }
+        isResendingConfirmation = true
+        confirmationResentMessage = nil
+        defer { isResendingConfirmation = false }
+        do {
+            try await authenticationCoordinator.resendSignupConfirmation(
+                email: pendingConfirmationEmail
+            )
+            confirmationResentMessage = "Confirmation email sent. Check your inbox."
+            ExperienceHaptics.play(.success)
+        } catch {
+            confirmationResentMessage = UserFacingError.message(for: error)
+            ExperienceHaptics.play(.warning)
+        }
+    }
+
     private func present(_ error: Error) {
         ExperienceHaptics.play(.warning)
         if let auth = error as? AuthenticationError {
             if case .cancelled = auth {
                 errorMessage = nil
+                return
+            }
+            if case .emailConfirmationRequired(let email) = auth {
+                errorMessage = nil
+                pendingConfirmationEmail = email
+                informationalMessage =
+                    "We sent a confirmation link to \(email). Confirm your email, then sign in."
+                mode = .signIn
                 return
             }
             errorMessage = UserFacingError.map(auth).message

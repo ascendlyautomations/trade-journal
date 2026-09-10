@@ -6,6 +6,7 @@ import { NAVBAR_HEIGHT_CLASS } from "@/app/components/ui/DetailModalShell"
 import type { StoryBarProfile } from "./FeedStoriesBar"
 import StoryFrame from "./StoryFrame"
 import StoryReplyInput from "./StoryReplyInput"
+import { optimizeStorageImageUrl } from "@/lib/optimizedStorageImage"
 
 type StorySlide = {
   id: string
@@ -198,11 +199,17 @@ function FeedStoryViewer({
 
   const prevCoverUrl =
     prevProfile != null
-      ? (storiesByUser[prevProfile.id]?.[0]?.image_url ?? null)
+      ? optimizeStorageImageUrl(
+          storiesByUser[prevProfile.id]?.[0]?.image_url ?? null,
+          "story"
+        )
       : null
   const nextCoverUrl =
     nextProfile != null
-      ? (storiesByUser[nextProfile.id]?.[0]?.image_url ?? null)
+      ? optimizeStorageImageUrl(
+          storiesByUser[nextProfile.id]?.[0]?.image_url ?? null,
+          "story"
+        )
       : null
 
   const showStoryReply =

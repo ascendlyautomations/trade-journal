@@ -15,13 +15,28 @@ final class AccountDeletionExperienceTests: XCTestCase {
         XCTAssertTrue(viewModel.deleteAccountExplainerMessage.contains("This cannot be undone."))
     }
 
+    func testDeleteAccountExplainerIncludesAppleSubscriptionNotice() async {
+        var status = SettingsFixtures.billingStatus()
+        status.entitlementSource = .apple
+        status.plan = .pro
+        status.lifecycle = .active
+        status.isProEntitled = true
+        let context = await makeContext(billing: status)
+        let viewModel = context.viewModel
+        await viewModel.refresh()
+        let message = viewModel.deleteAccountExplainerMessage
+        XCTAssertTrue(message.contains("Apple App Store"))
+        XCTAssertTrue(message.contains("does not cancel your Apple subscription"))
+    }
+
     func testDeleteAccountExplainerIncludesSubscriptionNoticeWhenProActive() async {
         let context = await makeContext(billing: SettingsFixtures.billingStatus())
         let viewModel = context.viewModel
         await viewModel.refresh()
         let message = viewModel.deleteAccountExplainerMessage
         XCTAssertTrue(message.contains("TraxPro trial"))
-        XCTAssertTrue(message.contains("Stripe billing"))
+        XCTAssertTrue(message.localizedCaseInsensitiveContains("stripe"))
+        XCTAssertTrue(message.localizedCaseInsensitiveContains("apple app store"))
     }
 
     func testDeleteAccountExplainerIncludesAppleNoticeWhenSignedInWithApple() async throws {

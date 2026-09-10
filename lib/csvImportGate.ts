@@ -1,16 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { isProActive } from "@/lib/subscription"
-import { mirrorAccountSettingsHasUsedCsvImport } from "@/lib/profileSplitMirrorWrites"
+import { loadActiveAppleSubscriptionForUser } from "./appleSubscription.ts"
+import { mirrorAccountSettingsHasUsedCsvImport } from "./profileSplitMirrorWrites.ts"
+import { isTraxProActive, type TraxProEntitlementProfile } from "./traxProEntitlement.ts"
 
 export const FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS = 7
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 export const FREE_PLAN_CSV_IMPORT_COOLDOWN_MS =
   FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS * MS_PER_DAY
 
-export type CsvImportProfileGateFields = {
-  is_pro?: boolean | null
-  subscription_status?: string | null
-  trial_end?: string | null
+export type CsvImportProfileGateFields = Pick<
+  TraxProEntitlementProfile,
+  "is_pro" | "creator_access" | "subscription_status" | "trial_end"
+> & {
   last_csv_import_at?: string | null
 }
 
@@ -19,9 +20,10 @@ export type CsvImportGateStatus =
   | { allowed: false; daysUntilNextImport: number }
 
 export function evaluateCsvImportGate(
-  profile: CsvImportProfileGateFields | null | undefined
+  profile: CsvImportProfileGateFields | null | undefined,
+  traxProActive = false
 ): CsvImportGateStatus {
-  if (isProActive(profile)) return { allowed: true }
+  if (traxProActive) return { allowed: true }
 
   const lastAt = profile?.last_csv_import_at
   if (!lastAt) return { allowed: true }
@@ -54,7 +56,9 @@ export async function fetchCsvImportGateStatus(
 ): Promise<CsvImportGateStatus> {
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("is_pro, subscription_status, trial_end, last_csv_import_at")
+    .select(
+      "is_pro,creator_access,subscription_status,trial_end,early_access_enrolled_at,early_access_started_at,early_access_status,early_access_ends_at,early_access_campaign_id,early_access_enrollment_source,last_csv_import_at"
+    )
     .eq("id", userId)
     .maybeSingle()
 
@@ -63,7 +67,13 @@ export async function fetchCsvImportGateStatus(
     return { allowed: true }
   }
 
-  return evaluateCsvImportGate(profile)
+  const appleSubscription = await loadActiveAppleSubscriptionForUser(
+    supabase,
+    userId
+  )
+  const traxProActive = isTraxProActive(profile, appleSubscription)
+
+  return evaluateCsvImportGate(profile, traxProActive)
 }
 
 /** Free users may run one successful CSV import every 7 days until they upgrade to Pro. */

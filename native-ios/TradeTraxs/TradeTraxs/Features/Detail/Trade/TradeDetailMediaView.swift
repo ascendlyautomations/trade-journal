@@ -15,7 +15,8 @@ struct TradeDetailMediaView: View {
             imagePipeline: imagePipeline,
             emptyIcon: .chart,
             accessibilityIdentifier: "detail.trade.media",
-            displayMode: .originalDetail,
+            deliveryQuality: .fullResolution,
+            auditSurface: "detail",
             onDoubleTapLike: onDoubleTapLike
         )
     }

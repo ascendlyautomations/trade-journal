@@ -63,6 +63,9 @@ struct ReportDetailView: View {
                     bestTrade: viewModel.bestTrade,
                     onOpenBestTrade: { viewModel.openBestTrade() }
                 )
+
+                ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.performanceReport)
+                    .padding(.horizontal, ExperienceSpacing.md)
             }
             .padding(.bottom, ExperienceSpacing.xxxl)
         }

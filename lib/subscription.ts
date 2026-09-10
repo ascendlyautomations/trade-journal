@@ -1,7 +1,10 @@
 /**
- * Pro access: `profiles.is_pro` (manual/admin), complimentary creator access,
+ * Profile-based Pro access: `profiles.is_pro` (manual/admin), complimentary creator access,
  * active/trialing Stripe subscription, a future `trial_end` when webhook
  * status has not synced yet, or unexpired active Early Access.
+ *
+ * For unified TraxPro (including verified Apple App Store subscriptions), use
+ * `isTraxProActive` in `lib/traxProEntitlement.ts`.
  */
 export function isProActive(
   profile: {

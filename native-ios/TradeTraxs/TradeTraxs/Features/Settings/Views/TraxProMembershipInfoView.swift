@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Informational TraxPro surface — no purchase or external billing links.
+/// TraxPro gate surface — routes to in-app subscription purchase, never web checkout.
 struct TraxProMembershipInfoView: View {
     let onClose: () -> Void
+    var onViewSubscription: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
 
@@ -14,7 +15,20 @@ struct TraxProMembershipInfoView: View {
                     message: TraxProFeatureMessaging.featureRequired
                 )
             } footer: {
-                Text("TraxPro access is tied to your account membership status.")
+                Text("TraxPro unlocks Trade AI, higher limits, and advanced analytics.")
+            }
+
+            if let onViewSubscription {
+                Section {
+                    Button(action: onViewSubscription) {
+                        SettingsPrimaryActionLabel(
+                            title: "View TraxPro Plans",
+                            systemImage: "creditcard"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("traxpro.membership.viewPlans")
+                }
             }
         }
         .listStyle(.insetGrouped)

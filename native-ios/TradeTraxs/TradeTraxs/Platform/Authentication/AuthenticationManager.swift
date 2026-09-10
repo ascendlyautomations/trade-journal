@@ -234,6 +234,11 @@ final class AuthenticationManager {
         try await emailProvider.requestPasswordReset(email: email)
     }
 
+    func resendSignupConfirmation(email: String) async throws {
+        if let error = validator.validateEmail(email) { throw error }
+        try await emailProvider.resendSignupConfirmation(email: email)
+    }
+
     // MARK: - Logout / lock
 
     func logout() async {
@@ -306,6 +311,10 @@ final class AuthenticationManager {
             emit(.signInFailed(.cancelled))
             throw CancellationError()
         } catch let error as AuthenticationError {
+            if case .emailConfirmationRequired = error {
+                state = .unauthenticated
+                throw error
+            }
             state = .failure(error)
             emit(.signInFailed(error))
             throw error

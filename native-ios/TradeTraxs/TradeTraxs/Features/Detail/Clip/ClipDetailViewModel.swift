@@ -179,6 +179,13 @@ final class ClipDetailViewModel {
         let newPlayer = AVPlayer(playerItem: item)
         player = newPlayer
         didReachEnd = false
+        #if DEBUG
+        MediaEgressTracker.installVideoAccessLog(
+            on: item,
+            mediaID: reel.id.rawValue,
+            surface: "clips"
+        )
+        #endif
 
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,

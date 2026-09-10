@@ -113,6 +113,10 @@ final class AuthenticationCoordinator {
         try await authenticationManager.requestPasswordReset(email: email)
     }
 
+    func resendSignupConfirmation(email: String) async throws {
+        try await authenticationManager.resendSignupConfirmation(email: email)
+    }
+
     func logout() async {
         await performLocalSessionTeardown(
             correlationLabel: "logout",

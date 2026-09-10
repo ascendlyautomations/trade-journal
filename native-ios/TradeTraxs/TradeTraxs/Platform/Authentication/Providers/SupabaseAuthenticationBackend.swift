@@ -27,13 +27,27 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
             var email: String
             var password: String
         }
-        return try await tokenRequest(
-            path: "/auth/v1/signup",
-            query: [],
-            body: Body(email: email, password: password),
-            provider: .email,
-            requiresAuthentication: false
-        )
+        guard transport.isConfigured else { throw AuthenticationError.notConfigured }
+        do {
+            let response = try await transport.send(
+                host: .supabase,
+                path: "/auth/v1/signup",
+                method: .post,
+                body: try transport.encodeJSON(Body(email: email, password: password)),
+                requiresAuthentication: false
+            )
+            return try parseSignupResponse(
+                response: response,
+                fallbackEmail: email,
+                provider: .email
+            )
+        } catch let error as AppError {
+            throw mapTokenRequestError(error, provider: .email)
+        } catch let error as AuthenticationError {
+            throw error
+        } catch {
+            throw AuthenticationError.unknown(error.localizedDescription)
+        }
     }
 
     func signOut(accessToken: String) async throws {
@@ -79,6 +93,21 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
             path: "/auth/v1/recover",
             method: .post,
             body: try transport.encodeJSON(Body(email: email)),
+            requiresAuthentication: false
+        )
+    }
+
+    func resendSignupConfirmation(email: String) async throws {
+        struct Body: Encodable {
+            var type: String
+            var email: String
+        }
+        guard transport.isConfigured else { throw AuthenticationError.notConfigured }
+        _ = try await transport.send(
+            host: .supabase,
+            path: "/auth/v1/resend",
+            method: .post,
+            body: try transport.encodeJSON(Body(type: "signup", email: email)),
             requiresAuthentication: false
         )
     }
@@ -203,6 +232,22 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
         return .unknown(String(describing: error))
     }
 
+    private func parseSignupResponse(
+        response: HTTPResponse,
+        fallbackEmail: String,
+        provider: AuthenticationProviderKind
+    ) throws -> AuthenticationSession {
+        let envelope = try transport.decoder.decode(GoTrueSignupEnvelope.self, from: response)
+        if let session = try envelope.makeSessionIfPresent(provider: provider) {
+            return session
+        }
+        let resolvedEmail = envelope.normalizedUser()?.email ?? fallbackEmail
+        if envelope.normalizedUser()?.id?.isEmpty == false {
+            throw AuthenticationError.emailConfirmationRequired(email: resolvedEmail)
+        }
+        throw AuthenticationError.sessionMissing
+    }
+
     private func mapProviderServerFailure(
         statusCode: Int,
         message: String?,
@@ -228,28 +273,67 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
     }
 }
 
-private nonisolated struct GoTrueTokenResponse: Decodable {
-    var access_token: String
+private nonisolated struct GoTrueSignupEnvelope: Decodable {
+    var access_token: String?
     var refresh_token: String?
     var expires_in: Double?
     var token_type: String?
     var user: GoTrueUser?
+    var id: String?
+    var email: String?
 
-    func makeSession(provider: AuthenticationProviderKind) throws -> AuthenticationSession {
-        guard let userID = user?.id, !userID.isEmpty else {
-            throw AuthenticationError.sessionMissing
+    func normalizedUser() -> GoTrueUser? {
+        if let user { return user }
+        guard let id, !id.isEmpty else { return nil }
+        return GoTrueUser(id: id, email: email)
+    }
+
+    func makeSessionIfPresent(provider: AuthenticationProviderKind) throws -> AuthenticationSession? {
+        guard let userID = normalizedUser()?.id?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !userID.isEmpty
+        else {
+            return nil
+        }
+        guard let accessToken = access_token?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !accessToken.isEmpty
+        else {
+            return nil
         }
         let expires = Date().addingTimeInterval(expires_in ?? 3600)
         return AuthenticationSession(
             userID: UserID(userID),
-            email: user?.email,
-            accessToken: access_token,
+            email: normalizedUser()?.email,
+            accessToken: accessToken,
             refreshToken: refresh_token,
             expiresAt: expires,
             provider: provider,
             createdAt: Date(),
             lastRefreshedAt: Date()
         )
+    }
+}
+
+private nonisolated struct GoTrueTokenResponse: Decodable {
+    var access_token: String?
+    var refresh_token: String?
+    var expires_in: Double?
+    var token_type: String?
+    var user: GoTrueUser?
+
+    func makeSession(provider: AuthenticationProviderKind) throws -> AuthenticationSession {
+        let envelope = GoTrueSignupEnvelope(
+            access_token: access_token,
+            refresh_token: refresh_token,
+            expires_in: expires_in,
+            token_type: token_type,
+            user: user,
+            id: nil,
+            email: nil
+        )
+        guard let session = try envelope.makeSessionIfPresent(provider: provider) else {
+            throw AuthenticationError.sessionMissing
+        }
+        return session
     }
 }
 

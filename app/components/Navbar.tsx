@@ -219,12 +219,19 @@ export default function Navbar() {
 
   const fetchUnreadMessages = useCallback(async () => {
     if (!user?.id) return
+    if (isBackendV2Enabled("session")) {
+      const badges = getSessionBadges(user.id)
+      if (badges) {
+        setUnreadMessagesCount(badges.dm_unread)
+        return
+      }
+    }
     const count = await fetchTotalUnreadMessageCount(user.id)
     setUnreadMessagesCount(count)
     if (isBackendV2Enabled("session")) {
       patchSessionBadges(user.id, { dm_unread: count })
     }
-  }, [user])
+  }, [user?.id])
 
   const fetchUnread = useCallback(async () => {
     if (!user?.id) return
@@ -247,7 +254,7 @@ export default function Navbar() {
     if (isBackendV2Enabled("session")) {
       patchSessionBadges(user.id, { notifications_unread: next })
     }
-  }, [user])
+  }, [user?.id])
 
   useEffect(() => {
     if (!user?.id) return
@@ -267,7 +274,7 @@ export default function Navbar() {
     return subscribeNotificationChanges(uid, () => {
       void fetchUnread()
     })
-  }, [user, fetchUnread])
+  }, [user?.id, fetchUnread])
 
   useEffect(() => {
     const onRefresh = () => {

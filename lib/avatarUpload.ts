@@ -7,6 +7,7 @@ import {
 } from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
 import { validateImageUpload } from "./uploadValidation"
+import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "./storageCacheControl"
 
 /** Upload to public `avatars` bucket; returns public URL or null on failure. */
 export async function uploadAvatarFile(
@@ -34,6 +35,7 @@ export async function uploadAvatarFile(
       path: fileName,
       file: uploadFile,
       upsert: true,
+      cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
       onProgress: (loaded, total) => {
         report({
           percent: mapUploadBytesToPercent(loaded, total, {
@@ -51,7 +53,10 @@ export async function uploadAvatarFile(
   } else {
     const { error } = await supabase.storage
       .from("avatars")
-      .upload(fileName, uploadFile, { upsert: true })
+      .upload(fileName, uploadFile, {
+        upsert: true,
+        cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
+      })
 
     if (error) {
       console.error("Avatar upload error:", error.message)

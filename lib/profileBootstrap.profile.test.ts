@@ -400,15 +400,26 @@ describe("Profile own-path vs bootstrap wiring", () => {
     )
     const fetchStart = pageSrc.indexOf("async function fetchProfile(")
     assert.ok(fetchStart >= 0)
-    const fetchBody = pageSrc.slice(fetchStart, fetchStart + 12000)
-    const bootStart = fetchBody.indexOf('if (isBackendV2Enabled("profile"))')
+    const fetchBody = pageSrc.slice(fetchStart, fetchStart + 14000)
+    const ownBootStart = fetchBody.indexOf('if (isBackendV2Enabled("profile"))')
+    assert.ok(ownBootStart >= 0)
+    const otherBootStart = fetchBody.indexOf(
+      'if (isBackendV2Enabled("profile"))',
+      ownBootStart + 1
+    )
     const bootEnd = fetchBody.indexOf('let profileQuery = supabase.from("profiles")')
-    assert.ok(bootStart >= 0 && bootEnd > bootStart)
-    const bootBlock = fetchBody.slice(bootStart, bootEnd)
-    assert.match(bootBlock, /loadProfileBootstrapWithResilience/)
-    assert.match(bootBlock, /return/)
-    assert.doesNotMatch(bootBlock, /applyProfileMetadata/)
-    assert.doesNotMatch(bootBlock, /profileQuery/)
+    assert.ok(otherBootStart >= 0 && bootEnd > otherBootStart)
+    const otherBootBlock = fetchBody.slice(otherBootStart, bootEnd)
+    assert.match(otherBootBlock, /loadProfileBootstrapWithResilience/)
+    assert.match(otherBootBlock, /return/)
+    assert.doesNotMatch(otherBootBlock, /applyProfileMetadata/)
+    assert.doesNotMatch(otherBootBlock, /profileQuery/)
+
+    const ownBootEnd = fetchBody.indexOf("return\n    }", ownBootStart)
+    assert.ok(ownBootEnd > ownBootStart)
+    const ownBootBlock = fetchBody.slice(ownBootStart, ownBootEnd)
+    assert.match(ownBootBlock, /loadProfileBootstrapWithResilience/)
+    assert.match(ownBootBlock, /applyProfileMetadata/)
   })
 
   it("maps RPC name to rpc_v1_profile_bootstrap", () => {

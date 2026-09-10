@@ -135,6 +135,32 @@ struct LoginView: View {
                 Text(informationalMessage)
                     .experienceStyle(.footnote, color: colors.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("auth.confirmationPending")
+            }
+
+            if viewModel.pendingConfirmationEmail != nil {
+                Button {
+                    Task { await viewModel.resendConfirmationEmail() }
+                } label: {
+                    if viewModel.isResendingConfirmation {
+                        ProgressView()
+                    } else {
+                        Text("Resend confirmation email")
+                    }
+                }
+                .font(ExperienceTypography.footnote)
+                .foregroundStyle(colors.accent)
+                .frame(minHeight: ExperienceAccessibility.minTouchTarget)
+                .disabled(viewModel.isResendingConfirmation)
+                .accessibilityLabel("Resend confirmation email")
+                .accessibilityIdentifier("auth.resendConfirmation")
+            }
+
+            if let confirmationResentMessage = viewModel.confirmationResentMessage {
+                Text(confirmationResentMessage)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("auth.confirmationResent")
             }
         }
     }

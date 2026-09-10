@@ -59,6 +59,8 @@ export function useActiveStories(
 
   const userIdsRef = useRef(userIds)
   userIdsRef.current = userIds
+  const storiesByUserRef = useRef(storiesByUser)
+  storiesByUserRef.current = storiesByUser
 
   useEffect(() => {
     if (!enabled) {
@@ -79,9 +81,16 @@ export function useActiveStories(
 
     const ids = normalizeUserIds(userIdsRef.current)
     if (ids.length === 0) return
-    if (!autoLoad && Object.keys(storiesByUser).length === 0) return
+    if (!autoLoad && Object.keys(storiesByUserRef.current).length === 0) return
 
-    const channel = supabase.channel(`active-stories:${userIdsKey}`)
+    const topic = `active-stories:${userIdsKey}`
+    supabase.getChannels().forEach((c) => {
+      if (c.topic === topic) {
+        void supabase.removeChannel(c)
+      }
+    })
+
+    const channel = supabase.channel(topic)
 
     for (const userId of ids) {
       channel.on(
@@ -103,7 +112,7 @@ export function useActiveStories(
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [autoLoad, enabled, loadStories, storiesByUser, userIdsKey])
+  }, [autoLoad, enabled, loadStories, userIdsKey])
 
   useEffect(() => {
     if (!enabled) return

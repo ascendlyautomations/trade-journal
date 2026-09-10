@@ -241,7 +241,8 @@ final class CreatePostViewModel {
                 path: path,
                 data: data,
                 contentType: "image/jpeg",
-                purpose: .postImage
+                purpose: .postImage,
+                cacheControl: StorageCacheControl.immutableMaxAge
             )
         )
         let publicURL = objectStorage.publicURL(

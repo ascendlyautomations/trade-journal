@@ -67,7 +67,15 @@ nonisolated final class InMemoryChannelRegistry: ChannelRegistry, @unchecked Sen
         lock.lock()
         retainCounts[channel, default: 0] += 1
         channels.insert(channel)
+        let refcount = retainCounts[channel] ?? 0
+        let registered = channels.count
         lock.unlock()
+        RealtimeLifecycleDebugLog.registrySubscribe(
+            kind: channel.kind.rawValue,
+            topic: channel.topic,
+            refcount: refcount,
+            registered: registered
+        )
     }
 
     func unregister(_ channel: RealtimeChannelID) {
@@ -79,7 +87,14 @@ nonisolated final class InMemoryChannelRegistry: ChannelRegistry, @unchecked Sen
         } else {
             retainCounts[channel] = next
         }
+        let registered = channels.count
         lock.unlock()
+        RealtimeLifecycleDebugLog.registryUnsubscribe(
+            kind: channel.kind.rawValue,
+            topic: channel.topic,
+            refcount: next,
+            registered: registered
+        )
     }
 
     /// Testing / DEBUG — current retain count for a channel.
@@ -144,6 +159,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
     func start() {
         guard !isActive else { return }
         isActive = true
+        RealtimeLifecycleDebugLog.hubStart()
         Task { [weak self] in
             await self?.establishConnectionWithRetry()
         }
@@ -152,6 +168,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
     /// App foreground — reconnect socket and rejoin active watches if the WS died.
     func resumeIfNeeded() {
         guard isActive else { return }
+        RealtimeLifecycleDebugLog.hubResumeIfNeeded()
         Task { [weak self] in
             guard let self else { return }
             if let live = self.realtime as? LiveSupabaseRealtimeProvider {
@@ -178,6 +195,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
 
     func stop() async {
         isActive = false
+        RealtimeLifecycleDebugLog.hubStop()
         await subscriptions.unsubscribeAll()
         await realtime.disconnect()
     }

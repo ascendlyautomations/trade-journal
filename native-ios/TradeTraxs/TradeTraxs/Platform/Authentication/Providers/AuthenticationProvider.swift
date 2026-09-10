@@ -9,6 +9,7 @@ nonisolated protocol AuthenticationProviding: Sendable {
     func signOut(session: AuthenticationSession) async throws
     func refresh(session: AuthenticationSession) async throws -> AuthenticationSession
     func requestPasswordReset(email: String) async throws
+    func resendSignupConfirmation(email: String) async throws
 }
 
 nonisolated protocol OAuthProviding: Sendable {
@@ -24,6 +25,7 @@ nonisolated protocol AuthenticationBackend: Sendable {
     func signOut(accessToken: String) async throws
     func refresh(refreshToken: String) async throws -> AuthenticationSession
     func requestPasswordReset(email: String) async throws
+    func resendSignupConfirmation(email: String) async throws
     func updateUserMetadata(accessToken: String, metadata: [String: String]) async throws
 }
 
@@ -52,6 +54,11 @@ nonisolated struct PlaceholderAuthenticationBackend: AuthenticationBackend {
         throw AuthenticationError.notConfigured
     }
 
+    func resendSignupConfirmation(email: String) async throws {
+        _ = email
+        throw AuthenticationError.notConfigured
+    }
+
     func updateUserMetadata(accessToken: String, metadata: [String: String]) async throws {
         _ = (accessToken, metadata)
         throw AuthenticationError.notConfigured
@@ -75,8 +82,13 @@ nonisolated final class InMemoryAuthenticationBackend: AuthenticationBackend, @u
         return makeSession(email: email, provider: .email)
     }
 
+    var signUpRequiresEmailConfirmation = false
+
     func signUp(email: String, password: String) async throws -> AuthenticationSession {
-        try await signIn(email: email, password: password)
+        if signUpRequiresEmailConfirmation {
+            throw AuthenticationError.emailConfirmationRequired(email: email)
+        }
+        return try await signIn(email: email, password: password)
     }
 
     func signOut(accessToken: String) async throws {
@@ -97,6 +109,10 @@ nonisolated final class InMemoryAuthenticationBackend: AuthenticationBackend, @u
     }
 
     func requestPasswordReset(email: String) async throws {
+        _ = email
+    }
+
+    func resendSignupConfirmation(email: String) async throws {
         _ = email
     }
 

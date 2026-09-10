@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreMedia
 import XCTest
 @testable import TradeTraxs
 

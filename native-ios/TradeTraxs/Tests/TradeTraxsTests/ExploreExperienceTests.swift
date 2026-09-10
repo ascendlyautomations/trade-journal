@@ -191,6 +191,7 @@ final class ExploreExperienceTests: XCTestCase {
             explore: ExploreStubRepository(),
             search: ExploreStubSearchRepository(),
             profiles: profiles,
+            rooms: ExploreStubRoomRepository(),
             session: ExploreStubSession(userID: ExploreFixtures.viewerID.rawValue),
             detailCache: cache,
             navigationCoordinator: coordinator,
@@ -253,7 +254,9 @@ final class ExploreExperienceTests: XCTestCase {
 // MARK: - Stubs
 
 private struct ExploreStubRoomRepository: RoomRepository {
-    func room(id: RoomID) async throws -> TradeRoom { throw DomainError.notFound }
+    func room(id: RoomID) async throws -> TradeRoom {
+        throw DomainError.notFound(entity: "room", id: id.rawValue)
+    }
     func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
         CursorPage(items: [], nextCursor: nil)
     }

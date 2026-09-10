@@ -1,5 +1,9 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { markNotificationsReadForTarget } from "@/lib/notificationReadSync"
+import {
+  markConversationReadForUser,
+  markRoomReadForUser,
+} from "@/lib/server/guardedMarkRead"
 import { invalidateAppIconBadgeCache } from "@/lib/server/push/badgeService"
 
 type Body = {
@@ -46,20 +50,11 @@ export async function POST(req: Request) {
     invalidateAppIconBadgeCache(user.id)
 
     if (body.markConversationRead !== false) {
-      const now = new Date().toISOString()
-      const { error } = await supabaseServiceRole
-        .from("conversation_member_preferences")
-        .upsert(
-          {
-            user_id: user.id,
-            conversation_id: conversationId,
-            last_read_at: now,
-          },
-          { onConflict: "user_id,conversation_id" }
-        )
-      if (error) {
-        console.error("[mark-read-target] conversation prefs", error)
-      }
+      await markConversationReadForUser(
+        supabaseServiceRole,
+        user.id,
+        conversationId
+      )
     }
   }
 
@@ -86,15 +81,7 @@ export async function POST(req: Request) {
     invalidateAppIconBadgeCache(user.id)
 
     if (body.markRoomRead !== false && roomId) {
-      const { error } = await supabaseServiceRole
-        .from("room_members")
-        .update({ last_read_at: new Date().toISOString() })
-        .eq("room_id", roomId)
-        .eq("user_id", user.id)
-        .is("left_at", null)
-      if (error) {
-        console.error("[mark-read-target] room members", error)
-      }
+      await markRoomReadForUser(supabaseServiceRole, user.id, roomId)
     }
   }
 

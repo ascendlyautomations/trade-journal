@@ -279,8 +279,8 @@ private struct RealtimeBlockedAuthorFeedRepository: FeedRepository {
     }
 
     func deleteStory(id: StoryID) async throws {}
-    func reel(id: ReelID) async throws -> Reel {
-        ProfileClipFixtures.samples(owner: authorID)[0]
+    func reel(id: ReelID) async throws -> ReelLoadResult {
+        ReelLoadResult(reel: ProfileClipFixtures.samples(owner: authorID)[0], embeddedTrade: nil)
     }
 
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
