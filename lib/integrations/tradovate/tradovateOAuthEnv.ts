@@ -2,6 +2,7 @@ import { TRADOVATE_OAUTH_REDIRECT_URI as DEFAULT_REDIRECT_URI } from "./tradovat
 
 export type TradovateApiEnvironment = "demo" | "live"
 
+/** Browser OAuth login — same host for demo and live apps per Tradovate's official example. */
 const DEFAULT_AUTHORIZE_URL = "https://trader.tradovate.com/oauth"
 
 const TOKEN_URL_BY_ENV: Record<TradovateApiEnvironment, string> = {
@@ -31,6 +32,7 @@ export function getTradovateOAuthConfig() {
     throw new Error("tradovate_oauth_config_missing")
   }
 
+  // Demo vs live affects REST token/me hosts only; authorization stays on trader.tradovate.com unless overridden.
   const authorizeUrl =
     process.env.TRADOVATE_OAUTH_AUTHORIZE_URL?.trim() || DEFAULT_AUTHORIZE_URL
   const tokenUrl =

@@ -1,8 +1,13 @@
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
-import { USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
+import { USER_FACING_ERROR_MESSAGES, toUserFacingErrorMessage } from "@/lib/userFacingError"
+
+const AUTHORIZE_PATH = "/api/integrations/tradovate/authorize"
 
 /**
- * Starts Tradovate OAuth using the server authorize route (Bearer session required).
+ * Starts Tradovate OAuth via top-level browser navigation (never fetch-follows Tradovate redirect).
+ *
+ * 1. POST handoff cookie using Bearer session (localStorage Supabase auth).
+ * 2. Navigate to GET authorize; server redirects to Tradovate as a normal document navigation.
  */
 export async function startTradovateOAuthConnect(): Promise<void> {
   const headers = await supabaseBearerHeaders()
@@ -10,10 +15,12 @@ export async function startTradovateOAuthConnect(): Promise<void> {
     throw new Error(USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED)
   }
 
-  const res = await fetch("/api/integrations/tradovate/authorize", {
-    method: "GET",
-    headers,
-    redirect: "manual",
+  const res = await fetch(AUTHORIZE_PATH, {
+    method: "POST",
+    headers: {
+      ...headers,
+      Accept: "application/json",
+    },
     credentials: "same-origin",
   })
 
@@ -21,25 +28,18 @@ export async function startTradovateOAuthConnect(): Promise<void> {
     throw new Error(USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED)
   }
 
-  if (res.status === 302 || res.status === 307 || res.status === 308) {
-    const location = res.headers.get("Location")
-    if (!location) {
-      throw new Error("Could not start Tradovate connection. Please try again.")
-    }
-    window.location.assign(location)
-    return
-  }
-
   if (!res.ok) {
     let message = "Could not start Tradovate connection. Please try again."
     try {
       const body = (await res.json()) as { error?: string }
-      if (body?.error) message = body.error
+      if (body?.error) {
+        message = toUserFacingErrorMessage(body.error, message)
+      }
     } catch {
       // ignore
     }
     throw new Error(message)
   }
 
-  throw new Error("Could not start Tradovate connection. Please try again.")
+  window.location.assign(AUTHORIZE_PATH)
 }
