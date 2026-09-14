@@ -5,6 +5,8 @@ export type BrokerAccountSyncView = {
   lastSyncSuccessAt: string | null
   lastSyncStatus: string
   lastSyncErrorCode: string | null
+  autoSyncEnabled: boolean
+  lastAutoSyncAt: string | null
 }
 
 const SYNC_LOCK_MS = 120_000
@@ -19,7 +21,7 @@ export async function loadBrokerAccountSyncViews(
   const { data, error } = await supabase
     .from("broker_integration_account_sync")
     .select(
-      "broker_integration_account_id, last_sync_attempt_at, last_sync_success_at, last_sync_status, last_sync_error_code"
+      "broker_integration_account_id, last_sync_attempt_at, last_sync_success_at, last_sync_status, last_sync_error_code, auto_sync_enabled, last_auto_sync_at"
     )
     .in("broker_integration_account_id", mappingIds)
 
@@ -31,6 +33,8 @@ export async function loadBrokerAccountSyncViews(
       lastSyncSuccessAt: row.last_sync_success_at,
       lastSyncStatus: row.last_sync_status ?? "never",
       lastSyncErrorCode: row.last_sync_error_code,
+      autoSyncEnabled: row.auto_sync_enabled !== false,
+      lastAutoSyncAt: row.last_auto_sync_at,
     })
   }
   return out
@@ -100,6 +104,7 @@ export async function releaseBrokerSyncLock(
     lastSyncErrorMessage?: string | null
     maxExternalFillId?: number | null
     maxExecutedAt?: string | null
+    lastAutoSyncAt?: string | null
   }
 ): Promise<void> {
   const nowIso = new Date().toISOString()
@@ -112,7 +117,9 @@ export async function releaseBrokerSyncLock(
       last_sync_error_message: patch.lastSyncErrorMessage ?? null,
       max_external_fill_id: patch.maxExternalFillId ?? undefined,
       max_executed_at: patch.maxExecutedAt ?? undefined,
+      last_auto_sync_at: patch.lastAutoSyncAt ?? undefined,
       sync_lock_until: null,
+      pending_sync_after_current: false,
       updated_at: nowIso,
     })
     .eq("broker_integration_account_id", mappingId)

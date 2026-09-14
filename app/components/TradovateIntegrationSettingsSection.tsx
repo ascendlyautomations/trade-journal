@@ -1,6 +1,10 @@
 "use client"
 
+import CreateAccountModal, {
+  type Props as CreateAccountModalProps,
+} from "@/components/CreateAccountModal"
 import ActionButton from "@/app/components/ui/ActionButton"
+import { buildTradovateCreateAccountInitialValues } from "@/lib/integrations/tradovate/tradovateBrokerAccountFormDefaults"
 import { startTradovateOAuthConnect } from "@/lib/startTradovateOAuthConnect"
 import { supabase } from "@/lib/supabaseClient"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
@@ -24,12 +28,17 @@ type BrokerAccount = {
   id: string
   externalAccountId: string
   externalAccountName: string | null
+  externalDisplayName?: string | null
+  metadata?: Record<string, unknown>
   tradetraxsAccountId: string | null
   tradetraxsAccountName: string | null
   status: string
   lastSyncSuccessAt?: string | null
   lastSyncStatus?: string
+  autoSyncEnabled?: boolean
 }
+
+type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
 type ConnectionAccountsPayload = {
   state: string
@@ -56,7 +65,7 @@ export default function TradovateIntegrationSettingsSection({
   const [ownedAccounts, setOwnedAccounts] = useState<{ id: string; name: string }[]>([])
   const [linkMode, setLinkMode] = useState<"create" | "link">("create")
   const [selectedAccountId, setSelectedAccountId] = useState("")
-  const [createSize, setCreateSize] = useState("")
+  const [creatingAndLinking, setCreatingAndLinking] = useState(false)
   const [syncingMappingId, setSyncingMappingId] = useState<string | null>(null)
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null)
 
@@ -168,12 +177,52 @@ export default function TradovateIntegrationSettingsSection({
 
   async function openLinkModal(connectionId: string, account: BrokerAccount) {
     setLinkTarget({ connectionId, account })
-    setLinkMode("create")
-    setSelectedAccountId("")
-    setCreateSize("")
+    setLinkMode(account.tradetraxsAccountId ? "link" : "create")
+    setSelectedAccountId(account.tradetraxsAccountId ?? "")
     if (userId) {
       const { accounts } = await loadTradingAccounts(supabase, userId)
       setOwnedAccounts(accounts.map((a) => ({ id: a.id, name: a.name })))
+    }
+  }
+
+  async function handleToggleAutoSync(
+    connectionId: string,
+    account: BrokerAccount,
+    enabled: boolean
+  ) {
+    if (!account.tradetraxsAccountId) return
+    setBusy(true)
+    setError(null)
+    try {
+      const headers = {
+        ...(await supabaseBearerHeaders()),
+        "Content-Type": "application/json",
+      }
+      const res = await fetch(
+        `/api/integrations/tradovate/connections/${connectionId}/accounts/${account.id}/auto-sync`,
+        {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ enabled }),
+        }
+      )
+      const data = (await res.json()) as { error?: string; accounts?: BrokerAccount[] }
+      if (!res.ok) {
+        throw new Error(data.error ?? "Could not update automatic sync.")
+      }
+      if (data.accounts) {
+        setAccountsByConnection((prev) => ({
+          ...prev,
+          [connectionId]: {
+            state: prev[connectionId]?.state ?? "connected",
+            accounts: data.accounts!,
+          },
+        }))
+      }
+    } catch (err) {
+      setError(toUserFacingErrorMessage(err, "Could not update automatic sync."))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -251,8 +300,31 @@ export default function TradovateIntegrationSettingsSection({
     return `Last synced: ${d.toLocaleString()}`
   }
 
-  async function submitLink() {
-    if (!linkTarget) return
+  async function applyLinkResponse(
+    connectionId: string,
+    data: { accounts?: BrokerAccount[] }
+  ) {
+    if (data.accounts) {
+      setAccountsByConnection((prev) => ({
+        ...prev,
+        [connectionId]: {
+          state: "connected",
+          accounts: data.accounts!,
+        },
+      }))
+    }
+    if (userId) {
+      invalidateTradingAccountsSettingsCache(userId)
+      void ensureAccountsLoaded(supabase, userId, { force: true })
+    }
+  }
+
+  async function submitLinkExisting() {
+    if (!linkTarget || linkMode !== "link") return
+    if (!selectedAccountId) {
+      setError("Select a TradeTraxs account.")
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -267,9 +339,8 @@ export default function TradovateIntegrationSettingsSection({
           headers,
           body: JSON.stringify({
             brokerIntegrationAccountId: linkTarget.account.id,
-            action: linkMode,
-            tradetraxsAccountId: linkMode === "link" ? selectedAccountId : undefined,
-            accountSize: linkMode === "create" ? createSize : undefined,
+            action: "link",
+            tradetraxsAccountId: selectedAccountId,
           }),
         }
       )
@@ -277,19 +348,7 @@ export default function TradovateIntegrationSettingsSection({
       if (!res.ok) {
         throw new Error(data.error ?? "Could not link account.")
       }
-      if (data.accounts) {
-        setAccountsByConnection((prev) => ({
-          ...prev,
-          [linkTarget.connectionId]: {
-            state: "connected",
-            accounts: data.accounts!,
-          },
-        }))
-      }
-      if (userId) {
-        invalidateTradingAccountsSettingsCache(userId)
-        void ensureAccountsLoaded(supabase, userId, { force: true })
-      }
+      await applyLinkResponse(linkTarget.connectionId, data)
       setLinkTarget(null)
     } catch (err) {
       setError(toUserFacingErrorMessage(err, "Could not link account."))
@@ -297,6 +356,62 @@ export default function TradovateIntegrationSettingsSection({
       setBusy(false)
     }
   }
+
+  async function submitCreateAndLink(newAccount: CreateAccountSavePayload) {
+    if (!linkTarget || creatingAndLinking) return
+    setCreatingAndLinking(true)
+    setError(null)
+    try {
+      const headers = {
+        ...(await supabaseBearerHeaders()),
+        "Content-Type": "application/json",
+      }
+      const res = await fetch(
+        `/api/integrations/tradovate/connections/${linkTarget.connectionId}/accounts/link`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            brokerIntegrationAccountId: linkTarget.account.id,
+            action: "create",
+            createAccount: {
+              name: newAccount.name,
+              size: newAccount.size,
+              accountNumber: newAccount.id,
+              category: newAccount.category,
+              mode: newAccount.mode,
+              rules: newAccount.rules,
+            },
+          }),
+        }
+      )
+      const data = (await res.json()) as { error?: string; accounts?: BrokerAccount[] }
+      if (!res.ok) {
+        throw new Error(data.error ?? "Could not create and link account.")
+      }
+      await applyLinkResponse(linkTarget.connectionId, data)
+      setLinkTarget(null)
+    } catch (err) {
+      setError(toUserFacingErrorMessage(err, "Could not create and link account."))
+      throw err
+    } finally {
+      setCreatingAndLinking(false)
+    }
+  }
+
+  const brokerCreateInitial = linkTarget
+    ? buildTradovateCreateAccountInitialValues({
+        externalAccountId: linkTarget.account.externalAccountId,
+        externalAccountName: linkTarget.account.externalAccountName,
+        metadata: linkTarget.account.metadata,
+      })
+    : null
+
+  const brokerDisplayName =
+    linkTarget?.account.externalAccountName ??
+    linkTarget?.account.externalDisplayName ??
+    linkTarget?.account.externalAccountId ??
+    ""
 
   const connectionCount = connections.length
   const hasConnections = connectionCount > 0
@@ -434,6 +549,9 @@ export default function TradovateIntegrationSettingsSection({
                                       Linked → {row.tradetraxsAccountName ?? "Trading account"}
                                     </p>
                                     <p className="text-xs text-gray-500">
+                                      Automatic sync{" "}
+                                      {row.autoSyncEnabled === false ? "OFF" : "ON"}
+                                      {" · "}
                                       {formatLastSynced(row.lastSyncSuccessAt)}
                                     </p>
                                   </>
@@ -443,14 +561,30 @@ export default function TradovateIntegrationSettingsSection({
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
                                 {linked ? (
-                                  <ActionButton
-                                    type="button"
-                                    className="rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200"
-                                    disabled={busy || syncingMappingId === row.id}
-                                    onClick={() => void handleSyncTrades(connection.id, row)}
-                                  >
-                                    {syncingMappingId === row.id ? "Syncing…" : "Sync Trades"}
-                                  </ActionButton>
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-xs text-gray-300"
+                                      disabled={busy}
+                                      onClick={() =>
+                                        void handleToggleAutoSync(
+                                          connection.id,
+                                          row,
+                                          row.autoSyncEnabled === false
+                                        )
+                                      }
+                                    >
+                                      Auto {row.autoSyncEnabled === false ? "Off" : "On"}
+                                    </button>
+                                    <ActionButton
+                                      type="button"
+                                      className="rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200"
+                                      disabled={busy || syncingMappingId === row.id}
+                                      onClick={() => void handleSyncTrades(connection.id, row)}
+                                    >
+                                      {syncingMappingId === row.id ? "Syncing…" : "Sync Now"}
+                                    </ActionButton>
+                                  </>
                                 ) : null}
                                 <ActionButton
                                   type="button"
@@ -478,50 +612,63 @@ export default function TradovateIntegrationSettingsSection({
         <p className="text-sm text-emerald-200/90">{syncFeedback}</p>
       ) : null}
 
-      {linkTarget ? (
+      {linkTarget && linkMode === "create" && brokerCreateInitial ? (
+        <CreateAccountModal
+          open
+          dialogTitle="Create & link trading account"
+          dialogSubtitle="Set up your TradeTraxs account, then we will link this Tradovate account."
+          saveLabel="Create & link"
+          overlayClassName="z-[100]"
+          initialAccount={brokerCreateInitial}
+          brokerContext={{
+            brokerName: "Tradovate",
+            brokerAccountName: brokerDisplayName,
+            brokerAccountId: linkTarget.account.externalAccountId,
+          }}
+          supplementaryFooterLink={{
+            label: "Link an existing TradeTraxs account instead",
+            onClick: () => setLinkMode("link"),
+            disabled: creatingAndLinking,
+          }}
+          onClose={() => setLinkTarget(null)}
+          onSave={async (acc) => {
+            await submitCreateAndLink(acc)
+          }}
+        />
+      ) : null}
+
+      {linkTarget && linkMode === "link" ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0f172a] p-5 shadow-xl">
             <h4 className="text-sm font-semibold text-white">Link Tradovate account</h4>
-            <p className="mt-1 text-sm text-gray-400">
-              {linkTarget.account.externalAccountName ?? linkTarget.account.externalAccountId}
-            </p>
+            <p className="mt-1 text-sm text-gray-400">{brokerDisplayName}</p>
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                className={`rounded-lg px-3 py-1.5 text-xs ${linkMode === "create" ? "bg-blue-600 text-white" : "bg-white/10 text-gray-300"}`}
+                className="rounded-lg bg-white/10 px-3 py-1.5 text-xs text-gray-300"
                 onClick={() => setLinkMode("create")}
               >
-                Create New Trading Account
+                Create new trading account
               </button>
               <button
                 type="button"
-                className={`rounded-lg px-3 py-1.5 text-xs ${linkMode === "link" ? "bg-blue-600 text-white" : "bg-white/10 text-gray-300"}`}
-                onClick={() => setLinkMode("link")}
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white"
               >
-                Link Existing
+                Link existing
               </button>
             </div>
-            {linkMode === "link" ? (
-              <select
-                className="mt-4 w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white"
-                value={selectedAccountId}
-                onChange={(e) => setSelectedAccountId(e.target.value)}
-              >
-                <option value="">Select trading account…</option>
-                {ownedAccounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                className="mt-4 w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white"
-                placeholder="Account value (required if Tradovate did not provide size)"
-                value={createSize}
-                onChange={(e) => setCreateSize(e.target.value)}
-              />
-            )}
+            <select
+              className="mt-4 w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white"
+              value={selectedAccountId}
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+            >
+              <option value="">Select trading account…</option>
+              {ownedAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
             <div className="mt-5 flex justify-end gap-2">
               <ActionButton
                 type="button"
@@ -534,12 +681,12 @@ export default function TradovateIntegrationSettingsSection({
               <ActionButton
                 type="button"
                 className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white"
-                disabled={busy}
+                disabled={busy || !selectedAccountId}
                 syncing={busy}
-                syncingLabel="Saving…"
-                onClick={() => void submitLink()}
+                syncingLabel="Linking…"
+                onClick={() => void submitLinkExisting()}
               >
-                Save
+                Link account
               </ActionButton>
             </div>
           </div>

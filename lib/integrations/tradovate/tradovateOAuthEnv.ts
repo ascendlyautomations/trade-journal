@@ -21,6 +21,20 @@ export const TRADOVATE_REST_BASE_BY_ENV: Record<TradovateApiEnvironment, string>
   live: "https://live.tradovateapi.com",
 }
 
+/** Official user WebSocket (not market data): wss://{demo|live}.tradovateapi.com/v1/websocket */
+export const TRADOVATE_WEBSOCKET_URL_BY_ENV: Record<TradovateApiEnvironment, string> = {
+  demo: "wss://demo.tradovateapi.com/v1/websocket",
+  live: "wss://live.tradovateapi.com/v1/websocket",
+}
+
+export function getTradovateWebSocketUrl(
+  apiEnvironment: TradovateApiEnvironment
+): string {
+  const override = process.env.TRADOVATE_WEBSOCKET_URL?.trim()
+  if (override) return override
+  return TRADOVATE_WEBSOCKET_URL_BY_ENV[apiEnvironment]
+}
+
 export function getTradovateRestBaseUrl(apiEnvironment: TradovateApiEnvironment): string {
   const override = process.env.TRADOVATE_REST_BASE_URL?.trim()
   if (override) return override.replace(/\/$/, "")

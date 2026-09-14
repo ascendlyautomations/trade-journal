@@ -2,10 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { loadOwnedBrokerConnection } from "@/lib/integrations/brokerConnectionAccess"
 import { listSafeBrokerIntegrationAccounts } from "@/lib/integrations/brokerIntegrationAccounts"
-import {
-  attachSyncViewsToBrokerAccounts,
-  runTradovateAccountTradeSync,
-} from "@/lib/integrations/tradovate/runTradovateAccountTradeSync"
+import { attachSyncViewsToBrokerAccounts } from "@/lib/integrations/tradovate/runTradovateAccountTradeSync"
+import { syncTradovateBrokerAccount } from "@/lib/integrations/tradovate/syncTradovateBrokerAccount"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -32,12 +30,12 @@ export async function POST(_req: Request, context: RouteContext) {
     return Response.json({ error: "Connection not found." }, { status: 404 })
   }
 
-  const summary = await runTradovateAccountTradeSync(
-    integrationDb,
-    user.id,
+  const summary = await syncTradovateBrokerAccount(integrationDb, {
+    userId: user.id,
     connectionId,
-    mappingId
-  )
+    brokerIntegrationAccountId: mappingId,
+    trigger: "manual",
+  })
 
   const accounts = await listSafeBrokerIntegrationAccounts(integrationDb, {
     userId: user.id,

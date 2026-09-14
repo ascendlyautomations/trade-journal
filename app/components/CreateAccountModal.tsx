@@ -62,6 +62,18 @@ export interface Props {
   lockMode?: string
   /** Override stacking when nested above another modal (default z-[100]). */
   overlayClassName?: string
+  /** Read-only broker identity shown above the form (broker link flows). */
+  brokerContext?: {
+    brokerName: string
+    brokerAccountName: string
+    brokerAccountId: string
+  } | null
+  /** Optional link below the primary actions (e.g. switch to link-existing). */
+  supplementaryFooterLink?: {
+    label: string
+    onClick: () => void
+    disabled?: boolean
+  } | null
 }
 
 const emptyForm = {
@@ -117,6 +129,8 @@ export default function CreateAccountModal({
   lockCategory,
   lockMode,
   overlayClassName,
+  brokerContext = null,
+  supplementaryFooterLink = null,
 }: Props) {
   const [name, setName] = useState("")
   const [size, setSize] = useState("")
@@ -338,7 +352,18 @@ export default function CreateAccountModal({
         </>
       }
       footer={
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div className="flex flex-col gap-3">
+          {supplementaryFooterLink ? (
+            <button
+              type="button"
+              className="text-left text-sm text-blue-300 hover:text-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={supplementaryFooterLink.disabled || isSaving}
+              onClick={supplementaryFooterLink.onClick}
+            >
+              {supplementaryFooterLink.label}
+            </button>
+          ) : null}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={handleCancel}
@@ -365,10 +390,29 @@ export default function CreateAccountModal({
               primaryLabel
             )}
           </button>
+          </div>
         </div>
       }
     >
         <div className="space-y-4">
+          {brokerContext ? (
+            <div className="rounded-xl border border-white/10 bg-black/25 p-3 space-y-2">
+              <div>
+                <span className={READABLE_FIELD_LABEL_CLASS}>Broker</span>
+                <p className="mt-0.5 text-sm text-white">{brokerContext.brokerName}</p>
+              </div>
+              <div>
+                <span className={READABLE_FIELD_LABEL_CLASS}>Broker account</span>
+                <p className="mt-0.5 text-sm text-white">{brokerContext.brokerAccountName}</p>
+              </div>
+              <div>
+                <span className={READABLE_FIELD_LABEL_CLASS}>Broker account ID</span>
+                <p className="mt-0.5 text-sm font-mono text-gray-300">
+                  {brokerContext.brokerAccountId}
+                </p>
+              </div>
+            </div>
+          ) : null}
           <label className="block">
             <span className={READABLE_FIELD_LABEL_CLASS}>Account type</span>
             <CustomSelect

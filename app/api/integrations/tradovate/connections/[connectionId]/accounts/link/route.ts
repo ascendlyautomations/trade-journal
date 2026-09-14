@@ -5,8 +5,9 @@ import {
   linkBrokerIntegrationAccount,
   listSafeBrokerIntegrationAccounts,
 } from "@/lib/integrations/brokerIntegrationAccounts"
-import { assertRequiredAccountValue } from "@/lib/createAccountForm"
+import { parseBrokerLinkCreateAccountPayload } from "@/lib/integrations/brokerLinkCreateAccountPayload"
 import { insertTradingAccount } from "@/lib/tradingAccounts"
+import type { TradingAccountPropFirmRules } from "@/lib/tradingAccounts"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,8 +20,18 @@ type LinkBody = {
   brokerIntegrationAccountId?: string
   action?: "link" | "create"
   tradetraxsAccountId?: string
+  /** @deprecated Use createAccount payload */
   accountSize?: string
+  /** @deprecated Use createAccount.name */
   accountName?: string
+  createAccount?: {
+    name?: string
+    size?: string
+    accountNumber?: string
+    category?: string
+    mode?: string | null
+    rules?: TradingAccountPropFirmRules | null
+  }
 }
 
 export async function POST(req: Request, context: RouteContext) {
@@ -113,30 +124,42 @@ export async function POST(req: Request, context: RouteContext) {
       }
     }
 
-    const metadata = (brokerRow.external_metadata ?? {}) as Record<string, unknown>
-    const evaluationSize =
-      typeof metadata.evaluationSize === "number" ? metadata.evaluationSize : null
-    const sizeCandidate =
-      body.accountSize?.trim() ||
-      (evaluationSize != null ? String(Math.round(evaluationSize)) : "")
-    const sizeGate = assertRequiredAccountValue(sizeCandidate)
-    if (!sizeGate.ok) {
-      return Response.json({ error: sizeGate.message }, { status: 400 })
-    }
-
-    const name =
-      body.accountName?.trim() ||
+    const fallbackName =
       brokerRow.external_account_name?.trim() ||
       `Tradovate ${brokerRow.external_account_id}`
 
-    const { account, error: createError } = await insertTradingAccount(integrationDb, user.id, {
-      name,
-      size: sizeGate.value,
-      id: String(brokerRow.external_account_id),
-      category: "Broker",
-      mode: "Live",
-      rules: null,
-    })
+    const metadata = (brokerRow.external_metadata ?? {}) as Record<string, unknown>
+    const evaluationSize =
+      typeof metadata.evaluationSize === "number" ? metadata.evaluationSize : null
+
+    const legacyCreate = body.createAccount
+      ? null
+      : {
+          name: body.accountName,
+          size:
+            body.accountSize?.trim() ||
+            (evaluationSize != null ? String(Math.round(evaluationSize)) : ""),
+          accountNumber:
+            brokerRow.external_account_name?.trim() ||
+            String(brokerRow.external_account_id),
+          category: undefined as string | undefined,
+          mode: undefined as string | null | undefined,
+          rules: null as TradingAccountPropFirmRules | null,
+        }
+
+    const parsed = parseBrokerLinkCreateAccountPayload(
+      body.createAccount ?? legacyCreate ?? {},
+      fallbackName
+    )
+    if (!parsed.ok) {
+      return Response.json({ error: parsed.message }, { status: 400 })
+    }
+
+    const { account, error: createError } = await insertTradingAccount(
+      integrationDb,
+      user.id,
+      parsed.payload
+    )
 
     if (createError || !account) {
       return Response.json(
@@ -153,9 +176,26 @@ export async function POST(req: Request, context: RouteContext) {
         tradetraxsAccountId: account.id,
       })
     } catch {
+      await integrationDb
+        .from("accounts")
+        .delete()
+        .eq("id", account.id)
+        .eq("user_id", user.id)
       return Response.json({ error: "Account created but linking failed." }, { status: 500 })
     }
   }
+
+  const now = new Date().toISOString()
+  await integrationDb.from("broker_integration_account_sync").upsert(
+    {
+      broker_integration_account_id: brokerIntegrationAccountId,
+      user_id: user.id,
+      connection_id: connectionId,
+      auto_sync_enabled: true,
+      updated_at: now,
+    },
+    { onConflict: "broker_integration_account_id" }
+  )
 
   const accounts = await listSafeBrokerIntegrationAccounts(integrationDb, {
     userId: user.id,
