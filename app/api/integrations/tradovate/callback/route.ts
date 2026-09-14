@@ -128,5 +128,15 @@ export async function GET(request: NextRequest) {
     hasProviderUserId: Boolean(providerUserId),
   })
 
+  const { runTradovateAccountDiscovery } = await import(
+    "@/lib/integrations/tradovate/runTradovateAccountDiscovery"
+  )
+  void runTradovateAccountDiscovery(supabaseServiceRole, boundUser.user_id).catch((err) => {
+    console.error(
+      "[tradovate/callback] account_discovery_failed",
+      err instanceof Error ? err.message : "unknown"
+    )
+  })
+
   return redirectOutcome(request, { kind: "success" })
 }

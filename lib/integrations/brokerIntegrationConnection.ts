@@ -8,7 +8,11 @@ import type { TradovateApiEnvironment } from "@/lib/integrations/tradovate/trado
 
 export type BrokerIntegrationProvider = "tradovate"
 
-export type BrokerIntegrationStatus = "connected" | "disconnected" | "error"
+export type BrokerIntegrationStatus =
+  | "connected"
+  | "disconnected"
+  | "error"
+  | "reconnect_required"
 
 export type SafeBrokerIntegrationView = {
   provider: BrokerIntegrationProvider
@@ -95,6 +99,27 @@ export async function disconnectBrokerIntegration(
   }
 ): Promise<boolean> {
   const now = new Date().toISOString()
+  const { data: active, error: loadError } = await supabase
+    .from("broker_integration_connections")
+    .select("id, status")
+    .eq("user_id", params.userId)
+    .eq("provider", params.provider)
+    .in("status", ["connected", "reconnect_required", "error"])
+    .maybeSingle()
+
+  if (loadError) {
+    throw new Error("broker_integration_disconnect_failed")
+  }
+  if (!active) return false
+
+  const { disableBrokerAccountsForConnection } = await import(
+    "@/lib/integrations/brokerIntegrationAccounts"
+  )
+  await disableBrokerAccountsForConnection(supabase, {
+    userId: params.userId,
+    connectionId: active.id,
+  })
+
   const { data, error } = await supabase
     .from("broker_integration_connections")
     .update({
@@ -105,9 +130,7 @@ export async function disconnectBrokerIntegration(
       disconnected_at: now,
       updated_at: now,
     })
-    .eq("user_id", params.userId)
-    .eq("provider", params.provider)
-    .eq("status", "connected")
+    .eq("id", active.id)
     .select("id")
     .maybeSingle()
 

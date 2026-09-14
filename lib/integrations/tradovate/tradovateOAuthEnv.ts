@@ -15,6 +15,18 @@ const ME_URL_BY_ENV: Record<TradovateApiEnvironment, string> = {
   live: "https://live.tradovateapi.com/v1/auth/me",
 }
 
+/** Official REST API base (Account List: GET /v1/account/list). */
+export const TRADOVATE_REST_BASE_BY_ENV: Record<TradovateApiEnvironment, string> = {
+  demo: "https://demo.tradovateapi.com",
+  live: "https://live.tradovateapi.com",
+}
+
+export function getTradovateRestBaseUrl(apiEnvironment: TradovateApiEnvironment): string {
+  const override = process.env.TRADOVATE_REST_BASE_URL?.trim()
+  if (override) return override.replace(/\/$/, "")
+  return TRADOVATE_REST_BASE_BY_ENV[apiEnvironment]
+}
+
 function readApiEnvironment(): TradovateApiEnvironment {
   const raw = process.env.TRADOVATE_API_ENV?.trim().toLowerCase()
   if (raw === "live") return "live"
