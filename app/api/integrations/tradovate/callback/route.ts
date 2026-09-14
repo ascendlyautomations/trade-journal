@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { upsertTradovateConnection } from "@/lib/integrations/brokerIntegrationConnection"
 import { consumeIntegrationOAuthState } from "@/lib/integrations/integrationOAuthState"
 import {
   buildTradovateIntegrationResultUrl,
   parseTradovateCallbackQuery,
   type TradovateCallbackOutcome,
 } from "@/lib/integrations/tradovate/tradovateOAuthCallback"
+import { getTradovateOAuthConfig } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
+import {
+  exchangeTradovateAuthorizationCode,
+  fetchTradovateMeProfile,
+  parseTradovateIdTokenSubject,
+} from "@/lib/integrations/tradovate/tradovateTokenExchange"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -58,13 +65,68 @@ export async function GET(request: NextRequest) {
     return redirectOutcome(request, { kind: "error", reason: "missing_code" })
   }
 
-  // Do not log authorization codes. Token exchange is a follow-up phase.
-  console.info("[tradovate/callback] authorization_code_received", {
-    userId: boundUser.user_id,
-    codeLength: query.code.length,
-  })
+  try {
+    getTradovateOAuthConfig()
+  } catch {
+    console.error("[tradovate/callback] oauth_config_missing")
+    return redirectOutcome(request, { kind: "error", reason: "server" })
+  }
 
-  // Phase 2: await exchangeTradovateAuthorizationCode({ code: query.code, userId: boundUser.user_id })
+  const exchange = await exchangeTradovateAuthorizationCode(query.code)
+  if (!exchange.ok) {
+    console.info("[tradovate/callback] token_exchange_failed", {
+      reason: exchange.reason,
+      oauthError: exchange.oauthError ?? null,
+    })
+    return redirectOutcome(request, { kind: "error", reason: "token_exchange" })
+  }
+
+  const tokens = exchange.tokens
+  const config = getTradovateOAuthConfig()
+  const nowMs = Date.now()
+  const accessExpiresAt =
+    typeof tokens.expires_in === "number" && tokens.expires_in > 0
+      ? new Date(nowMs + tokens.expires_in * 1000)
+      : null
+  const refreshExpiresAt =
+    typeof tokens.refresh_token_expires_in === "number" &&
+    tokens.refresh_token_expires_in > 0
+      ? new Date(nowMs + tokens.refresh_token_expires_in * 1000)
+      : null
+
+  let providerUserId = parseTradovateIdTokenSubject(tokens.id_token)
+  if (!providerUserId) {
+    const me = await fetchTradovateMeProfile(tokens.access_token)
+    if (me?.userId != null) {
+      providerUserId = String(me.userId)
+    }
+  }
+
+  try {
+    await upsertTradovateConnection(supabaseServiceRole, {
+      userId: boundUser.user_id,
+      providerUserId,
+      credentials: {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token ?? null,
+        token_type: tokens.token_type ?? null,
+      },
+      accessTokenExpiresAt: accessExpiresAt,
+      refreshTokenExpiresAt: refreshExpiresAt,
+      apiEnvironment: config.apiEnvironment,
+    })
+  } catch (err) {
+    console.error(
+      "[tradovate/callback] connection_persist_failed",
+      err instanceof Error ? err.message : "unknown"
+    )
+    return redirectOutcome(request, { kind: "error", reason: "server" })
+  }
+
+  console.info("[tradovate/callback] connection_established", {
+    userId: boundUser.user_id,
+    hasProviderUserId: Boolean(providerUserId),
+  })
 
   return redirectOutcome(request, { kind: "success" })
 }

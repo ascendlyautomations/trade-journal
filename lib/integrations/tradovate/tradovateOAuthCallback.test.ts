@@ -4,6 +4,7 @@ import {
   parseTradovateCallbackQuery,
   TRADOVATE_OAUTH_REDIRECT_URI,
   buildTradovateIntegrationResultUrl,
+  tradovateCallbackUserMessage,
 } from "./tradovateOAuthCallback"
 
 describe("tradovateOAuthCallback", () => {
@@ -23,6 +24,11 @@ describe("tradovateOAuthCallback", () => {
     assert.equal(parsed.state, "xyz")
     assert.equal(parsed.oauthError, "access_denied")
     assert.equal(parsed.oauthErrorDescription, "nope")
+  })
+
+  it("maps token exchange errors to user copy", () => {
+    const msg = tradovateCallbackUserMessage({ kind: "error", reason: "token_exchange" })
+    assert.match(msg, /could not finish linking/i)
   })
 
   it("builds settings redirect URLs", () => {

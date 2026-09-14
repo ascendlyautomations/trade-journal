@@ -16,6 +16,7 @@ export type TradovateCallbackOutcome =
         | "invalid_state"
         | "missing_code"
         | "state_expired"
+        | "token_exchange"
         | "server"
     }
 
@@ -29,12 +30,14 @@ const REASON_MESSAGES: Record<TradovateCallbackErrorReason, string> = {
     invalid_state: "This connection attempt expired or was invalid. Please try again from TradeTraxs.",
     missing_code: "Tradovate did not return an authorization code. Please try again.",
     state_expired: "This connection attempt expired. Please start again from TradeTraxs.",
+    token_exchange:
+      "Tradovate authorized the connection, but TradeTraxs could not finish linking. Please try again.",
     server: "We could not complete the Tradovate connection. Please try again.",
   }
 
 export function tradovateCallbackUserMessage(outcome: TradovateCallbackOutcome): string {
   if (outcome.kind === "success") {
-    return "Tradovate authorization received. Account linking will finish in an upcoming update."
+    return "Tradovate is connected. Trade import and sync will arrive in a future update."
   }
   return REASON_MESSAGES[outcome.reason]
 }

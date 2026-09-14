@@ -74,6 +74,7 @@ import {
   isStartedTradingDateInFuture,
 } from "@/lib/tradeDateValidation"
 import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSettingsSection"
+import TradovateIntegrationSettingsSection from "@/app/components/TradovateIntegrationSettingsSection"
 import CopyTradingGroupsSection from "@/app/components/CopyTradingGroupsSection"
 import NotificationPreferencesSettingsSection from "@/app/components/NotificationPreferencesSettingsSection"
 import CreatePasswordModal from "@/app/components/CreatePasswordModal"
@@ -1562,6 +1563,7 @@ export default function SettingsPage() {
 
             {activeTab === "trading-accounts" && (
               <div className="space-y-6">
+                <TradovateIntegrationSettingsSection userId={user?.id} />
                 <TradingAccountsSettingsSection
                   userId={user?.id}
                   isPro={isProActive(profile)}
