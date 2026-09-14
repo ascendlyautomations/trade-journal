@@ -90,16 +90,22 @@ export async function listSafeBrokerIntegrationAccounts(
   params: {
     userId: string
     provider: BrokerIntegrationProvider
+    connectionId?: string
   }
 ): Promise<SafeBrokerIntegrationAccountView[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("broker_integration_accounts")
     .select(
       "id, provider, external_account_id, external_account_name, external_display_name, external_metadata, tradetraxs_account_id, sync_enabled, status, discovered_at, last_seen_at"
     )
     .eq("user_id", params.userId)
     .eq("provider", params.provider)
-    .order("external_account_name", { ascending: true })
+
+  if (params.connectionId) {
+    query = query.eq("connection_id", params.connectionId)
+  }
+
+  const { data, error } = await query.order("external_account_name", { ascending: true })
 
   if (error) {
     throw new Error("broker_integration_accounts_list_failed")
@@ -212,13 +218,23 @@ export async function disableBrokerAccountsForConnection(
 
 export async function getBrokerIntegrationAccountMaxLastSeen(
   supabase: SupabaseClient,
-  params: { userId: string; provider: BrokerIntegrationProvider }
+  params: {
+    userId: string
+    provider: BrokerIntegrationProvider
+    connectionId?: string
+  }
 ): Promise<string | null> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("broker_integration_accounts")
     .select("last_seen_at")
     .eq("user_id", params.userId)
     .eq("provider", params.provider)
+
+  if (params.connectionId) {
+    query = query.eq("connection_id", params.connectionId)
+  }
+
+  const { data, error } = await query
     .order("last_seen_at", { ascending: false })
     .limit(1)
     .maybeSingle()

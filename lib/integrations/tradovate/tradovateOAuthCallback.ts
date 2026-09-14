@@ -17,6 +17,7 @@ export type TradovateCallbackOutcome =
         | "missing_code"
         | "state_expired"
         | "token_exchange"
+        | "identity_mismatch"
         | "server"
     }
 
@@ -32,6 +33,8 @@ const REASON_MESSAGES: Record<TradovateCallbackErrorReason, string> = {
     state_expired: "This connection attempt expired. Please start again from TradeTraxs.",
     token_exchange:
       "Tradovate authorized the connection, but TradeTraxs could not finish linking. Please try again.",
+    identity_mismatch:
+      "You signed into a different Tradovate login than this connection. Reconnect with the original login or add a new connection instead.",
     server: "We could not complete the Tradovate connection. Please try again.",
   }
 

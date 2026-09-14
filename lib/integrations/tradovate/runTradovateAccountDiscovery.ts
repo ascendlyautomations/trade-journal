@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { loadOwnedBrokerConnection } from "@/lib/integrations/brokerConnectionAccess"
 import {
+  getBrokerIntegrationAccountMaxLastSeen,
   listSafeBrokerIntegrationAccounts,
   upsertDiscoveredBrokerAccounts,
 } from "@/lib/integrations/brokerIntegrationAccounts"
@@ -20,28 +22,28 @@ export type TradovateAccountDiscoveryResult =
 
 export async function runTradovateAccountDiscovery(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  connectionId: string
 ): Promise<TradovateAccountDiscoveryResult> {
-  const { data: connection, error } = await supabase
-    .from("broker_integration_connections")
-    .select("id, status")
-    .eq("user_id", userId)
-    .eq("provider", "tradovate")
-    .maybeSingle()
+  const owned = await loadOwnedBrokerConnection(supabase, {
+    userId,
+    connectionId,
+    provider: "tradovate",
+  })
 
-  if (error || !connection || connection.status !== "connected") {
+  if (!owned || owned.status !== "connected") {
     return { ok: false, reason: "not_connected" }
   }
 
   try {
-    const rawList = await fetchTradovateAccountListRaw(supabase, userId)
+    const rawList = await fetchTradovateAccountListRaw(supabase, userId, connectionId)
     const discovered = rawList
       .map((row) => normalizeTradovateAccountRow(row as TradovateAccountListItemRaw))
       .filter((row): row is NonNullable<typeof row> => row != null)
 
     await upsertDiscoveredBrokerAccounts(supabase, {
       userId,
-      connectionId: connection.id,
+      connectionId,
       provider: "tradovate",
       discovered,
     })
@@ -49,7 +51,8 @@ export async function runTradovateAccountDiscovery(
     await supabase
       .from("broker_integration_connections")
       .update({ updated_at: new Date().toISOString() })
-      .eq("id", connection.id)
+      .eq("id", connectionId)
+      .eq("user_id", userId)
 
     return { ok: true, accountCount: discovered.length }
   } catch (err) {
@@ -72,23 +75,23 @@ export function isTradovateDiscoveryStale(lastSeenAt: string | null): boolean {
   return Date.now() - ms > TRADOVATE_ACCOUNT_DISCOVERY_STALE_MS
 }
 
-export async function loadTradovateAccountsForUser(
+export async function loadTradovateConnectionAccounts(
   supabase: SupabaseClient,
   userId: string,
+  connectionId: string,
   options?: { forceRefresh?: boolean }
 ): Promise<{
   connectionStatus: string
   discovery: TradovateAccountDiscoveryResult | null
   accounts: Awaited<ReturnType<typeof listSafeBrokerIntegrationAccounts>>
 }> {
-  const { data: connection } = await supabase
-    .from("broker_integration_connections")
-    .select("status")
-    .eq("user_id", userId)
-    .eq("provider", "tradovate")
-    .maybeSingle()
+  const owned = await loadOwnedBrokerConnection(supabase, {
+    userId,
+    connectionId,
+    provider: "tradovate",
+  })
 
-  const connectionStatus = connection?.status ?? "disconnected"
+  const connectionStatus = owned?.status ?? "disconnected"
   if (connectionStatus !== "connected") {
     return {
       connectionStatus,
@@ -97,22 +100,21 @@ export async function loadTradovateAccountsForUser(
     }
   }
 
-  const { getBrokerIntegrationAccountMaxLastSeen } = await import(
-    "@/lib/integrations/brokerIntegrationAccounts"
-  )
   const lastSeen = await getBrokerIntegrationAccountMaxLastSeen(supabase, {
     userId,
     provider: "tradovate",
+    connectionId,
   })
 
   let discovery: TradovateAccountDiscoveryResult | null = null
   if (options?.forceRefresh || isTradovateDiscoveryStale(lastSeen)) {
-    discovery = await runTradovateAccountDiscovery(supabase, userId)
+    discovery = await runTradovateAccountDiscovery(supabase, userId, connectionId)
   }
 
   const accounts = await listSafeBrokerIntegrationAccounts(supabase, {
     userId,
     provider: "tradovate",
+    connectionId,
   })
 
   return { connectionStatus, discovery, accounts }

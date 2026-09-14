@@ -8,12 +8,12 @@ import { loadTradingAccounts } from "@/lib/tradingAccounts"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import { useCallback, useEffect, useState } from "react"
 
-type TradovateStatus = {
+type TradovateConnection = {
+  id: string
+  label: string
   connected: boolean
   status: string
-  connected_at: string | null
-  last_sync_at: string | null
-  provider_user_id: string | null
+  provider_display_name: string | null
   api_environment: string | null
 }
 
@@ -26,7 +26,7 @@ type BrokerAccount = {
   status: string
 }
 
-type AccountsPayload = {
+type ConnectionAccountsPayload = {
   state: string
   accounts: BrokerAccount[]
 }
@@ -36,21 +36,43 @@ export default function TradovateIntegrationSettingsSection({
 }: {
   userId: string | undefined
 }) {
-  const [status, setStatus] = useState<TradovateStatus | null>(null)
-  const [accountsPayload, setAccountsPayload] = useState<AccountsPayload | null>(null)
+  const [connections, setConnections] = useState<TradovateConnection[]>([])
+  const [accountsByConnection, setAccountsByConnection] = useState<
+    Record<string, ConnectionAccountsPayload>
+  >({})
   const [loading, setLoading] = useState(true)
-  const [accountsLoading, setAccountsLoading] = useState(false)
+  const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [linkTarget, setLinkTarget] = useState<BrokerAccount | null>(null)
+  const [linkTarget, setLinkTarget] = useState<{
+    connectionId: string
+    account: BrokerAccount
+  } | null>(null)
   const [ownedAccounts, setOwnedAccounts] = useState<{ id: string; name: string }[]>([])
   const [linkMode, setLinkMode] = useState<"create" | "link">("create")
   const [selectedAccountId, setSelectedAccountId] = useState("")
   const [createSize, setCreateSize] = useState("")
 
-  const loadStatus = useCallback(async () => {
+  const loadConnectionAccounts = useCallback(
+    async (connectionId: string, refresh?: boolean) => {
+      const headers = await supabaseBearerHeaders()
+      const qs = refresh ? "?refresh=1" : ""
+      const res = await fetch(
+        `/api/integrations/tradovate/connections/${connectionId}/accounts${qs}`,
+        { headers }
+      )
+      if (!res.ok) {
+        throw new Error("Could not load broker accounts for this connection.")
+      }
+      const body = (await res.json()) as ConnectionAccountsPayload
+      setAccountsByConnection((prev) => ({ ...prev, [connectionId]: body }))
+    },
+    []
+  )
+
+  const loadConnections = useCallback(async () => {
     if (!userId) {
-      setStatus(null)
+      setConnections([])
       setLoading(false)
       return
     }
@@ -58,71 +80,43 @@ export default function TradovateIntegrationSettingsSection({
     setError(null)
     try {
       const headers = await supabaseBearerHeaders()
-      const res = await fetch("/api/integrations/tradovate/status", { headers })
+      const res = await fetch("/api/integrations/tradovate/connections", { headers })
       if (res.status === 401) {
-        setStatus(null)
+        setConnections([])
         return
       }
-      if (!res.ok) {
-        throw new Error("Could not load Tradovate status.")
-      }
-      const body = (await res.json()) as TradovateStatus
-      setStatus(body)
+      if (!res.ok) throw new Error("Could not load Tradovate connections.")
+      const body = (await res.json()) as { connections: TradovateConnection[] }
+      const list = body.connections ?? []
+      setConnections(list)
+      await Promise.all(
+        list.filter((c) => c.connected).map((c) => loadConnectionAccounts(c.id))
+      )
     } catch (err) {
-      setError(toUserFacingErrorMessage(err, "Could not load Tradovate status."))
+      setError(toUserFacingErrorMessage(err, "Could not load Tradovate connections."))
     } finally {
       setLoading(false)
     }
-  }, [userId])
-
-  const loadBrokerAccounts = useCallback(
-    async (options?: { refresh?: boolean }) => {
-      if (!userId) return
-      setAccountsLoading(true)
-      try {
-        const headers = await supabaseBearerHeaders()
-        const qs = options?.refresh ? "?refresh=1" : ""
-        const res = await fetch(`/api/integrations/tradovate/accounts${qs}`, { headers })
-        if (!res.ok) {
-          throw new Error("Could not load Tradovate broker accounts.")
-        }
-        const body = (await res.json()) as AccountsPayload
-        setAccountsPayload(body)
-      } catch (err) {
-        setError(toUserFacingErrorMessage(err, "Could not load Tradovate broker accounts."))
-      } finally {
-        setAccountsLoading(false)
-      }
-    },
-    [userId]
-  )
+  }, [userId, loadConnectionAccounts])
 
   useEffect(() => {
-    void loadStatus()
-  }, [loadStatus])
+    void loadConnections()
+  }, [loadConnections])
 
-  const connected = status?.connected === true
-
-  useEffect(() => {
-    if (connected && userId) {
-      void loadBrokerAccounts()
-    } else {
-      setAccountsPayload(null)
-    }
-  }, [connected, userId, loadBrokerAccounts])
-
-  async function handleConnect() {
+  async function handleConnect(reconnectConnectionId?: string) {
     setBusy(true)
     setError(null)
     try {
-      await startTradovateOAuthConnect()
+      await startTradovateOAuthConnect(
+        reconnectConnectionId ? { reconnectConnectionId } : undefined
+      )
     } catch (err) {
       setError(toUserFacingErrorMessage(err, "Could not connect Tradovate."))
       setBusy(false)
     }
   }
 
-  async function handleDisconnect() {
+  async function handleDisconnect(connectionId: string) {
     setBusy(true)
     setError(null)
     try {
@@ -130,15 +124,12 @@ export default function TradovateIntegrationSettingsSection({
         ...(await supabaseBearerHeaders()),
         "Content-Type": "application/json",
       }
-      const res = await fetch("/api/integrations/tradovate/disconnect", {
-        method: "POST",
-        headers,
-      })
-      if (!res.ok) {
-        throw new Error("Could not disconnect Tradovate.")
-      }
-      setAccountsPayload(null)
-      await loadStatus()
+      const res = await fetch(
+        `/api/integrations/tradovate/connections/${connectionId}/disconnect`,
+        { method: "POST", headers }
+      )
+      if (!res.ok) throw new Error("Could not disconnect this Tradovate connection.")
+      await loadConnections()
     } catch (err) {
       setError(toUserFacingErrorMessage(err, "Could not disconnect Tradovate."))
     } finally {
@@ -146,8 +137,30 @@ export default function TradovateIntegrationSettingsSection({
     }
   }
 
-  async function openLinkModal(row: BrokerAccount) {
-    setLinkTarget(row)
+  async function handleRefreshAccounts(connectionId: string) {
+    setRefreshingId(connectionId)
+    setError(null)
+    try {
+      const headers = await supabaseBearerHeaders()
+      const res = await fetch(
+        `/api/integrations/tradovate/connections/${connectionId}/accounts/refresh`,
+        { method: "POST", headers }
+      )
+      if (!res.ok) throw new Error("Could not refresh accounts.")
+      const body = (await res.json()) as ConnectionAccountsPayload & { connectionId: string }
+      setAccountsByConnection((prev) => ({
+        ...prev,
+        [connectionId]: { state: body.state, accounts: body.accounts },
+      }))
+    } catch (err) {
+      setError(toUserFacingErrorMessage(err, "Could not refresh accounts."))
+    } finally {
+      setRefreshingId(null)
+    }
+  }
+
+  async function openLinkModal(connectionId: string, account: BrokerAccount) {
+    setLinkTarget({ connectionId, account })
     setLinkMode("create")
     setSelectedAccountId("")
     setCreateSize("")
@@ -166,24 +179,31 @@ export default function TradovateIntegrationSettingsSection({
         ...(await supabaseBearerHeaders()),
         "Content-Type": "application/json",
       }
-      const res = await fetch("/api/integrations/tradovate/accounts/link", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          brokerIntegrationAccountId: linkTarget.id,
-          action: linkMode,
-          tradetraxsAccountId: linkMode === "link" ? selectedAccountId : undefined,
-          accountSize: linkMode === "create" ? createSize : undefined,
-        }),
-      })
+      const res = await fetch(
+        `/api/integrations/tradovate/connections/${linkTarget.connectionId}/accounts/link`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            brokerIntegrationAccountId: linkTarget.account.id,
+            action: linkMode,
+            tradetraxsAccountId: linkMode === "link" ? selectedAccountId : undefined,
+            accountSize: linkMode === "create" ? createSize : undefined,
+          }),
+        }
+      )
       const data = (await res.json()) as { error?: string; accounts?: BrokerAccount[] }
       if (!res.ok) {
         throw new Error(data.error ?? "Could not link account.")
       }
       if (data.accounts) {
-        setAccountsPayload((prev) =>
-          prev ? { ...prev, accounts: data.accounts! } : { state: "connected", accounts: data.accounts! }
-        )
+        setAccountsByConnection((prev) => ({
+          ...prev,
+          [linkTarget.connectionId]: {
+            state: "connected",
+            accounts: data.accounts!,
+          },
+        }))
       }
       setLinkTarget(null)
     } catch (err) {
@@ -193,137 +213,171 @@ export default function TradovateIntegrationSettingsSection({
     }
   }
 
-  const accountsState = accountsPayload?.state
-  const brokerAccounts = accountsPayload?.accounts ?? []
+  const connectionCount = connections.length
+  const hasConnections = connectionCount > 0
 
   return (
     <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
-        Broker integrations
-      </h3>
-      <p className="mt-1 text-sm text-gray-400">
-        Connect supported brokers to import trading activity into TradeTraxs.
-      </p>
-
-      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-medium text-white">Tradovate</p>
-            {loading ? (
-              <p className="mt-1 text-sm text-gray-400">Checking connection…</p>
-            ) : connected ? (
-              <p className="mt-1 text-sm text-emerald-300">Connected ✓</p>
-            ) : status?.status === "reconnect_required" ? (
-              <p className="mt-1 text-sm text-amber-300">Reconnect required</p>
-            ) : (
-              <p className="mt-1 text-sm text-gray-400">Not connected</p>
-            )}
-            {connected && status?.api_environment ? (
-              <p className="mt-1 text-xs text-gray-500">
-                Environment: {status.api_environment}
-              </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
+            Broker integrations
+          </h3>
+          <p className="mt-1 text-sm font-medium text-white">
+            Tradovate
+            {hasConnections ? (
+              <span className="ml-2 text-sm font-normal text-gray-400">
+                {connectionCount} connection{connectionCount === 1 ? "" : "s"}
+              </span>
             ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {connected ? (
-              <>
-                <ActionButton
-                  type="button"
-                  className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/15"
-                  disabled={busy || accountsLoading}
-                  syncing={accountsLoading}
-                  syncingLabel="Refreshing…"
-                  onClick={() => void loadBrokerAccounts({ refresh: true })}
-                >
-                  Refresh Accounts
-                </ActionButton>
-                <ActionButton
-                  type="button"
-                  className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/15"
-                  disabled={busy || !userId}
-                  onClick={() => void handleDisconnect()}
-                >
-                  Disconnect
-                </ActionButton>
-              </>
-            ) : (
-              <ActionButton
-                type="button"
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
-                disabled={busy || loading || !userId}
-                onClick={() => void handleConnect()}
-              >
-                Connect Tradovate
-              </ActionButton>
-            )}
-          </div>
-        </div>
-
-        {connected ? (
-          <div className="mt-4 border-t border-white/10 pt-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-              Broker accounts
+          </p>
+          {!hasConnections && !loading ? (
+            <p className="mt-2 text-sm text-gray-400">
+              Connect your Tradovate accounts to automatically sync trading data.
             </p>
-            {accountsLoading && brokerAccounts.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-400">Loading accounts…</p>
-            ) : accountsState === "reconnect_required" ? (
-              <p className="mt-2 text-sm text-amber-200">
-                Tradovate authorization expired. Disconnect and connect again.
-              </p>
-            ) : accountsState === "provider_unavailable" ? (
-              <p className="mt-2 text-sm text-amber-200">
-                Tradovate is temporarily unavailable. Try Refresh Accounts later.
-              </p>
-            ) : brokerAccounts.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-400">
-                No Tradovate accounts were returned for this login. Try Refresh Accounts.
-              </p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {brokerAccounts.map((row) => {
-                  const label =
-                    row.externalAccountName?.trim() ||
-                    `Account ${row.externalAccountId}`
-                  const linked = Boolean(row.tradetraxsAccountId)
-                  return (
-                    <li
-                      key={row.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-white">{label}</p>
-                        <p className="text-xs text-gray-500">ID {row.externalAccountId}</p>
-                        {linked ? (
-                          <p className="mt-1 text-xs text-emerald-300">
-                            Linked → {row.tradetraxsAccountName ?? "Trading account"}
-                          </p>
-                        ) : (
-                          <p className="mt-1 text-xs text-gray-400">Not linked</p>
-                        )}
-                      </div>
-                      <ActionButton
-                        type="button"
-                        className="rounded-lg border border-blue-400/40 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-200 hover:bg-blue-500/20"
-                        disabled={busy}
-                        onClick={() => void openLinkModal(row)}
-                      >
-                        {linked ? "Manage" : "Link Account"}
-                      </ActionButton>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </div>
+          ) : null}
+        </div>
+        {!loading ? (
+          <ActionButton
+            type="button"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
+            disabled={busy || !userId}
+            onClick={() => void handleConnect()}
+          >
+            {hasConnections ? "+ Connect Another Tradovate Account" : "Connect Tradovate"}
+          </ActionButton>
         ) : null}
       </div>
+
+      {loading ? (
+        <p className="mt-4 text-sm text-gray-400">Loading connections…</p>
+      ) : (
+        <div className="mt-4 space-y-4">
+          {connections.map((connection) => {
+            const payload = accountsByConnection[connection.id]
+            const brokerAccounts = payload?.accounts ?? []
+            const accountsState = payload?.state
+            const isConnected = connection.connected
+
+            return (
+              <div
+                key={connection.id}
+                className="rounded-xl border border-white/10 bg-black/20 p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-white">{connection.label}</p>
+                    {isConnected ? (
+                      <p className="mt-1 text-sm text-emerald-300">Connected ✓</p>
+                    ) : connection.status === "reconnect_required" ? (
+                      <p className="mt-1 text-sm text-amber-300">Reconnect required</p>
+                    ) : (
+                      <p className="mt-1 text-sm text-gray-400">{connection.status}</p>
+                    )}
+                    {connection.api_environment ? (
+                      <p className="mt-1 text-xs text-gray-500">
+                        Environment: {connection.api_environment}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {connection.status === "reconnect_required" ? (
+                      <ActionButton
+                        type="button"
+                        className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+                        disabled={busy}
+                        onClick={() => void handleConnect(connection.id)}
+                      >
+                        Reconnect
+                      </ActionButton>
+                    ) : null}
+                    {isConnected ? (
+                      <ActionButton
+                        type="button"
+                        className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs text-white"
+                        disabled={busy || refreshingId === connection.id}
+                        syncing={refreshingId === connection.id}
+                        syncingLabel="Refreshing…"
+                        onClick={() => void handleRefreshAccounts(connection.id)}
+                      >
+                        Refresh Accounts
+                      </ActionButton>
+                    ) : null}
+                    <ActionButton
+                      type="button"
+                      className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs text-white"
+                      disabled={busy}
+                      onClick={() => void handleDisconnect(connection.id)}
+                    >
+                      Disconnect
+                    </ActionButton>
+                  </div>
+                </div>
+
+                {isConnected ? (
+                  <div className="mt-4 border-t border-white/10 pt-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      Broker accounts
+                    </p>
+                    {accountsState === "reconnect_required" ? (
+                      <p className="mt-2 text-sm text-amber-200">
+                        Authorization expired for this connection. Reconnect to continue.
+                      </p>
+                    ) : !payload ? (
+                      <p className="mt-2 text-sm text-gray-400">Loading accounts…</p>
+                    ) : brokerAccounts.length === 0 ? (
+                      <p className="mt-2 text-sm text-gray-400">
+                        No accounts returned. Try Refresh Accounts.
+                      </p>
+                    ) : (
+                      <ul className="mt-2 space-y-2">
+                        {brokerAccounts.map((row) => {
+                          const label =
+                            row.externalAccountName?.trim() ||
+                            `Account ${row.externalAccountId}`
+                          const linked = Boolean(row.tradetraxsAccountId)
+                          return (
+                            <li
+                              key={row.id}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2"
+                            >
+                              <div>
+                                <p className="text-sm text-white">{label}</p>
+                                {linked ? (
+                                  <p className="text-xs text-emerald-300">
+                                    Linked → {row.tradetraxsAccountName ?? "Trading account"}
+                                  </p>
+                                ) : (
+                                  <p className="text-xs text-gray-400">Not linked</p>
+                                )}
+                              </div>
+                              <ActionButton
+                                type="button"
+                                className="rounded-lg border border-blue-400/40 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-200"
+                                disabled={busy}
+                                onClick={() => void openLinkModal(connection.id, row)}
+                              >
+                                {linked ? "Manage" : "Link Account"}
+                              </ActionButton>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {linkTarget ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0f172a] p-5 shadow-xl">
             <h4 className="text-sm font-semibold text-white">Link Tradovate account</h4>
             <p className="mt-1 text-sm text-gray-400">
-              {linkTarget.externalAccountName ?? linkTarget.externalAccountId}
+              {linkTarget.account.externalAccountName ?? linkTarget.account.externalAccountId}
             </p>
             <div className="mt-4 flex gap-2">
               <button

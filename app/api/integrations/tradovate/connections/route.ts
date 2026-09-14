@@ -4,7 +4,6 @@ import { listSafeBrokerConnections } from "@/lib/integrations/brokerIntegrationC
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/** Legacy summary + multi-connection list. Prefer GET /api/integrations/tradovate/connections. */
 export async function GET(req: Request) {
   const user = await getRouteUser(req)
   if (!user?.id) {
@@ -16,23 +15,16 @@ export async function GET(req: Request) {
       userId: user.id,
       provider: "tradovate",
     })
-    const primary = connections[0]
     return Response.json({
-      connected: connections.some((c) => c.connected),
+      provider: "tradovate",
       connectionCount: connections.length,
       connections,
-      provider: "tradovate",
-      status: primary?.status ?? "disconnected",
-      connected_at: primary?.connected_at ?? null,
-      last_sync_at: primary?.last_sync_at ?? null,
-      provider_user_id: primary?.provider_user_id ?? null,
-      api_environment: primary?.api_environment ?? null,
     })
   } catch (err) {
     console.error(
-      "[tradovate/status] load_failed",
+      "[tradovate/connections] list_failed",
       err instanceof Error ? err.message : "unknown"
     )
-    return Response.json({ error: "Could not load integration status." }, { status: 500 })
+    return Response.json({ error: "Could not load Tradovate connections." }, { status: 500 })
   }
 }

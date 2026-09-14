@@ -24,6 +24,7 @@ function TradovateIntegrationResultInner() {
         "missing_code",
         "state_expired",
         "token_exchange",
+        "identity_mismatch",
         "server",
       ] as const
       const normalized = allowed.includes(reason as (typeof allowed)[number])

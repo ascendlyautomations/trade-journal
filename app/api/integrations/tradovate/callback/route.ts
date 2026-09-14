@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-import { upsertTradovateConnection } from "@/lib/integrations/brokerIntegrationConnection"
+import {
+  BrokerOAuthIdentityMismatchError,
+  persistTradovateConnectionAfterOAuth,
+} from "@/lib/integrations/brokerIntegrationConnection"
 import { consumeIntegrationOAuthState } from "@/lib/integrations/integrationOAuthState"
 import {
   buildTradovateIntegrationResultUrl,
@@ -22,12 +25,6 @@ function redirectOutcome(req: NextRequest, outcome: TradovateCallbackOutcome) {
   return NextResponse.redirect(target, { status: 302 })
 }
 
-/**
- * Tradovate OAuth redirect URI (register in Tradovate developer portal):
- *   https://www.tradetraxs.com/api/integrations/tradovate/callback
- *
- * Next phase: authorization code → server-side token exchange → encrypted storage → sync.
- */
 export async function GET(request: NextRequest) {
   const query = parseTradovateCallbackQuery(request.nextUrl.searchParams)
 
@@ -43,7 +40,7 @@ export async function GET(request: NextRequest) {
     return redirectOutcome(request, { kind: "error", reason: "invalid_state" })
   }
 
-  let boundUser: { user_id: string } | null = null
+  let boundUser: Awaited<ReturnType<typeof consumeIntegrationOAuthState>> = null
   try {
     boundUser = await consumeIntegrationOAuthState(supabaseServiceRole, {
       provider: "tradovate",
@@ -95,17 +92,21 @@ export async function GET(request: NextRequest) {
       : null
 
   let providerUserId = parseTradovateIdTokenSubject(tokens.id_token)
-  if (!providerUserId) {
-    const me = await fetchTradovateMeProfile(tokens.access_token)
-    if (me?.userId != null) {
-      providerUserId = String(me.userId)
-    }
+  let providerDisplayName: string | null = null
+  const me = await fetchTradovateMeProfile(tokens.access_token)
+  if (me?.userId != null && !providerUserId) {
+    providerUserId = String(me.userId)
+  }
+  if (me?.fullName?.trim()) {
+    providerDisplayName = me.fullName.trim()
   }
 
+  let connectionId: string
   try {
-    await upsertTradovateConnection(supabaseServiceRole, {
+    const persisted = await persistTradovateConnectionAfterOAuth(supabaseServiceRole, {
       userId: boundUser.user_id,
       providerUserId,
+      providerDisplayName,
       credentials: {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token ?? null,
@@ -114,8 +115,14 @@ export async function GET(request: NextRequest) {
       accessTokenExpiresAt: accessExpiresAt,
       refreshTokenExpiresAt: refreshExpiresAt,
       apiEnvironment: config.apiEnvironment,
+      oauthIntent: boundUser.oauth_intent,
+      targetConnectionId: boundUser.target_connection_id,
     })
+    connectionId = persisted.connectionId
   } catch (err) {
+    if (err instanceof BrokerOAuthIdentityMismatchError) {
+      return redirectOutcome(request, { kind: "error", reason: "identity_mismatch" })
+    }
     console.error(
       "[tradovate/callback] connection_persist_failed",
       err instanceof Error ? err.message : "unknown"
@@ -131,7 +138,11 @@ export async function GET(request: NextRequest) {
   const { runTradovateAccountDiscovery } = await import(
     "@/lib/integrations/tradovate/runTradovateAccountDiscovery"
   )
-  void runTradovateAccountDiscovery(supabaseServiceRole, boundUser.user_id).catch((err) => {
+  void runTradovateAccountDiscovery(
+    supabaseServiceRole,
+    boundUser.user_id,
+    connectionId
+  ).catch((err) => {
     console.error(
       "[tradovate/callback] account_discovery_failed",
       err instanceof Error ? err.message : "unknown"

@@ -40,8 +40,12 @@ describe("tradovate OAuth phase 2", () => {
       "base64url"
     )
     try {
-      const value = createTradovateAuthorizeHandoffValue("user-abc")
-      assert.equal(verifyTradovateAuthorizeHandoffValue(value), "user-abc")
+      const value = createTradovateAuthorizeHandoffValue({
+        userId: "user-abc",
+        oauthIntent: "connect_new",
+        targetConnectionId: null,
+      })
+      assert.equal(verifyTradovateAuthorizeHandoffValue(value)?.userId, "user-abc")
       assert.equal(verifyTradovateAuthorizeHandoffValue(`${value}tampered`), null)
     } finally {
       if (prior === undefined) {

@@ -3,13 +3,14 @@ import { USER_FACING_ERROR_MESSAGES, toUserFacingErrorMessage } from "@/lib/user
 
 const AUTHORIZE_PATH = "/api/integrations/tradovate/authorize"
 
-/**
- * Starts Tradovate OAuth via top-level browser navigation (never fetch-follows Tradovate redirect).
- *
- * 1. POST handoff cookie using Bearer session (localStorage Supabase auth).
- * 2. Navigate to GET authorize; server redirects to Tradovate as a normal document navigation.
- */
-export async function startTradovateOAuthConnect(): Promise<void> {
+export type StartTradovateOAuthConnectOptions = {
+  /** Reconnect an existing Tradovate connection (same provider identity required). */
+  reconnectConnectionId?: string
+}
+
+export async function startTradovateOAuthConnect(
+  options: StartTradovateOAuthConnectOptions = {}
+): Promise<void> {
   const headers = await supabaseBearerHeaders()
   if (!("Authorization" in headers)) {
     throw new Error(USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED)
@@ -20,8 +21,12 @@ export async function startTradovateOAuthConnect(): Promise<void> {
     headers: {
       ...headers,
       Accept: "application/json",
+      "Content-Type": "application/json",
     },
     credentials: "same-origin",
+    body: JSON.stringify({
+      reconnectConnectionId: options.reconnectConnectionId ?? undefined,
+    }),
   })
 
   if (res.status === 401 || res.status === 403) {

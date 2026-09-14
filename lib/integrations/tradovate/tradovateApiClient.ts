@@ -1,10 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   decryptIntegrationCredentials,
-  encryptIntegrationCredentials,
   type IntegrationCredentialPayload,
 } from "@/lib/integrations/credentialEncryption"
-import { upsertTradovateConnection } from "@/lib/integrations/brokerIntegrationConnection"
+import {
+  markBrokerConnectionReconnectRequired,
+  updateBrokerConnectionCredentials,
+} from "@/lib/integrations/brokerIntegrationConnection"
+import { loadOwnedBrokerConnection } from "@/lib/integrations/brokerConnectionAccess"
 import type { TradovateApiEnvironment } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
 import { getTradovateRestBaseUrl } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
 import {
@@ -43,13 +46,15 @@ export class TradovateApiError extends Error {
 
 async function loadConnectedConnection(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  connectionId: string
 ): Promise<ConnectedTradovateConnection | null> {
   const { data, error } = await supabase
     .from("broker_integration_connections")
     .select(
       "id, user_id, provider_user_id, status, credentials_ciphertext, access_token_expires_at, api_environment"
     )
+    .eq("id", connectionId)
     .eq("user_id", userId)
     .eq("provider", "tradovate")
     .maybeSingle()
@@ -60,20 +65,6 @@ async function loadConnectedConnection(
   if (data.api_environment !== "demo" && data.api_environment !== "live") return null
 
   return data as ConnectedTradovateConnection
-}
-
-async function markReconnectRequired(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<void> {
-  await supabase
-    .from("broker_integration_connections")
-    .update({
-      status: "reconnect_required",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("user_id", userId)
-    .eq("provider", "tradovate")
 }
 
 function accessTokenExpired(expiresAtIso: string | null): boolean {
@@ -90,13 +81,12 @@ async function persistRefreshedCredentials(
   accessTokenExpiresAt: Date | null,
   refreshTokenExpiresAt: Date | null
 ): Promise<void> {
-  await upsertTradovateConnection(supabase, {
+  await updateBrokerConnectionCredentials(supabase, {
+    connectionId: connection.id,
     userId: connection.user_id,
-    providerUserId: connection.provider_user_id,
     credentials,
     accessTokenExpiresAt,
     refreshTokenExpiresAt,
-    apiEnvironment: connection.api_environment,
   })
 }
 
@@ -110,16 +100,19 @@ async function ensureValidAccessToken(
     return credentials.access_token
   }
 
-  const refreshed = await runTradovateTokenRefreshSingleFlight(connection.user_id, async () => {
-    const current = decryptIntegrationCredentials(connection.credentials_ciphertext)
+  const flightKey = connection.id
+  const refreshed = await runTradovateTokenRefreshSingleFlight(flightKey, async () => {
+    const latest = await loadConnectedConnection(supabase, connection.user_id, connection.id)
+    if (!latest) return false
+    const current = decryptIntegrationCredentials(latest.credentials_ciphertext)
     if (!current.refresh_token?.trim()) {
-      await markReconnectRequired(supabase, connection.user_id)
+      await markBrokerConnectionReconnectRequired(supabase, connection.id, connection.user_id)
       return false
     }
 
     const result = await refreshTradovateAccessToken(current.refresh_token)
     if (!result.ok) {
-      await markReconnectRequired(supabase, connection.user_id)
+      await markBrokerConnectionReconnectRequired(supabase, connection.id, connection.user_id)
       return false
     }
 
@@ -127,7 +120,7 @@ async function ensureValidAccessToken(
     const expiries = tokenExpiryDates(result.tokens)
     await persistRefreshedCredentials(
       supabase,
-      connection,
+      latest,
       nextCredentials,
       expiries.accessTokenExpiresAt,
       expiries.refreshTokenExpiresAt
@@ -139,7 +132,7 @@ async function ensureValidAccessToken(
     throw new TradovateApiError("reconnect_required")
   }
 
-  const reloaded = await loadConnectedConnection(supabase, connection.user_id)
+  const reloaded = await loadConnectedConnection(supabase, connection.user_id, connection.id)
   if (!reloaded) throw new TradovateApiError("not_connected")
   credentials = decryptIntegrationCredentials(reloaded.credentials_ciphertext)
   return credentials.access_token
@@ -148,10 +141,20 @@ async function ensureValidAccessToken(
 export async function tradovateAuthedJsonRequest<T>(
   supabase: SupabaseClient,
   userId: string,
+  connectionId: string,
   path: string,
   init?: { method?: "GET" | "POST"; retried?: boolean }
 ): Promise<T> {
-  const connection = await loadConnectedConnection(supabase, userId)
+  const owned = await loadOwnedBrokerConnection(supabase, {
+    userId,
+    connectionId,
+    provider: "tradovate",
+  })
+  if (!owned || owned.status !== "connected") {
+    throw new TradovateApiError("not_connected")
+  }
+
+  const connection = await loadConnectedConnection(supabase, userId, connectionId)
   if (!connection) {
     throw new TradovateApiError("not_connected")
   }
@@ -178,14 +181,14 @@ export async function tradovateAuthedJsonRequest<T>(
   if (response.status === 401 && !init?.retried) {
     const current = decryptIntegrationCredentials(connection.credentials_ciphertext)
     if (!current.refresh_token?.trim()) {
-      await markReconnectRequired(supabase, userId)
+      await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
       throw new TradovateApiError("reconnect_required")
     }
 
-    const refreshed = await runTradovateTokenRefreshSingleFlight(userId, async () => {
+    const refreshed = await runTradovateTokenRefreshSingleFlight(connectionId, async () => {
       const result = await refreshTradovateAccessToken(current.refresh_token!)
       if (!result.ok) {
-        await markReconnectRequired(supabase, userId)
+        await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
         return false
       }
       const nextCredentials = credentialsFromRefreshTokens(result.tokens)
@@ -201,7 +204,7 @@ export async function tradovateAuthedJsonRequest<T>(
     })
 
     if (!refreshed) throw new TradovateApiError("reconnect_required")
-    return tradovateAuthedJsonRequest(supabase, userId, path, {
+    return tradovateAuthedJsonRequest(supabase, userId, connectionId, path, {
       ...init,
       retried: true,
     })
@@ -221,9 +224,15 @@ export async function tradovateAuthedJsonRequest<T>(
 
 export async function fetchTradovateAccountListRaw(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  connectionId: string
 ): Promise<unknown[]> {
-  const body = await tradovateAuthedJsonRequest<unknown>(supabase, userId, "/v1/account/list")
+  const body = await tradovateAuthedJsonRequest<unknown>(
+    supabase,
+    userId,
+    connectionId,
+    "/v1/account/list"
+  )
   if (!Array.isArray(body)) {
     throw new TradovateApiError("provider_unavailable")
   }
