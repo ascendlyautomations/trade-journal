@@ -1,6 +1,11 @@
 "use client"
 
 import type { ButtonHTMLAttributes } from "react"
+import {
+  UI_BUTTON_GHOST,
+  UI_BUTTON_PRIMARY,
+  UI_BUTTON_SECONDARY,
+} from "@/lib/uiPrimitiveStyles"
 import { cn } from "./cn"
 
 export type ButtonVariant = "primary" | "secondary" | "accent" | "ghost"
@@ -8,17 +13,13 @@ export type ButtonVariant = "primary" | "secondary" | "accent" | "ghost"
 export type ButtonSize = "sm" | "md" | "lg"
 
 /** Solid primary fill/hover — compose with padding/radius at call sites. */
-export const SOLID_PRIMARY_BUTTON_CORE =
-  "bg-blue-500 text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
+export const SOLID_PRIMARY_BUTTON_CORE = UI_BUTTON_PRIMARY
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: SOLID_PRIMARY_BUTTON_CORE,
-  secondary:
-    "border border-white/15 bg-white/5 text-gray-100 hover:bg-white/10 disabled:hover:bg-white/5",
-  accent:
-    "bg-blue-500 text-white hover:bg-blue-600 disabled:hover:bg-blue-500",
-  ghost:
-    "bg-transparent text-gray-200 hover:text-white hover:bg-white/5 disabled:hover:bg-transparent",
+  primary: UI_BUTTON_PRIMARY,
+  secondary: UI_BUTTON_SECONDARY,
+  accent: UI_BUTTON_PRIMARY,
+  ghost: UI_BUTTON_GHOST,
 }
 
 const sizeClasses: Record<ButtonSize, string> = {

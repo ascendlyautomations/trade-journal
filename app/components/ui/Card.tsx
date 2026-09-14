@@ -1,13 +1,18 @@
 import type { HTMLAttributes, ReactNode } from "react"
-import { READABLE_CARD_TEXT_CLASS } from "@/lib/readableTextStyles"
+import {
+  UI_CARD_GLASS,
+  UI_CARD_INTERACTIVE,
+  UI_CARD_PANEL,
+  UI_CARD_SOLID,
+} from "@/lib/uiPrimitiveStyles"
 import { cn } from "./cn"
 
 export type CardVariant = "glass" | "solid" | "panel"
 
 const variantClasses: Record<CardVariant, string> = {
-  glass: `rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${READABLE_CARD_TEXT_CLASS}`,
-  solid: `rounded-xl border border-white/10 bg-[#0f172a] ${READABLE_CARD_TEXT_CLASS}`,
-  panel: `rounded-2xl border border-white/10 bg-white/10 shadow-2xl backdrop-blur-xl ${READABLE_CARD_TEXT_CLASS}`,
+  glass: `${UI_CARD_GLASS} ui-theme-backdrop`,
+  solid: UI_CARD_SOLID,
+  panel: `${UI_CARD_PANEL} ui-theme-backdrop`,
 }
 
 export type CardProps = HTMLAttributes<HTMLDivElement> & {
@@ -37,8 +42,7 @@ export default function Card({
       className={cn(
         variantClasses[variant],
         paddingClasses[padding],
-        interactive &&
-          "cursor-pointer transition hover:bg-white/10 hover:border-white/15",
+        interactive && UI_CARD_INTERACTIVE,
         className
       )}
       {...props}

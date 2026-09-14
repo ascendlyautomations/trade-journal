@@ -57,6 +57,7 @@ struct PublicTradeMetaChipRow: View {
             }
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
         case .wrap:
             ExperienceFlowLayout(
                 spacing: PublicTradeMetaChipRowLayout.chipSpacing,

@@ -31,6 +31,12 @@ nonisolated struct SupabaseTransport: Sendable {
         }
     }
 
+    /// Auth + Supabase headers at execution time (safe for background global uploads).
+    func prepareRequest(_ request: HTTPRequest) async throws -> HTTPRequest {
+        try requireConfigured()
+        return try await client.prepare(request)
+    }
+
     func send(
         host: APIHost,
         path: String,

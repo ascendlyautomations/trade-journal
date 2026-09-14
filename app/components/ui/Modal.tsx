@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import { cn } from "./cn"
 import { MODAL_FIXED_BELOW_NAVBAR_CLASS } from "./DetailModalShell"
 import ModalCloseButton from "./ModalCloseButton"
+import { UI_MODAL_BACKDROP, UI_MODAL_TITLE } from "@/lib/uiPrimitiveStyles"
 import {
   MODAL_BODY_SCROLL_CLASS,
   MODAL_FOOTER_CLASS,
@@ -113,13 +114,7 @@ export default function Modal({
       role="presentation"
       onClick={closeDisabled || !showCloseButton ? undefined : onClose}
     >
-      <div
-        className={cn(
-          "absolute inset-0 bg-black/50 backdrop-blur-sm",
-          backdropClassName
-        )}
-        aria-hidden
-      />
+      <div className={cn(UI_MODAL_BACKDROP, backdropClassName)} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"
@@ -149,7 +144,7 @@ export default function Modal({
               showCloseButton ? "px-6 py-4 pr-12" : "px-6 py-4"
             )}
           >
-            <h2 className="text-lg font-semibold text-white">{title}</h2>
+            <h2 className={UI_MODAL_TITLE}>{title}</h2>
           </div>
         ) : null}
         <div

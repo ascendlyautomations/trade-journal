@@ -232,9 +232,13 @@ enum FeedPersistedCacheCoordinator {
 
     static func patchTrade(_ trade: Trade, viewerID: ProfileID) {
         SocialEntityDiskCache.saveTrade(trade, viewerID: viewerID)
+        guard trade.visibility == .public else {
+            removeEntry(viewerID: viewerID, entryID: trade.id.rawValue)
+            return
+        }
         for blob in FeedDiskCache.allPages(for: viewerID) {
             var changed = false
-            let updatedEntries = blob.entries.map { entry -> FeedTimelineEntry in
+            var updatedEntries = blob.entries.map { entry -> FeedTimelineEntry in
                 switch entry {
                 case .trade(let item, let existing) where existing.id == trade.id:
                     changed = true
@@ -242,6 +246,32 @@ enum FeedPersistedCacheCoordinator {
                 default:
                     return entry
                 }
+            }
+            let tradeAlreadyPresent = updatedEntries.contains { entry in
+                if case .trade(_, let existing) = entry { return existing.id == trade.id }
+                return false
+            }
+            if !tradeAlreadyPresent {
+                let item = FeedItem(
+                    id: trade.id.rawValue,
+                    kind: .trade,
+                    authorProfileID: trade.ownerProfileID,
+                    createdAt: trade.createdAt,
+                    tradeID: trade.id,
+                    postID: nil,
+                    reelID: nil,
+                    storyID: nil,
+                    achievementID: nil,
+                    caption: trade.publicCaption,
+                    likeCount: 0,
+                    commentCount: 0,
+                    viewerHasLiked: false,
+                    mediaURL: trade.thumbnail?.id
+                )
+                updatedEntries = FeedPersistentReconcile.dedupe(
+                    [.trade(item, trade)] + updatedEntries
+                )
+                changed = true
             }
             guard changed,
                   let scope = FeedScope(rawValue: blob.scope),

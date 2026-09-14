@@ -32,12 +32,10 @@ final class CreateAchievementViewModel {
     private let achievements: any AchievementRepository
     private let trades: any TradeRepository
     private let session: any SessionProviding
-    private let uploadService: any UploadService
-    private let objectStorage: any ObjectStorageProviding
+    private let uploadServices: GlobalUploadServices
     private let onDismiss: () -> Void
 
     private var viewerID: ProfileID?
-    private var publishTask: Task<Void, Never>?
     private var hasPrepared = false
     private var hasLoadedAccounts = false
 
@@ -45,16 +43,14 @@ final class CreateAchievementViewModel {
         achievements: any AchievementRepository,
         trades: any TradeRepository,
         session: any SessionProviding,
-        uploadService: any UploadService,
-        objectStorage: any ObjectStorageProviding,
+        uploadServices: GlobalUploadServices,
         prefill: CreateAchievementPrefill? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.achievements = achievements
         self.trades = trades
         self.session = session
-        self.uploadService = uploadService
-        self.objectStorage = objectStorage
+        self.uploadServices = uploadServices
         self.onDismiss = onDismiss
         if let prefill {
             applyPrefill(prefill)
@@ -195,8 +191,50 @@ final class CreateAchievementViewModel {
     #endif
 
     func publish() {
-        guard phase == .ready, publishTask == nil else { return }
-        publishTask = Task { await performPublish() }
+        guard phase == .ready else { return }
+        formError = nil
+        guard validate() else { return }
+        guard let viewerID else {
+            formError = "Sign in to create an achievement."
+            return
+        }
+        guard let finalImage, let finalImageData else {
+            formError = "An image is required."
+            return
+        }
+
+        PostImageUploadProbe.log(finalImage: finalImage, uploadData: finalImageData)
+
+        let payout = isPayoutKind ? Self.parsePayout(payoutAmountText) : nil
+        let trimmedTitle = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDescription = descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let spec = AchievementUploadSpec(
+            jobID: UUID().uuidString,
+            authorID: viewerID,
+            kind: kind,
+            title: trimmedTitle,
+            description: trimmedDescription.isEmpty ? nil : trimmedDescription,
+            payout: payout,
+            payoutText: payout.map { Self.formatPayoutText($0) },
+            firm: firmForSelectedAccount(),
+            accountID: selectedAccountID,
+            imageData: finalImageData,
+            isPublic: isPublic,
+            achievedAt: achievedAt
+        )
+        let jobID = GlobalUploadCoordinator.shared.enqueueAchievement(spec: spec, services: uploadServices)
+        clearImage()
+        titleText = ""
+        descriptionText = ""
+        payoutAmountText = ""
+        phase = .ready
+        onDismiss()
+        GlobalUploadJobDiagnostics.log(
+            id: jobID,
+            kind: .achievement,
+            event: .composerDismissed,
+            taskCancelled: Task.isCancelled
+        )
     }
 
     func dismissRequested() {
@@ -248,103 +286,6 @@ final class CreateAchievementViewModel {
         }
     }
 
-    private func performPublish() async {
-        formError = nil
-        guard validate() else {
-            publishTask = nil
-            return
-        }
-        guard let viewerID else {
-            formError = "Sign in to create an achievement."
-            publishTask = nil
-            return
-        }
-        guard let finalImage, let finalImageData else {
-            formError = "An image is required."
-            publishTask = nil
-            return
-        }
-
-        PostImageUploadProbe.log(finalImage: finalImage, uploadData: finalImageData)
-
-        phase = .publishing
-        var uploadedStoragePath: String?
-        do {
-            let payout = isPayoutKind ? Self.parsePayout(payoutAmountText) : nil
-            let trimmedTitle = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let trimmedDescription = descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            let imageRef: MediaReference
-            if viewerID.rawValue.hasPrefix("dev.") {
-                imageRef = MediaReference(id: "dev/create-achievement.jpg", kind: .image, altText: nil)
-            } else {
-                isUploadingMedia = true
-                let uploaded = try await uploadImage(finalImageData, viewerID: viewerID)
-                uploadedStoragePath = uploaded.storagePath
-                imageRef = MediaReference(
-                    id: uploaded.publicURL,
-                    kind: .image,
-                    altText: nil
-                )
-                isUploadingMedia = false
-            }
-
-            let draft = Achievement(
-                id: AchievementID("pending"),
-                ownerProfileID: viewerID,
-                kind: kind,
-                title: trimmedTitle,
-                description: trimmedDescription.isEmpty ? nil : trimmedDescription,
-                tier: .bronze,
-                value: payout.map { Money(amount: $0) },
-                valueText: payout.map { Self.formatPayoutText($0) },
-                firm: firmForSelectedAccount(),
-                accountID: selectedAccountID,
-                image: imageRef,
-                isPublic: isPublic,
-                isFeatured: false,
-                sortOrder: 0,
-                achievedAt: achievedAt
-            )
-
-            let saved: Achievement
-            if viewerID.rawValue.hasPrefix("dev.") {
-                var fixture = CreateAchievementFixtures.sampleAchievement(
-                    owner: viewerID,
-                    kind: kind,
-                    title: trimmedTitle
-                )
-                fixture.description = draft.description
-                fixture.value = draft.value
-                fixture.valueText = draft.valueText
-                fixture.firm = draft.firm
-                fixture.accountID = draft.accountID
-                fixture.image = draft.image
-                fixture.isPublic = draft.isPublic
-                fixture.achievedAt = draft.achievedAt
-                saved = fixture
-            } else {
-                saved = try await achievements.save(draft)
-            }
-
-            OwnerProfileOptimisticStore.shared.noteAchievementCreated(saved)
-            ExperienceHaptics.play(.achievement)
-            phase = .ready
-            onDismiss()
-        } catch {
-            isUploadingMedia = false
-            if let path = uploadedStoragePath {
-                try? await objectStorage.delete(
-                    bucket: StorageBucket.screenshots.rawValue,
-                    path: path
-                )
-            }
-            phase = .ready
-            formError = "Couldn't publish achievement. Check your connection and try again."
-        }
-        publishTask = nil
-    }
-
     private func validate() -> Bool {
         var missing: [String] = []
         let title = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -380,29 +321,6 @@ final class CreateAchievementViewModel {
             return account.name
         }
         return nil
-    }
-
-    private struct UploadedImage {
-        var storagePath: String
-        var publicURL: String
-    }
-
-    private func uploadImage(_ data: Data, viewerID: ProfileID) async throws -> UploadedImage {
-        let path = "achievements/\(viewerID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
-        let reference = try await uploadService.upload(
-            UploadRequest(
-                bucket: StorageBucket.screenshots.rawValue,
-                path: path,
-                data: data,
-                contentType: "image/jpeg",
-                purpose: .postImage
-            )
-        )
-        let publicURL = objectStorage.publicURL(
-            bucket: StorageBucket.screenshots.rawValue,
-            path: reference.id
-        )?.absoluteString ?? reference.id
-        return UploadedImage(storagePath: reference.id, publicURL: publicURL)
     }
 
     private static func parsePayout(_ raw: String) -> Decimal? {

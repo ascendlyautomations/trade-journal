@@ -333,7 +333,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
 
     func wallPosts(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post> {
         // Web Profile: select * / user_id / created_at desc — full list (no range).
-        let limit = max(page.limit, 500)
+        let limit = min(max(page.limit, 1), 100)
         let cursor = page.cursor ?? "-"
         let key = "profiles.wallPosts:\(profileID.rawValue):limit=\(limit):cursor=\(cursor)"
         return try await RepositoryRequestFlight.shared.coalesce(

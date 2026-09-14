@@ -654,6 +654,37 @@ nonisolated struct LeaderboardBootstrapV1: Codable, Sendable, Equatable {
     }
 }
 
+nonisolated struct ProfileStatisticsBootstrapV1: Codable, Sendable, Equatable {
+    var meta: BootstrapMetaV1
+    var data: DataPayload
+
+    nonisolated struct DataPayload: Codable, Sendable, Equatable {
+        var profile_id: String?
+        /// Keys: all, eval, funded, live, sim, backtest — each value is a mode result object.
+        var modes: [String: JSONValue]
+    }
+
+    func validateContractVersion() throws {
+        try BackendV2Versioning.assertContractVersion(meta.contract_version)
+    }
+}
+
+nonisolated struct ProfileTabBootstrapV1: Codable, Sendable, Equatable {
+    var meta: BootstrapMetaV1
+    var data: DataPayload
+
+    nonisolated struct DataPayload: Codable, Sendable, Equatable {
+        var tab: String
+        var items: [JSONValue]
+        var engagement: [String: ProfileBootstrapV1.TradeEngagementWire]?
+        var next_cursor: String?
+    }
+
+    func validateContractVersion() throws {
+        try BackendV2Versioning.assertContractVersion(meta.contract_version)
+    }
+}
+
 nonisolated struct CalendarBootstrapV1: Codable, Sendable, Equatable {
     var meta: BootstrapMetaV1
     var data: DataPayload

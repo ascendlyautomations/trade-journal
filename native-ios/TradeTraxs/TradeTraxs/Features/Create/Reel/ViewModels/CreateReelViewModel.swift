@@ -37,6 +37,7 @@ final class CreateReelViewModel {
     private var videoPipelineTask: Task<Void, Never>?
     private var publishTask: Task<Void, Never>?
     private var activePublishID: String?
+    private var didHandOffBackgroundPublish = false
     private var hasPrepared = false
     private var hasLoadedTrades = false
 
@@ -93,10 +94,6 @@ final class CreateReelViewModel {
             return match
         }
         return detailCache.trade(id: id)
-    }
-
-    var captionEnabled: Bool {
-        draft?.linkedTradeID == nil
     }
 
     func loadIfNeeded() {
@@ -195,8 +192,7 @@ final class CreateReelViewModel {
         }
         current.linkedTradeID = trade.id
         current.linkedTradeSummary = Self.summary(for: trade)
-        current.caption = ""
-        captionText = ""
+        current.caption = captionText
         draft = current
         ExperienceHaptics.play(.selection)
     }
@@ -217,7 +213,7 @@ final class CreateReelViewModel {
     func publish() {
         ReelPublishDiagnostics.logTapReceived(selectionID: draft?.selectionID)
 
-        if activePublishID != nil || publishTask != nil {
+        if didHandOffBackgroundPublish || activePublishID != nil || publishTask != nil {
             ReelPublishDiagnostics.logDuplicateInvocationIgnored(
                 publishID: activePublishID ?? "in-flight"
             )
@@ -259,11 +255,71 @@ final class CreateReelViewModel {
             publishID: publishID,
             selectionID: draft.selectionID
         )
-        activePublishID = publishID
-        phase = .publishing
-        uploadProgress = 0
         formError = nil
-        publishTask = Task { await performPublish(publishID: publishID) }
+
+        guard let viewerID else {
+            formError = "Sign in to publish."
+            return
+        }
+
+        var publishDraft = draft
+        publishDraft.caption = captionText
+
+        let tradeIsPublic: Bool? = {
+            guard let id = publishDraft.linkedTradeID else { return nil }
+            if let match = pickerTrades.first(where: { $0.id == id }) {
+                return match.visibility == .public
+            }
+            if let cached = detailCache.trade(id: id) {
+                return cached.visibility == .public
+            }
+            return nil
+        }()
+
+        let snapshot: ReelDraftSnapshot
+        do {
+            snapshot = try ReelEncodingPipeline.captureUploadSnapshot(
+                from: publishDraft,
+                publishID: publishID,
+                captionOverride: nil
+            )
+        } catch {
+            formError = Self.userMessage(for: error)
+            return
+        }
+
+        let spec = ReelUploadSpec(
+            publishID: publishID,
+            snapshot: snapshot,
+            authorID: viewerID,
+            tradeIsPublic: tradeIsPublic
+        )
+        let jobID = GlobalUploadCoordinator.shared.enqueueReel(
+            spec: spec,
+            services: GlobalUploadServices(
+                feed: feed,
+                profiles: nil,
+                trades: trades,
+                achievements: nil,
+                uploadService: uploadService,
+                objectStorage: objectStorage,
+                detailCache: detailCache
+            )
+        )
+        didHandOffBackgroundPublish = true
+
+        cleanupDraftFiles(publishDraft)
+        self.draft = nil
+        currentSelectionID = nil
+        lastImportedItemIdentifier = nil
+        phase = .ready
+        GlobalUploadJobDiagnostics.log(
+            id: jobID,
+            kind: .reel,
+            event: .composerDismissed,
+            taskCancelled: Task.isCancelled
+        )
+        onDismiss()
     }
 
     func dismissRequested() {
@@ -368,7 +424,7 @@ final class CreateReelViewModel {
             phase = .preparingVideo
             VideoPrepareDiagnostics.logStarted(id: selectionID)
 
-            let prepared = try await MediaVideoPreparation.prepareLocalVideo(
+            let prepared = try await ReelEncodingPipeline.prepareForUpload(
                 from: owned.url,
                 contentType: owned.contentType,
                 onProgress: { [weak self] value in
@@ -488,11 +544,7 @@ final class CreateReelViewModel {
             return
         }
 
-        if captionEnabled {
-            publishDraft.caption = captionText
-        } else {
-            publishDraft.caption = ""
-        }
+        publishDraft.caption = captionText
 
         let linkedTradeID = publishDraft.linkedTradeID
         let tradeIsPublic: Bool? = {
@@ -609,12 +661,10 @@ final class CreateReelViewModel {
             formError = "Choose a video to continue."
             return false
         }
-        if captionEnabled {
-            let caption = captionText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if caption.count > MediaVideoPreparation.maxCaptionLength {
-                formError = "Caption must be \(MediaVideoPreparation.maxCaptionLength) characters or less."
-                return false
-            }
+        let caption = captionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if caption.count > MediaVideoPreparation.maxCaptionLength {
+            formError = "Caption must be \(MediaVideoPreparation.maxCaptionLength) characters or less."
+            return false
         }
         return true
     }

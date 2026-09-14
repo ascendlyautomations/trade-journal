@@ -152,6 +152,46 @@ final class FeedScreenViewModel {
         await bootstrapTask?.value
     }
 
+    /// Inserts or updates a public journal trade on the first page without a blind network replace.
+    func applyJournalPublicTrade(_ trade: Trade) {
+        guard trade.visibility == .public else {
+            state.entries.removeAll { $0.id == trade.id.rawValue }
+            rebuildVisibleEntriesCache()
+            persistFeedFirstPage()
+            return
+        }
+        detailCache.seed(trade)
+        let mediaURL = trade.thumbnail?.id
+        let item = FeedItem(
+            id: trade.id.rawValue,
+            kind: .trade,
+            authorProfileID: trade.ownerProfileID,
+            createdAt: trade.createdAt,
+            tradeID: trade.id,
+            postID: nil,
+            reelID: nil,
+            storyID: nil,
+            achievementID: nil,
+            caption: trade.publicCaption,
+            likeCount: 0,
+            commentCount: 0,
+            viewerHasLiked: false,
+            mediaURL: mediaURL
+        )
+        FeedBootstrap.seedAuthor(from: item, detailCache: detailCache)
+        guard let entry = FeedBootstrap.buildEntryFromItemSync(item, detailCache: detailCache) else { return }
+        upsert(entry)
+        prefetchEngagement()
+    }
+
+    func applyJournalPublicTradeRemoval(tradeID: TradeID) {
+        let raw = tradeID.rawValue
+        guard state.entries.contains(where: { $0.id == raw }) else { return }
+        state.entries.removeAll { $0.id == raw }
+        rebuildVisibleEntriesCache()
+        persistFeedFirstPage()
+    }
+
     /// Standard lifecycle — pages using the last visible entry when available.
     func loadMore() async {
         guard let currentID = state.cachedVisibleEntries.last?.id else { return }
@@ -726,7 +766,8 @@ final class FeedScreenViewModel {
                             let reconcileStart = Date()
                             let result = FeedPersistentReconcile.reconcileFirstPage(
                                 existing: existingForReconcile,
-                                incoming: filteredEntries
+                                incoming: filteredEntries,
+                                preserveEntryIDs: ownerPublicFeedEntryPreserveIDs(viewerID: viewerID)
                             )
                             MainThreadWorkProbe.measure("feed.reconcileApply", surface: "feed") {
                                 assignFeedEntries(
@@ -1093,6 +1134,14 @@ final class FeedScreenViewModel {
         }
         assignFeedEntries(FeedSupport.sortDescending(working))
         persistFeedFirstPage()
+    }
+
+    private func ownerPublicFeedEntryPreserveIDs(viewerID: ProfileID) -> Set<String> {
+        Set(
+            (SessionOwnerTradesStore.shared.cached(for: viewerID) ?? [])
+                .filter { $0.visibility == .public }
+                .map(\.id.rawValue)
+        )
     }
 }
 

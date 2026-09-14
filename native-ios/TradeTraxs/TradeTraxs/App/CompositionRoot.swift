@@ -411,6 +411,31 @@ enum CompositionRoot {
             profileOnboardingGate.reset()
         }
         let authLifecycle = authentication.lifecycle
+        Task {
+            await NetworkUnauthorizedRecovery.shared.configure { @Sendable in
+                await Task { @MainActor in
+                    await authentication.coordinator.recoverSessionAfterUnauthorized()
+                }.value
+            }
+        }
+        authLifecycle.refreshBillingEntitlementsOnForeground = {
+            guard let userID = sessionManager.currentSession?.userID else { return }
+            let profileID = ProfileID(userID.rawValue)
+            await BillingEntitlementRefreshFlight.shared.refresh {
+                do {
+                    let refreshed = try await data.billing.refreshEntitlements(for: profileID)
+                    await MainActor.run {
+                        SessionBillingEntitlementStore.shared.apply(refreshed)
+                        NotificationCenter.default.post(
+                            name: .billingEntitlementsDidRefresh,
+                            object: refreshed
+                        )
+                    }
+                } catch {
+                    // Keep last-known entitlement when refresh fails offline.
+                }
+            }
+        }
         authentication.coordinator.onAuthenticatedSessionBound = {
             Task {
                 while !authLifecycle.initialRestoreCompleted {

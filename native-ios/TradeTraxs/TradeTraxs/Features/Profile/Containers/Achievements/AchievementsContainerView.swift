@@ -33,6 +33,9 @@ struct AchievementsContainerView: View {
                             ? .opacity
                             : .opacity.combined(with: .move(edge: .bottom))
                     )
+                    .task {
+                        await viewModel.loadMoreIfNeeded(currentAchievementID: achievement.id)
+                    }
                 }
             }
             .animation(

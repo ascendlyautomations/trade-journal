@@ -73,6 +73,8 @@ enum SessionScopedCaches {
         TradingReportSessionStore.shared.invalidate()
         CreateAchievementPrefillStore.shared.clear()
         Task { await data.cache.images.removeAllImages() }
+        GlobalUploadCoordinator.shared.invalidateForSessionChange()
+        SessionBillingEntitlementStore.shared.clear()
         data.detailCache.removeAll()
         data.engagementStore.removeAll()
         data.vaultStore.removeAll()

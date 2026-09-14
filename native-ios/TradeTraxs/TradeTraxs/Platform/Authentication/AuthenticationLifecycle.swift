@@ -8,6 +8,9 @@ final class AuthenticationLifecycle {
     private let authenticationCoordinator: AuthenticationCoordinator
     private(set) var initialRestoreCompleted = false
 
+    /// Bound by ``CompositionRoot`` — coalesced TraxPro entitlement refresh on foreground.
+    var refreshBillingEntitlementsOnForeground: (@MainActor () async -> Void)?
+
     init(
         authenticationManager: AuthenticationManager,
         authenticationCoordinator: AuthenticationCoordinator
@@ -51,5 +54,6 @@ final class AuthenticationLifecycle {
         if authenticationManager.sessionNeedsRefresh() {
             await authenticationCoordinator.bootstrapSession()
         }
+        await refreshBillingEntitlementsOnForeground?()
     }
 }

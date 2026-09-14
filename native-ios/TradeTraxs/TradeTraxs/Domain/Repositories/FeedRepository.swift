@@ -54,8 +54,16 @@ nonisolated protocol FeedRepository: Sendable {
     func deleteReel(id: ReelID) async throws
     /// Own clips with `trade_id IS NULL` — candidates for linking to a new trade.
     func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel]
-    /// Sets `reels.trade_id` (and clears caption per DB check). App enforces one reel per trade.
+    /// Sets `reels.trade_id` (caption unchanged). App enforces one reel per trade.
     func attachReel(id: ReelID, to tradeID: TradeID) async throws
+    /// Targeted link — PATCH `reels` (`trade_id`, mirror trade visibility; caption preserved).
+    func linkReelToTrade(
+        reelID: ReelID,
+        tradeID: TradeID,
+        ownerID: ProfileID,
+        tradeIsPublic: Bool,
+        linkJobID: String?
+    ) async throws
     /// True when any reel already references this trade.
     func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool
 }
@@ -87,6 +95,16 @@ extension FeedRepository {
 
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {
         throw AppError.notImplemented(feature: "attachReel")
+    }
+
+    func linkReelToTrade(
+        reelID: ReelID,
+        tradeID: TradeID,
+        ownerID: ProfileID,
+        tradeIsPublic: Bool,
+        linkJobID: String?
+    ) async throws {
+        try await attachReel(id: reelID, to: tradeID)
     }
 
     func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool {

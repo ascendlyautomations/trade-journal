@@ -1,8 +1,12 @@
 import Foundation
 
-/// Lightweight lookahead prefetch for Feed card images — reuses the shared ``ImagePipeline`` cache.
-nonisolated enum FeedImagePrefetch {
-    static let lookaheadCount = 4
+/// Viewport-aware Feed image prefetch — small lookahead, cancellable, feed-display quality only.
+@MainActor
+enum FeedImagePrefetch {
+    static let lookaheadCount = 2
+
+    private static var generation: UInt64 = 0
+    private static var prefetchTask: Task<Void, Never>?
 
     static func prefetchNearby(
         entries: [FeedTimelineEntry],
@@ -15,9 +19,30 @@ nonisolated enum FeedImagePrefetch {
             .prefix(lookaheadCount)
             .compactMap(imageRequest(for:))
         guard !requests.isEmpty else { return }
-        Task(priority: .utility) {
-            await pipeline.prefetch(requests)
+
+        generation &+= 1
+        let token = generation
+        prefetchTask?.cancel()
+        prefetchTask = Task(priority: .utility) {
+            for request in requests {
+                if Task.isCancelled || token != generation {
+                    #if DEBUG
+                    MediaEgressTracker.recordImagePrefetchCancelled()
+                    #endif
+                    return
+                }
+                if await pipeline.cachedImageData(for: request) != nil {
+                    continue
+                }
+                _ = try? await pipeline.data(for: request)
+            }
         }
+    }
+
+    static func cancelAll() {
+        generation &+= 1
+        prefetchTask?.cancel()
+        prefetchTask = nil
     }
 
     static func imageRequest(for entry: FeedTimelineEntry) -> ImageRequest? {
@@ -27,7 +52,9 @@ nonisolated enum FeedImagePrefetch {
             return ImageRequest(
                 reference: reference,
                 purpose: .tradeScreenshot,
-                allowsProgressiveLoading: true
+                allowsProgressiveLoading: true,
+                deliveryQuality: .feedDisplay,
+                auditSurface: "feed"
             )
 
         case .post(_, let post):
@@ -37,7 +64,9 @@ nonisolated enum FeedImagePrefetch {
             return ImageRequest(
                 reference: reference,
                 purpose: .postImage,
-                allowsProgressiveLoading: true
+                allowsProgressiveLoading: true,
+                deliveryQuality: .feedDisplay,
+                auditSurface: "feed"
             )
 
         case .achievement(_, let achievement):
@@ -45,7 +74,9 @@ nonisolated enum FeedImagePrefetch {
             return ImageRequest(
                 reference: reference,
                 purpose: .postImage,
-                allowsProgressiveLoading: true
+                allowsProgressiveLoading: true,
+                deliveryQuality: .feedDisplay,
+                auditSurface: "feed"
             )
 
         case .clip(_, let reel):
@@ -53,7 +84,9 @@ nonisolated enum FeedImagePrefetch {
             return ImageRequest(
                 reference: reference,
                 purpose: .reelThumbnail,
-                allowsProgressiveLoading: true
+                allowsProgressiveLoading: true,
+                deliveryQuality: .feedDisplay,
+                auditSurface: "feed"
             )
         }
     }

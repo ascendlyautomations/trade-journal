@@ -2,8 +2,8 @@ import Foundation
 
 /// Coordinated Leaderboard first-paint — owned exclusively by ``LeaderboardScreenViewModel``.
 ///
-/// Loads the shared public trade set once (web `/api/leaderboard/trades`), then ranks
-/// client-side for the selected window. Child views never call repositories.
+/// Server-windowed rankings via `rpc_v1_leaderboard_bootstrap` (V2), with legacy trade-corpus
+/// fallback only when the leaderboard flag is off.
 @MainActor
 enum LeaderboardBootstrap: ScreenBootstrap {
     struct Context {
@@ -12,13 +12,15 @@ enum LeaderboardBootstrap: ScreenBootstrap {
         var explore: any ExploreRepository
         var session: any SessionProviding
         var detailCache: DetailPresentationCache
+        var rpc: (any RPCClient)?
         var audience: LeaderboardAudience
         var timeframe: LeaderboardTimeframe
         var category: LeaderboardCategory
         var cursor: String?
         var limit: Int = 100
         var forceNetwork: Bool = false
-        /// When set, skip network and re-rank from these trades (timeframe change).
+        var rankOffset: Int = 0
+        /// Legacy only — re-rank from cached trades when V2 is unavailable.
         var cachedTrades: [LeaderboardTradeRow]? = nil
     }
 
@@ -65,6 +67,60 @@ enum LeaderboardBootstrap: ScreenBootstrap {
                 nextCursor: resolved.nextCursor,
                 timeframeResolution: resolved.resolution,
                 usedDevelopmentFixtures: true,
+                didFetchTrades: true
+            )
+        }
+
+        if BackendV2FeatureFlags.isEnabled(.leaderboard), let rpc = context.rpc {
+            let applied = try await LeaderboardBootstrapLoader.loadPage(
+                viewerID: viewer,
+                timeframe: context.timeframe,
+                category: context.category,
+                audience: context.audience,
+                cursor: context.cursor,
+                limit: context.limit,
+                rpc: rpc,
+                detailCache: context.detailCache,
+                forceNetwork: context.forceNetwork
+            )
+            var entries = applied.entries
+            if context.rankOffset > 0 {
+                entries = entries.enumerated().map { offset, entry in
+                    var copy = entry
+                    copy.rank = context.rankOffset + offset + 1
+                    return copy
+                }
+            }
+
+            async let followingTask = loadFollowingIDs(viewer: viewer, context: context)
+            let following = await followingTask
+            let friends: Set<ProfileID>
+            if context.audience == .friends {
+                friends = await loadFriendIDs(viewer: viewer, following: following, context: context)
+            } else {
+                friends = []
+            }
+
+            let effectiveTimeframe = LeaderboardTimeframeFallback.presetOrder.first {
+                $0.rpcValue == applied.timeframe
+            } ?? context.timeframe
+
+            return Result(
+                trades: [],
+                entries: entries,
+                profiles: applied.profiles,
+                verified: [],
+                followers: applied.followers,
+                following: following,
+                friends: friends,
+                viewerID: viewer,
+                nextCursor: applied.nextCursor,
+                timeframeResolution: LeaderboardTimeframeFallback.Resolution(
+                    requested: context.timeframe,
+                    effective: effectiveTimeframe,
+                    usedFallback: effectiveTimeframe != context.timeframe
+                ),
+                usedDevelopmentFixtures: false,
                 didFetchTrades: true
             )
         }

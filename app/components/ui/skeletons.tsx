@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { UI_SKELETON_CARD } from "@/lib/uiPrimitiveStyles"
 import Skeleton from "./Skeleton"
 import { cn } from "./cn"
 
@@ -9,16 +10,7 @@ function SkeletonCard({
   children?: ReactNode
   className?: string
 }) {
-  return (
-    <div
-      className={cn(
-        "rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md",
-        className
-      )}
-    >
-      {children}
-    </div>
-  )
+  return <div className={cn(UI_SKELETON_CARD, className)}>{children}</div>
 }
 
 export function SkeletonStatsCard({ className }: { className?: string }) {

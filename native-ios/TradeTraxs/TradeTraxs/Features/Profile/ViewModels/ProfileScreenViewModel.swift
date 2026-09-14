@@ -416,6 +416,71 @@ final class ProfileScreenViewModel {
         state = next
     }
 
+    /// Keeps ``ProfileState.trades`` aligned with the section VM after journal create/update.
+    func syncTradesFromSection(_ trades: [Trade]) {
+        guard isOwnerTarget else { return }
+        guard state.trades != trades else { return }
+        var next = state
+        next.trades = trades
+        next.lastUpdated = Date()
+        state = next
+    }
+
+    /// Authoritative journal trade — update Profile state + trades section without stale bootstrap overwrite.
+    func applyJournalTradeMutation(_ trade: Trade) {
+        guard isOwnerTarget else { return }
+        guard matchesOwner(trade.ownerProfileID) else { return }
+
+        syncShellIfNeeded()
+        shellViewModel?.ensureTradesSection()
+
+        if trade.visibility == .public {
+            data.detailCache.seed(trade)
+            shellViewModel?.trades?.noteJournalMutationSucceeded(
+                trade,
+                preservingExisting: preferredTradesBase()
+            )
+
+            var next = state
+            next.trades = OwnerProfileOptimisticStore.upserting(trade, into: preferredTradesBase())
+            if next.phase == .idle || next.phase == .loading {
+                applyLocalState(next, skipTradesBootstrap: true)
+            } else {
+                next.phase = .loaded
+                next.didBootstrap = true
+                applyLocalState(next, skipTradesBootstrap: true)
+            }
+
+            if let visible = shellViewModel?.trades?.items {
+                syncTradesFromSection(visible)
+            }
+        } else {
+            var next = state
+            next.trades.removeAll { $0.id == trade.id }
+            applyLocalState(next, skipTradesBootstrap: true)
+            shellViewModel?.trades?.handleJournalMutation()
+        }
+    }
+
+    private func preferredTradesBase() -> [Trade] {
+        if let tradesVM = shellViewModel?.trades, !tradesVM.items.isEmpty {
+            return tradesVM.items
+        }
+        if !state.trades.isEmpty {
+            return state.trades
+        }
+        return []
+    }
+
+    private func ownerPublicTradePreserveIDs(for profileID: ProfileID?) -> Set<TradeID> {
+        guard let profileID else { return [] }
+        return Set(
+            (SessionOwnerTradesStore.shared.cached(for: profileID) ?? [])
+                .filter { $0.visibility == .public }
+                .map(\.id)
+        )
+    }
+
     private func preferredClipsBase() -> [Reel] {
         if let clipsVM = shellViewModel?.clips, !clipsVM.items.isEmpty {
             return clipsVM.items
@@ -581,7 +646,8 @@ final class ProfileScreenViewModel {
     private func applyLocalState(
         _ next: ProfileState,
         skipPostsBootstrap: Bool = false,
-        skipClipsBootstrap: Bool = false
+        skipClipsBootstrap: Bool = false,
+        skipTradesBootstrap: Bool = false
     ) {
         var next = next
         next.lastUpdated = Date()
@@ -590,12 +656,20 @@ final class ProfileScreenViewModel {
         contentStore.applyBootstrap(next)
         if shellViewModel == nil {
             syncShellIfNeeded()
+        } else if skipPostsBootstrap && skipClipsBootstrap && skipTradesBootstrap {
+            shellViewModel?.applyExcludingPostsClipsAndTrades(state: next)
         } else if skipPostsBootstrap && skipClipsBootstrap {
             shellViewModel?.applyExcludingPostsAndClips(state: next)
+        } else if skipPostsBootstrap && skipTradesBootstrap {
+            shellViewModel?.applyExcludingPostsAndTrades(state: next)
+        } else if skipClipsBootstrap && skipTradesBootstrap {
+            shellViewModel?.applyExcludingClipsAndTrades(state: next)
         } else if skipPostsBootstrap {
             shellViewModel?.applyExcludingPosts(state: next)
         } else if skipClipsBootstrap {
             shellViewModel?.applyExcludingClips(state: next)
+        } else if skipTradesBootstrap {
+            shellViewModel?.applyExcludingTrades(state: next)
         } else {
             shellViewModel?.apply(state: next)
         }
@@ -688,7 +762,10 @@ final class ProfileScreenViewModel {
             let reconcileStart = Date()
             let merged = ProfilePersistentReconcile.reconcileProfileState(
                 existing: existingForReconcile,
-                incoming: next
+                incoming: next,
+                preservePublicTradeIDs: ownerPublicTradePreserveIDs(
+                    for: existingForReconcile.profileID ?? next.profileID
+                )
             )
             publish(merged, source: .network)
             #if DEBUG

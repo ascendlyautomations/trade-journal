@@ -116,14 +116,65 @@ nonisolated struct LiveSupabaseStorageProvider: SupabaseStorageProviding {
             // Supabase Storage expects `cache-control: max-age=<seconds>` (matches supabase-js upload options).
             headers["cache-control"] = "max-age=\(cacheControl)"
         }
-        _ = try await transport.send(
-            host: .supabaseStorage,
-            path: "/storage/v1/object/\(bucket)/\(cleaned)",
-            method: .post,
-            headers: headers,
-            body: data
-        )
+        if let jobID = UploadProgressContext.jobID {
+            let endpoint = Endpoint(
+                host: .supabaseStorage,
+                path: "/storage/v1/object/\(bucket)/\(cleaned)",
+                method: .post,
+                queryItems: [],
+                headers: headers,
+                requiresAuthentication: true
+            )
+            let built = try transport.requestBuilder.makeRequest(endpoint: endpoint, body: data)
+            let authenticated = try await transport.prepareRequest(built)
+            var uploadRequest = authenticated.urlRequest
+            uploadRequest.httpBody = nil
+            uploadRequest.httpBodyStream = nil
+
+            var attempt = 1
+            let maxAttempts = 3
+            while true {
+                let (responseData, urlResponse) = try await StorageUploadProgressTransport.upload(
+                    request: uploadRequest,
+                    body: data,
+                    progressJobID: jobID
+                )
+                if let http = urlResponse as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) {
+                    break
+                }
+                let status = (urlResponse as? HTTPURLResponse)?.statusCode ?? -1
+                let supabaseCode = StorageUploadDiagnostics.parseSupabaseCode(from: responseData)
+                if attempt < maxAttempts, Self.isRetriableStorageUpload(status: status, supabaseCode: supabaseCode) {
+                    attempt += 1
+                    try await Task.sleep(nanoseconds: UInt64(min(attempt, 3)) * 500_000_000)
+                    continue
+                }
+                if let mapped = NetworkErrorMapper().map(
+                    data: responseData,
+                    response: urlResponse,
+                    error: nil
+                ) {
+                    throw SupabaseErrorMapping.mapNetwork(mapped)
+                }
+                throw AppError.unknown(message: "Upload failed.")
+            }
+        } else {
+            _ = try await transport.send(
+                host: .supabaseStorage,
+                path: "/storage/v1/object/\(bucket)/\(cleaned)",
+                method: .post,
+                headers: headers,
+                body: data
+            )
+        }
         return cleaned
+    }
+
+    private static func isRetriableStorageUpload(status: Int, supabaseCode: String?) -> Bool {
+        if status == 544 { return true }
+        if supabaseCode == "DatabaseTimeout" { return true }
+        if (500 ... 599).contains(status) { return true }
+        return false
     }
 
     func download(bucket: String, path: String) async throws -> Data {

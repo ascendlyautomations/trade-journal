@@ -137,6 +137,16 @@ nonisolated enum VideoDeliveryExporter {
         )
     }
 
+    /// Transcode encoder rate — ceiling cap; stay near source when already efficient.
+    static func transcodeVideoBitrate(profile: SourceProfile, ceiling: Int) -> Int {
+        let audioAllowance = profile.hasAudio ? 128_000 : 0
+        let sourceVideoEstimate = max(
+            500_000,
+            Int(effectiveBitrate(for: profile) - Double(audioAllowance))
+        )
+        return min(ceiling, sourceVideoEstimate)
+    }
+
     static func resolutionClass(for longEdge: CGFloat) -> DeliveryResolutionClass {
         if longEdge <= 720 { return .small }
         if longEdge <= 1280 { return .hd720 }
@@ -194,17 +204,35 @@ nonisolated enum VideoDeliveryExporter {
         return max(1, Int(round(cadenceFPS)))
     }
 
-    /// Social playback targets — lower than camera originals to keep progressive MP4 size reasonable.
+    /// Social playback targets — tuned for feed delivery (1080p ~4–6 Mbps, 720p ~2.5–4 Mbps).
     static func targetVideoBitrate(longEdge: CGFloat, targetFPS: Double) -> Int {
         let highFPS = targetFPS > highFrameRateBitrateThreshold
         switch resolutionClass(for: longEdge) {
         case .small:
-            return highFPS ? 2_200_000 : 1_500_000
+            return highFPS ? 2_000_000 : 1_400_000
         case .hd720:
-            return highFPS ? 3_000_000 : 2_200_000
+            return highFPS ? 3_500_000 : 2_800_000
         case .hd1080:
-            return highFPS ? 4_000_000 : 2_800_000
+            return highFPS ? 5_500_000 : 4_500_000
         }
+    }
+
+    /// Track metadata can under-report; file size ÷ duration is the ground truth for passthrough decisions.
+    static func averageFileBitrate(for profile: SourceProfile) -> Double {
+        guard profile.durationSeconds > 0 else { return 0 }
+        return (Double(profile.fileBytes) * 8.0) / Double(profile.durationSeconds)
+    }
+
+    static func effectiveBitrate(for profile: SourceProfile) -> Double {
+        max(profile.estimatedBitrate, averageFileBitrate(for: profile))
+    }
+
+    /// Upper bound for an efficiently encoded delivery file (video + AAC + mux overhead).
+    static func maxDeliveryFileBytes(profile: SourceProfile, target: DeliveryTarget) -> Int {
+        let audioRate = profile.hasAudio ? Double(target.audioBitrate) : 0
+        let totalBps = Double(target.videoBitrate) + audioRate
+        let seconds = Double(max(profile.durationSeconds, 1))
+        return Int((totalBps / 8.0 * seconds * 1.18).rounded(.up))
     }
 
     static func decideDeliveryMode(profile: SourceProfile, target: DeliveryTarget) -> (DeliveryMode, String) {
@@ -212,22 +240,21 @@ nonisolated enum VideoDeliveryExporter {
             || target.outputSize.height < profile.orientedSize.height - 1
         let needsFPSReduction = profile.frameRate > maxDeliveryFrameRate + 0.5
 
-        let passthroughBitrateCeiling = Double(target.videoBitrate) * 1.10
-        let bitrateTooHigh = profile.estimatedBitrate > passthroughBitrateCeiling
+        let passthroughBitrateCeiling = Double(target.videoBitrate) * 1.02
+        let effectiveRate = effectiveBitrate(for: profile)
+        let bitrateTooHigh = effectiveRate > passthroughBitrateCeiling
+        let fileTooLarge = profile.fileBytes > maxDeliveryFileBytes(profile: profile, target: target)
 
         let isH264 = profile.videoCodec?.lowercased().contains("avc") == true
             || profile.videoCodec?.lowercased() == "h264"
-        let audioOK = !profile.hasAudio
-            || profile.audioCodec?.lowercased().contains("mp4a") == true
-            || profile.audioCodec?.lowercased() == "aac"
 
-        if needsScale || needsFPSReduction || !isH264 || !audioOK || bitrateTooHigh {
+        if needsScale || needsFPSReduction || !isH264 || bitrateTooHigh || fileTooLarge {
             var reasons: [String] = []
             if needsScale { reasons.append("resolution") }
             if needsFPSReduction { reasons.append("fps") }
             if !isH264 { reasons.append("codec") }
-            if !audioOK { reasons.append("audio") }
             if bitrateTooHigh { reasons.append("bitrate") }
+            if fileTooLarge { reasons.append("size") }
             return (.transcode, reasons.joined(separator: "+"))
         }
 
@@ -235,6 +262,23 @@ nonisolated enum VideoDeliveryExporter {
             return (.passthrough, "delivery-ready-mp4")
         }
         return (.remux, "compatible-codecs-non-mp4")
+    }
+
+    /// Video stream is within delivery limits — used for post-encode size guard (ignore audio codec differences).
+    static func isDeliveryCompatibleVideo(profile: SourceProfile, target: DeliveryTarget) -> Bool {
+        let needsScale = target.outputSize.width < profile.orientedSize.width - 1
+            || target.outputSize.height < profile.orientedSize.height - 1
+        let needsFPSReduction = profile.frameRate > maxDeliveryFrameRate + 0.5
+        let passthroughBitrateCeiling = Double(targetVideoBitrate(
+            longEdge: max(target.outputSize.width, target.outputSize.height),
+            targetFPS: target.outputFrameRate
+        )) * 1.02
+        let effectiveRate = effectiveBitrate(for: profile)
+        let bitrateTooHigh = effectiveRate > passthroughBitrateCeiling
+        let fileTooLarge = profile.fileBytes > maxDeliveryFileBytes(profile: profile, target: target)
+        let isH264 = profile.videoCodec?.lowercased().contains("avc") == true
+            || profile.videoCodec?.lowercased() == "h264"
+        return !needsScale && !needsFPSReduction && isH264 && !bitrateTooHigh && !fileTooLarge
     }
 
     // MARK: - Export
@@ -379,6 +423,7 @@ nonisolated enum VideoDeliveryExporter {
         try await transcodeWithReaderWriter(
             asset: asset,
             outputURL: outputURL,
+            profile: profile,
             sourceFrameRate: profile.frameRate,
             target: target,
             metrics: &metrics,
@@ -581,6 +626,7 @@ nonisolated enum VideoDeliveryExporter {
     private static func transcodeWithReaderWriter(
         asset: AVURLAsset,
         outputURL: URL,
+        profile: SourceProfile,
         sourceFrameRate: Double,
         target: DeliveryTarget,
         metrics: inout TranscodeMetrics,
@@ -632,12 +678,16 @@ nonisolated enum VideoDeliveryExporter {
         let encoderFPS = encoderHintFrameRate(
             for: compositionOutputFrameRate(sourceFPS: sourceFrameRate, targetFPS: target.outputFrameRate)
         )
+        let encodeBitrate = transcodeVideoBitrate(
+            profile: profile,
+            ceiling: target.videoBitrate
+        )
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: outputWidth,
             AVVideoHeightKey: outputHeight,
             AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: target.videoBitrate,
+                AVVideoAverageBitRateKey: encodeBitrate,
                 AVVideoMaxKeyFrameIntervalKey: max(1, encoderFPS) * 2,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
                 AVVideoExpectedSourceFrameRateKey: max(1, encoderFPS),

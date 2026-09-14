@@ -40,6 +40,7 @@ struct AddTradeView: View {
                 detailCache: data.detailCache,
                 uploadService: data.uploadService,
                 objectStorage: data.objectStorage,
+                uploadServices: data.globalUploadServices(),
                 imagePipeline: data.imagePipeline,
                 mode: mode,
                 onDismiss: onDismiss
@@ -85,10 +86,8 @@ struct AddTradeView: View {
                     snapshot: viewModel.instrumentPickerSnapshot,
                     catalogRevision: viewModel.instrumentCatalogRevision,
                     selectedSymbol: viewModel.symbolText,
-                    startInCustomEntry: ProcessInfo.processInfo.arguments.contains("-uitesting-addtrade-custom"),
-                    initialCustomText: ProcessInfo.processInfo.arguments.contains("-uitesting-addtrade-custom")
-                        ? "MGC"
-                        : "",
+                    startInCustomEntry: Self.instrumentPickerStartsInCustomEntry,
+                    initialCustomText: Self.instrumentPickerInitialCustomText,
                     onSelect: { ticker in
                         viewModel.applySymbol(ticker)
                         showsInstrumentPicker = false
@@ -224,26 +223,6 @@ struct AddTradeView: View {
         }
         .experienceKeyboardDoneToolbar()
         .accessibilityIdentifier("addTrade.root")
-        .sheet(isPresented: Binding(
-            get: { viewModel.pendingPostTradeReflection != nil },
-            set: { isPresented in
-                if !isPresented { viewModel.skipPostTradeReflection() }
-            }
-        )) {
-            if let trade = viewModel.pendingPostTradeReflection {
-                PostTradeReflectionSheet(
-                    trade: trade,
-                    onSave: { exitEmotion, executionRating in
-                        await viewModel.savePostTradeReflection(
-                            exitEmotion: exitEmotion,
-                            executionRating: executionRating
-                        )
-                    },
-                    onSkip: { viewModel.skipPostTradeReflection() }
-                )
-                .experienceProtectedFormDismiss()
-            }
-        }
     }
 
     private var preTradePsychologyNotice: some View {
@@ -880,6 +859,22 @@ struct AddTradeView: View {
     private func presentScreenshotCrop(for item: PhotosPickerItem?) async {
         guard let image = await ImageCropSelectionSupport.loadUIImage(from: item) else { return }
         cropSourceImage = image
+    }
+
+    private static var instrumentPickerStartsInCustomEntry: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-uitesting-addtrade-custom")
+        #else
+        false
+        #endif
+    }
+
+    private static var instrumentPickerInitialCustomText: String {
+        #if DEBUG
+        instrumentPickerStartsInCustomEntry ? "MGC" : ""
+        #else
+        ""
+        #endif
     }
 }
 

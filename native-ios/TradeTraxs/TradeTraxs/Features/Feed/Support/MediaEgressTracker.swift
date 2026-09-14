@@ -24,8 +24,102 @@ enum MediaEgressTracker {
     nonisolated(unsafe) private static var profileBytes: Int64 = 0
     nonisolated(unsafe) private static var otherSurfaceBytes: Int64 = 0
     nonisolated(unsafe) private static var periodicTimer: Timer?
+    nonisolated(unsafe) private static var imageMemoryCacheHits = 0
+    nonisolated(unsafe) private static var imageDiskCacheHits = 0
+    nonisolated(unsafe) private static var imageCacheMisses = 0
+    nonisolated(unsafe) private static var imageCoalescedDuplicates = 0
+    nonisolated(unsafe) private static var imagePrefetchCancelled = 0
+    nonisolated(unsafe) private static var imageMemoryCacheHitBytes: Int64 = 0
+    nonisolated(unsafe) private static var imageDiskCacheHitBytes: Int64 = 0
+    nonisolated(unsafe) private static var imageNetworkRequests = 0
+    nonisolated(unsafe) private static var videoNetworkRequests = 0
+
+    struct SessionSnapshot: Sendable {
+        var imageNetworkRequests: Int
+        var imageNetworkBytes: Int64
+        var videoNetworkBytes: Int64
+        var videoNetworkRequests: Int
+        var imageMemoryCacheHits: Int
+        var imageDiskCacheHits: Int
+        var imageCacheMisses: Int
+        var imageCoalescedDuplicates: Int
+        var imagePrefetchCancelled: Int
+    }
 
     // MARK: - Public API
+
+    nonisolated static func resetSessionCounters() {
+        lock.lock()
+        networkRequests = 0
+        totalBytes = 0
+        imagesBytes = 0
+        videosBytes = 0
+        avatarsBytes = 0
+        otherTypeBytes = 0
+        feedBytes = 0
+        detailBytes = 0
+        clipsBytes = 0
+        profileBytes = 0
+        otherSurfaceBytes = 0
+        imageMemoryCacheHits = 0
+        imageDiskCacheHits = 0
+        imageCacheMisses = 0
+        imageCoalescedDuplicates = 0
+        imagePrefetchCancelled = 0
+        imageMemoryCacheHitBytes = 0
+        imageDiskCacheHitBytes = 0
+        imageNetworkRequests = 0
+        videoNetworkRequests = 0
+        lock.unlock()
+    }
+
+    nonisolated static func sessionSnapshot() -> SessionSnapshot {
+        lock.lock()
+        defer { lock.unlock() }
+        return SessionSnapshot(
+            imageNetworkRequests: imageNetworkRequests,
+            imageNetworkBytes: imagesBytes + avatarsBytes,
+            videoNetworkBytes: videosBytes,
+            videoNetworkRequests: videoNetworkRequests,
+            imageMemoryCacheHits: imageMemoryCacheHits,
+            imageDiskCacheHits: imageDiskCacheHits,
+            imageCacheMisses: imageCacheMisses,
+            imageCoalescedDuplicates: imageCoalescedDuplicates,
+            imagePrefetchCancelled: imagePrefetchCancelled
+        )
+    }
+
+    nonisolated static func recordImageMemoryCacheHit(bytes: Int) {
+        lock.lock()
+        imageMemoryCacheHits += 1
+        imageMemoryCacheHitBytes += Int64(bytes)
+        lock.unlock()
+    }
+
+    nonisolated static func recordImageDiskCacheHit(bytes: Int) {
+        lock.lock()
+        imageDiskCacheHits += 1
+        imageDiskCacheHitBytes += Int64(bytes)
+        lock.unlock()
+    }
+
+    nonisolated static func recordImageCacheMiss() {
+        lock.lock()
+        imageCacheMisses += 1
+        lock.unlock()
+    }
+
+    nonisolated static func recordImageCoalescedDuplicate() {
+        lock.lock()
+        imageCoalescedDuplicates += 1
+        lock.unlock()
+    }
+
+    nonisolated static func recordImagePrefetchCancelled() {
+        lock.lock()
+        imagePrefetchCancelled += 1
+        lock.unlock()
+    }
 
     nonisolated static func recordNetworkTransfer(
         type: MediaType,
@@ -43,9 +137,15 @@ enum MediaEgressTracker {
         totalBytes += byteCount
 
         switch type {
-        case .image: imagesBytes += byteCount
-        case .video: videosBytes += byteCount
-        case .avatar: avatarsBytes += byteCount
+        case .image:
+            imagesBytes += byteCount
+            imageNetworkRequests += 1
+        case .video:
+            videosBytes += byteCount
+            videoNetworkRequests += 1
+        case .avatar:
+            avatarsBytes += byteCount
+            imageNetworkRequests += 1
         case .other: otherTypeBytes += byteCount
         }
 
@@ -100,7 +200,15 @@ enum MediaEgressTracker {
             avatarsMB=\(megabytes(avatarsBytes)) \
             feedMB=\(megabytes(feedBytes)) \
             detailMB=\(megabytes(detailBytes)) \
-            clipsMB=\(megabytes(clipsBytes))
+            clipsMB=\(megabytes(clipsBytes)) \
+            imageNetworkRequests=\(networkRequests) \
+            imageMemoryCacheHits=\(imageMemoryCacheHits) \
+            imageDiskCacheHits=\(imageDiskCacheHits) \
+            imageCacheMisses=\(imageCacheMisses) \
+            imageCoalescedDuplicates=\(imageCoalescedDuplicates) \
+            imagePrefetchCancelled=\(imagePrefetchCancelled) \
+            imageMemoryHitMB=\(megabytes(imageMemoryCacheHitBytes)) \
+            imageDiskHitMB=\(megabytes(imageDiskCacheHitBytes))
             """
         )
     }
@@ -259,6 +367,25 @@ enum MediaEgressTracker {
 enum MediaEgressTracker {
     enum MediaType: String { case image, video, avatar, other }
 
+    struct SessionSnapshot: Sendable {
+        var imageNetworkRequests: Int = 0
+        var imageNetworkBytes: Int64 = 0
+        var videoNetworkBytes: Int64 = 0
+        var videoNetworkRequests: Int = 0
+        var imageMemoryCacheHits: Int = 0
+        var imageDiskCacheHits: Int = 0
+        var imageCacheMisses: Int = 0
+        var imageCoalescedDuplicates: Int = 0
+        var imagePrefetchCancelled: Int = 0
+    }
+
+    static func resetSessionCounters() {}
+    static func sessionSnapshot() -> SessionSnapshot { SessionSnapshot() }
+    static func recordImageMemoryCacheHit(bytes: Int) {}
+    static func recordImageDiskCacheHit(bytes: Int) {}
+    static func recordImageCacheMiss() {}
+    static func recordImageCoalescedDuplicate() {}
+    static func recordImagePrefetchCancelled() {}
     static func recordNetworkTransfer(type: MediaType, surface: String, mediaID: String, bytes: Int) {}
     static func printSummary() {}
     static func startPeriodicSummaries(interval: TimeInterval = 60) {}

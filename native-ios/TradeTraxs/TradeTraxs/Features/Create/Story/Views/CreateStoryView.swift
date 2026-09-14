@@ -22,6 +22,7 @@ struct CreateStoryView: View {
                 detailCache: data.detailCache,
                 uploadService: data.uploadService,
                 objectStorage: data.objectStorage,
+                uploadServices: data.globalUploadServices(),
                 onPublished: onPublished,
                 onDismiss: onDismiss
             )

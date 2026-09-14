@@ -65,6 +65,7 @@ struct TradeTraxsApp: App {
                 applyAddTradeScreenshotLaunchArgumentsIfNeeded()
                 applyCreateScreenshotLaunchArgumentsIfNeeded()
                 applyNavigationUITestLaunchArgumentsIfNeeded()
+                applyNetworkDiagnosticLaunchArgumentsIfNeeded(environment: appEnvironment)
                 #endif
             }
             .onChange(of: launchController.bootstrapGeneration) { _, _ in
@@ -74,6 +75,11 @@ struct TradeTraxsApp: App {
                 launchController.environment.lifecycle.handle(scenePhase: newPhase)
                 if newPhase == .background {
                     launchController.environment.navigation.persistState()
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("-networkDiagnosticAutoEnd") {
+                        TradeTraxsNetworkDiagnostic.endSessionAndPrint()
+                    }
+                    #endif
                 }
             }
         }
@@ -577,6 +583,20 @@ struct TradeTraxsApp: App {
                 appEnvironment.navigation.coordinator.pushHome(.settings(.tradingAccounts))
             }
             try? await Task.sleep(nanoseconds: 1_200_000_000)
+        }
+    }
+
+    private func applyNetworkDiagnosticLaunchArgumentsIfNeeded(environment: AppEnvironment) {
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-networkDiagnosticCold") {
+            Task {
+                await TradeTraxsNetworkDiagnostic.beginColdRun(data: environment.data)
+            }
+        } else if args.contains("-networkDiagnosticWarm") {
+            TradeTraxsNetworkDiagnostic.beginWarmRun()
+        }
+        if args.contains("-networkDiagnosticEnd") {
+            TradeTraxsNetworkDiagnostic.endSessionAndPrint()
         }
     }
     #endif

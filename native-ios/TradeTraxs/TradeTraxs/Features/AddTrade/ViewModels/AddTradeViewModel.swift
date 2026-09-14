@@ -93,11 +93,13 @@ final class AddTradeViewModel {
     private let detailCache: DetailPresentationCache
     private let uploadService: any UploadService
     private let objectStorage: any ObjectStorageProviding
+    private let uploadServices: GlobalUploadServices
     private let imagePipeline: (any ImagePipeline)?
     private let onDismiss: () -> Void
 
     private var viewerID: ProfileID?
     private var saveTask: Task<Void, Never>?
+    private var isEnqueueingTradeSave = false
     private var hasLoadedAccounts = false
     private var hasLoadedReels = false
     private var editingTrade: Trade?
@@ -118,6 +120,7 @@ final class AddTradeViewModel {
         detailCache: DetailPresentationCache,
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
+        uploadServices: GlobalUploadServices,
         imagePipeline: (any ImagePipeline)? = nil,
         mode: Mode = .create,
         onDismiss: @escaping () -> Void
@@ -128,9 +131,43 @@ final class AddTradeViewModel {
         self.detailCache = detailCache
         self.uploadService = uploadService
         self.objectStorage = objectStorage
+        self.uploadServices = uploadServices
         self.imagePipeline = imagePipeline
         self.mode = mode
         self.onDismiss = onDismiss
+    }
+
+    convenience init(
+        trades: any TradeRepository,
+        feed: any FeedRepository,
+        session: any SessionProviding,
+        detailCache: DetailPresentationCache,
+        uploadService: any UploadService,
+        objectStorage: any ObjectStorageProviding,
+        imagePipeline: (any ImagePipeline)? = nil,
+        mode: Mode = .create,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.init(
+            trades: trades,
+            feed: feed,
+            session: session,
+            detailCache: detailCache,
+            uploadService: uploadService,
+            objectStorage: objectStorage,
+            uploadServices: GlobalUploadServices(
+                feed: feed,
+                profiles: nil,
+                trades: trades,
+                achievements: nil,
+                uploadService: uploadService,
+                objectStorage: objectStorage,
+                detailCache: detailCache
+            ),
+            imagePipeline: imagePipeline,
+            mode: mode,
+            onDismiss: onDismiss
+        )
     }
 
     var isEditing: Bool {
@@ -386,14 +423,14 @@ final class AddTradeViewModel {
         formError = nil
         Task {
             do {
-                let prepared = try await MediaVideoPreparation.prepareLocalVideo(
+                let prepared = try await ReelEncodingPipeline.prepareForUpload(
                     from: url,
                     contentType: contentType
                 )
                 linkedReel = nil
                 reelDraft = ReelDraft(
                     selectionID: UUID().uuidString,
-                    ownedSourceURL: prepared.fileURL,
+                    ownedSourceURL: nil,
                     localVideoURL: prepared.fileURL,
                     contentType: prepared.contentType,
                     byteCount: prepared.byteCount,
@@ -464,8 +501,25 @@ final class AddTradeViewModel {
     #endif
 
     func save() {
-        guard canSave, saveTask == nil else { return }
-        saveTask = Task { await performSave() }
+        guard canSave, saveTask == nil, !isEnqueueingTradeSave else { return }
+        isEnqueueingTradeSave = true
+        phase = .saving
+        saveTask = Task {
+            await enqueueSave()
+            isEnqueueingTradeSave = false
+        }
+    }
+
+    static func rememberLastAccountID(_ id: TradingAccountID) {
+        lastAccountID = id
+    }
+
+    static func devFixtureTrade(from draft: TradeDraft, owner: ProfileID) -> Trade {
+        fixtureTrade(from: draft, owner: owner)
+    }
+
+    static func devFixtureUpdatedTrade(from draft: TradeDraft, previous: Trade) -> Trade {
+        fixtureUpdatedTrade(from: draft, previous: previous)
     }
 
     func dismissRequested() {
@@ -685,158 +739,155 @@ final class AddTradeViewModel {
         return NSDecimalNumber(decimal: value).stringValue
     }
 
-    private func performSave() async {
+    private func enqueueSave() async {
         formError = nil
         fieldErrors = [:]
 
-        // Partial recovery: trade already exists — only retry clip create/link.
-        if let pendingTradeID = tradeAwaitingClip {
-            phase = .saving
-            do {
-                try await attachClipIfNeeded(to: pendingTradeID, tradeIsPublic: shareToProfile)
-                tradeAwaitingClip = nil
-                ExperienceHaptics.play(.tradeSaved)
-                phase = .ready
-                onDismiss()
-            } catch {
-                phase = .ready
-                formError = "Trade was saved, but the clip didn’t finish. Tap Save to retry the clip only."
-            }
-            saveTask = nil
-            return
-        }
-
         guard validate() else {
+            phase = .ready
             saveTask = nil
             return
         }
         guard let account = selectedAccount else {
             formError = "Choose an account that can accept trades."
+            phase = .ready
             saveTask = nil
             return
         }
         let keepOriginalAccount = isEditing && account.id == editingOriginalAccountID
         guard account.canAddTrades || keepOriginalAccount else {
             formError = "Choose an account that can accept trades."
+            phase = .ready
+            saveTask = nil
+            return
+        }
+        guard let viewerID else {
+            formError = isEditing ? "Sign in to edit trades." : "Sign in to add trades."
+            phase = .ready
+            saveTask = nil
+            return
+        }
+        guard let spec = makeTradeSaveUploadSpec(viewerID: viewerID, account: account) else {
+            phase = .ready
             saveTask = nil
             return
         }
 
-        phase = .saving
-        var uploadedStoragePath: String?
-        do {
-            var imageURL: String?
-            if let screenshotData, let screenshotPreview {
-                PostImageUploadProbe.log(finalImage: screenshotPreview, uploadData: screenshotData)
-                isUploadingMedia = true
-                let uploaded = try await uploadScreenshot(screenshotData)
-                uploadedStoragePath = uploaded.storagePath
-                imageURL = uploaded.publicURL
-                isUploadingMedia = false
-            } else if isEditing {
-                imageURL = removeExistingScreenshot ? nil : existingImageURL
-            }
-
-            let ticker = symbolText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            let quantity = Self.parseDecimal(contractsText) ?? 1
-            let pnl = Self.parseDecimal(pnlText) ?? 0
-            let sessionLabel = TradingSessionLabel.session(from: entryAt) ?? "NY"
-            let resolvedTimeframe = TradeReviewCatalog.resolvedTimeframe(
-                selection: timeframeSelection,
-                custom: customTimeframeText
-            )
-            let holdDuration = includeExitTime
-                ? TradeHoldDuration.compute(entryAt: entryAt, exitAt: exitAt)
-                : nil
-            let draft = TradeDraft(
-                accountID: account.id,
-                accountName: account.name,
-                accountSizeLabel: account.size.map { "\($0.amount)" },
-                accountModeLabel: account.mode.rawValue,
-                accountCategoryLabel: account.category.rawValue,
-                ownerAccountNumber: account.accountNumber,
-                ownerAccountCategory: account.category,
-                ownerAccountMode: account.mode,
-                symbol: Symbol(ticker: ticker),
-                side: side,
-                mode: mapTradeMode(from: account),
-                quantity: quantity,
-                entryPrice: Self.parseDecimal(entryPriceText),
-                exitPrice: Self.parseDecimal(exitPriceText),
-                entryAt: entryAt,
-                exitAt: includeExitTime ? exitAt : nil,
-                realizedPnL: Money(amount: pnl),
-                riskReward: Self.parseOptionalRiskReward(rrText),
-                points: Self.parseDecimal(pointsText) ?? 0,
-                sessionLabel: sessionLabel,
-                strategy: Self.nilIfEmpty(strategyText),
-                visibility: shareToProfile ? .public : .private,
-                publicCaption: Self.nilIfEmpty(publicCaptionText),
-                noteBody: Self.nilIfEmpty(notesText),
-                timeframe: resolvedTimeframe,
-                newsEvent: newsEvent,
-                confidence: confidenceLevel > 0 ? confidenceLevel : nil,
-                emotion: Self.nilIfEmpty(emotionSelection),
-                followedPlan: followedPlan,
-                marketCondition: Self.nilIfEmpty(marketConditionSelection),
-                psychologyNotes: Self.nilIfEmpty(psychologyNotesText),
-                imageDisplayMode: screenshotDisplayMode,
-                durationSeconds: holdDuration?.seconds,
-                durationText: holdDuration?.text,
-                imageURL: imageURL,
-                imageCrop: nil
-            )
-
-            let trade: Trade
-            if let viewerID, viewerID.rawValue.hasPrefix("dev.") {
-                if let previous = editingTrade {
-                    trade = Self.fixtureUpdatedTrade(from: draft, previous: previous)
-                } else {
-                    trade = Self.fixtureTrade(from: draft, owner: viewerID)
-                }
-            } else if let previous = editingTrade {
-                trade = try await trades.update(id: previous.id, draft: draft, previous: previous)
-            } else {
-                trade = try await trades.save(draft)
-            }
-
-            detailCache.seed(trade)
-            if isEditing {
-                TradeJournalMutationStore.shared.noteUpdated(trade)
-            } else {
-                TradeJournalMutationStore.shared.noteCreated(trade)
-            }
-            Self.lastAccountID = account.id
-
-            do {
-                try await attachClipIfNeeded(to: trade.id, tradeIsPublic: shareToProfile)
-            } catch {
-                tradeAwaitingClip = trade.id
-                phase = .ready
-                formError = "Trade was saved, but the clip didn’t finish. Tap Save to retry the clip only."
-                saveTask = nil
-                return
-            }
-
-            ExperienceHaptics.play(.tradeSaved)
-            phase = .ready
-            if isEditing {
-                onDismiss()
-            } else {
-                pendingPostTradeReflection = trade
-            }
-        } catch {
-            isUploadingMedia = false
-            if let path = uploadedStoragePath {
-                try? await objectStorage.delete(
-                    bucket: StorageBucket.screenshots.rawValue,
-                    path: path
-                )
-            }
-            phase = .ready
-            formError = Self.userMessage(for: error)
+        var checkpoint = TradeSaveUploadCheckpoint(
+            uploadedScreenshotPublicURL: nil,
+            uploadedScreenshotStoragePath: nil,
+            savedTradeID: tradeAwaitingClip,
+            clipAttached: false,
+            reelLinked: false,
+            publicFeedPostCompleted: false,
+            reelVideoPublicURL: nil,
+            reelVideoStoragePath: nil,
+            reelThumbnailPublicURL: nil,
+            reelThumbnailStoragePath: nil,
+            linkedExistingReelID: nil
+        )
+        if tradeAwaitingClip != nil {
+            checkpoint.clipAttached = false
         }
+
+        if let screenshotData, let screenshotPreview {
+            PostImageUploadProbe.log(finalImage: screenshotPreview, uploadData: screenshotData)
+        }
+
+        let jobID = GlobalUploadCoordinator.shared.enqueueTrade(
+            spec: spec,
+            services: uploadServices,
+            checkpoint: checkpoint
+        )
+
+        tradeAwaitingClip = nil
+        reelDraft = nil
+        linkedReel = nil
+        screenshotData = nil
+        screenshotPreview = nil
+        phase = .ready
         saveTask = nil
+        onDismiss()
+        GlobalUploadJobDiagnostics.log(
+            id: jobID,
+            kind: .trade,
+            event: .composerDismissed,
+            taskCancelled: Task.isCancelled
+        )
+    }
+
+    private func makeTradeSaveUploadSpec(
+        viewerID: ProfileID,
+        account: TradingAccount
+    ) -> TradeSaveUploadSpec? {
+        let ticker = symbolText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let quantity = Self.parseDecimal(contractsText) ?? 1
+        let pnl = Self.parseDecimal(pnlText) ?? 0
+        let sessionLabel = TradingSessionLabel.session(from: entryAt) ?? "NY"
+        let resolvedTimeframe = TradeReviewCatalog.resolvedTimeframe(
+            selection: timeframeSelection,
+            custom: customTimeframeText
+        )
+        let holdDuration = includeExitTime
+            ? TradeHoldDuration.compute(entryAt: entryAt, exitAt: exitAt)
+            : nil
+        let draft = TradeDraft(
+            accountID: account.id,
+            accountName: account.name,
+            accountSizeLabel: account.size.map { "\($0.amount)" },
+            accountModeLabel: account.mode.rawValue,
+            accountCategoryLabel: account.category.rawValue,
+            ownerAccountNumber: account.accountNumber,
+            ownerAccountCategory: account.category,
+            ownerAccountMode: account.mode,
+            symbol: Symbol(ticker: ticker),
+            side: side,
+            mode: mapTradeMode(from: account),
+            quantity: quantity,
+            entryPrice: Self.parseDecimal(entryPriceText),
+            exitPrice: Self.parseDecimal(exitPriceText),
+            entryAt: entryAt,
+            exitAt: includeExitTime ? exitAt : nil,
+            realizedPnL: Money(amount: pnl),
+            riskReward: Self.parseOptionalRiskReward(rrText),
+            points: Self.parseDecimal(pointsText) ?? 0,
+            sessionLabel: sessionLabel,
+            strategy: Self.nilIfEmpty(strategyText),
+            visibility: shareToProfile ? .public : .private,
+            publicCaption: Self.nilIfEmpty(publicCaptionText),
+            noteBody: Self.nilIfEmpty(notesText),
+            timeframe: resolvedTimeframe,
+            newsEvent: newsEvent,
+            confidence: confidenceLevel > 0 ? confidenceLevel : nil,
+            emotion: Self.nilIfEmpty(emotionSelection),
+            followedPlan: followedPlan,
+            marketCondition: Self.nilIfEmpty(marketConditionSelection),
+            psychologyNotes: Self.nilIfEmpty(psychologyNotesText),
+            imageDisplayMode: screenshotDisplayMode,
+            durationSeconds: holdDuration?.seconds,
+            durationText: holdDuration?.text,
+            imageURL: nil,
+            imageCrop: nil
+        )
+
+        let uploadMode: TradeSaveUploadMode = {
+            if case .edit(let tradeID) = mode { return .edit(tradeID: tradeID) }
+            return .create
+        }()
+
+        return TradeSaveUploadSpec(
+            jobID: UUID().uuidString,
+            authorID: viewerID,
+            mode: uploadMode,
+            draft: draft,
+            screenshotData: screenshotData,
+            removeExistingScreenshot: removeExistingScreenshot,
+            existingImageURL: existingImageURL,
+            reelSnapshot: reelDraft.map { ReelDraftSnapshot(draft: $0, captionOverride: nil) },
+            linkedReelID: linkedReel?.id,
+            tradeIsPublic: shareToProfile,
+            lastAccountID: account.id
+        )
     }
 
     func skipPostTradeReflection() {

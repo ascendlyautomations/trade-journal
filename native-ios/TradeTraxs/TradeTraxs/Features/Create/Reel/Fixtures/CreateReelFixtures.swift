@@ -44,7 +44,7 @@ enum CreateReelFixtures {
             authorProfileID: author,
             video: MediaReference(id: "https://example.com/dev-reel.mp4", kind: .video, altText: nil),
             thumbnail: MediaReference(id: "https://example.com/dev-reel-thumb.jpg", kind: .image, altText: nil),
-            caption: tradeID == nil ? "Standalone clip caption" : nil,
+            caption: "Standalone clip caption",
             visibility: .public,
             linkedTradeID: tradeID,
             durationSeconds: 12,
@@ -79,7 +79,7 @@ enum CreateReelFixtures {
             durationSeconds: 12,
             thumbnailJPEG: thumb.jpegData(compressionQuality: 0.8),
             thumbnailPreview: thumb,
-            caption: linkedTrade == nil ? "Took the sweep and held for the target." : "",
+            caption: "Took the sweep and held for the target.",
             linkedTradeID: linkedTrade?.id,
             linkedTradeSummary: linkedTrade.map {
                 "\($0.symbol.ticker) · \($0.side.rawValue.capitalized)"

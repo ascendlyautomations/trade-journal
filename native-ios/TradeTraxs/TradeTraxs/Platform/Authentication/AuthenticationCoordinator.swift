@@ -216,9 +216,19 @@ final class AuthenticationCoordinator {
         authenticationManager.state.session?.provider
     }
 
+    func recoverSessionAfterUnauthorized() async -> NetworkUnauthorizedRecovery.Outcome {
+        switch await authenticationManager.attemptRefreshAfterUnauthorized() {
+        case .refreshed:
+            return .recovered
+        case .transientFailure:
+            return .failedTransient
+        case .sessionTerminated:
+            return .sessionEnded
+        }
+    }
+
     func handleUnauthorizedFromNetwork() async {
-        AppLog.authentication.info("Unauthorized — forcing logout")
-        await logout()
+        _ = await recoverSessionAfterUnauthorized()
     }
 
     func syncNavigation(with state: AuthenticationState) {

@@ -12,7 +12,8 @@ nonisolated enum FeedPersistentReconcile {
     /// Server first page is authoritative for the overlapping window; older paginated tail is preserved.
     static func reconcileFirstPage(
         existing: [FeedTimelineEntry],
-        incoming: [FeedTimelineEntry]
+        incoming: [FeedTimelineEntry],
+        preserveEntryIDs: Set<String> = []
     ) -> Result {
         let sortedIncoming = FeedSupport.sortDescending(incoming)
         let incomingIDs = Set(sortedIncoming.map(\.id))
@@ -25,6 +26,7 @@ nonisolated enum FeedPersistentReconcile {
 
         if let oldest = incomingOldest {
             for (id, entry) in byID where entry.createdAt >= oldest && !incomingIDs.contains(id) {
+                if preserveEntryIDs.contains(id) { continue }
                 byID.removeValue(forKey: id)
                 removed += 1
             }

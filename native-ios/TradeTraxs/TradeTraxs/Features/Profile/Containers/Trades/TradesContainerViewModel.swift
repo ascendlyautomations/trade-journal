@@ -21,6 +21,7 @@ final class TradesContainerViewModel {
 
     private let profileID: ProfileID
     private let trades: any TradeRepository
+    private let rpc: (any RPCClient)?
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
     private let engagementStore: EngagementStore?
@@ -31,9 +32,12 @@ final class TradesContainerViewModel {
     private var hasLoaded = false
     private var isLoadingMore = false
     private var paginationGeneration = 0
+    private var syncGeneration: UInt64 = 0
     private var canViewContent = true
     /// When true, initial data comes from ``ProfileScreenViewModel`` bootstrap.
     private var isScreenOwned = false
+
+    var hasAuthoritativePayload: Bool { hasLoaded }
 
     struct SharePayload: Identifiable, Equatable {
         let id = UUID()
@@ -43,6 +47,7 @@ final class TradesContainerViewModel {
     init(
         profileID: ProfileID,
         trades: any TradeRepository,
+        rpc: (any RPCClient)? = nil,
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
         engagementStore: EngagementStore? = nil,
@@ -50,6 +55,7 @@ final class TradesContainerViewModel {
     ) {
         self.profileID = profileID
         self.trades = trades
+        self.rpc = rpc
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
         self.engagementStore = engagementStore
@@ -115,21 +121,52 @@ final class TradesContainerViewModel {
             }
             return
         }
-        hasLoaded = true
-        items = snapshot.trades
+
+        if hasLoaded {
+            guard !snapshot.trades.isEmpty else { return }
+            items = OwnerProfileOptimisticStore.merging(overlay: snapshot.trades, into: items)
+            nextCursor = snapshot.tradesNextCursor ?? nextCursor
+            if !snapshot.accountNames.isEmpty { accountNames = snapshot.accountNames }
+            if !snapshot.accountModes.isEmpty { accountModes = snapshot.accountModes }
+            if !snapshot.accountSizes.isEmpty { accountSizes = snapshot.accountSizes }
+            seedCachesFromItems()
+            updateStateForVisibleItems()
+            prefetchEngagement(for: visibleItems.map(\.id))
+            return
+        }
+
+        let reconciled = ProfileSectionSupport.reconcileSectionItems(
+            snapshotItems: snapshot.trades,
+            loadedItems: items,
+            hasLoaded: hasLoaded,
+            didLoadAuthoritative: snapshot.didLoadTrades
+        )
+        items = reconciled.items
+        hasLoaded = reconciled.hasLoaded
         nextCursor = snapshot.tradesNextCursor
         accountNames = snapshot.accountNames
         accountNumbers = [:]
         accountModes = snapshot.accountModes
         accountSizes = snapshot.accountSizes
-        detailCache.seed(publicTrades: items, for: profileID)
-        detailCache.seedPublicAccountMetadata(
-            names: sanitizedPublicAccountNames(from: accountNames),
-            modes: accountModes,
-            sizes: accountSizes,
-            for: profileID
-        )
+        seedCachesFromItems()
         paginationErrorMessage = nil
+        updateStateForVisibleItems()
+        prefetchEngagement(for: visibleItems.map(\.id))
+    }
+
+    /// Owner journal create/update — upsert immediately; optional page-1 reload uses generation guards.
+    func noteJournalMutationSucceeded(_ trade: Trade, preservingExisting existingItems: [Trade] = []) {
+        guard trade.ownerProfileID == profileID else { return }
+        guard trade.visibility == .public else {
+            items.removeAll { $0.id == trade.id }
+            detailCache.removeTrade(id: trade.id)
+            updateStateForVisibleItems()
+            return
+        }
+        let baseline = items.isEmpty ? existingItems : items
+        items = OwnerProfileOptimisticStore.upserting(trade, into: baseline)
+        hasLoaded = true
+        detailCache.seed(trade)
         updateStateForVisibleItems()
         prefetchEngagement(for: visibleItems.map(\.id))
     }
@@ -141,7 +178,9 @@ final class TradesContainerViewModel {
             state = .empty
             return
         }
-        loadTask = Task { await performLoad(reset: true) }
+        syncGeneration &+= 1
+        let generation = syncGeneration
+        loadTask = Task { await performLoad(reset: true, generation: generation) }
     }
 
     func refresh() async {
@@ -321,10 +360,12 @@ final class TradesContainerViewModel {
     private func refresh(background: Bool) async {
         loadTask?.cancel()
         cancelLoadMore(reason: "refresh")
+        syncGeneration &+= 1
+        let generation = syncGeneration
         if !background {
             isRefreshing = true
         }
-        await performLoad(reset: true)
+        await performLoad(reset: true, generation: generation)
         isRefreshing = false
     }
 
@@ -347,12 +388,28 @@ final class TradesContainerViewModel {
         }
 
         do {
-            let page = try await trades.trades(
-                ownedBy: profileID,
-                accountID: nil,
-                page: PageRequest(cursor: cursor, limit: 30),
-                publicOnly: true
-            )
+            let pageItems: [Trade]
+            let newCursor: String?
+            if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
+                let applied = try await ProfileTabBootstrapLoader.load(
+                    tab: .trades,
+                    profileID: profileID,
+                    rpc: rpc,
+                    cursor: cursor
+                )
+                pageItems = applied.trades ?? []
+                newCursor = applied.nextCursor
+                seedTradeEngagement(applied.tradeEngagement)
+            } else {
+                let page = try await trades.trades(
+                    ownedBy: profileID,
+                    accountID: nil,
+                    page: PageRequest(cursor: cursor, limit: 30),
+                    publicOnly: true
+                )
+                pageItems = page.items
+                newCursor = page.nextCursor
+            }
 
             guard generation == paginationGeneration, !Task.isCancelled else {
                 #if DEBUG
@@ -363,17 +420,17 @@ final class TradesContainerViewModel {
 
             #if DEBUG
             ProfileTradesPaginationDiagnostics.response(
-                count: page.items.count,
-                hasMore: page.nextCursor != nil
+                count: pageItems.count,
+                hasMore: newCursor != nil
             )
             #endif
 
             let beforeCount = items.count
-            if page.items.isEmpty {
+            if pageItems.isEmpty {
                 nextCursor = nil
             } else {
-                appendUnique(page.items)
-                nextCursor = page.nextCursor
+                appendUnique(pageItems)
+                nextCursor = newCursor
                 if items.count == beforeCount {
                     nextCursor = nil
                 }
@@ -413,24 +470,22 @@ final class TradesContainerViewModel {
         }
     }
 
-    private func performLoad(reset: Bool) async {
+    private func performLoad(reset: Bool, generation: UInt64) async {
         if reset {
             cancelLoadMore(reason: "reset")
         }
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            guard generation == syncGeneration else {
+                loadTask = nil
+                return
+            }
             hasLoaded = true
             items = ProfileTradeFixtures.samples(owner: profileID)
             accountNames = ProfileTradeFixtures.accountNames()
             accountNumbers = [:]
             accountModes = ProfileTradeFixtures.accountModes()
             accountSizes = ProfileTradeFixtures.accountSizes()
-            detailCache.seed(publicTrades: items, for: profileID)
-            detailCache.seedPublicAccountMetadata(
-                names: sanitizedPublicAccountNames(from: accountNames),
-                modes: accountModes,
-                sizes: accountSizes,
-                for: profileID
-            )
+            seedCachesFromItems()
             nextCursor = nil
             updateStateForVisibleItems()
             prefetchEngagement(for: visibleItems.map(\.id))
@@ -443,26 +498,59 @@ final class TradesContainerViewModel {
         }
 
         do {
-            // Mirror web Profile list: public trades only (`is_public = true`).
-            let page = try await trades.trades(
-                ownedBy: profileID,
-                accountID: nil,
-                page: PageRequest(),
-                publicOnly: true
-            )
+            let pageItems: [Trade]
+            let newCursor: String?
+            if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
+                let applied = try await ProfileTabBootstrapLoader.load(
+                    tab: .trades,
+                    profileID: profileID,
+                    rpc: rpc,
+                    cursor: nil
+                )
+                pageItems = applied.trades ?? []
+                newCursor = applied.nextCursor
+                if let names = applied.accountNames { accountNames = names }
+                if let modes = applied.accountModes { accountModes = modes }
+                if let sizes = applied.accountSizes { accountSizes = sizes }
+                seedTradeEngagement(applied.tradeEngagement)
+            } else {
+                let page = try await trades.trades(
+                    ownedBy: profileID,
+                    accountID: nil,
+                    page: PageRequest(limit: 30),
+                    publicOnly: true
+                )
+                pageItems = page.items
+                newCursor = page.nextCursor
+            }
 
-            guard !Task.isCancelled else { return }
+            guard generation == syncGeneration, !Task.isCancelled else {
+                loadTask = nil
+                return
+            }
 
-            items = page.items
-            detailCache.seed(publicTrades: items, for: profileID)
-            nextCursor = page.nextCursor
+            let preserveIDs = ownerPublicTradePreserveIDs()
+            if reset, !items.isEmpty {
+                items = ProfilePersistentReconcile.reconcileTrades(
+                    existing: items,
+                    incoming: pageItems,
+                    preserveIDs: preserveIDs
+                ).items
+            } else {
+                items = pageItems
+            }
+            nextCursor = newCursor
+            seedCachesFromItems()
             hasLoaded = true
             paginationErrorMessage = nil
             updateStateForVisibleItems()
-
             prefetchEngagement(for: visibleItems.map(\.id))
         } catch {
             guard !Task.isCancelled else { return }
+            guard generation == syncGeneration else {
+                loadTask = nil
+                return
+            }
             if items.isEmpty {
                 state = .failed(message: ProfileSectionSupport.message(for: error))
             } else {
@@ -470,6 +558,24 @@ final class TradesContainerViewModel {
             }
         }
         loadTask = nil
+    }
+
+    private func seedCachesFromItems() {
+        detailCache.seed(publicTrades: items, for: profileID)
+        detailCache.seedPublicAccountMetadata(
+            names: sanitizedPublicAccountNames(from: accountNames),
+            modes: accountModes,
+            sizes: accountSizes,
+            for: profileID
+        )
+    }
+
+    private func ownerPublicTradePreserveIDs() -> Set<TradeID> {
+        Set(
+            (SessionOwnerTradesStore.shared.cached(for: profileID) ?? [])
+                .filter { $0.visibility == .public }
+                .map(\.id)
+        )
     }
 
     private func sanitizedPublicAccountNames(
@@ -486,6 +592,20 @@ final class TradesContainerViewModel {
                 )
             )
         })
+    }
+
+    private func seedTradeEngagement(_ engagement: [String: ProfileBootstrapV1.TradeEngagementWire]?) {
+        guard let engagement else { return }
+        for (tradeID, wire) in engagement {
+            engagementStore?.seed(
+                EngagementSnapshot(
+                    likeCount: wire.like_count,
+                    commentCount: wire.comment_count,
+                    viewerHasLiked: wire.liked_by_me
+                ),
+                for: .trade(TradeID(tradeID))
+            )
+        }
     }
 
     private func appendUnique(_ pageItems: [Trade]) {

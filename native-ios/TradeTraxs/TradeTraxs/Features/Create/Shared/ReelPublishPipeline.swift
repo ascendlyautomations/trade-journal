@@ -11,7 +11,7 @@ enum ReelPublishPipeline {
     }
 
     /// Uploads video (+ optional thumb) then inserts `reels`.
-    /// Trade-linked: `caption` forced nil; visibility from trade public flag.
+    /// Trade-linked: visibility from trade public flag; reel caption is independent of trade description.
     /// Linked-trade uniqueness must be validated by the caller before invoking this method.
     static func publish(
         publishID: String,
@@ -58,12 +58,7 @@ enum ReelPublishPipeline {
             return .public
         }()
 
-        // DB: trade_id IS NULL OR caption IS NULL
-        let caption: String? = {
-            guard tradeID == nil else { return nil }
-            let trimmed = draft.caption.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : String(trimmed.prefix(MediaVideoPreparation.maxCaptionLength))
-        }()
+        let caption: String? = Self.normalizedCaption(draft.caption)
 
         let thumbURL = uploaded.thumbnailPublicURL ?? uploaded.videoPublicURL
         let provisional = Reel(
@@ -117,6 +112,12 @@ enum ReelPublishPipeline {
 
     private static let reelVideoCacheControl = "31536000"
 
+    static func normalizedCaption(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(MediaVideoPreparation.maxCaptionLength))
+    }
+
     private static func uploadMedia(
         publishID: String,
         draft: ReelDraft,
@@ -125,7 +126,28 @@ enum ReelPublishPipeline {
         objectStorage: any ObjectStorageProviding,
         onProgress: ((Double) -> Void)?
     ) async throws -> UploadedMedia {
-        let videoData = try Data(contentsOf: draft.localVideoURL, options: [.mappedIfSafe])
+        let resolved: ReelEncodingPipeline.ResolvedUploadVideo
+        do {
+            resolved = try await ReelEncodingPipeline.resolveUploadVideo(draft: draft) { value in
+                onProgress?(0.05 + value * 0.15)
+            }
+        } catch {
+            ReelPublishDiagnostics.logFailed(
+                publishID: publishID,
+                stage: "encode",
+                error: error
+            )
+            throw error
+        }
+
+        defer {
+            ReelEncodingPipeline.cleanupEphemeralFiles(
+                resolved.ephemeralURLs,
+                preserving: Set([draft.localVideoURL, draft.ownedSourceURL].compactMap { $0 })
+            )
+        }
+
+        let videoData = try Data(contentsOf: resolved.fileURL, options: [.mappedIfSafe])
         guard videoData.count <= MediaVideoPreparation.maxFinalUploadBytes else {
             throw AppError.unknown(message: "Videos must be 100 MB or smaller.")
         }

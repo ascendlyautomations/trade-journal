@@ -1,89 +1,123 @@
 import Foundation
 import ImageIO
 
-/// Production image pipeline: memory cache → Supabase render URL (feed) or original → optional downsample.
+/// Production image pipeline: memory → disk → network (with in-flight coalescing).
 ///
 /// Feed surfaces use `/storage/v1/render/image/public/` transforms (web parity).
-/// Detail/zoom passes `deliveryQuality: .fullResolution` for original object bytes.
+/// Detail uses `.feedDetail` (1280px) by default; `.fullResolution` for deep zoom.
 nonisolated struct DefaultImagePipeline: ImagePipeline {
     private let cache: any ImageCaching
+    private let tieredCache: TieredImageCache?
     private let storage: any ObjectStorageProviding
     private let downloadService: any DownloadService
     private let urlSession: URLSession
+    private let coalescer: ImageLoadCoalescer
+
+    private static let sharedCoalescer = ImageLoadCoalescer()
 
     init(
         cache: any ImageCaching,
         storage: any ObjectStorageProviding,
         downloadService: any DownloadService,
-        urlSession: URLSession = .shared
+        urlSession: URLSession = MediaURLSession.shared,
+        coalescer: ImageLoadCoalescer? = nil
     ) {
         self.cache = cache
+        self.tieredCache = cache as? TieredImageCache
         self.storage = storage
         self.downloadService = downloadService
         self.urlSession = urlSession
+        self.coalescer = coalescer ?? Self.sharedCoalescer
     }
 
     func data(for request: ImageRequest) async throws -> Data {
         let key = cacheKey(for: request)
         if let cached = await cache.imageData(forKey: key) {
             #if DEBUG
-            let mediaID = request.reference.id.split(separator: "/").last.map(String.init)
-                ?? request.reference.id
-            MediaLoadDiagnostics.log(
-                contentType: "image/\(request.purpose.rawValue)",
-                mediaID: String(mediaID.prefix(48)),
-                source: .feedImage,
-                role: .image,
-                cacheHit: true
-            )
-            logFetchAudit(request: request, cacheKey: key, cacheHit: true, data: cached)
+            logCacheHit(request: request, cacheKey: key, data: cached, source: .memoryOrDisk)
             #endif
             return cached
         }
 
-        let raw = try await fetch(
-            request: request,
-            cacheKey: key,
-            cacheHit: false
-        )
-        let data = Self.downsampleIfNeeded(raw, maxPixelSize: request.maxPixelSize)
-        if ImageFidelityTrace.isEnabled {
-            let before = ImageFidelityTrace.pixelSize(of: raw)
-            let after = ImageFidelityTrace.pixelSize(of: data)
-            ImageFidelityTrace.log(
-                ImageFidelityTrace.StageReport(
-                    stage: "pipeline/after-downsample",
-                    url: request.reference.id,
-                    byteCount: data.count,
-                    pixelSize: after,
-                    resizingNote: request.maxPixelSize.map { "maxPixelSize=\($0)" } ?? "maxPixelSize=nil (passthrough)",
-                    fidelityNote: {
-                        guard let before, let after else { return nil }
-                        if before == after { return "bytes unchanged vs download" }
-                        return "CHANGED \(before.label) → \(after.label)"
-                    }()
-                )
+        #if DEBUG
+        MediaEgressTracker.recordImageCacheMiss()
+        #endif
+
+        return try await coalescer.load(key: key) { [self] in
+            if let raced = await cache.imageData(forKey: key) {
+                return raced
+            }
+            let raw = try await fetch(
+                request: request,
+                cacheKey: key,
+                cacheHit: false
             )
+            let data = Self.downsampleIfNeeded(raw, maxPixelSize: request.maxPixelSize)
+            if ImageFidelityTrace.isEnabled {
+                let before = ImageFidelityTrace.pixelSize(of: raw)
+                let after = ImageFidelityTrace.pixelSize(of: data)
+                ImageFidelityTrace.log(
+                    ImageFidelityTrace.StageReport(
+                        stage: "pipeline/after-downsample",
+                        url: request.reference.id,
+                        byteCount: data.count,
+                        pixelSize: after,
+                        resizingNote: request.maxPixelSize.map { "maxPixelSize=\($0)" } ?? "maxPixelSize=nil (passthrough)",
+                        fidelityNote: {
+                            guard let before, let after else { return nil }
+                            if before == after { return "bytes unchanged vs download" }
+                            return "CHANGED \(before.label) → \(after.label)"
+                        }()
+                    )
+                )
+            }
+            await cache.setImageData(data, forKey: key)
+            return data
         }
-        await cache.setImageData(data, forKey: key)
-        return data
     }
 
     func cachedImageData(for request: ImageRequest) async -> Data? {
         await cache.imageData(forKey: cacheKey(for: request))
     }
 
+    /// Best available cached bytes at or below the requested delivery tier (feed thumb before detail).
+    func bestCachedImageData(for request: ImageRequest) async -> (data: Data, quality: ImageDeliveryQuality)? {
+        let order: [ImageDeliveryQuality] = {
+            switch request.deliveryQuality {
+            case .fullResolution:
+                return [.fullResolution, .feedDetail, .feedDisplay]
+            case .feedDetail:
+                return [.feedDetail, .feedDisplay]
+            case .feedDisplay:
+                return [.feedDisplay]
+            }
+        }()
+        for quality in order {
+            var candidate = request
+            candidate.deliveryQuality = quality
+            if let data = await cachedImageData(for: candidate) {
+                return (data, quality)
+            }
+        }
+        return nil
+    }
+
     func prefetch(_ requests: [ImageRequest]) async {
         for request in requests {
+            if Task.isCancelled { break }
+            if await cachedImageData(for: request) != nil { continue }
             _ = try? await data(for: request)
         }
     }
 
     func invalidate(reference: MediaReference) async {
-        await cache.removeImage(forKey: reference.id)
-        // Also clear sized variants.
         for purpose in ImagePurpose.allCases {
-            await cache.removeImage(forKey: "\(reference.id)|\(purpose.rawValue)|0")
+            for quality in [ImageDeliveryQuality.feedDisplay, .feedDetail, .fullResolution] {
+                let key = "\(reference.id)|\(purpose.rawValue)|\(quality.rawValue)|0"
+                await cache.removeImage(forKey: key)
+                let feedKey = key + "|feedRev=\(StorageImageTransform.feedDisplayCacheRevision)"
+                await cache.removeImage(forKey: feedKey)
+            }
         }
     }
 
@@ -95,6 +129,31 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
             : ""
         return "\(request.reference.id)|\(request.purpose.rawValue)|\(request.deliveryQuality.rawValue)|\(request.maxPixelSize ?? 0)\(feedRevision)"
     }
+
+    private enum CacheHitSource {
+        case memoryOrDisk
+    }
+
+    #if DEBUG
+    private func logCacheHit(
+        request: ImageRequest,
+        cacheKey: String,
+        data: Data,
+        source: CacheHitSource
+    ) {
+        _ = source
+        let mediaID = request.reference.id.split(separator: "/").last.map(String.init)
+            ?? request.reference.id
+        MediaLoadDiagnostics.log(
+            contentType: "image/\(request.purpose.rawValue)",
+            mediaID: String(mediaID.prefix(48)),
+            source: .feedImage,
+            role: .image,
+            cacheHit: true
+        )
+        logFetchAudit(request: request, cacheKey: cacheKey, cacheHit: true, data: data)
+    }
+    #endif
 
     private func fetch(
         request: ImageRequest,
@@ -109,7 +168,6 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
             throw AppError.network(.validation(statusCode: nil, message: "Empty media reference"))
         }
 
-        // Prefer public URL resolution (web parity) for storage paths.
         if let url = MediaURLResolver.url(
             for: reference,
             bucket: Self.storageBucket(for: purpose),
@@ -124,6 +182,7 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
             }
 
             do {
+                tieredCache?.markDiskEligible(key: cacheKey)
                 let data = try await fetchURLWithTransientRetry(fetchURL, request: request)
                 #if DEBUG
                 let mediaID = reference.id.split(separator: "/").last.map(String.init) ?? reference.id
@@ -148,8 +207,6 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
                 #endif
                 return data
             } catch {
-                // Transform unavailable — fall back to original only on genuine transform failure.
-                // Never fall back on cancellation (SwiftUI task teardown would double-fetch).
                 if fetchURL != url, !Self.shouldSkipTransformFallback(for: error) {
                     let data = try await fetchURLWithTransientRetry(url, request: request)
                     #if DEBUG
@@ -170,7 +227,6 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
             }
         }
 
-        // Last resort — authenticated download (private buckets / unconfigured public URL).
         let data = try await downloadService.download(
             DownloadRequest(bucket: Self.storageBucket(for: purpose).rawValue, path: identifier)
         )
@@ -232,7 +288,6 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
     }
     #endif
 
-    /// Short bounded retry for flaky cellular / brief outages (idempotent GET).
     private func fetchURLWithTransientRetry(_ url: URL, request: ImageRequest) async throws -> Data {
         let maximumAttempts = 3
         var lastError: Error?
@@ -322,12 +377,6 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
         }
     }
 
-    /// ImageIO downsample for **list thumbnails only** (avatars, 96pt cards).
-    ///
-    /// Feed/detail pass `maxPixelSize: nil` and receive original object bytes.
-    /// When a budget is set, it is treated as a **minimum width-or-height floor for the
-    /// displayed axis**: we size so neither edge of the decoded bitmap is smaller than
-    /// `maxPixelSize` after aspect-fit (avoids portrait under-width → SwiftUI upscale blur).
     private static func downsampleIfNeeded(_ data: Data, maxPixelSize: Int?) -> Data {
         guard let maxPixelSize, maxPixelSize > 0 else { return data }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return data }
@@ -337,15 +386,11 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
         let pixelHeight = (properties?[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue ?? 0
         guard pixelWidth > 0, pixelHeight > 0 else { return data }
 
-        // Longest-edge target that keeps *both* edges ≥ maxPixelSize when possible.
-        // Portrait 3:4 needing width ≥ W requires longest(height) ≥ W × 4/3.
         let aspect = Double(pixelWidth) / Double(pixelHeight)
         let longestNeeded: Int = {
             if aspect >= 1 {
-                // Landscape — width is longest.
                 return maxPixelSize
             } else {
-                // Portrait — height is longest; size height so width == maxPixelSize.
                 return Int((Double(maxPixelSize) / aspect).rounded(.up))
             }
         }()

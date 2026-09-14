@@ -278,20 +278,15 @@ struct CreateReelView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             CreateComposerSectionLabel(title: "Caption")
 
-            if viewModel.captionEnabled {
-                CreateComposerMultilineField(
-                    text: $viewModel.captionText,
-                    placeholder: "Write something about this clip…",
-                    minHeight: 72,
-                    accessibilityIdentifier: "createReel.caption",
-                    accessibilityLabel: "Clip caption"
-                )
-                Text("\(viewModel.captionText.count)/\(MediaVideoPreparation.maxCaptionLength)")
-                    .experienceStyle(.caption, color: colors.tertiaryText)
-            } else {
-                Text("Caption comes from the linked trade’s public description.")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
+            CreateComposerMultilineField(
+                text: $viewModel.captionText,
+                placeholder: "Write something about this clip…",
+                minHeight: 72,
+                accessibilityIdentifier: "createReel.caption",
+                accessibilityLabel: "Clip caption"
+            )
+            Text("\(viewModel.captionText.count)/\(MediaVideoPreparation.maxCaptionLength)")
+                .experienceStyle(.caption, color: colors.tertiaryText)
         }
     }
 
@@ -313,7 +308,7 @@ struct CreateReelView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(viewModel.linkedTradeSummary ?? "")
                             .experienceStyle(.body, color: colors.primaryText)
-                        Text("Clip description uses this trade")
+                        Text("Linked trade")
                             .experienceStyle(.caption, color: colors.secondaryText)
                     }
                     Spacer(minLength: ExperienceSpacing.xs)

@@ -10,6 +10,7 @@ enum StoryPublishPipeline {
         feed: any FeedRepository,
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
+        predeterminedStoragePath: String? = nil,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> Story {
         onProgress?(0.08)
@@ -22,9 +23,14 @@ enum StoryPublishPipeline {
             throw AppError.unknown(message: message)
         }
 
-        let stamp = Int(Date().timeIntervalSince1970 * 1000)
         let safeName = sanitizedFileName(originalFileName, contentType: contentType)
-        let storagePath = "\(authorID.rawValue)/\(stamp)-\(safeName)"
+        let storagePath: String
+        if let predetermined = predeterminedStoragePath, !predetermined.isEmpty {
+            storagePath = predetermined
+        } else {
+            let stamp = Int(Date().timeIntervalSince1970 * 1000)
+            storagePath = "\(authorID.rawValue)/\(stamp)-\(safeName)"
+        }
 
         onProgress?(0.15)
         let uploaded = try await uploadService.upload(
@@ -58,6 +64,16 @@ enum StoryPublishPipeline {
             )
             throw error
         }
+    }
+
+    static func makeJobStoragePath(
+        jobID: String,
+        authorID: ProfileID,
+        originalFileName: String,
+        contentType: String
+    ) -> String {
+        let safeName = sanitizedFileName(originalFileName, contentType: contentType)
+        return "\(authorID.rawValue)/\(jobID)-\(safeName)"
     }
 
     private static func sanitizedFileName(_ name: String, contentType: String) -> String {

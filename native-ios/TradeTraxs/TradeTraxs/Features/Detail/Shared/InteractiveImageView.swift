@@ -39,7 +39,7 @@ struct InteractiveImageView: View {
     let imagePipeline: any ImagePipeline
     var emptyIcon: AppIcon = .photo
     var accessibilityIdentifier: String = "interactive.media"
-    /// Feed uses `.feedDisplay` (640px transform). Detail passes `.fullResolution`.
+    /// Feed uses `.feedDisplay` (640px). Detail defaults to `.feedDetail` (1280px); pinch upgrades to `.fullResolution`.
     var deliveryQuality: ImageDeliveryQuality = .feedDisplay
     /// DEBUG pipeline audit label — `feed` or `detail`.
     var auditSurface: String = ""
@@ -52,6 +52,7 @@ struct InteractiveImageView: View {
     @State private var displayImage: UIImage?
     @State private var didFail = false
     @State private var showLikeHeart = false
+    @State private var wantsFullResolution = false
 
     var body: some View {
         Group {
@@ -69,7 +70,7 @@ struct InteractiveImageView: View {
                     InteractiveImageRepresentable(
                         mediaID: mediaID,
                         storageReference: reference?.id ?? "",
-                        deliveryQuality: deliveryQuality,
+                        deliveryQuality: effectiveDeliveryQuality,
                         auditSurface: auditSurface,
                         image: displayImage,
                         backgroundColor: .clear,
@@ -82,6 +83,11 @@ struct InteractiveImageView: View {
                             {
                                 presentLikeFeedback()
                                 action()
+                            }
+                        },
+                        onPinchDeepZoom: {
+                            if deliveryQuality != .fullResolution {
+                                wantsFullResolution = true
                             }
                         }
                     )
@@ -120,7 +126,7 @@ struct InteractiveImageView: View {
         .overlay {
             LikeFeedbackOverlay(isVisible: showLikeHeart, reduceMotion: reduceMotion)
         }
-        .task(id: "\(reference?.id ?? "")|\(purpose.rawValue)|\(deliveryQuality.rawValue)|\(displayScale)") {
+        .task(id: "\(reference?.id ?? "")|\(purpose.rawValue)|\(effectiveDeliveryQuality.rawValue)|\(displayScale)") {
             await loadDisplayImage()
         }
         .accessibilityIdentifier(accessibilityIdentifier)
@@ -169,6 +175,11 @@ struct InteractiveImageView: View {
         }
     }
 
+    private var effectiveDeliveryQuality: ImageDeliveryQuality {
+        if wantsFullResolution { return .fullResolution }
+        return deliveryQuality
+    }
+
     private func loadDisplayImage() async {
         guard let reference else {
             displayImage = nil
@@ -177,26 +188,39 @@ struct InteractiveImageView: View {
         }
 
         let requestKey = reference.id
+        let targetQuality = effectiveDeliveryQuality
         let request = ImageRequest(
             reference: reference,
             purpose: purpose,
             maxPixelSize: nil,
             allowsProgressiveLoading: true,
-            deliveryQuality: deliveryQuality,
+            deliveryQuality: targetQuality,
             auditSurface: auditSurface,
             auditMediaID: mediaID
         )
         let cacheKey = MediaPipelineAudit.cacheKey(
             referenceID: reference.id,
             purpose: purpose,
-            deliveryQuality: deliveryQuality,
+            deliveryQuality: targetQuality,
             maxPixelSize: nil
         )
 
         didFail = false
         FeedImageProbe.log(id: mediaID, event: .requestStarted, url: requestKey)
 
-        if let cachedData = await imagePipeline.cachedImageData(for: request) {
+        if let best = await imagePipeline.bestCachedImageData(for: request) {
+            let sourceLabel = best.quality == targetQuality ? "memory" : "memory-tier-\(best.quality.rawValue)"
+            FeedImageProbe.log(id: mediaID, event: .cacheHitMemory, url: requestKey)
+            await assignDisplayImage(
+                from: best.data,
+                requestKey: requestKey,
+                cacheKey: cacheKey,
+                source: sourceLabel
+            )
+            if best.quality == targetQuality {
+                return
+            }
+        } else if let cachedData = await imagePipeline.cachedImageData(for: request) {
             FeedImageProbe.log(id: mediaID, event: .cacheHitMemory, url: requestKey)
             await assignDisplayImage(
                 from: cachedData,
@@ -315,12 +339,14 @@ private struct InteractiveImageRepresentable: UIViewRepresentable {
     let containerSize: CGSize
     let onSingleTap: (() -> Void)?
     let onDoubleTapLike: (() -> Void)?
+    let onPinchDeepZoom: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             mediaID: mediaID,
             onSingleTap: onSingleTap,
-            onDoubleTapLike: onDoubleTapLike
+            onDoubleTapLike: onDoubleTapLike,
+            onPinchDeepZoom: onPinchDeepZoom
         )
     }
 
@@ -341,6 +367,7 @@ private struct InteractiveImageRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: InteractiveImageUIView, context: Context) {
         context.coordinator.onSingleTap = onSingleTap
         context.coordinator.onDoubleTapLike = onDoubleTapLike
+        context.coordinator.onPinchDeepZoom = onPinchDeepZoom
         uiView.coordinator = context.coordinator
         uiView.backgroundFillColor = backgroundColor
         guard !uiView.isPinching else { return }
@@ -359,16 +386,19 @@ private struct InteractiveImageRepresentable: UIViewRepresentable {
         let mediaID: String
         var onSingleTap: (() -> Void)?
         var onDoubleTapLike: (() -> Void)?
+        var onPinchDeepZoom: (() -> Void)?
         weak var rootView: InteractiveImageUIView?
 
         init(
             mediaID: String,
             onSingleTap: (() -> Void)?,
-            onDoubleTapLike: (() -> Void)?
+            onDoubleTapLike: (() -> Void)?,
+            onPinchDeepZoom: (() -> Void)? = nil
         ) {
             self.mediaID = mediaID
             self.onSingleTap = onSingleTap
             self.onDoubleTapLike = onDoubleTapLike
+            self.onPinchDeepZoom = onPinchDeepZoom
         }
     }
 }
@@ -664,6 +694,7 @@ final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
         normalizedPinchAnchor = normalizedPoint(midpoint, in: frame)
         livePinchScale = 1
         isPinching = true
+        coordinator?.onPinchDeepZoom?()
 
         scrollView?.isScrollEnabled = false
         imageView.alpha = 0

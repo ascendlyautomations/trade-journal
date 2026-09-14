@@ -35,12 +35,29 @@ final class ProfileShellViewModel {
         self.isOwner = isOwner
     }
 
+    /// Ensures the Trades section VM exists without changing the selected tab.
+    func ensureTradesSection() {
+        if trades == nil {
+            trades = TradesContainerViewModel(
+                profileID: profileID,
+                trades: data.trades,
+                rpc: data.rpc,
+                navigationCoordinator: navigationCoordinator,
+                detailCache: data.detailCache,
+                engagementStore: data.engagementStore,
+                isOwner: isOwner
+            )
+        }
+        trades?.applyBootstrap(latestState)
+    }
+
     /// Ensures the Posts section VM exists without changing the selected tab.
     func ensurePostsSection() {
         if posts == nil {
             posts = PostsContainerViewModel(
                 profileID: profileID,
                 profiles: data.profiles,
+                rpc: data.rpc,
                 navigationCoordinator: navigationCoordinator,
                 detailCache: data.detailCache,
                 engagementStore: data.engagementStore,
@@ -74,6 +91,51 @@ final class ProfileShellViewModel {
         }
         trades?.applyBootstrap(state)
         clips?.applyBootstrap(state)
+        stats?.applyBootstrap(state)
+        achievements?.applyBootstrap(state)
+    }
+
+    /// Applies bootstrap to every created section VM except Trades (journal mutation-owned).
+    func applyExcludingTrades(state: ProfileState) {
+        latestState = state
+        isOwner = state.isOwner
+        if let profileID = state.profileID {
+            self.profileID = profileID
+        }
+        posts?.applyBootstrap(state)
+        clips?.applyBootstrap(state)
+        stats?.applyBootstrap(state)
+        achievements?.applyBootstrap(state)
+    }
+
+    func applyExcludingPostsAndTrades(state: ProfileState) {
+        latestState = state
+        isOwner = state.isOwner
+        if let profileID = state.profileID {
+            self.profileID = profileID
+        }
+        clips?.applyBootstrap(state)
+        stats?.applyBootstrap(state)
+        achievements?.applyBootstrap(state)
+    }
+
+    func applyExcludingClipsAndTrades(state: ProfileState) {
+        latestState = state
+        isOwner = state.isOwner
+        if let profileID = state.profileID {
+            self.profileID = profileID
+        }
+        posts?.applyBootstrap(state)
+        stats?.applyBootstrap(state)
+        achievements?.applyBootstrap(state)
+    }
+
+    func applyExcludingPostsClipsAndTrades(state: ProfileState) {
+        latestState = state
+        isOwner = state.isOwner
+        if let profileID = state.profileID {
+            self.profileID = profileID
+        }
         stats?.applyBootstrap(state)
         achievements?.applyBootstrap(state)
     }
@@ -151,6 +213,7 @@ final class ProfileShellViewModel {
                 trades = TradesContainerViewModel(
                     profileID: profileID,
                     trades: data.trades,
+                    rpc: data.rpc,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
                     engagementStore: data.engagementStore,
@@ -164,6 +227,7 @@ final class ProfileShellViewModel {
                 posts = PostsContainerViewModel(
                     profileID: profileID,
                     profiles: data.profiles,
+                    rpc: data.rpc,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
                     engagementStore: data.engagementStore,
@@ -177,6 +241,7 @@ final class ProfileShellViewModel {
                 clips = ClipsContainerViewModel(
                     profileID: profileID,
                     feed: data.feed,
+                    rpc: data.rpc,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
                     engagementStore: data.engagementStore,
@@ -190,6 +255,7 @@ final class ProfileShellViewModel {
                 stats = StatsContainerViewModel(
                     profileID: profileID,
                     trades: data.trades,
+                    rpc: data.rpc,
                     achievements: data.achievements,
                     detailCache: data.detailCache
                 )
@@ -201,6 +267,7 @@ final class ProfileShellViewModel {
                 achievements = AchievementsContainerViewModel(
                     profileID: profileID,
                     achievements: data.achievements,
+                    rpc: data.rpc,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
                     engagementStore: data.engagementStore,

@@ -10,7 +10,10 @@ nonisolated struct DashboardRpcBootstrapRepository: DashboardBootstrapProviding 
     }
 
     func loadDashboardBootstrap(accountID: String?) async throws -> DashboardBootstrapV1 {
-        let args = DashboardRpcArguments(p_account_id: accountID, p_trade_limit: 500)
+        let args = DashboardRpcArguments(
+            p_account_id: accountID,
+            p_trade_limit: DashboardBootstrapTradeLimit.default
+        )
         let body = try JSONEncoder().encode(args)
         let value = try await client.call(
             .dashboard,
@@ -25,6 +28,11 @@ nonisolated struct DashboardRpcBootstrapRepository: DashboardBootstrapProviding 
         try value.validateContract()
         return value
     }
+}
+
+/// Recent trade window shipped in dashboard bootstrap — metrics/equity use full scoped history server-side.
+nonisolated enum DashboardBootstrapTradeLimit {
+    static let `default` = 120
 }
 
 private nonisolated struct DashboardRpcArguments: Encodable, Sendable {

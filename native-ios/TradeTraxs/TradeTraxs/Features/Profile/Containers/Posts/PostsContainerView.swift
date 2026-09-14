@@ -33,6 +33,9 @@ struct PostsContainerView: View {
                             ? .opacity
                             : .opacity.combined(with: .move(edge: .bottom))
                     )
+                    .task {
+                        await viewModel.loadMoreIfNeeded(currentPostID: post.id)
+                    }
                 }
             }
             .animation(

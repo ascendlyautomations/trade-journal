@@ -1,9 +1,9 @@
 "use client"
 
+import { UI_MODAL_CLOSE_BUTTON } from "@/lib/uiPrimitiveStyles"
 import { cn } from "./cn"
 
-export const MODAL_CLOSE_BUTTON_CLASS =
-  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-white/10 px-2.5 py-1.5 text-sm font-medium text-white opacity-90 transition hover:bg-white/20 hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 disabled:cursor-not-allowed disabled:opacity-50 md:h-auto md:w-auto md:min-h-0 md:min-w-0"
+export const MODAL_CLOSE_BUTTON_CLASS = UI_MODAL_CLOSE_BUTTON
 
 export type ModalCloseButtonProps = {
   onClick: () => void

@@ -4,6 +4,7 @@ import XCTest
 @MainActor
 final class AddTradeExperienceTests: XCTestCase {
     override func tearDown() {
+        GlobalUploadCoordinator.shared.resetForTesting()
         TradeJournalMutationStore.shared.invalidate()
         ContentMutationStore.shared.invalidate()
         super.tearDown()
@@ -98,6 +99,7 @@ final class AddTradeExperienceTests: XCTestCase {
         viewModel.contractsText = "1"
         viewModel.save()
         await waitFor { dismissed }
+        await waitFor { TradeJournalMutationStore.shared.revision == 1 }
         XCTAssertTrue(dismissed)
         XCTAssertEqual(TradeJournalMutationStore.shared.revision, 1)
     }
@@ -167,11 +169,13 @@ final class AddTradeExperienceTests: XCTestCase {
         viewModel.save()
         viewModel.save()
         await waitFor { dismissCount == 1 }
-        XCTAssertEqual(repo.saveCalls, 1)
+        XCTAssertEqual(GlobalUploadCoordinator.shared.jobs.count, 1)
+        await waitFor { repo.saveCalls == 1 }
         XCTAssertEqual(dismissCount, 1)
     }
 
-    func testFailedSavePreservesForm() async {
+    func testFailedSaveSurfacesGlobalUploadFailure() async {
+        var dismissed = false
         let cache = DetailPresentationCache()
         let viewModel = AddTradeViewModel(
             trades: AddTradeFailingRepository(),
@@ -180,7 +184,7 @@ final class AddTradeExperienceTests: XCTestCase {
             detailCache: cache,
             uploadService: AddTradeStubUpload(),
             objectStorage: AddTradeStubStorage(),
-            onDismiss: {}
+            onDismiss: { dismissed = true }
         )
         cache.seed(accounts: AddTradeFixtures.accounts(owner: ProfileID("user.real")), for: ProfileID("user.real"))
         viewModel.loadIfNeeded()
@@ -189,10 +193,11 @@ final class AddTradeExperienceTests: XCTestCase {
         viewModel.pnlText = "-20"
         viewModel.notesText = "Keep me"
         viewModel.save()
-        await waitFor { viewModel.formError != nil }
-        XCTAssertEqual(viewModel.symbolText, "CL")
-        XCTAssertEqual(viewModel.notesText, "Keep me")
-        XCTAssertEqual(viewModel.phase, .ready)
+        await waitFor { dismissed }
+        await waitFor {
+            GlobalUploadCoordinator.shared.jobs.contains { $0.phase == .failed }
+        }
+        XCTAssertTrue(dismissed)
     }
 
     func testMediaSelectionAndRemoval() async {
@@ -353,6 +358,10 @@ final class AddTradeExperienceTests: XCTestCase {
         viewModel.applyClipDraftFixture()
         viewModel.save()
         await waitFor { dismissed }
+        await waitFor {
+            GlobalUploadCoordinator.shared.jobs.isEmpty
+                || GlobalUploadCoordinator.shared.jobs.allSatisfy { $0.phase == .completed }
+        }
         XCTAssertNil(viewModel.tradeAwaitingClip)
         XCTAssertEqual(ContentMutationStore.shared.revision, 1)
         XCTAssertNotNil(ContentMutationStore.shared.latestReelID)
@@ -481,7 +490,7 @@ final class AddTradeExperienceTests: XCTestCase {
     func testInstrumentPickerSearchFiltersAllSections() {
         let snapshot = InstrumentPickerSnapshot(
             mostUsed: ["NQ"],
-            custom: ["TEST"],
+            custom: ["MNQ"],
             futures: ["ES", "MES"],
             stocks: ["AAPL"],
             options: [],
@@ -492,6 +501,7 @@ final class AddTradeExperienceTests: XCTestCase {
         XCTAssertTrue(filtered.futures.contains("ES"))
         XCTAssertTrue(filtered.futures.contains("MES"))
         XCTAssertTrue(filtered.custom.isEmpty)
+        XCTAssertTrue(filtered.mostUsed.isEmpty)
     }
 
     func testRiskRewardFormattingAndParsing() {
@@ -550,6 +560,7 @@ private struct AddTradeStubSession: SessionProviding {
 private final class AddTradeStubFeedRepository: FeedRepository, @unchecked Sendable {
     private(set) var attachCalls = 0
     var shouldFailAttach = false
+    private var lastCreatedReel: Reel?
 
     func feed(scope: FeedScope, contentFilter: FeedContentFilter, page: PageRequest) async throws -> FeedPageResult {
         FeedPageResult(items: [], nextCursor: nil, embeddedTrades: [])
@@ -576,14 +587,22 @@ private final class AddTradeStubFeedRepository: FeedRepository, @unchecked Senda
             viewerHasSeen: false
         )
     }
-    func reel(id: ReelID) async throws -> ReelLoadResult { throw AppError.unknown(message: "stub") }
+    func reel(id: ReelID) async throws -> ReelLoadResult {
+        guard let lastCreatedReel, lastCreatedReel.id == id else {
+            throw AppError.unknown(message: "stub")
+        }
+        return ReelLoadResult(reel: lastCreatedReel, embeddedTrade: nil)
+    }
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel> {
         CursorPage(items: AddTradeFixtures.unattachedReels(owner: profileID), nextCursor: nil)
     }
     func profileReels(for profileID: ProfileID) async throws -> ProfileReelsResult {
         ProfileReelsResult(reels: AddTradeFixtures.unattachedReels(owner: profileID), embeddedTrades: [])
     }
-    func createReel(_ reel: Reel) async throws -> Reel { reel }
+    func createReel(_ reel: Reel) async throws -> Reel {
+        lastCreatedReel = reel
+        return reel
+    }
     func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] {
         Array(AddTradeFixtures.unattachedReels(owner: profileID).prefix(limit))
     }

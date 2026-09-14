@@ -1,6 +1,12 @@
 import Foundation
 import OSLog
 
+enum UnauthorizedRefreshResult: Sendable {
+    case refreshed
+    case transientFailure
+    case sessionTerminated
+}
+
 /// Owns authentication state. Features observe ``state`` — they never touch Keychain.
 @Observable
 final class AuthenticationManager {
@@ -191,6 +197,79 @@ final class AuthenticationManager {
         isRetryingValidation = true
         state = .refreshing(session)
         await restoreSession()
+    }
+
+    /// Invoked when an authenticated API returns 401 — refresh once, then terminal logout if needed.
+    func attemptRefreshAfterUnauthorized() async -> UnauthorizedRefreshResult {
+        if restoreInFlight {
+            await waitForRestoreCompletion()
+            if state.isSessionReady {
+                return .refreshed
+            }
+        }
+
+        switch state {
+        case .unauthenticated, .failure, .unknown, .authenticating:
+            return .sessionTerminated
+        case .sessionValidationFailed:
+            return .transientFailure
+        case .refreshing:
+            await waitForRestoreCompletion()
+            return state.isSessionReady ? .refreshed : .transientFailure
+        case .authenticated, .locked:
+            break
+        }
+
+        guard let session = state.session else {
+            return .sessionTerminated
+        }
+
+        let generation = restorationGeneration
+        do {
+            let refreshed = try await AuthRefreshSingleFlight.shared.refresh(
+                fingerprint: SessionFingerprint.make(session),
+                generation: generation
+            ) {
+                try await self.emailProvider.refresh(session: session)
+            }
+            guard generation == restorationGeneration else {
+                return .transientFailure
+            }
+            try sessionManager.install(refreshed)
+            applyAuthenticated(refreshed, event: .tokenRefreshSucceeded)
+            await SessionNetworkGate.shared.markReady()
+            refreshCoordinator.schedule(for: refreshed)
+            return .refreshed
+        } catch let error as AuthenticationError {
+            if error.isTerminalRefreshFailure {
+                await handleExpiredSession()
+                return .sessionTerminated
+            }
+            if error.isTransientRefreshFailure {
+                lastSessionValidationError = error
+                state = .sessionValidationFailed(session, error)
+                await SessionNetworkGate.shared.markUnauthenticated()
+                return .transientFailure
+            }
+            await handleExpiredSession()
+            return .sessionTerminated
+        } catch is CancellationError {
+            return .transientFailure
+        } catch {
+            let mapped = AuthenticationError.fromRefreshFailure(error)
+            if mapped.isTerminalRefreshFailure {
+                await handleExpiredSession()
+                return .sessionTerminated
+            }
+            if mapped.isTransientRefreshFailure {
+                lastSessionValidationError = mapped
+                state = .sessionValidationFailed(session, mapped)
+                await SessionNetworkGate.shared.markUnauthenticated()
+                return .transientFailure
+            }
+            await handleExpiredSession()
+            return .sessionTerminated
+        }
     }
 
     var isValidationRetryInFlight: Bool { isRetryingValidation && restoreInFlight }

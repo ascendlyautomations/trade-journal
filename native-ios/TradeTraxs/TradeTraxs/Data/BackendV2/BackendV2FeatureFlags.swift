@@ -58,6 +58,7 @@ nonisolated enum BackendV2FeatureFlags {
         .propFirm,
         .activity,
         .explore,
+        .leaderboard,
         .calendar,
         .tradesList,
         .gettingStarted,

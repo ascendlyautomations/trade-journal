@@ -172,7 +172,7 @@ final class DataEnvironment {
             networking: networking,
             session: session
         )
-        let imageCache = InMemoryImageCache()
+        let imageCache = TieredImageCache()
         let cache = CacheStack(
             memory: PlaceholderMemoryCache(),
             disk: PlaceholderDiskCache(),
@@ -285,7 +285,7 @@ final class DataEnvironment {
                 session: session
             ),
             calendar: DefaultCalendarRepository(supabase: supabase, cache: cache),
-            leaderboard: DefaultLeaderboardRepository(supabase: supabase, cache: cache),
+            leaderboard: DefaultLeaderboardRepository(),
             explore: DefaultExploreRepository(supabase: supabase),
             search: DefaultSearchRepository(supabase: supabase, cache: cache),
             billing: billing,
@@ -389,7 +389,7 @@ final class DataEnvironment {
                 ),
                 followRequests: DefaultFollowRequestRepository(supabase: supabase, session: session),
                 calendar: DefaultCalendarRepository(supabase: supabase, cache: cache),
-                leaderboard: DefaultLeaderboardRepository(supabase: supabase, cache: cache),
+                leaderboard: DefaultLeaderboardRepository(),
                 explore: DefaultExploreRepository(supabase: supabase),
                 search: DefaultSearchRepository(supabase: supabase, cache: cache),
                 billing: DefaultBillingRepository(

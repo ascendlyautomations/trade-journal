@@ -9,8 +9,9 @@ import Observation
 final class LeaderboardSessionStore {
     static let shared = LeaderboardSessionStore()
 
-    /// Full public trade set — web `leaderboardSessionCache.trades`.
+    /// Full public trade set — legacy corpus path only (empty when V2 RPC rankings are active).
     private(set) var rawTrades: [LeaderboardTradeRow] = []
+    private(set) var usesServerRankings = false
     /// Ranked entries for the current timeframe (derived from ``rawTrades``).
     private(set) var rawEntries: [LeaderboardEntry] = []
     private(set) var profilesByID: [ProfileID: Profile] = [:]
@@ -43,6 +44,7 @@ final class LeaderboardSessionStore {
         category: LeaderboardCategory
     ) {
         rawTrades = trades
+        usesServerRankings = trades.isEmpty && !entries.isEmpty
         rawEntries = entries
         mergeProfiles(profiles, verified: verified, followers: followers)
         verifiedIDs = verified

@@ -62,12 +62,16 @@ struct SettingsSubscriptionView: View {
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Plan")
         .overlay {
-            if viewModel.isLoading {
+            if viewModel.isLoading, viewModel.status == nil {
                 ProgressView()
             }
         }
         .onAppear {
             viewModel.loadIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { notification in
+            guard let refreshed = notification.object as? BillingStatus else { return }
+            viewModel.applyForegroundEntitlementRefresh(refreshed)
         }
         .refreshable {
             await viewModel.refresh()
@@ -85,7 +89,17 @@ struct SettingsSubscriptionView: View {
                 SettingsInfoRow(title: "Renewal", value: renewalDetail)
             }
         } footer: {
-            Text(viewModel.membershipSummaryFooter)
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                if viewModel.isRefreshingEntitlements {
+                    HStack(spacing: ExperienceSpacing.xs) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Updating plan…")
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                    }
+                }
+                Text(viewModel.membershipSummaryFooter)
+            }
         }
     }
 

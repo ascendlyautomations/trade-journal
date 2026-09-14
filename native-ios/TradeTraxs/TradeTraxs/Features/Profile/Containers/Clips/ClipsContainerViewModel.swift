@@ -6,14 +6,19 @@ import Observation
 final class ClipsContainerViewModel {
     private(set) var state: ProfileSectionLoadState = .idle
     private(set) var items: [Reel] = []
+    private(set) var nextCursor: String?
 
     let profileOwnerID: ProfileID
     private(set) var isOwner: Bool
     private let feed: any FeedRepository
+    private let rpc: (any RPCClient)?
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
     private let engagementStore: EngagementStore?
     private var loadTask: Task<Void, Never>?
+    private var loadMoreTask: Task<Void, Never>?
+    private var isLoadingMore = false
+    private var paginationGeneration = 0
     private var hasLoaded = false
     private var isScreenOwned = false
     private var syncGeneration: UInt64 = 0
@@ -24,6 +29,7 @@ final class ClipsContainerViewModel {
     init(
         profileID: ProfileID,
         feed: any FeedRepository,
+        rpc: (any RPCClient)? = nil,
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
         engagementStore: EngagementStore? = nil,
@@ -32,6 +38,7 @@ final class ClipsContainerViewModel {
         self.profileOwnerID = profileID
         self.isOwner = isOwner
         self.feed = feed
+        self.rpc = rpc
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
         self.engagementStore = engagementStore
@@ -133,11 +140,36 @@ final class ClipsContainerViewModel {
         syncGeneration &+= 1
         let generation = syncGeneration
         loadTask?.cancel()
+        cancelLoadMore(reason: "refresh")
         await performLoad(generation: generation)
     }
 
     func loadMoreIfNeeded() async {
-        // Web Profile Clips loads the full list in one request.
+        guard let lastID = items.last?.id else { return }
+        await loadMoreIfNeeded(currentReelID: lastID)
+    }
+
+    func loadMoreIfNeeded(currentReelID: ReelID?) async {
+        guard hasLoaded, nextCursor != nil, loadMoreTask == nil, !isLoadingMore else { return }
+        guard let currentReelID, items.last?.id == currentReelID else { return }
+        let cursor = nextCursor
+        let generation = paginationGeneration
+        isLoadingMore = true
+        loadMoreTask = Task { @MainActor in
+            defer {
+                isLoadingMore = false
+                loadMoreTask = nil
+            }
+            await performLoadMore(cursor: cursor, generation: generation)
+        }
+    }
+
+    private func cancelLoadMore(reason: String) {
+        paginationGeneration &+= 1
+        loadMoreTask?.cancel()
+        loadMoreTask = nil
+        isLoadingMore = false
+        _ = reason
     }
 
     func openClip(_ reel: Reel) {
@@ -182,9 +214,27 @@ final class ClipsContainerViewModel {
         }
 
         state = items.isEmpty ? .loading : state
+        paginationGeneration &+= 1
         do {
-            // Web `fetchUserProfileReels` — full list + trade-linked visibility filter.
-            let result = try await feed.profileReels(for: profileOwnerID)
+            let pageReels: [Reel]
+            let cursor: String?
+            if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
+                let applied = try await ProfileTabBootstrapLoader.load(
+                    tab: .reels,
+                    profileID: profileOwnerID,
+                    rpc: rpc,
+                    cursor: nil
+                )
+                pageReels = applied.reels ?? []
+                cursor = applied.nextCursor
+            } else {
+                let result = try await feed.profileReels(for: profileOwnerID)
+                pageReels = result.reels
+                cursor = nil
+                if !result.embeddedTrades.isEmpty {
+                    detailCache.seed(trades: result.embeddedTrades)
+                }
+            }
             guard !Task.isCancelled else { return }
             guard generation == syncGeneration else {
                 #if DEBUG
@@ -201,17 +251,15 @@ final class ClipsContainerViewModel {
                     && OwnerProfileOptimisticStore.isListedOnOwnerProfile($0)
             }
             let beforeCount = items.count
-            let serverMerged = OwnerProfileOptimisticStore.merging(overlay: overlay, into: result.reels)
-            items = OwnerProfileOptimisticStore.merging(overlay: serverMerged, into: items)
+            let serverMerged = OwnerProfileOptimisticStore.merging(overlay: overlay, into: pageReels)
+            items = OwnerProfileOptimisticStore.merging(overlay: serverMerged, into: [])
+            nextCursor = cursor
             detailCache.seed(reels: items)
-            if !result.embeddedTrades.isEmpty {
-                detailCache.seed(trades: result.embeddedTrades)
-            }
             hasLoaded = true
             #if DEBUG
             ProfileClipsSync.logFetch(
                 userID: profileOwnerID.rawValue,
-                count: result.reels.count,
+                count: pageReels.count,
                 newPublishedReelID: trackedPublishedReelID?.rawValue
             )
             for reel in items {
@@ -229,10 +277,10 @@ final class ClipsContainerViewModel {
                     reelID: trackedPublishedReelID.rawValue
                 )
             }
-            ProfileClipsSync.logAuthoritativeReturned(generation: generation, count: result.reels.count)
+            ProfileClipsSync.logAuthoritativeReturned(generation: generation, count: pageReels.count)
             ProfileClipsSync.logReconciled(
                 beforeCount: beforeCount,
-                snapshotCount: result.reels.count,
+                snapshotCount: pageReels.count,
                 afterCount: items.count
             )
             ProfileClipsSync.logUIVisibleCount(items.count)
@@ -257,5 +305,47 @@ final class ClipsContainerViewModel {
             }
         }
         loadTask = nil
+    }
+
+    private func performLoadMore(cursor: String?, generation: Int) async {
+        guard generation == paginationGeneration else { return }
+        do {
+            let pageReels: [Reel]
+            let newCursor: String?
+            if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
+                let applied = try await ProfileTabBootstrapLoader.load(
+                    tab: .reels,
+                    profileID: profileOwnerID,
+                    rpc: rpc,
+                    cursor: cursor
+                )
+                pageReels = applied.reels ?? []
+                newCursor = applied.nextCursor
+            } else {
+                return
+            }
+            guard generation == paginationGeneration, !Task.isCancelled else { return }
+            if pageReels.isEmpty {
+                nextCursor = nil
+                return
+            }
+            appendUniqueReels(pageReels)
+            nextCursor = newCursor
+            state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            prefetchEngagement(for: pageReels.map(\.id))
+        } catch {
+            guard generation == paginationGeneration else { return }
+        }
+    }
+
+    private func appendUniqueReels(_ pageItems: [Reel]) {
+        let existing = Set(items.map(\.id))
+        let fresh = pageItems.filter { !existing.contains($0.id) }
+        guard !fresh.isEmpty else {
+            nextCursor = nil
+            return
+        }
+        items.append(contentsOf: fresh)
+        detailCache.seed(reels: items)
     }
 }

@@ -25,6 +25,7 @@ final class CreatePostViewModel {
     private let session: any SessionProviding
     private let uploadService: any UploadService
     private let objectStorage: any ObjectStorageProviding
+    private let uploadServices: GlobalUploadServices
     private let onDismiss: () -> Void
 
     private var viewerID: ProfileID?
@@ -36,12 +37,14 @@ final class CreatePostViewModel {
         session: any SessionProviding,
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
+        uploadServices: GlobalUploadServices,
         onDismiss: @escaping () -> Void
     ) {
         self.profiles = profiles
         self.session = session
         self.uploadService = uploadService
         self.objectStorage = objectStorage
+        self.uploadServices = uploadServices
         self.onDismiss = onDismiss
     }
 
@@ -98,7 +101,29 @@ final class CreatePostViewModel {
 
     func publish() {
         guard canPublish, publishTask == nil else { return }
-        publishTask = Task { await performPublish() }
+        formError = nil
+        guard validate() else { return }
+        guard let viewerID else {
+            formError = "Sign in to create a post."
+            return
+        }
+
+        let spec = PostUploadSpec(
+            authorID: viewerID,
+            bodyText: bodyText,
+            imageData: finalImageData
+        )
+        let jobID = GlobalUploadCoordinator.shared.enqueuePost(spec: spec, services: uploadServices)
+        bodyText = ""
+        clearImage()
+        phase = .ready
+        onDismiss()
+        GlobalUploadJobDiagnostics.log(
+            id: jobID,
+            kind: .post,
+            event: .composerDismissed,
+            taskCancelled: Task.isCancelled
+        )
     }
 
     func dismissRequested() {

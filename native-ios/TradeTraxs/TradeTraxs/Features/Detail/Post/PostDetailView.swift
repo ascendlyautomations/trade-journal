@@ -177,7 +177,7 @@ struct PostDetailView: View {
                 imagePipeline: imagePipeline,
                 emptyIcon: .photo,
                 accessibilityIdentifier: "detail.post.media",
-                deliveryQuality: .fullResolution,
+                deliveryQuality: .feedDetail,
                 auditSurface: "detail",
                 onDoubleTapLike: {
                     Task { await data.engagementStore.ensureLiked(on: .profilePost(post.id)) }
@@ -193,7 +193,7 @@ struct PostDetailView: View {
                         imagePipeline: imagePipeline,
                         emptyIcon: .photo,
                         accessibilityIdentifier: "detail.post.media.\(index)",
-                        deliveryQuality: .fullResolution,
+                        deliveryQuality: .feedDetail,
                         auditSurface: "detail",
                         onDoubleTapLike: {
                             Task { await data.engagementStore.ensureLiked(on: .profilePost(post.id)) }

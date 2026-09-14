@@ -141,8 +141,8 @@ struct TradeRoomsHomeView: View {
                     Text("Your Room")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(colors.onAccent)
-                        .padding(.horizontal, ExperienceSpacing.sm)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, ExperienceSpacing.xs)
+                        .padding(.vertical, ExperienceSpacing.xxs)
                         .background(colors.accent, in: Capsule())
                 }
                 .buttonStyle(.plain)

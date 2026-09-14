@@ -1,6 +1,12 @@
 "use client"
 
 import {
+  UI_DROPDOWN_ITEM,
+  UI_DROPDOWN_ITEM_DANGER,
+  UI_DROPDOWN_ITEM_DISABLED,
+  UI_DROPDOWN_MENU,
+} from "@/lib/uiPrimitiveStyles"
+import {
   useEffect,
   useLayoutEffect,
   useRef,
@@ -8,6 +14,7 @@ import {
   type ReactNode,
 } from "react"
 import { createPortal } from "react-dom"
+import { cn } from "./cn"
 
 export type DropdownMenuItem = {
   id: string
@@ -111,7 +118,7 @@ export default function DropdownMenu({
       <div
         ref={menuRef}
         role="menu"
-        className={`fixed z-[10070] min-w-[10.5rem] overflow-hidden rounded-lg border border-white/15 bg-[#0f172a] py-1 shadow-xl ${menuClassName}`}
+        className={cn(UI_DROPDOWN_MENU, menuClassName)}
         style={{
           top: menuPosition.top,
           left: menuPosition.left,
@@ -130,13 +137,14 @@ export default function DropdownMenu({
               item.onSelect()
               setOpen(false)
             }}
-            className={`flex w-full items-center px-3 py-2 text-left text-sm transition ${
+            className={cn(
               item.disabled
-                ? "cursor-default text-gray-400"
+                ? UI_DROPDOWN_ITEM_DISABLED
                 : item.variant === "danger"
-                  ? "text-red-300 hover:bg-white/10"
-                  : "text-gray-100 hover:bg-white/10"
-            } disabled:opacity-100`}
+                  ? UI_DROPDOWN_ITEM_DANGER
+                  : UI_DROPDOWN_ITEM,
+              "disabled:opacity-100"
+            )}
           >
             {item.label}
           </button>

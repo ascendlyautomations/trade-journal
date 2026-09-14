@@ -4,6 +4,7 @@ import XCTest
 @MainActor
 final class CreateExperienceTests: XCTestCase {
     override func tearDown() {
+        GlobalUploadCoordinator.shared.resetForTesting()
         ContentMutationStore.shared.invalidate()
         super.tearDown()
     }
@@ -15,6 +16,7 @@ final class CreateExperienceTests: XCTestCase {
             session: CreateStubSession(userID: CreatePostFixtures.viewerID.rawValue),
             uploadService: CreateStubUpload(),
             objectStorage: CreateStubStorage(),
+            uploadServices: makeUploadServices(),
             onDismiss: { dismissed = true }
         )
         viewModel.loadIfNeeded()
@@ -26,26 +28,30 @@ final class CreateExperienceTests: XCTestCase {
         viewModel.bodyText = "Hello traders"
         viewModel.publish()
         await waitFor { dismissed }
+        await waitFor { ContentMutationStore.shared.revision == 1 }
         XCTAssertTrue(dismissed)
         XCTAssertEqual(ContentMutationStore.shared.revision, 1)
     }
 
-    func testCreatePostFailedPublishPreservesDraft() async {
+    func testCreatePostFailedPublishSurfacesGlobalUploadFailure() async {
         var dismissed = false
         let viewModel = CreatePostViewModel(
             profiles: CreateFailingProfileRepository(),
             session: CreateStubSession(userID: "user.real"),
             uploadService: CreateStubUpload(),
             objectStorage: CreateStubStorage(),
+            uploadServices: makeUploadServices(profiles: CreateFailingProfileRepository()),
             onDismiss: { dismissed = true }
         )
         viewModel.loadIfNeeded()
         await waitFor { viewModel.phase == .ready }
         viewModel.bodyText = "Keep me"
         viewModel.publish()
-        await waitFor { viewModel.formError != nil }
-        XCTAssertEqual(viewModel.bodyText, "Keep me")
-        XCTAssertFalse(dismissed)
+        await waitFor { dismissed }
+        await waitFor {
+            GlobalUploadCoordinator.shared.jobs.contains { $0.phase == .failed }
+        }
+        XCTAssertTrue(dismissed)
     }
 
     func testAchievementRequiresImageAndPayoutForPayoutType() async {
@@ -54,8 +60,7 @@ final class CreateExperienceTests: XCTestCase {
             achievements: CreateStubAchievementRepository(),
             trades: CreateStubTradeRepository(),
             session: CreateStubSession(userID: CreateAchievementFixtures.viewerID.rawValue),
-            uploadService: CreateStubUpload(),
-            objectStorage: CreateStubStorage(),
+            uploadServices: makeUploadServices(),
             onDismiss: { dismissed = true }
         )
         viewModel.loadIfNeeded()
@@ -71,11 +76,12 @@ final class CreateExperienceTests: XCTestCase {
         #endif
         viewModel.payoutAmountText = "2500"
         viewModel.publish()
-        await waitFor { dismissed || viewModel.formError == nil }
-        // Dev path should dismiss after valid publish when image fixture applied.
-        if viewModel.finalImageData != nil {
-            XCTAssertTrue(dismissed)
+        await waitFor { dismissed }
+        await waitFor {
+            GlobalUploadCoordinator.shared.jobs.isEmpty
+                || GlobalUploadCoordinator.shared.jobs.allSatisfy { $0.phase == .completed }
         }
+        XCTAssertTrue(dismissed)
     }
 
     func testOnlyUserCreatableAchievementKindsExposed() {
@@ -144,15 +150,18 @@ final class CreateExperienceTests: XCTestCase {
         await waitFor { viewModel.phase == .ready }
         viewModel.applyScreenshotFixture(filled: true)
         XCTAssertNotNil(viewModel.draft)
-        XCTAssertFalse(viewModel.captionEnabled)
         XCTAssertNotNil(viewModel.linkedTradeSummary)
         let linked = try XCTUnwrap(viewModel.linkedTrade)
         XCTAssertNotNil(ProfileCardMediaPresence.tradeMedia(in: linked))
+        viewModel.captionText = "Caught this breakout perfectly today"
+        viewModel.selectLinkedTrade(linked)
+        XCTAssertEqual(viewModel.captionText, "Caught this breakout perfectly today")
         viewModel.clearLinkedTrade()
-        XCTAssertTrue(viewModel.captionEnabled)
+        XCTAssertEqual(viewModel.captionText, "Caught this breakout perfectly today")
         viewModel.captionText = "Standalone note"
         viewModel.publish()
         await waitFor { dismissed }
+        await waitFor { ContentMutationStore.shared.revision >= 1 }
         XCTAssertEqual(ContentMutationStore.shared.latestReelID?.rawValue, "dev-reel-created")
     }
 
@@ -177,12 +186,11 @@ final class CreateExperienceTests: XCTestCase {
     }
 
     func testCreateReelDuplicatePublishPrevention() async {
-        let feed = CreateCountingFeedRepository()
         var dismissed = false
         let viewModel = CreateReelViewModel(
-            feed: feed,
+            feed: CreateStubFeedRepository(),
             trades: CreateStubTradeRepository(),
-            session: CreateStubSession(userID: "user.real"),
+            session: CreateStubSession(userID: CreateReelFixtures.viewerID.rawValue),
             detailCache: DetailPresentationCache(),
             uploadService: CreateStubUpload(),
             objectStorage: CreateStubStorage(),
@@ -190,12 +198,14 @@ final class CreateExperienceTests: XCTestCase {
         )
         viewModel.loadIfNeeded()
         await waitFor { viewModel.phase == .ready }
-        viewModel.draft = CreateReelFixtures.screenshotDraft()
+        viewModel.applyScreenshotFixture(filled: true)
         viewModel.publish()
+        let jobsAfterFirst = GlobalUploadCoordinator.shared.jobs.count
         viewModel.publish()
+        XCTAssertEqual(GlobalUploadCoordinator.shared.jobs.count, jobsAfterFirst)
+        XCTAssertEqual(jobsAfterFirst, 1)
         await waitFor { dismissed }
-        XCTAssertEqual(feed.createCalls, 1)
-        XCTAssertEqual(ContentMutationStore.shared.revision, 1)
+        await waitFor { ContentMutationStore.shared.revision >= 1 }
     }
 
     func testCreateReelPreflightBlocksTradeWithExistingClip() async {
@@ -217,14 +227,12 @@ final class CreateExperienceTests: XCTestCase {
         draft.linkedTradeID = trade.id
         viewModel.draft = draft
         viewModel.publish()
-        await waitFor { viewModel.formError != nil }
-        XCTAssertFalse(dismissed)
+        await waitFor { dismissed }
+        await waitFor {
+            GlobalUploadCoordinator.shared.jobs.contains { $0.phase == .failed }
+        }
         XCTAssertEqual(feed.createCalls, 0)
         XCTAssertEqual(feed.preflightCalls, 1)
-        XCTAssertEqual(
-            viewModel.formError,
-            "This trade already has a clip attached."
-        )
     }
 
     func testMediaVideoDurationFormattingAndLimits() {
@@ -250,6 +258,22 @@ final class CreateExperienceTests: XCTestCase {
 }
 
 // MARK: - Stubs
+
+@MainActor
+private func makeUploadServices(
+    profiles: any ProfileRepository = CreateStubProfileRepository(),
+    feed: any FeedRepository = CreateStubFeedRepository()
+) -> GlobalUploadServices {
+    GlobalUploadServices(
+        feed: feed,
+        profiles: profiles,
+        trades: nil,
+        achievements: CreateStubAchievementRepository(),
+        uploadService: CreateStubUpload(),
+        objectStorage: CreateStubStorage(),
+        detailCache: DetailPresentationCache()
+    )
+}
 
 private struct CreateStubSession: SessionProviding {
     let userID: String?

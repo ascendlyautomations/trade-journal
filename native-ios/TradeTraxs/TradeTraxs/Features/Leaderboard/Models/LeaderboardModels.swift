@@ -51,6 +51,17 @@ enum LeaderboardTimeframe: String, CaseIterable, Hashable, Sendable {
         guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return nil }
         return DateIntervalValue(start: start, end: end)
     }
+
+    /// Backend V2 `rpc_v1_leaderboard_bootstrap` timeframe parameter.
+    var rpcValue: String {
+        switch self {
+        case .today: return "today"
+        case .week: return "week"
+        case .month: return "month"
+        case .year: return "year"
+        case .allTime: return "all_time"
+        }
+    }
 }
 
 /// Ranking / display metric. Sorting uses fields already available from the leaderboard

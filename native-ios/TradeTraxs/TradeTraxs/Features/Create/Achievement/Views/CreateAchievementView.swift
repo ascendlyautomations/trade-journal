@@ -33,8 +33,7 @@ struct CreateAchievementView: View {
                 achievements: data.achievements,
                 trades: data.trades,
                 session: data.session,
-                uploadService: data.uploadService,
-                objectStorage: data.objectStorage,
+                uploadServices: data.globalUploadServices(),
                 prefill: prefill,
                 onDismiss: onDismiss
             )

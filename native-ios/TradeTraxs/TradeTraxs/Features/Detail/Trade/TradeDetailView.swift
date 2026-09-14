@@ -166,8 +166,10 @@ struct TradeDetailView: View {
                                 socialTradeContent(trade, scrollProxy: proxy)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, ExperienceSpacing.md)
                 .padding(.top, ExperienceSpacing.xs)
                 .padding(.bottom, ExperienceSpacing.lg)
@@ -312,7 +314,7 @@ struct TradeDetailView: View {
         )
         .accessibilityIdentifier("detail.trade.headline")
 
-        PublicTradeMetaChipRow(trade: trade)
+        PublicTradeMetaChipRow(trade: trade, layout: .wrap)
             .accessibilityIdentifier("detail.trade.badges")
 
         TradeDetailQuickStatsSection(trade: trade)

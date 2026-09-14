@@ -31,6 +31,9 @@ struct ClipsContainerView: View {
                             ? .opacity
                             : .opacity.combined(with: .move(edge: .bottom))
                     )
+                    .task {
+                        await viewModel.loadMoreIfNeeded(currentReelID: reel.id)
+                    }
                 }
             }
             .animation(

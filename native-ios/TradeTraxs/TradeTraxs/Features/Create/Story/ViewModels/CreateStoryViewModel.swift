@@ -32,6 +32,7 @@ final class CreateStoryViewModel {
     private let detailCache: DetailPresentationCache
     private let uploadService: any UploadService
     private let objectStorage: any ObjectStorageProviding
+    private let uploadServices: GlobalUploadServices
     private let onPublished: (Story) -> Void
     private let onDismiss: () -> Void
 
@@ -46,6 +47,7 @@ final class CreateStoryViewModel {
         detailCache: DetailPresentationCache,
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
+        uploadServices: GlobalUploadServices,
         onPublished: @escaping (Story) -> Void,
         onDismiss: @escaping () -> Void
     ) {
@@ -55,6 +57,7 @@ final class CreateStoryViewModel {
         self.detailCache = detailCache
         self.uploadService = uploadService
         self.objectStorage = objectStorage
+        self.uploadServices = uploadServices
         self.onPublished = onPublished
         self.onDismiss = onDismiss
     }
@@ -142,7 +145,39 @@ final class CreateStoryViewModel {
 
     func publish() {
         guard canPublish, publishTask == nil else { return }
-        publishTask = Task { await performPublish() }
+        formError = nil
+        guard let viewerID, let imageData else {
+            formError = "Missing story image."
+            return
+        }
+        if let message = StoryUploadValidation.validate(
+            data: imageData,
+            contentType: contentType,
+            fileName: originalFileName
+        ) {
+            formError = message
+            return
+        }
+
+        let jobID = GlobalUploadCoordinator.shared.enqueueStory(
+            spec: StoryUploadSpec(
+                authorID: viewerID,
+                imageData: imageData,
+                contentType: contentType,
+                originalFileName: originalFileName
+            ),
+            services: uploadServices,
+            onSuccess: onPublished
+        )
+        clearImage()
+        phase = .ready
+        onDismiss()
+        GlobalUploadJobDiagnostics.log(
+            id: jobID,
+            kind: .story,
+            event: .composerDismissed,
+            taskCancelled: Task.isCancelled
+        )
     }
 
     func dismissRequested() {

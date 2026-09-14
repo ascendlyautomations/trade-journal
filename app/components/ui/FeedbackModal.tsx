@@ -1,5 +1,10 @@
 "use client"
 
+import {
+  UI_FEEDBACK_MODAL_DISMISS,
+  UI_FEEDBACK_MODAL_PANEL_BASE,
+  UI_MODAL_BACKDROP,
+} from "@/lib/uiPrimitiveStyles"
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "./cn"
@@ -7,18 +12,18 @@ import ModalCloseButton from "./ModalCloseButton"
 import { useModalScrollLock } from "./modalLayout"
 import type { FeedbackPopupType } from "./feedback-popup-types"
 
-const panelStyles: Record<FeedbackPopupType, string> = {
-  success: "border-green-500/70 bg-[#0f172a]/95 backdrop-blur-xl",
-  error: "border-red-500/70 bg-[#0f172a]/95 backdrop-blur-xl",
-  warning: "border-amber-500/70 bg-[#0f172a]/95 backdrop-blur-xl",
-  info: "border-blue-500/70 bg-[#0f172a]/95 backdrop-blur-xl",
+const panelBorderStyles: Record<FeedbackPopupType, string> = {
+  success: "border-positive/50",
+  error: "border-negative/50",
+  warning: "border-warning/50",
+  info: "border-info/50",
 }
 
 const messageStyles: Record<FeedbackPopupType, string> = {
-  success: "text-green-400",
-  error: "text-red-400",
-  warning: "text-amber-400",
-  info: "text-blue-400",
+  success: "text-positive",
+  error: "text-negative",
+  warning: "text-warning",
+  info: "text-info",
 }
 
 /** Above ScrollableModalShell / DetailModalShell overlays (z-[10050]). */
@@ -75,11 +80,11 @@ export default function FeedbackModal({
 
   return createPortal(
     <div className={cn(FEEDBACK_MODAL_OVERLAY_CLASS, overlayClassName)}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className={UI_MODAL_BACKDROP} />
       <div
         className={cn(
-          "relative w-full max-w-sm rounded-xl border px-6 py-5 text-center shadow-xl",
-          panelStyles[type]
+          UI_FEEDBACK_MODAL_PANEL_BASE,
+          panelBorderStyles[type]
         )}
       >
         <ModalCloseButton
@@ -87,7 +92,7 @@ export default function FeedbackModal({
           className="absolute right-3 top-5 z-10"
         />
         {title ? (
-          <h3 className="mb-2 pr-12 text-base font-semibold text-white">
+          <h3 className="mb-2 pr-12 text-base font-semibold text-foreground">
             {title}
           </h3>
         ) : null}
@@ -99,11 +104,7 @@ export default function FeedbackModal({
         >
           {message}
         </p>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-4 rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15"
-        >
+        <button type="button" onClick={onClose} className={UI_FEEDBACK_MODAL_DISMISS}>
           {dismissLabel}
         </button>
       </div>

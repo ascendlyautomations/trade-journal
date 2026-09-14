@@ -59,8 +59,12 @@ struct ImageCropEditorView: View {
         FeedMediaLayout.exceedsFeedPortraitLimit(imageAspect: imageAspect)
     }
 
+    /// Aspect-fill pan/pinch — required for fixed ratios and Original when Feed caps portrait at 4:5.
     private var usesInteractiveCrop: Bool {
-        FeedMediaLayout.requiresFillCrop(
+        if aspectOption == .original, originalExceedsFeedLimit {
+            return true
+        }
+        return FeedMediaLayout.requiresFillCrop(
             imageAspect: imageAspect,
             aspectOption: aspectOption
         )
@@ -87,12 +91,6 @@ struct ImageCropEditorView: View {
                 if usesInteractiveCrop {
                     Text("This is how your image will appear in the Feed.")
                         .experienceStyle(.caption, color: colors.secondaryText)
-                    zoomControl
-                    Text("Drag to reposition. Pinch or use the slider to zoom.")
-                        .experienceStyle(.caption2, color: colors.tertiaryText)
-                } else {
-                    Text("The entire image will appear in your post.")
-                        .experienceStyle(.caption2, color: colors.tertiaryText)
                 }
             }
             .padding(.horizontal, ExperienceSpacing.md)
@@ -108,14 +106,6 @@ struct ImageCropEditorView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Choose Photo") {
                         Task { await confirmCrop() }
-                    }
-                    .disabled(isSaving)
-                }
-                ToolbarItem(placement: .bottomBar) {
-                    Button("Reset") {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            resetTransform()
-                        }
                     }
                     .disabled(isSaving)
                 }
@@ -202,10 +192,6 @@ struct ImageCropEditorView: View {
                 CropEditorImagePreview(image: sourceImage, geometry: geometry)
                     .frame(width: width, height: height)
 
-                #if DEBUG
-                CropEditorDebugOverlay(viewportSize: frameSize)
-                #endif
-
                 cropMask(width: width, height: height)
 
                 ImageCropViewportInteraction(
@@ -283,37 +269,6 @@ struct ImageCropEditorView: View {
             translation: transform.offset,
             maxUserScale: preset.maxZoom
         )
-    }
-
-    private var zoomControl: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text("Zoom")
-                .experienceStyle(.caption, color: colors.secondaryText)
-            Slider(
-                value: Binding(
-                    get: { transform.zoom },
-                    set: { newValue in
-                        guard activeViewportSize.width > 0, activeViewportSize.height > 0 else { return }
-                        let anchor = CGPoint(
-                            x: activeViewportSize.width / 2,
-                            y: activeViewportSize.height / 2
-                        )
-                        let magnification = newValue / max(transform.zoom, 0.01)
-                        transform = ImageCropViewportMath.zoomAroundAnchor(
-                            anchor: anchor,
-                            imagePixelSize: imagePixelSize,
-                            viewportSize: activeViewportSize,
-                            startUserScale: transform.zoom,
-                            startTranslation: transform.offset,
-                            magnification: magnification,
-                            maxUserScale: preset.maxZoom
-                        )
-                        panSessionStartTranslation = transform.offset
-                    }
-                ),
-                in: ImageCropViewportMath.minUserScale...preset.maxZoom
-            )
-        }
     }
 
     private func commitTransform(

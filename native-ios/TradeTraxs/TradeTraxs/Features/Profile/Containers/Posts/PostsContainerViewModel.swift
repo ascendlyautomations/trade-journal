@@ -10,10 +10,15 @@ final class PostsContainerViewModel {
     let profileOwnerID: ProfileID
     private(set) var isOwner: Bool
     private let profiles: any ProfileRepository
+    private let rpc: (any RPCClient)?
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
     private let engagementStore: EngagementStore?
     private var loadTask: Task<Void, Never>?
+    private var loadMoreTask: Task<Void, Never>?
+    private var nextCursor: String?
+    private var isLoadingMore = false
+    private var paginationGeneration = 0
     private var hasLoaded = false
     private var isScreenOwned = false
     private var syncGeneration: UInt64 = 0
@@ -24,6 +29,7 @@ final class PostsContainerViewModel {
     init(
         profileID: ProfileID,
         profiles: any ProfileRepository,
+        rpc: (any RPCClient)? = nil,
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
         engagementStore: EngagementStore? = nil,
@@ -32,6 +38,7 @@ final class PostsContainerViewModel {
         self.profileOwnerID = profileID
         self.isOwner = isOwner
         self.profiles = profiles
+        self.rpc = rpc
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
         self.engagementStore = engagementStore
@@ -133,8 +140,19 @@ final class PostsContainerViewModel {
         await performLoad(generation: generation)
     }
 
-    func loadMoreIfNeeded() async {
-        // Web Profile Posts loads the full wall in one request.
+    func loadMoreIfNeeded(currentPostID: PostID?) async {
+        guard hasLoaded, nextCursor != nil, loadMoreTask == nil, !isLoadingMore else { return }
+        guard let currentPostID, items.last?.id == currentPostID else { return }
+        let cursor = nextCursor
+        let generation = paginationGeneration
+        isLoadingMore = true
+        loadMoreTask = Task { @MainActor in
+            defer {
+                isLoadingMore = false
+                loadMoreTask = nil
+            }
+            await performLoadMore(cursor: cursor, generation: generation)
+        }
     }
 
     func openPost(_ post: Post) {
@@ -177,12 +195,27 @@ final class PostsContainerViewModel {
         }
 
         state = items.isEmpty ? .loading : state
+        paginationGeneration &+= 1
         do {
-            // Web: `profile_posts` select * / user_id / created_at desc (+ pinned client sort).
-            let page = try await profiles.wallPosts(
-                for: profileOwnerID,
-                page: PageRequest(limit: 500)
-            )
+            let pageItems: [Post]
+            let cursor: String?
+            if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
+                let applied = try await ProfileTabBootstrapLoader.load(
+                    tab: .posts,
+                    profileID: profileOwnerID,
+                    rpc: rpc,
+                    cursor: nil
+                )
+                pageItems = applied.posts ?? []
+                cursor = applied.nextCursor
+            } else {
+                let page = try await profiles.wallPosts(
+                    for: profileOwnerID,
+                    page: PageRequest(limit: ProfileTabBootstrapLoader.defaultPageSize)
+                )
+                pageItems = page.items
+                cursor = page.nextCursor
+            }
             guard !Task.isCancelled else { return }
             guard generation == syncGeneration else {
                 #if DEBUG
@@ -198,15 +231,16 @@ final class PostsContainerViewModel {
                 $0.authorProfileID == profileOwnerID
             }
             let beforeCount = items.count
-            let serverMerged = OwnerProfileOptimisticStore.merging(overlay: overlay, into: page.items)
-            items = OwnerProfileOptimisticStore.merging(overlay: serverMerged, into: items)
+            let serverMerged = OwnerProfileOptimisticStore.merging(overlay: overlay, into: pageItems)
+            items = OwnerProfileOptimisticStore.merging(overlay: serverMerged, into: [])
+            nextCursor = cursor
             detailCache.seed(posts: items)
             hasLoaded = true
             #if DEBUG
-            ProfilePostsSync.logAuthoritativeReturned(generation: generation, count: page.items.count)
+            ProfilePostsSync.logAuthoritativeReturned(generation: generation, count: pageItems.count)
             ProfilePostsSync.logReconciled(
                 beforeCount: beforeCount,
-                snapshotCount: page.items.count,
+                snapshotCount: pageItems.count,
                 afterCount: items.count
             )
             ProfilePostsSync.logUIVisibleCount(items.count)
@@ -231,5 +265,51 @@ final class PostsContainerViewModel {
             }
         }
         loadTask = nil
+    }
+
+    private func performLoadMore(cursor: String?, generation: Int) async {
+        do {
+            let pageItems: [Post]
+            let newCursor: String?
+            if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
+                let applied = try await ProfileTabBootstrapLoader.load(
+                    tab: .posts,
+                    profileID: profileOwnerID,
+                    rpc: rpc,
+                    cursor: cursor
+                )
+                pageItems = applied.posts ?? []
+                newCursor = applied.nextCursor
+            } else {
+                let page = try await profiles.wallPosts(
+                    for: profileOwnerID,
+                    page: PageRequest(cursor: cursor, limit: ProfileTabBootstrapLoader.defaultPageSize)
+                )
+                pageItems = page.items
+                newCursor = page.nextCursor
+            }
+            guard generation == paginationGeneration, !Task.isCancelled else { return }
+            if pageItems.isEmpty {
+                nextCursor = nil
+                return
+            }
+            appendUniquePosts(pageItems)
+            nextCursor = newCursor
+            state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            prefetchEngagement(for: pageItems.map(\.id))
+        } catch {
+            guard generation == paginationGeneration else { return }
+        }
+    }
+
+    private func appendUniquePosts(_ pageItems: [Post]) {
+        let existing = Set(items.map(\.id))
+        let fresh = pageItems.filter { !existing.contains($0.id) }
+        guard !fresh.isEmpty else {
+            nextCursor = nil
+            return
+        }
+        items.append(contentsOf: fresh)
+        detailCache.seed(posts: items)
     }
 }

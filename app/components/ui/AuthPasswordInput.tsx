@@ -105,7 +105,7 @@ export default function AuthPasswordInput({
           aria-label={visible ? "Hide password" : "Show password"}
           aria-pressed={visible}
           onClick={() => setVisible((prev) => !prev)}
-          className="absolute inset-y-0 right-3 flex items-center justify-center p-0 leading-none text-gray-400 transition hover:text-gray-200"
+          className="absolute inset-y-0 right-3 flex items-center justify-center p-0 leading-none text-muted-foreground transition hover:text-foreground"
         >
           {visible ? <EyeOffIcon /> : <EyeIcon />}
         </button>

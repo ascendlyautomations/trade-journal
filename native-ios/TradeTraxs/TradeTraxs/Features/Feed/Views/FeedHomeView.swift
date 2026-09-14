@@ -157,13 +157,12 @@ struct FeedHomeView: View {
             #endif
         }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
-            // Private journal inserts do not belong in Feed.
             switch TradeJournalMutationStore.shared.latest {
-            case .created(let trade) where trade.visibility == .public:
-                Task { await viewModel.refresh(trigger: .journalMutation) }
-            case .updated(let trade) where trade.visibility == .public:
-                Task { await viewModel.refresh(trigger: .journalMutation) }
-            case .deleted:
+            case .created(let trade), .updated(let trade):
+                viewModel.applyJournalPublicTrade(trade)
+            case .deleted(let id, _):
+                viewModel.applyJournalPublicTradeRemoval(tradeID: id)
+            case .bulkImport:
                 Task { await viewModel.refresh(trigger: .journalMutation) }
             default:
                 break

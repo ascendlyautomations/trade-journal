@@ -14,7 +14,7 @@ nonisolated enum ImageFidelityTrace {
         ProcessInfo.processInfo.arguments.contains("-uitesting-feed-image-diagnostics")
             || ProcessInfo.processInfo.environment["FEED_IMAGE_DIAGNOSTICS"] == "1"
         #else
-        ProcessInfo.processInfo.arguments.contains("-uitesting-feed-image-diagnostics")
+        false
         #endif
     }
 

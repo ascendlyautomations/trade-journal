@@ -30,6 +30,7 @@ final class SettingsSubscriptionViewModel {
     private(set) var productsState: SettingsSubscriptionProductsState = .idle
     private(set) var actionState: SettingsSubscriptionActionState = .idle
     private(set) var isLoading = false
+    private(set) var isRefreshingEntitlements = false
     private(set) var errorMessage: String?
     private(set) var actionMessage: String?
     var selectedProductID: String?
@@ -127,7 +128,15 @@ final class SettingsSubscriptionViewModel {
     func loadIfNeeded() {
         guard !hasLoaded else { return }
         hasLoaded = true
+        if let cached = SessionBillingEntitlementStore.shared.status {
+            status = cached
+        }
         Task { await refreshAll(reloadProducts: true) }
+    }
+
+    func applyForegroundEntitlementRefresh(_ refreshed: BillingStatus) {
+        status = refreshed
+        errorMessage = nil
     }
 
     func refresh() async {
@@ -228,10 +237,19 @@ final class SettingsSubscriptionViewModel {
     }
 
     private func refreshAll(reloadProducts: Bool) async {
-        isLoading = status == nil
+        let blocking = status == nil
+        if blocking {
+            isLoading = true
+        } else {
+            isRefreshingEntitlements = true
+        }
+        defer {
+            isLoading = false
+            isRefreshingEntitlements = false
+        }
+
         guard let userID = await session.currentUserID else {
             errorMessage = "Sign in to view your plan."
-            isLoading = false
             return
         }
 
@@ -239,7 +257,6 @@ final class SettingsSubscriptionViewModel {
         if reloadProducts, showsFreePlanDetails {
             await loadProductsIfNeeded(force: false)
         }
-        isLoading = false
     }
 
     private func reconcileEntitlements(profileID: ProfileID? = nil) async {
@@ -248,7 +265,9 @@ final class SettingsSubscriptionViewModel {
 
         do {
             try? await storeKit.syncVerifiedTransactionsToServer()
-            status = try await billing.refreshEntitlements(for: profile)
+            let refreshed = try await billing.refreshEntitlements(for: profile)
+            status = refreshed
+            SessionBillingEntitlementStore.shared.apply(refreshed)
             errorMessage = nil
         } catch {
             if userID.rawValue.hasPrefix("dev.") {

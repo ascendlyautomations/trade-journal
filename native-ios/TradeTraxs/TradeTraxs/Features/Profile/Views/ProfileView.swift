@@ -184,8 +184,13 @@ struct ProfileView: View {
         }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
             guard contentStore.isOwner else { return }
-            if case .deleted(let id, _) = TradeJournalMutationStore.shared.latest {
+            switch TradeJournalMutationStore.shared.latest {
+            case .created(let trade), .updated(let trade):
+                screen.applyJournalTradeMutation(trade)
+            case .deleted(let id, _):
                 screen.applyOptimisticPinnedRemoval(contentType: .trade, contentID: id.rawValue)
+            default:
+                break
             }
         }
         .onChange(of: screen.state.profileID) { _, _ in

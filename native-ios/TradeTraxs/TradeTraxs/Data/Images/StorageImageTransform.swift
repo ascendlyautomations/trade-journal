@@ -89,12 +89,23 @@ nonisolated enum StorageImageTransform {
     }
 
     static func preset(for purpose: ImagePurpose, delivery: ImageDeliveryQuality) -> Preset? {
-        guard delivery == .feedDisplay else { return nil }
-        switch purpose {
-        case .profileAvatar: return .avatar
-        case .tradeScreenshot, .postImage: return .feedThumb
-        case .storyMedia: return .story
-        case .reelThumbnail: return .reelThumb
+        switch delivery {
+        case .fullResolution:
+            return nil
+        case .feedDetail:
+            switch purpose {
+            case .profileAvatar: return .avatar
+            case .tradeScreenshot, .postImage: return .feedDetail
+            case .storyMedia: return .story
+            case .reelThumbnail: return .reelThumb
+            }
+        case .feedDisplay:
+            switch purpose {
+            case .profileAvatar: return .avatar
+            case .tradeScreenshot, .postImage: return .feedThumb
+            case .storyMedia: return .story
+            case .reelThumbnail: return .reelThumb
+            }
         }
     }
 }

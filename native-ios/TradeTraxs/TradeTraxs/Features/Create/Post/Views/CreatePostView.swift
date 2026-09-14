@@ -26,6 +26,7 @@ struct CreatePostView: View {
                 session: data.session,
                 uploadService: data.uploadService,
                 objectStorage: data.objectStorage,
+                uploadServices: data.globalUploadServices(),
                 onDismiss: onDismiss
             )
         )

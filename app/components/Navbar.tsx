@@ -49,6 +49,27 @@ import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
 import { isNativeIos } from "@/lib/nativePlatform"
 import { NATIVE_IOS_OPEN_APP_MENU_EVENT } from "@/lib/nativeIosAppMenu"
 import { useMobileAutoHideNavbar } from "@/app/components/useMobileAutoHideNavbar"
+import {
+  NAV_ACCOUNT_DROPDOWN_PANEL,
+  NAV_CHROME_BAR,
+  NAV_CHROME_FIXED_ROOT,
+  NAV_CHROME_MOBILE_SCROLL,
+  NAV_CTA_PRIMARY,
+  NAV_CTA_PRIMARY_MD,
+  NAV_DIVIDER,
+  NAV_DROPDOWN_PANEL,
+  NAV_ITEM_ACTIVE,
+  NAV_ITEM_INACTIVE,
+  NAV_ITEM_INACTIVE_HOVER_SURFACE,
+  NAV_ITEM_MUTED_HOVER_SURFACE,
+  NAV_LINK_SECONDARY_HOVER_ACCENT,
+  NAV_MENU_ROW,
+  NAV_MENU_ROW_DESTRUCTIVE,
+  NAV_SECTION_LABEL,
+  NAV_SKELETON_PULSE,
+  NAV_UNREAD_BADGE,
+  NAV_UNREAD_BADGE_ABSOLUTE,
+} from "@/lib/navChromeStyles"
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -87,8 +108,8 @@ export default function Navbar() {
   const showMobileNav = !!user || demoActive
   const showReturnToApp = isAuthenticatedUser && isHomePage
   const returnToAppButtonClassName = isHomePage
-    ? "inline-flex shrink-0 rounded bg-blue-500 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600"
-    : "hidden shrink-0 rounded bg-blue-500 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600 md:inline-flex"
+    ? `inline-flex shrink-0 ${NAV_CTA_PRIMARY_MD}`
+    : `hidden shrink-0 md:inline-flex ${NAV_CTA_PRIMARY_MD}`
   const isActive = (path: string) => pathname === path
   const isGroupActive = (paths: string[]) =>
     paths.some((p) => pathname.startsWith(p))
@@ -567,12 +588,10 @@ export default function Navbar() {
         ? "flex w-full items-center justify-between gap-2 rounded px-3 py-2"
         : "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5"
     const state = isActive(item.href)
-      ? "bg-blue-500/20 text-blue-300"
+      ? NAV_ITEM_ACTIVE
       : item.proOnly && !isProUser
-        ? "text-gray-400 hover:bg-white/10"
-        : layout === "desktop"
-          ? "text-gray-300 hover:bg-white/10"
-          : "hover:bg-white/10 text-gray-300"
+        ? NAV_ITEM_MUTED_HOVER_SURFACE
+        : NAV_ITEM_INACTIVE_HOVER_SURFACE
     return `${base} ${state}`
   }
 
@@ -609,12 +628,12 @@ export default function Navbar() {
             <div
               className={
                 layout === "desktop"
-                  ? "mx-2 my-1 border-t border-white/10 px-1 pt-2 pb-1"
-                  : "mx-1 my-1 border-t border-white/10 px-2 pt-2 pb-1"
+                  ? "mx-2 my-1 border-t border-border px-1 pt-2 pb-1"
+                  : "mx-1 my-1 border-t border-border px-2 pt-2 pb-1"
               }
               role="presentation"
             >
-              <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+              <span className={NAV_SECTION_LABEL}>
                 TradeTraxs Pro
               </span>
             </div>
@@ -641,7 +660,7 @@ export default function Navbar() {
   const notificationBellControl = (
     iconClassName: string,
     wrapperClassName = "",
-    badgeClassName = "absolute -right-2 -top-1 min-w-[1.25rem] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-xs tabular-nums text-white"
+    badgeClassName = NAV_UNREAD_BADGE_ABSOLUTE
   ) => (
     <div
       className={`relative shrink-0 cursor-pointer ${wrapperClassName}`.trim()}
@@ -734,8 +753,8 @@ export default function Navbar() {
   const navTriggerClass = (active: boolean) =>
     `shrink-0 rounded px-2 py-1 transition ${
       active
-        ? "bg-blue-500/20 text-blue-300"
-        : "text-gray-300 hover:text-white"
+        ? NAV_ITEM_ACTIVE
+        : NAV_ITEM_INACTIVE
     }`
 
   const renderMoreOverflowItem = (id: DesktopNavOverflowId) => {
@@ -746,8 +765,8 @@ export default function Navbar() {
           href="/messages"
           className={`flex items-center justify-between gap-2 rounded px-3 py-2 ${
             isActive("/messages")
-              ? "bg-blue-500/20 text-blue-300"
-              : "text-gray-300 hover:bg-white/10"
+              ? NAV_ITEM_ACTIVE
+              : NAV_ITEM_INACTIVE_HOVER_SURFACE
           }`}
           onClick={() => {
             void handleToggleMessages()
@@ -757,7 +776,7 @@ export default function Navbar() {
         >
           <span>Messages</span>
           {unreadMessagesCount > 0 ? (
-            <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs tabular-nums text-white">
+            <span className={NAV_UNREAD_BADGE}>
               {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
             </span>
           ) : null}
@@ -772,8 +791,8 @@ export default function Navbar() {
           href="/beta"
           className={`block rounded px-3 py-2 ${
             isActive("/beta")
-              ? "bg-blue-500/20 text-blue-300"
-              : "text-gray-300 hover:bg-white/10"
+              ? NAV_ITEM_ACTIVE
+              : NAV_ITEM_INACTIVE_HOVER_SURFACE
           }`}
           onClick={() => {
             setActiveMenu(null)
@@ -800,15 +819,15 @@ export default function Navbar() {
                 "/achievements",
                 "/analyst",
               ]) || moreSubmenu === "analytics"
-                ? "bg-blue-500/20 text-blue-300"
-                : "text-gray-300 hover:bg-white/10"
+                ? NAV_ITEM_ACTIVE
+                : NAV_ITEM_INACTIVE_HOVER_SURFACE
             }`}
           >
             <span>Analytics</span>
             <span aria-hidden>{moreSubmenu === "analytics" ? "▾" : "▸"}</span>
           </button>
           {moreSubmenu === "analytics" ? (
-            <div className="border-t border-white/10 pb-1 pl-2">
+            <div className="border-t border-border pb-1 pl-2">
               {renderAnalyticsDropdown("desktop")}
             </div>
           ) : null}
@@ -829,23 +848,23 @@ export default function Navbar() {
                 "/leaderboard",
                 "/explore",
               ]) || moreSubmenu === "community"
-                ? "bg-blue-500/20 text-blue-300"
-                : "text-gray-300 hover:bg-white/10"
+                ? NAV_ITEM_ACTIVE
+                : NAV_ITEM_INACTIVE_HOVER_SURFACE
             }`}
           >
             <span>Community</span>
             <span aria-hidden>{moreSubmenu === "community" ? "▾" : "▸"}</span>
           </button>
           {moreSubmenu === "community" ? (
-            <div className="border-t border-white/10 pb-1 pl-2">
+            <div className="border-t border-border pb-1 pl-2">
               {communityLinks.map((item) => (
                 <IntentPrefetchLink
                   key={item.href}
                   href={item.href}
                   className={`block rounded px-3 py-2 ${
                     isActive(item.href)
-                      ? "bg-blue-500/20 text-blue-300"
-                      : "text-gray-300 hover:bg-white/10"
+                      ? NAV_ITEM_ACTIVE
+                      : NAV_ITEM_INACTIVE_HOVER_SURFACE
                   }`}
                   onClick={() => {
                     setActiveMenu(null)
@@ -869,7 +888,7 @@ export default function Navbar() {
   const navbar = (
     <div
       ref={navRef}
-      className={`fixed left-0 top-0 z-[9999] w-full bg-[#0b1f3a] pt-[var(--safe-area-top)] text-gray-100 transition-transform duration-200 ease-out will-change-transform ${
+      className={`${NAV_CHROME_FIXED_ROOT} transition-transform duration-200 ease-out will-change-transform ${
         mobileNavbarHidden ? "max-md:-translate-y-full md:translate-y-0" : "translate-y-0"
       } ${
         mobileMenuOpen
@@ -877,7 +896,7 @@ export default function Navbar() {
           : "overflow-visible"
       }`}
     >
-      <div className="flex h-16 w-full shrink-0 items-center border-b border-white/10 bg-[#0b1f3a]">
+      <div className={NAV_CHROME_BAR}>
         <div className="flex h-full w-full items-center gap-2 px-4 md:gap-3 md:px-6">
         {/* LEFT */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -890,7 +909,7 @@ export default function Navbar() {
           </IntentPrefetchLink>
 
           {!user && !isHomePage ? (
-            <IntentPrefetchLink href="/faq" className="hidden md:inline text-sm text-gray-200 hover:text-blue-400 transition">
+            <IntentPrefetchLink href="/faq" className={`hidden md:inline text-sm transition ${NAV_LINK_SECONDARY_HOVER_ACCENT}`}>
               FAQ
             </IntentPrefetchLink>
           ) : null}
@@ -901,8 +920,8 @@ export default function Navbar() {
                 href="/faq"
                 className={`shrink-0 rounded px-2 py-1 transition ${
                   isActive("/faq")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
               >
                 FAQ
@@ -912,8 +931,8 @@ export default function Navbar() {
                   href="/pricing"
                   className={`shrink-0 rounded px-2 py-1 transition ${
                     isActive("/pricing")
-                      ? "bg-blue-500/20 text-blue-300"
-                      : "text-gray-300 hover:text-white"
+                      ? NAV_ITEM_ACTIVE
+                      : NAV_ITEM_INACTIVE
                   }`}
                 >
                   Pricing
@@ -946,7 +965,7 @@ export default function Navbar() {
                 >
                   Messages
                   {unreadMessagesCount > 0 ? (
-                    <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs tabular-nums text-white">
+                    <span className={NAV_UNREAD_BADGE}>
                       {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
                     </span>
                   ) : null}
@@ -1014,7 +1033,7 @@ export default function Navbar() {
                     Profile
                   </IntentPrefetchLink>
                 ) : (
-                  <span className="shrink-0 rounded px-2 py-1 text-gray-400">
+                  <span className="shrink-0 rounded px-2 py-1 text-muted-foreground">
                     Profile
                   </span>
                 )}
@@ -1025,8 +1044,8 @@ export default function Navbar() {
                   href="/messages"
                   className={`inline-flex shrink-0 items-center gap-2 rounded px-2 py-1 transition ${
                     isActive("/messages")
-                      ? "bg-blue-500/20 text-blue-300"
-                      : "text-gray-300 hover:text-white"
+                      ? NAV_ITEM_ACTIVE
+                      : NAV_ITEM_INACTIVE
                   }`}
                   onClick={() => {
                     void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
@@ -1037,7 +1056,7 @@ export default function Navbar() {
                 >
                   Messages
                   {unreadMessagesCount > 0 ? (
-                    <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs tabular-nums text-white">
+                    <span className={NAV_UNREAD_BADGE}>
                       {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
                     </span>
                   ) : null}
@@ -1063,7 +1082,7 @@ export default function Navbar() {
                     Analytics ▾
                   </button>
                   {activeMenu === "analytics" ? (
-                    <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
+                    <div className={NAV_DROPDOWN_PANEL}>
                       {renderAnalyticsDropdown("desktop")}
                     </div>
                   ) : null}
@@ -1087,15 +1106,15 @@ export default function Navbar() {
                     Community ▾
                   </button>
                   {activeMenu === "community" ? (
-                    <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
+                    <div className={NAV_DROPDOWN_PANEL}>
                       {communityLinks.map((item) => (
                         <IntentPrefetchLink
                           key={item.href}
                           href={item.href}
                           className={`block rounded px-3 py-2 ${
                             isActive(item.href)
-                              ? "bg-blue-500/20 text-blue-300"
-                              : "text-gray-300 hover:bg-white/10"
+                              ? NAV_ITEM_ACTIVE
+                              : NAV_ITEM_INACTIVE_HOVER_SURFACE
                           }`}
                         >
                           {item.label}
@@ -1118,7 +1137,7 @@ export default function Navbar() {
                     More ▾
                   </button>
                   {activeMenu === "more" ? (
-                    <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
+                    <div className={NAV_DROPDOWN_PANEL}>
                       {overflowDisplayIds.map((id) =>
                         renderMoreOverflowItem(id)
                       )}
@@ -1148,8 +1167,8 @@ export default function Navbar() {
                 href="/admin"
                 className={`md:hidden shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
                   isGroupActive(["/admin"])
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-200 hover:text-blue-400"
+                    ? NAV_ITEM_ACTIVE
+                    : `${NAV_LINK_SECONDARY_HOVER_ACCENT}`
                 }`}
               >
                 Admin
@@ -1161,12 +1180,12 @@ export default function Navbar() {
                 ? notificationBellControl(
                     "text-lg leading-none",
                     "inline-flex items-center justify-center px-1 py-1",
-                    "absolute -right-0.5 -top-0.5 min-w-[1rem] rounded-full bg-red-500 px-1 py-px text-center text-[10px] leading-tight tabular-nums text-white"
+                    `absolute -right-0.5 -top-0.5 min-w-[1rem] px-1 py-px text-center text-[10px] leading-tight ${NAV_UNREAD_BADGE}`
                   )
                 : null}
               <button
                 type="button"
-                className="shrink-0 text-2xl leading-none text-white px-1 py-1"
+                className="shrink-0 px-1 py-1 text-2xl leading-none text-chrome-foreground"
                 aria-expanded={isOpen}
                 aria-label={isOpen ? "Close menu" : "Open menu"}
                 onClick={() => {
@@ -1189,7 +1208,7 @@ export default function Navbar() {
             {!isHomePage && user ? (
               <div className="hidden items-center gap-3 md:flex">
                 {isAdmin ? (
-                  <IntentPrefetchLink href="/admin" className="text-sm hover:text-blue-400">
+                  <IntentPrefetchLink href="/admin" className="text-sm hover:text-nav-link-hover">
                     Admin
                   </IntentPrefetchLink>
                 ) : null}
@@ -1225,24 +1244,24 @@ export default function Navbar() {
                         className="h-8 w-8"
                       />
                     ) : (
-                      <div className="h-8 w-8 animate-pulse rounded-full bg-white/10" aria-hidden />
+                      <div className={`h-8 w-8 ${NAV_SKELETON_PULSE}`} aria-hidden />
                     )}
                     {!profileChromePending ? (
                       <span>{profile?.username ?? user?.email?.split("@")[0]}</span>
                     ) : (
-                      <div className="h-4 w-20 animate-pulse rounded bg-white/10" />
+                      <div className={`h-4 w-20 ${NAV_SKELETON_PULSE}`} />
                     )}
                   </button>
 
                   {accountMenuOpen ? (
-                    <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg">
+                    <div className={NAV_ACCOUNT_DROPDOWN_PANEL}>
                       <button
                         type="button"
                         onClick={() => {
                           setAccountMenuOpen(false)
                           router.push("/settings#account")
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                        className={NAV_MENU_ROW}
                       >
                         Settings
                       </button>
@@ -1252,7 +1271,7 @@ export default function Navbar() {
                           setAccountMenuOpen(false)
                           router.push(affiliateMenuItem.href)
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                        className={NAV_MENU_ROW}
                       >
                         {affiliateMenuItem.label}
                       </button>
@@ -1262,7 +1281,7 @@ export default function Navbar() {
                           setAccountMenuOpen(false)
                           router.push("/help")
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                        className={NAV_MENU_ROW}
                       >
                         Help Center
                       </button>
@@ -1272,7 +1291,7 @@ export default function Navbar() {
                           setAccountMenuOpen(false)
                           setReviewModalOpen(true)
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                        className={NAV_MENU_ROW}
                       >
                         Leave a Review
                       </button>
@@ -1281,7 +1300,7 @@ export default function Navbar() {
                         onClick={() => {
                           void handleSignOut()
                         }}
-                        className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
+                        className={NAV_MENU_ROW_DESTRUCTIVE}
                       >
                         Sign Out
                       </button>
@@ -1295,14 +1314,14 @@ export default function Navbar() {
           loading ? null : (
           <IntentPrefetchLink
             href="/login"
-            className="shrink-0 rounded bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600"
+            className={`shrink-0 px-4 py-2 ${NAV_CTA_PRIMARY}`}
           >
             Login
           </IntentPrefetchLink>
           )
         ) : loading ? null : (
           <div className="flex shrink-0 items-center gap-3">
-            <IntentPrefetchLink href="/faq" className="md:hidden text-sm text-gray-200 hover:text-blue-400 transition">
+            <IntentPrefetchLink href="/faq" className={`md:hidden text-sm transition ${NAV_LINK_SECONDARY_HOVER_ACCENT}`}>
               FAQ
             </IntentPrefetchLink>
             <button type="button" onClick={() => router.push("/login")} className="border px-4 py-2 rounded shrink-0">
@@ -1315,8 +1334,8 @@ export default function Navbar() {
       </div>
 
       {mobileMenuOpen ? (
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-t border-white/10 bg-[#0b1f3a] [webkit-overflow-scrolling:touch] md:hidden">
-          <div className="flex w-full flex-col gap-1 px-4 pb-[calc(0.75rem+var(--safe-area-bottom)+var(--app-tab-bar-height))] pt-1.5 text-sm text-white md:px-6">
+        <div className={`${NAV_CHROME_MOBILE_SCROLL} [webkit-overflow-scrolling:touch]`}>
+          <div className="flex w-full flex-col gap-1 px-4 pb-[calc(0.75rem+var(--safe-area-bottom)+var(--app-tab-bar-height))] pt-1.5 text-sm text-chrome-foreground md:px-6">
           {isNativeIos() ? (
             <>
               {/* Native iOS: primary tabs live in the bottom bar — this is More. */}
@@ -1324,22 +1343,22 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={handleReturnToApp}
-                  className="rounded-lg bg-blue-500 px-3 py-1.5 font-medium text-white transition hover:bg-blue-600"
+                  className={`rounded-lg px-3 py-1.5 font-medium ${NAV_CTA_PRIMARY}`}
                 >
                   Return to App
                 </button>
               ) : null}
               {user ? <GettingStartedMobileEntry placement="menu" /> : null}
 
-              <p className="px-3 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              <p className="px-3 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Trading
               </p>
               <IntentPrefetchLink
                 href="/calendar"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/calendar")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
                 onClick={closeMobile}
               >
@@ -1349,8 +1368,8 @@ export default function Navbar() {
                 href="/trades"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/trades")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
                 onClick={closeMobile}
               >
@@ -1360,10 +1379,10 @@ export default function Navbar() {
                 href="/backtest"
                 className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition ${
                   isActive("/backtest")
-                    ? "bg-blue-500/20 text-blue-300"
+                    ? NAV_ITEM_ACTIVE
                     : isProUser
-                      ? "text-gray-300 hover:text-white"
-                      : "text-gray-400 hover:bg-white/10"
+                      ? NAV_ITEM_INACTIVE
+                      : NAV_ITEM_MUTED_HOVER_SURFACE
                 }`}
                 onClick={closeMobile}
               >
@@ -1374,10 +1393,10 @@ export default function Navbar() {
                 href="/analyst"
                 className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition ${
                   isActive("/analyst")
-                    ? "bg-blue-500/20 text-blue-300"
+                    ? NAV_ITEM_ACTIVE
                     : isProUser
-                      ? "text-gray-300 hover:text-white"
-                      : "text-gray-400 hover:bg-white/10"
+                      ? NAV_ITEM_INACTIVE
+                      : NAV_ITEM_MUTED_HOVER_SURFACE
                 }`}
                 onClick={closeMobile}
               >
@@ -1388,8 +1407,8 @@ export default function Navbar() {
                 href="/import"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/import")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
                 onClick={closeMobile}
               >
@@ -1399,10 +1418,10 @@ export default function Navbar() {
                 href="/analytics/propfirm"
                 className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition ${
                   isActive("/analytics/propfirm")
-                    ? "bg-blue-500/20 text-blue-300"
+                    ? NAV_ITEM_ACTIVE
                     : isProUser
-                      ? "text-gray-300 hover:text-white"
-                      : "text-gray-400 hover:bg-white/10"
+                      ? NAV_ITEM_INACTIVE
+                      : NAV_ITEM_MUTED_HOVER_SURFACE
                 }`}
                 onClick={closeMobile}
               >
@@ -1413,8 +1432,8 @@ export default function Navbar() {
                 href="/achievements"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/achievements")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
                 onClick={closeMobile}
               >
@@ -1424,23 +1443,23 @@ export default function Navbar() {
                 href="/streaks"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/streaks")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
                 onClick={closeMobile}
               >
                 Streaks
               </IntentPrefetchLink>
 
-              <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Community
               </p>
               <IntentPrefetchLink
                 href="/explore"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/explore")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
                 onClick={closeMobile}
               >
@@ -1450,8 +1469,8 @@ export default function Navbar() {
                 href="/community"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/community") || pathname.startsWith("/room/")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
                 onClick={closeMobile}
               >
@@ -1461,20 +1480,20 @@ export default function Navbar() {
                 href="/leaderboard"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/leaderboard")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
                 onClick={closeMobile}
               >
                 Leaderboard
               </IntentPrefetchLink>
 
-              <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Account
               </p>
               <button
                 type="button"
-                className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-gray-300 transition hover:text-white"
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left transition ${NAV_ITEM_INACTIVE}`}
                 onClick={() => {
                   void handleToggleNotifications()
                   closeMobile()
@@ -1483,14 +1502,14 @@ export default function Navbar() {
               >
                 <span>Notifications</span>
                 {unreadCount > 0 ? (
-                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs text-white tabular-nums">
+                  <span className={`px-2 py-0.5 text-xs tabular-nums ${NAV_UNREAD_BADGE}`}>
                     {badgeText(unreadCount)}
                   </span>
                 ) : null}
               </button>
               <IntentPrefetchLink
                 href="/settings#subscription"
-                className="rounded-lg px-3 py-1.5 text-gray-300 transition hover:text-white"
+                className={`rounded-lg px-3 py-1.5 transition ${NAV_ITEM_INACTIVE}`}
                 onClick={closeMobile}
               >
                 Billing / Subscription
@@ -1499,8 +1518,8 @@ export default function Navbar() {
                 href="/referrals"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/referrals")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
                 onClick={closeMobile}
               >
@@ -1508,7 +1527,7 @@ export default function Navbar() {
               </IntentPrefetchLink>
               <IntentPrefetchLink
                 href="/settings#account"
-                className="rounded-lg px-3 py-1.5 text-gray-300 transition hover:text-white"
+                className={`rounded-lg px-3 py-1.5 transition ${NAV_ITEM_INACTIVE}`}
                 onClick={closeMobile}
               >
                 Settings
@@ -1522,20 +1541,20 @@ export default function Navbar() {
                     "/affiliate/payout-setup",
                     "/payouts",
                   ])
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
                 onClick={closeMobile}
               >
                 {affiliateMenuItem.label}
               </IntentPrefetchLink>
 
-              <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Support
               </p>
               <button
                 type="button"
-                className="rounded-lg px-3 py-1.5 text-left text-gray-300 transition hover:text-white"
+                className={`rounded-lg px-3 py-1.5 text-left transition ${NAV_ITEM_INACTIVE}`}
                 onClick={() => {
                   closeMobile()
                   setReviewModalOpen(true)
@@ -1545,7 +1564,7 @@ export default function Navbar() {
               </button>
               <button
                 type="button"
-                className="rounded-lg px-3 py-1.5 text-left text-gray-300 transition hover:text-white"
+                className={`rounded-lg px-3 py-1.5 text-left transition ${NAV_ITEM_INACTIVE}`}
                 onClick={() => {
                   closeMobile()
                   setBugReportModalOpen(true)
@@ -1557,8 +1576,8 @@ export default function Navbar() {
                 href="/feature-requests"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/feature-requests")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
+                    ? NAV_ITEM_ACTIVE
+                    : NAV_ITEM_INACTIVE
                 }`}
                 onClick={closeMobile}
               >
@@ -1566,21 +1585,21 @@ export default function Navbar() {
               </IntentPrefetchLink>
               <IntentPrefetchLink
                 href="/help"
-                className="rounded-lg px-3 py-1.5 text-gray-300 transition hover:text-white"
+                className={`rounded-lg px-3 py-1.5 transition ${NAV_ITEM_INACTIVE}`}
                 onClick={closeMobile}
               >
                 Help / Support
               </IntentPrefetchLink>
               <IntentPrefetchLink
                 href="/privacy"
-                className="rounded-lg px-3 py-1.5 text-gray-300 transition hover:text-white"
+                className={`rounded-lg px-3 py-1.5 transition ${NAV_ITEM_INACTIVE}`}
                 onClick={closeMobile}
               >
                 Privacy Policy
               </IntentPrefetchLink>
               <IntentPrefetchLink
                 href="/terms"
-                className="rounded-lg px-3 py-1.5 text-gray-300 transition hover:text-white"
+                className={`rounded-lg px-3 py-1.5 transition ${NAV_ITEM_INACTIVE}`}
                 onClick={closeMobile}
               >
                 Terms of Service
@@ -1588,7 +1607,7 @@ export default function Navbar() {
 
               {(profile?.is_beta_tester || isAdmin) ? (
                 <>
-                  <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                  <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Developer
                   </p>
                   {profile?.is_beta_tester ? (
@@ -1608,7 +1627,7 @@ export default function Navbar() {
                   {isAdmin ? (
                     <IntentPrefetchLink
                       href="/admin"
-                      className="rounded-lg px-3 py-1.5 text-white hover:text-blue-400"
+                      className="rounded-lg px-3 py-1.5 text-chrome-foreground hover:text-nav-link-hover"
                       onClick={closeMobile}
                     >
                       Admin
@@ -1617,7 +1636,7 @@ export default function Navbar() {
                 </>
               ) : null}
 
-              <div className="mt-1 border-t border-white/10 pt-1.5">
+              <div className="mt-1 border-t border-border pt-1.5">
                 <button
                   type="button"
                   className="w-full rounded-lg px-3 py-1.5 text-left text-sm text-red-400 hover:text-red-300"
@@ -1635,7 +1654,7 @@ export default function Navbar() {
             <button
               type="button"
               onClick={handleReturnToApp}
-              className="rounded-lg bg-blue-500 px-3 py-1.5 font-medium text-white transition hover:bg-blue-600"
+              className={`rounded-lg px-3 py-1.5 font-medium ${NAV_CTA_PRIMARY}`}
             >
               Return to App
             </button>
@@ -1645,8 +1664,8 @@ export default function Navbar() {
             href="/app"
             className={`rounded-lg px-3 py-1.5 transition ${
               isActive("/app")
-                ? "bg-blue-500/20 text-blue-300"
-                : "text-gray-300 hover:text-white"
+                ? NAV_ITEM_ACTIVE
+                : NAV_ITEM_INACTIVE
             }`}
             onClick={closeMobile}
           >
@@ -1657,8 +1676,8 @@ export default function Navbar() {
             href="/dashboard"
             className={`rounded-lg px-3 py-1.5 transition ${
               isActive("/dashboard")
-                ? "bg-blue-500/20 text-blue-300"
-                : "text-gray-300 hover:text-white"
+                ? NAV_ITEM_ACTIVE
+                : NAV_ITEM_INACTIVE
             }`}
             onClick={closeMobile}
           >
@@ -1669,8 +1688,8 @@ export default function Navbar() {
             href="/trades"
             className={`rounded-lg px-3 py-1.5 transition ${
               isActive("/trades")
-                ? "bg-blue-500/20 text-blue-300"
-                : "text-gray-300 hover:text-white"
+                ? NAV_ITEM_ACTIVE
+                : NAV_ITEM_INACTIVE
             }`}
             onClick={closeMobile}
           >
@@ -1681,8 +1700,8 @@ export default function Navbar() {
             href="/feed"
             className={`rounded-lg px-3 py-1.5 transition ${
               isActive("/feed")
-                ? "bg-blue-500/20 text-blue-300"
-                : "text-gray-300 hover:text-white"
+                ? NAV_ITEM_ACTIVE
+                : NAV_ITEM_INACTIVE
             }`}
             onClick={closeMobile}
           >
@@ -1694,8 +1713,8 @@ export default function Navbar() {
               href={profileHref}
               className={`rounded-lg px-3 py-1.5 transition ${
                 isGroupActive(["/profile"])
-                  ? "bg-blue-500/20 text-blue-300"
-                  : "text-gray-300 hover:text-white"
+                  ? NAV_ITEM_ACTIVE
+                  : NAV_ITEM_INACTIVE
               }`}
               onClick={() => {
                 void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
@@ -1707,15 +1726,15 @@ export default function Navbar() {
               Profile
             </IntentPrefetchLink>
           ) : (
-            <span className="rounded-lg px-3 py-1.5 text-gray-400">Profile</span>
+            <span className="rounded-lg px-3 py-1.5 text-muted-foreground">Profile</span>
           )}
 
           <IntentPrefetchLink
             href="/messages"
             className={`flex items-center justify-between rounded-lg px-3 py-1.5 transition ${
               isActive("/messages")
-                ? "bg-blue-500/20 text-blue-300"
-                : "text-gray-300 hover:text-white"
+                ? NAV_ITEM_ACTIVE
+                : NAV_ITEM_INACTIVE
             }`}
             onClick={() => {
               void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
@@ -1727,7 +1746,7 @@ export default function Navbar() {
           >
             <span>Messages</span>
             {unreadMessagesCount > 0 ? (
-              <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full tabular-nums">
+              <span className={`text-xs px-2 py-0.5 rounded-full tabular-nums ${NAV_UNREAD_BADGE}`}>
                 {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
               </span>
             ) : null}
@@ -1745,13 +1764,13 @@ export default function Navbar() {
                   "/achievements",
                   "/analyst",
                 ])
-                  ? "bg-blue-500/20 text-blue-300"
-                  : "text-gray-300 hover:text-white"
+                  ? NAV_ITEM_ACTIVE
+                  : NAV_ITEM_INACTIVE
               }`}
               onClick={() => toggleSection("analytics")}
             >
               <span>Analytics</span>
-              <span className="text-gray-400 tabular-nums">{openSection === "analytics" ? "−" : "+"}</span>
+              <span className="text-muted-foreground tabular-nums">{openSection === "analytics" ? "−" : "+"}</span>
             </button>
             {openSection === "analytics" ? (
               <div className="mt-1 space-y-0.5 pl-3 text-sm">
@@ -1765,13 +1784,13 @@ export default function Navbar() {
               type="button"
               className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 transition ${
                 isGroupActive(["/community", "/trade-rooms", "/leaderboard", "/explore"])
-                  ? "bg-blue-500/20 text-blue-300"
-                  : "text-gray-300 hover:text-white"
+                  ? NAV_ITEM_ACTIVE
+                  : NAV_ITEM_INACTIVE
               }`}
               onClick={() => toggleSection("community")}
             >
               <span>Community</span>
-              <span className="text-gray-400 tabular-nums">{openSection === "community" ? "−" : "+"}</span>
+              <span className="text-muted-foreground tabular-nums">{openSection === "community" ? "−" : "+"}</span>
             </button>
             {openSection === "community" ? (
               <div className="mt-1 space-y-0.5 pl-3 text-sm">
@@ -1781,8 +1800,8 @@ export default function Navbar() {
                     href={item.href}
                     className={`block rounded-lg px-3 py-1.5 ${
                       isActive(item.href)
-                        ? "bg-blue-500/20 text-blue-300"
-                        : "hover:bg-white/10 text-gray-300"
+                        ? NAV_ITEM_ACTIVE
+                        : NAV_ITEM_INACTIVE_HOVER_SURFACE
                     }`}
                     onClick={closeMobile}
                   >
@@ -1808,11 +1827,11 @@ export default function Navbar() {
             </IntentPrefetchLink>
           ) : null}
 
-          <div className="flex flex-col gap-1 border-t border-white/10 pt-1.5">
+          <div className="flex flex-col gap-1 border-t border-border pt-1.5">
             {isAdmin ? (
               <IntentPrefetchLink
                 href="/admin"
-                className="rounded-lg px-3 py-1.5 text-white hover:text-blue-400"
+                className="rounded-lg px-3 py-1.5 text-chrome-foreground hover:text-nav-link-hover"
                 onClick={closeMobile}
               >
                 Admin
@@ -1821,7 +1840,7 @@ export default function Navbar() {
 
             <IntentPrefetchLink
               href="/settings#account"
-              className="rounded-lg px-3 py-1.5 text-white hover:text-blue-400"
+              className="rounded-lg px-3 py-1.5 text-chrome-foreground hover:text-nav-link-hover"
               onClick={closeMobile}
             >
               Settings
@@ -1835,8 +1854,8 @@ export default function Navbar() {
                   "/affiliate/payout-setup",
                   "/payouts",
                 ])
-                  ? "bg-blue-500/20 text-blue-300"
-                  : "text-white hover:text-blue-400"
+                  ? NAV_ITEM_ACTIVE
+                  : "text-chrome-foreground hover:text-nav-link-hover"
               }`}
               onClick={closeMobile}
             >
@@ -1844,14 +1863,14 @@ export default function Navbar() {
             </IntentPrefetchLink>
             <IntentPrefetchLink
               href="/help"
-              className="rounded-lg px-3 py-1.5 text-white hover:text-blue-400"
+              className="rounded-lg px-3 py-1.5 text-chrome-foreground hover:text-nav-link-hover"
               onClick={closeMobile}
             >
               Help Center
             </IntentPrefetchLink>
             <button
               type="button"
-              className="rounded-lg px-3 py-1.5 text-left text-white hover:text-blue-400"
+              className="rounded-lg px-3 py-1.5 text-left text-chrome-foreground hover:text-nav-link-hover"
               onClick={() => {
                 closeMobile()
                 setReviewModalOpen(true)
@@ -1862,7 +1881,7 @@ export default function Navbar() {
 
             <button
               type="button"
-              className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-white hover:text-blue-400"
+              className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-chrome-foreground hover:text-nav-link-hover"
               onClick={() => {
                 void handleToggleNotifications()
                 closeMobile()
@@ -1871,7 +1890,7 @@ export default function Navbar() {
             >
               <span>Notifications</span>
               {unreadCount > 0 ? (
-                <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full tabular-nums">
+                <span className={`text-xs px-2 py-0.5 rounded-full tabular-nums ${NAV_UNREAD_BADGE}`}>
                   {badgeText(unreadCount)}
                 </span>
               ) : null}

@@ -111,28 +111,28 @@ final class VideoDeliveryExporterTests: XCTestCase {
     func testTargetVideoBitrate1080p30() {
         XCTAssertEqual(
             VideoDeliveryExporter.targetVideoBitrate(longEdge: 1920, targetFPS: 30),
-            2_800_000
+            4_500_000
         )
     }
 
     func testTargetVideoBitrate1080p60() {
         XCTAssertEqual(
             VideoDeliveryExporter.targetVideoBitrate(longEdge: 1920, targetFPS: 60),
-            4_000_000
+            5_500_000
         )
     }
 
     func testTargetVideoBitrate720p30() {
         XCTAssertEqual(
             VideoDeliveryExporter.targetVideoBitrate(longEdge: 1280, targetFPS: 30),
-            2_200_000
+            2_800_000
         )
     }
 
     func testTargetVideoBitrate720p60() {
         XCTAssertEqual(
             VideoDeliveryExporter.targetVideoBitrate(longEdge: 1280, targetFPS: 60),
-            3_000_000
+            3_500_000
         )
     }
 
@@ -243,7 +243,26 @@ final class VideoDeliveryExporterTests: XCTestCase {
         let (mode, reason) = VideoDeliveryExporter.decideDeliveryMode(profile: profile, target: target)
         XCTAssertEqual(mode, .passthrough)
         XCTAssertTrue(reason.contains("mp4"))
-        XCTAssertEqual(target.videoBitrate, 4_000_000)
+        XCTAssertEqual(target.videoBitrate, 5_500_000)
+    }
+
+    func testDecideTranscodeWhenTrackBitrateUnderReportsFileAverage() {
+        let profile = VideoDeliveryExporter.SourceProfile(
+            durationSeconds: 30,
+            orientedSize: CGSize(width: 1080, height: 1920),
+            frameRate: 30,
+            estimatedBitrate: 2_000_000,
+            videoCodec: "avc1",
+            audioCodec: "mp4a",
+            hasAudio: true,
+            fileBytes: 17_560_000,
+            containerExtension: "mp4",
+            isMP4Container: true
+        )
+        let target = VideoDeliveryExporter.deliveryTarget(for: profile)
+        let (mode, reason) = VideoDeliveryExporter.decideDeliveryMode(profile: profile, target: target)
+        XCTAssertEqual(mode, .transcode)
+        XCTAssertTrue(reason.contains("bitrate"))
     }
 
     func testDecideTranscodeFor1080p60HighBitrate() {
@@ -283,6 +302,44 @@ final class VideoDeliveryExporterTests: XCTestCase {
         XCTAssertEqual(mode, .transcode)
         XCTAssertTrue(reason.contains("fps"))
         XCTAssertEqual(target.outputFrameRate, 60, accuracy: 0.001)
+    }
+
+    func testDecidePassthroughWhenAudioCodecDiffersButVideoIsEfficient() {
+        let profile = VideoDeliveryExporter.SourceProfile(
+            durationSeconds: 41,
+            orientedSize: CGSize(width: 1920, height: 1080),
+            frameRate: 30,
+            estimatedBitrate: 1_020_000,
+            videoCodec: "avc1",
+            audioCodec: "lpcm",
+            hasAudio: true,
+            fileBytes: 5_000_000,
+            containerExtension: "mp4",
+            isMP4Container: true
+        )
+        let target = VideoDeliveryExporter.deliveryTarget(for: profile)
+        let (mode, reason) = VideoDeliveryExporter.decideDeliveryMode(profile: profile, target: target)
+        XCTAssertEqual(mode, .passthrough)
+        XCTAssertTrue(reason.contains("mp4"))
+    }
+
+    func testTranscodeVideoBitrateCapsToSourceEffectiveRate() {
+        let profile = VideoDeliveryExporter.SourceProfile(
+            durationSeconds: 41,
+            orientedSize: CGSize(width: 1920, height: 1080),
+            frameRate: 30,
+            estimatedBitrate: 1_020_000,
+            videoCodec: "avc1",
+            audioCodec: "mp4a",
+            hasAudio: true,
+            fileBytes: 5_000_000,
+            containerExtension: "mp4",
+            isMP4Container: true
+        )
+        let ceiling = VideoDeliveryExporter.targetVideoBitrate(longEdge: 1920, targetFPS: 30)
+        let capped = VideoDeliveryExporter.transcodeVideoBitrate(profile: profile, ceiling: ceiling)
+        XCTAssertEqual(capped, 892_000)
+        XCTAssertLessThan(capped, ceiling)
     }
 
     func testDecidePassthroughForDeliveryReadyMP4() {

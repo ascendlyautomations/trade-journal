@@ -9,6 +9,9 @@ nonisolated protocol NetworkClient: Sendable {
         decodeAs type: T.Type
     ) async throws -> T
 
+    /// Applies the same request interceptors as ``send(_:)`` (auth, Supabase headers, logging).
+    func prepare(_ request: HTTPRequest) async throws -> HTTPRequest
+
     /// Streaming bytes for large payloads / progressive downloads.
     func bytes(for request: HTTPRequest) async throws -> (URLSession.AsyncBytes, URLResponse)
 }
@@ -44,12 +47,17 @@ actor URLSessionNetworkClient: NetworkClient {
         self.reachability = reachability
     }
 
+    func prepare(_ request: HTTPRequest) async throws -> HTTPRequest {
+        try await requestInterceptor.intercept(request)
+    }
+
     func send(_ request: HTTPRequest) async throws -> HTTPResponse {
         var attempt = 1
-        var current = try await requestInterceptor.intercept(request)
+        var unauthorizedRecoveryAttempted = false
+        var current = try await prepare(request)
 
         while true {
-            try throwIfCancelled()
+            try throwIfCancelled(requestPath: current.url.path)
             try throwIfOffline()
 
             var metrics = RequestMetrics(
@@ -104,6 +112,23 @@ actor URLSessionNetworkClient: NetworkClient {
                     metrics.errorDescription = String(describing: mapped)
                     metricsRecorder?.record(metrics)
 
+                    if case .unauthorized = mapped,
+                       current.endpoint.requiresAuthentication,
+                       !unauthorizedRecoveryAttempted
+                    {
+                        unauthorizedRecoveryAttempted = true
+                        let recovery = await NetworkUnauthorizedRecovery.shared.recoverFromUnauthorized()
+                        switch recovery {
+                        case .recovered:
+                            current = try await prepare(request)
+                            continue
+                        case .failedTransient, .noHandler:
+                            break
+                        case .sessionEnded:
+                            break
+                        }
+                    }
+
                     if retryPolicy.shouldRetry(request: current, error: mapped, attempt: attempt) {
                         let delay = retryPolicy.delay(forAttempt: attempt, error: mapped)
                         attempt += 1
@@ -149,6 +174,13 @@ actor URLSessionNetworkClient: NetworkClient {
                     metrics.endedAt = Date()
                     metrics.errorDescription = cancelled.localizedDescription
                     metricsRecorder?.record(metrics)
+                    #if DEBUG
+                    NetworkCancelDiagnostics.log(
+                        requestPath: current.url.path,
+                        reason: cancelled.localizedDescription,
+                        cancelSource: "transport"
+                    )
+                    #endif
                     throw cancelled
                 }
 
@@ -178,7 +210,7 @@ actor URLSessionNetworkClient: NetworkClient {
     }
 
     func bytes(for request: HTTPRequest) async throws -> (URLSession.AsyncBytes, URLResponse) {
-        try throwIfCancelled()
+        try throwIfCancelled(requestPath: request.url.path)
         try throwIfOffline()
         let current = try await requestInterceptor.intercept(request)
         let priority = current.schedulingPriority
@@ -201,10 +233,17 @@ actor URLSessionNetworkClient: NetworkClient {
         }
     }
 
-    private func throwIfCancelled() throws {
+    private func throwIfCancelled(requestPath: String) throws {
         do {
             try NetworkTaskCancellation.check()
         } catch {
+            #if DEBUG
+            NetworkCancelDiagnostics.log(
+                requestPath: requestPath,
+                reason: "Task.checkCancellation",
+                cancelSource: "NetworkClient.send"
+            )
+            #endif
             throw NetworkError.cancelled
         }
     }
@@ -239,5 +278,9 @@ nonisolated struct NetworkClientBox: NetworkClient {
 
     func bytes(for request: HTTPRequest) async throws -> (URLSession.AsyncBytes, URLResponse) {
         try await client.bytes(for: request)
+    }
+
+    func prepare(_ request: HTTPRequest) async throws -> HTTPRequest {
+        try await client.prepare(request)
     }
 }

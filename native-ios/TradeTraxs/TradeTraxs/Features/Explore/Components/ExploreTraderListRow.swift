@@ -11,8 +11,8 @@ struct ExploreTraderListRow: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        HStack(spacing: ExperienceSpacing.md) {
-            FollowListAvatarView(profile: profile, imagePipeline: imagePipeline, size: 40)
+        HStack(alignment: .center, spacing: ExperienceSpacing.md) {
+            ExploreProfileAvatarView(profile: profile, imagePipeline: imagePipeline, size: 40)
             VStack(alignment: .leading, spacing: 2) {
                 Text(profile.displayName)
                     .experienceStyle(.subheadline, color: colors.primaryText)

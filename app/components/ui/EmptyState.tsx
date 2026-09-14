@@ -1,8 +1,8 @@
 import type { ReactNode } from "react"
 import {
-  READABLE_EMPTY_CLASS,
-  READABLE_PRIMARY_CLASS,
-} from "@/lib/readableTextStyles"
+  UI_EMPTY_STATE_ICON,
+  UI_EMPTY_STATE_SHELL,
+} from "@/lib/uiPrimitiveStyles"
 import { cn } from "./cn"
 
 export type EmptyStateProps = {
@@ -21,25 +21,15 @@ export default function EmptyState({
   className,
 }: EmptyStateProps) {
   return (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 px-6 py-10 text-center",
-        className
-      )}
-    >
+    <div className={cn(UI_EMPTY_STATE_SHELL, "ui-theme-backdrop", className)}>
       {icon ? (
-        <div
-          className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-lg"
-          aria-hidden
-        >
+        <div className={UI_EMPTY_STATE_ICON} aria-hidden>
           {icon}
         </div>
       ) : null}
-      <h3 className={`text-base font-semibold ${READABLE_PRIMARY_CLASS}`}>
-        {title}
-      </h3>
+      <h3 className="text-base font-semibold text-foreground">{title}</h3>
       {description ? (
-        <p className={`mt-2 max-w-sm text-sm ${READABLE_EMPTY_CLASS}`}>
+        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
           {description}
         </p>
       ) : null}

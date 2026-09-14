@@ -18,12 +18,12 @@ final class FeedVideoPlaybackCoordinator {
 
     private enum PrefetchBufferPolicy {
         /// Neighbor clip — warm start without downloading the full object.
-        static let forwardBufferSeconds: TimeInterval = 3
+        static let forwardBufferSeconds: TimeInterval = 2
     }
 
     private enum ActiveBufferPolicy {
         /// Active Feed/Clips playback — preferred forward buffer target (not a hard byte cap).
-        static let forwardBufferSeconds: TimeInterval = 5
+        static let forwardBufferSeconds: TimeInterval = 4
     }
 
     private struct InlineClipSessionState {
@@ -539,6 +539,7 @@ final class FeedVideoPlaybackCoordinator {
         let item = AVPlayerItem(url: url)
         configurePrefetchItem(item)
         let player = AVPlayer(playerItem: item)
+        player.automaticallyWaitsToMinimizeStalling = true
         applyAudioState(to: player)
         player.actionAtItemEnd = .pause
         player.pause()
@@ -664,6 +665,7 @@ final class FeedVideoPlaybackCoordinator {
 
             let item = built.0
             let player = built.1
+            player.automaticallyWaitsToMinimizeStalling = true
             self.configureActiveItem(item)
             self.applyAudioState(to: player)
             player.actionAtItemEnd = .pause

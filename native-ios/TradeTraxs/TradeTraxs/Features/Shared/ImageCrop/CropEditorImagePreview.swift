@@ -48,37 +48,6 @@ final class CropEditorImagePreviewView: UIView {
     }
 }
 
-#if DEBUG
-struct CropEditorDebugOverlay: View {
-    let viewportSize: CGSize
-
-    var body: some View {
-        ZStack {
-            Rectangle()
-                .stroke(Color.red.opacity(0.85), lineWidth: 1)
-
-            Path { path in
-                let midX = viewportSize.width / 2
-                let midY = viewportSize.height / 2
-                path.move(to: CGPoint(x: midX, y: 0))
-                path.addLine(to: CGPoint(x: midX, y: viewportSize.height))
-                path.move(to: CGPoint(x: 0, y: midY))
-                path.addLine(to: CGPoint(x: viewportSize.width, y: midY))
-
-                for fraction in [0.25, 0.75] {
-                    let y = viewportSize.height * fraction
-                    path.move(to: CGPoint(x: 0, y: y))
-                    path.addLine(to: CGPoint(x: viewportSize.width, y: y))
-                }
-            }
-            .stroke(Color.yellow.opacity(0.7), lineWidth: 0.75)
-        }
-        .frame(width: viewportSize.width, height: viewportSize.height)
-        .allowsHitTesting(false)
-    }
-}
-#endif
-
 struct CropViewportSizePreferenceKey: PreferenceKey {
     static var defaultValue: CGSize = .zero
 

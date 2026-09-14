@@ -1,13 +1,8 @@
 @import "tailwindcss";
+@import "./web-theme-tokens.css";
 
-/* ------------------ ROOT VARIABLES ------------------ */
+/* ------------------ ROOT VARIABLES (layout — not theme colors) ------------------ */
 :root {
-  --background: #ffffff;
-  /*
-   * App chrome is always a dark blue→green gradient. Keep inherited text
-   * light so unstyled copy never renders as dark-on-navy under light OS prefs.
-   */
-  --foreground: #e5e7eb;
   --safe-area-top: env(safe-area-inset-top, 0px);
   /* Real device inset only — do not floor to 34px (breaks home-button iPhones). */
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
@@ -291,20 +286,67 @@ html.tt-native-ios [data-tt-native-no-web-navbar="1"] {
   );
 }
 
-/* Tailwind theme mapping */
+/* Tailwind v4 semantic color + radius mapping (values from html[data-theme]) */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface-primary: var(--surface-primary);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-card-border: var(--card-border);
+  --color-foreground-secondary: var(--foreground-secondary);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-label: var(--label);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-divider: var(--divider);
+  --color-input: var(--input);
+  --color-input-border: var(--input-border);
+  --color-input-foreground: var(--input-foreground);
+  --color-placeholder: var(--placeholder);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
+  --color-negative: var(--negative);
+  --color-negative-soft: var(--negative-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ring: var(--ring);
+  --color-focus-ring: var(--focus-ring);
+  --color-chrome: var(--chrome);
+  --color-chrome-foreground: var(--chrome-foreground);
+  --color-chrome-border: var(--chrome-border);
+  --color-overlay: var(--overlay);
+  --color-nav-link-hover: var(--nav-link-hover);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-axis: var(--chart-axis);
+  --color-chart-axis-label: var(--chart-axis-label);
+  --color-chart-tooltip-bg: var(--chart-tooltip-bg);
+  --color-chart-equity: var(--chart-equity);
+  --color-chart-secondary: var(--chart-secondary);
+  --color-chart-positive: var(--chart-positive);
+  --color-chart-negative: var(--chart-negative);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-/* Dark mode variables */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+  --shadow-card: var(--shadow-card);
+  --shadow-elevated: var(--shadow-elevated);
+  --shadow-modal: var(--shadow-modal);
 }
 
 /* Reply jump-to-original highlight */
@@ -324,21 +366,20 @@ body {
   min-height: 100%;
   height: auto;
 
-  /* YOUR GRADIENT */
   background: linear-gradient(
     to right,
-    #1e3a8a 0%,
-    #1e3a8a 30%,
-    #065f46 100%
+    var(--background-gradient-start) 0%,
+    var(--background-gradient-mid) 30%,
+    var(--background-gradient-end) 100%
   );
 
   /*
    * Solid layer under the gradient. The shorthand above leaves
    * background-color transparent, so any unpainted region (WKWebView
    * transitions, fixed-attachment repaint gaps, overscroll) showed the
-   * white WebView surface. Must stay dark — matches navbar #0b1f3a.
+   * white WebView surface. Must stay dark — matches navbar chrome.
    */
-  background-color: #0b1f3a;
+  background-color: var(--background-underlay);
 
   background-repeat: no-repeat;
   background-size: cover;
@@ -347,6 +388,11 @@ body {
   /* Keep Tailwind + Geist font working */
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;
+}
+
+::selection {
+  background-color: var(--selection-background);
+  color: var(--selection-foreground);
 }
 
 /*
@@ -369,14 +415,14 @@ html.tt-native {
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
   /* Solid shell color — never the marketing body gradient (#1e3a8a). */
-  background-color: #0b1f3a;
+  background-color: var(--background-underlay, #0b1f3a);
   background-image: none;
 }
 
 html.tt-native body {
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
-  background-color: #0b1f3a;
+  background-color: var(--background-underlay, #0b1f3a);
   background-image: none;
 }
 
@@ -393,7 +439,7 @@ html.tt-ios-auth,
 html.tt-ios-auth body {
   height: 100%;
   overflow: hidden;
-  background-color: #0b1f3a;
+  background-color: var(--background-underlay, #0b1f3a);
   background-image: none;
 }
 
@@ -462,7 +508,7 @@ textarea::placeholder {
   opacity: 1;
 }
 
-/* Dark themed scrollbar */
+/* Theme-aware scrollbars (values per html[data-theme]) */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -472,18 +518,18 @@ textarea::placeholder {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.5);
-  border-radius: 9999px;
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.7);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(100, 116, 139, 0.5) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 input[type="date"]::-webkit-calendar-picker-indicator,
@@ -496,9 +542,16 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
-input[type="date"],
-input[type="time"] {
+html[data-theme="tradetraxs"] input[type="date"],
+html[data-theme="tradetraxs"] input[type="time"],
+html[data-theme="dark"] input[type="date"],
+html[data-theme="dark"] input[type="time"] {
   color-scheme: dark;
+}
+
+html[data-theme="light"] input[type="date"],
+html[data-theme="light"] input[type="time"] {
+  color-scheme: light;
 }
 
 /* Safari/iOS: neutralize native select chrome when any residual <select> remains. */
@@ -725,9 +778,26 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
 }
 
 /* Auth password fields — light text; hide browser-native reveal (styled via AuthPasswordInput). */
+/* Theme-aware backdrop for glass panels / modals ( --surface-blur is 0 on light ). */
+.ui-theme-backdrop {
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  backdrop-filter: blur(var(--surface-blur));
+}
+
 .tt-auth-password {
-  color: #ffffff;
-  color-scheme: dark;
+  border: 1px solid var(--input-border);
+  background-color: var(--input);
+  color: var(--input-foreground);
+  color-scheme: inherit;
+}
+
+.tt-auth-password::placeholder {
+  color: var(--placeholder);
+}
+
+.tt-auth-password:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .tt-auth-password::-ms-reveal,

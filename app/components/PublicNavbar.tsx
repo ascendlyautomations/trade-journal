@@ -11,6 +11,16 @@ import {
 } from "@/lib/marketingAccess"
 import { NAVBAR_BRAND_LINK_CLASS_NOWRAP } from "@/lib/navbarBrand"
 import { navigateToComingSoonSection } from "@/app/components/landing/LandingComingSoonSection"
+import {
+  NAV_CHROME_BAR_SUBTLE_BORDER,
+  NAV_CHROME_FIXED_ROOT,
+  NAV_CTA_PRIMARY,
+  NAV_DIVIDER,
+  NAV_ITEM_ACTIVE,
+  NAV_ITEM_INACTIVE,
+  NAV_LINK_SECONDARY_HOVER_ACCENT,
+  NAV_PUBLIC_MOBILE_MENU,
+} from "@/lib/navChromeStyles"
 
 const DESKTOP_NAV_LINKS = [
   { href: "/faq", label: "FAQ" },
@@ -41,32 +51,24 @@ function isNavLinkActive(pathname: string, href: string): boolean {
 
 function navLinkClass(pathname: string, href: string): string {
   return `shrink-0 rounded px-2 py-1 text-sm transition ${
-    isNavLinkActive(pathname, href)
-      ? "bg-blue-500/20 text-blue-300"
-      : "text-gray-300 hover:text-white"
+    isNavLinkActive(pathname, href) ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
   }`
 }
 
 function mobileNavLinkClass(pathname: string, href: string): string {
   return `rounded-lg px-3 py-2 transition ${
-    isNavLinkActive(pathname, href)
-      ? "bg-blue-500/20 text-blue-300"
-      : "text-gray-300 hover:text-white"
+    isNavLinkActive(pathname, href) ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
   }`
 }
 
 function comingSoonNavClass(active: boolean, mobile: boolean): string {
   if (mobile) {
     return `rounded-lg px-3 py-2 transition ${
-      active
-        ? "bg-blue-500/20 text-blue-300"
-        : "text-gray-300 hover:text-white"
+      active ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
     }`
   }
   return `shrink-0 rounded px-2 py-1 text-sm transition ${
-    active
-      ? "bg-blue-500/20 text-blue-300"
-      : "text-gray-300 hover:text-white"
+    active ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
   }`
 }
 
@@ -148,8 +150,8 @@ export default function PublicNavbar() {
   }
 
   return (
-    <div className="fixed left-0 top-0 z-[9999] w-full overflow-visible bg-[#0b1f3a] pt-[var(--safe-area-top)] text-white">
-      <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
+    <div className={`${NAV_CHROME_FIXED_ROOT} overflow-visible`}>
+      <div className={NAV_CHROME_BAR_SUBTLE_BORDER}>
         <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
           <div className="flex min-w-0 items-center gap-2 whitespace-nowrap sm:gap-3">
             <IntentPrefetchLink
@@ -171,7 +173,7 @@ export default function PublicNavbar() {
               <button
                 type="button"
                 onClick={handleReturnToApp}
-                className="hidden rounded bg-blue-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600 sm:px-4 md:inline-flex"
+                className={`hidden px-3 sm:px-4 md:inline-flex ${NAV_CTA_PRIMARY}`}
               >
                 Return to App
               </button>
@@ -179,13 +181,13 @@ export default function PublicNavbar() {
               <div className="hidden items-center gap-2 sm:gap-3 md:flex">
                 <IntentPrefetchLink
                   href="/login"
-                  className="rounded border border-white/20 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-white/10 sm:px-4"
+                  className="rounded border border-chrome-border px-3 py-1.5 text-sm font-medium text-chrome-foreground transition hover:bg-surface-elevated sm:px-4"
                 >
                   Login
                 </IntentPrefetchLink>
                 <IntentPrefetchLink
                   href="/login?tab=signup"
-                  className="rounded bg-blue-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600 sm:px-4"
+                  className={`rounded px-3 sm:px-4 ${NAV_CTA_PRIMARY}`}
                 >
                   Sign Up
                 </IntentPrefetchLink>
@@ -196,14 +198,14 @@ export default function PublicNavbar() {
               {!showReturnToApp ? (
                 <IntentPrefetchLink
                   href="/login"
-                  className="rounded border border-white/20 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-white/10"
+                  className="rounded border border-chrome-border px-3 py-1.5 text-sm font-medium text-chrome-foreground transition hover:bg-surface-elevated"
                 >
                   Login
                 </IntentPrefetchLink>
               ) : null}
               <button
                 type="button"
-                className="px-1 py-1 text-2xl leading-none text-white"
+                className="px-1 py-1 text-2xl leading-none text-chrome-foreground"
                 aria-expanded={menuOpen}
                 aria-label={menuOpen ? "Close menu" : "Open menu"}
                 onClick={() => setMenuOpen((open) => !open)}
@@ -216,9 +218,9 @@ export default function PublicNavbar() {
       </div>
 
       {menuOpen ? (
-        <div className="max-h-[calc(100dvh-var(--app-header-offset))] w-full overflow-y-auto overscroll-y-contain border-t border-white/5 bg-[#0b1f3a] md:hidden">
+        <div className={NAV_PUBLIC_MOBILE_MENU}>
           <nav
-            className="flex w-full flex-col gap-2 px-4 pb-[calc(0.75rem+var(--safe-area-bottom))] pt-1.5 text-sm text-white md:px-6"
+            className="flex w-full flex-col gap-2 px-4 pb-[calc(0.75rem+var(--safe-area-bottom))] pt-1.5 text-sm text-chrome-foreground md:px-6"
             aria-label="Marketing menu"
           >
             {showReturnToApp ? (
@@ -226,29 +228,29 @@ export default function PublicNavbar() {
                 <button
                   type="button"
                   onClick={handleReturnToApp}
-                  className="rounded-lg px-3 py-2 text-left font-semibold text-gray-200 transition hover:text-white"
+                  className={`rounded-lg px-3 py-2 text-left font-semibold transition ${NAV_LINK_SECONDARY_HOVER_ACCENT}`}
                 >
                   Return to App
                 </button>
-                <div className="my-1 border-t border-white/10" aria-hidden />
+                <div className={`my-1 ${NAV_DIVIDER}`} aria-hidden />
               </>
             ) : (
               <>
                 <IntentPrefetchLink
                   href="/login?tab=signup"
-                  className="rounded-lg px-3 py-2 font-semibold text-gray-200 transition hover:text-white"
+                  className={`rounded-lg px-3 py-2 font-semibold transition ${NAV_LINK_SECONDARY_HOVER_ACCENT}`}
                   onClick={() => setMenuOpen(false)}
                 >
                   Sign Up
                 </IntentPrefetchLink>
                 <IntentPrefetchLink
                   href="/login"
-                  className="rounded-lg px-3 py-2 font-semibold text-gray-200 transition hover:text-white"
+                  className={`rounded-lg px-3 py-2 font-semibold transition ${NAV_LINK_SECONDARY_HOVER_ACCENT}`}
                   onClick={() => setMenuOpen(false)}
                 >
                   Login
                 </IntentPrefetchLink>
-                <div className="my-1 border-t border-white/10" aria-hidden />
+                <div className={`my-1 ${NAV_DIVIDER}`} aria-hidden />
               </>
             )}
             {renderNavLinks(true)}

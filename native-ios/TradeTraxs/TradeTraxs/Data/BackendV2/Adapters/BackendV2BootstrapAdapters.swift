@@ -62,6 +62,8 @@ nonisolated protocol LeaderboardBootstrapProviding: Sendable {
     func loadLeaderboardBootstrap(
         timeframe: String,
         category: String,
+        audience: String,
+        limit: Int,
         cursor: String?
     ) async throws -> LeaderboardBootstrapV1
 }
@@ -152,9 +154,11 @@ nonisolated struct UnimplementedRpcBootstrapRepository:
     func loadLeaderboardBootstrap(
         timeframe: String,
         category: String,
+        audience: String,
+        limit: Int,
         cursor: String?
     ) async throws -> LeaderboardBootstrapV1 {
-        _ = (timeframe, category, cursor)
+        _ = (timeframe, category, audience, limit, cursor)
         throw BackendV2RPCError.notImplemented("LeaderboardRpcBootstrapRepository")
     }
 

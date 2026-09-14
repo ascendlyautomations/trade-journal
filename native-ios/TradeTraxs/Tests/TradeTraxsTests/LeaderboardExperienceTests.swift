@@ -3,7 +3,13 @@ import XCTest
 
 @MainActor
 final class LeaderboardExperienceTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        BackendV2FeatureFlags.setFlagForTests(.leaderboard, enabled: false)
+    }
+
     override func tearDown() async throws {
+        BackendV2FeatureFlags.setFlagForTests(.leaderboard, enabled: nil)
         LeaderboardSessionStore.shared.invalidate()
         SessionProfileStore.shared.invalidate()
         await LeaderboardTradeRowsCache.shared.invalidate()

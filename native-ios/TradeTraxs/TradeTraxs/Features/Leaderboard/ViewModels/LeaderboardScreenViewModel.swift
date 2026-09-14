@@ -16,6 +16,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator
     private let store: LeaderboardSessionStore
+    private let rpc: (any RPCClient)?
 
     private var bootstrapTask: Task<Void, Never>?
     private var filterGeneration: UInt64 = 0
@@ -30,7 +31,8 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
-        store: LeaderboardSessionStore? = nil
+        store: LeaderboardSessionStore? = nil,
+        rpc: (any RPCClient)? = nil
     ) {
         self.leaderboard = leaderboard
         self.profiles = profiles
@@ -39,6 +41,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
         self.store = store ?? .shared
+        self.rpc = rpc
     }
 
     // MARK: - Facades
@@ -93,7 +96,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         do {
             let generation = filterGeneration
             var context = makeContext(cursor: cursor, forceNetwork: false)
-            context.cachedTrades = store.rawTrades
+            context.rankOffset = store.rawEntries.count
             context.timeframe = state.timeframe
             let result = try await LeaderboardBootstrap.loadPage(context)
             guard generation == filterGeneration, !Task.isCancelled else { return }
@@ -134,6 +137,11 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         store.updateFilters(audience: next, timeframe: state.timeframe, category: state.category)
         filterGeneration &+= 1
         let generation = filterGeneration
+        if store.usesServerRankings {
+            bootstrapTask?.cancel()
+            bootstrapTask = Task { await performBootstrap(forceNetwork: false, resetting: true) }
+            return
+        }
         if next == .friends, store.friendIDs.isEmpty {
             bootstrapTask?.cancel()
             bootstrapTask = Task {
@@ -158,7 +166,11 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
             category: state.category
         )
         bootstrapTask?.cancel()
-        bootstrapTask = Task { await refilterFromCachedTrades(generation: generation) }
+        if store.usesServerRankings {
+            bootstrapTask = Task { await performBootstrap(forceNetwork: false, resetting: true) }
+        } else {
+            bootstrapTask = Task { await refilterFromCachedTrades(generation: generation) }
+        }
     }
 
     func setCategory(_ next: LeaderboardCategory) {
@@ -340,7 +352,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     }
 
     private func reapplyPresentationFromStore(didPlayPodiumEntrance: Bool = true) {
-        guard !store.rawTrades.isEmpty else {
+        guard !store.usesServerRankings, !store.rawTrades.isEmpty else {
             applyStoreToState(didPlayPodiumEntrance: didPlayPodiumEntrance)
             return
         }
@@ -431,6 +443,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
             explore: explore,
             session: session,
             detailCache: detailCache,
+            rpc: rpc,
             audience: state.audience,
             timeframe: state.timeframe,
             category: state.category,

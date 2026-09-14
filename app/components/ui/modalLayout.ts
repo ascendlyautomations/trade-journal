@@ -3,6 +3,12 @@
 import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 import {
+  UI_MODAL_FOOTER,
+  UI_MODAL_HEADER,
+  UI_MODAL_PANEL_SHELL,
+  UI_MODAL_PANEL_SURFACE,
+} from "@/lib/uiPrimitiveStyles"
+import {
   lockPageScroll,
   resetPageScrollLock,
   unlockPageScroll,
@@ -27,19 +33,16 @@ export const MODAL_OVERLAY_SAFE_PADDING_CLASS =
  * Solid modal panel fill — page content must not show through the dialog.
  * Backdrop dimming stays on the overlay, separate from this surface.
  */
-export const MODAL_PANEL_SURFACE_CLASS =
-  "bg-[#0f172a]/95 backdrop-blur-xl"
+export const MODAL_PANEL_SURFACE_CLASS = UI_MODAL_PANEL_SURFACE
 
-export const MODAL_PANEL_SHELL_CLASS =
-  `flex flex-col overflow-hidden rounded-xl border border-white/15 ${MODAL_PANEL_SURFACE_CLASS} text-gray-100 shadow-xl`
+export const MODAL_PANEL_SHELL_CLASS = UI_MODAL_PANEL_SHELL
 
 export const MODAL_BODY_SCROLL_CLASS =
   "min-h-0 flex-1 overflow-y-auto overscroll-contain"
 
-export const MODAL_HEADER_CLASS = "shrink-0 border-b border-white/10"
+export const MODAL_HEADER_CLASS = UI_MODAL_HEADER
 
-export const MODAL_FOOTER_CLASS =
-  `shrink-0 border-t border-white/10 ${MODAL_PANEL_SURFACE_CLASS}`
+export const MODAL_FOOTER_CLASS = UI_MODAL_FOOTER
 
 /**
  * Modal stacking (lowest → highest among common overlays):

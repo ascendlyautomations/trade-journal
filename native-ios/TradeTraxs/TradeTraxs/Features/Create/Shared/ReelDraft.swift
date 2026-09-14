@@ -13,7 +13,7 @@ struct ReelDraft: Equatable {
     var durationSeconds: Int
     var thumbnailJPEG: Data?
     var thumbnailPreview: UIImage?
-    /// Standalone caption (`reels.caption`). Must stay nil when trade-linked (DB check).
+    /// Reel caption (`reels.caption`) — independent of linked trade description.
     var caption: String = ""
     var linkedTradeID: TradeID?
     /// Compact trade summary for UI (loaded only when user picks a trade).

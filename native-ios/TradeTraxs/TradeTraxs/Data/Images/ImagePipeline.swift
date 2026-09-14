@@ -4,7 +4,9 @@ import Foundation
 nonisolated enum ImageDeliveryQuality: String, Sendable {
     /// Supabase `/render/image/` transforms matching web feed presets.
     case feedDisplay
-    /// Original object bytes — detail/zoom surfaces only.
+    /// Higher-width render for detail surfaces (1280px) — not original object bytes.
+    case feedDetail
+    /// Original object bytes — deep zoom / explicit full fidelity only.
     case fullResolution
 }
 
@@ -51,11 +53,16 @@ nonisolated protocol ImagePipeline: Sendable {
     func data(for request: ImageRequest) async throws -> Data
     func prefetch(_ requests: [ImageRequest]) async
     func invalidate(reference: MediaReference) async
+    func cachedImageData(for request: ImageRequest) async -> Data?
+    func bestCachedImageData(for request: ImageRequest) async -> (data: Data, quality: ImageDeliveryQuality)?
 }
 
 extension ImagePipeline {
-    /// Memory-cache lookup without triggering a download — used for instant Feed display.
     func cachedImageData(for request: ImageRequest) async -> Data? {
+        nil
+    }
+
+    func bestCachedImageData(for request: ImageRequest) async -> (data: Data, quality: ImageDeliveryQuality)? {
         nil
     }
 }
@@ -76,6 +83,10 @@ nonisolated struct PlaceholderImagePipeline: ImagePipeline {
 
     func cachedImageData(for request: ImageRequest) async -> Data? {
         await cache.imageData(forKey: request.reference.id)
+    }
+
+    func bestCachedImageData(for request: ImageRequest) async -> (data: Data, quality: ImageDeliveryQuality)? {
+        nil
     }
 
     func prefetch(_ requests: [ImageRequest]) async {

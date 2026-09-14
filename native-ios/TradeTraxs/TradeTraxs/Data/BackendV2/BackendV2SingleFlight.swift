@@ -193,4 +193,29 @@ nonisolated enum BackendV2FlightKeys {
     static func gettingStarted(viewerID: String) -> String {
         "\(viewerID)|\(BackendV2Versioning.RPCName.gettingStarted.rawValue)"
     }
+
+    static func leaderboard(
+        timeframe: String,
+        category: String,
+        audience: String,
+        cursor: String?,
+        limit: Int
+    ) -> String {
+        let c = cursor ?? "-"
+        return "\(BackendV2Versioning.RPCName.leaderboard.rawValue)|\(timeframe)|\(category)|\(audience)|\(limit)|\(c)"
+    }
+
+    static func profileTab(
+        tab: String,
+        profileID: String,
+        cursor: String?,
+        limit: Int
+    ) -> String {
+        let c = cursor ?? "-"
+        return "\(profileID)|\(tab)|\(limit)|\(c)"
+    }
+
+    static func profileStatistics(profileID: String) -> String {
+        "\(profileID)|\(BackendV2Versioning.RPCName.profileStatisticsBootstrap.rawValue)"
+    }
 }

@@ -38,6 +38,7 @@ import {
 } from "@/lib/site"
 import JsonLd from "./components/JsonLd"
 import { organizationJsonLd, websiteJsonLd } from "@/lib/structuredData"
+import { DEFAULT_WEB_THEME } from "@/lib/webTheme"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -138,6 +139,7 @@ export default async function RootLayout({
     <html
       lang="en"
       className={htmlClassName}
+      data-theme={DEFAULT_WEB_THEME}
     >
       <body className="flex flex-col">
         <JsonLd data={[organizationJsonLd(), websiteJsonLd()]} />

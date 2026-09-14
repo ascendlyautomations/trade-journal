@@ -14,6 +14,7 @@ nonisolated enum BackendV2Versioning {
         case profileTabPosts = "rpc_v1_profile_tab_posts"
         case profileTabReels = "rpc_v1_profile_tab_reels"
         case profileTabAchievements = "rpc_v1_profile_tab_achievements"
+        case profileStatisticsBootstrap = "rpc_v1_profile_statistics_bootstrap"
         case profilePinContent = "rpc_v1_profile_pin_content"
         case profileUnpinContent = "rpc_v1_profile_unpin_content"
         case profileReorderPinned = "rpc_v1_profile_reorder_pinned"

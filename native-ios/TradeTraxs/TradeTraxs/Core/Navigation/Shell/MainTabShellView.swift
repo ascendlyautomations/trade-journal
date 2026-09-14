@@ -10,7 +10,9 @@ struct MainTabShellView: View {
     let authenticationCoordinator: AuthenticationCoordinator
     @Bindable var currentUserProfile: CurrentUserProfileStore
     @Bindable private var viewerStoryStore = ViewerActiveStoryStore.shared
+    @Bindable private var postTradeReflectionGate = PostTradeReflectionGate.shared
     @Environment(\.appEnvironment) private var appEnvironment
+    @State private var reflectionError: String?
 
     var body: some View {
         // Edge-anchored tab bar (not floating capsule). Background reaches the
@@ -25,6 +27,37 @@ struct MainTabShellView: View {
         }
         .tabViewStyle(.tabBarOnly)
         .experienceAppChrome()
+        .globalUploadChrome()
+        .sheet(isPresented: Binding(
+            get: { postTradeReflectionGate.pendingTrade != nil },
+            set: { isPresented in
+                if !isPresented { postTradeReflectionGate.clear() }
+            }
+        )) {
+            if let trade = postTradeReflectionGate.pendingTrade {
+                PostTradeReflectionSheet(
+                    trade: trade,
+                    onSave: { exitEmotion, executionRating in
+                        reflectionError = await postTradeReflectionGate.saveReflection(
+                            exitEmotion: exitEmotion,
+                            executionRating: executionRating,
+                            trades: appEnvironment.data.trades,
+                            detailCache: appEnvironment.data.detailCache
+                        )
+                    },
+                    onSkip: { postTradeReflectionGate.clear() }
+                )
+                .experienceProtectedFormDismiss()
+            }
+        }
+        .alert("Reflection", isPresented: Binding(
+            get: { reflectionError != nil },
+            set: { if !$0 { reflectionError = nil } }
+        )) {
+            Button("OK", role: .cancel) { reflectionError = nil }
+        } message: {
+            Text(reflectionError ?? "")
+        }
         .vaultConfirmationOverlay(store: appEnvironment.data.vaultStore)
         .onChange(of: store.selectedTab) { _, tab in
             MainThreadOperationTracker.push("tab.select.\(tab.rawValue)")

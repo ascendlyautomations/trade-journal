@@ -8,8 +8,17 @@ nonisolated enum ProfilePersistentReconcile {
         var removed: Int
     }
 
-    static func reconcileTrades(existing: [Trade], incoming: [Trade]) -> (items: [Trade], counts: Counts) {
-        reconcileByCreatedAt(existing: existing, incoming: incoming, createdAt: \.createdAt)
+    static func reconcileTrades(
+        existing: [Trade],
+        incoming: [Trade],
+        preserveIDs: Set<TradeID> = []
+    ) -> (items: [Trade], counts: Counts) {
+        reconcileByCreatedAt(
+            existing: existing,
+            incoming: incoming,
+            createdAt: \.createdAt,
+            preserveIDs: preserveIDs
+        )
     }
 
     static func reconcilePosts(existing: [Post], incoming: [Post]) -> (items: [Post], counts: Counts) {
@@ -27,10 +36,18 @@ nonisolated enum ProfilePersistentReconcile {
         reconcileByCreatedAt(existing: existing, incoming: incoming, createdAt: \.achievedAt)
     }
 
-    static func reconcileProfileState(existing: ProfileState, incoming: ProfileState) -> ProfileState {
+    static func reconcileProfileState(
+        existing: ProfileState,
+        incoming: ProfileState,
+        preservePublicTradeIDs: Set<TradeID> = []
+    ) -> ProfileState {
         var merged = incoming
         if incoming.didLoadTrades && !existing.trades.isEmpty {
-            let result = reconcileTrades(existing: existing.trades, incoming: incoming.trades)
+            let result = reconcileTrades(
+                existing: existing.trades,
+                incoming: incoming.trades,
+                preserveIDs: preservePublicTradeIDs
+            )
             merged.trades = result.items
             logSection("trades", result.counts)
         }
@@ -52,7 +69,8 @@ nonisolated enum ProfilePersistentReconcile {
     private static func reconcileByCreatedAt<T: Identifiable & Equatable>(
         existing: [T],
         incoming: [T],
-        createdAt: KeyPath<T, Date>
+        createdAt: KeyPath<T, Date>,
+        preserveIDs: Set<T.ID> = []
     ) -> (items: [T], counts: Counts) where T.ID: Hashable {
         let sortedIncoming = incoming.sorted { $0[keyPath: createdAt] > $1[keyPath: createdAt] }
         let incomingIDs = Set(sortedIncoming.map(\.id))
@@ -65,6 +83,7 @@ nonisolated enum ProfilePersistentReconcile {
 
         if let oldest = incomingOldest {
             for (id, item) in byID where item[keyPath: createdAt] >= oldest && !incomingIDs.contains(id) {
+                if preserveIDs.contains(id) { continue }
                 byID.removeValue(forKey: id)
                 removed += 1
             }

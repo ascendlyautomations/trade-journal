@@ -16,7 +16,7 @@ struct ExploreTraderCard: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             Button(action: onOpen) {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    FollowListAvatarView(profile: profile, imagePipeline: imagePipeline, size: 52)
+                    ExploreProfileAvatarView(profile: profile, imagePipeline: imagePipeline, size: 52)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(profile.displayName)
                             .experienceStyle(.subheadline, color: colors.primaryText)

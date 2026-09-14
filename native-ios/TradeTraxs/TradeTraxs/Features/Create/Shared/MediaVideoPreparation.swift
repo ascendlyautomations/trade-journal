@@ -50,6 +50,7 @@ enum MediaVideoPreparation {
     }
 
     /// Copy → inspect → compress/remux → validate → thumbnail from final delivery asset.
+    /// Prefer ``ReelEncodingPipeline/prepareForUpload(from:contentType:onProgress:)`` for reel uploads.
     static func prepareLocalVideo(
         from sourceURL: URL,
         contentType: String?,
@@ -157,6 +158,42 @@ enum MediaVideoPreparation {
             throw mapPreparationError(error, fallback: compressionFailedMessage)
         }
 
+        var finalURL = deliveryURL
+        var finalProfile = outputProfile
+        if outputProfile.fileBytes >= profile.fileBytes,
+           VideoDeliveryExporter.isDeliveryCompatibleVideo(profile: profile, target: target)
+        {
+            try? FileManager.default.removeItem(at: deliveryURL)
+            if profile.isMP4Container {
+                finalURL = stagedSource
+                finalProfile = profile
+            } else {
+                var remuxMetrics: VideoDeliveryExporter.TranscodeMetrics?
+                let remuxed = try await VideoDeliveryExporter.produceDeliveryVideo(
+                    from: sourceAsset,
+                    sourceURL: stagedSource,
+                    profile: profile,
+                    mode: .remux,
+                    target: target,
+                    transcodeMetrics: &remuxMetrics,
+                    onProgress: nil
+                )
+                try? FileManager.default.removeItem(at: stagedSource)
+                finalURL = remuxed
+                finalProfile = try await VideoDeliveryExporter.inspectSource(
+                    asset: AVURLAsset(url: remuxed),
+                    fileURL: remuxed
+                )
+            }
+        } else {
+            try? FileManager.default.removeItem(at: stagedSource)
+        }
+
+        guard finalProfile.fileBytes <= maxFinalUploadBytes else {
+            try? FileManager.default.removeItem(at: finalURL)
+            throw AppError.unknown(message: "Prepared video is still too large. Try a shorter clip.")
+        }
+
         VideoCompressionDiagnostics.logOutput(
             sourceFPS: profile.frameRate,
             targetFPS: target.outputFrameRate,
@@ -164,39 +201,36 @@ enum MediaVideoPreparation {
             sourceDuration: profile.durationSeconds,
             outputDuration: outputProfile.durationSeconds,
             sourceBytes: profile.fileBytes,
-            outputBytes: outputProfile.fileBytes,
-            outputBitrate: outputProfile.estimatedBitrate,
+            outputBytes: finalProfile.fileBytes,
+            outputBitrate: finalProfile.estimatedBitrate,
             outputFrameCount: transcodeMetrics?.outputVideoFrameCount
         )
 
         onProgress?(0.92)
 
+        let finalAsset = AVURLAsset(url: finalURL)
         let thumb = await generateThumbnail(
-            for: deliveryAsset,
-            durationSeconds: outputProfile.durationSeconds
+            for: finalAsset,
+            durationSeconds: finalProfile.durationSeconds
         )
         guard thumb != nil else {
-            try? FileManager.default.removeItem(at: stagedSource)
-            try? FileManager.default.removeItem(at: deliveryURL)
+            try? FileManager.default.removeItem(at: finalURL)
             throw AppError.unknown(message: compressionFailedMessage)
         }
 
         #if DEBUG
-        if let info = await VideoPresentationInfo.load(asset: deliveryAsset) {
+        if let info = await VideoPresentationInfo.load(asset: finalAsset) {
             VideoPresentationProbe.log(surface: .profileThumbnail, info: info)
         }
         #endif
 
         onProgress?(1)
 
-        // Drop staged source; caller owns delivery file until upload completes.
-        try? FileManager.default.removeItem(at: stagedSource)
-
         return PreparedLocalVideo(
-            fileURL: deliveryURL,
+            fileURL: finalURL,
             contentType: "video/mp4",
-            byteCount: outputProfile.fileBytes,
-            durationSeconds: outputProfile.durationSeconds,
+            byteCount: finalProfile.fileBytes,
+            durationSeconds: finalProfile.durationSeconds,
             thumbnailJPEG: thumb?.jpegData(compressionQuality: 0.9),
             thumbnailImage: thumb
         )
