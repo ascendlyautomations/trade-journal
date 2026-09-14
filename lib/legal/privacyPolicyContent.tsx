@@ -43,8 +43,12 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
           <li>
             <strong>Trading data</strong>, trades you log or import (including tickers, dates,
             profit and loss, direction, session, strategy notes, account labels, screenshots, and
-            CSV import files), dashboard preferences, and analytics derived from your trading
-            activity within the Service.
+            CSV import files); when you connect a supported broker or trading platform,
+            authorized data from that connection (such as broker or platform user identifiers,
+            trading account identifiers, orders, positions, executions or fills, transaction or
+            trading history, balances or related account metadata, and information derived from
+            the foregoing for journaling and analytics); dashboard preferences; and analytics
+            derived from your trading activity within the Service.
           </li>
           <li>
             <strong>User-generated content</strong>, posts, clips, comments, likes, direct messages,
@@ -112,8 +116,33 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
       <>
         <p>
           TradeTraxs is designed for journaling, performance tracking, and community sharing. You
-          may enter trades manually, upload CSV files from other platforms, attach screenshots, and
-          choose whether individual trades or posts are public or private.
+          may enter trades manually, upload CSV files from other platforms, connect supported
+          broker or trading platform integrations where available, attach screenshots, and choose
+          whether individual trades or posts are public or private.
+        </p>
+        <p>
+          When you voluntarily connect a supported broker or trading platform (such as Tradovate),
+          we may receive and process data you authorize through that integration, including broker
+          or platform user identifiers, trading account identifiers and account information, orders,
+          positions, executions or fills, transaction or trading history, balances or related account
+          metadata when authorized, and data derived from the above to power TradeTraxs journaling,
+          dashboards, calendars, analytics, reporting, and related features. We use this information
+          to connect your broker account, import or synchronize trading activity, create and update
+          journal records, provide product functionality, and maintain or troubleshoot the
+          authorized integration.
+        </p>
+        <p>
+          Supported broker connections use authorization mechanisms such as OAuth where offered.
+          You authenticate with the broker or platform; TradeTraxs does not ask you to provide your
+          Tradovate password for the OAuth-based Tradovate integration and does not need or store
+          that password through that flow. To maintain an authorized connection, we may securely
+          store authorization tokens or similar credentials server-side. Access is limited to
+          permissions you grant through the integration. You may disconnect supported broker
+          integrations where the Service provides that control. Disconnecting stops future
+          synchronization but does not automatically delete trading data already imported into
+          TradeTraxs unless you delete it through available TradeTraxs controls. The initial
+          Tradovate integration is intended for journal and data synchronization; it is not
+          intended to authorize TradeTraxs to place trades on your behalf.
         </p>
         <p>
           Unless you share content publicly or with other users through the Service, your private
@@ -124,8 +153,14 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
           format support, to improve import compatibility.
         </p>
         <p>
-          <strong>Important:</strong> Do not upload credentials, account passwords, or sensitive
-          broker login information. TradeTraxs does not need broker passwords to operate.
+          <strong>Important:</strong> Do not upload broker account passwords, API secrets, or other
+          login credentials you type or paste into TradeTraxs (for example in support messages,
+          posts, or CSV attachments). TradeTraxs does not need your broker password to operate
+          manual journaling or CSV import, and the OAuth-based Tradovate connection does not use
+          your Tradovate password. That is different from authorization tokens or similar
+          credentials stored securely on our servers solely to maintain an integration you
+          authorized—we do not treat those server-side tokens as something you should manually
+          submit or share.
         </p>
       </>
     ),
@@ -293,6 +328,12 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
             <strong>AI service providers</strong>, including OpenAI when you use AI features
             described above.
           </li>
+          <li>
+            <strong>Brokers and trading platforms</strong>, such as Tradovate when you choose to
+            connect an account. Those providers authenticate you and may transmit trading data to
+            TradeTraxs according to their terms, APIs, and the permissions you grant. Listing a
+            provider here does not imply that the provider endorses TradeTraxs.
+          </li>
         </ul>
         <p>
           These providers may process data in the United States and other countries. Their privacy
@@ -313,6 +354,10 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
           <li>Process subscriptions, referrals, and affiliate payouts;</li>
           <li>Enable social features, messaging, notifications, and Trade Rooms;</li>
           <li>Generate AI-assisted trade analysis when you request it;</li>
+          <li>
+            Connect, import, and synchronize authorized broker or platform data and maintain those
+            integrations;
+          </li>
           <li>Respond to support, feedback, and legal requests;</li>
           <li>Detect abuse, fraud, and violations of our Terms;</li>
           <li>Comply with legal obligations; and</li>

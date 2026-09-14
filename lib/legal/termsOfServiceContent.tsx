@@ -36,8 +36,9 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
         <p>
           TradeTraxs is a <strong>trading journal and social community platform</strong> for
           educational, record-keeping, and community purposes. The Service allows you to log and
-          import trades, analyze performance, share content with other users, participate in Trade
-          Rooms, message other users, and access optional premium features such as AI Analyst.
+          import trades (including CSV import and, where available, authorized broker integrations),
+          analyze performance, share content with other users, participate in Trade Rooms, message
+          other users, and access optional premium features such as AI Analyst.
         </p>
         <p>
           <strong>TradeTraxs is not a broker, dealer, exchange, or investment adviser.</strong> We
@@ -333,7 +334,7 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
   },
   {
     id: "csv-imports",
-    title: "CSV Imports and Third-Party Data",
+    title: "CSV Imports, Broker Integrations, and Third-Party Data",
     content: (
       <>
         <p>
@@ -344,6 +345,29 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
         <p>
           Import parsers may not support every broker format. We do not guarantee error-free
           imports. Review imported trades before relying on analytics or sharing them publicly.
+        </p>
+        <p>
+          Where available, you may voluntarily connect supported brokers or trading platforms (such
+          as Tradovate). By connecting, you authorize TradeTraxs to access the account and trading
+          data permitted through that connection, which may include accounts, orders, positions,
+          executions or fills, balances, and trading history. TradeTraxs uses synchronized data for
+          journaling, analytics, reporting, and related product functionality—not as investment
+          advice.
+        </p>
+        <p>
+          Third-party and broker-sourced data may be delayed, incomplete, duplicated, unavailable, or
+          inaccurate. You remain responsible for reviewing imported or synchronized records before
+          relying on analytics, sharing them, or making trading decisions. Broker or platform
+          availability, APIs, permissions, and functionality can change or become unavailable outside
+          our control.
+        </p>
+        <p>
+          Connecting a broker or platform does <strong>not</strong> make TradeTraxs a broker,
+          dealer, exchange, investment adviser, or custodian, and TradeTraxs does not hold brokerage
+          funds. The Tradovate integration is read and data-sync oriented and is not intended to
+          execute or place trades on your behalf. You are responsible for complying with your
+          broker or platform agreements and applicable rules. You may disconnect supported
+          integrations where the Service provides that control.
         </p>
       </>
     ),
@@ -374,9 +398,10 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
       <>
         <p>
           The Service integrates with third parties such as Supabase, Stripe, Apple (App Store
-          billing on iOS), Google sign-in, Vercel, and AI providers. Your use of those services may
-          be subject to their terms. We are not responsible for third-party services outside our
-          reasonable control.
+          billing on iOS), Google sign-in, Vercel, AI providers, and—when you connect an
+          account—brokers or trading platforms such as Tradovate. Your use of those services may be
+          subject to their terms. We are not responsible for third-party services outside our
+          reasonable control, including broker APIs, authentication flows, or data feeds.
         </p>
         <p>
           Links to external sites do not imply endorsement. Use external sites at your own risk.

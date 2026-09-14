@@ -24,4 +24,4 @@ export const LEGAL_COPYRIGHT_EMAIL = COPYRIGHT_EMAIL
 /** @deprecated Prefer {@link SUPPORT_EMAIL} from `@/lib/contactEmails`. */
 export const LEGAL_CONTACT_EMAIL = SUPPORT_EMAIL
 
-export const LEGAL_LAST_UPDATED = "July 7, 2026"
+export const LEGAL_LAST_UPDATED = "September 14, 2026"
