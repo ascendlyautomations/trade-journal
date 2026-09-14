@@ -12,6 +12,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     /// Centralized APNs — features never register themselves.
     var pushNotifications: PushNotificationCenter?
 
+    override init() {
+        StartupTrace.begin("AppDelegate.init")
+        super.init()
+        StartupTrace.end("AppDelegate.init")
+    }
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -19,6 +25,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // Prefer the edge-anchored tab bar presentation over the floating capsule
         // when the OS still exposes that preference (iPad historically; harmless on iPhone).
         UserDefaults.standard.register(defaults: ["UseFloatingTabBar": false])
+        StartupTrace.event("AppDelegate.didFinishLaunching")
         AppLog.application.info("AppDelegate.didFinishLaunching")
         pushNotifications?.bindIfNeeded()
 

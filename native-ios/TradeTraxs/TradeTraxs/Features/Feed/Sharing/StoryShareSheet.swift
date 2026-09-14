@@ -76,6 +76,7 @@ struct StoryShareSheet: View {
             StoryShareRecipientPickerView(
                 scope: scope,
                 viewModel: viewModel,
+                imagePipeline: data.imagePipeline,
                 onSelectConversation: { _ in onClose() },
                 onSelectRoom: { _ in onClose() },
                 onClose: { recipientScope = nil }

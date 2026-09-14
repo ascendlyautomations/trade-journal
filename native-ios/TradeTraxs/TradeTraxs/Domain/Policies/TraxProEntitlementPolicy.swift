@@ -7,7 +7,7 @@ nonisolated enum TraxProEntitlementPolicy {
     }
 }
 
-extension BillingStatus {
+nonisolated extension BillingStatus {
     /// Authoritative TraxPro entitlement for native UI and feature gates.
     var hasTraxProAccess: Bool {
         TraxProEntitlementResolver.resolve(self).isActive

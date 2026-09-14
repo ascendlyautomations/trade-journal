@@ -550,20 +550,24 @@ struct DashboardHoldHistogramView: View {
                 .frame(height: 120)
                 .accessibilityLabel("Hold time distribution")
 
-                // Discrete taps — avoid scrub-driven navigation.
-                HStack(spacing: ExperienceSpacing.xs) {
-                    ForEach(buckets.filter { $0.count > 0 }) { bucket in
+                // One count chip per X-axis bucket — labels live on the chart only.
+                HStack(spacing: 0) {
+                    ForEach(buckets) { bucket in
                         Button {
                             ExperienceHaptics.play(.selection)
                             onSelectBucket?(bucket.label)
                         } label: {
-                            Text("\(bucket.label) · \(bucket.count)")
-                                .experienceStyle(.caption2, color: colors.primaryText)
-                                .padding(.horizontal, ExperienceSpacing.sm)
-                                .padding(.vertical, ExperienceSpacing.xs)
+                            Text("\(bucket.count)")
+                                .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                                .foregroundStyle(colors.primaryText)
+                                .padding(.horizontal, ExperienceSpacing.xs)
+                                .padding(.vertical, 4)
                                 .background(colors.fillSecondary.opacity(0.55), in: Capsule())
+                                .contentTransition(.numericText())
                         }
                         .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+                        .disabled(bucket.count == 0 || onSelectBucket == nil)
                         .accessibilityLabel("\(bucket.label), \(bucket.count) trades. Double tap to view.")
                     }
                 }

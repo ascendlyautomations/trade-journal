@@ -3,11 +3,11 @@ import SwiftUI
 struct StoryShareRecipientPickerView: View {
     let scope: StoryShareViewModel.RecipientScope
     @Bindable var viewModel: StoryShareViewModel
+    let imagePipeline: any ImagePipeline
     var onSelectConversation: (Conversation) -> Void
     var onSelectRoom: (TradeRoom) -> Void
     var onClose: () -> Void
 
-    @Environment(\.themeColors) private var colors
     @State private var searchText = ""
 
     var body: some View {
@@ -75,7 +75,10 @@ struct StoryShareRecipientPickerView: View {
                                 }
                             }
                         } label: {
-                            conversationRow(conversation)
+                            ShareRecipientConversationRow(
+                                conversation: conversation,
+                                imagePipeline: imagePipeline
+                            )
                         }
                         .buttonStyle(.plain)
                         .disabled(viewModel.phase == .sending)
@@ -89,7 +92,7 @@ struct StoryShareRecipientPickerView: View {
                                 }
                             }
                         } label: {
-                            roomRow(room)
+                            ShareRecipientTradeRoomRow(room: room, imagePipeline: imagePipeline)
                         }
                         .buttonStyle(.plain)
                         .disabled(viewModel.phase == .sending)
@@ -105,50 +108,6 @@ struct StoryShareRecipientPickerView: View {
                 }
             }
         }
-    }
-
-    private func conversationRow(_ conversation: Conversation) -> some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            ExperienceAvatar(
-                initials: ProfileDisplay.initials(
-                    displayName: conversation.title ?? "",
-                    username: conversation.peerUsername ?? "?"
-                ),
-                size: 44
-            )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(conversation.title ?? "Conversation")
-                    .experienceStyle(.headline, color: colors.primaryText)
-                    .lineLimit(1)
-                if let username = conversation.peerUsername, !username.isEmpty {
-                    Text("@\(username)")
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func roomRow(_ room: TradeRoom) -> some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            ExperienceAvatar(initials: String(room.name.prefix(2)).uppercased(), size: 44)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(room.name)
-                    .experienceStyle(.headline, color: colors.primaryText)
-                    .lineLimit(1)
-                if let description = room.description?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !description.isEmpty
-                {
-                    Text(description)
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 4)
     }
 
     private var filteredConversations: [Conversation] {

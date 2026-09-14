@@ -56,9 +56,20 @@ export function buildPsychologyCoachUserPrompt(
   const factsJson = JSON.stringify(facts, null, 2)
   const modeInstruction =
     mode === "summary"
-      ? "Write a concise personalized psychology summary (2-4 sentences) plus 2-4 bullet observations. Use ONLY numbers from the facts."
+      ? `Write a concise personalized psychology summary (2-4 sentences) plus 2-4 bullet observations. Use ONLY numbers from the facts.`
       : mode === "reportSummary"
-        ? "Write an AI Psychology Summary for this report period. Explain the most important supported patterns in 2-4 paragraphs. Use ONLY numbers from the facts. Include comparisons when present in trends."
+        ? `Write a brief Psychology Report review the trader can read in under 40 seconds. Match the density of a Trading Performance Report executive summary — not an essay.
+
+Output format (plain text):
+1) One short paragraph (2-3 sentences max): overall psychological state + how it likely affected execution. No filler intro or conclusion.
+2) Then 2-4 bullet lines (each 1-2 sentences): only the strongest supported patterns from topInsights/trends. Do NOT restate every metric in baseline.
+3) End with a single line starting with "Focus next:" — one actionable behavioral guardrail.
+
+Rules:
+- Use ONLY numbers from the facts; if hasMinimumData is false or dataGaps exist, say data is limited in 1-2 sentences and skip bullets.
+- Do not repeat the same point in the paragraph and bullets.
+- Do not explain obvious statistics the UI already shows.
+- No motivational filler or repeated disclaimers.`
       : mode === "explain"
         ? "Explain the user's top psychology patterns in plain language. Include practical behavioral guardrails where supported by facts."
         : "Answer the user's follow-up question using ONLY the facts below."

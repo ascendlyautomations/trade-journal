@@ -12,8 +12,10 @@ nonisolated enum FeedInlineClipLayout {
     static let inlineMediaHeightBoost: CGFloat = 38
     /// Rough chrome subtracted from screen height (status + nav + tab bar).
     static let verticalChromeAllowance: CGFloat = 60
+    /// Layout reference when callers do not supply live `UIScreen` bounds (tests, pure sizing).
+    static let referencePhoneScreenBounds = CGRect(x: 0, y: 0, width: 390, height: 844)
 
-    static func maxMediaHeight(screenBounds: CGRect = UIScreen.main.bounds) -> CGFloat {
+    static func maxMediaHeight(screenBounds: CGRect) -> CGFloat {
         let usable = max(screenBounds.height - verticalChromeAllowance, minMediaHeight)
         let derived = usable * screenHeightFraction
         let capped = min(maxMediaHeightCeiling, max(maxMediaHeightFloor, derived))
@@ -23,11 +25,12 @@ nonisolated enum FeedInlineClipLayout {
     /// Fixed media region for inline Feed — caps tall portrait clips; video aspect-fits inside.
     static func containerSize(
         containerWidth: CGFloat,
-        videoAspectRatio: CGFloat
+        videoAspectRatio: CGFloat,
+        screenBounds: CGRect = referencePhoneScreenBounds
     ) -> CGSize {
         let width = max(containerWidth, 1)
         let naturalHeight = max(width / max(videoAspectRatio, 0.01), FeedMediaLayout.minHeight)
-        let height = min(naturalHeight, maxMediaHeight())
+        let height = min(naturalHeight, maxMediaHeight(screenBounds: screenBounds))
         return CGSize(width: width, height: height)
     }
 

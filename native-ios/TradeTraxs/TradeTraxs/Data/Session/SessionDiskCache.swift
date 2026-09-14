@@ -24,7 +24,13 @@ nonisolated enum SessionDiskCache {
         var profileID: String
         var savedAt: Date
         var trades: [Trade]
+        var historyComplete: Bool?
+        var totalTradeCount: Int?
     }
+
+    /// Align with dashboard trade window — single owner snapshot, not a second trade database.
+    static let ownerTradesMaxCount = 500
+    static let ownerTradesMaxAge: TimeInterval = 7 * 24 * 60 * 60
 
     static func saveAccounts(_ accounts: [TradingAccount], for profileID: ProfileID) {
         let blob = AccountsBlob(profileID: profileID.rawValue, savedAt: Date(), accounts: accounts)
@@ -48,17 +54,33 @@ nonisolated enum SessionDiskCache {
         return blob.followingIDs
     }
 
-    static func saveOwnerTrades(_ trades: [Trade], for profileID: ProfileID) {
-        // Cap disk footprint — presentation/recent window only.
-        let capped = Array(trades.prefix(200))
-        let blob = OwnerTradesBlob(profileID: profileID.rawValue, savedAt: Date(), trades: capped)
+    static func saveOwnerTrades(
+        _ trades: [Trade],
+        for profileID: ProfileID,
+        historyComplete: Bool? = nil,
+        totalTradeCount: Int? = nil
+    ) {
+        let capped = Array(trades.prefix(ownerTradesMaxCount))
+        let blob = OwnerTradesBlob(
+            profileID: profileID.rawValue,
+            savedAt: Date(),
+            trades: capped,
+            historyComplete: historyComplete,
+            totalTradeCount: totalTradeCount
+        )
         write(blob, file: "owner-trades-\(profileID.rawValue).json")
     }
 
-    static func loadOwnerTrades(for profileID: ProfileID, maxAge: TimeInterval = 6 * 60 * 60) -> [Trade]? {
-        guard let blob: OwnerTradesBlob = read(file: "owner-trades-\(profileID.rawValue).json") else { return nil }
+    static func loadOwnerTrades(
+        for profileID: ProfileID,
+        maxAge: TimeInterval = ownerTradesMaxAge
+    ) -> OwnerTradesBlob? {
+        guard let blob: OwnerTradesBlob = read(file: "owner-trades-\(profileID.rawValue).json") else {
+            return nil
+        }
         guard Date().timeIntervalSince(blob.savedAt) <= maxAge else { return nil }
-        return blob.trades
+        guard blob.profileID == profileID.rawValue else { return nil }
+        return blob
     }
 
     static func clearAll() {
@@ -83,6 +105,7 @@ nonisolated enum SessionDiskCache {
         do {
             let data = try JSONEncoder().encode(value)
             try data.write(to: url, options: [.atomic])
+            DiskCacheIOProbe.recordWrite()
         } catch {
             // Soft-fail — disk cache must never break networking.
         }
@@ -92,6 +115,7 @@ nonisolated enum SessionDiskCache {
         guard let dir = directoryURL() else { return nil }
         let url = dir.appendingPathComponent(sanitize(file))
         guard let data = try? Data(contentsOf: url) else { return nil }
+        DiskCacheIOProbe.recordRead()
         return try? JSONDecoder().decode(T.self, from: data)
     }
 

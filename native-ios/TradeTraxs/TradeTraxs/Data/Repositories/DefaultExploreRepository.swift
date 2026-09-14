@@ -151,12 +151,18 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : ProfileID(trimmed)
         }
+        let yourRaw = payload.data?.your_rooms ?? []
+        let suggestedRaw = payload.data?.suggested ?? []
+        let popularRaw = payload.data?.popular ?? []
+        let yourRooms = mapDiscoveryRows(yourRaw, section: "your_rooms")
+        let suggested = mapDiscoveryRows(suggestedRaw, section: "suggested")
+        let popular = mapDiscoveryRows(popularRaw, section: "popular")
         return TradeRoomsHomeBootstrap(
             viewerID: viewerID,
             scope: scope,
-            yourRooms: mapDiscoveryRows(payload.data?.your_rooms ?? []),
-            suggested: mapDiscoveryRows(payload.data?.suggested ?? []),
-            popular: mapDiscoveryRows(payload.data?.popular ?? [])
+            yourRooms: yourRooms,
+            suggested: suggested,
+            popular: popular
         )
     }
 
@@ -212,14 +218,23 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
         if let version = payload.meta?.contract_version {
             try BackendV2Versioning.assertContractVersion(version)
         }
-        return mapDiscoveryRows(payload.data?.rooms ?? [])
+        return mapDiscoveryRows(payload.data?.rooms ?? [], section: mode.rawValue)
     }
 
-    private func mapDiscoveryRows(_ rows: [DiscoveryRoomRow]) -> [ExploreRoomSuggestion] {
-        rows.compactMap { row -> ExploreRoomSuggestion? in
-            guard let id = row.id, let name = row.name else { return nil }
+    private func mapDiscoveryRows(
+        _ rows: [DiscoveryRoomRow],
+        section: String = "discovery"
+    ) -> [ExploreRoomSuggestion] {
+        let mapped = rows.compactMap { row -> ExploreRoomSuggestion? in
+            guard let id = row.id, let name = row.name else {
+                RoomDiscoveryProbe.logDropped(roomID: row.id, reason: "\(section)MissingIdOrName")
+                return nil
+            }
             let slug = (row.slug ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if slug.lowercased() == "tradetraxs-beta" { return nil }
+            if slug.lowercased() == "tradetraxs-beta" {
+                RoomDiscoveryProbe.logDropped(roomID: id, reason: "\(section)BetaSlug")
+                return nil
+            }
             let image = row.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
             let ownerID = row.owner?.id.flatMap { ProfileID($0) }
             return ExploreRoomSuggestion(
@@ -243,6 +258,12 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
                 viewerJoinRequestState: TradeRoomJoinRequestState.parse(row.viewer_join_request_status)
             )
         }
+        RoomDiscoveryProbe.logBootstrapSection(
+            section: section,
+            serverReturned: rows.count,
+            decoded: mapped.count
+        )
+        return mapped
     }
 
     private func filterDiscoveryRooms(

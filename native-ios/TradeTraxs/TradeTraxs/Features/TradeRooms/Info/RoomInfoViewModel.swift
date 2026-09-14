@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 @Observable
 @MainActor
@@ -29,6 +30,7 @@ final class RoomInfoViewModel {
     var editDescription = ""
     var editShowsOnProfile = true
     var pendingImageData: Data?
+    var pendingImagePreview: UIImage?
 
     private let rooms: any RoomRepository
     private let uploadService: any UploadService
@@ -112,6 +114,12 @@ final class RoomInfoViewModel {
         navigationCoordinator?.open(navigationHost.manageRoom(roomID))
     }
 
+    func setCroppedRoomImage(_ result: ImageCropSelectionResult) {
+        guard let applied = ComposerCropImageState.apply(result) else { return }
+        pendingImagePreview = applied.finalImage
+        pendingImageData = applied.uploadData
+    }
+
     func saveDetails() async {
         guard canManageRoom, let management = rooms as? any RoomManagementRepository else { return }
         isSavingDetails = true
@@ -131,6 +139,7 @@ final class RoomInfoViewModel {
                 )
                 imageURL = reference.id
                 pendingImageData = nil
+                pendingImagePreview = nil
             }
             let trimmedName = editName.trimmingCharacters(in: .whitespacesAndNewlines)
             let trimmedDescription = editDescription.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -25,6 +25,7 @@ final class MessagingDomain {
     private let inboxStore = MessagesInboxStore.shared
 
     private var bootstrapTask: Task<Void, Never>?
+    private var catchUpTask: Task<Void, Never>?
     private var revalidationTask: Task<Void, Never>?
     private var readCursorTask: Task<Void, Never>?
     private var roomUnreadTask: Task<Void, Never>?
@@ -196,6 +197,8 @@ final class MessagingDomain {
         loadGeneration &+= 1
         bootstrapTask?.cancel()
         bootstrapTask = nil
+        catchUpTask?.cancel()
+        catchUpTask = nil
         revalidationTask?.cancel()
         revalidationTask = nil
         stopRealtime()
@@ -241,8 +244,26 @@ final class MessagingDomain {
             applyTerminalFailure("Messaging domain is not configured.", generation: generation)
             return
         }
+        var hydratedFromDisk = false
+        if let session, let userID = await session.currentUserID, !forceNetwork, !inboxStore.hasLoaded {
+            let viewer = ProfileID(userID.rawValue)
+            hydratedFromDisk = SocialPersistedCacheCoordinator.hydrateInbox(viewerID: viewer, inboxStore: inboxStore)
+            if hydratedFromDisk {
+                inboxStore.setPersistedViewerID(viewer)
+                _ = SocialPersistedCacheCoordinator.hydrateMemberRooms(
+                    viewerID: viewer,
+                    inboxStore: inboxStore,
+                    memberRoomsStore: SessionMemberRoomsStore.shared
+                )
+                markLoaded(generation: generation)
+                state.viewerID = viewer
+            }
+        }
+
         if state.phase != .loaded || !inboxStore.hasLoaded {
-            state.phase = .loading
+            if !hydratedFromDisk {
+                state.phase = .loading
+            }
         }
         do {
             if BackendV2FeatureFlags.isEnabled(.messages),
@@ -251,6 +272,21 @@ final class MessagingDomain {
                let userID = await session.currentUserID
             {
                 let viewer = ProfileID(userID.rawValue)
+                inboxStore.setPersistedViewerID(viewer)
+
+                if hydratedFromDisk, !forceNetwork {
+                    catchUpTask?.cancel()
+                    catchUpTask = Task { [generation] in
+                        await self.performInboxCatchUp(
+                            viewerID: viewer,
+                            rpc: rpc,
+                            generation: generation,
+                            owner: owner
+                        )
+                    }
+                    return
+                }
+
                 do {
                     _ = try await MessagingBootstrapLoader.loadInbox(
                         viewerID: viewer,
@@ -269,9 +305,9 @@ final class MessagingDomain {
                         repository: rooms!,
                         forceNetwork: forceNetwork
                     )
-                    let (memberRooms, roomUnread) = try await roomsTask
+                    let (memberRooms, roomUnread, roomActivityAt) = try await roomsTask
                     guard generation == loadGeneration else { return }
-                    inboxStore.replaceRooms(memberRooms, unread: roomUnread)
+                    inboxStore.replaceRooms(memberRooms, activityAt: roomActivityAt, unread: roomUnread)
                     peerProfiles = [:]
                     markLoaded(generation: generation)
                     return
@@ -327,6 +363,41 @@ final class MessagingDomain {
                 if !benign {
                     applyTerminalFailure(MessagesInboxSupport.message(for: error), generation: generation)
                 }
+            }
+        }
+    }
+
+    private func performInboxCatchUp(
+        viewerID: ProfileID,
+        rpc: any RPCClient,
+        generation: UInt64,
+        owner: String
+    ) async {
+        guard generation == loadGeneration else { return }
+        guard let rooms else { return }
+        do {
+            _ = try await MessagingBootstrapLoader.loadInbox(
+                viewerID: viewerID,
+                rpc: rpc,
+                inboxStore: inboxStore,
+                detailCache: detailCache!,
+                forceNetwork: false,
+                loadGeneration: generation,
+                currentGeneration: { [weak self] in self?.loadGeneration ?? 0 },
+                owner: "\(owner).catchUp"
+            )
+            guard generation == loadGeneration else { return }
+            let (memberRooms, roomUnread, roomActivityAt) = try await SessionMemberRoomsStore.shared.memberRooms(
+                for: viewerID,
+                repository: rooms,
+                forceNetwork: false
+            )
+            guard generation == loadGeneration else { return }
+            inboxStore.replaceRooms(memberRooms, activityAt: roomActivityAt, unread: roomUnread)
+            markLoaded(generation: generation)
+        } catch {
+            if inboxStore.hasLoaded {
+                await markLoadedFromCache(generation: generation)
             }
         }
     }
@@ -472,6 +543,9 @@ final class MessagingDomain {
         await startRoomReadCursorRealtimeIfNeeded(viewerID: viewerID, session: session)
         await startRoomMemberCountRealtimeIfNeeded(viewerID: viewerID, session: session)
         await startInboxMessagesRealtimeIfNeeded(viewerID: viewerID, session: session)
+#if DEBUG
+        SocialCacheProbe.setRealtimeSubscribed(true)
+#endif
     }
 
     private func stopRealtime() {

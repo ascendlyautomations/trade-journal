@@ -29,23 +29,13 @@ struct NewChatPickerView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch viewModel.mode {
-                case .chooser:
-                    chooserContent
-                case .personal:
-                    peoplePickerContent(isGroup: false)
-                case .group:
-                    peoplePickerContent(isGroup: true)
-                }
+            VStack(spacing: 0) {
+                newChatTopSection
+                mainContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .experienceScreenBackground()
             .experienceNavigationTitle(navigationTitle)
-            .searchable(
-                text: $viewModel.searchText,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search people"
-            )
             .onChange(of: viewModel.searchText) { _, _ in
                 viewModel.searchChanged()
             }
@@ -94,26 +84,66 @@ struct NewChatPickerView: View {
         }
     }
 
-    private var chooserContent: some View {
-        VStack(spacing: ExperienceSpacing.lg) {
-            Spacer()
-            chooserButton(
-                title: "New Personal Chat",
-                subtitle: "Message one person",
-                icon: .messages
-            ) {
-                viewModel.presentPersonalChat()
+    /// Search + optional create actions — one compact block at the top.
+    private var newChatTopSection: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            ExperienceSearchField(
+                text: $viewModel.searchText,
+                placeholder: "Search people",
+                accessibilityIdentifier: "newChat.search"
+            )
+
+            if viewModel.mode == .chooser {
+                VStack(spacing: ExperienceSpacing.xs) {
+                    chooserButton(
+                        title: "New Personal Chat",
+                        subtitle: "Message one person",
+                        icon: .messages
+                    ) {
+                        viewModel.presentPersonalChat()
+                    }
+                    chooserButton(
+                        title: "New Group Chat",
+                        subtitle: "Message several people",
+                        icon: .rooms
+                    ) {
+                        viewModel.presentGroupChat()
+                    }
+                }
             }
-            chooserButton(
-                title: "New Group Chat",
-                subtitle: "Message several people",
-                icon: .rooms
-            ) {
-                viewModel.presentGroupChat()
-            }
-            Spacer()
         }
-        .padding(.horizontal, ExperienceSpacing.lg)
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.top, ExperienceSpacing.sm)
+        .padding(.bottom, ExperienceSpacing.sm)
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
+        switch viewModel.mode {
+        case .chooser:
+            if viewModel.phase == .opening {
+                ExperienceLoadingSpinner(label: "Opening conversation")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error = viewModel.errorMessage {
+                ExperienceEmptyState(
+                    icon: .warning,
+                    title: "Unable to continue",
+                    message: error
+                )
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.top, ExperienceSpacing.md)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            } else {
+                peopleResultsContent(
+                    isGroup: false,
+                    emptyMessage: "Find a trader to start a conversation."
+                )
+            }
+        case .personal:
+            peoplePickerContent(isGroup: false)
+        case .group:
+            peoplePickerContent(isGroup: true)
+        }
     }
 
     private func chooserButton(
@@ -123,18 +153,20 @@ struct NewChatPickerView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: ExperienceSpacing.md) {
-                ExperienceIcon(icon: icon, size: .lg, color: colors.accent)
-                VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: ExperienceSpacing.sm) {
+                ExperienceIcon(icon: icon, size: .md, color: colors.accent)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .experienceStyle(.headline, color: colors.primaryText)
+                        .experienceStyle(.subheadline, color: colors.primaryText)
+                        .fontWeight(.semibold)
                     Text(subtitle)
                         .experienceStyle(.caption, color: colors.secondaryText)
                 }
-                Spacer()
+                Spacer(minLength: 0)
                 ExperienceIcon(icon: .forward, size: .sm, color: colors.tertiaryText)
             }
-            .padding(ExperienceSpacing.md)
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.vertical, ExperienceSpacing.sm)
             .background(colors.backgroundSecondary)
             .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg))
         }
@@ -155,41 +187,54 @@ struct NewChatPickerView: View {
                 title: "Unable to continue",
                 message: error
             )
+            .padding(.horizontal, ExperienceSpacing.md)
         } else {
             VStack(spacing: 0) {
                 if isGroup {
                     groupComposerHeader
                 }
-                if viewModel.visibleResults.isEmpty {
-                    ExperienceEmptyState(
-                        icon: .search,
-                        title: viewModel.prompt,
-                        message: isGroup
-                            ? "Select at least two people, then tap Create."
-                            : "Find a trader to start a conversation."
-                    )
-                    .frame(maxHeight: .infinity)
-                } else {
-                    List(viewModel.visibleResults) { profile in
-                        if isGroup {
-                            groupRow(profile)
-                        } else {
-                            personalRow(profile)
-                        }
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                }
+                peopleResultsContent(
+                    isGroup: isGroup,
+                    emptyMessage: isGroup
+                        ? "Select at least two people, then tap Create."
+                        : "Find a trader to start a conversation."
+                )
             }
         }
     }
 
+    @ViewBuilder
+    private func peopleResultsContent(isGroup: Bool, emptyMessage: String) -> some View {
+        if viewModel.phase == .searching, viewModel.isSearching, viewModel.mode == .chooser {
+            ExperienceLoadingSpinner(label: "Searching people")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if viewModel.visibleResults.isEmpty {
+            ExperienceEmptyState(
+                icon: .search,
+                title: viewModel.prompt,
+                message: emptyMessage
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.top, ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        } else {
+            List(viewModel.visibleResults) { profile in
+                if isGroup {
+                    groupRow(profile)
+                } else {
+                    personalRow(profile)
+                }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+        }
+    }
+
     private var groupComposerHeader: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             TextField("Group name (optional)", text: $viewModel.groupName)
                 .textFieldStyle(.roundedBorder)
                 .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.top, ExperienceSpacing.sm)
 
             if !viewModel.selectedGroupMembers.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -214,7 +259,7 @@ struct NewChatPickerView: View {
                 }
             }
         }
-        .padding(.bottom, ExperienceSpacing.sm)
+        .padding(.bottom, ExperienceSpacing.xs)
     }
 
     private func personalRow(_ profile: Profile) -> some View {

@@ -3,12 +3,14 @@ import SwiftUI
 struct SharedContentShareRecipientPickerView: View {
     let scope: SharedContentShareViewModel.RecipientScope
     @Bindable var viewModel: SharedContentShareViewModel
-    var onSelectConversation: (Conversation) -> Void
-    var onSelectRoom: (TradeRoom) -> Void
+    let imagePipeline: any ImagePipeline
+    var onSendSuccess: () -> Void
     var onClose: () -> Void
 
-    @Environment(\.themeColors) private var colors
     @State private var searchText = ""
+    @FocusState private var messageFieldFocused: Bool
+
+    @Environment(\.themeColors) private var colors
 
     var body: some View {
         NavigationStack {
@@ -36,6 +38,11 @@ struct SharedContentShareRecipientPickerView: View {
                 }
             }
             .searchable(text: $searchText, prompt: searchPrompt)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if viewModel.hasSelection {
+                    shareComposerBar
+                }
+            }
             .task(id: scope) {
                 await viewModel.loadRecipients(for: scope)
             }
@@ -69,86 +76,90 @@ struct SharedContentShareRecipientPickerView: View {
                 case .messages:
                     ForEach(filteredConversations) { conversation in
                         Button {
-                            Task {
-                                if await viewModel.send(to: conversation) {
-                                    onSelectConversation(conversation)
-                                }
-                            }
+                            viewModel.toggleConversationSelection(conversation)
                         } label: {
-                            conversationRow(conversation)
+                            ShareRecipientConversationRow(
+                                conversation: conversation,
+                                imagePipeline: imagePipeline,
+                                isSelected: viewModel.isConversationSelected(conversation.id)
+                            )
                         }
                         .buttonStyle(.plain)
                         .disabled(viewModel.phase == .sending)
+                        .accessibilityIdentifier("sharedContentShare.conversation.\(conversation.id.rawValue)")
                     }
                 case .rooms:
                     ForEach(filteredRooms) { room in
                         Button {
-                            Task {
-                                if await viewModel.send(to: room) {
-                                    onSelectRoom(room)
-                                }
-                            }
+                            viewModel.toggleRoomSelection(room)
                         } label: {
-                            roomRow(room)
+                            ShareRecipientTradeRoomRow(
+                                room: room,
+                                imagePipeline: imagePipeline,
+                                isSelected: viewModel.isRoomSelected(room.id)
+                            )
                         }
                         .buttonStyle(.plain)
                         .disabled(viewModel.phase == .sending)
+                        .accessibilityIdentifier("sharedContentShare.room.\(room.id.rawValue)")
                     }
                 }
             }
             .listStyle(.plain)
-            .overlay {
-                if viewModel.phase == .sending {
-                    ProgressView("Sending…")
-                        .padding()
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                }
-            }
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 
-    private func conversationRow(_ conversation: Conversation) -> some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            ExperienceAvatar(
-                initials: ProfileDisplay.initials(
-                    displayName: conversation.title ?? "",
-                    username: conversation.peerUsername ?? "?"
-                ),
-                size: 44
-            )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(conversation.title ?? "Conversation")
-                    .experienceStyle(.headline, color: colors.primaryText)
-                    .lineLimit(1)
-                if let username = conversation.peerUsername, !username.isEmpty {
-                    Text("@\(username)")
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .lineLimit(1)
+    private var shareComposerBar: some View {
+        VStack(spacing: ExperienceSpacing.sm) {
+            TextField("Add a message...", text: $viewModel.accompanyingMessage, axis: .vertical)
+                .lineLimit(1 ... 4)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.vertical, ExperienceSpacing.sm)
+                .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                .focused($messageFieldFocused)
+                .disabled(viewModel.phase == .sending)
+                .submitLabel(.done)
+                .onSubmit {
+                    messageFieldFocused = false
+                }
+                .accessibilityIdentifier("sharedContentShare.messageField")
+
+            ExperienceButton(
+                title: sendButtonTitle,
+                kind: .primary,
+                isEnabled: viewModel.hasSelection,
+                isLoading: viewModel.phase == .sending,
+                accessibilityIdentifier: "sharedContentShare.send"
+            ) {
+                messageFieldFocused = false
+                Task {
+                    if await viewModel.sendToSelected() {
+                        onSendSuccess()
+                    }
                 }
             }
-            Spacer(minLength: 0)
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.top, ExperienceSpacing.sm)
+        .padding(.bottom, ExperienceSpacing.md)
+        .background {
+            Rectangle()
+                .fill(.bar)
+                .overlay(alignment: .top) {
+                    Divider()
+                }
+                .ignoresSafeArea(edges: .bottom)
+        }
     }
 
-    private func roomRow(_ room: TradeRoom) -> some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            ExperienceAvatar(initials: String(room.name.prefix(2)).uppercased(), size: 44)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(room.name)
-                    .experienceStyle(.headline, color: colors.primaryText)
-                    .lineLimit(1)
-                if let description = room.description?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !description.isEmpty
-                {
-                    Text(description)
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 0)
+    private var sendButtonTitle: String {
+        let count = viewModel.selectedDestinationCount
+        if count <= 1 {
+            return "Send"
         }
-        .padding(.vertical, 4)
+        return "Send to \(count)"
     }
 
     private var filteredConversations: [Conversation] {

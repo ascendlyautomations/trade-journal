@@ -6,6 +6,7 @@ struct LoginView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState private var focusedField: AuthLoginField?
 
     init(
         authenticationCoordinator: AuthenticationCoordinator,
@@ -39,14 +40,31 @@ struct LoginView: View {
         .experienceScreenBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
-        .animation(
-            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-            value: viewModel.mode
-        )
-        .animation(
-            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-            value: viewModel.errorMessage
-        )
+        .onAppear {
+            StartupTrace.event("LoginView.body.onAppear")
+            LoginFocusProbe.installKeyboardObserversIfNeeded()
+        }
+        .onDisappear {
+            releaseLoginKeyboardFocus()
+        }
+        .onChange(of: viewModel.isSubmitting) { _, isSubmitting in
+            if isSubmitting {
+                releaseLoginKeyboardFocus()
+            }
+        }
+        .onChange(of: viewModel.mode) { _, _ in
+            releaseLoginKeyboardFocus()
+        }
+        .onChange(of: focusedField) { _, newValue in
+            switch newValue {
+            case .email:
+                LoginFocusProbe.focused(field: "email")
+            case .password:
+                LoginFocusProbe.focused(field: "password")
+            case nil:
+                break
+            }
+        }
     }
 
     private var header: some View {
@@ -67,6 +85,10 @@ struct LoginView: View {
             .experienceStyle(.body, color: colors.secondaryText)
         }
         .padding(.top, ExperienceSpacing.xxl)
+        .animation(
+            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+            value: viewModel.mode
+        )
     }
 
     private var social: some View {
@@ -74,6 +96,7 @@ struct LoginView: View {
             isEnabled: !viewModel.isSubmitting,
             isLoading: viewModel.isSubmitting,
             onAppleCredential: { credential in
+                releaseLoginKeyboardFocus()
                 Task { await viewModel.signInWithApple(credential: credential) }
             },
             onAppleCancelled: {
@@ -83,6 +106,7 @@ struct LoginView: View {
                 viewModel.handleAppleSignInFailure(error)
             },
             onGoogle: {
+                releaseLoginKeyboardFocus()
                 Task { await viewModel.signInWithGoogle() }
             }
         )
@@ -95,7 +119,10 @@ struct LoginView: View {
                 text: $viewModel.email,
                 kind: .email,
                 textContentType: .username,
-                submitLabel: .next
+                submitLabel: .next,
+                onSubmit: { focusedField = .password },
+                loginField: .email,
+                loginFocusedField: $focusedField
             )
 
             AuthTextField(
@@ -106,15 +133,25 @@ struct LoginView: View {
                 textContentType: viewModel.mode == .signUp ? .newPassword : .password,
                 submitLabel: .go,
                 onSubmit: {
+                    releaseLoginKeyboardFocus()
                     Task { await viewModel.submit() }
-                }
+                },
+                loginField: .password,
+                loginFocusedField: $focusedField
             )
+
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-uitesting-login-native-ab") {
+                loginNativeABControls
+            }
+            #endif
 
             if viewModel.mode == .signIn {
                 HStack {
                     Spacer()
                     Button("Forgot password?") {
                         ExperienceHaptics.play(.selection)
+                        releaseLoginKeyboardFocus()
                         navigationCoordinator.open(.auth(.resetPassword))
                     }
                     .font(ExperienceTypography.footnote)
@@ -129,6 +166,10 @@ struct LoginView: View {
                     .experienceStyle(.footnote, color: colors.error)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("auth.error")
+                    .animation(
+                        ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+                        value: viewModel.errorMessage
+                    )
             }
 
             if let informationalMessage = viewModel.informationalMessage {
@@ -174,6 +215,7 @@ struct LoginView: View {
                 isLoading: viewModel.isSubmitting,
                 accessibilityIdentifier: "auth.submit"
             ) {
+                releaseLoginKeyboardFocus()
                 Task { await viewModel.submit() }
             }
 
@@ -197,6 +239,7 @@ struct LoginView: View {
                 .padding(.top, ExperienceSpacing.sm)
 
             Button {
+                releaseLoginKeyboardFocus()
                 viewModel.toggleMode()
             } label: {
                 (
@@ -212,6 +255,7 @@ struct LoginView: View {
 
             Button("Take a quick tour") {
                 ExperienceHaptics.play(.selection)
+                releaseLoginKeyboardFocus()
                 navigationCoordinator.open(.auth(.onboarding))
             }
             .font(ExperienceTypography.footnote)
@@ -222,4 +266,46 @@ struct LoginView: View {
         .frame(maxWidth: .infinity)
         .padding(.bottom, ExperienceSpacing.xxl)
     }
+
+    #if DEBUG
+    /// Plain SwiftUI controls for A/B against ``AuthTextField`` — launch arg `-uitesting-login-native-ab`.
+    private var loginNativeABControls: some View {
+        LoginNativeABControls(isSignUp: viewModel.mode == .signUp)
+            .padding(.top, ExperienceSpacing.md)
+    }
+    #endif
+
+    /// Ends RTI/text session before OAuth, navigation, or auth state tears down Login.
+    private func releaseLoginKeyboardFocus() {
+        focusedField = nil
+        ExperienceKeyboard.dismiss()
+    }
 }
+
+#if DEBUG
+/// Isolated A/B fields — separate text/focus from production ``AuthTextField`` controls.
+private struct LoginNativeABControls: View {
+    let isSignUp: Bool
+    @State private var abEmail = ""
+    @State private var abPassword = ""
+    @FocusState private var abFocusedField: AuthLoginField?
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Text("Native A/B (DEBUG)")
+                .experienceStyle(.caption, color: colors.secondaryText)
+            TextField("AB Email", text: $abEmail)
+                .textContentType(.username)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($abFocusedField, equals: .email)
+            SecureField("AB Password", text: $abPassword)
+                .textContentType(isSignUp ? .newPassword : .password)
+                .focused($abFocusedField, equals: .password)
+        }
+    }
+}
+#endif

@@ -122,7 +122,7 @@ final class ScreenDataOrchestrationTests: XCTestCase {
         TradeRoomsFixtures.seedInbox(inbox, viewerID: viewer)
         XCTAssertTrue(inbox.hasLoadedRooms)
 
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         MessagingDomain.shared.invalidate()
         let viewModel = TradeRoomsHomeViewModel(
             messages: environment.data.messages,
@@ -142,7 +142,7 @@ final class ScreenDataOrchestrationTests: XCTestCase {
     }
 
     func testCurrentUserProfileStoreSeedsDetailCache() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let cache = environment.data.detailCache
         let store = CurrentUserProfileStore(
             profiles: environment.data.profiles,

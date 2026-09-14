@@ -59,7 +59,7 @@ enum InstrumentCatalog {
             for: profileID,
             maxAge: 30 * 24 * 60 * 60
         ) {
-            for trade in disk {
+            for trade in disk.trades {
                 byID[trade.id] = trade
             }
         }

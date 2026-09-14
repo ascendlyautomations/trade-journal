@@ -29,6 +29,7 @@ final class FeedScreenViewModel {
     private var paginationTask: Task<Void, Never>?
     private var realtimeTask: Task<Void, Never>?
     private var bootstrapGeneration: UInt64 = 0
+    private var pendingNetworkReconcile = false
     @ObservationIgnored private nonisolated(unsafe) var blockObserver: NSObjectProtocol?
 
     init(
@@ -83,10 +84,8 @@ final class FeedScreenViewModel {
     var isRefreshing: Bool { state.isRefreshing }
     var isLoadingMore: Bool { state.isLoadingMore }
     var viewerID: ProfileID? { state.viewerID }
-    var visibleEntries: [FeedTimelineEntry] {
-        let filtered = state.entries.filter { $0.matches(filter: state.contentFilter) }
-        return FeedBlockedAuthorsFilter.shared.filterEntries(filtered)
-    }
+    var visibleEntries: [FeedTimelineEntry] { state.cachedVisibleEntries }
+    var visibleEntryIDs: [String] { state.cachedVisibleEntryIDs }
     var showsEmpty: Bool {
         state.showsEmpty
     }
@@ -110,12 +109,22 @@ final class FeedScreenViewModel {
     /// Exactly one bootstrap on first presentation.
     func loadIfNeeded() {
         guard bootstrapTask == nil, !state.didBootstrap else { return }
-        hydrateFilterSnapshotFromSessionStore()
         bootstrapGeneration &+= 1
         let generation = bootstrapGeneration
         bootstrapTask = Task {
             await performBootstrap(forceNetwork: false, resetting: true, generation: generation, trigger: .initial)
             bootstrapTask = nil
+            if pendingNetworkReconcile {
+                pendingNetworkReconcile = false
+                Task(priority: .utility) { @MainActor in
+                    await self.performBootstrap(
+                        forceNetwork: true,
+                        resetting: true,
+                        generation: generation,
+                        trigger: .initial
+                    )
+                }
+            }
         }
     }
 
@@ -145,14 +154,14 @@ final class FeedScreenViewModel {
 
     /// Standard lifecycle — pages using the last visible entry when available.
     func loadMore() async {
-        guard let currentID = state.visibleEntries.last?.id else { return }
+        guard let currentID = state.cachedVisibleEntries.last?.id else { return }
         await loadMoreIfNeeded(currentID: currentID)
     }
 
     func loadMoreIfNeeded(currentID: String) async {
         guard state.hasMore, !state.isLoadingMore, state.phase == .loaded else { return }
         guard bootstrapTask == nil, !state.isRefreshing else { return }
-        guard state.visibleEntries.last?.id == currentID else { return }
+        guard state.cachedVisibleEntries.last?.id == currentID else { return }
         guard paginationTask == nil else { return }
 
         let generation = bootstrapGeneration
@@ -195,7 +204,7 @@ final class FeedScreenViewModel {
 
 #if DEBUG
     func testing_setLoadedEntries(_ entries: [FeedTimelineEntry], viewerID: ProfileID) {
-        state.entries = entries
+        publishFeedEntries(entries)
         state.viewerID = viewerID
         state.phase = .loaded
         state.didBootstrap = true
@@ -340,6 +349,7 @@ final class FeedScreenViewModel {
             state.stories = ActiveStorySemantics.stripStories(from: merged, viewerID: viewerID)
         }
         state.lastUpdated = Date()
+        persistFeedFirstPage()
     }
 
     /// Removes a deleted story from the strip without a full feed reload.
@@ -350,6 +360,7 @@ final class FeedScreenViewModel {
         detailCache.removeStory(id: storyID)
         state.stories.removeAll { $0.id == storyID }
         state.lastUpdated = Date()
+        persistFeedFirstPage()
     }
 
     func author(for profileID: ProfileID) -> Profile? {
@@ -372,13 +383,92 @@ final class FeedScreenViewModel {
     private func syncBlockedAuthorsFromServer(force: Bool) async {
         guard let messages else { return }
         await FeedBlockedAuthorsFilter.shared.syncFromServer(messages: messages, force: force)
+        guard let viewerID = state.viewerID else { return }
+        let blocked = FeedBlockedAuthorsFilter.shared.blockedPeerIDs
+        FeedPersistedCacheCoordinator.persistBlockedPeers(viewerID: viewerID, peers: blocked)
+        FeedPersistedCacheCoordinator.pruneBlockedAuthors(viewerID: viewerID, blocked: blocked)
     }
 
-    private func applyBlockedAuthorsToLoadedFeed() {
+    private func rebuildVisibleEntriesCache() {
+        state.rebuildVisibleEntries(blockedPeerIDs: FeedBlockedAuthorsFilter.shared.blockedPeerIDs)
+    }
+
+    private func assignFeedEntries(_ entries: [FeedTimelineEntry]) {
+        state.entries = entries
+        rebuildVisibleEntriesCache()
+    }
+
+    private func publishFeedEntries(_ entries: [FeedTimelineEntry]) {
+        MainThreadWorkProbe.measure("feed.state.publish", surface: "feed") {
+            assignFeedEntries(entries)
+        }
+    }
+
+    private func applyBlockedAuthorsToLoadedFeed(persist: Bool = true) {
         guard let viewerID = state.viewerID else { return }
-        state.entries = FeedBlockedAuthorsFilter.shared.filterEntries(state.entries)
-        state.stories = FeedBlockedAuthorsFilter.shared.filterStories(state.stories, viewerID: viewerID)
+        let filteredEntries = FeedBlockedAuthorsFilter.shared.filterEntries(state.entries)
+        let filteredStories = FeedBlockedAuthorsFilter.shared.filterStories(state.stories, viewerID: viewerID)
+        guard filteredEntries != state.entries || filteredStories != state.stories else { return }
+        publishFeedEntries(filteredEntries)
+        state.stories = filteredStories
+        if persist {
+            persistFeedFirstPage()
+        }
         state.lastUpdated = Date()
+    }
+
+    private func persistFeedFirstPage() {
+        guard let viewerID = state.viewerID else { return }
+        FeedPersistedCacheCoordinator.persistFirstPage(
+            viewerID: viewerID,
+            scope: state.scope,
+            contentFilter: state.contentFilter,
+            entries: state.entries,
+            stories: state.stories,
+            nextCursor: state.nextCursor,
+            engagementStore: engagementStore
+        )
+    }
+
+    private func hydrateDiskFeedCacheIfNeeded(
+        scope: FeedScope,
+        contentFilter: FeedContentFilter
+    ) async -> Bool {
+        guard let userID = await session.currentUserID else { return false }
+        let viewerID = ProfileID(userID.rawValue)
+        state.viewerID = viewerID
+        let hydrateStart = Date()
+        guard await FeedPersistedCacheCoordinator.hydratePageAsync(
+            viewerID: viewerID,
+            scope: scope,
+            contentFilter: contentFilter,
+            detailCache: detailCache,
+            blockedFilter: FeedBlockedAuthorsFilter.shared
+        ) != nil else { return false }
+        let resolved = FeedSessionStore.shared.resolvedEntries(
+            viewerID: viewerID,
+            scope: scope,
+            contentFilter: contentFilter
+        )
+        guard !resolved.entries.isEmpty else { return false }
+        #if DEBUG
+        let exactKey = FeedSessionStore.cacheKey(
+            viewerID: viewerID,
+            scope: scope,
+            contentFilter: contentFilter,
+            cursor: nil
+        )
+        let ageMs = FeedSessionStore.shared.restore(key: exactKey).map {
+            Int(Date().timeIntervalSince($0.loadedAt) * 1000)
+        } ?? 0
+        FeedPersistentCacheProbe.recordDiskHit(
+            items: resolved.entries.count,
+            ageMs: ageMs,
+            firstRenderMs: Int(Date().timeIntervalSince(hydrateStart) * 1000)
+        )
+        MainThreadFreezeProbe.event("feed.diskHydrate", "items=\(resolved.entries.count)")
+        #endif
+        return true
     }
 
     private func shouldSuppressFeedAuthor(_ profileID: ProfileID) -> Bool {
@@ -426,7 +516,9 @@ final class FeedScreenViewModel {
             knownEmpty: knownEmpty
         )
         guard !resolved.entries.isEmpty else { return }
-        state.entries = FeedBlockedAuthorsFilter.shared.filterEntries(resolved.entries)
+        MainThreadWorkProbe.measure("feed.rows.transform", surface: "feed") {
+            publishFeedEntries(FeedBlockedAuthorsFilter.shared.filterEntries(resolved.entries))
+        }
         if state.scope == .following,
            let exact = FeedSessionStore.shared.restore(
             key: FeedSessionStore.cacheKey(
@@ -461,12 +553,14 @@ final class FeedScreenViewModel {
         )
         state.isQueryReloadInProgress = false
         guard generation == bootstrapGeneration, !Task.isCancelled else { return }
-        await performBootstrap(
-            forceNetwork: true,
-            resetting: true,
-            generation: generation,
-            trigger: trigger
-        )
+        Task(priority: .utility) { @MainActor in
+            await self.performBootstrap(
+                forceNetwork: true,
+                resetting: true,
+                generation: generation,
+                trigger: trigger
+            )
+        }
     }
 
     private func noteFilterLoadResult(
@@ -525,10 +619,40 @@ final class FeedScreenViewModel {
         let resolvedScope = queryScope ?? state.scope
         let resolvedFilter = queryFilter ?? state.contentFilter
         let resolvedCursor = resetting ? nil : (queryCursor ?? state.nextCursor)
+        let existingForReconcile = resetting && forceNetwork && resolvedCursor == nil
+            ? state.entries
+            : []
 
-        if resetting, !forceNetwork {
+        if resetting, resolvedCursor == nil {
+            if !forceNetwork {
+                _ = await hydrateDiskFeedCacheIfNeeded(scope: resolvedScope, contentFilter: resolvedFilter)
+            }
+            hydrateFilterSnapshotFromSessionStore()
+        } else if resetting, !forceNetwork {
             hydrateFilterSnapshotFromSessionStore()
         }
+
+        let hadCachedFirstRender = resetting && resolvedCursor == nil && !state.entries.isEmpty
+        #if DEBUG
+        if resetting, resolvedCursor == nil {
+            let resolved = state.viewerID.map {
+                FeedSessionStore.shared.resolvedEntries(
+                    viewerID: $0,
+                    scope: resolvedScope,
+                    contentFilter: resolvedFilter
+                )
+            }
+            CacheDecisionProbe.log(
+                surface: "feed",
+                cacheExists: resolved?.entries.isEmpty == false,
+                cacheUsable: hadCachedFirstRender,
+                action: hadCachedFirstRender ? "renderCache" : "networkRequired",
+                reason: forceNetwork
+                    ? "backgroundReconcile"
+                    : (resolved?.source.rawValue ?? "none")
+            )
+        }
+        #endif
 
         let blockPeerSync: Task<Void, Never>?
         if resetting {
@@ -539,11 +663,13 @@ final class FeedScreenViewModel {
             } else {
                 blockPeerSync = nil
             }
-            if state.visibleEntries.isEmpty, state.entries.isEmpty {
+            if state.cachedVisibleEntries.isEmpty, state.entries.isEmpty, !hadCachedFirstRender {
                 state.phase = .loading
             }
-            state.nextCursor = nil
-            state.hasMore = false
+            if !(hadCachedFirstRender && forceNetwork) {
+                state.nextCursor = nil
+                state.hasMore = false
+            }
         } else {
             blockPeerSync = nil
         }
@@ -551,6 +677,21 @@ final class FeedScreenViewModel {
         if BackendV2FeatureFlags.isEnabled(.feed), let rpc {
             if let userID = await session.currentUserID {
                 let viewerID = ProfileID(userID.rawValue)
+                if hadCachedFirstRender && !forceNetwork && resolvedCursor == nil {
+                    state.viewerID = viewerID
+                    state.phase = .loaded
+                    state.didBootstrap = true
+                    pendingNetworkReconcile = true
+                    prefetchEngagement()
+                    if blockPeerSync != nil {
+                        Task(priority: .utility) { @MainActor in
+                            await blockPeerSync?.value
+                            self.applyBlockedAuthorsToLoadedFeed(persist: false)
+                        }
+                    }
+                    Task { await startRealtimeIfNeeded() }
+                    return
+                }
                 do {
                     let loaded = try await FeedBootstrapLoader.loadTimeline(
                         viewerID: viewerID,
@@ -564,7 +705,8 @@ final class FeedScreenViewModel {
                         profiles: profiles,
                         achievements: achievements,
                         detailCache: detailCache,
-                        forceNetwork: forceNetwork
+                        forceNetwork: forceNetwork,
+                        allowNetwork: forceNetwork || !hadCachedFirstRender
                     )
                     guard shouldApplyBootstrapResult(
                         generation: activeGeneration,
@@ -580,21 +722,45 @@ final class FeedScreenViewModel {
                         viewerID: viewerID
                     )
                     if resetting {
-                        state.entries = filteredEntries
+                        if forceNetwork && !existingForReconcile.isEmpty && resolvedCursor == nil {
+                            let reconcileStart = Date()
+                            let result = FeedPersistentReconcile.reconcileFirstPage(
+                                existing: existingForReconcile,
+                                incoming: filteredEntries
+                            )
+                            MainThreadWorkProbe.measure("feed.reconcileApply", surface: "feed") {
+                                assignFeedEntries(
+                                    FeedBlockedAuthorsFilter.shared.filterEntries(result.entries)
+                                )
+                            }
+                            #if DEBUG
+                            FeedPersistentCacheProbe.recordReconcile(
+                                inserted: result.inserted,
+                                updated: result.updated,
+                                removed: result.removed,
+                                durationMs: Int(Date().timeIntervalSince(reconcileStart) * 1000)
+                            )
+                            #endif
+                        } else {
+                            MainThreadWorkProbe.measure("feed.bootstrapApply", surface: "feed") {
+                                assignFeedEntries(filteredEntries)
+                            }
+                        }
                         state.stories = filteredStories
                         syncViewerStoryStoreIfNeeded()
                         if resolvedCursor == nil {
                             noteFilterLoadResult(
-                                entries: filteredEntries,
+                                entries: state.entries,
                                 scope: resolvedScope,
                                 filter: resolvedFilter,
                                 viewerID: viewerID
                             )
+                            persistFeedFirstPage()
                         }
                     } else {
                         let existing = Set(state.entries.map(\.id))
                         let appended = filteredEntries.filter { !existing.contains($0.id) }
-                        state.entries = FeedSupport.sortDescending(state.entries + appended)
+                        assignFeedEntries(FeedSupport.sortDescending(state.entries + appended))
                     }
                     state.nextCursor = loaded.nextCursor
                     state.hasMore = loaded.nextCursor != nil
@@ -607,6 +773,9 @@ final class FeedScreenViewModel {
                     state.phase = .loaded
                     state.didBootstrap = true
                     state.lastUpdated = Date()
+                    if hadCachedFirstRender && !forceNetwork && resolvedCursor == nil {
+                        pendingNetworkReconcile = true
+                    }
                     scheduleBackgroundEntryHydration(
                         items: loaded.pendingHydrationItems,
                         feedItemOrder: loaded.feedItemOrder,
@@ -621,6 +790,23 @@ final class FeedScreenViewModel {
                     applyBlockedAuthorsToLoadedFeed()
                     await startRealtimeIfNeeded()
                     return
+                } catch FeedBootstrapLoader.LoaderError.cacheMissSkipped {
+                    guard shouldApplyBootstrapResult(
+                        generation: activeGeneration,
+                        resetting: resetting,
+                        queryScope: resolvedScope,
+                        queryFilter: resolvedFilter,
+                        queryCursor: resolvedCursor
+                    ) else { return }
+                    if hadCachedFirstRender && !forceNetwork {
+                        state.phase = .loaded
+                        state.didBootstrap = true
+                        pendingNetworkReconcile = true
+                        await blockPeerSync?.value
+                        applyBlockedAuthorsToLoadedFeed()
+                        await startRealtimeIfNeeded()
+                        return
+                    }
                 } catch is FeedBootstrapLoader.LoaderError {
                     // Controlled fallback to legacy REST merge.
                 } catch {
@@ -677,7 +863,7 @@ final class FeedScreenViewModel {
                 filteredStories = page.stories
             }
             if resetting {
-                state.entries = filteredEntries
+                assignFeedEntries(filteredEntries)
                 state.stories = filteredStories
                 syncViewerStoryStoreIfNeeded()
                 if resolvedCursor == nil {
@@ -688,26 +874,21 @@ final class FeedScreenViewModel {
                         viewerID: page.viewerID
                     )
                     if let viewerID = page.viewerID {
-                        FeedSessionStore.shared.save(
-                            FeedSessionStore.Snapshot(
-                                cacheKey: FeedSessionStore.cacheKey(
-                                    viewerID: viewerID,
-                                    scope: resolvedScope,
-                                    contentFilter: resolvedFilter,
-                                    cursor: nil
-                                ),
-                                entries: filteredEntries,
-                                stories: filteredStories,
-                                nextCursor: page.nextCursor,
-                                loadedAt: Date()
-                            )
+                        FeedPersistedCacheCoordinator.persistFirstPage(
+                            viewerID: viewerID,
+                            scope: resolvedScope,
+                            contentFilter: resolvedFilter,
+                            entries: filteredEntries,
+                            stories: filteredStories,
+                            nextCursor: page.nextCursor,
+                            engagementStore: engagementStore
                         )
                     }
                 }
             } else {
                 let existing = Set(state.entries.map(\.id))
                 let appended = filteredEntries.filter { !existing.contains($0.id) }
-                state.entries = FeedSupport.sortDescending(state.entries + appended)
+                assignFeedEntries(FeedSupport.sortDescending(state.entries + appended))
             }
             state.nextCursor = page.nextCursor
             state.hasMore = page.nextCursor != nil
@@ -743,9 +924,10 @@ final class FeedScreenViewModel {
     }
 
     private func prefetchEngagement() {
-        let targets = state.visibleEntries.map(\.interactionTarget)
+        let visible = state.cachedVisibleEntries
+        let targets = visible.map(\.interactionTarget)
         engagementStore.prefetch(targets)
-        let vaultRefs = state.visibleEntries.compactMap { VaultContentRef.from($0.interactionTarget) }
+        let vaultRefs = visible.compactMap { VaultContentRef.from($0.interactionTarget) }
         vaultStore.prefetch(vaultRefs)
     }
 
@@ -765,7 +947,7 @@ final class FeedScreenViewModel {
             #if DEBUG
             FeedRpcLoadProbe.recordNetworkHydrate()
             #endif
-            let hydrated = await FeedBootstrap.hydrate(
+            var hydrated = await FeedBootstrap.hydrate(
                 items,
                 feed: feed,
                 trades: trades,
@@ -773,6 +955,22 @@ final class FeedScreenViewModel {
                 achievements: achievements,
                 detailCache: detailCache
             )
+            let hydratedIDs = Set(hydrated.map(\.id))
+            let stillMissing = items.filter { !hydratedIDs.contains($0.id) }
+            if !stillMissing.isEmpty {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if !Task.isCancelled {
+                    let retryHydrated = await FeedBootstrap.hydrate(
+                        stillMissing,
+                        feed: feed,
+                        trades: trades,
+                        profiles: profiles,
+                        achievements: achievements,
+                        detailCache: detailCache
+                    )
+                    hydrated.append(contentsOf: retryHydrated)
+                }
+            }
             guard shouldApplyBootstrapResult(
                 generation: generation,
                 resetting: resetting,
@@ -786,7 +984,7 @@ final class FeedScreenViewModel {
                 hydrated: hydrated,
                 feedItemOrder: feedItemOrder
             )
-            state.entries = FeedBlockedAuthorsFilter.shared.filterEntries(merged)
+            assignFeedEntries(FeedBlockedAuthorsFilter.shared.filterEntries(merged))
             state.lastUpdated = Date()
             prefetchEngagement()
 
@@ -797,19 +995,14 @@ final class FeedScreenViewModel {
                     filter: queryFilter,
                     viewerID: viewerID
                 )
-                FeedSessionStore.shared.save(
-                    FeedSessionStore.Snapshot(
-                        cacheKey: FeedSessionStore.cacheKey(
-                            viewerID: viewerID,
-                            scope: queryScope,
-                            contentFilter: queryFilter,
-                            cursor: nil
-                        ),
-                        entries: state.entries,
-                        stories: state.stories,
-                        nextCursor: state.nextCursor,
-                        loadedAt: Date()
-                    )
+                FeedPersistedCacheCoordinator.persistFirstPage(
+                    viewerID: viewerID,
+                    scope: queryScope,
+                    contentFilter: queryFilter,
+                    entries: state.entries,
+                    stories: state.stories,
+                    nextCursor: state.nextCursor,
+                    engagementStore: engagementStore
                 )
             }
         }
@@ -829,7 +1022,9 @@ final class FeedScreenViewModel {
         guard realtimeTask == nil else { return }
 
         let channel = RealtimeChannelID(kind: .feed, topic: "home")
-        try? await realtimeHub.subscriptions.subscribe(channel)
+        await MainThreadWorkProbe.measureAsync("feed.realtime.setup", surface: "feed") {
+            try? await realtimeHub.subscriptions.subscribe(channel)
+        }
         let token = await session.accessToken
 
         realtimeTask = Task { [weak self] in
@@ -847,6 +1042,11 @@ final class FeedScreenViewModel {
         case .delete:
             guard let raw = signal.messageID else { return }
             state.entries.removeAll { $0.item.postID?.rawValue == raw || $0.id == raw }
+            rebuildVisibleEntriesCache()
+            if let viewerID = state.viewerID {
+                FeedPersistedCacheCoordinator.removeEntry(viewerID: viewerID, entryID: raw)
+            }
+            persistFeedFirstPage()
         case .insert, .update:
             guard let raw = signal.messageID else { return }
             let postID = PostID(raw)
@@ -885,12 +1085,14 @@ final class FeedScreenViewModel {
     }
 
     private func upsert(_ entry: FeedTimelineEntry) {
-        if let index = state.entries.firstIndex(where: { $0.id == entry.id }) {
-            state.entries[index] = entry
+        var working = state.entries
+        if let index = working.firstIndex(where: { $0.id == entry.id }) {
+            working[index] = entry
         } else {
-            state.entries.append(entry)
+            working.append(entry)
         }
-        state.entries = FeedSupport.sortDescending(state.entries)
+        assignFeedEntries(FeedSupport.sortDescending(working))
+        persistFeedFirstPage()
     }
 }
 

@@ -17,4 +17,14 @@ nonisolated enum PropFirmPayoutPolicy {
             return true
         }
     }
+
+    /// Create → Withdrawal — live accounts using the manual payout ledger.
+    static func supportsLiveWithdrawal(for account: TradingAccount) -> Bool {
+        account.mode == .live && supportsManualPayoutLedger(for: account)
+    }
+
+    /// Create → Withdrawal — Live (manual ledger) or Funded prop-firm (cycle record flow).
+    static func supportsWithdrawal(for account: TradingAccount) -> Bool {
+        supportsRecordPayout(for: account) || supportsManualPayoutLedger(for: account)
+    }
 }

@@ -122,6 +122,10 @@ nonisolated enum BackendV2FlightKeys {
         "\(viewerID)|\(BackendV2Versioning.RPCName.session.rawValue)"
     }
 
+    static func viewerSyncState(viewerID: String) -> String {
+        "\(viewerID)|\(BackendV2Versioning.RPCName.viewerSyncState.rawValue)"
+    }
+
     static func dashboard(viewerID: String, accountID: String?) -> String {
         let account = accountID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             ? accountID!
@@ -167,9 +171,9 @@ nonisolated enum BackendV2FlightKeys {
         "\(viewerID)|\(BackendV2Versioning.RPCName.propFirm.rawValue)"
     }
 
-    static func activity(viewerID: String, cursor: String?) -> String {
+    static func activity(viewerID: String, limit: Int, cursor: String?) -> String {
         let c = cursor ?? "-"
-        return "\(viewerID)|\(BackendV2Versioning.RPCName.activity.rawValue)|\(c)"
+        return "\(viewerID)|\(BackendV2Versioning.RPCName.activity.rawValue)|\(limit)|\(c)"
     }
 
     static func explore(viewerID: String, traderOffset: Int) -> String {

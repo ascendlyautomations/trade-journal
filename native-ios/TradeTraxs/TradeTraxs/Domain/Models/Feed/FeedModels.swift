@@ -8,7 +8,7 @@ nonisolated enum FeedItemKind: String, Hashable, Codable, Sendable {
     case story
 }
 
-nonisolated enum FeedScope: String, Hashable, Codable, Sendable {
+nonisolated enum FeedScope: String, CaseIterable, Hashable, Codable, Sendable {
     case global
     case following
 }

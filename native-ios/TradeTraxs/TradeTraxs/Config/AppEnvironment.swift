@@ -26,7 +26,14 @@ struct AppEnvironment {
     var navigation: NavigationEnvironment { dependencies.navigation }
 
     /// Convenience access: CompositionRoot → AppEnvironment → DependencyContainer → Networking
-    var networking: NetworkingEnvironment { dependencies.networking }
+    var networking: NetworkingEnvironment {
+        guard let networking = dependencies.networking else {
+            preconditionFailure("NetworkingEnvironment accessed before deferred bootstrap completed")
+        }
+        return networking
+    }
+
+    var isDeferredBootstrapPending: Bool { dependencies.networking == nil }
 
     /// Convenience access: CompositionRoot → AppEnvironment → DependencyContainer → Data
     var data: DataEnvironment { dependencies.data }

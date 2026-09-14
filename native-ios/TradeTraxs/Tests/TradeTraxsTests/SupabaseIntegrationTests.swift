@@ -3,7 +3,7 @@ import XCTest
 
 final class SupabaseIntegrationTests: XCTestCase {
     func testBootstrapWiresSupabaseInfrastructure() {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         XCTAssertNotNil(environment.data.supabase.database)
         XCTAssertNotNil(environment.data.rpc)
         XCTAssertNotNil(environment.data.edgeFunctions)
@@ -16,7 +16,7 @@ final class SupabaseIntegrationTests: XCTestCase {
     }
 
     func testRepositoryDependencyInjection() {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         XCTAssertTrue(environment.data.trades is DefaultTradeRepository)
         #if DEBUG
         XCTAssertTrue(environment.data.profiles is DevelopmentProfileRepository)
@@ -79,7 +79,7 @@ final class SupabaseIntegrationTests: XCTestCase {
             supabaseAnonKey: "anon",
             appDisplayName: "TradeTraxs"
         )
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let storage = LiveSupabaseStorageProvider(
             transport: SupabaseTransport(
                 client: environment.networking.client,
@@ -95,7 +95,7 @@ final class SupabaseIntegrationTests: XCTestCase {
     }
 
     func testRPCAndEdgeClientsAreWired() {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         XCTAssertTrue(environment.data.rpc is DefaultRPCClient)
         XCTAssertTrue(environment.data.edgeFunctions is DefaultEdgeFunctionClient)
     }

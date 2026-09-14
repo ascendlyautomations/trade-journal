@@ -37,11 +37,38 @@ final class AuthenticationCoordinator {
         self.navigation = navigation
     }
 
-    /// Cold-launch: validate/refresh session before entering authenticated shell.
+    /// Cold-launch: async refresh only when ``prepareColdLaunch()`` left a refreshing session.
     func bootstrapSession() async {
         restoreGeneration &+= 1
         let generation = restoreGeneration
         let correlation = AuthFlowTracer.beginCorrelation()
+
+        if authenticationManager.shouldSkipAsyncRestoreAfterColdLaunch() {
+            AuthFlowTracer.trace(
+                "session.restore.skipped reason=coldLaunchResolved",
+                phase: authenticationManager.state.authFlowPhase,
+                correlation: correlation,
+                generation: generation
+            )
+            guard generation == restoreGeneration else {
+                AuthFlowTracer.trace(
+                    "auth.restore.cancelled reason=supersededBootstrap",
+                    phase: authenticationManager.state.authFlowPhase,
+                    correlation: correlation,
+                    generation: generation
+                )
+                return
+            }
+            applyNavigation(for: authenticationManager.state, correlation: correlation)
+            AuthFlowTracer.trace(
+                "session.restore.completed",
+                phase: authenticationManager.state.authFlowPhase,
+                correlation: correlation,
+                generation: generation
+            )
+            return
+        }
+
         AuthFlowTracer.trace(
             "session.restore.started",
             phase: authenticationManager.state.authFlowPhase,
@@ -110,6 +137,7 @@ final class AuthenticationCoordinator {
     }
 
     func requestPasswordReset(email: String) async throws {
+        await AppLaunchController.shared.ensureFullBootstrapComplete()
         try await authenticationManager.requestPasswordReset(email: email)
     }
 
@@ -204,6 +232,7 @@ final class AuthenticationCoordinator {
         let bootstrapAllowed = state.isSessionReady
         AuthFlowTracer.traceBootstrapAllowed(
             bootstrapAllowed,
+            authPhase: state.authFlowPhase,
             generation: authenticationManager.restorationGeneration
         )
 
@@ -221,7 +250,22 @@ final class AuthenticationCoordinator {
             }
             Task { await bindAuthenticatedUser() }
 
-        case .sessionValidationFailed, .refreshing, .unknown:
+        case .sessionValidationFailed:
+            if navigation.store.sessionPhase == .authenticated {
+                navigation.coordinator.markUnauthenticated()
+            }
+            navigation.clearDeferredAuthenticatedSnapshot()
+            if boundUserID != nil {
+                boundUserID = nil
+                Task {
+                    if let prepareSessionTeardown {
+                        await prepareSessionTeardown()
+                    }
+                    await invalidateCachesForSessionChange()
+                }
+            }
+
+        case .refreshing, .unknown:
             if navigation.store.sessionPhase == .authenticated {
                 navigation.coordinator.markUnauthenticated()
             }
@@ -247,6 +291,7 @@ final class AuthenticationCoordinator {
     }
 
     private func performSignIn(operation: () async throws -> Void) async throws {
+        await AppLaunchController.shared.ensureFullBootstrapComplete()
         signInGeneration &+= 1
         restoreGeneration &+= 1
         let generation = signInGeneration

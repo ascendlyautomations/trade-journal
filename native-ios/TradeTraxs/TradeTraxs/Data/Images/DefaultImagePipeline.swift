@@ -90,7 +90,10 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
     // MARK: - Private
 
     private func cacheKey(for request: ImageRequest) -> String {
-        "\(request.reference.id)|\(request.purpose.rawValue)|\(request.deliveryQuality.rawValue)|\(request.maxPixelSize ?? 0)"
+        let feedRevision = request.deliveryQuality == .feedDisplay
+            ? "|feedRev=\(StorageImageTransform.feedDisplayCacheRevision)"
+            : ""
+        return "\(request.reference.id)|\(request.purpose.rawValue)|\(request.deliveryQuality.rawValue)|\(request.maxPixelSize ?? 0)\(feedRevision)"
     }
 
     private func fetch(
@@ -235,7 +238,14 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
         var lastError: Error?
         for attempt in 1...maximumAttempts {
             do {
-                let (data, response) = try await urlSession.data(from: url)
+                let host = url.host ?? "storage"
+                let (data, response) = try await NetworkConcurrencyCoordinator.shared.runWithSlot(
+                    priority: .visible,
+                    path: url.path,
+                    host: host
+                ) {
+                    try await urlSession.data(from: url)
+                }
                 let status = (response as? HTTPURLResponse)?.statusCode
                 if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                     let serverError = AppError.network(.server(statusCode: http.statusCode, message: nil))

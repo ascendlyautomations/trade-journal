@@ -32,6 +32,11 @@ final class StoryShareMessageSupportTests: XCTestCase {
         XCTAssertFalse(StoryShareMessageSupport.isStoryShare(type: "voice", content: json))
     }
 
+    func testPlainTextIsNotStoryShareUnlessPayloadDecodes() {
+        XCTAssertFalse(StoryShareMessageSupport.isStoryShare(type: nil, content: "test"))
+        XCTAssertFalse(StoryShareMessageSupport.isStoryShare(type: nil, content: "Hi"))
+    }
+
     func testPreviewTextUsesUsername() {
         let json = samplePayloadJSON()
         XCTAssertEqual(StoryShareMessageSupport.previewText(from: json), "@alpha_trader's story")

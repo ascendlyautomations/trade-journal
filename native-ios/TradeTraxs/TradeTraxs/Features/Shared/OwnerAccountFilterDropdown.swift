@@ -69,6 +69,7 @@ struct OwnerAccountFilterDropdown<Trigger: View>: View {
     let accessibilityIdentifier: String
     var boundary: OwnerAccountDropdownSupport.Boundary?
     var profileID: ProfileID?
+    var detailCache: DetailPresentationCache?
     @ViewBuilder let trigger: () -> Trigger
 
     @State private var anchorFrame: CGRect = .zero
@@ -78,6 +79,14 @@ struct OwnerAccountFilterDropdown<Trigger: View>: View {
     var body: some View {
         Button {
             ExperienceHaptics.play(.selection)
+            if let boundary {
+                OwnerAccountDropdownSupport.logBoundary(
+                    boundary,
+                    accounts: accounts,
+                    profileID: profileID,
+                    detailCache: detailCache
+                )
+            }
             controller.present(
                 sourceID: accessibilityIdentifier,
                 anchorFrame: anchorFrame,
@@ -123,15 +132,6 @@ struct OwnerAccountFilterDropdown<Trigger: View>: View {
                 [accessibilityIdentifier: anchor]
             }
         )
-        .onAppear {
-            if let boundary {
-                OwnerAccountDropdownSupport.logBoundary(
-                    boundary,
-                    accounts: accounts,
-                    profileID: profileID
-                )
-            }
-        }
     }
 }
 

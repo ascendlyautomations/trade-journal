@@ -13,6 +13,9 @@ nonisolated protocol NotificationRepository: Sendable {
     /// Web `markNotificationsReadForTarget({ kind: "room" })`.
     func markRoomNotificationsRead(roomID: RoomID, slug: String?) async throws -> Int
     func markAllRead() async throws
+    /// Owner-scoped delete — RLS enforces `user_id = auth.uid()`.
+    func delete(id: NotificationID) async throws
+    func delete(ids: [NotificationID]) async throws -> Int
     /// Batch-load actor profiles for Activity rows (anti-N+1).
     func profiles(ids: [ProfileID]) async throws -> [Profile]
 }

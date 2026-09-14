@@ -46,7 +46,6 @@ final class PushNotificationCenter: NSObject {
         set { UserDefaults.standard.set(newValue, forKey: bannersDefaultsKey) }
     }
 
-    private var lastRegisteredToken: String?
     private let installationIDDefaultsKey = "tt.ios.push.installation_id"
     private var installationID: String {
         if let existing = UserDefaults.standard.string(forKey: installationIDDefaultsKey)?
@@ -145,7 +144,7 @@ final class PushNotificationCenter: NSObject {
 
     private func unregisterPush(allDevices: Bool) async {
         let token = deviceTokenHex
-        lastRegisteredToken = nil
+        await DevicePushRegistrationFlight.shared.resetForLogout()
         do {
             try await tokenClient.unregister(deviceToken: token, allDevices: allDevices)
             AppLog.notifications.info(
@@ -204,17 +203,23 @@ final class PushNotificationCenter: NSObject {
     private func uploadToken(_ token: String, previousDeviceToken: String? = nil) async {
         guard navigation.store.sessionPhase == .authenticated else { return }
         await SessionNetworkGate.shared.awaitReady()
-        if lastRegisteredToken == token { return }
         isRegistering = true
         defer { isRegistering = false }
+        let client = tokenClient
+        let installID = installationID
+        let version = appVersion
         do {
-            try await tokenClient.register(
-                deviceToken: token,
-                previousDeviceToken: previousDeviceToken,
-                installationID: installationID,
-                appVersion: appVersion
-            )
-            lastRegisteredToken = token
+            try await DevicePushRegistrationFlight.shared.register(
+                token: token,
+                previousDeviceToken: previousDeviceToken
+            ) {
+                try await client.register(
+                    deviceToken: token,
+                    previousDeviceToken: previousDeviceToken,
+                    installationID: installID,
+                    appVersion: version
+                )
+            }
             lastRegistrationError = nil
             AppLog.notifications.info("Push pipeline: BFF token registration succeeded")
         } catch {

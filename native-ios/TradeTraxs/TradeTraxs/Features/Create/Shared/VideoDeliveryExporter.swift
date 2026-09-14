@@ -194,15 +194,16 @@ nonisolated enum VideoDeliveryExporter {
         return max(1, Int(round(cadenceFPS)))
     }
 
+    /// Social playback targets — lower than camera originals to keep progressive MP4 size reasonable.
     static func targetVideoBitrate(longEdge: CGFloat, targetFPS: Double) -> Int {
         let highFPS = targetFPS > highFrameRateBitrateThreshold
         switch resolutionClass(for: longEdge) {
         case .small:
-            return highFPS ? 3_500_000 : 2_500_000
+            return highFPS ? 2_200_000 : 1_500_000
         case .hd720:
-            return highFPS ? 5_000_000 : 3_500_000
+            return highFPS ? 3_000_000 : 2_200_000
         case .hd1080:
-            return highFPS ? 7_500_000 : 4_500_000
+            return highFPS ? 4_000_000 : 2_800_000
         }
     }
 
@@ -251,14 +252,9 @@ nonisolated enum VideoDeliveryExporter {
             .appendingPathComponent("reel-delivery-\(UUID().uuidString).mp4")
 
         switch mode {
-        case .passthrough:
-            if sourceURL.pathExtension.lowercased() == "mp4" {
-                try FileManager.default.copyItem(at: sourceURL, to: outputURL)
-                onProgress?(1)
-                return outputURL
-            }
-            fallthrough
-        case .remux:
+        case .passthrough, .remux:
+            // Always remux through AVAssetExportSession so `shouldOptimizeForNetworkUse`
+            // moves the `moov` atom to the file start — raw copy skips fast-start.
             try await exportWithSession(
                 asset: sourceAsset,
                 outputURL: outputURL,

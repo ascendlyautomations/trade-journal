@@ -81,10 +81,14 @@ nonisolated enum AuthFlowTracer {
         )
     }
 
-    static func traceBootstrapAllowed(_ allowed: Bool, generation: UInt64) {
+    static func traceBootstrapAllowed(
+        _ allowed: Bool,
+        authPhase: AuthFlowPhase,
+        generation: UInt64
+    ) {
         trace(
-            "auth.bootstrap.allowed=\(allowed)",
-            phase: allowed ? .authenticated : .restoring,
+            "auth.bootstrap.allowed=\(allowed) generation=\(generation)",
+            phase: allowed ? .authenticated : authPhase,
             generation: generation
         )
     }
@@ -101,7 +105,11 @@ nonisolated enum AuthFlowTracer {
     ) {}
     static func traceRefreshCompleted(_ result: AuthRefreshTraceResult, generation: UInt64) {}
     static func traceRootTransition(to phase: AuthFlowPhase, generation: UInt64) {}
-    static func traceBootstrapAllowed(_ allowed: Bool, generation: UInt64) {}
+    static func traceBootstrapAllowed(
+        _ allowed: Bool,
+        authPhase: AuthFlowPhase,
+        generation: UInt64
+    ) {}
 }
 #endif
 

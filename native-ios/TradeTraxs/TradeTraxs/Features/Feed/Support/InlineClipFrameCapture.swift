@@ -10,7 +10,8 @@ enum InlineClipFrameCapture {
             generator.maximumSize = CGSize(width: maxPixelSize, height: maxPixelSize)
             generator.requestedTimeToleranceBefore = CMTime(seconds: 0.05, preferredTimescale: 600)
             generator.requestedTimeToleranceAfter = CMTime(seconds: 0.05, preferredTimescale: 600)
-            guard let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) else {
+
+            guard let cgImage = try? await generator.image(at: time).image else {
                 return nil
             }
             return UIImage(cgImage: cgImage)

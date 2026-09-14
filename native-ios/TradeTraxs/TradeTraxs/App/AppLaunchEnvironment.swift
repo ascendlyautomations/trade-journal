@@ -6,17 +6,9 @@ import Foundation
 /// path must never call ``CompositionRoot/bootstrap()`` directly or the entire
 /// dependency graph is rebuilt in a loop (black screen + repeated ready logs).
 enum AppLaunchEnvironment {
-    private static let lock = NSLock()
-    private static var cached: AppEnvironment?
-
     static var shared: AppEnvironment {
-        lock.lock()
-        defer { lock.unlock() }
-        if let cached {
-            return cached
+        MainActor.assumeIsolated {
+            AppLaunchController.shared.environment
         }
-        let environment = MainActor.assumeIsolated { CompositionRoot.bootstrap() }
-        cached = environment
-        return environment
     }
 }

@@ -7,6 +7,7 @@ nonisolated enum BackendV2Versioning {
     enum RPCName: String, CaseIterable, Sendable {
         case session = "rpc_v1_session_bootstrap"
         case dashboard = "rpc_v1_dashboard_bootstrap"
+        case viewerSyncState = "rpc_v1_viewer_sync_state"
         case feed = "rpc_v1_feed_bootstrap"
         case profile = "rpc_v1_profile_bootstrap"
         case profileTabTrades = "rpc_v1_profile_tab_trades"

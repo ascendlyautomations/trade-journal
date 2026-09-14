@@ -15,7 +15,6 @@ final class ManageAccountsViewModel {
     private(set) var formError: String?
     private var hasLoaded = false
     private var viewerID: ProfileID?
-    private var payoutEntriesByAccount: [TradingAccountID: [AccountPayoutEntry]] = [:]
     private(set) var isLoadingPayouts = false
     private(set) var payoutError: String?
 
@@ -88,6 +87,47 @@ final class ManageAccountsViewModel {
         Task { await loadAccounts(requiresFullOwnerSnapshot: true) }
     }
 
+    /// Cache-first accounts for Withdrawals — awaits load; never exits while accounts are still loading.
+    func ensureAccountsReadyForWithdrawals() async {
+        WithdrawalsTrace.log("ensureAccountsStarted")
+        if let userID = await session.currentUserID {
+            let profileID = ProfileID(userID.rawValue)
+            viewerID = profileID
+            WithdrawalsHistoryStore.shared.bindProfile(profileID)
+            WithdrawalsHistoryStore.shared.hydrateFromSessionCaches(profileID: profileID)
+            if accounts.isEmpty,
+               let cached = SessionAccountsStore.shared.cached(for: profileID),
+               !cached.isEmpty
+            {
+                accounts = Self.sorted(cached)
+                WithdrawalsTrace.log("accountsResolved", detail: "source=sessionCache count=\(accounts.count)")
+            }
+        }
+        if accounts.isEmpty {
+            if !hasLoaded {
+                hasLoaded = true
+            }
+            await loadAccounts(requiresFullOwnerSnapshot: true)
+        }
+        let deadline = Date().addingTimeInterval(15)
+        while accounts.isEmpty, Date() < deadline {
+            if isLoading {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                continue
+            }
+            if errorMessage != nil {
+                WithdrawalsTrace.log("earlyReturn", detail: "accountsError=\(errorMessage ?? "")")
+                break
+            }
+            await loadAccounts(requiresFullOwnerSnapshot: true)
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        WithdrawalsTrace.log(
+            "accountsResolved",
+            detail: "count=\(accounts.count) isLoading=\(isLoading)"
+        )
+    }
+
     func refresh() async {
         await loadAccounts(forceNetwork: true)
     }
@@ -105,6 +145,8 @@ final class ManageAccountsViewModel {
                 return
             }
             viewerID = ProfileID(userID.rawValue)
+            WithdrawalsHistoryStore.shared.bindProfile(ProfileID(userID.rawValue))
+            WithdrawalsHistoryStore.shared.hydrateFromSessionCaches(profileID: ProfileID(userID.rawValue))
             let loaded = try await SessionAccountsStore.shared.accounts(
                 for: ProfileID(userID.rawValue),
                 detailCache: detailCache,
@@ -150,7 +192,7 @@ final class ManageAccountsViewModel {
             let created = try await trades.createAccount(ownerID: viewerID, draft: draft)
             accounts = Self.sorted(accounts + [created])
             SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
-            AccountMutationStore.shared.noteAccountCreated(created.id)
+            AccountMutationStore.shared.noteAccountCreated(created, allAccounts: accounts)
             ExperienceHaptics.play(.success)
         }
     }
@@ -161,7 +203,7 @@ final class ManageAccountsViewModel {
             let updated = try await trades.updateAccount(id: id, ownerID: viewerID, draft: draft)
             accounts = Self.sorted(accounts.map { $0.id == id ? updated : $0 })
             SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
-            AccountMutationStore.shared.noteAccountUpdated(id)
+            AccountMutationStore.shared.noteAccountUpdated(updated, allAccounts: accounts)
             ExperienceHaptics.play(.success)
         }
     }
@@ -178,7 +220,9 @@ final class ManageAccountsViewModel {
             if let viewerID {
                 SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
             }
-            AccountMutationStore.shared.noteAccountUpdated(id)
+            if let updated = accounts.first(where: { $0.id == id }) {
+                AccountMutationStore.shared.noteAccountUpdated(updated, allAccounts: accounts)
+            }
             ExperienceHaptics.play(.selection)
         }
     }
@@ -198,7 +242,7 @@ final class ManageAccountsViewModel {
             )
             accounts = Self.sorted(accounts.map { $0.id == id ? updated : $0 })
             SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
-            AccountMutationStore.shared.noteAccountUpdated(id)
+            AccountMutationStore.shared.noteAccountUpdated(updated, allAccounts: accounts)
             ExperienceHaptics.play(.selection)
         }
     }
@@ -208,7 +252,11 @@ final class ManageAccountsViewModel {
     }
 
     func payoutEntries(for accountID: TradingAccountID) -> [AccountPayoutEntry] {
-        payoutEntriesByAccount[accountID] ?? []
+        WithdrawalsHistoryStore.shared.ledgerByAccount[accountID] ?? []
+    }
+
+    var allPayoutEntriesByAccount: [TradingAccountID: [AccountPayoutEntry]] {
+        WithdrawalsHistoryStore.shared.ledgerByAccount
     }
 
     func loadPayoutEntries(for accountID: TradingAccountID) async {
@@ -217,20 +265,31 @@ final class ManageAccountsViewModel {
         defer { isLoadingPayouts = false }
         do {
             let rows = try await trades.payoutEntries(for: accountID)
-            payoutEntriesByAccount[accountID] = rows
+            if let viewerID {
+                WithdrawalsHistoryStore.shared.setLedgerEntries(rows, accountID: accountID, profileID: viewerID)
+            }
         } catch {
             payoutError = UserFacingError.message(for: error)
         }
     }
 
+    func syncPayoutEntriesFromSessionStore() {
+        guard let viewerID else { return }
+        WithdrawalsHistoryStore.shared.hydrateFromSessionCaches(profileID: viewerID)
+    }
+
     func loadAllPayoutEntries() async {
+        if let viewerID {
+            WithdrawalsHistoryStore.shared.hydrateFromSessionCaches(profileID: viewerID)
+        }
         let accountIDs = accounts.map(\.id)
         guard !accountIDs.isEmpty else { return }
-        isLoadingPayouts = payoutEntriesByAccount.isEmpty
+        isLoadingPayouts = WithdrawalsHistoryStore.shared.ledgerByAccount.isEmpty
         payoutError = nil
         defer { isLoadingPayouts = false }
 
         let started = CFAbsoluteTimeGetCurrent()
+        WithdrawalsTrace.log("ledgerFetchStarted", detail: "accounts=\(accountIDs.count)")
         do {
             let rows = try await trades.payoutEntries(for: accountIDs)
             var grouped: [TradingAccountID: [AccountPayoutEntry]] = [:]
@@ -240,15 +299,19 @@ final class ManageAccountsViewModel {
             for entry in rows {
                 grouped[entry.accountID, default: []].append(entry)
             }
-            payoutEntriesByAccount = grouped
+            if let viewerID {
+                WithdrawalsHistoryStore.shared.applyLedgerSnapshot(grouped, profileID: viewerID)
+            }
             PayoutBatchDiagnostics.logEntries(
                 accounts: accountIDs.count,
                 requests: 1,
                 entries: rows.count,
                 dtMs: Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
             )
+            WithdrawalsTrace.log("ledgerFetchCompleted", detail: "entries=\(rows.count)")
         } catch {
             payoutError = UserFacingError.message(for: error)
+            WithdrawalsTrace.log("ledgerFetchFailed", detail: UserFacingError.message(for: error))
         }
     }
 
@@ -268,7 +331,7 @@ final class ManageAccountsViewModel {
             )
             accounts = Self.sorted(accounts.map { $0.id == accountID ? updated : $0 })
             SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
-            AccountMutationStore.shared.noteAccountUpdated(accountID)
+            AccountMutationStore.shared.noteAccountUpdated(updated, allAccounts: accounts)
             ExperienceHaptics.play(.success)
         }
     }
@@ -284,10 +347,9 @@ final class ManageAccountsViewModel {
                 accountID: accountID,
                 draft: draft
             )
-            var rows = payoutEntriesByAccount[accountID] ?? []
-            rows.insert(created, at: 0)
-            payoutEntriesByAccount[accountID] = rows
-            AccountMutationStore.shared.noteAccountsChanged()
+            WithdrawalsHistoryStore.shared.bindProfile(viewerID)
+            WithdrawalsHistoryStore.shared.prependLedgerEntry(created, profileID: viewerID)
+            AccountMutationStore.shared.notePayoutRecorded(accountID: accountID)
             ExperienceHaptics.play(.success)
         }
     }
@@ -298,20 +360,24 @@ final class ManageAccountsViewModel {
         draft: AccountPayoutEntryDraft
     ) async -> Bool {
         await mutate {
+            guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
             let updated = try await trades.updatePayoutEntry(id: entryID, draft: draft)
-            var rows = payoutEntriesByAccount[accountID] ?? []
-            rows = rows.map { $0.id == entryID ? updated : $0 }
-            payoutEntriesByAccount[accountID] = rows
-            AccountMutationStore.shared.noteAccountsChanged()
+            WithdrawalsHistoryStore.shared.replaceLedgerEntry(updated, profileID: viewerID)
+            AccountMutationStore.shared.notePayoutRecorded(accountID: accountID)
             ExperienceHaptics.play(.success)
         }
     }
 
     func deletePayout(entryID: AccountPayoutEntryID, accountID: TradingAccountID) async -> Bool {
         await mutate {
+            guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
             try await trades.deletePayoutEntry(id: entryID)
-            payoutEntriesByAccount[accountID] = payoutEntries(for: accountID).filter { $0.id != entryID }
-            AccountMutationStore.shared.noteAccountsChanged()
+            WithdrawalsHistoryStore.shared.removeLedgerEntry(
+                entryID: entryID,
+                accountID: accountID,
+                profileID: viewerID
+            )
+            AccountMutationStore.shared.notePayoutRecorded(accountID: accountID)
             ExperienceHaptics.play(.selection)
         }
     }

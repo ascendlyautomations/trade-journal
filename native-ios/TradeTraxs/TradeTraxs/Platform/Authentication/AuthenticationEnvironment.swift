@@ -128,4 +128,93 @@ final class AuthenticationEnvironment {
             passkeys: passkeys
         )
     }
+
+    /// Keychain-first launch graph — live Supabase backend installs after login shell when logged out.
+    static func makeForLaunch(
+        appConfiguration: AppConfiguration,
+        navigation: NavigationEnvironment,
+        keychain: (any KeychainServicing)? = nil
+    ) -> (
+        environment: AuthenticationEnvironment,
+        swappableBackend: SwappableAuthenticationBackend,
+        swappableGooglePerformer: SwappableGoogleSignInPerformer
+    ) {
+        let authConfiguration = AuthenticationConfiguration.make(
+            for: appConfiguration.buildConfiguration
+        )
+        let keychainService = keychain ?? KeychainService()
+        let credentials = SecureCredentialStore(
+            keychain: keychainService,
+            configuration: authConfiguration
+        )
+        let tokens = TokenStore(keychain: keychainService, configuration: authConfiguration)
+        let sessionStore = SessionStore(credentials: credentials, tokens: tokens)
+        let expiration = SessionExpiration(leeway: authConfiguration.refreshLeeway)
+        let sessionManager = SessionManager(store: sessionStore, expiration: expiration)
+        let sessionBridge = AuthenticationSessionBridge(sessionManager: sessionManager)
+
+        let swappableBackend = SwappableAuthenticationBackend(
+            initial: PlaceholderAuthenticationBackend()
+        )
+        let emailProvider = EmailAuthenticationProvider(backend: swappableBackend)
+        let appleProvider = AppleSignInProvider(backend: swappableBackend)
+        let googleFallback = GoogleIDTokenSignInPerformer(
+            backend: swappableBackend,
+            credentialSource: UnavailableGoogleCredentialSource()
+        )
+        let swappableGooglePerformer = SwappableGoogleSignInPerformer(fallback: googleFallback)
+        let googleProvider = GoogleSignInProvider(performer: swappableGooglePerformer)
+        let passkeys = FuturePasskeySupport()
+
+        let refreshCoordinator = TokenRefreshCoordinator(
+            sessionManager: sessionManager,
+            emailProvider: emailProvider,
+            expiration: expiration
+        )
+        let logoutCoordinator = LogoutCoordinator(
+            sessionManager: sessionManager,
+            emailProvider: emailProvider,
+            credentials: credentials
+        )
+        let biometrics: any BiometricAuthenticating = authConfiguration.biometricUnlockEnabled
+            ? BiometricAuthenticationSupport()
+            : DisabledBiometricAuthenticationSupport()
+        let migration = CredentialMigration(configuration: authConfiguration)
+
+        let manager = AuthenticationManager(
+            configuration: authConfiguration,
+            sessionManager: sessionManager,
+            emailProvider: emailProvider,
+            appleProvider: appleProvider,
+            googleProvider: googleProvider,
+            refreshCoordinator: refreshCoordinator,
+            logoutCoordinator: logoutCoordinator,
+            biometrics: biometrics,
+            migration: migration
+        )
+        let coordinator = AuthenticationCoordinator(
+            authenticationManager: manager,
+            navigation: navigation
+        )
+        let lifecycle = AuthenticationLifecycle(
+            authenticationManager: manager,
+            authenticationCoordinator: coordinator
+        )
+
+        AppLog.authentication.info("AuthenticationEnvironment ready (launch)")
+
+        let environment = AuthenticationEnvironment(
+            configuration: authConfiguration,
+            manager: manager,
+            coordinator: coordinator,
+            lifecycle: lifecycle,
+            sessionManager: sessionManager,
+            sessionBridge: sessionBridge,
+            emailProvider: emailProvider,
+            appleProvider: appleProvider,
+            googleProvider: googleProvider,
+            passkeys: passkeys
+        )
+        return (environment, swappableBackend, swappableGooglePerformer)
+    }
 }

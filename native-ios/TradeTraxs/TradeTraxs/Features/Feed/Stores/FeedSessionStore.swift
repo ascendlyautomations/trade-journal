@@ -77,8 +77,10 @@ final class FeedSessionStore {
         if let viewerID {
             let prefix = viewerID.rawValue + "|"
             snapshots = snapshots.filter { !$0.key.hasPrefix(prefix) }
+            FeedPersistedCacheCoordinator.clear(viewerID: viewerID)
         } else {
             snapshots = [:]
+            FeedPersistedCacheCoordinator.clearAll()
         }
     }
 

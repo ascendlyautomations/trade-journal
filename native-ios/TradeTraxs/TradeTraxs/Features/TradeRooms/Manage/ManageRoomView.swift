@@ -125,19 +125,6 @@ struct ManageRoomView: View {
             channelEditorSheet(channel: channel)
         }
         .accessibilityIdentifier("tradeRooms.manage")
-        .onChange(of: photoItem) { _, item in
-            Task { await presentRoomImageCrop(for: item) }
-        }
-        .imageCropSelection(
-            sourceImage: $cropSourceImage,
-            preset: .room,
-            onConfirm: { result in
-                viewModel.setCroppedRoomImage(result)
-                cropSourceImage = nil
-                photoItem = nil
-            },
-            onCancel: { photoItem = nil }
-        )
     }
 
     private var hub: some View {
@@ -251,22 +238,34 @@ struct ManageRoomView: View {
                 Toggle("Members can share images/media", isOn: $viewModel.editConfiguration.membersCanShareMedia)
             }
 
-            Section {
-                Button {
-                    Task { await viewModel.saveDetails() }
-                } label: {
-                    if viewModel.isSavingDetails {
-                        ProgressView()
-                    } else {
-                        Text("Save Changes")
-                    }
-                }
-                .disabled(viewModel.isSavingDetails)
-            }
         }
         .scrollContentBackground(.hidden)
         .experienceNavigationTitle("Edit Room Details")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    Task { await viewModel.saveDetails() }
+                }
+                .fontWeight(.semibold)
+                .disabled(viewModel.isSavingDetails)
+                .accessibilityIdentifier("tradeRooms.manage.details.save")
+            }
+        }
+        .disabled(viewModel.isSavingDetails)
         .experienceProtectedFormDismiss(viewModel.isSavingDetails)
+        .onChange(of: photoItem) { _, item in
+            Task { await presentRoomImageCrop(for: item) }
+        }
+        .imageCropSelection(
+            sourceImage: $cropSourceImage,
+            preset: .room,
+            onConfirm: { result in
+                viewModel.setCroppedRoomImage(result)
+                cropSourceImage = nil
+                photoItem = nil
+            },
+            onCancel: { photoItem = nil }
+        )
     }
 
     private func presentRoomImageCrop(for item: PhotosPickerItem?) async {

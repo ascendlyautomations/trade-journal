@@ -20,11 +20,30 @@ enum SharedContentHydrationProbe {
         init(surface: Surface) {
             self.surface = surface
             startedAt = CFAbsoluteTimeGetCurrent()
-            log("resolveStarted surface=\(surface.rawValue)")
         }
 
-        func logResolve(type: String, id: String) {
-            log("resolveStarted surface=\(surface.rawValue) type=\(type) id=\(id)")
+        func logResolution(
+            type: String,
+            contentID: String,
+            source: String,
+            result: String,
+            durationMs: Int? = nil,
+            reason: String? = nil,
+            messageID: String? = nil,
+            deduped: Bool = false
+        ) {
+            var parts = [
+                "surface=\(surface.rawValue)",
+                "type=\(type)",
+                "contentID=\(contentID)",
+                "deduped=\(deduped)",
+                "source=\(source)",
+                "result=\(result)",
+            ]
+            if let messageID { parts.append("messageID=\(messageID)") }
+            if let durationMs { parts.append("durationMs=\(durationMs)") }
+            if let reason { parts.append("reason=\(reason)") }
+            log(parts.joined(separator: " "))
         }
 
         func logMemoryCacheHit(_ hit: Bool) {
@@ -89,7 +108,16 @@ enum SharedContentHydrationProbe {
     final class Session {
         init(surface: Surface) {}
 
-        func logResolve(type: String, id: String) {}
+        func logResolution(
+            type: String,
+            contentID: String,
+            source: String,
+            result: String,
+            durationMs: Int? = nil,
+            reason: String? = nil,
+            messageID: String? = nil,
+            deduped: Bool = false
+        ) {}
         func logMemoryCacheHit(_ hit: Bool) {}
         func logFeedCacheHit(_ hit: Bool) {}
         func logSnapshotAvailable(_ available: Bool) {}

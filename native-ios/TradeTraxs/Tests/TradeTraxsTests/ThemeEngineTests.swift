@@ -140,7 +140,7 @@ final class ThemeEngineTests: XCTestCase {
     }
 
     func testBootstrapIncludesThemeManager() {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         XCTAssertNotNil(environment.themeManager)
         XCTAssertFalse(environment.themeManager.registry.allMetadata().isEmpty)
     }

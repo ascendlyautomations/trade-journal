@@ -57,6 +57,9 @@ struct ResetPasswordView: View {
         .scrollDismissesKeyboard(.interactively)
         .experienceScreenBackground()
         .experienceNavigationTitle("Reset Password")
+        .onDisappear {
+            ExperienceKeyboard.dismiss()
+        }
     }
 
     private var successCard: some View {

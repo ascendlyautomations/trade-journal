@@ -30,6 +30,7 @@ final class ActivityInboxStore {
     private var startedForUserID: String?
     private var isStarting = false
     private var isBootstrappingUnread = false
+    private var persistedViewerID: ProfileID?
 
     private init() {}
 
@@ -41,15 +42,75 @@ final class ActivityInboxStore {
         nextCursor: String?,
         pendingFollowRequestCount: Int = 0
     ) {
+        let sorted = items.sorted { $0.createdAt > $1.createdAt }
+        let publishStart = CFAbsoluteTimeGetCurrent()
+        MainThreadWorkProbe.measure("activity.replace", surface: "activity") {
+            self.items = sorted
+            self.unreadCount = max(0, unreadCount)
+            self.nextCursor = nextCursor
+            self.hasMore = nextCursor != nil
+            self.pendingFollowRequestCount = max(0, pendingFollowRequestCount)
+            hasLoaded = true
+            hasBootstrappedUnread = true
+            lastLoadedAt = .now
+        }
+        MainThreadWorkProbe.publish(
+            surface: "activity",
+            items: sorted.count,
+            durationMs: Int((CFAbsoluteTimeGetCurrent() - publishStart) * 1000)
+        )
+        ActivityPipelineProbe.record(stage: "published", stored: sorted.count)
+        AppIconBadgeSync.refresh(animated: true)
+        schedulePersistSnapshot()
+    }
+
+    /// Restores Activity presentation from a viewer-scoped disk snapshot (cold launch).
+    func hydrateFromDisk(
+        viewerID: ProfileID,
+        items: [ActivityNotification],
+        unreadCount: Int,
+        pendingFollowRequestCount: Int,
+        nextCursor: String?,
+        savedAt: Date
+    ) {
+        persistedViewerID = viewerID
         self.items = Self.sortNewestFirst(items)
         self.unreadCount = max(0, unreadCount)
+        self.pendingFollowRequestCount = max(0, pendingFollowRequestCount)
         self.nextCursor = nextCursor
         self.hasMore = nextCursor != nil
-        self.pendingFollowRequestCount = max(0, pendingFollowRequestCount)
-        hasLoaded = true
+        hasLoaded = !items.isEmpty
         hasBootstrappedUnread = true
-        lastLoadedAt = .now
-        AppIconBadgeSync.refresh(animated: true)
+        lastLoadedAt = savedAt
+    }
+
+    /// Merge authoritative catch-up rows without dropping older cached pages.
+    func mergeCatchUp(
+        items: [ActivityNotification],
+        unreadCount: Int,
+        pendingFollowRequestCount: Int? = nil
+    ) {
+        let existingItems = self.items
+        let merged = MainThreadWorkProbe.measure("activity.mergeCatchUp.prepare", surface: "activity") {
+            var byID = Dictionary(uniqueKeysWithValues: existingItems.map { ($0.id, $0) })
+            for item in items {
+                byID[item.id] = item
+            }
+            return Array(byID.values.sorted { $0.createdAt > $1.createdAt }.prefix(SocialDiskCache.maxActivityItems))
+        }
+        MainThreadWorkProbe.measure("activity.mergeCatchUp.apply", surface: "activity") {
+            self.items = merged
+            setUnreadCount(unreadCount)
+            if let pendingFollowRequestCount {
+                self.pendingFollowRequestCount = max(0, pendingFollowRequestCount)
+            }
+            hasLoaded = true
+            lastLoadedAt = .now
+        }
+        schedulePersistSnapshot()
+#if DEBUG
+        SocialCacheProbe.recordActivityCatchup(items: items.count, fullBootstrap: false)
+#endif
     }
 
     func append(page items: [ActivityNotification], nextCursor: String?) {
@@ -62,6 +123,7 @@ final class ActivityInboxStore {
         self.nextCursor = nextCursor
         self.hasMore = nextCursor != nil
         isLoadingMore = false
+        schedulePersistSnapshot()
     }
 
     func setLoadingMore(_ value: Bool) {
@@ -93,15 +155,48 @@ final class ActivityInboxStore {
         items = Self.sortNewestFirst(next)
         hasLoaded = true
         AppIconBadgeSync.refresh(animated: true)
+        schedulePersistSnapshot()
     }
 
     func remove(id: NotificationID) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        if !items[index].isRead {
-            unreadCount = max(0, unreadCount - 1)
+        _ = removeLocally(ids: [id])
+    }
+
+    /// Optimistic swipe-delete — returns removed rows for rollback.
+    @discardableResult
+    func removeLocally(ids: [NotificationID]) -> [ActivityNotification] {
+        let targets = Set(ids)
+        guard !targets.isEmpty else { return [] }
+        let removed = items.filter { targets.contains($0.id) }
+        guard !removed.isEmpty else { return [] }
+
+        let unreadRemoved = removed.filter { !$0.isRead }.count
+        items = items.filter { !targets.contains($0.id) }
+        if unreadRemoved > 0 {
+            unreadCount = max(0, unreadCount - unreadRemoved)
             AppIconBadgeSync.refresh(animated: true)
         }
-        items.remove(at: index)
+        schedulePersistSnapshot()
+        return removed
+    }
+
+    /// Rolls back a failed optimistic ``removeLocally``.
+    func restoreLocally(_ notifications: [ActivityNotification]) {
+        guard !notifications.isEmpty else { return }
+        var byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        var unreadRestored = 0
+        for notification in notifications where byID[notification.id] == nil {
+            byID[notification.id] = notification
+            if !notification.isRead {
+                unreadRestored += 1
+            }
+        }
+        items = Self.sortNewestFirst(Array(byID.values))
+        if unreadRestored > 0 {
+            unreadCount += unreadRestored
+            AppIconBadgeSync.refresh(animated: true)
+        }
+        schedulePersistSnapshot()
     }
 
     func markReadLocally(id: NotificationID) {
@@ -206,8 +301,8 @@ final class ActivityInboxStore {
         detailCache: DetailPresentationCache? = nil,
         rpc: (any RPCClient)? = nil
     ) {
-        Task {
-            await bootstrapUnreadIfNeeded(
+        Task.detached(priority: .utility) {
+            await ActivityInboxStore.shared.bootstrapUnreadIfNeeded(
                 notifications: notifications,
                 session: session,
                 realtimeHub: realtimeHub,
@@ -239,7 +334,8 @@ final class ActivityInboxStore {
         session: any SessionProviding,
         realtimeHub: RealtimeHub?,
         detailCache: DetailPresentationCache? = nil,
-        rpc: (any RPCClient)? = nil
+        rpc: (any RPCClient)? = nil,
+        feedPresentation: Bool = false
     ) async {
         await bootstrapUnreadIfNeeded(
             notifications: notifications,
@@ -250,6 +346,25 @@ final class ActivityInboxStore {
         )
 
         guard let userID = await session.currentUserID?.rawValue else { return }
+        let viewerID = ProfileID(userID)
+
+        if feedPresentation, startedForUserID == userID, hasLoaded {
+            startRealtime(
+                userID: userID,
+                notifications: notifications,
+                session: session,
+                realtimeHub: realtimeHub
+            )
+            await syncPresentedFeed(
+                viewerID: viewerID,
+                notifications: notifications,
+                followRequests: followRequests,
+                detailCache: detailCache,
+                rpc: rpc
+            )
+            return
+        }
+
         if startedForUserID == userID, hasLoaded { return }
         guard !isStarting else { return }
         isStarting = true
@@ -278,6 +393,36 @@ final class ActivityInboxStore {
             nextCursor = nil
             hasMore = true
             startedForUserID = userID
+            persistedViewerID = ProfileID(userID)
+            _ = SocialPersistedCacheCoordinator.hydrateActivity(
+                viewerID: ProfileID(userID),
+                store: self
+            )
+        }
+
+        if hasLoaded {
+            startRealtime(
+                userID: userID,
+                notifications: notifications,
+                session: session,
+                realtimeHub: realtimeHub
+            )
+            if feedPresentation {
+                await syncPresentedFeed(
+                    viewerID: viewerID,
+                    notifications: notifications,
+                    followRequests: followRequests,
+                    detailCache: detailCache,
+                    rpc: rpc
+                )
+            } else {
+                await catchUpActivityIfNeeded(
+                    viewerID: viewerID,
+                    detailCache: detailCache,
+                    rpc: rpc
+                )
+            }
+            return
         }
 
         if let applied = await loadRpcBootstrapIfAvailable(
@@ -293,6 +438,9 @@ final class ActivityInboxStore {
                 nextCursor: applied.nextCursor,
                 pendingFollowRequestCount: applied.pendingFollowRequestCount
             )
+#if DEBUG
+            SocialCacheProbe.recordActivityCatchup(items: applied.items.count, fullBootstrap: true)
+#endif
             startRealtime(
                 userID: userID,
                 notifications: notifications,
@@ -378,6 +526,10 @@ final class ActivityInboxStore {
             nextCursor = nil
             hasMore = true
             startedForUserID = userID
+            persistedViewerID = ProfileID(userID)
+            if SocialPersistedCacheCoordinator.hydrateActivity(viewerID: ProfileID(userID), store: self) {
+                hasBootstrappedUnread = true
+            }
         }
 
         if let applied = await loadRpcBootstrapIfAvailable(
@@ -492,7 +644,96 @@ final class ActivityInboxStore {
         startedForUserID = nil
         isStarting = false
         isBootstrappingUnread = false
+        persistedViewerID = nil
         AppIconBadgeController.shared.clear()
+    }
+
+    private func schedulePersistSnapshot() {
+        guard let persistedViewerID else { return }
+        let blob = SocialDiskCache.ActivityBlob(
+            viewerID: persistedViewerID.rawValue,
+            savedAt: Date(),
+            items: items,
+            unreadCount: unreadCount,
+            pendingFollowRequestCount: pendingFollowRequestCount,
+            nextCursor: nextCursor
+        )
+        Task.detached(priority: .utility) {
+            SocialDiskCache.saveActivity(blob)
+        }
+    }
+
+    /// Authoritative first-page sync when Activity is on screen (replace, not merge-only catch-up).
+    private func syncPresentedFeed(
+        viewerID: ProfileID,
+        notifications: any NotificationRepository,
+        followRequests: (any FollowRequestRepository)?,
+        detailCache: DetailPresentationCache?,
+        rpc: (any RPCClient)?
+    ) async {
+        if let applied = await loadRpcBootstrapIfAvailable(
+            viewerID: viewerID,
+            detailCache: detailCache,
+            rpc: rpc,
+            limit: Self.pageSize,
+            cursor: nil
+        ) {
+            replace(
+                items: applied.items,
+                unreadCount: applied.unreadCount,
+                nextCursor: applied.nextCursor,
+                pendingFollowRequestCount: applied.pendingFollowRequestCount
+            )
+#if DEBUG
+            SocialCacheProbe.recordActivityCatchup(items: applied.items.count, fullBootstrap: true)
+#endif
+            ActivityPipelineProbe.record(stage: "presentedFeedBootstrap", stored: applied.items.count)
+            return
+        }
+
+        do {
+            let page = try await notifications.notifications(
+                page: PageRequest(limit: Self.pageSize)
+            )
+            let previousFollowCount = pendingFollowRequestCount
+            async let unreadTask = notifications.unreadCount()
+            async let followTask: Int = {
+                guard let followRequests else { return previousFollowCount }
+                return (try? await followRequests.pendingRequests().count) ?? previousFollowCount
+            }()
+            let unread = (try? await unreadTask) ?? unreadCount
+            let followCount = await followTask
+            replace(
+                items: page.items,
+                unreadCount: unread,
+                nextCursor: page.nextCursor,
+                pendingFollowRequestCount: followCount
+            )
+            ActivityPipelineProbe.record(stage: "presentedFeedREST", stored: page.items.count)
+        } catch {
+            ActivityPipelineProbe.record(stage: "presentedFeedFailed", note: String(describing: error))
+        }
+    }
+
+    private func catchUpActivityIfNeeded(
+        viewerID: ProfileID,
+        detailCache: DetailPresentationCache?,
+        rpc: (any RPCClient)?
+    ) async {
+        guard let applied = await loadRpcBootstrapIfAvailable(
+            viewerID: viewerID,
+            detailCache: detailCache,
+            rpc: rpc,
+            limit: Self.pageSize,
+            cursor: nil
+        ) else {
+            return
+        }
+        mergeCatchUp(
+            items: applied.items,
+            unreadCount: applied.unreadCount,
+            pendingFollowRequestCount: applied.pendingFollowRequestCount
+        )
     }
 
     func resetForTesting() {
@@ -509,13 +750,14 @@ final class ActivityInboxStore {
         cursor: String?
     ) async -> ActivityBootstrapApplier.Applied? {
         guard let rpc else { return nil }
-        return try? await ActivityBootstrapLoader.load(
+        guard let applied = try? await ActivityBootstrapLoader.load(
             viewerID: viewerID,
             rpc: rpc,
-            detailCache: detailCache,
             limit: limit,
             cursor: cursor
-        )
+        ) else { return nil }
+        ActivityBootstrapApplier.seedActors(applied.actorProfiles, detailCache: detailCache)
+        return applied
     }
 
     private func invalidateRealtimeOnly() {
@@ -544,6 +786,9 @@ final class ActivityInboxStore {
         invalidateRealtimeOnly()
         activeRealtimeUserID = userID
         activeRealtimeHub = realtimeHub
+#if DEBUG
+        SocialCacheProbe.setRealtimeSubscribed(true)
+#endif
         let channel = RealtimeChannelID(kind: .notifications, topic: "user:\(userID)")
         realtimeTask = Task { [weak self] in
             await realtimeHub.stopWatchingNotifications(userID: userID)

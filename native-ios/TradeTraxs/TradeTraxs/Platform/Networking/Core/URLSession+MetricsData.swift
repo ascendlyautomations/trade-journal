@@ -7,9 +7,12 @@ extension URLSession {
         metricsCollector: URLSessionTaskMetricsCollector = .shared
     ) async throws -> (Data, URLResponse, URLSessionTaskMetrics?) {
         try await withCheckedThrowingContinuation { continuation in
-            var task: URLSessionDataTask!
-            task = dataTask(with: request) { data, response, error in
-                let metrics = metricsCollector.consumeMetrics(taskIdentifier: task.taskIdentifier)
+            final class TaskIdentifierSlot: @unchecked Sendable {
+                var value: Int = 0
+            }
+            let taskIdentifierSlot = TaskIdentifierSlot()
+            let task = dataTask(with: request) { data, response, error in
+                let metrics = metricsCollector.consumeMetrics(taskIdentifier: taskIdentifierSlot.value)
                 if let error {
                     continuation.resume(throwing: error)
                     return
@@ -22,6 +25,7 @@ extension URLSession {
                 }
                 continuation.resume(returning: (data, response, metrics))
             }
+            taskIdentifierSlot.value = task.taskIdentifier
             task.resume()
         }
     }

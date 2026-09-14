@@ -54,7 +54,7 @@ nonisolated enum MediaPipelineAudit {
         var contentMode: String
     }
 
-    static func logFetch(_ report: FetchReport) {
+    nonisolated static func logFetch(_ report: FetchReport) {
         let encoded = encodedDimensionsLabel(
             width: report.encodedPixelWidth,
             height: report.encodedPixelHeight
@@ -74,7 +74,7 @@ nonisolated enum MediaPipelineAudit {
         )
     }
 
-    static func logDecode(_ report: DecodeReport) {
+    nonisolated static func logDecode(_ report: DecodeReport) {
         print(
             """
             [MEDIA_PIPELINE_AUDIT] phase=decode surface=\(report.surface) \
@@ -90,7 +90,7 @@ nonisolated enum MediaPipelineAudit {
         )
     }
 
-    static func logRender(_ report: RenderReport) {
+    nonisolated static func logRender(_ report: RenderReport) {
         print(
             """
             [MEDIA_PIPELINE_AUDIT] phase=render surface=\(report.surface) \
@@ -104,7 +104,7 @@ nonisolated enum MediaPipelineAudit {
         )
     }
 
-    static func encodedPixelSize(of data: Data) -> (width: Int, height: Int)? {
+    nonisolated static func encodedPixelSize(of data: Data) -> (width: Int, height: Int)? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
             return nil
@@ -115,12 +115,12 @@ nonisolated enum MediaPipelineAudit {
         return (width, height)
     }
 
-    static func describePreset(_ preset: StorageImageTransform.Preset) -> (name: String, params: String) {
+    nonisolated static func describePreset(_ preset: StorageImageTransform.Preset) -> (name: String, params: String) {
         switch preset {
         case .avatar:
             return ("avatar", "width=96 height=96 quality=80 resize=cover")
         case .feedThumb:
-            return ("feedThumb", "width=640 quality=75 resize=default")
+            return ("feedThumb", "width=640 quality=75 resize=contain")
         case .feedDetail:
             return ("feedDetail", "width=1280 quality=82 resize=default")
         case .story:
@@ -130,16 +130,19 @@ nonisolated enum MediaPipelineAudit {
         }
     }
 
-    static func cacheKey(
+    nonisolated static func cacheKey(
         referenceID: String,
         purpose: ImagePurpose,
         deliveryQuality: ImageDeliveryQuality,
         maxPixelSize: Int?
     ) -> String {
-        "\(referenceID)|\(purpose.rawValue)|\(deliveryQuality.rawValue)|\(maxPixelSize ?? 0)"
+        let feedRevision = deliveryQuality == .feedDisplay
+            ? "|feedRev=\(StorageImageTransform.feedDisplayCacheRevision)"
+            : ""
+        return "\(referenceID)|\(purpose.rawValue)|\(deliveryQuality.rawValue)|\(maxPixelSize ?? 0)\(feedRevision)"
     }
 
-    static func orientationLabel(_ orientation: UIImage.Orientation) -> String {
+    nonisolated static func orientationLabel(_ orientation: UIImage.Orientation) -> String {
         switch orientation {
         case .up: return "up"
         case .down: return "down"
@@ -153,11 +156,11 @@ nonisolated enum MediaPipelineAudit {
         }
     }
 
-    static func uiImagePointSizeLabel(_ image: UIImage) -> String {
+    nonisolated static func uiImagePointSizeLabel(_ image: UIImage) -> String {
         String(format: "%.1fx%.1f", image.size.width, image.size.height)
     }
 
-    static func cgPixelSize(of image: UIImage) -> (width: Int, height: Int) {
+    nonisolated static func cgPixelSize(of image: UIImage) -> (width: Int, height: Int) {
         if let cg = image.cgImage {
             return (cg.width, cg.height)
         }
@@ -167,19 +170,19 @@ nonisolated enum MediaPipelineAudit {
         )
     }
 
-    static func describeRect(_ rect: CGRect) -> String {
+    nonisolated static func describeRect(_ rect: CGRect) -> String {
         String(
             format: "(%.1f,%.1f,%.1fx%.1f)",
             rect.origin.x, rect.origin.y, rect.width, rect.height
         )
     }
 
-    private static func encodedDimensionsLabel(width: Int?, height: Int?) -> String {
+    nonisolated private static func encodedDimensionsLabel(width: Int?, height: Int?) -> String {
         guard let width, let height else { return "unknown" }
         return "\(width)x\(height)"
     }
 
-    private static func formatScale(_ scale: CGFloat) -> String {
+    nonisolated private static func formatScale(_ scale: CGFloat) -> String {
         String(format: "%.2f", scale)
     }
 }
@@ -232,11 +235,11 @@ nonisolated enum MediaPipelineAudit {
         var contentMode: String = ""
     }
 
-    static func logFetch(_ report: FetchReport) {}
-    static func logDecode(_ report: DecodeReport) {}
-    static func logRender(_ report: RenderReport) {}
-    static func encodedPixelSize(of data: Data) -> (width: Int, height: Int)? { nil }
-    static func cacheKey(
+    nonisolated static func logFetch(_ report: FetchReport) {}
+    nonisolated static func logDecode(_ report: DecodeReport) {}
+    nonisolated static func logRender(_ report: RenderReport) {}
+    nonisolated static func encodedPixelSize(of data: Data) -> (width: Int, height: Int)? { nil }
+    nonisolated static func cacheKey(
         referenceID: String,
         purpose: ImagePurpose,
         deliveryQuality: ImageDeliveryQuality,

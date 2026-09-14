@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// Outcome filter + sort controls — lives inside ``ProfileSectionContainerChrome`` (Stats parity).
 struct ProfileTradesFilterBar: View {
     @Bindable var viewModel: TradesContainerViewModel
 
@@ -7,19 +8,19 @@ struct ProfileTradesFilterBar: View {
 
     var body: some View {
         HStack(spacing: ExperienceSpacing.sm) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: ExperienceSpacing.xs) {
-                    ForEach(ProfileTradesFilter.allCases) { filter in
-                        ExperienceChip(
-                            title: filter.title,
-                            isSelected: viewModel.filter == filter
-                        ) {
-                            viewModel.setFilter(filter)
-                        }
-                        .accessibilityIdentifier("profile.trades.filter.\(filter.rawValue)")
+            HStack(spacing: ExperienceSpacing.xs) {
+                ForEach(ProfileTradesFilter.allCases) { filter in
+                    ExperienceChip(
+                        title: filter.title,
+                        isSelected: viewModel.filter == filter
+                    ) {
+                        viewModel.setFilter(filter)
                     }
+                    .accessibilityIdentifier("profile.trades.filter.\(filter.rawValue)")
                 }
             }
+
+            Spacer(minLength: 0)
 
             Menu {
                 ForEach(ProfileTradesSort.allCases) { sort in
@@ -37,6 +38,7 @@ struct ProfileTradesFilterBar: View {
                 Label(viewModel.sort.title, systemImage: "arrow.up.arrow.down")
                     .font(ExperienceTypography.footnote)
                     .foregroundStyle(colors.primaryText)
+                    .lineLimit(1)
                     .padding(.horizontal, ExperienceSpacing.sm)
                     .frame(minHeight: ExperienceAccessibility.minTouchTarget)
                     .background(colors.fillSecondary)
@@ -46,5 +48,7 @@ struct ProfileTradesFilterBar: View {
             .accessibilityValue(viewModel.sort.title)
             .accessibilityIdentifier("profile.trades.sort")
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("profile.trades.filters")
     }
 }

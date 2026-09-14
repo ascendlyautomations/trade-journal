@@ -349,7 +349,7 @@ final class TradeRoomsExperienceTests: XCTestCase {
         XCTAssertFalse(viewModel.yourRooms.isEmpty)
     }
 
-    func testDefaultDiscoveryModeIsSuggestedWhenNotMember() async {
+    func testDefaultDiscoveryModeIsYourRoomsWhenEmpty() async {
         let store = MessagesInboxStore.shared
         store.resetForTesting()
 
@@ -366,7 +366,7 @@ final class TradeRoomsExperienceTests: XCTestCase {
         viewModel.loadIfNeeded()
         await waitFor { viewModel.phase == .loaded }
 
-        XCTAssertEqual(viewModel.discoveryMode, .suggested)
+        XCTAssertEqual(viewModel.discoveryMode, .yourRooms)
         XCTAssertTrue(viewModel.yourRooms.isEmpty)
     }
 
@@ -391,6 +391,8 @@ final class TradeRoomsExperienceTests: XCTestCase {
 
         XCTAssertTrue(viewModel.yourRooms.first?.isOwner == true)
         XCTAssertTrue(viewModel.isViewerOwner(of: viewModel.yourRooms[0]))
+        XCTAssertNotNil(viewModel.viewerOwnedRoom)
+        XCTAssertTrue(viewModel.isHeaderOwnershipResolved)
     }
 
     func testYourRoomsMembershipBadgeShowsOwnerForOwnedRoom() async {

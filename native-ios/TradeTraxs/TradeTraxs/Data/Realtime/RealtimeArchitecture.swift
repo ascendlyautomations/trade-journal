@@ -50,6 +50,7 @@ nonisolated protocol ChannelRegistry: Sendable {
     func registeredChannels() -> [RealtimeChannelID]
     func register(_ channel: RealtimeChannelID)
     func unregister(_ channel: RealtimeChannelID)
+    func clearAll()
 }
 
 nonisolated final class InMemoryChannelRegistry: ChannelRegistry, @unchecked Sendable {
@@ -102,6 +103,13 @@ nonisolated final class InMemoryChannelRegistry: ChannelRegistry, @unchecked Sen
         lock.lock(); defer { lock.unlock() }
         return retainCounts[channel] ?? 0
     }
+
+    func clearAll() {
+        lock.lock()
+        channels = []
+        retainCounts = [:]
+        lock.unlock()
+    }
 }
 
 nonisolated protocol SubscriptionManaging: Sendable {
@@ -127,9 +135,7 @@ nonisolated struct RegistrySubscriptionManager: SubscriptionManaging {
     }
 
     func unsubscribeAll() async {
-        for channel in registry.registeredChannels() {
-            registry.unregister(channel)
-        }
+        registry.clearAll()
     }
 }
 

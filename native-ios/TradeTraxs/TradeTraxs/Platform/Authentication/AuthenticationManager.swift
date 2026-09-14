@@ -8,6 +8,8 @@ final class AuthenticationManager {
     private(set) var lastEvent: AuthenticationEvent?
     /// Monotonic attempt id — stale async refresh/restore completions must not publish state.
     private(set) var restorationGeneration: UInt64 = 0
+    /// Set after synchronous Keychain restore in ``prepareColdLaunch()``.
+    private(set) var coldLaunchKeychainRestoreCompleted = false
 
     private let configuration: AuthenticationConfiguration
     private let sessionManager: SessionManager
@@ -76,6 +78,13 @@ final class AuthenticationManager {
     /// Synchronous Keychain restore for CompositionRoot cold launch (no network).
     @discardableResult
     func prepareColdLaunch() -> AuthenticationState {
+        UnauthLaunchProbe.sessionCheckStarted()
+        let start = CFAbsoluteTimeGetCurrent()
+        defer {
+            coldLaunchKeychainRestoreCompleted = true
+            let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1_000)
+            UnauthLaunchProbe.mainThreadSlow(operation: "auth.prepareColdLaunch", durationMs: ms)
+        }
         emit(.restorationStarted)
         AuthFlowTracer.trace(
             "auth.restore.started",
@@ -88,6 +97,7 @@ final class AuthenticationManager {
                 state = .unauthenticated
                 emit(.restorationFailed)
                 traceRestoreSessionFound(expired: false, present: false)
+                UnauthLaunchProbe.noSession()
                 Task { await SessionNetworkGate.shared.markUnauthenticated() }
                 return state
             }
@@ -118,7 +128,7 @@ final class AuthenticationManager {
         }
     }
 
-    /// Authoritative async restore — single-flight refresh when needed.
+    /// Async follow-up after cold launch — refresh only when required.
     func restoreSession() async {
         if restoreInFlight {
             await waitForRestoreCompletion()
@@ -130,8 +140,25 @@ final class AuthenticationManager {
             isRetryingValidation = false
         }
 
-        if state == .unknown {
+        if !coldLaunchKeychainRestoreCompleted, state == .unknown {
             _ = prepareColdLaunch()
+        }
+
+        if coldLaunchKeychainRestoreCompleted {
+            switch state {
+            case .unauthenticated, .failure:
+                await SessionNetworkGate.shared.markUnauthenticated()
+                return
+            case .authenticated, .locked:
+                await SessionNetworkGate.shared.markReady()
+                return
+            case .sessionValidationFailed:
+                return
+            case .authenticating:
+                return
+            case .unknown, .refreshing:
+                break
+            }
         }
 
         if case .sessionValidationFailed(let session, _) = state {
@@ -145,6 +172,17 @@ final class AuthenticationManager {
 
         if state.isSessionReady {
             await SessionNetworkGate.shared.markReady()
+        }
+    }
+
+    /// True when ``prepareColdLaunch()`` already resolved session state (no second Keychain read).
+    func shouldSkipAsyncRestoreAfterColdLaunch() -> Bool {
+        guard coldLaunchKeychainRestoreCompleted else { return false }
+        switch state {
+        case .refreshing, .unknown:
+            return false
+        case .unauthenticated, .failure, .authenticated, .locked, .sessionValidationFailed, .authenticating:
+            return true
         }
     }
 

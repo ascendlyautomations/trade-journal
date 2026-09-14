@@ -3,19 +3,19 @@ import Foundation
 
 #if DEBUG
 enum VideoTranscodeDiagnostics {
-    static func logReaderStarted() {
+    nonisolated static func logReaderStarted() {
         print("[VideoTranscode] readerStarted")
     }
 
-    static func logWriterStarted() {
+    nonisolated static func logWriterStarted() {
         print("[VideoTranscode] writerStarted")
     }
 
-    static func logVideoPumpStarted() {
+    nonisolated static func logVideoPumpStarted() {
         print("[VideoTranscode] videoPumpStarted")
     }
 
-    static func logVideoProgress(samples: Int, pts: Double, writerReady: Bool) {
+    nonisolated static func logVideoProgress(samples: Int, pts: Double, writerReady: Bool) {
         print(
             """
             [VideoTranscode] videoProgress samples=\(samples) \
@@ -24,15 +24,15 @@ enum VideoTranscodeDiagnostics {
         )
     }
 
-    static func logVideoPumpFinished(samples: Int) {
+    nonisolated static func logVideoPumpFinished(samples: Int) {
         print("[VideoTranscode] videoPumpFinished samples=\(samples)")
     }
 
-    static func logAudioPumpStarted() {
+    nonisolated static func logAudioPumpStarted() {
         print("[VideoTranscode] audioPumpStarted")
     }
 
-    static func logAudioProgress(samples: Int, pts: Double, writerReady: Bool) {
+    nonisolated static func logAudioProgress(samples: Int, pts: Double, writerReady: Bool) {
         print(
             """
             [VideoTranscode] audioProgress samples=\(samples) \
@@ -41,23 +41,23 @@ enum VideoTranscodeDiagnostics {
         )
     }
 
-    static func logAudioPumpFinished(samples: Int) {
+    nonisolated static func logAudioPumpFinished(samples: Int) {
         print("[VideoTranscode] audioPumpFinished samples=\(samples)")
     }
 
-    static func logInputsMarkedFinished() {
+    nonisolated static func logInputsMarkedFinished() {
         print("[VideoTranscode] inputsMarkedFinished")
     }
 
-    static func logWriterFinishStarted() {
+    nonisolated static func logWriterFinishStarted() {
         print("[VideoTranscode] writerFinishStarted")
     }
 
-    static func logWriterFinishCompleted(status: String) {
+    nonisolated static func logWriterFinishCompleted(status: String) {
         print("[VideoTranscode] writerFinishCompleted status=\(status)")
     }
 
-    static func logStall(
+    nonisolated static func logStall(
         readerStatus: String,
         writerStatus: String,
         videoReady: Bool,
@@ -83,18 +83,18 @@ enum VideoTranscodeDiagnostics {
 }
 #else
 enum VideoTranscodeDiagnostics {
-    static func logReaderStarted() {}
-    static func logWriterStarted() {}
-    static func logVideoPumpStarted() {}
-    static func logVideoProgress(samples: Int, pts: Double, writerReady: Bool) {}
-    static func logVideoPumpFinished(samples: Int) {}
-    static func logAudioPumpStarted() {}
-    static func logAudioProgress(samples: Int, pts: Double, writerReady: Bool) {}
-    static func logAudioPumpFinished(samples: Int) {}
-    static func logInputsMarkedFinished() {}
-    static func logWriterFinishStarted() {}
-    static func logWriterFinishCompleted(status: String) {}
-    static func logStall(
+    nonisolated static func logReaderStarted() {}
+    nonisolated static func logWriterStarted() {}
+    nonisolated static func logVideoPumpStarted() {}
+    nonisolated static func logVideoProgress(samples: Int, pts: Double, writerReady: Bool) {}
+    nonisolated static func logVideoPumpFinished(samples: Int) {}
+    nonisolated static func logAudioPumpStarted() {}
+    nonisolated static func logAudioProgress(samples: Int, pts: Double, writerReady: Bool) {}
+    nonisolated static func logAudioPumpFinished(samples: Int) {}
+    nonisolated static func logInputsMarkedFinished() {}
+    nonisolated static func logWriterFinishStarted() {}
+    nonisolated static func logWriterFinishCompleted(status: String) {}
+    nonisolated static func logStall(
         readerStatus: String,
         writerStatus: String,
         videoReady: Bool,

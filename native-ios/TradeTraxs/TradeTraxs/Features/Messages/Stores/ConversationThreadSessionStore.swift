@@ -32,11 +32,26 @@ final class ConversationThreadSessionStore {
     }
 
     func restore(key: String) -> Snapshot? {
-        snapshots[key]
+        if let cached = snapshots[key] {
+            return cached
+        }
+        let parts = key.split(separator: "|", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        let viewerID = ProfileID(parts[0])
+        let conversationID = ConversationID(parts[1])
+        guard let disk = SocialPersistedCacheCoordinator.restoreDMThread(
+            viewerID: viewerID,
+            conversationID: conversationID
+        ) else {
+            return nil
+        }
+        snapshots[key] = disk
+        return disk
     }
 
     func save(_ snapshot: Snapshot) {
         snapshots[snapshot.cacheKey] = snapshot
+        persistSnapshot(snapshot)
     }
 
     /// Merge canonical server/local rows into the cached first page (web `patchConversationThreadMessages`).
@@ -60,10 +75,11 @@ final class ConversationThreadSessionStore {
             snapshot.loadedAt = Date()
             snapshot.contentGeneration &+= 1
             snapshots[key] = snapshot
+            persistSnapshot(snapshot)
             return
         }
         guard let conversation else { return }
-        snapshots[key] = Snapshot(
+        let created = Snapshot(
             cacheKey: key,
             conversation: conversation,
             messages: Self.newestPage(from: incoming, limit: Self.messageLimit),
@@ -72,6 +88,8 @@ final class ConversationThreadSessionStore {
             loadedAt: Date(),
             contentGeneration: 1
         )
+        snapshots[key] = created
+        persistSnapshot(created)
     }
 
     /// Persist RPC/bootstrap first page without dropping newer locally patched rows.
@@ -88,17 +106,16 @@ final class ConversationThreadSessionStore {
             incoming: incoming
         )
         let priorGeneration = snapshots[cacheKey]?.contentGeneration ?? 0
-        save(
-            Snapshot(
-                cacheKey: cacheKey,
-                conversation: conversation,
-                messages: Self.cacheMessages(from: merged, existingCount: existing.count),
-                nextCursor: nextCursor,
-                hasMoreMessages: hasMoreMessages,
-                loadedAt: Date(),
-                contentGeneration: priorGeneration
-            )
+        let snapshot = Snapshot(
+            cacheKey: cacheKey,
+            conversation: conversation,
+            messages: Self.cacheMessages(from: merged, existingCount: existing.count),
+            nextCursor: nextCursor,
+            hasMoreMessages: hasMoreMessages,
+            loadedAt: Date(),
+            contentGeneration: priorGeneration
         )
+        save(snapshot)
     }
 
     /// Persist the full in-memory thread (including paginated history) for warm reopen.
@@ -122,6 +139,16 @@ final class ConversationThreadSessionStore {
                 loadedAt: Date(),
                 contentGeneration: priorGeneration &+ 1
             )
+        )
+    }
+
+    private func persistSnapshot(_ snapshot: Snapshot) {
+        let parts = snapshot.cacheKey.split(separator: "|", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return }
+        SocialPersistedCacheCoordinator.persistDMThread(
+            viewerID: ProfileID(parts[0]),
+            conversationID: ConversationID(parts[1]),
+            snapshot: snapshot
         )
     }
 
@@ -150,15 +177,21 @@ final class ConversationThreadSessionStore {
         snapshot.messages.removeAll { $0.id == messageID }
         snapshot.contentGeneration &+= 1
         snapshots[key] = snapshot
+        persistSnapshot(snapshot)
     }
 
     func invalidate(viewerID: ProfileID? = nil, conversationID: ConversationID? = nil) {
         if let viewerID, let conversationID {
             snapshots.removeValue(forKey: Self.cacheKey(viewerID: viewerID, conversationID: conversationID))
+            SocialPersistedCacheCoordinator.removeDMThread(viewerID: viewerID, conversationID: conversationID)
             return
         }
         if let viewerID {
             let prefix = viewerID.rawValue + "|"
+            for key in snapshots.keys where key.hasPrefix(prefix) {
+                let conversationID = ConversationID(String(key.dropFirst(prefix.count)))
+                SocialPersistedCacheCoordinator.removeDMThread(viewerID: viewerID, conversationID: conversationID)
+            }
             snapshots = snapshots.filter { !$0.key.hasPrefix(prefix) }
         } else {
             snapshots = [:]

@@ -745,6 +745,7 @@ enum FeedImageRenderProbe {
     static func log(
         mediaID: String,
         surface: String,
+        deliveryQuality: String,
         decodedPixels: CGSize,
         containerSize: CGSize,
         contentMode: String,
@@ -767,6 +768,7 @@ enum FeedImageRenderProbe {
         }
         print(
             "[FEED_IMAGE_RENDER] mediaID=\(mediaID) surface=\(surface) "
+                + "deliveryQuality=\(deliveryQuality) "
                 + "decoded=\(Int(decodedPixels.width))x\(Int(decodedPixels.height)) "
                 + "container=\(Int(containerSize.width))x\(Int(containerSize.height)) "
                 + "decodedAspect=\(String(format: "%.4f", decodedAspect)) "
@@ -870,6 +872,7 @@ enum FeedImageRenderProbe {
     static func log(
         mediaID: String,
         surface: String,
+        deliveryQuality: String,
         decodedPixels: CGSize,
         containerSize: CGSize,
         contentMode: String,

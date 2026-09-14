@@ -15,6 +15,7 @@ struct ProfileView: View {
 
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.tabIsActive) private var tabIsActive
 
     /// Profile tab root — current user.
     init(
@@ -157,7 +158,8 @@ struct ProfileView: View {
         .refreshable {
             await screen.refresh()
         }
-        .onAppear {
+        .task(id: tabIsActive) {
+            guard !showsOwnerChrome || tabIsActive else { return }
             headerViewModel.onRetryBootstrap = { screen.retryBootstrap() }
             headerViewModel.onAppear()
             screen.onAppear(currentUserProfile: currentUserProfile)

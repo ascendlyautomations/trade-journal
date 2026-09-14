@@ -7,6 +7,10 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
     private let cache: CacheStack
     private let session: any SessionProviding
 
+    private static let messageSelect = """
+    *,message_reactions(id,message_id,user_id,reaction,created_at)
+    """
+
     /// Same select as web `fetchUserDmConversations`.
     private static let conversationSelect = """
     id,is_group,is_pinned,name,avatar_url,last_message,last_message_at,\
@@ -132,7 +136,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             MessageDTO.Message.self,
             from: "messages",
             query: SupabaseQuery.page(page) + [
-                SupabaseQuery.select("*"),
+                SupabaseQuery.select(Self.messageSelect),
                 SupabaseQuery.eq("conversation_id", conversationID.rawValue),
             ]
         )
@@ -634,6 +638,65 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
                 conversationID: ConversationID(conversationRaw)
             )
         }
+    }
+
+    func insertMessageReaction(
+        conversationID: ConversationID,
+        messageID: MessageID,
+        userID: ProfileID,
+        reaction: String
+    ) async throws -> RoomMessageReaction {
+        struct Body: Encodable {
+            var message_id: String
+            var conversation_id: String
+            var user_id: String
+            var reaction: String
+        }
+        let row: MessageDTO.MessageReactionRow = try await supabase.database.insert(
+            Body(
+                message_id: messageID.rawValue,
+                conversation_id: conversationID.rawValue,
+                user_id: userID.rawValue,
+                reaction: reaction
+            ),
+            into: "message_reactions",
+            returning: MessageDTO.MessageReactionRow.self
+        )
+        guard let mapped = mapMessageReaction(row, fallbackMessageID: messageID) else {
+            throw AppError.unknown(message: "Could not update reaction.")
+        }
+        return mapped
+    }
+
+    func deleteMessageReaction(id: String) async throws {
+        try await supabase.database.delete(
+            from: "message_reactions",
+            query: [SupabaseQuery.eq("id", id)]
+        )
+    }
+
+    private func mapMessageReaction(
+        _ dto: MessageDTO.MessageReactionRow,
+        fallbackMessageID: MessageID
+    ) -> RoomMessageReaction? {
+        guard let id = dto.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
+              let reaction = dto.reaction?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !reaction.isEmpty,
+              MessageReactionSemantics.supportedEmojis.contains(reaction)
+        else { return nil }
+        let messageRaw = dto.message_id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageID = messageRaw.flatMap { raw -> MessageID? in
+            raw.isEmpty ? nil : MessageID(raw)
+        } ?? fallbackMessageID
+        guard let userRaw = dto.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !userRaw.isEmpty
+        else { return nil }
+        return RoomMessageReaction(
+            id: id,
+            messageID: RoomMessageID(messageID.rawValue),
+            userID: ProfileID(userRaw),
+            reaction: reaction,
+            createdAt: ISO8601.date(from: dto.created_at)
+        )
     }
 
     private func fetchBlockStatus<P: Encodable>(

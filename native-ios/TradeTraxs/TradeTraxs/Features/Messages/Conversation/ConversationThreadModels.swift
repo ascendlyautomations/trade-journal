@@ -31,6 +31,21 @@ nonisolated enum ConversationThreadSupport {
         }
         return UserFacingError.map(AppError.unknown(message: error.localizedDescription)).message
     }
+
+    /// Trade Room incoming sender label — never raw UUIDs.
+    static func senderDisplayName(for profile: Profile?) -> String {
+        guard let profile else { return ProfileIdentitySanitizer.neutralFallbackName }
+        return ProfileIdentitySanitizer.leaderboardDisplayName(
+            name: profile.displayName,
+            username: profile.username
+        )
+    }
+
+    /// Trade Rooms — first bubble when the chronological predecessor is a different sender.
+    static func tradeRoomStartsSenderGroup(message: Message, previous: Message?) -> Bool {
+        guard let previous else { return true }
+        return previous.senderProfileID != message.senderProfileID
+    }
 }
 
 enum ConversationTimelineItem: Identifiable, Hashable {
@@ -59,6 +74,9 @@ struct ConversationBubbleItem: Identifiable, Hashable {
     /// Room-scoped member tags for Trade Room senders.
     var authorTags: [RoomMemberTag] = []
     var showsOwnerBadge: Bool = false
+    /// True when sender differs from the previous chronological message (Trade Rooms spacing).
+    var startsSenderGroup: Bool = false
+    var addsSenderGroupTopInset: Bool = false
 
     enum SendState: Hashable {
         case sent

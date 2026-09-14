@@ -28,6 +28,25 @@ nonisolated struct PropFirmStatusSnapshot: Hashable, Sendable, Identifiable {
     var dailyDrawdownBreached: Bool
     var completedPayoutHistory: [AccountPayoutCycle] = []
 
+    // Detail presentation — authoritative rules + live cycle metrics.
+    var firmName: String = ""
+    var configuredAccountSize: Decimal = 0
+    var cycleStartBalance: Decimal = 0
+    var peakBalance: Decimal = 0
+    var maxDrawdownUsed: Decimal = 0
+    var consistencyPercent: Decimal?
+    var consistencyBiggestWin: Decimal = 0
+    var consistencyTotalProfit: Decimal = 0
+    var consistencyAllowedMax: Decimal = 0
+    var winningDayThreshold: Decimal?
+    var payoutDrawdownBehaviorRaw: String?
+    var accountNote: String?
+    var publicStatusLabel: String?
+    var isFunded: Bool = false
+    var supportsRecordPayout: Bool = false
+    var winningDaysTargetMet: Bool = true
+    var profitTargetConfigured: Bool = false
+
     var riskTone: DashboardMetricTone {
         if isFailed || dailyDrawdownBreached { return .negative }
         if distanceDanger { return .negative }
@@ -74,6 +93,14 @@ nonisolated struct PropFirmStatusSnapshot: Hashable, Sendable, Identifiable {
             return metrics.evalDisplayStatus
         }()
 
+        let winningMet: Bool = {
+            guard let required = rules.winningDaysRequired, required > 0 else { return true }
+            return metrics.cycleDaily.winningDays >= required
+        }()
+
+        let profitTarget = rules.profitTarget
+        let profitConfigured = (profitTarget ?? 0) > 0
+
         return PropFirmStatusSnapshot(
             accountID: account.id,
             accountName: TradingAccountDisplay.title(for: account, audience: .owner),
@@ -87,7 +114,7 @@ nonisolated struct PropFirmStatusSnapshot: Hashable, Sendable, Identifiable {
             maxDrawdownLimit: rules.maxDrawdown,
             dailyLossUsed: metrics.cycleDaily.worstDailyLossUsed,
             dailyLossLimit: rules.dailyDrawdown,
-            profitTarget: rules.profitTarget,
+            profitTarget: profitTarget,
             profitTargetProgress: metrics.cycleProgress.progressPercent,
             winningDays: metrics.cycleDaily.winningDays,
             winningDaysRequired: rules.winningDaysRequired,
@@ -98,7 +125,24 @@ nonisolated struct PropFirmStatusSnapshot: Hashable, Sendable, Identifiable {
             payoutReady: metrics.payoutReady,
             distanceDanger: metrics.cycleProgress.distanceDanger,
             dailyDrawdownBreached: metrics.dailyDrawdownBreached,
-            completedPayoutHistory: PropFirmPayoutCycleSupport.selectCompletedPayoutHistory(payoutCycles)
+            completedPayoutHistory: PropFirmPayoutCycleSupport.selectCompletedPayoutHistory(payoutCycles),
+            firmName: TradingAccountDisplay.inferPropFirmName(account.name),
+            configuredAccountSize: size,
+            cycleStartBalance: cycleContext.cycleStartBalance,
+            peakBalance: metrics.cycleTrailing.peakBalance,
+            maxDrawdownUsed: metrics.cycleTrailing.maxDrawdownUsed,
+            consistencyPercent: rules.consistencyPercent,
+            consistencyBiggestWin: metrics.cycleConsistency.biggestWin,
+            consistencyTotalProfit: metrics.cycleConsistency.totalProfit,
+            consistencyAllowedMax: metrics.cycleConsistency.allowedMax,
+            winningDayThreshold: rules.winningDayThreshold,
+            payoutDrawdownBehaviorRaw: rules.payoutDrawdownBehavior,
+            accountNote: account.note,
+            publicStatusLabel: account.customPublicStatus,
+            isFunded: account.mode == .funded,
+            supportsRecordPayout: PropFirmPayoutPolicy.supportsRecordPayout(for: account),
+            winningDaysTargetMet: winningMet,
+            profitTargetConfigured: profitConfigured
         )
     }
 }

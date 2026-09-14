@@ -67,14 +67,36 @@ actor URLSessionNetworkClient: NetworkClient {
             )
 
             do {
-                let (data, response, taskMetrics) = try await session.dataWithTaskMetrics(
-                    for: current.urlRequest
-                )
+                let priority = current.schedulingPriority
+                let path = current.url.path
+                let host = current.endpoint.host.rawValue
+                let inFlightAtStart = await NetworkConcurrencyCoordinator.shared.snapshot().total
+                let transportStarted = CFAbsoluteTimeGetCurrent()
+                let urlRequest = current.urlRequest
+                let (data, response, taskMetrics) = try await NetworkConcurrencyCoordinator.shared.runWithSlot(
+                    priority: priority,
+                    path: path,
+                    host: host
+                ) {
+                    try await session.dataWithTaskMetrics(for: urlRequest)
+                }
                 #if DEBUG
                 NetworkTaskMetricsProbe.logRPCIfPresent(
-                    path: current.url.path,
+                    path: path,
                     metrics: taskMetrics
                 )
+                let totalMs = (CFAbsoluteTimeGetCurrent() - transportStarted) * 1000
+                if totalMs >= 2000 {
+                    let responseWaitMs = NetworkTaskMetricsProbe.responseWaitMilliseconds(metrics: taskMetrics)
+                    NetworkConcurrencyProbe.logSlowRequest(
+                        host: host,
+                        path: path,
+                        priority: priority,
+                        inFlightAtStart: inFlightAtStart,
+                        totalMs: totalMs,
+                        responseWaitMs: responseWaitMs
+                    )
+                }
                 #endif
                 if let mapped = errorMapper.map(data: data, response: response, error: nil) {
                     metrics.endedAt = Date()
@@ -159,8 +181,18 @@ actor URLSessionNetworkClient: NetworkClient {
         try throwIfCancelled()
         try throwIfOffline()
         let current = try await requestInterceptor.intercept(request)
+        let priority = current.schedulingPriority
+        let path = current.url.path
+        let host = current.endpoint.host.rawValue
+        let urlRequest = current.urlRequest
         do {
-            return try await session.bytes(for: current.urlRequest)
+            return try await NetworkConcurrencyCoordinator.shared.runWithSlot(
+                priority: priority,
+                path: path,
+                host: host
+            ) {
+                try await session.bytes(for: urlRequest)
+            }
         } catch {
             if let cancelled = NetworkTaskCancellation.mapIfCancelled(error) {
                 throw cancelled

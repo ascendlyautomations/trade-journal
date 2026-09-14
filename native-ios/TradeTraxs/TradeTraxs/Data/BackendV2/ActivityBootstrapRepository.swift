@@ -50,11 +50,9 @@ enum ActivityBootstrapLoader {
         case rpcUnavailable
     }
 
-    @MainActor
-    static func load(
+    nonisolated static func load(
         viewerID: ProfileID,
         rpc: any RPCClient,
-        detailCache: DetailPresentationCache?,
         limit: Int,
         cursor: String?
     ) async throws -> ActivityBootstrapApplier.Applied {
@@ -67,16 +65,20 @@ enum ActivityBootstrapLoader {
             throw LoaderError.rpcUnavailable
         }
 
-        let flightKey = BackendV2FlightKeys.activity(viewerID: viewerID.rawValue, cursor: cursor)
-        let bootstrap: ActivityBootstrapV1
+        let flightKey = BackendV2FlightKeys.activity(
+            viewerID: viewerID.rawValue,
+            limit: limit,
+            cursor: cursor
+        )
+        let data: Data
         do {
-            let data = try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
-                let repo = ActivityRpcBootstrapRepository(rpc: rpc)
-                let value = try await repo.load(limit: limit, cursor: cursor)
-                return try JSONEncoder().encode(value)
+            data = try await BootstrapTransportTimeout.run {
+                try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
+                    let repo = ActivityRpcBootstrapRepository(rpc: rpc)
+                    let value = try await repo.load(limit: limit, cursor: cursor)
+                    return try JSONEncoder().encode(value)
+                }
             }
-            bootstrap = try JSONDecoder().decode(ActivityBootstrapV1.self, from: data)
-            try bootstrap.validateContractVersion()
         } catch {
             if BackendV2RpcCompat.isRpcUnavailable(error, rpcName: rpcName) {
                 await BackendV2RpcAvailability.shared.markUnavailable(
@@ -88,6 +90,10 @@ enum ActivityBootstrapLoader {
             throw error
         }
 
-        return ActivityBootstrapApplier.apply(bootstrap, detailCache: detailCache)
+        return try await Task.detached(priority: .utility) {
+            let bootstrap = try JSONDecoder().decode(ActivityBootstrapV1.self, from: data)
+            try bootstrap.validateContractVersion()
+            return ActivityBootstrapApplier.transform(bootstrap)
+        }.value
     }
 }

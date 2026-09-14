@@ -615,7 +615,7 @@ final class InteractionExperienceTests: XCTestCase {
     }
 
     func testDataEnvironmentExposesSharedEngagementStore() {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         XCTAssertTrue(environment.data.engagementStore === environment.data.engagementStore)
         let trade = InteractionTarget.trade(TradeID("dev-trade-1"))
         XCTAssertEqual(environment.data.engagementStore.snapshot(for: trade), .empty)

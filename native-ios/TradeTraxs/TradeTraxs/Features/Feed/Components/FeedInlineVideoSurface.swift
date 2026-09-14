@@ -62,14 +62,16 @@ struct FeedInlineVideoSurface: UIViewRepresentable {
                 gravity: videoGravity
             )
         }
-        uiView.setNeedsLayout()
-        uiView.layoutIfNeeded()
+        if uiView.bounds.size != containerSize, containerSize.width > 1, containerSize.height > 1 {
+            uiView.setNeedsLayout()
+        }
     }
 
     final class Coordinator {
         let clipID: String
         var containerSize: CGSize = .zero
         private var lastLoggedBounds: CGRect = .zero
+        private var metadataLoadGeneration: UInt64 = 0
 
         init(clipID: String) {
             self.clipID = clipID
@@ -88,30 +90,57 @@ struct FeedInlineVideoSurface: UIViewRepresentable {
             lastLoggedBounds = bounds
 
             let playerLayer = layerView.playerLayer
-            let item = playerLayer.player?.currentItem
-            let presentationSize = item?.presentationSize ?? .zero
-            var naturalSize: CGSize?
-            var transformSummary: String?
-            if let track = item?.asset.tracks(withMediaType: .video).first {
-                naturalSize = track.naturalSize
-                let transform = track.preferredTransform
-                transformSummary = String(
-                    format: "a=%.2f,b=%.2f,c=%.2f,d=%.2f,tx=%.0f,ty=%.0f",
-                    transform.a, transform.b, transform.c, transform.d, transform.tx, transform.ty
-                )
-            }
+            guard let item = playerLayer.player?.currentItem else { return }
+            let asset = item.asset
+            let itemToken = ObjectIdentifier(item)
+            metadataLoadGeneration &+= 1
+            let generation = metadataLoadGeneration
 
-            InlineClipRenderFrameDiagnostics.log(
-                clipID: clipID,
-                swiftUIContainer: containerSize,
-                uiViewBounds: bounds,
-                playerLayerFrame: playerLayer.frame,
-                videoRect: playerLayer.videoRect,
-                gravity: gravity == .resizeAspectFill ? "aspectFill" : "aspectFit",
-                presentationSize: presentationSize.width > 0 ? presentationSize : nil,
-                naturalSize: naturalSize,
-                preferredTransform: transformSummary
+            let presentationSize = item.presentationSize
+            let swiftUIContainer = containerSize
+            let uiViewBounds = bounds
+            let playerLayerFrame = playerLayer.frame
+            let videoRect = playerLayer.videoRect
+            let gravityLabel = gravity == .resizeAspectFill ? "aspectFill" : "aspectFit"
+            let clipID = self.clipID
+
+            Task {
+                let trackMetadata = await Self.loadVideoTrackMetadata(asset: asset)
+                await MainActor.run {
+                    guard generation == self.metadataLoadGeneration else { return }
+                    guard playerLayer.player?.currentItem.map(ObjectIdentifier.init) == itemToken else {
+                        return
+                    }
+                    InlineClipRenderFrameDiagnostics.log(
+                        clipID: clipID,
+                        swiftUIContainer: swiftUIContainer,
+                        uiViewBounds: uiViewBounds,
+                        playerLayerFrame: playerLayerFrame,
+                        videoRect: videoRect,
+                        gravity: gravityLabel,
+                        presentationSize: presentationSize.width > 0 ? presentationSize : nil,
+                        naturalSize: trackMetadata?.naturalSize,
+                        preferredTransform: trackMetadata?.transformSummary
+                    )
+                }
+            }
+        }
+
+        private struct VideoTrackMetadata: Sendable {
+            let naturalSize: CGSize
+            let transformSummary: String
+        }
+
+        private static func loadVideoTrackMetadata(asset: AVAsset) async -> VideoTrackMetadata? {
+            guard let track = try? await asset.loadTracks(withMediaType: .video).first else { return nil }
+            guard let naturalSize = try? await track.load(.naturalSize),
+                  let transform = try? await track.load(.preferredTransform)
+            else { return nil }
+            let transformSummary = String(
+                format: "a=%.2f,b=%.2f,c=%.2f,d=%.2f,tx=%.0f,ty=%.0f",
+                transform.a, transform.b, transform.c, transform.d, transform.tx, transform.ty
             )
+            return VideoTrackMetadata(naturalSize: naturalSize, transformSummary: transformSummary)
         }
     }
 }

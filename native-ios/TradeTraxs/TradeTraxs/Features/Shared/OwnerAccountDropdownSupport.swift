@@ -26,9 +26,14 @@ enum OwnerAccountDropdownSupport {
     static func menuAccounts(
         profileID: ProfileID?,
         fallback: [TradingAccount],
-        preservingSelection selectedID: TradingAccountID?
+        preservingSelection selectedID: TradingAccountID?,
+        detailCache: DetailPresentationCache? = nil
     ) -> [TradingAccount] {
-        let resolved = resolvedAccounts(profileID: profileID, fallback: fallback)
+        let resolved = resolvedAccounts(
+            profileID: profileID,
+            fallback: fallback,
+            detailCache: detailCache
+        )
         return TradingAccountDropdownFilter.menuAccounts(
             from: resolved,
             preservingSelection: selectedID
@@ -36,21 +41,77 @@ enum OwnerAccountDropdownSupport {
     }
 
     /// Prefer full REST owner snapshot from ``SessionAccountsStore`` over partial dashboard/bootstrap rows.
-    static func resolvedAccounts(profileID: ProfileID?, fallback: [TradingAccount]) -> [TradingAccount] {
+    static func resolvedAccounts(
+        profileID: ProfileID?,
+        fallback: [TradingAccount],
+        detailCache: DetailPresentationCache? = nil
+    ) -> [TradingAccount] {
         guard let profileID else { return fallback }
-        guard let cached = SessionAccountsStore.shared.cached(for: profileID), !cached.isEmpty else {
-            return fallback
+        if let cached = SessionAccountsStore.shared.cached(for: profileID), !cached.isEmpty {
+            let kind = SessionAccountsStore.shared.snapshotKind(for: profileID)
+            if kind == .rest {
+                return cached
+            }
+            return mergePreferringOwnerFields(primary: cached, secondary: fallback)
         }
-        let kind = SessionAccountsStore.shared.snapshotKind(for: profileID)
-        if kind == .rest {
-            return cached
+        if let disk = SessionDiskCache.loadAccounts(for: profileID),
+           !disk.isEmpty,
+           !TradingAccountOwnerDiagnostics.looksLikeSessionSummaryStub(disk)
+        {
+            SessionAccountsStore.shared.seed(
+                disk,
+                for: profileID,
+                detailCache: detailCache,
+                kind: .rest
+            )
+            return disk
         }
-        return mergePreferringOwnerFields(primary: cached, secondary: fallback)
+        if let detail = detailCache?.accounts(for: profileID), !detail.isEmpty {
+            SessionAccountsStore.shared.seed(
+                detail,
+                for: profileID,
+                detailCache: detailCache,
+                kind: .dashboard
+            )
+            return detail
+        }
+        if let cachedDashboard = BackendV2BootstrapDiskCache.loadDashboard(viewerID: profileID.rawValue) {
+            let accounts = DashboardBootstrapApplier.mappedAccounts(
+                from: cachedDashboard.bootstrap,
+                ownerID: profileID
+            )
+            if !accounts.isEmpty {
+                SessionAccountsStore.shared.seed(
+                    accounts,
+                    for: profileID,
+                    detailCache: detailCache,
+                    kind: .dashboard
+                )
+                return accounts
+            }
+        }
+        return fallback
     }
 
-    static func snapshotKindLabel(for profileID: ProfileID?) -> String {
-        guard let profileID else { return "unknown" }
-        return SessionAccountsStore.shared.snapshotKind(for: profileID)?.rawValue ?? "unknown"
+    static func snapshotKindLabel(
+        for profileID: ProfileID?,
+        resolvedAccounts accounts: [TradingAccount]
+    ) -> String {
+        guard let profileID else {
+            return accounts.isEmpty ? "unknown" : "fallback"
+        }
+        if SessionAccountsStore.shared.cached(for: profileID)?.isEmpty == false {
+            return SessionAccountsStore.shared.snapshotKind(for: profileID)?.rawValue ?? "session"
+        }
+        if SessionDiskCache.loadAccounts(for: profileID)?.isEmpty == false {
+            return "cache"
+        }
+        if BackendV2BootstrapDiskCache.loadDashboard(viewerID: profileID.rawValue) != nil,
+           !accounts.isEmpty
+        {
+            return "cache"
+        }
+        return accounts.isEmpty ? "unknown" : "fallback"
     }
 
     /// Menu panel width — 80% of screen, clamped to leave 16pt margins on each edge.
@@ -101,10 +162,21 @@ enum OwnerAccountDropdownSupport {
         )
     }
 
-    static func logBoundary(_ boundary: Boundary, accounts: [TradingAccount], profileID: ProfileID?) {
+    static func logBoundary(
+        _ boundary: Boundary,
+        accounts: [TradingAccount],
+        profileID: ProfileID?,
+        detailCache: DetailPresentationCache? = nil
+    ) {
         #if DEBUG
-        let kind = snapshotKindLabel(for: profileID)
-        let stats = presence(for: accounts, sourceKind: kind)
+        let resolved = resolvedAccounts(
+            profileID: profileID,
+            fallback: accounts,
+            detailCache: detailCache
+        )
+        let menu = TradingAccountDropdownFilter.menuAccounts(from: resolved, preservingSelection: nil)
+        let kind = snapshotKindLabel(for: profileID, resolvedAccounts: resolved)
+        let stats = presence(for: menu, sourceKind: kind)
         Logger(subsystem: AppLog.subsystem, category: "OwnerAccountDropdown").debug(
             """
             ownerAccountDropdown boundary=\(boundary.rawValue, privacy: .public) \
@@ -149,8 +221,8 @@ enum OwnerAccountDropdownSupport {
 extension OwnerAccountsSnapshotKind {
     fileprivate var rawValue: String {
         switch self {
-        case .rest: return "rest"
-        case .dashboard: return "dashboard"
+        case .rest: return "session"
+        case .dashboard: return "cache"
         }
     }
 }

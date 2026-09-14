@@ -1,32 +1,19 @@
 import SwiftUI
 
-/// Owner payout hub — funded prop cycles via Record Payout; legacy manual ledger elsewhere.
+/// Dashboard / Settings withdrawal history — observes ``WithdrawalsHistoryStore`` directly.
 struct PayoutsScreenView: View {
-    @State private var viewModel: ManageAccountsViewModel
-    @State private var payoutSheetContext: PayoutSheetContext?
-    @State private var recordPayoutAccountID: TradingAccountID?
-    @State private var payoutCyclesByAccount: [TradingAccountID: [AccountPayoutCycle]] = [:]
-    @State private var loadingCycleAccounts: Set<TradingAccountID> = []
+    @Bindable private var withdrawalsHistory = WithdrawalsHistoryStore.shared
+    @State private var accountsViewModel: ManageAccountsViewModel
+    @State private var isRevalidatingCycles = false
 
     @Environment(\.themeColors) private var colors
 
     private let data: DataEnvironment?
-    private let navigationCoordinator: NavigationCoordinator?
 
-    private struct PayoutSheetContext: Identifiable {
-        let accountID: TradingAccountID
-        let editingEntryID: AccountPayoutEntryID?
-        var draft: AccountPayoutEntryDraft
-
-        var id: String {
-            accountID.rawValue + (editingEntryID?.rawValue ?? "new")
-        }
-    }
-
-    init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
+    init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator? = nil) {
         self.data = data
-        self.navigationCoordinator = navigationCoordinator
-        _viewModel = State(
+        _ = navigationCoordinator
+        _accountsViewModel = State(
             initialValue: ManageAccountsViewModel(
                 trades: data.trades,
                 session: data.session,
@@ -37,267 +24,226 @@ struct PayoutsScreenView: View {
 
     init(viewModel: ManageAccountsViewModel) {
         self.data = nil
-        self.navigationCoordinator = nil
-        _viewModel = State(initialValue: viewModel)
+        _accountsViewModel = State(initialValue: viewModel)
+    }
+
+    private var historyItems: [PayoutHistoryItem] {
+        PayoutHistorySupport.buildHistory(
+            accounts: accountsViewModel.accounts,
+            entriesByAccount: withdrawalsHistory.ledgerByAccount,
+            cyclesByAccount: withdrawalsHistory.cyclesByAccount
+        )
+    }
+
+    private var accountsByID: [TradingAccountID: TradingAccount] {
+        Dictionary(uniqueKeysWithValues: accountsViewModel.accounts.map { ($0.id, $0) })
+    }
+
+    private var liveWithdrawals: [PayoutHistoryItem] {
+        PayoutHistorySupport.liveWithdrawals(from: historyItems, accountsByID: accountsByID)
+    }
+
+    private var propPayouts: [PayoutHistoryItem] {
+        PayoutHistorySupport.propPayouts(from: historyItems, accountsByID: accountsByID)
+    }
+
+    private var totalWithdrawals: Decimal {
+        PayoutHistorySupport.summary(for: historyItems).total
+    }
+
+    private var equityCurvePoints: [PayoutEquityCurvePoint] {
+        PayoutEquityCurveSupport.buildPoints(from: historyItems)
     }
 
     var body: some View {
         Group {
-            if let error = viewModel.errorMessage, viewModel.accounts.isEmpty, !viewModel.isLoading {
+            if let error = accountsViewModel.errorMessage,
+               accountsViewModel.accounts.isEmpty,
+               !accountsViewModel.isLoading
+            {
                 ExperienceErrorState(
-                    title: "Couldn't load payouts",
+                    title: "Couldn't load withdrawals",
                     message: error,
-                    onRetry: { Task { await viewModel.refresh() } }
+                    onRetry: { Task { await hydrateWithdrawalsScreen() } }
                 )
             } else {
-                payoutList
+                content
             }
         }
         .experienceScreenBackground()
-        .experienceNavigationTitle("Payouts")
+        .experienceNavigationTitle("Withdrawals")
         .toolbar(.hidden, for: .tabBar)
+        .onAppear {
+            WithdrawalsTrace.log("viewAppeared")
+            WithdrawalsTrace.storeIdentity("withdrawalsScreen")
+        }
+        .onDisappear {
+            WithdrawalsHydrationPriorityGate.setScreenActive(false)
+        }
         .refreshable {
-            await viewModel.refresh()
-            await reloadAllPayoutData()
+            WithdrawalsHydrationPriorityGate.setScreenActive(true)
+            defer { WithdrawalsHydrationPriorityGate.setScreenActive(false) }
+            await hydrateWithdrawalsScreen()
         }
         .task {
-            viewModel.loadIfNeeded()
-            await loadPayoutsWhenReady()
+            WithdrawalsTrace.log("taskStarted")
+            WithdrawalsHydrationPriorityGate.setScreenActive(true)
+            defer { WithdrawalsHydrationPriorityGate.setScreenActive(false) }
+            await hydrateWithdrawalsScreen()
         }
-        .onChange(of: AccountMutationStore.shared.revision) { _, _ in
-            Task { await reloadFundedCycleHistory() }
-        }
-        .sheet(item: $payoutSheetContext) { context in
-            AccountPayoutEditorSheet(
-                viewModel: viewModel,
-                accountID: context.accountID,
-                editingEntryID: context.editingEntryID,
-                draft: bindingDraft(for: context),
-                isPresented: Binding(
-                    get: { payoutSheetContext != nil },
-                    set: { if !$0 { payoutSheetContext = nil } }
+        .accessibilityIdentifier("withdrawals.home")
+    }
+
+    private var content: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+                totalSection
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.top, ExperienceSpacing.sm)
+
+                PayoutEquityCurveView(
+                    points: equityCurvePoints,
+                    totalWithdrawals: totalWithdrawals,
+                    hasWithdrawals: !historyItems.isEmpty
                 )
-            )
-        }
-        .sheet(isPresented: recordPayoutPresented) {
-            if let accountID = recordPayoutAccountID,
-               let data,
-               let navigationCoordinator {
-                RecordPayoutFlowView(
-                    accountID: accountID,
-                    data: data,
-                    navigationCoordinator: navigationCoordinator
-                )
-            }
-        }
-        .accessibilityIdentifier("payouts.home")
-    }
+                .padding(.horizontal, ExperienceSpacing.md)
 
-    private var recordPayoutPresented: Binding<Bool> {
-        Binding(
-            get: { recordPayoutAccountID != nil },
-            set: { if !$0 { recordPayoutAccountID = nil } }
-        )
-    }
-
-    private var fundedAccounts: [TradingAccount] {
-        viewModel.accounts.filter { PropFirmPayoutPolicy.supportsRecordPayout(for: $0) }
-    }
-
-    private var manualLedgerAccounts: [TradingAccount] {
-        viewModel.accounts.filter { PropFirmPayoutPolicy.supportsManualPayoutLedger(for: $0) }
-    }
-
-    private var payoutList: some View {
-        List {
-            Section {
-                introBlock
-            }
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-
-            if viewModel.isLoading, viewModel.accounts.isEmpty {
-                Section {
-                    HStack {
-                        ProgressView()
-                        Text("Loading accounts…")
-                            .experienceStyle(.footnote, color: colors.secondaryText)
-                    }
-                }
-            } else if viewModel.accounts.isEmpty {
-                Section {
-                    SettingsIntroBlock(
-                        title: "No trading accounts yet",
-                        message: "Add an account from Manage Accounts to track payouts here."
+                if showInitialLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, ExperienceSpacing.xl)
+                } else if historyItems.isEmpty {
+                    ExperienceEmptyState(
+                        icon: .payouts,
+                        title: "No withdrawals yet",
+                        message: "Withdrawals you record from Create will appear here."
                     )
-                }
-            } else {
-                if !fundedAccounts.isEmpty {
-                    Section {
-                        Text("Funded prop-firm accounts use payout cycles. Recording a payout closes the current cycle and starts the next from your post-payout balance.")
-                            .experienceStyle(.footnote, color: colors.secondaryText)
-                    } header: {
-                        Text("Record Payout")
+                    .padding(.horizontal, ExperienceSpacing.md)
+                } else {
+                    if !liveWithdrawals.isEmpty {
+                        historySection(title: "Live Withdrawals", items: liveWithdrawals)
                     }
-
-                    ForEach(fundedAccounts) { account in
-                        Section {
-                            fundedAccountContent(account)
-                        } header: {
-                            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                                Text(TradingAccountDisplay.title(for: account, audience: .owner))
-                                Text(viewModel.subtitle(for: account))
-                                    .font(.caption)
-                                    .foregroundStyle(colors.secondaryText)
-                            }
-                        }
-                        .task(id: account.id.rawValue) {
-                            await loadPayoutCycles(for: account.id)
-                        }
-                    }
-                }
-
-                if !manualLedgerAccounts.isEmpty {
-                    Section {
-                        Text("Private ledger entries for live and other supported accounts. Share payouts publicly by posting payout achievements.")
-                            .experienceStyle(.footnote, color: colors.secondaryText)
-                    } header: {
-                        Text("Manual Payouts")
-                    }
-
-                    ForEach(manualLedgerAccounts) { account in
-                        Section {
-                            AccountPayoutListContent(
-                                viewModel: viewModel,
-                                accountID: account.id,
-                                onAdd: { presentAddPayout(for: account.id) },
-                                onEdit: { entry in presentEditPayout(entry, accountID: account.id) }
-                            )
-                        } header: {
-                            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                                Text(TradingAccountDisplay.title(for: account, audience: .owner))
-                                Text(viewModel.subtitle(for: account))
-                                    .font(.caption)
-                                    .foregroundStyle(colors.secondaryText)
-                            }
-                        }
-                        .task(id: account.id.rawValue) {
-                            await viewModel.loadPayoutEntries(for: account.id)
-                        }
+                    if !propPayouts.isEmpty {
+                        historySection(title: "Prop Payouts", items: propPayouts)
                     }
                 }
             }
-        }
-        .listStyle(.insetGrouped)
-    }
-
-    @ViewBuilder
-    private func fundedAccountContent(_ account: TradingAccount) -> some View {
-        Button {
-            recordPayoutAccountID = account.id
-        } label: {
-            Label("Record Payout", systemImage: "dollarsign.circle")
-        }
-        .disabled(navigationCoordinator == nil)
-        .accessibilityIdentifier("payouts.recordPayout.\(account.id.rawValue)")
-
-        if loadingCycleAccounts.contains(account.id),
-           payoutCyclesByAccount[account.id] == nil {
-            HStack {
-                ProgressView()
-                Text("Loading payout history…")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
-        } else {
-            FundedPayoutCycleHistoryContent(
-                cycles: PropFirmPayoutCycleSupport.selectCompletedPayoutHistory(
-                    payoutCyclesByAccount[account.id] ?? []
-                )
-            )
+            .padding(.bottom, ExperienceSpacing.xxxl)
         }
     }
 
-    private var introBlock: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("Payouts")
-                .experienceStyle(.title2, color: colors.primaryText)
-            Text("Record funded prop-firm payouts against your payout cycles, or maintain a private manual ledger on supported accounts.")
+    private var showInitialLoading: Bool {
+        historyItems.isEmpty
+            && withdrawalsHistory.isEmpty
+            && (accountsViewModel.isLoading || accountsViewModel.isLoadingPayouts || isRevalidatingCycles)
+    }
+
+    private var totalSection: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            Text("Total Withdrawals")
                 .experienceStyle(.subheadline, color: colors.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(ProfileDisplay.formatMoney(totalWithdrawals))
+                .font(.system(.title2, design: .rounded).weight(.semibold).monospacedDigit())
+                .foregroundStyle(colors.primaryText)
+                .accessibilityIdentifier("withdrawals.total")
         }
-        .padding(ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            colors.accent.opacity(0.16),
-                            colors.fillSecondary.opacity(0.65),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+        .accessibilityElement(children: .combine)
+    }
+
+    private func historySection(title: String, items: [PayoutHistoryItem]) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Text(title)
+                .experienceStyle(.headline, color: colors.primaryText)
+                .padding(.horizontal, ExperienceSpacing.md)
+
+            LazyVStack(spacing: 0) {
+                ForEach(items) { item in
+                    PayoutHistoryRowView(
+                        item: item,
+                        account: accountsByID[item.accountID]
                     )
-                )
-        }
-        .padding(.horizontal, ExperienceSpacing.md)
-        .padding(.vertical, ExperienceSpacing.sm)
-        .accessibilityIdentifier("payouts.intro")
-    }
-
-    private func presentAddPayout(for accountID: TradingAccountID) {
-        payoutSheetContext = PayoutSheetContext(
-            accountID: accountID,
-            editingEntryID: nil,
-            draft: AccountPayoutEntryDraft(amountDigits: "", payoutDate: .now, note: "")
-        )
-    }
-
-    private func presentEditPayout(_ entry: AccountPayoutEntry, accountID: TradingAccountID) {
-        payoutSheetContext = PayoutSheetContext(
-            accountID: accountID,
-            editingEntryID: entry.id,
-            draft: AccountPayoutEntryDraft(
-                amountDigits: NSDecimalNumber(decimal: entry.amount.amount).stringValue,
-                payoutDate: entry.payoutDate,
-                note: entry.note ?? ""
-            )
-        )
-    }
-
-    private func bindingDraft(for context: PayoutSheetContext) -> Binding<AccountPayoutEntryDraft> {
-        Binding(
-            get: { payoutSheetContext?.draft ?? context.draft },
-            set: { newValue in
-                payoutSheetContext?.draft = newValue
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.vertical, ExperienceSpacing.xxs)
+                    .background(colors.backgroundPrimary)
+                    if item.id != items.last?.id {
+                        Divider()
+                            .padding(.leading, ExperienceSpacing.md)
+                    }
+                }
             }
+            .background(colors.fillSecondary.opacity(0.25), in: RoundedRectangle(
+                cornerRadius: ExperienceRadius.md,
+                style: .continuous
+            ))
+            .padding(.horizontal, ExperienceSpacing.md)
+        }
+    }
+
+    private func hydrateProfileAndCaches() async {
+        guard let data else {
+            WithdrawalsTrace.log("earlyReturn", detail: "noDataEnvironment")
+            return
+        }
+        guard let userID = await data.session.currentUserID else {
+            WithdrawalsTrace.log("earlyReturn", detail: "noSessionUser")
+            return
+        }
+        let profileID = ProfileID(userID.rawValue)
+        WithdrawalsTrace.log("taskStarted", detail: "userID=\(profileID.rawValue)")
+        withdrawalsHistory.bindProfile(profileID)
+        withdrawalsHistory.hydrateFromSessionCaches(profileID: profileID)
+        WithdrawalsTrace.log(
+            "sessionLedgerHydrated",
+            detail: "entries=\(withdrawalsHistory.ledgerEntryCount())"
         )
     }
 
-    private func loadPayoutsWhenReady() async {
-        let deadline = Date().addingTimeInterval(5)
-        while viewModel.accounts.isEmpty, Date() < deadline {
-            if !viewModel.isLoading { break }
-            try? await Task.sleep(nanoseconds: 50_000_000)
+    private func hydrateWithdrawalsScreen() async {
+        await hydrateProfileAndCaches()
+        await accountsViewModel.ensureAccountsReadyForWithdrawals()
+
+        guard !accountsViewModel.accounts.isEmpty else {
+            WithdrawalsTrace.log("earlyReturn", detail: "accountsEmptyAfterEnsure")
+            logPublishedSummary(phase: "accountsEmpty")
+            return
         }
-        guard !viewModel.accounts.isEmpty else { return }
-        await reloadAllPayoutData()
+
+        if let data, let userID = await data.session.currentUserID {
+            let profileID = ProfileID(userID.rawValue)
+            let fundedIDs = accountsViewModel.accounts
+                .filter { PropFirmPayoutPolicy.supportsRecordPayout(for: $0) }
+                .map(\.id)
+            withdrawalsHistory.hydrateCyclesFromSessionStore(
+                profileID: profileID,
+                accountIDs: fundedIDs
+            )
+            WithdrawalsTrace.log(
+                "cyclesHydrated",
+                detail: "cachedCompleted=\(withdrawalsHistory.completedPropCycleCount())"
+            )
+        }
+
+        logPublishedSummary(phase: "beforeNetwork")
+
+        await accountsViewModel.loadAllPayoutEntries()
+        await revalidateCyclesFromServer()
+
+        logPublishedSummary(phase: "afterNetwork")
     }
 
-    private func reloadAllPayoutData() async {
-        await viewModel.loadAllPayoutEntries()
-        await reloadFundedCycleHistory()
-    }
-
-    private func reloadFundedCycleHistory() async {
+    private func revalidateCyclesFromServer() async {
         guard let data else { return }
-        let accountIDs = fundedAccounts.map(\.id)
+        guard let userID = await data.session.currentUserID else { return }
+        let profileID = ProfileID(userID.rawValue)
+        let accountIDs = accountsViewModel.accounts
+            .filter { PropFirmPayoutPolicy.supportsRecordPayout(for: $0) }
+            .map(\.id)
         guard !accountIDs.isEmpty else { return }
-        loadingCycleAccounts.formUnion(accountIDs)
-        defer { loadingCycleAccounts.subtract(accountIDs) }
 
-        let started = CFAbsoluteTimeGetCurrent()
+        isRevalidatingCycles = true
+        defer { isRevalidatingCycles = false }
+        WithdrawalsTrace.log("cyclesFetchStarted", detail: "accounts=\(accountIDs.count)")
         do {
             let cycles = try await data.trades.payoutCycleHistory(for: accountIDs)
             var grouped: [TradingAccountID: [AccountPayoutCycle]] = [:]
@@ -307,33 +253,20 @@ struct PayoutsScreenView: View {
             for cycle in cycles {
                 grouped[cycle.accountID, default: []].append(cycle)
             }
-            payoutCyclesByAccount.merge(grouped) { _, new in new }
-            PayoutBatchDiagnostics.logCycles(
-                accounts: accountIDs.count,
-                requests: 1,
-                cycles: cycles.count,
-                dtMs: Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+            withdrawalsHistory.applyCyclesSnapshot(grouped, profileID: profileID)
+            WithdrawalsTrace.log(
+                "cyclesFetchCompleted",
+                detail: "cycles=\(cycles.count) completed=\(withdrawalsHistory.completedPropCycleCount())"
             )
         } catch {
-            for accountID in accountIDs {
-                payoutCyclesByAccount[accountID] = []
-            }
+            WithdrawalsTrace.log("cyclesFetchFailed", detail: error.localizedDescription)
         }
     }
 
-    private func loadPayoutCycles(for accountID: TradingAccountID, trades: any TradeRepository) async {
-        loadingCycleAccounts.insert(accountID)
-        defer { loadingCycleAccounts.remove(accountID) }
-        do {
-            let cycles = try await trades.payoutCycleHistory(for: accountID)
-            payoutCyclesByAccount[accountID] = cycles
-        } catch {
-            payoutCyclesByAccount[accountID] = []
-        }
-    }
-
-    private func loadPayoutCycles(for accountID: TradingAccountID) async {
-        guard let data else { return }
-        await loadPayoutCycles(for: accountID, trades: data.trades)
+    private func logPublishedSummary(phase: String) {
+        WithdrawalsTrace.log(
+            "published",
+            detail: "\(phase) live=\(liveWithdrawals.count) prop=\(propPayouts.count) total=\(totalWithdrawals) ledgerRows=\(withdrawalsHistory.ledgerEntryCount())"
+        )
     }
 }

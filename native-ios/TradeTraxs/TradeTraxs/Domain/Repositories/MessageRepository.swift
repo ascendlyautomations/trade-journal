@@ -65,6 +65,14 @@ nonisolated protocol MessageRepository: Sendable {
     func fetchActiveBlockPeerIDs() async throws -> Set<ProfileID>
     /// Muted 1:1 peers — `list_muted_dm_peers`.
     func fetchMutedDirectMessagePeers() async throws -> [MutedDirectMessagePeer]
+    /// DM message reactions — same emoji set as Trade Rooms (`message_reactions` table).
+    func insertMessageReaction(
+        conversationID: ConversationID,
+        messageID: MessageID,
+        userID: ProfileID,
+        reaction: String
+    ) async throws -> RoomMessageReaction
+    func deleteMessageReaction(id: String) async throws
 }
 
 extension MessageRepository {
@@ -94,5 +102,18 @@ extension MessageRepository {
 
     func fetchMutedDirectMessagePeers() async throws -> [MutedDirectMessagePeer] {
         throw AppError.notImplemented(feature: "fetchMutedDirectMessagePeers")
+    }
+
+    func insertMessageReaction(
+        conversationID: ConversationID,
+        messageID: MessageID,
+        userID: ProfileID,
+        reaction: String
+    ) async throws -> RoomMessageReaction {
+        throw AppError.notImplemented(feature: "insertMessageReaction")
+    }
+
+    func deleteMessageReaction(id: String) async throws {
+        throw AppError.notImplemented(feature: "deleteMessageReaction")
     }
 }

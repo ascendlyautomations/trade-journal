@@ -3,7 +3,7 @@ import XCTest
 
 final class DataLayerTests: XCTestCase {
     func testDataEnvironmentWiresAllRepositories() {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         XCTAssertNotNil(environment.data.trades)
         XCTAssertNotNil(environment.data.profiles)
         XCTAssertNotNil(environment.data.feed)

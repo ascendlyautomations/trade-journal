@@ -307,7 +307,7 @@ final class DashboardViewModel {
         case .payoutRecorded(let accountID):
             Task { await reloadAfterPayout(accountID: accountID) }
         case .generic:
-            Task { await reloadAccountsOnly() }
+            patchAccountsFromSessionStore()
         }
     }
 
@@ -376,7 +376,7 @@ final class DashboardViewModel {
         navigationCoordinator.open(.home(.reports))
     }
 
-    func openPayouts() {
+    func openWithdrawalsHistory() {
         ExperienceHaptics.play(.selection)
         navigationCoordinator.open(.home(.payouts))
     }
@@ -562,12 +562,21 @@ final class DashboardViewModel {
                     hasLoaded = true
                     recompute()
                     phase = .loaded
+                    #if DEBUG
+                    let source: String = switch loadResult.path {
+                    case .cache_fresh, .cache_stale_revalidate, .error_preserved_cache: "disk"
+                    case .v2_rpc: "network"
+                    default: "unknown"
+                    }
+                    ColdLaunchSummaryProbe.markDashboardFirstRender(source: source)
+                    #endif
                     DashboardLoadProbe.markFirstUsefulRender()
                     if v2.payoutTotal != nil {
                         DashboardLoadProbe.markFullHydration()
                     }
-                    if pendingAutomaticDateRangeResolution,
-                       loadResult.path == .cache_stale_revalidate || !v2.tradeHistoryComplete {
+                    let needsTradeHistoryBackfill = !v2.tradeHistoryComplete
+                        || !SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+                    if pendingAutomaticDateRangeResolution, needsTradeHistoryBackfill {
                         Task { [weak self] in
                             await self?.refreshAuthoritativeTradeHistory(
                                 profileID: profileID,
@@ -749,7 +758,13 @@ final class DashboardViewModel {
            let disk = SessionDiskCache.loadOwnerTrades(for: profileID),
            SessionOwnerTradesStore.shared.cached(for: profileID) == nil
         {
-            SessionOwnerTradesStore.shared.seed(disk, for: profileID, detailCache: detailCache)
+            SessionOwnerTradesStore.shared.seed(
+                disk.trades,
+                for: profileID,
+                detailCache: detailCache,
+                historyComplete: disk.historyComplete,
+                totalTradeCount: disk.totalTradeCount
+            )
         }
         let items = try await DashboardLoadProbe.measure(
             "dashboard.trades",
@@ -835,25 +850,28 @@ final class DashboardViewModel {
     }
 
     private func apply(trades list: [Trade], accounts: [TradingAccount], profileID: ProfileID) {
-        self.accounts = accounts.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
-        let accountTypes = Dictionary(
-            uniqueKeysWithValues: accounts.map {
-                ($0.id, ProfileStatisticsMetrics.accountTypeString(for: $0.mode))
+        MainThreadWorkProbe.measure("dashboard.applyHydration", surface: "dashboard") {
+            self.accounts = accounts.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
-        )
-        tradeInputs = list.map { trade in
-            DashboardChartMetrics.Input(
-                trade: trade,
-                accountType: trade.accountID.flatMap { accountTypes[$0] }
+            accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+            let accountTypes = Dictionary(
+                uniqueKeysWithValues: accounts.map {
+                    ($0.id, ProfileStatisticsMetrics.accountTypeString(for: $0.mode))
+                }
             )
+            tradeInputs = list.map { trade in
+                DashboardChartMetrics.Input(
+                    trade: trade,
+                    accountType: trade.accountID.flatMap { accountTypes[$0] }
+                )
+            }
         }
     }
 
     private func upsertTrade(_ trade: Trade) {
         guard hasLoaded else { return }
         SessionNetworkProbe.record(.localMutation, resource: "dashboard.trades", detail: trade.id.rawValue)
-        SessionOwnerTradesStore.shared.upsert(trade, detailCache: detailCache)
         let accountType = trade.accountID.flatMap { id in
             accounts.first(where: { $0.id == id }).map {
                 ProfileStatisticsMetrics.accountTypeString(for: $0.mode)
@@ -870,8 +888,22 @@ final class DashboardViewModel {
     private func removeTrade(id: TradeID) {
         guard hasLoaded else { return }
         SessionNetworkProbe.record(.localMutation, resource: "dashboard.trades.remove", detail: id.rawValue)
-        detailCache.removeTrade(id: id)
         tradeInputs.removeAll { $0.trade.id == id }
+        recompute()
+    }
+
+    private func patchAccountsFromSessionStore() {
+        guard let profileID else { return }
+        guard let cached = SessionAccountsStore.shared.cached(for: profileID)
+            ?? detailCache.accounts(for: profileID)
+        else {
+            Task { await reloadAccountsOnly() }
+            return
+        }
+        accounts = cached.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
         recompute()
     }
 
@@ -1083,17 +1115,15 @@ final class DashboardViewModel {
         forceNetwork: Bool,
         skipPayouts: Bool
     ) async {
-        async let payouts: Void = {
-            if skipPayouts { return }
+        if !skipPayouts {
             await hydratePayouts(profileID: profileID, forceNetwork: forceNetwork)
-        }()
-        async let propFirmCycles: Void = hydratePropFirmPayoutCycles(
+        }
+        await hydratePropFirmPayoutCycles(
             profileID: profileID,
             accountIDs: fundedPropAccountIDs(),
             forceNetwork: forceNetwork
         )
-        async let checkIns: Void = hydrateCheckIns(profileID: profileID, forceNetwork: forceNetwork)
-        _ = await (payouts, propFirmCycles, checkIns)
+        await hydrateCheckIns(profileID: profileID, forceNetwork: forceNetwork)
     }
 
     private func fundedPropAccountIDs() -> [TradingAccountID] {

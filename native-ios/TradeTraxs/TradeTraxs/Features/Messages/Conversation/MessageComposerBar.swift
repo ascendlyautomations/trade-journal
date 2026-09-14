@@ -6,6 +6,7 @@ import UIKit
 struct MessageComposerBar: View {
     @Binding var draft: String
     var isSending: Bool
+    var isEnabled: Bool = true
     var placeholder: String = "Message"
     var showsTradeShare: Bool = true
     var onSend: () -> Void
@@ -53,7 +54,7 @@ struct MessageComposerBar: View {
                         .contentShape(Rectangle())
                 }
                 .experienceTouchTarget()
-                .disabled(isSending)
+                .disabled(isSending || !isEnabled)
                 .accessibilityLabel("Send trade")
                 .accessibilityIdentifier("conversation.composer.trade")
             }
@@ -66,7 +67,7 @@ struct MessageComposerBar: View {
             .experienceTouchTarget()
             .accessibilityLabel("Send photo")
             .accessibilityIdentifier("conversation.composer.photo")
-            .disabled(isSending)
+            .disabled(isSending || !isEnabled)
 
             TextField(placeholder, text: $draft, axis: .vertical)
                 .lineLimit(1...5)
@@ -81,13 +82,14 @@ struct MessageComposerBar: View {
                 )
                 .focused($focused)
                 .submitLabel(.send)
+                .disabled(!isEnabled)
                 .onSubmit {
-                    guard canSendText else { return }
+                    guard canSendText, isEnabled else { return }
                     onSend()
                 }
                 .accessibilityIdentifier("conversation.composer.field")
 
-            if canSendText {
+            if canSendText, isEnabled {
                 Button(action: onSend) {
                     if isSending {
                         ProgressView()
@@ -112,7 +114,7 @@ struct MessageComposerBar: View {
                         .frame(width: 36, height: 36)
                 }
                 .experienceTouchTarget()
-                .disabled(isSending)
+                .disabled(isSending || !isEnabled)
                 .accessibilityLabel("Record voice message")
                 .accessibilityIdentifier("conversation.composer.mic")
             }

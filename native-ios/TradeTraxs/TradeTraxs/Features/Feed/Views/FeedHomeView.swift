@@ -17,6 +17,7 @@ struct FeedHomeView: View {
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.tabIsActive) private var tabIsActive
     @State private var scrollViewportFrame: CGRect = .zero
 
     init(
@@ -140,8 +141,15 @@ struct FeedHomeView: View {
         .modifier(FeedHomeRefreshModifier(isEnabled: viewModel.contentFilter != .clips) {
             await viewModel.refresh()
         })
-        .task {
-            viewModel.loadIfNeeded()
+        .task(id: tabIsActive) {
+            guard tabIsActive else {
+                viewModel.unsubscribeRealtime()
+                return
+            }
+            MainThreadWorkProbe.measure("feed.tab.activate", surface: "feed") {
+                viewModel.loadIfNeeded()
+                viewModel.subscribeRealtime()
+            }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-uitesting-feed-text-only") {
                 viewModel.userSelectedContentFilter(.posts)
@@ -281,7 +289,7 @@ struct FeedHomeView: View {
                         .padding(.vertical, ExperienceSpacing.md)
                 }
             }
-            .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.visibleEntries.map(\.id))
+            .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.visibleEntryIDs)
             .environment(\.feedScrollViewportFrame, scrollViewportFrame)
         }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in

@@ -2,9 +2,8 @@ import Foundation
 import Observation
 
 /// Higher-level network posture used by repositories / UI feedback later.
-@MainActor
 @Observable
-final class NetworkMonitor {
+final class NetworkMonitor: @unchecked Sendable {
     private let reachability: ReachabilityMonitor
     private(set) var status: ReachabilityStatus
 

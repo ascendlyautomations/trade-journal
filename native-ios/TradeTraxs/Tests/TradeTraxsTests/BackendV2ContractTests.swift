@@ -75,6 +75,17 @@ final class BackendV2ContractTests: XCTestCase {
         XCTAssertEqual(value.data.accounts.count, 1)
     }
 
+    func testViewerSyncStateJSONDecode() throws {
+        let json = """
+        {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"trades":{"count":1,"max_created_at":"2026-08-01T12:00:00.000Z","checksum":4242},"accounts":{"count":1,"max_created_at":null,"checksum":1313},"profile":{"checksum":"deadbeef"}}}
+        """
+        let value: ViewerSyncStateV1 = try decodeFixture(json)
+        try value.validateContractVersion()
+        XCTAssertEqual(value.data.trades.count, 1)
+        XCTAssertEqual(value.data.trades.checksum, 4242)
+        XCTAssertEqual(value.data.profile.checksum, "deadbeef")
+    }
+
     func testProfileBootstrapJSONDecode() throws {
         let value: ProfileBootstrapV1 = try decodeFixture(
             BackendV2ContractFixtures.profile

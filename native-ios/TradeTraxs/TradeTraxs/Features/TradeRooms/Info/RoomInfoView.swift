@@ -10,6 +10,7 @@ struct RoomInfoView: View {
     @Environment(\.appEnvironment) private var appEnvironment
     @State private var logoImage: Image?
     @State private var photoItem: PhotosPickerItem?
+    @State private var cropSourceImage: UIImage?
 
     init(
         roomID: RoomID,
@@ -55,18 +56,39 @@ struct RoomInfoView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle(viewModel.canManageRoom ? "Room Information" : "Room Info")
+        .toolbar {
+            if viewModel.canManageRoom, case .loaded = viewModel.phase {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task { await viewModel.saveDetails() }
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(viewModel.isSavingDetails)
+                    .accessibilityIdentifier("tradeRooms.info.save")
+                }
+            }
+        }
         .task {
             viewModel.loadIfNeeded()
         }
         .task(id: viewModel.room?.image?.id) {
             await loadLogo()
         }
-        .task(id: photoItem?.itemIdentifier) {
-            guard let photoItem else { return }
-            if let data = try? await photoItem.loadTransferable(type: Data.self) {
-                viewModel.pendingImageData = data
-            }
+        .onChange(of: photoItem) { _, item in
+            Task { await presentRoomImageCrop(for: item) }
         }
+        .imageCropSelection(
+            sourceImage: $cropSourceImage,
+            preset: .room,
+            onConfirm: { result in
+                viewModel.setCroppedRoomImage(result)
+                cropSourceImage = nil
+                photoItem = nil
+            },
+            onCancel: {
+                photoItem = nil
+            }
+        )
         .confirmationDialog(
             "Leave this Trade Room?",
             isPresented: $viewModel.showsLeaveConfirmation,
@@ -92,20 +114,22 @@ struct RoomInfoView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .experienceProtectedFormDismiss(viewModel.canManageRoom && viewModel.isSavingDetails)
+        .disabled(viewModel.isSavingDetails)
     }
 
     @ViewBuilder
     private var ownerEditorSections: some View {
         Section {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                banner
-                HStack(spacing: ExperienceSpacing.sm) {
-                    logo
-                    VStack(alignment: .leading, spacing: 3) {
-                        TextField("Room name", text: $viewModel.editName)
-                            .font(.headline)
-                        Text("\(ProfileDisplay.compactCount(viewModel.displayedMemberCount ?? 0)) members")
-                            .experienceStyle(.caption, color: colors.secondaryText)
+            HStack(spacing: ExperienceSpacing.sm) {
+                logo
+                VStack(alignment: .leading, spacing: 3) {
+                    TextField("Room name", text: $viewModel.editName)
+                        .font(.headline)
+                    Text("\(ProfileDisplay.compactCount(viewModel.displayedMemberCount ?? 0)) members")
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                    if viewModel.pendingImagePreview != nil {
+                        Text("New photo selected")
+                            .experienceStyle(.caption2, color: colors.accent)
                     }
                 }
             }
@@ -127,19 +151,6 @@ struct RoomInfoView: View {
             Toggle("Show on my profile", isOn: $viewModel.editShowsOnProfile)
         }
 
-        Section {
-            Button {
-                Task { await viewModel.saveDetails() }
-            } label: {
-                if viewModel.isSavingDetails {
-                    ProgressView()
-                } else {
-                    Text("Save Changes")
-                }
-            }
-            .disabled(viewModel.isSavingDetails)
-        }
-
         Section("Manage") {
             Button("Manage Room") { viewModel.openManageRoom() }
             Button("Members") { viewModel.openMembers() }
@@ -150,7 +161,6 @@ struct RoomInfoView: View {
     private var readOnlyHeaderSection: some View {
         Section {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                banner
                 HStack(spacing: ExperienceSpacing.sm) {
                     logo
                     VStack(alignment: .leading, spacing: 3) {
@@ -248,21 +258,25 @@ struct RoomInfoView: View {
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
         }
-    }
 
-    private var banner: some View {
-        LinearGradient(
-            colors: [colors.accent.opacity(0.4), colors.fillSecondary],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .frame(height: 110)
-        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+        if viewModel.isSavingDetails {
+            Section {
+                HStack {
+                    ProgressView()
+                    Text("Saving…")
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                }
+            }
+        }
     }
 
     private var logo: some View {
         Group {
-            if let logoImage {
+            if let pending = viewModel.pendingImagePreview {
+                Image(uiImage: pending)
+                    .resizable()
+                    .scaledToFill()
+            } else if let logoImage {
                 logoImage.resizable().scaledToFill()
             } else {
                 ZStack {
@@ -275,7 +289,15 @@ struct RoomInfoView: View {
         .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
     }
 
+    private func presentRoomImageCrop(for item: PhotosPickerItem?) async {
+        guard let image = await ImageCropSelectionSupport.loadUIImage(from: item) else { return }
+        cropSourceImage = image
+    }
+
     private func loadLogo() async {
+        if viewModel.pendingImagePreview != nil {
+            return
+        }
         guard let reference = viewModel.room?.image else {
             logoImage = nil
             return

@@ -151,6 +151,27 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
         )
     }
 
+    func delete(id: NotificationID) async throws {
+        _ = try await delete(ids: [id])
+    }
+
+    func delete(ids: [NotificationID]) async throws -> Int {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let unique = Array(Set(ids.map(\.rawValue))).filter { !$0.isEmpty }
+        guard !unique.isEmpty else { return 0 }
+
+        try await supabase.database.delete(
+            from: "notifications",
+            query: [
+                SupabaseQuery.eq("user_id", userID.rawValue),
+                SupabaseQuery.isIn("id", unique),
+            ]
+        )
+        return unique.count
+    }
+
     func profiles(ids: [ProfileID]) async throws -> [Profile] {
         let unique = Array(Set(ids.map(\.rawValue))).filter { !$0.isEmpty }
         guard !unique.isEmpty else { return [] }

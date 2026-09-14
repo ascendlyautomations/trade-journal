@@ -147,7 +147,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         }
     }
 
-    private static func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
+    nonisolated private static func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
         switch result {
         case .verified(let safe):
             return safe
@@ -156,7 +156,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         }
     }
 
-    private static func makeProduct(_ product: Product) -> StoreKitTraxProProduct {
+    nonisolated private static func makeProduct(_ product: Product) -> StoreKitTraxProProduct {
         let periodLabel = product.subscription.map { subscriptionPeriodLabel($0.subscriptionPeriod) } ?? "Subscription"
         let introEligible = product.subscription?.introductoryOffer != nil
         return StoreKitTraxProProduct(
@@ -169,7 +169,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         )
     }
 
-    private static func subscriptionPeriodLabel(_ period: Product.SubscriptionPeriod) -> String {
+    nonisolated private static func subscriptionPeriodLabel(_ period: Product.SubscriptionPeriod) -> String {
         switch period.unit {
         case .day:
             return period.value == 1 ? "Daily" : "\(period.value) days"
@@ -184,7 +184,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         }
     }
 
-    private static func sortOrder(for productID: String) -> Int {
+    nonisolated private static func sortOrder(for productID: String) -> Int {
         switch TraxProProductConfiguration.billingInterval(for: productID) {
         case .monthly: return 0
         case .sixMonth: return 1

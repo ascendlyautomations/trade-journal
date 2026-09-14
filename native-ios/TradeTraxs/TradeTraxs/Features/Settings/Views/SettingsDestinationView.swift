@@ -84,6 +84,8 @@ struct SettingsDestinationView: View {
                     data: data,
                     navigationCoordinator: navigationCoordinator
                 )
+            case .payouts:
+                PayoutsScreenView(data: data, navigationCoordinator: navigationCoordinator)
             case .privacy:
                 SettingsPrivacyView(data: data, profileStore: currentUserProfile)
             case .privacyBlockedAccounts:

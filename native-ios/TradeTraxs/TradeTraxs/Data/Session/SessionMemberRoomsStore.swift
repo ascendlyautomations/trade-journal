@@ -9,16 +9,17 @@ final class SessionMemberRoomsStore {
 
     private var roomsByViewer: [ProfileID: [TradeRoom]] = [:]
     private var unreadByViewer: [ProfileID: [RoomID: Int]] = [:]
-    private var inFlight: [ProfileID: Task<([TradeRoom], [RoomID: Int]), Error>] = [:]
+    private var activityAtByViewer: [ProfileID: [RoomID: Date]] = [:]
+    private var inFlight: [ProfileID: Task<([TradeRoom], [RoomID: Int], [RoomID: Date]), Error>] = [:]
     private var loadedAt: [ProfileID: Date] = [:]
 
     private let freshTTL: TimeInterval = 5 * 60
 
     private init() {}
 
-    func cached(for viewerID: ProfileID) -> ([TradeRoom], [RoomID: Int])? {
+    func cached(for viewerID: ProfileID) -> ([TradeRoom], [RoomID: Int], [RoomID: Date])? {
         guard let rooms = roomsByViewer[viewerID] else { return nil }
-        return (rooms, unreadByViewer[viewerID] ?? [:])
+        return (rooms, unreadByViewer[viewerID] ?? [:], activityAtByViewer[viewerID] ?? [:])
     }
 
     func isFresh(for viewerID: ProfileID, now: Date = Date()) -> Bool {
@@ -31,7 +32,7 @@ final class SessionMemberRoomsStore {
         for viewerID: ProfileID,
         repository: any RoomRepository,
         forceNetwork: Bool = false
-    ) async throws -> ([TradeRoom], [RoomID: Int]) {
+    ) async throws -> ([TradeRoom], [RoomID: Int], [RoomID: Date]) {
         if !forceNetwork, let cached = cached(for: viewerID), isFresh(for: viewerID) {
             SessionNetworkProbe.record(
                 .cacheHit,
@@ -39,6 +40,21 @@ final class SessionMemberRoomsStore {
                 detail: viewerID.rawValue
             )
             return cached
+        }
+
+        if !forceNetwork, roomsByViewer[viewerID] == nil,
+           SocialPersistedCacheCoordinator.hydrateMemberRooms(
+               viewerID: viewerID,
+               inboxStore: MessagesInboxStore.shared,
+               memberRoomsStore: .shared
+           )
+        {
+            if let cached = cached(for: viewerID) {
+                Task {
+                    _ = try? await self.memberRooms(for: viewerID, repository: repository, forceNetwork: true)
+                }
+                return cached
+            }
         }
 
         if let existing = inFlight[viewerID] {
@@ -61,15 +77,18 @@ final class SessionMemberRoomsStore {
             detail: viewerID.rawValue
         )
 
-        let task = Task { () -> ([TradeRoom], [RoomID: Int]) in
+        let task = Task { () -> ([TradeRoom], [RoomID: Int], [RoomID: Date]) in
             let rooms = try await repository.memberRooms(
                 for: viewerID,
                 page: PageRequest(limit: 50)
             ).items
-            async let unreadTask = repository.unreadCounts(for: rooms.map(\.id))
-            async let countsTask = repository.activeMemberCounts(for: rooms.map(\.id))
+            let roomIDs = rooms.map(\.id)
+            async let unreadTask = repository.unreadCounts(for: roomIDs)
+            async let countsTask = repository.activeMemberCounts(for: roomIDs)
+            async let activityTask = repository.lastMessageActivity(for: roomIDs)
             let unread = (try? await unreadTask) ?? [:]
             let counts = (try? await countsTask) ?? [:]
+            let activity = (try? await activityTask) ?? [:]
             let enriched = rooms.map { room -> TradeRoom in
                 var copy = room
                 if let count = counts[room.id] {
@@ -77,24 +96,33 @@ final class SessionMemberRoomsStore {
                 }
                 return copy
             }
-            return (enriched, unread)
+            return (enriched, unread, activity)
         }
         inFlight[viewerID] = task
         defer { inFlight[viewerID] = nil }
 
         let loaded = try await task.value
-        seed(rooms: loaded.0, unread: loaded.1, for: viewerID)
+        seed(rooms: loaded.0, unread: loaded.1, activityAt: loaded.2, for: viewerID)
         return loaded
     }
 
     func seed(
         rooms: [TradeRoom],
         unread: [RoomID: Int],
-        for viewerID: ProfileID
+        activityAt: [RoomID: Date] = [:],
+        for viewerID: ProfileID,
+        savedAt: Date = Date()
     ) {
         roomsByViewer[viewerID] = rooms
         unreadByViewer[viewerID] = unread
-        loadedAt[viewerID] = Date()
+        activityAtByViewer[viewerID] = activityAt
+        loadedAt[viewerID] = savedAt
+        SocialPersistedCacheCoordinator.persistMemberRooms(viewerID: viewerID, from: self)
+    }
+
+    func snapshotForPersistence(viewerID: ProfileID) -> (rooms: [TradeRoom], unread: [RoomID: Int], activityAt: [RoomID: Date])? {
+        guard let rooms = roomsByViewer[viewerID] else { return nil }
+        return (rooms, unreadByViewer[viewerID] ?? [:], activityAtByViewer[viewerID] ?? [:])
     }
 
     func applyMemberCounts(_ counts: [RoomID: Int], for viewerID: ProfileID) {
@@ -112,12 +140,14 @@ final class SessionMemberRoomsStore {
         if let viewerID {
             roomsByViewer[viewerID] = nil
             unreadByViewer[viewerID] = nil
+            activityAtByViewer[viewerID] = nil
             loadedAt[viewerID] = nil
             inFlight[viewerID]?.cancel()
             inFlight[viewerID] = nil
         } else {
             roomsByViewer = [:]
             unreadByViewer = [:]
+            activityAtByViewer = [:]
             loadedAt = [:]
             inFlight.values.forEach { $0.cancel() }
             inFlight = [:]

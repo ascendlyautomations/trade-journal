@@ -150,6 +150,45 @@ nonisolated extension Trade {
 }
 
 /// Wire account row — mirrors `accounts` columns returned by the Dashboard RPC.
+nonisolated extension DashboardAccountWireV1 {
+    mutating func mergeFields(from account: TradingAccount) {
+        id = account.id.rawValue
+        name = account.name
+        mode = account.mode.rawValue
+        category = account.category.rawValue
+        is_active = PostgresFlexibleBool(account.isActive)
+        can_add_trades = PostgresFlexibleBool(account.canAddTrades)
+        note = account.note
+        show_in_account_dropdowns = PostgresFlexibleBool(account.showInAccountDropdowns)
+        custom_public_status = account.customPublicStatus
+        account_number = account.accountNumber.map { PostgresAccountSizeWire(raw: $0) }
+        if let size = account.size {
+            account_size = PostgresAccountSizeWire(
+                raw: NSDecimalNumber(decimal: size.amount).stringValue
+            )
+        }
+        if let rules = account.propFirmRules {
+            consistency = rules.consistencyPercent.map { PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue) }
+            max_drawdown = rules.maxDrawdown.map { PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue) }
+            daily_drawdown = rules.dailyDrawdown.map { PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue) }
+            profit_target = rules.profitTarget.map { PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue) }
+            winning_days = rules.winningDaysRequired.map { PostgresFlexibleDouble(Double($0)) }
+            winning_day_threshold = rules.winningDayThreshold.map {
+                PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue)
+            }
+            payout_drawdown_behavior = rules.payoutDrawdownBehavior
+        }
+    }
+}
+
+nonisolated extension TradingAccount {
+    func asDashboardWireV1() -> DashboardAccountWireV1 {
+        var row = DashboardAccountWireV1(id: id.rawValue)
+        row.mergeFields(from: self)
+        return row
+    }
+}
+
 nonisolated struct DashboardAccountWireV1: Codable, Sendable, Equatable {
     var id: String
     var account_number: PostgresAccountSizeWire?

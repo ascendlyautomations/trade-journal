@@ -19,7 +19,7 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case streaks
     /// AI reports catalog (weekly / monthly / yearly / custom).
     case reports
-    /// Owner-only manual payout ledger.
+    /// Owner withdrawal history (live ledger + prop cycles).
     case payouts
     /// Single report detail (generated or notification deep-link).
     case report(ReportID)
@@ -121,6 +121,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case notificationsProduct = "notifications-product"
     case subscription
     case tradingAccounts = "trading-accounts"
+    case payouts
     case privacy
     case privacyBlockedAccounts = "privacy-blocked-accounts"
     case privacyMutedAccounts = "privacy-muted-accounts"
@@ -149,6 +150,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .notificationsProduct: return "Product Updates"
         case .subscription: return "Plan"
         case .tradingAccounts: return "Manage Accounts"
+        case .payouts: return "Withdrawals"
         case .privacy: return "Privacy"
         case .privacyBlockedAccounts: return "Blocked Accounts"
         case .privacyMutedAccounts: return "Muted Accounts"

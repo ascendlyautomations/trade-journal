@@ -106,6 +106,8 @@ enum MessagingBootstrapLoader {
 
         let flightKey = BackendV2FlightKeys.messaging(viewerID: viewerID.rawValue, cursor: nil)
         let replacementActive = await BackendV2SingleFlight.shared.hasInFlight(key: flightKey)
+        let hadLoadedBeforeRPC = inboxStore.hasLoaded
+        let markNotificationsRead = !hadLoadedBeforeRPC && !forceNetwork
         SafeInboxLog.bootstrapStarted(
             owner: owner,
             loadGeneration: loadGeneration,
@@ -119,7 +121,7 @@ enum MessagingBootstrapLoader {
                 viewerID: viewerID.rawValue,
                 rpc: rpc,
                 flightKey: flightKey,
-                markNotificationsRead: !forceNetwork
+                markNotificationsRead: markNotificationsRead
             )
             guard currentGeneration() == loadGeneration, !Task.isCancelled else {
                 throw CancellationError()
@@ -131,6 +133,12 @@ enum MessagingBootstrapLoader {
                 conversationCount: inboxStore.conversations.count,
                 rpcRequestCount: 1
             )
+#if DEBUG
+            SocialCacheProbe.recordInboxNetworkCatchup(
+                rows: bootstrap.data.conversations.count,
+                fullBootstrap: !hadLoadedBeforeRPC
+            )
+#endif
             return LoadResult(bootstrap: bootstrap, rpcRequestCount: 1)
         } catch {
             let diagnostic = MessagesBootstrapFailureDiagnostic.make(error: error)

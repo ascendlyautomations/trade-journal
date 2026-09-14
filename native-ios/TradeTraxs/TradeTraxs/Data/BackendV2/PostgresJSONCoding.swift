@@ -105,6 +105,10 @@ nonisolated struct PostgresFlexibleBool: Codable, Sendable, Equatable {
 nonisolated struct PostgresAccountSizeWire: Codable, Sendable, Equatable {
     var raw: String?
 
+    init(raw: String?) {
+        self.raw = raw
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if container.decodeNil() {

@@ -30,7 +30,8 @@ nonisolated struct SupabaseHeadersInterceptor: RequestInterceptor {
             body: request.body,
             timeout: request.timeout,
             idempotencyKey: request.idempotencyKey,
-            allowsRetry: request.allowsRetry
+            allowsRetry: request.allowsRetry,
+            schedulingPriority: request.schedulingPriority
         )
     }
 }

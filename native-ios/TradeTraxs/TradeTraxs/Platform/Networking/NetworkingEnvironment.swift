@@ -48,31 +48,40 @@ final class NetworkingEnvironment {
 
     static func make(
         appConfiguration: AppConfiguration,
-        accessTokenProvider: @escaping @Sendable () async -> String? = { nil }
+        accessTokenProvider: @escaping @Sendable () async -> String? = { nil },
+        startReachabilityMonitoring: Bool = true
     ) -> NetworkingEnvironment {
-        let environment = EnvironmentConfiguration.make(
-            for: appConfiguration.buildConfiguration,
-            appConfiguration: appConfiguration
-        )
-        let networkConfiguration = NetworkConfiguration.make(
-            environment: environment,
-            appDisplayName: appConfiguration.appDisplayName
-        )
+        let environment = StartupTrace.measure("NetworkingEnvironment.EnvironmentConfiguration") {
+            EnvironmentConfiguration.make(
+                for: appConfiguration.buildConfiguration,
+                appConfiguration: appConfiguration
+            )
+        }
+        let networkConfiguration = StartupTrace.measure("NetworkingEnvironment.NetworkConfiguration") {
+            NetworkConfiguration.make(
+                environment: environment,
+                appDisplayName: appConfiguration.appDisplayName
+            )
+        }
 
-        let reachability = ReachabilityMonitor()
-        let networkMonitor = NetworkMonitor(reachability: reachability)
-        networkMonitor.start()
+        let reachability = StartupTrace.measure("NetworkingEnvironment.ReachabilityMonitor") {
+            ReachabilityMonitor()
+        }
         let metrics = InMemoryRequestMetricsRecorder()
         let metricsBox = RequestMetricsRecorderBox(recorder: metrics)
         let decoder = JSONResponseDecoder()
         let errorMapper = NetworkErrorMapper()
-        let requestBuilder = RequestBuilder(configuration: networkConfiguration)
+        let requestBuilder = StartupTrace.measure("NetworkingEnvironment.RequestBuilder") {
+            RequestBuilder(configuration: networkConfiguration)
+        }
 
-        let session = URLSession(
-            configuration: networkConfiguration.makeURLSessionConfiguration(),
-            delegate: URLSessionTaskMetricsCollector.shared,
-            delegateQueue: nil
-        )
+        let session = StartupTrace.measure("NetworkingEnvironment.URLSession") {
+            URLSession(
+                configuration: networkConfiguration.makeURLSessionConfiguration(),
+                delegate: URLSessionTaskMetricsCollector.shared,
+                delegateQueue: nil
+            )
+        }
 
         let requestInterceptor = CompositeRequestInterceptor(
             interceptors: [
@@ -87,17 +96,27 @@ final class NetworkingEnvironment {
             ]
         )
 
-        let urlClient = URLSessionNetworkClient(
-            session: session,
-            requestInterceptor: requestInterceptor,
-            responseInterceptor: responseInterceptor,
-            retryPolicy: networkConfiguration.retryPolicy,
-            errorMapper: errorMapper,
-            decoder: decoder,
-            metricsRecorder: metricsBox,
-            reachability: reachability
-        )
+        let urlClient = StartupTrace.measure("NetworkingEnvironment.URLSessionNetworkClient") {
+            URLSessionNetworkClient(
+                session: session,
+                requestInterceptor: requestInterceptor,
+                responseInterceptor: responseInterceptor,
+                retryPolicy: networkConfiguration.retryPolicy,
+                errorMapper: errorMapper,
+                decoder: decoder,
+                metricsRecorder: metricsBox,
+                reachability: reachability
+            )
+        }
         let clientBox = NetworkClientBox(client: urlClient)
+
+        let networkMonitor = StartupTrace.measure("NetworkingEnvironment.NetworkMonitor") {
+            let monitor = NetworkMonitor(reachability: reachability)
+            if startReachabilityMonitoring {
+                monitor.start()
+            }
+            return monitor
+        }
 
         AppLog.networking.info(
             "NetworkingEnvironment ready (\(networkConfiguration.environment.apiEnvironment.rawValue, privacy: .public))"

@@ -66,6 +66,7 @@ final class SessionBootstrapStore {
         last = bootstrap
         if let viewerID = bootstrap.meta.viewer_id ?? Optional(bootstrap.data.viewer.id) {
             BackendV2BootstrapDiskCache.saveSession(bootstrap, viewerID: viewerID)
+            ViewerSyncStateRuntime.noteLocalMutation(viewerID: ProfileID(viewerID))
         }
     }
 
@@ -109,7 +110,8 @@ enum SessionBootstrapLoader {
         detailCache: DetailPresentationCache?,
         forceNetwork: Bool,
         loadGeneration: UInt64,
-        currentGeneration: @escaping () -> UInt64
+        currentGeneration: @escaping () -> UInt64,
+        skipSoftStaleReconcile: Bool = false
     ) async throws -> SessionBootstrapLoadResult {
         guard BackendV2FeatureFlags.isEnabled(.session) else {
             return try await loadLegacyREST(
@@ -152,20 +154,18 @@ enum SessionBootstrapLoader {
                 profiles: profiles,
                 detailCache: detailCache
             )
-            if cached.freshness == .softStale {
+            if cached.freshness == .softStale, !skipSoftStaleReconcile {
                 #if DEBUG
                 SessionWarmStartProbe.warmStartTrace("revalidateScheduled")
                 #endif
-                Task { @MainActor in
-                    await revalidateIfCurrent(
-                        viewerID: viewerID,
-                        rpc: rpc,
-                        profiles: profiles,
-                        detailCache: detailCache,
-                        loadGeneration: loadGeneration,
-                        currentGeneration: currentGeneration
-                    )
-                }
+                scheduleSoftStaleReconcile(
+                    viewerID: viewerID,
+                    rpc: rpc,
+                    profiles: profiles,
+                    detailCache: detailCache,
+                    loadGeneration: loadGeneration,
+                    currentGeneration: currentGeneration
+                )
             }
             #if DEBUG
             SessionWarmStartProbe.warmStartTrace("shellReleased")
@@ -231,6 +231,7 @@ enum SessionBootstrapLoader {
                 bootstrap: fetched.bootstrap,
                 viewerID: viewerID,
                 uid: uid,
+                rpc: rpc,
                 profiles: profiles,
                 detailCache: detailCache,
                 notifyObserver: true
@@ -277,28 +278,31 @@ enum SessionBootstrapLoader {
     }
 
     @MainActor
-    private static func revalidateIfCurrent(
+    private static func scheduleSoftStaleReconcile(
         viewerID: ProfileID,
         rpc: any RPCClient,
         profiles: any ProfileRepository,
         detailCache: DetailPresentationCache?,
         loadGeneration: UInt64,
         currentGeneration: @escaping () -> UInt64
-    ) async {
-        guard currentGeneration() == loadGeneration else { return }
-        do {
-            _ = try await load(
+    ) {
+        guard BackendV2FeatureFlags.isEnabled(.viewerSyncState) else {
+            BackendV2BootstrapDiskCache.touchSession(viewerID: viewerID.rawValue)
+            SyncStateProbe.logFallback("sync_flag_off_touch_session")
+            return
+        }
+        ViewerSyncReconciliationCoordinator.shared.schedule(
+            ViewerSyncReconcileContext(
                 viewerID: viewerID,
                 rpc: rpc,
                 profiles: profiles,
                 detailCache: detailCache,
-                forceNetwork: true,
                 loadGeneration: loadGeneration,
-                currentGeneration: currentGeneration
+                currentGeneration: currentGeneration,
+                needsSessionRefresh: true,
+                needsDashboardRefresh: false
             )
-        } catch {
-            // Preserve cached session presentation.
-        }
+        )
     }
 
     private struct FetchedRPC: Sendable {
@@ -328,6 +332,7 @@ enum SessionBootstrapLoader {
         bootstrap: SessionBootstrapV1,
         viewerID: ProfileID,
         uid: String,
+        rpc: any RPCClient,
         profiles: any ProfileRepository,
         detailCache: DetailPresentationCache?,
         notifyObserver: Bool
@@ -348,6 +353,7 @@ enum SessionBootstrapLoader {
         BackendV2RpcStageTracer.trace(rpcName, stage: "cache.write.started", correlation: uid.prefix(8).description)
         BackendV2BootstrapDiskCache.saveSession(bootstrap, viewerID: uid)
         BackendV2RpcStageTracer.trace(rpcName, stage: "cache.write.completed", correlation: uid.prefix(8).description)
+        ViewerSyncStateCapturer.captureAfterBootstrap(viewerID: uid, rpc: rpc)
         logPath(.v2_rpc)
         let result = SessionBootstrapLoadResult(
             profile: applied.profile,

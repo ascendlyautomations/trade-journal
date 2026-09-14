@@ -219,6 +219,9 @@ nonisolated enum ConversationThreadBootstrapApplier {
         }
 
         let isRead = row.seen_by.contains(viewerID.rawValue)
+        let reactions = (row.message_reactions ?? []).compactMap {
+            mapBootstrapReaction($0, fallbackMessageID: MessageID(trimmedID))
+        }
 
         return Message(
             id: MessageID(trimmedID),
@@ -230,7 +233,32 @@ nonisolated enum ConversationThreadBootstrapApplier {
             replyToMessageID: replyID,
             createdAt: createdAt,
             isReadByViewer: isRead,
-            sharedContent: resolvedSharedContent
+            sharedContent: resolvedSharedContent,
+            roomReactions: reactions
+        )
+    }
+
+    private static func mapBootstrapReaction(
+        _ row: ConversationThreadMessageReactionV1,
+        fallbackMessageID: MessageID
+    ) -> RoomMessageReaction? {
+        guard let id = row.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
+              let reaction = row.reaction?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !reaction.isEmpty,
+              MessageReactionSemantics.supportedEmojis.contains(reaction)
+        else { return nil }
+        let messageRaw = row.message_id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageID = messageRaw.flatMap { raw -> MessageID? in
+            raw.isEmpty ? nil : MessageID(raw)
+        } ?? fallbackMessageID
+        guard let userRaw = row.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !userRaw.isEmpty
+        else { return nil }
+        return RoomMessageReaction(
+            id: id,
+            messageID: RoomMessageID(messageID.rawValue),
+            userID: ProfileID(userRaw),
+            reaction: reaction,
+            createdAt: nil
         )
     }
 }

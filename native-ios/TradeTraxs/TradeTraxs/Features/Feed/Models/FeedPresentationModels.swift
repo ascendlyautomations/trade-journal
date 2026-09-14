@@ -1,12 +1,17 @@
 import Foundation
 
-/// Web `FeedContentFilter` — All / Trades / Posts / Clips / Achievements.
+/// Web `FeedContentFilter` — All / Trades / Clips / Posts / Achievements.
 nonisolated enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
     case all
     case trades
     case posts
     case clips
     case achievements
+
+    /// Filter strip order (UI only — `CaseIterable` order unchanged for cache/session code).
+    static let filterStripOrder: [FeedContentFilter] = [
+        .all, .trades, .clips, .posts, .achievements,
+    ]
 
     var title: String {
         switch self {
@@ -39,7 +44,7 @@ nonisolated enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
 }
 
 /// Hydrated feed row — wraps domain models already used by Profile cards / Detail.
-nonisolated enum FeedTimelineEntry: Identifiable, Hashable, Sendable {
+nonisolated enum FeedTimelineEntry: Identifiable, Hashable, Sendable, Codable {
     case trade(FeedItem, Trade)
     case post(FeedItem, Post)
     case clip(FeedItem, Reel)

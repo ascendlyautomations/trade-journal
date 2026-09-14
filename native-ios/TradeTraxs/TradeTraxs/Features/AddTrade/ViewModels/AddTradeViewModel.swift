@@ -444,7 +444,16 @@ final class AddTradeViewModel {
     /// Reload accounts after Manage Accounts mutations (no polling).
     func reloadAccountsAfterMutation() {
         guard let viewerID else { return }
-        Task { await refreshAccountsFromNetwork(viewerID: viewerID, forceNetwork: true) }
+        Task {
+            if let cached = SessionAccountsStore.shared.cached(for: viewerID)
+                ?? detailCache.accounts(for: viewerID),
+               !cached.isEmpty
+            {
+                accounts = cached
+                return
+            }
+            await refreshAccountsFromNetwork(viewerID: viewerID, forceNetwork: false)
+        }
     }
 
     #if DEBUG

@@ -23,6 +23,7 @@ struct AppRootView: View {
         Group {
             authRootContent
         }
+        .onAppear { StartupTrace.event("rootBodyFirstEvaluation") }
         .applyThemeEnvironment(themeManager.themeEnvironment)
         // Root fill only — do not also apply bar chrome here (owned by MainTabShellView)
         // so safe-area insets are not compensated twice.
@@ -70,7 +71,9 @@ struct AppRootView: View {
             NavigationCoordinatorProxy.openManageAccounts = {
                 navigation.coordinator.pushHome(.settings(.tradingAccounts))
             }
-            if authenticationLifecycle.initialRestoreCompleted {
+            if authenticationLifecycle.initialRestoreCompleted
+                || authenticationManager.state.authFlowPhase == .unauthenticated
+            {
                 isLaunchBootstrapping = false
             }
             Task {
@@ -115,7 +118,6 @@ struct AppRootView: View {
             guard let url = activity.webpageURL else { return }
             handleIncomingURL(url)
         }
-        .ownerAccountFilterDropdownOverlay()
         .onChange(of: navigation.store.selectedTab) { _, _ in
             OwnerAccountFilterDropdownController.shared.dismiss()
         }
@@ -130,6 +132,7 @@ struct AppRootView: View {
                 sessionValidationSurface(isRetrying: true)
             } else {
                 SplashView()
+                    .onAppear { StartupTrace.event("launchLoadingPresented") }
             }
 
         case .sessionValidationFailed:
@@ -143,16 +146,15 @@ struct AppRootView: View {
             }
 
         case .unauthenticated, .failure:
-            if isLaunchBootstrapping {
-                SplashView()
-            } else {
-                AuthInfrastructureView(
-                    store: navigation.store,
-                    coordinator: navigation.coordinator,
-                    authenticationCoordinator: authenticationCoordinator,
-                    authenticationManager: authenticationManager,
-                    allowsDevelopmentBypass: allowsDevelopmentBypass
-                )
+            AuthInfrastructureView(
+                store: navigation.store,
+                coordinator: navigation.coordinator,
+                authenticationCoordinator: authenticationCoordinator,
+                authenticationManager: authenticationManager,
+                allowsDevelopmentBypass: allowsDevelopmentBypass
+            )
+            .onAppear {
+                UnauthLaunchProbe.loginFirstFramePresented()
             }
 
         case .authenticating:
@@ -217,16 +219,22 @@ struct AppRootView: View {
             authenticationCoordinator: authenticationCoordinator,
             currentUserProfile: currentUserProfile
         )
+        .ownerAccountFilterDropdownOverlay()
+        .onChange(of: navigation.store.selectedTab) { _, _ in
+            OwnerAccountFilterDropdownController.shared.dismiss()
+        }
         .task(id: authenticationManager.restorationGeneration) {
-            guard authenticationManager.state.isSessionReady else { return }
-            await authenticationManager.awaitNetworkReady()
-            guard authenticationManager.state.isSessionReady else { return }
-            appBootstrapState.markReady()
-            AuthFlowTracer.trace("bootstrap.shell.ready", phase: .authenticated)
-            if !currentUserProfile.hasLoadedContent {
-                currentUserProfile.loadIfNeeded()
-            } else {
-                currentUserProfile.ensureTabAvatarLoaded()
+            await MainThreadOperationTracker.trackAsync("shell.authenticatedBootstrap") {
+                guard authenticationManager.state.isSessionReady else { return }
+                await authenticationManager.awaitNetworkReady()
+                guard authenticationManager.state.isSessionReady else { return }
+                appBootstrapState.markReady()
+                AuthFlowTracer.trace("bootstrap.shell.ready", phase: .authenticated)
+                if !currentUserProfile.hasLoadedContent {
+                    currentUserProfile.loadIfNeeded()
+                } else {
+                    currentUserProfile.ensureTabAvatarLoaded()
+                }
             }
         }
         .onChange(of: currentUserProfile.phase) { _, phase in
@@ -317,6 +325,11 @@ struct AppRootView: View {
                             navigation.coordinator.dismissSheet()
                             navigation.coordinator.openCompose(.story)
                         },
+                        onRecordWithdrawal: {
+                            ExperienceHaptics.play(.selection)
+                            navigation.coordinator.dismissSheet()
+                            navigation.coordinator.openCompose(.withdrawal)
+                        },
                         onClose: {
                             ExperienceHaptics.play(.selection)
                             navigation.coordinator.dismissSheet()
@@ -401,6 +414,12 @@ struct AppRootView: View {
                             navigation.coordinator.dismissFullScreen()
                             navigation.coordinator.present(fullScreen: .storyViewer(story.id))
                         },
+                        onDismiss: { navigation.coordinator.dismissFullScreen() }
+                    )
+                case .withdrawal:
+                    WithdrawalFlowView(
+                        data: appEnvironment.data,
+                        navigationCoordinator: navigation.coordinator,
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
                 case .importCSV:
@@ -497,6 +516,7 @@ struct AppRootView: View {
         case .newAchievement: return "New Achievement"
         case .newReel: return "New Clip"
         case .newStory: return "New Story"
+        case .withdrawal: return "Withdrawal"
         case .upgrade: return "TraxPro"
         case .mediaViewer: return "Media"
         case .storyViewer: return "Story"

@@ -19,6 +19,7 @@ final class ProfileScreenViewModel {
     private let target: ProfileContentStore.Target
 
     private var bootstrapTask: Task<Void, Never>?
+    private var isReconcilingFromDisk = false
 
     var pinnedContent: [ProfilePinnedItem] { state.pinnedContent }
     var showsPinReplaceSheet = false
@@ -354,6 +355,9 @@ final class ProfileScreenViewModel {
         guard isOwnerTarget else { return }
         guard matchesOwner(post.authorProfileID) else { return }
         data.detailCache.seed(post)
+        Task { await persistMutationPatch { viewerID in
+            ProfilePersistedCacheCoordinator.patchPost(post, viewerID: viewerID)
+        } }
 
         syncShellIfNeeded()
         shellViewModel?.ensurePostsSection()
@@ -452,6 +456,9 @@ final class ProfileScreenViewModel {
         guard matchesOwner(reel.authorProfileID) else { return }
         guard OwnerProfileOptimisticStore.isListedOnOwnerProfile(reel) else { return }
         data.detailCache.seed(reel)
+        Task { await persistMutationPatch { viewerID in
+            ProfilePersistedCacheCoordinator.patchReel(reel, viewerID: viewerID)
+        } }
 
         syncShellIfNeeded()
         shellViewModel?.ensureClipsSection()
@@ -482,6 +489,9 @@ final class ProfileScreenViewModel {
         guard isOwnerTarget else { return }
         guard matchesOwner(achievement.ownerProfileID) else { return }
         data.detailCache.seed(achievement)
+        Task { await persistMutationPatch { viewerID in
+            ProfilePersistedCacheCoordinator.patchAchievement(achievement, viewerID: viewerID)
+        } }
         var next = state
         let baseAchievements: [Achievement]
         if let achievementsVM = shellViewModel?.achievements, achievementsVM.hasAuthoritativePayload {
@@ -511,6 +521,11 @@ final class ProfileScreenViewModel {
     func applyOptimisticPostRemoval(id: PostID) {
         guard isOwnerTarget else { return }
         data.detailCache.removePost(id: id)
+        Task { await persistMutationPatch { viewerID in
+            if let owner = state.profileID {
+                ProfilePersistedCacheCoordinator.removePost(id: id, owner: owner, viewerID: viewerID)
+            }
+        } }
         var next = state
         next.posts.removeAll { $0.id == id }
         next.pinnedContent = ProfilePinnedMutation.remove(
@@ -538,6 +553,11 @@ final class ProfileScreenViewModel {
     func applyOptimisticReelRemoval(id: ReelID) {
         guard isOwnerTarget else { return }
         data.detailCache.removeReel(id: id)
+        Task { await persistMutationPatch { viewerID in
+            if let owner = state.profileID {
+                ProfilePersistedCacheCoordinator.removeReel(id: id, owner: owner, viewerID: viewerID)
+            }
+        } }
         var next = state
         next.clips.removeAll { $0.id == id }
         applyLocalState(next)
@@ -591,11 +611,58 @@ final class ProfileScreenViewModel {
     private func performBootstrap(force: Bool) async {
         if !force, state.didBootstrap { return }
 
+        let targetProfileID = await resolveTargetProfileID()
+        let viewerID = await data.session.currentUserID.map { ProfileID($0.rawValue) }
+
+        if !force, !isReconcilingFromDisk, let viewerID, let targetProfileID {
+            let hydrateStart = Date()
+            if let diskState = ProfilePersistedCacheCoordinator.hydrate(
+                viewerID: viewerID,
+                targetProfileID: targetProfileID,
+                detailCache: data.detailCache,
+                engagementStore: data.engagementStore,
+                blockedPeers: FeedBlockedAuthorsFilter.shared.blockedPeerIDs
+            ) {
+                publish(diskState, source: .disk)
+                #if DEBUG
+                ProfilePersistentCacheProbe.recordDiskHit(
+                    profileID: targetProfileID.rawValue,
+                    ageMs: Int(Date().timeIntervalSince(diskState.lastUpdated ?? Date()) * 1000),
+                    firstRenderMs: Int(Date().timeIntervalSince(hydrateStart) * 1000)
+                )
+                #endif
+                isReconcilingFromDisk = true
+                await performBootstrap(force: true)
+                isReconcilingFromDisk = false
+                bootstrapTask = nil
+                return
+            }
+
+            if case .currentUser = target,
+               let ownerState = buildOwnerPrefetchState(viewerID: viewerID, targetProfileID: targetProfileID)
+            {
+                publish(ownerState, source: .disk)
+                #if DEBUG
+                ProfilePersistentCacheProbe.recordDiskHit(
+                    profileID: targetProfileID.rawValue,
+                    ageMs: 0,
+                    firstRenderMs: Int(Date().timeIntervalSince(hydrateStart) * 1000)
+                )
+                #endif
+                isReconcilingFromDisk = true
+                await performBootstrap(force: true)
+                isReconcilingFromDisk = false
+                bootstrapTask = nil
+                return
+            }
+        }
+
         if state.profile == nil {
             state.phase = .loading
             contentStore.applyBootstrap(state)
         }
 
+        let existingForReconcile = isReconcilingFromDisk ? state : ProfileState()
         let next = await ProfileBootstrap.load(
             .init(
                 target: target,
@@ -612,15 +679,38 @@ final class ProfileScreenViewModel {
             )
         )
         guard !Task.isCancelled else { return }
-        if force {
+        if force, !isReconcilingFromDisk {
             // Recreate section VMs so Stage 2 reloads once per tab after refresh.
             shellViewModel = nil
         }
-        publish(next)
+
+        if isReconcilingFromDisk, existingForReconcile.profile != nil {
+            let reconcileStart = Date()
+            let merged = ProfilePersistentReconcile.reconcileProfileState(
+                existing: existingForReconcile,
+                incoming: next
+            )
+            publish(merged, source: .network)
+            #if DEBUG
+            ProfilePersistentCacheProbe.recordReconcile(
+                inserted: 0,
+                updated: 0,
+                removed: 0,
+                durationMs: Int(Date().timeIntervalSince(reconcileStart) * 1000)
+            )
+            #endif
+        } else {
+            publish(next, source: .network)
+        }
         bootstrapTask = nil
     }
 
-    private func publish(_ next: ProfileState) {
+    private enum PublishSource {
+        case disk
+        case network
+    }
+
+    private func publish(_ next: ProfileState, source: PublishSource) {
         var next = next
         if isOwnerTarget {
             next = OwnerProfileOptimisticStore.shared.merging(into: next)
@@ -639,6 +729,66 @@ final class ProfileScreenViewModel {
         if next.didLoadTrades, let trades = shellViewModel?.trades {
             trades.prefetchEngagement(for: next.trades.map(\.id))
         }
+
+        Task {
+            await persistProfileStateIfPossible(next, source: source)
+        }
+    }
+
+    private func persistProfileStateIfPossible(_ snapshot: ProfileState, source: PublishSource) async {
+        guard snapshot.phase == .loaded,
+              let userID = await data.session.currentUserID,
+              let targetID = snapshot.profileID ?? contentStore.resolvedProfileID
+        else { return }
+        let viewerID = ProfileID(userID.rawValue)
+        ProfilePersistedCacheCoordinator.persist(
+            viewerID: viewerID,
+            targetProfileID: targetID,
+            state: snapshot,
+            engagementStore: data.engagementStore
+        )
+        #if DEBUG
+        if source == .network {
+            ProfilePersistentCacheProbe.recordNetworkBootstrap(profileID: targetID.rawValue)
+        }
+        #endif
+    }
+
+    private func resolveTargetProfileID() async -> ProfileID? {
+        switch target {
+        case .currentUser:
+            guard let userID = await data.session.currentUserID else { return nil }
+            return ProfileID(userID.rawValue)
+        case .profile(let id):
+            return id
+        }
+    }
+
+    private func buildOwnerPrefetchState(
+        viewerID: ProfileID,
+        targetProfileID: ProfileID
+    ) -> ProfileState? {
+        guard viewerID == targetProfileID else { return nil }
+        guard let profile = data.detailCache.profile(id: viewerID) else { return nil }
+        var prefetched = ProfileState()
+        prefetched.phase = .loaded
+        prefetched.profileID = viewerID
+        prefetched.profile = profile
+        prefetched.stats = data.detailCache.stats(for: viewerID)
+        prefetched.isOwner = true
+        prefetched.canViewTrades = true
+        prefetched.didBootstrap = true
+        prefetched.didResolveTradeRoom = data.detailCache.hasResolvedOwnedTradeRoom(for: viewerID)
+        prefetched.ownedTradeRoom = data.detailCache.ownedTradeRoom(for: viewerID)
+        if let trades = ProfilePersistedCacheCoordinator.hydrateOwnerTradesIfNeeded(
+            ownerID: viewerID,
+            detailCache: data.detailCache
+        ) {
+            prefetched.trades = trades.filter { $0.visibility == .public }
+            prefetched.didLoadTrades = !prefetched.trades.isEmpty
+            prefetched.tradesNextCursor = prefetched.trades.count >= 30 ? "disk" : nil
+        }
+        return prefetched
     }
 
     private func seedOwnerCacheIfNeeded(from currentUserProfile: CurrentUserProfileStore) {
@@ -649,6 +799,19 @@ final class ProfileScreenViewModel {
         if let stats = currentUserProfile.stats, stats.hasLoadedHeaderMetrics {
             data.detailCache.seed(stats: stats)
         }
+        if let profile = currentUserProfile.profile {
+            Task {
+                guard let userID = await data.session.currentUserID else { return }
+                let viewerID = ProfileID(userID.rawValue)
+                SocialEntityDiskCache.saveProfile(profile, viewerID: viewerID)
+            }
+        }
+    }
+
+    private func persistMutationPatch(_ block: (ProfileID) -> Void) async {
+        guard let userID = await data.session.currentUserID else { return }
+        block(ProfileID(userID.rawValue))
+        await persistProfileStateIfPossible(state, source: .network)
     }
 }
 

@@ -93,7 +93,11 @@ struct ActivityHomeView: View {
             await viewModel.refresh()
         }
         .task {
+            ActivityFeedBootstrapPriorityGate.setScreenActive(true)
             viewModel.loadIfNeeded()
+        }
+        .onDisappear {
+            ActivityFeedBootstrapPriorityGate.setScreenActive(false)
         }
         .accessibilityIdentifier("activity.home")
     }
@@ -129,12 +133,17 @@ struct ActivityHomeView: View {
                         .onAppear {
                             viewModel.loadMoreIfNeeded(currentID: row.id)
                         }
-                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                viewModel.delete(row: row)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                             if row.isUnread {
                                 Button {
                                     viewModel.markRead(row: row)
                                 } label: {
-                                    Label("Read", systemImage: "envelope.open")
+                                    Label("Mark as Read", systemImage: "envelope.open")
                                 }
                                 .tint(colors.info)
                             }
@@ -151,6 +160,11 @@ struct ActivityHomeView: View {
                                 } label: {
                                     Label("Mark as Read", systemImage: "envelope.open")
                                 }
+                            }
+                            Button(role: .destructive) {
+                                viewModel.delete(row: row)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
                             }
                             if let actorID = row.notification.actorProfileID {
                                 Button {

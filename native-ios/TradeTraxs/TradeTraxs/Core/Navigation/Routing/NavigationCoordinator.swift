@@ -133,6 +133,8 @@ final class NavigationCoordinator {
         case .story:
             guard store.presentedFullScreen != .newStory else { return }
             present(fullScreen: .newStory)
+        case .withdrawal:
+            present(fullScreen: .withdrawal)
         }
     }
 

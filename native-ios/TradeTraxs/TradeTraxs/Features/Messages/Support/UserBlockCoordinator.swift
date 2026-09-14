@@ -53,6 +53,7 @@ final class UserBlockCoordinator {
         if blocked {
             inboxStore.removeDirectConversations(with: otherID)
             FeedBlockedAuthorsFilter.shared.noteBlock(peerID: otherID)
+            ProfilePersistedCacheCoordinator.pruneBlockedPeer(otherID)
         } else {
             FeedBlockedAuthorsFilter.shared.noteUnblock(peerID: otherID)
         }

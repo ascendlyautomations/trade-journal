@@ -17,6 +17,7 @@ struct SocialSignInButtons: View {
         VStack(spacing: ExperienceSpacing.sm) {
             SignInWithAppleButton(.continue) { request in
                 guard isEnabled, !isLoading else { return }
+                ExperienceKeyboard.dismiss()
                 let nonce = AppleSignInNonce.generate()
                 currentNonce = nonce
                 request.requestedScopes = [.fullName, .email]

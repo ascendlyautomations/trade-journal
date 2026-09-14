@@ -14,6 +14,8 @@ final class MessagesInboxStore {
     private(set) var conversations: [Conversation] = []
     private(set) var rooms: [TradeRoom] = []
     private(set) var roomPreviews: [RoomID: String] = [:]
+    /// Latest room message activity — inbox card timestamps (never render-time fallback).
+    private(set) var roomActivityAt: [RoomID: Date] = [:]
     private(set) var roomUnread: [RoomID: Int] = [:]
     /// DM thread currently open — suppresses inbox unread bumps from home realtime.
     private(set) var activeConversationID: ConversationID?
@@ -35,9 +37,15 @@ final class MessagesInboxStore {
     private var roomUnreadOverrides: [RoomID: Int] = [:]
     private var hiddenConversationIDs: Set<ConversationID> = []
     private var pendingDeleteConversationIDs: Set<ConversationID> = []
+    private(set) var persistedViewerID: ProfileID?
 
     /// Monotonic publish token — SwiftUI observes this for preview/order updates.
     private(set) var activityRevision: UInt64 = 0
+
+    var unreadOverridesForPersistence: [ConversationID: Int] { unreadOverrides }
+    var pinnedConversationIDsForPersistence: Set<ConversationID> { pinnedConversationIDs }
+    var mutedConversationIDsForPersistence: Set<ConversationID> { mutedConversationIDs }
+    var mutedRoomIDsForPersistence: Set<RoomID> { mutedRoomIDs }
 
 #if DEBUG
     /// Non-sensitive store identity for wiring audits.
@@ -74,6 +82,37 @@ final class MessagesInboxStore {
         }
     }
 
+    /// Restores inbox presentation from a viewer-scoped disk snapshot (cold launch).
+    func hydrateFromDisk(
+        viewerID: ProfileID,
+        conversations: [Conversation],
+        rooms: [TradeRoom],
+        roomPreviews: [RoomID: String],
+        roomActivityAt: [RoomID: Date],
+        roomUnread: [RoomID: Int],
+        unreadOverrides: [ConversationID: Int],
+        pinnedConversationIDs: Set<ConversationID>,
+        mutedConversationIDs: Set<ConversationID>,
+        mutedRoomIDs: Set<RoomID>,
+        savedAt: Date
+    ) {
+        persistedViewerID = viewerID
+        self.unreadOverrides = unreadOverrides
+        self.pinnedConversationIDs = pinnedConversationIDs
+        self.mutedConversationIDs = mutedConversationIDs
+        self.mutedRoomIDs = mutedRoomIDs
+        self.conversations = Self.sortConversationsDesc(conversations, pinned: pinnedConversationIDs)
+        DirectConversationPairIndex.shared.rebuild(from: self.conversations)
+        self.rooms = rooms.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        self.roomPreviews = roomPreviews
+        self.roomActivityAt = roomActivityAt
+        self.roomUnread = roomUnread
+        hasLoaded = !conversations.isEmpty || !rooms.isEmpty
+        hasLoadedRooms = !rooms.isEmpty
+        lastLoadedAt = savedAt
+        bumpActivityRevision()
+    }
+
     func replaceConversations(_ items: [Conversation]) {
         let unhideIDs = Set(items.map(\.id)).subtracting(pendingDeleteConversationIDs)
         hiddenConversationIDs.subtract(unhideIDs)
@@ -106,6 +145,7 @@ final class MessagesInboxStore {
         hasLoaded = true
         lastLoadedAt = .now
         bumpActivityRevision()
+        persistSnapshotIfPossible()
     }
 
     /// Merge bootstrap rows without clobbering newer local send/realtime activity.
@@ -155,6 +195,7 @@ final class MessagesInboxStore {
             forceNetwork: false
         )
 #endif
+        persistSnapshotIfPossible()
     }
 
     /// Merge a denormalized server conversation row (legacy REST revalidation only).
@@ -288,7 +329,12 @@ final class MessagesInboxStore {
 #endif
     }
 
-    func replaceRooms(_ items: [TradeRoom], previews: [RoomID: String] = [:], unread: [RoomID: Int] = [:]) {
+    func replaceRooms(
+        _ items: [TradeRoom],
+        previews: [RoomID: String] = [:],
+        activityAt: [RoomID: Date] = [:],
+        unread: [RoomID: Int] = [:]
+    ) {
         let preservedCounts = Dictionary(uniqueKeysWithValues: rooms.map { ($0.id, $0.memberCount) })
         rooms = items.map { item in
             var room = item
@@ -300,6 +346,7 @@ final class MessagesInboxStore {
         }
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         if !previews.isEmpty { roomPreviews.merge(previews) { _, new in new } }
+        if !activityAt.isEmpty { roomActivityAt.merge(activityAt) { existing, incoming in max(existing, incoming) } }
         if !unread.isEmpty {
             var merged = roomUnread
             var nextOverrides = roomUnreadOverrides
@@ -316,6 +363,7 @@ final class MessagesInboxStore {
             roomUnread = merged
         }
         hasLoadedRooms = true
+        persistSnapshotIfPossible()
     }
 
     func applyMemberCounts(_ counts: [RoomID: Int]) {
@@ -368,6 +416,7 @@ final class MessagesInboxStore {
         DirectConversationPairIndex.shared.register(conversation: conversation)
         hasLoaded = true
         bumpActivityRevision()
+        persistSnapshotIfPossible()
     }
 
     private func bumpActivityRevision() {
@@ -389,6 +438,7 @@ final class MessagesInboxStore {
         unreadOverrides.removeValue(forKey: id)
         DirectConversationPairIndex.shared.rebuild(from: conversations)
         bumpActivityRevision()
+        persistSnapshotIfPossible()
     }
 
     /// Hide 1:1 threads with a blocked peer — mirrors web hidden blocked DM inbox behavior.
@@ -420,8 +470,10 @@ final class MessagesInboxStore {
     func removeRoom(id: RoomID) {
         rooms.removeAll { $0.id == id }
         roomPreviews.removeValue(forKey: id)
+        roomActivityAt.removeValue(forKey: id)
         roomUnread.removeValue(forKey: id)
         mutedRoomIDs.remove(id)
+        persistSnapshotIfPossible()
     }
 
     func isMuted(_ id: ConversationID) -> Bool {
@@ -599,6 +651,7 @@ final class MessagesInboxStore {
         conversations = []
         rooms = []
         roomPreviews = [:]
+        roomActivityAt = [:]
         roomUnread = [:]
         activeConversationID = nil
         activeRoomID = nil
@@ -615,7 +668,17 @@ final class MessagesInboxStore {
         hiddenConversationIDs = []
         pendingDeleteConversationIDs = []
         activityRevision = 0
+        persistedViewerID = nil
         DirectConversationPairIndex.shared.invalidate()
+    }
+
+    func setPersistedViewerID(_ viewerID: ProfileID) {
+        persistedViewerID = viewerID
+    }
+
+    private func persistSnapshotIfPossible() {
+        guard let persistedViewerID else { return }
+        SocialPersistedCacheCoordinator.persistInbox(viewerID: persistedViewerID, from: self)
     }
 
 #if DEBUG

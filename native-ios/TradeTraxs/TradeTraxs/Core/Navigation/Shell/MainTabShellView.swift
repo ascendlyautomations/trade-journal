@@ -26,7 +26,9 @@ struct MainTabShellView: View {
         .tabViewStyle(.tabBarOnly)
         .experienceAppChrome()
         .vaultConfirmationOverlay(store: appEnvironment.data.vaultStore)
-        .onChange(of: store.selectedTab) { _, _ in
+        .onChange(of: store.selectedTab) { _, tab in
+            MainThreadOperationTracker.push("tab.select.\(tab.rawValue)")
+            defer { MainThreadOperationTracker.pop("tab.select.\(tab.rawValue)") }
             OwnerAccountFilterDropdownController.shared.dismiss()
         }
         .onChange(of: ContentMutationStore.shared.revision) { _, _ in
@@ -62,10 +64,12 @@ struct MainTabShellView: View {
                     authenticationCoordinator: authenticationCoordinator,
                     currentUserProfile: currentUserProfile
                 )
+                .tabActivation(isActive: store.selectedTab == .home)
             }
 
             Tab(TabIdentifier.feed.displayName, systemImage: TabIdentifier.feed.systemImage, value: TabIdentifier.feed) {
                 FeedNavigationStack(store: store, coordinator: coordinator)
+                    .tabActivation(isActive: store.selectedTab == .feed)
             }
 
             Tab(TabIdentifier.create.displayName, systemImage: TabIdentifier.create.systemImage, value: TabIdentifier.create) {
@@ -80,6 +84,7 @@ struct MainTabShellView: View {
                     authenticationCoordinator: authenticationCoordinator,
                     currentUserProfile: currentUserProfile
                 )
+                .tabActivation(isActive: store.selectedTab == .messages)
             }
 
             // Profile tab — circular session avatar when available; SF Symbol fallback.
@@ -90,6 +95,7 @@ struct MainTabShellView: View {
                     authenticationCoordinator: authenticationCoordinator,
                     currentUserProfile: currentUserProfile
                 )
+                .tabActivation(isActive: store.selectedTab == .profile)
             } label: {
                 Label {
                     Text(TabIdentifier.profile.displayName)
@@ -293,7 +299,7 @@ struct HomeNavigationStack: View {
         case .achievementDetail: return "Achievement"
         case .streaks: return "Streaks"
         case .reports: return "Reports"
-        case .payouts: return "Payouts"
+        case .payouts: return "Withdrawals"
         case .report: return "Report"
         case .psychologyAnalytics: return "Psychology Analytics"
         case .psychologyCoach: return "Psychology Coach"

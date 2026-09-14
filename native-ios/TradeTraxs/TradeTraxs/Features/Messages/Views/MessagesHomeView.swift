@@ -9,6 +9,14 @@ struct MessagesHomeView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.tabIsActive) private var tabIsActive
+
+    @State private var tradeRoomsSectionExpanded = false
+    @State private var directMessagesSectionExpanded = false
+
+    private enum InboxSectionPreview {
+        static let limit = 4
+    }
 
     init(
         data: DataEnvironment,
@@ -91,12 +99,20 @@ struct MessagesHomeView: View {
         .refreshable {
             await viewModel.refresh()
         }
-        .task {
+        .task(id: tabIsActive) {
+            guard tabIsActive else {
+                viewModel.setHomeScreenVisible(false)
+                viewModel.releaseRealtime()
+                return
+            }
 #if DEBUG
             SafeInboxLog.storeObserved(instance: inboxStore.debugInstance, source: "MessagesHomeView")
 #endif
             viewModel.setHomeScreenVisible(true)
-            defer { viewModel.setHomeScreenVisible(false) }
+            defer {
+                viewModel.setHomeScreenVisible(false)
+                viewModel.releaseRealtime()
+            }
             await viewModel.bootstrapIfNeeded()
         }
         .sheet(isPresented: $viewModel.showsNewChat) {
@@ -193,9 +209,15 @@ struct MessagesHomeView: View {
                 }
             }
 
+            if let ownedRoom = viewModel.ownedTradeRoomItem {
+                Section("Your Trade Room") {
+                    tradeRoomRow(ownedRoom)
+                }
+            }
+
             if !viewModel.directMessageItems.isEmpty {
                 Section("Direct Messages") {
-                    ForEach(viewModel.directMessageItems) { item in
+                    ForEach(displayedDirectMessageItems) { item in
                         conversationButton(item)
                             .listRowBackground(colors.backgroundPrimary)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -208,25 +230,19 @@ struct MessagesHomeView: View {
                                 conversationPreview(item)
                             }
                     }
+                    if showsDirectMessagesSectionToggle {
+                        inboxSectionToggle(expanded: $directMessagesSectionExpanded)
+                    }
                 }
             }
 
-            if !viewModel.tradeRoomItems.isEmpty {
+            if !viewModel.joinedTradeRoomItems.isEmpty {
                 Section {
-                    ForEach(viewModel.tradeRoomItems) { item in
-                        Button {
-                            viewModel.openRoom(item)
-                        } label: {
-                            TradeRoomInboxRowView(item: item, imagePipeline: imagePipeline)
-                        }
-                        .buttonStyle(.plain)
-                        .listRowBackground(colors.backgroundSecondary)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            roomTrailingActions(item)
-                        }
-                        .contextMenu { roomContextMenu(item) } preview: {
-                            roomPreview(item)
-                        }
+                    ForEach(displayedJoinedTradeRoomItems) { item in
+                        tradeRoomRow(item)
+                    }
+                    if showsJoinedTradeRoomsSectionToggle {
+                        inboxSectionToggle(expanded: $tradeRoomsSectionExpanded)
                     }
                 } header: {
                     HStack(spacing: ExperienceSpacing.xs) {
@@ -244,6 +260,59 @@ struct MessagesHomeView: View {
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.searchText)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: orderSignature)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: inboxStore.activityRevision)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: tradeRoomsSectionExpanded)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: directMessagesSectionExpanded)
+    }
+
+    private var displayedJoinedTradeRoomItems: [TradeRoomInboxItem] {
+        previewSlice(viewModel.joinedTradeRoomItems, expanded: tradeRoomsSectionExpanded)
+    }
+
+    private var displayedDirectMessageItems: [DirectMessageInboxItem] {
+        previewSlice(viewModel.directMessageItems, expanded: directMessagesSectionExpanded)
+    }
+
+    private var showsJoinedTradeRoomsSectionToggle: Bool {
+        viewModel.joinedTradeRoomItems.count > InboxSectionPreview.limit
+    }
+
+    @ViewBuilder
+    private func tradeRoomRow(_ item: TradeRoomInboxItem) -> some View {
+        Button {
+            viewModel.openRoom(item)
+        } label: {
+            TradeRoomInboxRowView(item: item, imagePipeline: imagePipeline)
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(colors.backgroundSecondary)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            roomTrailingActions(item)
+        }
+        .contextMenu { roomContextMenu(item) } preview: {
+            roomPreview(item)
+        }
+    }
+
+    private var showsDirectMessagesSectionToggle: Bool {
+        viewModel.directMessageItems.count > InboxSectionPreview.limit
+    }
+
+    private func previewSlice<T>(_ items: [T], expanded: Bool) -> [T] {
+        guard !expanded, items.count > InboxSectionPreview.limit else { return items }
+        return Array(items.prefix(InboxSectionPreview.limit))
+    }
+
+    private func inboxSectionToggle(expanded: Binding<Bool>) -> some View {
+        Button {
+            expanded.wrappedValue.toggle()
+        } label: {
+            Text(expanded.wrappedValue ? "Show Less" : "Show More")
+                .experienceStyle(.subheadline, color: colors.accent)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(colors.backgroundPrimary)
+        .accessibilityLabel(expanded.wrappedValue ? "Show less" : "Show more")
     }
 
     private func conversationButton(_ item: DirectMessageInboxItem) -> some View {

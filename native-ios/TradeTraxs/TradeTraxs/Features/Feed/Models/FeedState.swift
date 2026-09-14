@@ -14,6 +14,9 @@ struct FeedState: Equatable {
 
     var phase: Phase = .idle
     var entries: [FeedTimelineEntry] = []
+    /// Precomputed visible rows — avoids O(n) filtering during SwiftUI body evaluation.
+    var cachedVisibleEntries: [FeedTimelineEntry] = []
+    var cachedVisibleEntryIDs: [String] = []
     var stories: [Story] = []
     var scope: FeedScope = .following
     var contentFilter: FeedContentFilter = .all
@@ -30,13 +33,19 @@ struct FeedState: Equatable {
     /// Filter cache keys confirmed empty by an authoritative first-page load this session.
     var knownEmptyFilterKeys: Set<String> = []
 
-    var visibleEntries: [FeedTimelineEntry] {
-        entries.filter { $0.matches(filter: contentFilter) }
+    mutating func rebuildVisibleEntries(blockedPeerIDs: Set<ProfileID>) {
+        let filtered = entries.filter { $0.matches(filter: contentFilter) }
+        if blockedPeerIDs.isEmpty {
+            cachedVisibleEntries = filtered
+        } else {
+            cachedVisibleEntries = filtered.filter { !blockedPeerIDs.contains($0.authorProfileID) }
+        }
+        cachedVisibleEntryIDs = cachedVisibleEntries.map(\.id)
     }
 
     var showsEmpty: Bool {
         guard phase == .loaded, !isQueryReloadInProgress else { return false }
-        guard visibleEntries.isEmpty else { return false }
+        guard cachedVisibleEntries.isEmpty else { return false }
         guard let key = Self.firstPageCacheKey(viewerID: viewerID, scope: scope, contentFilter: contentFilter) else {
             return false
         }

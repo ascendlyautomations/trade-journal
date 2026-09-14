@@ -734,6 +734,15 @@ nonisolated enum MessageDTO {
         var created_at: String?
         var is_read: Bool?
         var deleted_for_everyone: Bool?
+        var message_reactions: [MessageReactionRow]?
+    }
+
+    struct MessageReactionRow: Codable, Sendable {
+        var id: String?
+        var message_id: String?
+        var user_id: String?
+        var reaction: String?
+        var created_at: String?
     }
 }
 
@@ -779,6 +788,26 @@ nonisolated enum RoomDTO {
         var created_at: String?
         var is_pinned: Bool?
         var room_message_reactions: [ReactionRow]?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case room_id
+            case sender_id
+            case sender_profile_id
+            case user_id
+            case type
+            case body
+            case content
+            case image_url
+            case audio_url
+            case audio_duration_ms
+            case trade_id
+            case section_id
+            case parent_message_id
+            case created_at
+            case is_pinned = "pinned"
+            case room_message_reactions
+        }
     }
 
     struct ReactionRow: Codable, Sendable {

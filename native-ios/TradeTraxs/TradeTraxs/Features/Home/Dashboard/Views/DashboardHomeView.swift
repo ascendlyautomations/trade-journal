@@ -5,6 +5,7 @@ struct DashboardHomeView: View {
     @State private var viewModel: DashboardViewModel
     @State private var activityStore = ActivityInboxStore.shared
     @State private var contentRevealed = false
+    @State private var deferredDashboardBootstrapStarted = false
     @State private var gettingStartedStore = GettingStartedStore.shared
     @State private var dailyCheckInStore = TraderDailyCheckInStore.shared
     private let navigationCoordinator: NavigationCoordinator
@@ -12,6 +13,7 @@ struct DashboardHomeView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.tabIsActive) private var tabIsActive
 
     init(
         data: DataEnvironment,
@@ -107,25 +109,20 @@ struct DashboardHomeView: View {
         .refreshable {
             await viewModel.refresh()
         }
-        .task {
+        .task(id: tabIsActive) {
+            guard tabIsActive else { return }
             viewModel.loadIfNeeded()
-            gettingStartedStore.loadIfNeeded()
-            dailyCheckInStore.loadIfNeeded()
-            if let data {
-                activityStore.ensureUnreadBootstrap(
-                    notifications: data.notifications,
-                    session: data.session,
-                    realtimeHub: data.realtimeHub,
-                    detailCache: data.detailCache,
-                    rpc: data.rpc
-                )
-            }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-uitesting-dashboard-propfirm") {
                 try? await Task.sleep(nanoseconds: 200_000_000)
                 viewModel.setAccountFilter(.account(PropFirmFixtures.accountID))
             }
             #endif
+        }
+        .onChange(of: viewModel.phase, initial: true) { _, phase in
+            guard tabIsActive else { return }
+            guard phase == .loaded || viewModel.summary != nil else { return }
+            startDeferredDashboardBootstrapIfNeeded()
         }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
             viewModel.handleJournalMutation()
@@ -190,7 +187,7 @@ struct DashboardHomeView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 DashboardFilterBar(viewModel: viewModel)
-                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.horizontal, ExperienceSpacing.sm)
                     .padding(.top, ExperienceSpacing.xs)
                     .padding(.bottom, ExperienceSpacing.sm)
 
@@ -391,6 +388,25 @@ struct DashboardHomeView: View {
         case .neutral: return colors.primaryText
         case .positive: return colors.profit
         case .negative: return colors.loss
+        }
+    }
+
+    /// Activity bell, Getting Started, and check-in hydrate after dashboard first paint.
+    private func startDeferredDashboardBootstrapIfNeeded() {
+        guard !deferredDashboardBootstrapStarted else { return }
+        deferredDashboardBootstrapStarted = true
+        Task(priority: .utility) {
+            gettingStartedStore.loadIfNeeded()
+            dailyCheckInStore.loadIfNeeded()
+            if let data {
+                activityStore.ensureUnreadBootstrap(
+                    notifications: data.notifications,
+                    session: data.session,
+                    realtimeHub: data.realtimeHub,
+                    detailCache: data.detailCache,
+                    rpc: data.rpc
+                )
+            }
         }
     }
 }

@@ -140,7 +140,7 @@ final class AuthenticationPlatformTests: XCTestCase {
     }
 
     func testBootstrapWiresAuthentication() {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         XCTAssertNotNil(environment.authentication.manager)
         XCTAssertNotNil(environment.data.authentication)
         XCTAssertFalse(environment.authentication.configuration.keychainService.isEmpty)

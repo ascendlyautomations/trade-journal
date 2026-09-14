@@ -8,9 +8,20 @@ import Foundation
 nonisolated enum TradePersistedCacheCoordinator {
     static func noteUpserted(_ trade: Trade) {
         BackendV2BootstrapDiskCache.patchTrade(trade, viewerID: trade.ownerProfileID.rawValue)
+        Task { @MainActor in
+            ViewerSyncStateRuntime.noteLocalMutation(viewerID: trade.ownerProfileID)
+            let viewerID = trade.ownerProfileID
+            ProfilePersistedCacheCoordinator.patchTrade(trade, viewerID: viewerID)
+            FeedPersistedCacheCoordinator.patchTrade(trade, viewerID: viewerID)
+        }
     }
 
     static func noteDeleted(id: TradeID, owner: ProfileID) {
         BackendV2BootstrapDiskCache.removeTrade(id: id.rawValue, viewerID: owner.rawValue)
+        Task { @MainActor in
+            ViewerSyncStateRuntime.noteLocalMutation(viewerID: owner)
+            ProfilePersistedCacheCoordinator.removeTrade(id: id, owner: owner, viewerID: owner)
+            FeedPersistedCacheCoordinator.removeEntry(viewerID: owner, entryID: id.rawValue)
+        }
     }
 }

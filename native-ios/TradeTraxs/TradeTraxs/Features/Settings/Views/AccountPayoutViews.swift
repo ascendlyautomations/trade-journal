@@ -102,27 +102,47 @@ struct AccountPayoutListContent: View {
     }
 }
 
+enum AccountPayoutEditorCopy: Sendable {
+    case manageAccount
+    case payoutHistory
+
+    var addTitle: String {
+        switch self {
+        case .manageAccount: return "Add Payout"
+        case .payoutHistory: return "Edit Payout"
+        }
+    }
+
+    var editTitle: String { "Edit Payout" }
+
+    var amountLabel: String { "Amount" }
+    var dateLabel: String { "Payout Date" }
+}
+
 struct AccountPayoutEditorSheet: View {
     @Bindable var viewModel: ManageAccountsViewModel
     let accountID: TradingAccountID
     let editingEntryID: AccountPayoutEntryID?
     @Binding var draft: AccountPayoutEntryDraft
     @Binding var isPresented: Bool
+    var copy: AccountPayoutEditorCopy = .manageAccount
 
     var body: some View {
         NavigationStack {
             Form {
-                SettingsLabeledField(title: "Amount", helper: "USD") {
+                SettingsLabeledField(title: copy.amountLabel, helper: "USD") {
                     TextField("0", text: $draft.amountDigits)
                         .keyboardType(.decimalPad)
                 }
-                DatePicker("Payout Date", selection: $draft.payoutDate, displayedComponents: .date)
+                DatePicker(copy.dateLabel, selection: $draft.payoutDate, displayedComponents: .date)
                 SettingsLabeledField(title: "Note", helper: "Optional") {
                     TextField("Optional", text: $draft.note, axis: .vertical)
                         .lineLimit(2...3)
                 }
             }
-            .experienceNavigationTitle(editingEntryID == nil ? "Add Payout" : "Edit Payout")
+            .experienceNavigationTitle(
+                editingEntryID == nil ? copy.addTitle : copy.editTitle
+            )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { isPresented = false }

@@ -80,6 +80,20 @@ nonisolated enum BackendV2BootstrapDiskCache {
         return (blob.bootstrap, freshness)
     }
 
+    /// Promote soft-stale blobs to fresh without changing bootstrap payloads.
+    static func touchSession(viewerID: String) {
+        guard var blob: SessionBlob = read(file: sessionFile(viewerID: viewerID)) else { return }
+        blob.savedAt = Date()
+        write(blob, file: sessionFile(viewerID: viewerID))
+    }
+
+    static func touchDashboard(viewerID: String, accountScope: String = "all") {
+        guard var blob: DashboardBlob = read(file: dashboardFile(viewerID: viewerID, accountScope: accountScope))
+        else { return }
+        blob.savedAt = Date()
+        write(blob, file: dashboardFile(viewerID: viewerID, accountScope: accountScope))
+    }
+
     static func clearAll(viewerID: String? = nil) {
         guard let dir = directoryURL() else { return }
         guard let contents = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
@@ -106,6 +120,31 @@ nonisolated enum BackendV2BootstrapDiskCache {
             cached.bootstrap.data.trade_window[index].mergeJournalFields(from: trade)
         } else {
             cached.bootstrap.data.trade_window.insert(trade.asDashboardWireV1(), at: 0)
+        }
+        cached.savedAt = Date()
+        write(cached, file: dashboardFile(viewerID: viewerID, accountScope: accountScope))
+    }
+
+    /// Replace the full accounts array inside a cached dashboard bootstrap payload.
+    static func replaceAccounts(_ accounts: [TradingAccount], viewerID: String, accountScope: String = "all") {
+        guard var cached = loadMutableDashboard(viewerID: viewerID, accountScope: accountScope) else {
+            return
+        }
+        cached.bootstrap.data.accounts = accounts.map { $0.asDashboardWireV1() }
+        cached.savedAt = Date()
+        write(cached, file: dashboardFile(viewerID: viewerID, accountScope: accountScope))
+    }
+
+    /// Patch one account row inside a cached dashboard bootstrap payload.
+    static func patchAccount(_ account: TradingAccount, viewerID: String, accountScope: String = "all") {
+        guard var cached = loadMutableDashboard(viewerID: viewerID, accountScope: accountScope) else {
+            return
+        }
+        let accountID = account.id.rawValue
+        if let index = cached.bootstrap.data.accounts.firstIndex(where: { $0.id == accountID }) {
+            cached.bootstrap.data.accounts[index].mergeFields(from: account)
+        } else {
+            cached.bootstrap.data.accounts.insert(account.asDashboardWireV1(), at: 0)
         }
         cached.savedAt = Date()
         write(cached, file: dashboardFile(viewerID: viewerID, accountScope: accountScope))
@@ -160,6 +199,7 @@ nonisolated enum BackendV2BootstrapDiskCache {
                 try FileManager.default.removeItem(at: url)
             }
             try FileManager.default.moveItem(at: temp, to: url)
+            DiskCacheIOProbe.recordWrite()
         } catch {
             try? FileManager.default.removeItem(at: temp)
         }
@@ -169,6 +209,53 @@ nonisolated enum BackendV2BootstrapDiskCache {
         guard let dir = directoryURL() else { return nil }
         let url = dir.appendingPathComponent(file)
         guard let data = try? Data(contentsOf: url) else { return nil }
+        DiskCacheIOProbe.recordRead()
         return try? JSONDecoder().decode(T.self, from: data)
     }
+
+    #if DEBUG
+    /// Force session + dashboard disk caches into soft-stale without changing production TTL constants.
+    static func forceSoftStaleForTesting(viewerID: String, accountScope: String = "all") {
+        let staleDate = Date().addingTimeInterval(-(11 * 60))
+        if var session: SessionBlob = read(file: sessionFile(viewerID: viewerID)) {
+            session.savedAt = staleDate
+            write(session, file: sessionFile(viewerID: viewerID))
+        }
+        if var dashboard: DashboardBlob = read(file: dashboardFile(viewerID: viewerID, accountScope: accountScope)) {
+            dashboard.savedAt = staleDate
+            write(dashboard, file: dashboardFile(viewerID: viewerID, accountScope: accountScope))
+        }
+    }
+
+    /// Test helper — write dashboard cache with an explicit saved-at for soft-stale simulation.
+    static func saveDashboardForTesting(
+        _ bootstrap: DashboardBootstrapV1,
+        viewerID: String,
+        accountScope: String = "all",
+        savedAt: Date
+    ) {
+        let blob = DashboardBlob(
+            viewerID: viewerID,
+            accountScope: accountScope,
+            contractVersion: bootstrap.meta.contract_version,
+            savedAt: savedAt,
+            bootstrap: bootstrap
+        )
+        write(blob, file: dashboardFile(viewerID: viewerID, accountScope: accountScope))
+    }
+
+    static func saveSessionForTesting(
+        _ bootstrap: SessionBootstrapV1,
+        viewerID: String,
+        savedAt: Date
+    ) {
+        let blob = SessionBlob(
+            viewerID: viewerID,
+            contractVersion: bootstrap.meta.contract_version,
+            savedAt: savedAt,
+            bootstrap: bootstrap
+        )
+        write(blob, file: sessionFile(viewerID: viewerID))
+    }
+    #endif
 }

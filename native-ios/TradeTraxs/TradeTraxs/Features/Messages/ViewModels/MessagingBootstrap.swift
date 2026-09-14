@@ -75,10 +75,10 @@ enum MessagingBootstrap: ScreenBootstrap {
         )
 
         let conversationResult = try await conversationsTask
-        let (memberRooms, roomUnread) = try await roomsTask
+        let (memberRooms, roomUnread, roomActivityAt) = try await roomsTask
 
         context.inboxStore.replaceConversations(conversationResult.items)
-        context.inboxStore.replaceRooms(memberRooms, unread: roomUnread)
+        context.inboxStore.replaceRooms(memberRooms, activityAt: roomActivityAt, unread: roomUnread)
 
         SessionProfileStore.shared.seed(
             conversationResult.embeddedProfiles,
@@ -138,12 +138,12 @@ enum MessagingBootstrap: ScreenBootstrap {
             )
         }
 
-        let (memberRooms, unread) = try await SessionMemberRoomsStore.shared.memberRooms(
+        let (memberRooms, unread, activityAt) = try await SessionMemberRoomsStore.shared.memberRooms(
             for: viewer,
             repository: context.rooms,
             forceNetwork: context.forceNetwork
         )
-        context.inboxStore.replaceRooms(memberRooms, unread: unread)
+        context.inboxStore.replaceRooms(memberRooms, activityAt: activityAt, unread: unread)
         let owners = await hydrateOwners(
             for: memberRooms,
             profiles: context.profiles,

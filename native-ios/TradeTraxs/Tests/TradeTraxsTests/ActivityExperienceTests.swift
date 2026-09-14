@@ -163,10 +163,35 @@ final class ActivityExperienceTests: XCTestCase {
             notifications: repo,
             followRequests: ActivityStubFollowRequestRepository(),
             session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
-            realtimeHub: nil
+            realtimeHub: nil,
+            feedPresentation: true
         )
         XCTAssertEqual(repo.notificationsPageCallCount, 1)
         XCTAssertTrue(ActivityInboxStore.shared.hasLoaded)
+        XCTAssertFalse(ActivityInboxStore.shared.items.isEmpty)
+    }
+
+    func testFeedPresentationSyncsWhenDiskCacheAlreadyLoaded() async {
+        let repo = ActivityStubNotificationRepository(
+            items: ActivityFixtures.notifications(),
+            profiles: ActivityFixtures.profiles()
+        )
+        ActivityFixtures.seedStore(ActivityInboxStore.shared)
+        XCTAssertTrue(ActivityInboxStore.shared.hasLoaded)
+        await ActivityInboxStore.shared.bootstrapUnreadIfNeeded(
+            notifications: repo,
+            session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
+            realtimeHub: nil
+        )
+        XCTAssertEqual(repo.notificationsPageCallCount, 0)
+        await ActivityInboxStore.shared.startIfNeeded(
+            notifications: repo,
+            followRequests: ActivityStubFollowRequestRepository(),
+            session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
+            realtimeHub: nil,
+            feedPresentation: true
+        )
+        XCTAssertEqual(repo.notificationsPageCallCount, 1)
         XCTAssertFalse(ActivityInboxStore.shared.items.isEmpty)
     }
 
@@ -193,6 +218,92 @@ final class ActivityExperienceTests: XCTestCase {
         XCTAssertEqual(profileRepo.profilesBatchCallCount, 1)
         XCTAssertEqual(Set(profileRepo.lastBatchIDs), Set(ActivityFixtures.profiles().map(\.id)))
         XCTAssertEqual(viewModel.phase, .loaded)
+    }
+
+    func testDeleteRemovesLocallyAndPersistsViaRepository() async {
+        let repo = ActivityStubNotificationRepository(
+            items: ActivityFixtures.notifications(),
+            profiles: ActivityFixtures.profiles()
+        )
+        ActivityFixtures.seedStore(ActivityInboxStore.shared)
+        let target = NotificationID("act-like-1")
+        let viewModel = ActivityHomeViewModel(
+            notifications: repo,
+            followRequests: ActivityStubFollowRequestRepository(),
+            profiles: ActivityStubProfileRepository(),
+            session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: .shared,
+            router: NotificationRouter()
+        )
+        let row = ActivityPresentation.sections(
+            from: ActivityInboxStore.shared.items,
+            actors: Dictionary(uniqueKeysWithValues: ActivityFixtures.profiles().map { ($0.id, $0) })
+        ).flatMap(\.rows).first { $0.id == target }
+        XCTAssertNotNil(row)
+        viewModel.delete(row: row!)
+        XCTAssertFalse(ActivityInboxStore.shared.items.contains { $0.id == target })
+        XCTAssertEqual(ActivityInboxStore.shared.unreadCount, 1)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(repo.deleteCallCount, 1)
+        XCTAssertEqual(repo.lastDeletedIDs, [target])
+    }
+
+    func testDeleteRollbackOnFailure() async {
+        let repo = ActivityStubNotificationRepository(
+            items: ActivityFixtures.notifications(),
+            profiles: ActivityFixtures.profiles(),
+            shouldFailDelete: true
+        )
+        ActivityFixtures.seedStore(ActivityInboxStore.shared)
+        let target = NotificationID("act-like-1")
+        let viewModel = ActivityHomeViewModel(
+            notifications: repo,
+            followRequests: ActivityStubFollowRequestRepository(),
+            profiles: ActivityStubProfileRepository(),
+            session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: .shared,
+            router: NotificationRouter()
+        )
+        let row = ActivityPresentation.sections(
+            from: ActivityInboxStore.shared.items,
+            actors: Dictionary(uniqueKeysWithValues: ActivityFixtures.profiles().map { ($0.id, $0) })
+        ).flatMap(\.rows).first { $0.id == target }
+        viewModel.delete(row: row!)
+        XCTAssertFalse(ActivityInboxStore.shared.items.contains { $0.id == target })
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(ActivityInboxStore.shared.items.contains { $0.id == target })
+        XCTAssertEqual(ActivityInboxStore.shared.unreadCount, 2)
+    }
+
+    func testMarkReadRowPersistsViaRepository() async {
+        let repo = ActivityStubNotificationRepository(
+            items: ActivityFixtures.notifications(),
+            profiles: ActivityFixtures.profiles()
+        )
+        ActivityFixtures.seedStore(ActivityInboxStore.shared)
+        let target = NotificationID("act-like-1")
+        let viewModel = ActivityHomeViewModel(
+            notifications: repo,
+            followRequests: ActivityStubFollowRequestRepository(),
+            profiles: ActivityStubProfileRepository(),
+            session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: .shared,
+            router: NotificationRouter()
+        )
+        let row = ActivityPresentation.sections(
+            from: ActivityInboxStore.shared.items,
+            actors: Dictionary(uniqueKeysWithValues: ActivityFixtures.profiles().map { ($0.id, $0) })
+        ).flatMap(\.rows).first { $0.id == target }
+        viewModel.markRead(row: row!)
+        XCTAssertEqual(ActivityInboxStore.shared.unreadCount, 1)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(repo.items.first { $0.id == target }?.isRead == true)
     }
 
     func testMarkAllReadPersistsViaRepository() async {
@@ -408,20 +519,25 @@ private final class ActivityStubNotificationRepository: NotificationRepository, 
     var items: [ActivityNotification]
     var profiles: [Profile]
     var shouldFail: Bool
+    var shouldFailDelete: Bool
     private(set) var profilesCallCount = 0
     private(set) var lastProfileIDs: [ProfileID] = []
     private(set) var markAllReadCallCount = 0
     private(set) var notificationsPageCallCount = 0
     private(set) var unreadCountCallCount = 0
+    private(set) var deleteCallCount = 0
+    private(set) var lastDeletedIDs: [NotificationID] = []
 
     init(
         items: [ActivityNotification] = ActivityFixtures.notifications(),
         profiles: [Profile] = ActivityFixtures.profiles(),
-        shouldFail: Bool = false
+        shouldFail: Bool = false,
+        shouldFailDelete: Bool = false
     ) {
         self.items = items
         self.profiles = profiles
         self.shouldFail = shouldFail
+        self.shouldFailDelete = shouldFailDelete
     }
 
     func notifications(page: PageRequest) async throws -> CursorPage<ActivityNotification> {
@@ -485,6 +601,20 @@ private final class ActivityStubNotificationRepository: NotificationRepository, 
             copy.isRead = true
             return copy
         }
+    }
+
+    func delete(id: NotificationID) async throws {
+        _ = try await delete(ids: [id])
+    }
+
+    func delete(ids: [NotificationID]) async throws -> Int {
+        deleteCallCount += 1
+        lastDeletedIDs = ids
+        if shouldFailDelete { throw AppError.unknown(message: "delete failed") }
+        let targets = Set(ids)
+        let removed = items.filter { targets.contains($0.id) }
+        items.removeAll { targets.contains($0.id) }
+        return removed.count
     }
 
     func profiles(ids: [ProfileID]) async throws -> [Profile] {

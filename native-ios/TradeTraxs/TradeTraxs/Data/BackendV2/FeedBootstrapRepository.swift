@@ -118,12 +118,17 @@ enum FeedBootstrapLoader {
 
         #if DEBUG
         if cursor == nil {
+            let resolved = FeedSessionStore.shared.resolvedEntries(
+                viewerID: viewerID,
+                scope: scope,
+                contentFilter: contentFilter
+            )
             FeedFilterCacheProbe.logHydrate(
                 filter: contentFilter,
                 scope: scope,
-                source: .none,
-                cachedCount: 0,
-                knownEmpty: false
+                source: resolved.entries.isEmpty ? .none : resolved.source,
+                cachedCount: resolved.entries.count,
+                knownEmpty: resolved.entries.isEmpty
             )
         }
         #endif
@@ -190,7 +195,7 @@ enum FeedBootstrapLoader {
         #endif
 
         let feedItemOrder = applied.items.filter { $0.kind != .story }.map(\.id)
-        var entries = FeedSupport.sortDescending(
+        let entries = FeedSupport.sortDescending(
             FeedBootstrap.buildEntriesFromSeededItems(applied.items, detailCache: detailCache)
         )
 
@@ -204,15 +209,18 @@ enum FeedBootstrapLoader {
         }
 
         if cursor == nil {
-            FeedSessionStore.shared.save(
-                FeedSessionStore.Snapshot(
-                    cacheKey: cacheKey,
-                    entries: entries,
-                    stories: applied.stories,
-                    nextCursor: applied.nextCursor,
-                    loadedAt: Date()
-                )
+            let snapshot = FeedSessionStore.Snapshot(
+                cacheKey: cacheKey,
+                entries: entries,
+                stories: applied.stories,
+                nextCursor: applied.nextCursor,
+                loadedAt: Date()
             )
+            FeedSessionStore.shared.save(snapshot)
+            FeedPersistedCacheCoordinator.persist(snapshot: snapshot)
+            #if DEBUG
+            FeedPersistentCacheProbe.recordNetworkBootstrap(items: entries.count)
+            #endif
         }
 
         return (

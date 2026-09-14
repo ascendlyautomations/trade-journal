@@ -75,6 +75,9 @@ export async function POST(req: Request) {
 
     const prompt = buildPsychologyCoachUserPrompt(facts, mode, messages)
 
+    const maxTokens =
+      mode === "reportSummary" ? 320 : mode === "summary" ? 400 : 800
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -85,8 +88,8 @@ export async function POST(req: Request) {
           content: message.content,
         })),
       ],
-      temperature: 0.4,
-      max_tokens: 800,
+      temperature: mode === "reportSummary" ? 0.3 : 0.4,
+      max_tokens: maxTokens,
     })
 
     const reply = completion.choices[0]?.message?.content?.trim()

@@ -25,6 +25,7 @@ enum FullScreenDestination: Hashable, Identifiable, Codable, Sendable {
     case newAchievement
     case newReel
     case newStory
+    case withdrawal
     case upgrade
     case mediaViewer(MediaViewerContext)
     case storyViewer(StoryID)
@@ -39,6 +40,7 @@ enum FullScreenDestination: Hashable, Identifiable, Codable, Sendable {
         case .newAchievement: return "newAchievement"
         case .newReel: return "newReel"
         case .newStory: return "newStory"
+        case .withdrawal: return "withdrawal"
         case .upgrade: return "upgrade"
         case .mediaViewer(let context): return "mediaViewer.\(context.id)"
         case .storyViewer(let id): return "storyViewer.\(id.rawValue)"
@@ -70,4 +72,5 @@ enum ComposeKind: String, Hashable, Codable, Sendable {
     case achievement
     case reel
     case story
+    case withdrawal
 }

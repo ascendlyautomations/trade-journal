@@ -37,9 +37,9 @@ final class FollowMutationCoordinatorTests: XCTestCase {
         cache.seedViewerFollowingIDs([])
 
         let profileStore = CurrentUserProfileStore(
-            profiles: CompositionRoot.bootstrap().data.profiles,
-            session: CompositionRoot.bootstrap().data.session,
-            imagePipeline: CompositionRoot.bootstrap().data.imagePipeline,
+            profiles: CompositionRoot.bootstrapAppEnvironment().data.profiles,
+            session: CompositionRoot.bootstrapAppEnvironment().data.session,
+            imagePipeline: CompositionRoot.bootstrapAppEnvironment().data.imagePipeline,
             detailCache: cache
         )
         // Seed owner stats without network.
@@ -134,9 +134,9 @@ final class FollowMutationCoordinatorTests: XCTestCase {
         FollowMutationCoordinator.shared.configure(
             detailCache: cache,
             currentUserProfile: CurrentUserProfileStore(
-                profiles: CompositionRoot.bootstrap().data.profiles,
-                session: CompositionRoot.bootstrap().data.session,
-                imagePipeline: CompositionRoot.bootstrap().data.imagePipeline,
+                profiles: CompositionRoot.bootstrapAppEnvironment().data.profiles,
+                session: CompositionRoot.bootstrapAppEnvironment().data.session,
+                imagePipeline: CompositionRoot.bootstrapAppEnvironment().data.imagePipeline,
                 detailCache: cache
             )
         )
@@ -162,9 +162,9 @@ final class FollowMutationCoordinatorTests: XCTestCase {
         FollowMutationCoordinator.shared.configure(
             detailCache: cache,
             currentUserProfile: CurrentUserProfileStore(
-                profiles: CompositionRoot.bootstrap().data.profiles,
-                session: CompositionRoot.bootstrap().data.session,
-                imagePipeline: CompositionRoot.bootstrap().data.imagePipeline,
+                profiles: CompositionRoot.bootstrapAppEnvironment().data.profiles,
+                session: CompositionRoot.bootstrapAppEnvironment().data.session,
+                imagePipeline: CompositionRoot.bootstrapAppEnvironment().data.imagePipeline,
                 detailCache: cache
             )
         )
@@ -203,9 +203,9 @@ final class FollowMutationCoordinatorTests: XCTestCase {
         FollowMutationCoordinator.shared.configure(
             detailCache: cache,
             currentUserProfile: CurrentUserProfileStore(
-                profiles: CompositionRoot.bootstrap().data.profiles,
-                session: CompositionRoot.bootstrap().data.session,
-                imagePipeline: CompositionRoot.bootstrap().data.imagePipeline,
+                profiles: CompositionRoot.bootstrapAppEnvironment().data.profiles,
+                session: CompositionRoot.bootstrapAppEnvironment().data.session,
+                imagePipeline: CompositionRoot.bootstrapAppEnvironment().data.imagePipeline,
                 detailCache: cache
             )
         )

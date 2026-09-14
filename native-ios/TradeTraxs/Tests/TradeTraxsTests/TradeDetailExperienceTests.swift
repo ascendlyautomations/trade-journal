@@ -46,7 +46,7 @@ final class TradeDetailExperienceTests: XCTestCase {
     }
 
     func testTradeDetailShowsAccountNameFromCache() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let profileID = ProfileID("dev.trade-detail-account")
         let trade = ProfileTradeFixtures.samples(owner: profileID)[0]
         let cache = environment.data.detailCache

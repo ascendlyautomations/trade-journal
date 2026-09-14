@@ -56,8 +56,8 @@ struct InteractiveImageView: View {
     var body: some View {
         Group {
             if let displayImage {
-                let aspect = MediaImageOrientation.aspectRatio(of: displayImage)
-                let pixels = MediaImageOrientation.pixelSize(of: displayImage)
+                let aspect = MediaImageOrientation.visualAspectRatio(of: displayImage)
+                let pixels = MediaImageOrientation.visualPixelSize(of: displayImage)
                 // Feed and detail share aspect-fit rendering; only URL delivery differs.
                 AdaptiveInlineMediaContainer(
                     imageAspect: aspect,
@@ -90,6 +90,7 @@ struct InteractiveImageView: View {
                         FeedImageRenderProbe.log(
                             mediaID: mediaID,
                             surface: deliveryQuality == .fullResolution ? "detail" : "feed",
+                            deliveryQuality: deliveryQuality.rawValue,
                             decodedPixels: pixels,
                             containerSize: CGSize(
                                 width: metrics.containerWidth,
@@ -236,8 +237,9 @@ struct InteractiveImageView: View {
         }
 
         let scale = displayScale
-        let decoded = await Task.detached(priority: .userInitiated) {
-            UIImage(data: data, scale: scale)
+        let normalized = await Task.detached(priority: .userInitiated) {
+            guard let decoded = UIImage(data: data, scale: scale) else { return nil as UIImage? }
+            return MediaImageOrientation.normalized(decoded)
         }.value
 
         guard reference?.id == requestKey else {
@@ -245,18 +247,19 @@ struct InteractiveImageView: View {
             return
         }
 
-        guard let decoded else {
+        guard let normalized else {
             didFail = true
             displayImage = nil
             return
         }
 
-        let normalized = MediaImageOrientation.normalized(decoded)
-        let pixels = MediaImageOrientation.pixelSize(of: normalized)
+        let assignSignpost = MainThreadFreezeProbe.begin("detailImage.assignDisplay")
+        defer { MainThreadFreezeProbe.end("detailImage.assignDisplay", id: assignSignpost) }
+
+        let pixels = MediaImageOrientation.visualPixelSize(of: normalized)
         FeedImageProbe.log(id: mediaID, event: .imageDecoded, pixels: pixels)
 
         #if DEBUG
-        let prePixels = MediaPipelineAudit.cgPixelSize(of: decoded)
         let postPixels = MediaPipelineAudit.cgPixelSize(of: normalized)
         MediaPipelineAudit.logDecode(
             MediaPipelineAudit.DecodeReport(
@@ -266,11 +269,11 @@ struct InteractiveImageView: View {
                 deliveryQuality: deliveryQuality.rawValue,
                 cacheKey: cacheKey,
                 source: source,
-                preNormalizeOrientation: MediaPipelineAudit.orientationLabel(decoded.imageOrientation),
-                preNormalizePixelWidth: prePixels.width,
-                preNormalizePixelHeight: prePixels.height,
-                preNormalizeSize: MediaPipelineAudit.uiImagePointSizeLabel(decoded),
-                preNormalizeScale: decoded.scale,
+                preNormalizeOrientation: MediaPipelineAudit.orientationLabel(normalized.imageOrientation),
+                preNormalizePixelWidth: postPixels.width,
+                preNormalizePixelHeight: postPixels.height,
+                preNormalizeSize: MediaPipelineAudit.uiImagePointSizeLabel(normalized),
+                preNormalizeScale: normalized.scale,
                 postNormalizePixelWidth: postPixels.width,
                 postNormalizePixelHeight: postPixels.height,
                 postNormalizeSize: MediaPipelineAudit.uiImagePointSizeLabel(normalized),
@@ -450,9 +453,16 @@ final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
     }
 
     func applyDetailFit(image: UIImage, containerSize: CGSize) {
-        if lastAppliedMediaID != mediaID {
+        let imageChanged = displayedImage !== image
+        if lastAppliedMediaID != mediaID || imageChanged {
             imageView.transform = .identity
+            livePinchScale = 1
             lastAppliedMediaID = mediaID
+            #if DEBUG
+            InteractiveImageZoomProbe.log(
+                "reset id=\(mediaID) zoomScale=1 minimumZoomScale=1 transform=identity"
+            )
+            #endif
         }
         setImage(image)
         relayoutImageSubview(expectedContainerSize: containerSize)
@@ -492,6 +502,7 @@ final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
             FeedImageRenderProbe.log(
                 mediaID: mediaID,
                 surface: auditSurface.isEmpty ? "interactive" : auditSurface,
+                deliveryQuality: deliveryQuality.rawValue,
                 decodedPixels: pixels,
                 containerSize: expectedContainerSize ?? bounds.size,
                 contentMode: contentModeLabel,

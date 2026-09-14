@@ -10,7 +10,9 @@ nonisolated struct HTTPRequest: Sendable {
     var timeout: TimeInterval?
     /// Stable key for metrics / future in-flight coalescing.
     var idempotencyKey: String?
-    var allowsRetry: Bool
+    var allowsRetry: Bool = true
+    /// Scheduling lane — background requests yield while visible work is in flight.
+    var schedulingPriority: NetworkSchedulingPriority = .visible
 
     var urlRequest: URLRequest {
         var request = URLRequest(url: url)

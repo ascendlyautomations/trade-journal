@@ -145,7 +145,7 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
     }
 
     func testApplyUpdatedRefreshesTradeDetailWithoutReload() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         TradeJournalMutationStore.shared.configure(detailCache: environment.data.detailCache)
         let owner = ProfileID("dev.detail-update")
         let trade = sampleTrade(id: "detail-upd-1", owner: owner.rawValue)

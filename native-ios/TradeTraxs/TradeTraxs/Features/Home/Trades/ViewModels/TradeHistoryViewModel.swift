@@ -53,6 +53,7 @@ final class TradeHistoryViewModel {
     private var coldLoadFinished = false
     #if DEBUG
     private var stageCorrelation: String?
+    private var cacheProbeStart: Date?
     #endif
 
     init(
@@ -297,8 +298,10 @@ final class TradeHistoryViewModel {
             #endif
 
             if !hasLocalBrowseConstraints,
-               let ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID),
-               SessionOwnerTradesStore.shared.isFresh(for: profileID)
+               OwnerTradeCacheCompleteness.canPaginateFromOwnerCache(
+                   metadata: SessionOwnerTradesStore.shared.snapshotMetadata(for: profileID)
+               ),
+               let ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID)
             {
                 let seeded = TradeHistoryOwnerSeed.page(
                     from: ownerTrades,
@@ -402,9 +405,8 @@ final class TradeHistoryViewModel {
     }
 
     func handleJournalMutation() {
-        // Prefer session-store patch (already applied in TradeJournalMutationStore).
         switch TradeJournalMutationStore.shared.latest {
-        case .created, .updated, .deleted:
+        case .created(let trade), .updated(let trade):
             if let profileID,
                let snap = TradeHistorySessionStore.shared.restore(
                    profileID: profileID,
@@ -415,18 +417,32 @@ final class TradeHistoryViewModel {
                 applySnapshot(snap)
                 return
             }
-        case .bulkImport, .none:
+            guard hasLoaded, trade.ownerProfileID == profileID else { return }
+            if TradeHistoryLocalMatch.matches(trade, query: currentQuery, context: matchContext) {
+                items.removeAll { $0.id == trade.id }
+                items.insert(trade, at: 0)
+                items = TradeHistorySortSupport.sorted(items, sort: filters.sort)
+                persistSnapshot()
+            } else {
+                items.removeAll { $0.id == trade.id }
+                persistSnapshot()
+            }
+        case .deleted(let id, let owner):
+            if owner == profileID {
+                items.removeAll { $0.id == id }
+                persistSnapshot()
+            }
+        case .bulkImport:
+            guard hasLoaded else { return }
+            Task { await reload(reason: "mutation", preserveScroll: true) }
+        case .none:
             break
         }
-        guard hasLoaded else { return }
-        // Bulk import / unknown mutation — revalidate once.
-        Task { await reload(reason: "mutation", preserveScroll: true) }
     }
 
     func handleAccountMutation() {
         guard hasLoaded || profileID != nil else { return }
-        SessionAccountsStore.shared.invalidate(profileID: profileID)
-        Task { await loadAccountsOnly() }
+        Task { await hydrateAccountsFromSession(for: profileID ?? ProfileID("")) }
     }
 
     // MARK: - Private
@@ -462,6 +478,7 @@ final class TradeHistoryViewModel {
                 ],
                 local: ["dev fixtures only", "dashboard browse seed"]
             )
+            cacheProbeStart = Date()
         } else {
             TradeHistoryLoadProbe.beginLoad()
         }
@@ -514,13 +531,17 @@ final class TradeHistoryViewModel {
             filters: filters,
             searchText: searchText
         )
+        let hydrate = SessionOwnerTradesStore.shared.hydrateFromDiskIfNeeded(
+            for: profileID,
+            detailCache: detailCache
+        )
+
         if Self.canUseOwnerTradeSeed(reason: reason),
            TradeHistoryOwnerSeed.canSeed(
                query: query,
                hasLocalBrowseConstraints: hasLocalBrowse
            ),
-           let ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID),
-           SessionOwnerTradesStore.shared.isFresh(for: profileID)
+           let ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID)
         {
             let seeded = TradeHistoryOwnerSeed.page(
                 from: ownerTrades,
@@ -528,32 +549,58 @@ final class TradeHistoryViewModel {
                 limit: 40,
                 context: matchContext
             )
+            let metadata = SessionOwnerTradesStore.shared.snapshotMetadata(for: profileID)
+            let complete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+            if OwnerTradeCacheCompleteness.canSeedTradeHistoryFirstPage(
+                metadata: metadata,
+                seededItemCount: seeded.items.count
+            ) {
+                #if DEBUG
+                DataLoadStageProbe.trace(
+                    correlation: stageCorrelation!,
+                    stage: "cache.hit",
+                    detail: "ownerTrades count=\(seeded.items.count) complete=true"
+                )
+                let probeMs = cacheProbeStart.map {
+                    Int(Date().timeIntervalSince($0) * 1000)
+                } ?? 0
+                TradeHistoryCacheProbe.recordDiskHit(
+                    complete: complete,
+                    trades: seeded.items.count,
+                    firstRenderMs: probeMs
+                )
+                #endif
+                async let accountsTask = hydrateAccountsFromSession(for: profileID)
+                items = seeded.items.filter(matchesLocalBrowseConstraints)
+                nextCursor = seeded.nextCursor
+                detailCache.seed(trades: items)
+                hasLoaded = true
+                lastQueryKey = queryKey
+                phase = .loaded
+                await accountsTask
+                persistSnapshot()
+                SessionNetworkProbe.record(
+                    .cacheHit,
+                    resource: "trades.history",
+                    detail: "ownerTradesSeed complete hydrated=\(hydrate.hydrated)"
+                )
+                #if DEBUG
+                TradeHistoryLoadProbe.markPageSize(items.count)
+                TradeHistoryLoadProbe.markFirstUsefulRender()
+                #endif
+                return
+            }
             #if DEBUG
-            DataLoadStageProbe.trace(
-                correlation: stageCorrelation!,
-                stage: "cache.hit",
-                detail: "ownerTrades count=\(seeded.items.count) partial=\(seeded.isPartial)"
-            )
+            if reason == "open" {
+                TradeHistoryCacheProbe.recordNetworkRequired(
+                    reason: complete ? "queryCoverageUncertain" : "incompleteOwnerSnapshot"
+                )
+            }
             #endif
-            async let accountsTask = hydrateAccountsFromSession(for: profileID)
-            items = seeded.items.filter(matchesLocalBrowseConstraints)
-            nextCursor = seeded.nextCursor
-            detailCache.seed(trades: items)
-            hasLoaded = true
-            lastQueryKey = queryKey
-            phase = .loaded
-            await accountsTask
-            persistSnapshot()
-            SessionNetworkProbe.record(
-                .cacheHit,
-                resource: "trades.history",
-                detail: "ownerTradesSeed partial=\(seeded.isPartial)"
-            )
+        } else if reason == "open" {
             #if DEBUG
-            TradeHistoryLoadProbe.markPageSize(items.count)
-            TradeHistoryLoadProbe.markFirstUsefulRender()
+            TradeHistoryCacheProbe.recordNetworkRequired(reason: "noOwnerCache")
             #endif
-            return
         }
 
         if !preserveScroll, queryKey == lastQueryKey, hasLoaded, !items.isEmpty, reason == "open" {
@@ -574,6 +621,9 @@ final class TradeHistoryViewModel {
         do {
             #if DEBUG
             TradeHistoryLoadProbe.markRequest()
+            if reason == "open", !TradeHistoryCacheProbe.networkRequired {
+                TradeHistoryCacheProbe.recordNetworkRequired(reason: "authoritativeFetch")
+            }
             #endif
 
             if !hasLocalBrowseConstraints,

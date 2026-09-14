@@ -17,8 +17,27 @@ final class AuthenticationLifecycle {
     }
 
     func applicationDidLaunch() async {
+        if authenticationManager.shouldSkipAsyncRestoreAfterColdLaunch() {
+            AppLog.authentication.debug(
+                "AuthenticationLifecycle — cold launch already resolved session state"
+            )
+            await authenticationCoordinator.bootstrapSession()
+            markInitialRestoreCompleted()
+            return
+        }
         AppLog.authentication.debug("AuthenticationLifecycle — initial session restore")
         await authenticationCoordinator.bootstrapSession()
+        markInitialRestoreCompleted()
+    }
+
+    /// Logged-out cold launch — login must not wait for async restore.
+    func markInitialRestoreCompletedIfLoggedOut() {
+        guard authenticationManager.shouldSkipAsyncRestoreAfterColdLaunch() else { return }
+        markInitialRestoreCompleted()
+    }
+
+    private func markInitialRestoreCompleted() {
+        guard !initialRestoreCompleted else { return }
         initialRestoreCompleted = true
     }
 

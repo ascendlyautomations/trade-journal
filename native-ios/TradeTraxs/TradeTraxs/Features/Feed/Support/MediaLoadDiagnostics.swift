@@ -20,7 +20,7 @@ nonisolated enum MediaLoadDiagnostics {
         case image
     }
 
-    static func log(
+    nonisolated static func log(
         contentType: String,
         mediaID: String,
         source: Source,
@@ -61,7 +61,7 @@ nonisolated enum MediaLoadDiagnostics {
     enum Source: String { case feedInline, clipsPager, clipsPrefetch, feedImage, clipPoster, story, profile, other }
     enum Role: String { case active, prefetch, poster, image }
 
-    static func log(
+    nonisolated static func log(
         contentType: String,
         mediaID: String,
         source: Source,

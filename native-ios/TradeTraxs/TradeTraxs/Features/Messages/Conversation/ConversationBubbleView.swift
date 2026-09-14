@@ -15,6 +15,7 @@ struct ConversationBubbleView: View {
     var sharedAchievementAuthor: Profile? = nil
     var isSharedContentUnavailable: Bool = false
     var reactionConfiguration: MessageReactionConfiguration? = nil
+    var onLongPressForReactions: (() -> Void)? = nil
     var canDelete: Bool = false
     var onRetry: (() -> Void)?
     var onDelete: (() -> Void)?
@@ -72,18 +73,20 @@ struct ConversationBubbleView: View {
 
     private func bubbleColumn(alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: 4) {
-            if item.showsAuthorName, !item.isOutgoing, let name = resolvedAuthor?.displayName {
-                Text(name)
-                    .experienceStyle(.caption2, color: colors.tertiaryText)
-                    .padding(.leading, 4)
-                if item.showsOwnerBadge || !item.authorTags.isEmpty {
-                    RoomMemberTagChipsView(
-                        tags: item.authorTags,
-                        showsOwnerBadge: item.showsOwnerBadge,
-                        limit: 3
-                    )
-                    .padding(.leading, 4)
+            if item.showsAuthorName, !item.isOutgoing {
+                HStack(spacing: ExperienceSpacing.xxs) {
+                    Text(ConversationThreadSupport.senderDisplayName(for: resolvedAuthor))
+                        .font(.system(.caption, design: .default).weight(.semibold))
+                        .foregroundStyle(colors.secondaryText)
+                    if item.showsOwnerBadge || !item.authorTags.isEmpty {
+                        RoomMemberTagChipsView(
+                            tags: item.authorTags,
+                            showsOwnerBadge: item.showsOwnerBadge,
+                            limit: 3
+                        )
+                    }
                 }
+                .padding(.leading, 4)
             }
             bubbleContent
             if item.showsTimestamp || item.sendState != .sent {
@@ -150,11 +153,22 @@ struct ConversationBubbleView: View {
             }
         }
         .opacity(item.sendState == .sending ? 0.72 : 1)
+        .messageReactionInteractions(
+            isEnabled: reactionInteractionsEnabled,
+            onLongPress: { onLongPressForReactions?() },
+            onDoubleTapLike: { reactionConfiguration?.onToggle(MessageReactionSemantics.doubleTapLikeEmoji) }
+        )
         .contextMenu {
             if !isSelectionMode {
                 bubbleContextMenu
             }
         }
+    }
+
+    private var reactionInteractionsEnabled: Bool {
+        !isSelectionMode
+            && item.sendState == .sent
+            && reactionConfiguration?.isEnabled == true
     }
 
     @ViewBuilder
@@ -165,15 +179,6 @@ struct ConversationBubbleView: View {
                 ExperienceHaptics.play(.success)
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
-            }
-        }
-        if let reactionConfiguration, reactionConfiguration.isEnabled {
-            Menu("React") {
-                ForEach(reactionConfiguration.supportedEmojis, id: \.self) { emoji in
-                    Button(emoji) {
-                        reactionConfiguration.onToggle(emoji)
-                    }
-                }
             }
         }
         if item.sendState == .failed, let onRetry {
@@ -213,9 +218,7 @@ struct ConversationBubbleView: View {
                     )
                     .multilineTextAlignment(item.isOutgoing ? .trailing : .leading)
             }
-            if showsInlineReactions {
-                inlineReactionStrip(topPadding: 6)
-            }
+            reactionChipsOnly(topPadding: 6)
         }
         .fixedSize(horizontal: true, vertical: false)
         .padding(.horizontal, ExperienceSpacing.sm + 2)
@@ -271,26 +274,18 @@ struct ConversationBubbleView: View {
     }
 
     private func imageBubble(reference: MediaReference) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            AspectFitMediaView(
-                reference: reference,
-                purpose: .tradeScreenshot,
-                imagePipeline: imagePipeline,
-                accessibilityIdentifier: "conversation.bubble.image",
-                emptyIcon: .photo,
-                allowsFullResolutionViewer: true
-            )
-            .frame(maxWidth: 240)
-
-            if showsInlineReactions {
-                inlineReactionStrip(topPadding: 0)
-                    .padding(6)
-                    .background(
-                        .ultraThinMaterial,
-                        in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                    )
-                    .padding(6)
-            }
+        AspectFitMediaView(
+            reference: reference,
+            purpose: .tradeScreenshot,
+            imagePipeline: imagePipeline,
+            accessibilityIdentifier: "conversation.bubble.image",
+            emptyIcon: .photo,
+            allowsFullResolutionViewer: true
+        )
+        .frame(maxWidth: 240)
+        .overlay(alignment: .bottomLeading) {
+            reactionChipsOnly(topPadding: 0)
+                .padding(6)
         }
         .frame(maxWidth: 240, alignment: item.isOutgoing ? .trailing : .leading)
         .clipShape(
@@ -324,7 +319,7 @@ struct ConversationBubbleView: View {
                 isOutgoing: item.isOutgoing,
                 includesBackground: false
             )
-            inlineReactionStrip(topPadding: 6)
+            reactionChipsOnly(topPadding: 6)
         }
         .padding(.horizontal, ExperienceSpacing.sm + 2)
         .padding(.top, ExperienceSpacing.sm)
@@ -415,7 +410,7 @@ struct ConversationBubbleView: View {
     private func sharedContentBubbleContent<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             content()
-            inlineReactionStrip(topPadding: 6)
+            reactionChipsOnly(topPadding: 6)
         }
         .padding(.horizontal, ExperienceSpacing.sm + 2)
         .padding(.top, ExperienceSpacing.sm)
@@ -428,8 +423,8 @@ struct ConversationBubbleView: View {
     }
 
     private var reactionsOnlyBubble: some View {
-        inlineReactionStrip(topPadding: 0)
-            .fixedSize(horizontal: true, vertical: false)
+        Color.clear
+            .frame(width: 44, height: 32)
             .padding(.horizontal, ExperienceSpacing.sm + 2)
             .padding(.vertical, ExperienceSpacing.xs)
             .background(
@@ -439,11 +434,10 @@ struct ConversationBubbleView: View {
     }
 
     @ViewBuilder
-    private func inlineReactionStrip(topPadding: CGFloat) -> some View {
-        if let reactionConfiguration, reactionConfiguration.showsStrip {
+    private func reactionChipsOnly(topPadding: CGFloat) -> some View {
+        if let reactionConfiguration, !reactionConfiguration.summaries.isEmpty {
             MessageReactionStrip(
                 summaries: reactionConfiguration.summaries,
-                supportedEmojis: reactionConfiguration.supportedEmojis,
                 isOutgoing: item.isOutgoing,
                 isEnabled: reactionConfiguration.isEnabled,
                 onToggle: reactionConfiguration.onToggle
@@ -454,7 +448,11 @@ struct ConversationBubbleView: View {
     }
 
     private var reactionBottomPadding: CGFloat {
-        showsInlineReactions ? ExperienceSpacing.xs + 2 : ExperienceSpacing.sm
+        guard let reactionConfiguration else { return ExperienceSpacing.sm }
+        if !reactionConfiguration.summaries.isEmpty {
+            return ExperienceSpacing.xs + 2
+        }
+        return ExperienceSpacing.sm
     }
 
     /// Maximum bubble width (~72% of screen). Short messages stay intrinsic; long text wraps at this cap.
@@ -489,12 +487,12 @@ private struct ConversationPeerAvatarView: View {
         ExperienceAvatar(
             initials: ProfileDisplay.initials(
                 displayName: profile?.displayName ?? "",
-                username: profile?.username ?? "?"
+                username: profile?.username ?? ""
             ),
             image: image,
             size: size
         )
-        .task(id: profile?.avatar?.id) {
+        .task(id: profile?.id) {
             await load()
         }
     }

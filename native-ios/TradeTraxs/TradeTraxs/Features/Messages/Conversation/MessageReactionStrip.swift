@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Aggregated reaction chip for message bubbles (Trade Rooms today; DMs when backend adds support).
+/// Aggregated reaction chip for message bubbles (DMs + Trade Rooms).
 struct MessageReactionSummary: Hashable, Sendable {
     var emoji: String
     var count: Int
@@ -45,7 +45,6 @@ struct MessageReactionConfiguration: Hashable {
 /// Compact inline reaction chips for the bottom of a message bubble.
 struct MessageReactionStrip: View {
     let summaries: [MessageReactionSummary]
-    let supportedEmojis: [String]
     let isOutgoing: Bool
     let isEnabled: Bool
     let onToggle: (String) -> Void
@@ -57,30 +56,7 @@ struct MessageReactionStrip: View {
             ForEach(summaries, id: \.emoji) { summary in
                 reactionChip(summary)
             }
-            reactMenu
         }
-    }
-
-    private var reactMenu: some View {
-        Menu {
-            ForEach(supportedEmojis, id: \.self) { emoji in
-                Button {
-                    onToggle(emoji)
-                } label: {
-                    Text(emoji)
-                }
-                .disabled(!isEnabled)
-            }
-        } label: {
-            Image(systemName: "face.smiling")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(secondaryLabelColor)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(chipBackground(reactedByViewer: false), in: Capsule())
-        }
-        .disabled(!isEnabled)
-        .accessibilityIdentifier("message.reaction.menu")
     }
 
     private func reactionChip(_ summary: MessageReactionSummary) -> some View {

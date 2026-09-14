@@ -4,30 +4,29 @@ import Foundation
 actor AppIconBadgeRefreshFlight {
     static let shared = AppIconBadgeRefreshFlight()
 
-    private var slotID: UUID?
     private var inFlight: Task<Void, Never>?
+    private var pendingTrailingRefresh = false
 
     func run(_ operation: @escaping @Sendable () async -> Void) async {
-        if let existing = inFlight {
-            await existing.value
+        if inFlight != nil {
+            pendingTrailingRefresh = true
+            await inFlight?.value
             return
         }
-        let id = UUID()
-        let task = Task {
-            await operation()
-        }
-        slotID = id
-        inFlight = task
-        await task.value
-        if slotID == id {
+        repeat {
+            pendingTrailingRefresh = false
+            let task = Task {
+                await operation()
+            }
+            inFlight = task
+            await task.value
             inFlight = nil
-            slotID = nil
-        }
+        } while pendingTrailingRefresh
     }
 
     func resetForTests() {
         inFlight?.cancel()
         inFlight = nil
-        slotID = nil
+        pendingTrailingRefresh = false
     }
 }

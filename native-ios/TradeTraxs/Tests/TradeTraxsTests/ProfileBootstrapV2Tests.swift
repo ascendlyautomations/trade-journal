@@ -4,7 +4,7 @@ import XCTest
 @MainActor
 final class ProfileBootstrapV2Tests: XCTestCase {
     func testDevelopmentBootstrapFillsAllSectionsOnce() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let state = await ProfileBootstrap.load(
             .init(
                 target: .profile(ProfileID("dev.bootstrap-v2")),
@@ -32,7 +32,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
     }
 
     func testScreenViewModelBootstrapAppliesToSectionViewModelsWithoutAutonomousLoad() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let screen = ProfileScreenViewModel(
             target: .profile(ProfileID("dev.bootstrap-screen")),
             currentUserProfile: environment.currentUserProfile,
@@ -88,7 +88,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
     }
 
     func testSectionLoadIfNeededIsNoOpAfterBootstrapApply() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let profileID = ProfileID("dev.bootstrap-noop")
         let snapshot = await ProfileBootstrap.load(
             .init(
@@ -159,7 +159,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
 
     func testOwnerOptimisticReelLandsInScreenStateWithoutNetworkRefresh() {
         OwnerProfileOptimisticStore.shared.invalidate()
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let screen = ProfileScreenViewModel(
             target: .currentUser,
             currentUserProfile: environment.currentUserProfile,
@@ -193,7 +193,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
 
     func testClipsSectionReconcilePreservesLoadedItemsOnOptimisticSnapshot() {
         let owner = ProfileID("dev.optimistic-clips")
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         var existing = CreateReelFixtures.sampleReel(author: owner, tradeID: nil)
         existing.id = ReelID("reel-existing")
         let clipsVM = ClipsContainerViewModel(
@@ -221,7 +221,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
 
     func testOwnerOptimisticPostAndAchievementLandWithoutNetworkRefresh() {
         OwnerProfileOptimisticStore.shared.invalidate()
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let screen = ProfileScreenViewModel(
             target: .currentUser,
             currentUserProfile: environment.currentUserProfile,
@@ -253,7 +253,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
 
     func testPostsSectionReconcilePreservesLoadedItemsOnOptimisticSnapshot() {
         let owner = ProfileID("dev.optimistic-posts")
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         var existing = CreatePostFixtures.samplePost(author: owner, body: "older")
         existing.id = PostID("post-existing")
         let postsVM = PostsContainerViewModel(
@@ -286,7 +286,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
 
     func testPostsSectionNeverShrinksWhenAuthoritativeSnapshotIsPartial() {
         let owner = ProfileID("dev.partial-authoritative-posts")
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         var existingPosts: [Post] = (0..<8).map { index in
             var post = CreatePostFixtures.samplePost(author: owner, body: "post-\(index)")
             post.id = PostID("post-\(index)")
@@ -325,7 +325,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
 
     func testAuthoritativeRefreshNeverShrinksVisiblePosts() async {
         let owner = ProfileID("dev.shrink-guard")
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         var existingPosts: [Post] = (0..<8).map { index in
             var post = CreatePostFixtures.samplePost(author: owner, body: "post-\(index)")
             post.id = PostID("visible-\(index)")

@@ -15,7 +15,8 @@ final class SessionTradeEntityStore {
         ids: [TradeID],
         detailCache: DetailPresentationCache,
         repository: any TradeRepository,
-        forceNetwork: Bool = false
+        forceNetwork: Bool = false,
+        viewerID: ProfileID? = nil
     ) async throws -> [Trade] {
         let unique = Array(Set(ids)).filter { !$0.rawValue.isEmpty }
         guard !unique.isEmpty else { return [] }
@@ -25,6 +26,12 @@ final class SessionTradeEntityStore {
         for id in unique {
             if !forceNetwork, let cached = detailCache.trade(id: id) {
                 hit.append(cached)
+            } else if !forceNetwork,
+                      let viewerID,
+                      let disk = SocialEntityDiskCache.loadTrade(id: id, viewerID: viewerID)
+            {
+                detailCache.seed(disk)
+                hit.append(disk)
             } else {
                 missing.append(id)
             }
@@ -70,9 +77,16 @@ final class SessionTradeEntityStore {
         return merge(hit, fetched)
     }
 
-    func upsert(_ trade: Trade, detailCache: DetailPresentationCache) {
+    func upsert(_ trade: Trade, detailCache: DetailPresentationCache, viewerID: ProfileID? = nil) {
         SessionNetworkProbe.record(.realtimeUpdate, resource: "trades.entity", detail: trade.id.rawValue)
         detailCache.seed(trade)
+        if let viewerID {
+            SocialEntityDiskCache.saveTrade(trade, viewerID: viewerID)
+        }
+    }
+
+    func remove(id: TradeID) {
+        SessionNetworkProbe.record(.localMutation, resource: "trades.entity.remove", detail: id.rawValue)
     }
 
     func invalidate() {

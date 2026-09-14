@@ -95,10 +95,14 @@ struct VideoPresentationInfo: Equatable, Sendable {
     }
 
     /// Inline Feed — compact capped media region; video aspect-fits inside (never cropped).
-    func feedInlineContainerSize(containerWidth: CGFloat) -> CGSize {
+    func feedInlineContainerSize(
+        containerWidth: CGFloat,
+        screenBounds: CGRect = FeedInlineClipLayout.referencePhoneScreenBounds
+    ) -> CGSize {
         FeedInlineClipLayout.containerSize(
             containerWidth: containerWidth,
-            videoAspectRatio: aspectRatio
+            videoAspectRatio: aspectRatio,
+            screenBounds: screenBounds
         )
     }
 

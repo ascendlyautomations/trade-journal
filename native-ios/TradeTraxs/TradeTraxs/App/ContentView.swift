@@ -24,7 +24,7 @@ struct ContentView: View {
 }
 
 #Preview("App Root") {
-    let environment = CompositionRoot.bootstrap()
+    let environment = CompositionRoot.bootstrapAppEnvironment()
     AppRootView(
         navigation: environment.navigation,
         themeManager: environment.themeManager,

@@ -95,7 +95,7 @@ nonisolated enum SubscriptionPresentationPolicy {
     }
 }
 
-private extension BillingInterval {
+nonisolated private extension BillingInterval {
     var displayLabel: String {
         switch self {
         case .monthly: return "Monthly"

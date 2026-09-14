@@ -1,9 +1,9 @@
 import UIKit
 
 /// EXIF / UIImage orientation — normalize once before crop math, encode, and display sizing.
-enum MediaImageOrientation {
+nonisolated enum MediaImageOrientation {
     /// Bakes orientation into pixels. Returns `.up` at scale 1.
-    static func normalized(_ image: UIImage) -> UIImage {
+    nonisolated static func normalized(_ image: UIImage) -> UIImage {
         if image.imageOrientation == .up, image.scale == 1, image.cgImage != nil {
             return image
         }
@@ -22,18 +22,31 @@ enum MediaImageOrientation {
     }
 
     /// Visual pixel width/height after applying orientation metadata.
-    static func pixelSize(of image: UIImage) -> CGSize {
+    nonisolated static func pixelSize(of image: UIImage) -> CGSize {
         resolvedPixelSize(normalized(image))
     }
 
-    static func aspectRatio(of image: UIImage) -> CGFloat {
+    nonisolated static func aspectRatio(of image: UIImage) -> CGFloat {
         let size = pixelSize(of: image)
+        return max(size.width, 1) / max(size.height, 1)
+    }
+
+    /// Visual pixel dimensions without re-baking orientation — for already-normalized display bitmaps.
+    nonisolated static func visualPixelSize(of image: UIImage) -> CGSize {
+        if image.imageOrientation == .up, image.scale == 1, let cgImage = image.cgImage {
+            return CGSize(width: cgImage.width, height: cgImage.height)
+        }
+        return pixelSize(of: image)
+    }
+
+    nonisolated static func visualAspectRatio(of image: UIImage) -> CGFloat {
+        let size = visualPixelSize(of: image)
         return max(size.width, 1) / max(size.height, 1)
     }
 
     // MARK: - Private
 
-    private static func resolvedPixelSize(_ image: UIImage) -> CGSize {
+    nonisolated private static func resolvedPixelSize(_ image: UIImage) -> CGSize {
         if let cgImage = image.cgImage {
             return CGSize(width: cgImage.width, height: cgImage.height)
         }
@@ -43,7 +56,7 @@ enum MediaImageOrientation {
         )
     }
 
-    private static func orientedPixelSize(for image: UIImage) -> CGSize {
+    nonisolated private static func orientedPixelSize(for image: UIImage) -> CGSize {
         if let cg = image.cgImage {
             switch image.imageOrientation {
             case .left, .leftMirrored, .right, .rightMirrored:

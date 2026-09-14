@@ -3,10 +3,15 @@ import SwiftUI
 @main
 struct TradeTraxsApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    /// Single process graph — must not call ``CompositionRoot/bootstrap()`` here
-    /// (``EnvironmentKey.defaultValue`` also resolves through ``AppLaunchEnvironment``).
-    @State private var appEnvironment = AppLaunchEnvironment.shared
+    @Bindable private var launchController = AppLaunchController.shared
     @Environment(\.scenePhase) private var scenePhase
+
+    private var appEnvironment: AppEnvironment { launchController.environment }
+
+    init() {
+        StartupTrace.event("TradeTraxsApp.init.begin")
+        StartupTrace.event("TradeTraxsApp.init.end")
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -29,19 +34,18 @@ struct TradeTraxsApp: App {
             .environment(appEnvironment.currentUserProfile)
             .environmentObject(OwnerAccountFilterDropdownController.shared)
             .onAppear {
-                appDelegate.lifecycle = appEnvironment.lifecycle
-                appDelegate.pushNotifications = appEnvironment.pushNotifications
-                appEnvironment.lifecycle.pushNotifications = appEnvironment.pushNotifications
-                appEnvironment.pushNotifications.bindIfNeeded()
+                StartupTrace.event("TradeTraxsApp.body.firstEvaluation")
+                bindAppDelegate(with: appEnvironment)
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-uitesting-reset-auth") {
                     Task {
-                        await appEnvironment.authentication.coordinator.logout()
+                        await launchController.environment.authentication.coordinator.logout()
                     }
                 }
                 if ProcessInfo.processInfo.arguments.contains("-uitesting-development-session") {
                     Task {
-                        try? await appEnvironment.authentication.coordinator.continueAsDevelopmentSessionIfAllowed()
+                        try? await launchController.environment.authentication.coordinator
+                            .continueAsDevelopmentSessionIfAllowed()
                     }
                 }
                 applyDetailScreenshotLaunchArgumentsIfNeeded()
@@ -63,13 +67,23 @@ struct TradeTraxsApp: App {
                 applyNavigationUITestLaunchArgumentsIfNeeded()
                 #endif
             }
+            .onChange(of: launchController.bootstrapGeneration) { _, _ in
+                bindAppDelegate(with: launchController.environment)
+            }
             .onChange(of: scenePhase) { _, newPhase in
-                appEnvironment.lifecycle.handle(scenePhase: newPhase)
+                launchController.environment.lifecycle.handle(scenePhase: newPhase)
                 if newPhase == .background {
-                    appEnvironment.navigation.persistState()
+                    launchController.environment.navigation.persistState()
                 }
             }
         }
+    }
+
+    private func bindAppDelegate(with appEnvironment: AppEnvironment) {
+        appDelegate.lifecycle = appEnvironment.lifecycle
+        appDelegate.pushNotifications = appEnvironment.pushNotifications
+        appEnvironment.lifecycle.pushNotifications = appEnvironment.pushNotifications
+        appEnvironment.pushNotifications.bindIfNeeded()
     }
 
     #if DEBUG

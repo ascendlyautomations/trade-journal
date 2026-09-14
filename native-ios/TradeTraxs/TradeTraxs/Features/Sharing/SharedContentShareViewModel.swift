@@ -25,27 +25,70 @@ final class SharedContentShareViewModel {
     private(set) var rooms: [TradeRoom] = []
     private(set) var sendErrorMessage: String?
 
+    var selectedConversationIDs: Set<ConversationID> = []
+    var selectedRoomIDs: Set<RoomID> = []
+    var accompanyingMessage = ""
+
     private let messagesRepo: any MessageRepository
     private let roomsRepo: any RoomRepository
     private let session: any SessionProviding
     private let inboxStore: MessagesInboxStore
+    private let detailCache: DetailPresentationCache
 
     init(
         target: SharedContentShareTarget,
         messagesRepo: any MessageRepository,
         roomsRepo: any RoomRepository,
         session: any SessionProviding,
+        detailCache: DetailPresentationCache,
         inboxStore: MessagesInboxStore? = nil
     ) {
         self.target = target
         self.messagesRepo = messagesRepo
         self.roomsRepo = roomsRepo
         self.session = session
+        self.detailCache = detailCache
         self.inboxStore = inboxStore ?? MessagesInboxStore.shared
+    }
+
+    var hasSelection: Bool {
+        !selectedConversationIDs.isEmpty || !selectedRoomIDs.isEmpty
+    }
+
+    var selectedDestinationCount: Int {
+        selectedConversationIDs.count + selectedRoomIDs.count
     }
 
     func clearSendError() {
         sendErrorMessage = nil
+    }
+
+    func isConversationSelected(_ id: ConversationID) -> Bool {
+        selectedConversationIDs.contains(id)
+    }
+
+    func isRoomSelected(_ id: RoomID) -> Bool {
+        selectedRoomIDs.contains(id)
+    }
+
+    func toggleConversationSelection(_ conversation: Conversation) {
+        guard phase != .sending else { return }
+        ExperienceHaptics.play(.selection)
+        if selectedConversationIDs.contains(conversation.id) {
+            selectedConversationIDs.remove(conversation.id)
+        } else {
+            selectedConversationIDs.insert(conversation.id)
+        }
+    }
+
+    func toggleRoomSelection(_ room: TradeRoom) {
+        guard phase != .sending else { return }
+        ExperienceHaptics.play(.selection)
+        if selectedRoomIDs.contains(room.id) {
+            selectedRoomIDs.remove(room.id)
+        } else {
+            selectedRoomIDs.insert(room.id)
+        }
     }
 
     var externalShareText: String { target.externalShareText }
@@ -91,81 +134,251 @@ final class SharedContentShareViewModel {
         }
     }
 
-    func send(to conversation: Conversation) async -> Bool {
-        guard phase != .sending, let viewerID = await session.currentUserID else { return false }
+    /// Sends optional accompanying text (first) then shared content to every selected destination.
+    func sendToSelected() async -> Bool {
+        guard phase != .sending, hasSelection, let viewerID = await session.currentUserID else { return false }
+
         phase = .sending
         sendErrorMessage = nil
-        defer {
-            if phase == .sending { phase = .loaded }
-        }
 
-        let optimistic = makeOptimisticMessage(
-            conversationID: conversation.id,
-            viewerID: ProfileID(viewerID.rawValue)
+        let profileID = ProfileID(viewerID.rawValue)
+        let trimmed = accompanyingMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let accompanyingText = trimmed.isEmpty ? nil : trimmed
+
+        SharedContentShareSeeder.seed(
+            target: target,
+            detailCache: detailCache,
+            feedSessionStore: FeedSessionStore.shared,
+            viewerID: profileID
         )
 
-        if ConversationThreadSupport.isLocalDevelopment(ProfileID(viewerID.rawValue))
-            || ConversationThreadSupport.isLocalConversation(conversation.id)
-        {
-            patchInbox(with: optimistic, conversation: conversation, viewerID: ProfileID(viewerID.rawValue))
+        var failures: [String] = []
+        var successCount = 0
+
+        let selectedConversations = conversations.filter { selectedConversationIDs.contains($0.id) }
+        for conversation in selectedConversations {
+            if await sendBundle(to: conversation, accompanyingText: accompanyingText, viewerID: profileID) {
+                selectedConversationIDs.remove(conversation.id)
+                successCount += 1
+            } else {
+                failures.append(conversation.title ?? "Conversation")
+            }
+        }
+
+        let selectedRooms = rooms.filter { selectedRoomIDs.contains($0.id) }
+        for room in selectedRooms {
+            if await sendBundle(to: room, accompanyingText: accompanyingText, viewerID: profileID) {
+                selectedRoomIDs.remove(room.id)
+                successCount += 1
+            } else {
+                failures.append(room.name)
+            }
+        }
+
+        if failures.isEmpty {
+            accompanyingMessage = ""
             phase = .sent
             ExperienceHaptics.play(.messageSent)
+            return true
+        }
+
+        phase = .loaded
+        if successCount > 0 {
+            if failures.count == 1 {
+                sendErrorMessage =
+                    "Sent to \(successCount) destination\(successCount == 1 ? "" : "s"). Couldn't send to \(failures[0])."
+            } else {
+                sendErrorMessage =
+                    "Sent to \(successCount) destination\(successCount == 1 ? "" : "s"). \(failures.count) couldn't be sent."
+            }
+            ExperienceHaptics.play(.warning)
+        } else {
+            sendErrorMessage = sendErrorMessage ?? "Couldn't send. Try again."
+            ExperienceHaptics.play(.error)
+        }
+        return false
+    }
+
+    // MARK: - DM bundle (text → shared content)
+
+    private func sendBundle(
+        to conversation: Conversation,
+        accompanyingText: String?,
+        viewerID: ProfileID
+    ) async -> Bool {
+        if let text = accompanyingText {
+            let sent = await sendTextMessage(text, to: conversation, viewerID: viewerID)
+            if !sent { return false }
+        }
+        return await sendSharedContent(to: conversation, viewerID: viewerID)
+    }
+
+    private func sendTextMessage(
+        _ text: String,
+        to conversation: Conversation,
+        viewerID: ProfileID
+    ) async -> Bool {
+        let optimistic = Message(
+            id: MessageID("temp-\(UUID().uuidString)"),
+            conversationID: conversation.id,
+            senderProfileID: viewerID,
+            kind: .text,
+            body: text,
+            attachments: [],
+            replyToMessageID: nil,
+            createdAt: .now,
+            isReadByViewer: true,
+            sharedContent: nil
+        )
+
+        if ConversationThreadSupport.isLocalDevelopment(viewerID)
+            || ConversationThreadSupport.isLocalConversation(conversation.id)
+        {
+            deliverOutbound(message: optimistic, conversation: conversation, viewerID: viewerID)
             return true
         }
 
         do {
             let saved = try await messagesRepo.send(optimistic)
-            patchInbox(with: saved, conversation: conversation, viewerID: ProfileID(viewerID.rawValue))
-            phase = .sent
-            ExperienceHaptics.play(.messageSent)
+            deliverOutbound(message: saved, conversation: conversation, viewerID: viewerID)
             return true
         } catch {
             sendErrorMessage = ProfileSectionSupport.message(for: error)
-            ExperienceHaptics.play(.error)
             return false
         }
     }
 
-    func send(to room: TradeRoom) async -> Bool {
-        guard phase != .sending, let viewerID = await session.currentUserID else { return false }
-        phase = .sending
-        sendErrorMessage = nil
-        defer {
-            if phase == .sending { phase = .loaded }
+    private func sendSharedContent(
+        to conversation: Conversation,
+        viewerID: ProfileID
+    ) async -> Bool {
+        let optimistic = makeOptimisticSharedMessage(
+            conversationID: conversation.id,
+            viewerID: viewerID
+        )
+
+        if ConversationThreadSupport.isLocalDevelopment(viewerID)
+            || ConversationThreadSupport.isLocalConversation(conversation.id)
+        {
+            deliverOutbound(message: optimistic, conversation: conversation, viewerID: viewerID)
+            return true
         }
 
-        if MessagesInboxSupport.isLocalDevelopmentProfile(ProfileID(viewerID.rawValue))
+        do {
+            let saved = try await messagesRepo.send(optimistic)
+            deliverOutbound(message: saved, conversation: conversation, viewerID: viewerID)
+            return true
+        } catch {
+            sendErrorMessage = ProfileSectionSupport.message(for: error)
+            return false
+        }
+    }
+
+    // MARK: - Room bundle (text → shared content)
+
+    private func sendBundle(
+        to room: TradeRoom,
+        accompanyingText: String?,
+        viewerID: ProfileID
+    ) async -> Bool {
+        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
             || room.id.rawValue.hasPrefix("dev-")
         {
-            phase = .sent
-            ExperienceHaptics.play(.messageSent)
             return true
         }
 
         do {
             let channels = try await roomsRepo.channels(roomID: room.id)
             guard let channel = channels.first(where: \.isGeneral) ?? channels.first else {
-                sendErrorMessage = "This room has no channels yet."
+                sendErrorMessage = "\(room.name) has no channels yet."
                 return false
             }
 
-            let payload = makeRoomMessage(
+            if let text = accompanyingText {
+                let sent = await sendRoomTextMessage(
+                    text,
+                    room: room,
+                    channelID: channel.id,
+                    viewerID: viewerID
+                )
+                if !sent { return false }
+            }
+
+            return await sendRoomSharedContent(
                 room: room,
                 channelID: channel.id,
-                viewerID: ProfileID(viewerID.rawValue)
+                viewerID: viewerID
             )
-            _ = try await roomsRepo.send(payload)
-            phase = .sent
-            ExperienceHaptics.play(.messageSent)
-            return true
         } catch {
             sendErrorMessage = ProfileSectionSupport.message(for: error)
-            ExperienceHaptics.play(.error)
             return false
         }
     }
 
-    private func makeOptimisticMessage(
+    private func sendRoomTextMessage(
+        _ text: String,
+        room: TradeRoom,
+        channelID: RoomChannelID,
+        viewerID: ProfileID
+    ) async -> Bool {
+        let tempID = RoomMessageID("temp-\(UUID().uuidString)")
+        let payload = RoomMessage(
+            id: tempID,
+            roomID: room.id,
+            senderProfileID: viewerID,
+            body: text,
+            attachedTradeID: nil,
+            media: [],
+            parentMessageID: nil,
+            channelID: channelID,
+            isPinned: false,
+            createdAt: .now
+        )
+
+        do {
+            let saved = try await roomsRepo.send(payload)
+            let display = RoomMessageMapping.displayMessage(from: saved)
+            deliverRoomOutbound(message: display, room: room, channelID: channelID, viewerID: viewerID)
+            return true
+        } catch {
+            sendErrorMessage = ProfileSectionSupport.message(for: error)
+            return false
+        }
+    }
+
+    private func sendRoomSharedContent(
+        room: TradeRoom,
+        channelID: RoomChannelID,
+        viewerID: ProfileID
+    ) async -> Bool {
+        let payload = makeRoomMessage(
+            room: room,
+            channelID: channelID,
+            viewerID: viewerID
+        )
+
+        do {
+            let saved = try await roomsRepo.send(payload)
+            let display = RoomMessageMapping.displayMessage(from: saved)
+            if let reference = display.sharedContent {
+                SharedContentShareSeeder.seed(
+                    reference: reference,
+                    detailCache: detailCache,
+                    feedSessionStore: FeedSessionStore.shared,
+                    viewerID: viewerID
+                )
+            }
+            deliverRoomOutbound(message: display, room: room, channelID: channelID, viewerID: viewerID)
+            return true
+        } catch {
+            sendErrorMessage = ProfileSectionSupport.message(for: error)
+            return false
+        }
+    }
+
+    // MARK: - Message builders
+
+    private func makeOptimisticSharedMessage(
         conversationID: ConversationID,
         viewerID: ProfileID
     ) -> Message {
@@ -230,6 +443,52 @@ final class SharedContentShareViewModel {
             isPinned: false,
             createdAt: .now,
             shareType: target.reference.messageType
+        )
+    }
+
+    // MARK: - Outbound delivery
+
+    private func deliverOutbound(
+        message: Message,
+        conversation: Conversation,
+        viewerID: ProfileID
+    ) {
+        if let reference = message.sharedContent {
+            SharedContentShareSeeder.seed(
+                reference: reference,
+                detailCache: detailCache,
+                feedSessionStore: FeedSessionStore.shared,
+                viewerID: viewerID
+            )
+        }
+        patchInbox(with: message, conversation: conversation, viewerID: viewerID)
+        SharedContentOutboundDelivery.post(
+            SharedContentOutboundDelivery.Payload(
+                destination: .dm(conversation.id),
+                message: message
+            )
+        )
+    }
+
+    private func deliverRoomOutbound(
+        message: Message,
+        room: TradeRoom,
+        channelID: RoomChannelID,
+        viewerID: ProfileID
+    ) {
+        if let reference = message.sharedContent {
+            SharedContentShareSeeder.seed(
+                reference: reference,
+                detailCache: detailCache,
+                feedSessionStore: FeedSessionStore.shared,
+                viewerID: viewerID
+            )
+        }
+        SharedContentOutboundDelivery.post(
+            SharedContentOutboundDelivery.Payload(
+                destination: .room(room.id, channelID: channelID),
+                message: message
+            )
         )
     }
 

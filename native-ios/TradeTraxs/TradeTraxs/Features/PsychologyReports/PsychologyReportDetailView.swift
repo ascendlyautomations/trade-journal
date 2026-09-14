@@ -52,7 +52,9 @@ struct PsychologyReportDetailView: View {
                         .frame(maxWidth: .infinity)
                 }
 
-                if !report.doingWell.isEmpty {
+                let showDeterministicHighlights = viewModel.aiSummary == nil && !viewModel.isLoadingAI
+
+                if showDeterministicHighlights, !report.doingWell.isEmpty {
                     bulletSection(title: "What Went Well", items: report.doingWell, tint: colors.success)
                 }
 
@@ -60,11 +62,11 @@ struct PsychologyReportDetailView: View {
                     sectionCard(section)
                 }
 
-                if !report.watchItems.isEmpty {
+                if showDeterministicHighlights, !report.watchItems.isEmpty {
                     bulletSection(title: "What to Watch", items: report.watchItems, tint: colors.warning)
                 }
 
-                if !report.comparisons.isEmpty {
+                if showDeterministicHighlights, !report.comparisons.isEmpty {
                     comparisonsSection(report.comparisons)
                 }
             }
@@ -93,7 +95,8 @@ struct PsychologyReportDetailView: View {
             Text("AI Psychology Summary")
                 .experienceStyle(.headline, color: colors.primaryText)
             Text(text)
-                .experienceStyle(.body, color: colors.secondaryText)
+                .experienceStyle(.subheadline, color: colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
             ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.psychologyReportAI)
         }
         .padding(ExperienceSpacing.md)

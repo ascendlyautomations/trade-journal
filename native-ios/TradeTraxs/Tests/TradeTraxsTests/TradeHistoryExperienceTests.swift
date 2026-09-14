@@ -308,7 +308,7 @@ final class TradeHistoryExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.items.count, countBefore + 1)
 
         // Bulk import still forces a revalidate.
-        TradeJournalMutationStore.shared.noteBulkImport()
+        TradeJournalMutationStore.shared.noteBulkImport(owner: profileID)
         viewModel.handleJournalMutation()
         await waitFor { repository.historyCallCount == before + 1 }
         XCTAssertEqual(repository.historyCallCount, before + 1)

@@ -12,8 +12,8 @@ struct DependencyContainer {
     /// Production navigation subgraph.
     let navigation: NavigationEnvironment
 
-    /// Production networking subgraph.
-    let networking: NetworkingEnvironment
+    /// Production networking subgraph — nil only during logged-out login shell bootstrap.
+    let networking: NetworkingEnvironment?
 
     /// Production data subgraph (repositories, cache, realtime seams).
     let data: DataEnvironment
@@ -24,7 +24,7 @@ struct DependencyContainer {
     static func make(
         configuration: AppConfiguration,
         navigation: NavigationEnvironment,
-        networking: NetworkingEnvironment,
+        networking: NetworkingEnvironment?,
         data: DataEnvironment,
         authentication: AuthenticationEnvironment
     ) -> DependencyContainer {

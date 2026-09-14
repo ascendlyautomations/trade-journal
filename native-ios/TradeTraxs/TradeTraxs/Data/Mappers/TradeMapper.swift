@@ -498,6 +498,10 @@ nonisolated enum MessageMapper: DTOMapper {
             return nil
         }()
 
+        let reactions = (dto.message_reactions ?? []).compactMap {
+            mapMessageReaction($0, fallbackMessageID: MessageID(id))
+        }
+
         return Message(
             id: MessageID(id),
             conversationID: ConversationID(conversationID),
@@ -508,7 +512,32 @@ nonisolated enum MessageMapper: DTOMapper {
             replyToMessageID: nil,
             createdAt: createdAt,
             isReadByViewer: dto.is_read ?? false,
-            sharedContent: resolvedSharedContent
+            sharedContent: resolvedSharedContent,
+            roomReactions: reactions
+        )
+    }
+
+    private static func mapMessageReaction(
+        _ dto: MessageDTO.MessageReactionRow,
+        fallbackMessageID: MessageID
+    ) -> RoomMessageReaction? {
+        guard let id = dto.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
+              let reaction = dto.reaction?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !reaction.isEmpty,
+              MessageReactionSemantics.supportedEmojis.contains(reaction)
+        else { return nil }
+        let messageRaw = dto.message_id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageID = messageRaw.flatMap { raw -> MessageID? in
+            raw.isEmpty ? nil : MessageID(raw)
+        } ?? fallbackMessageID
+        guard let userRaw = dto.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !userRaw.isEmpty
+        else { return nil }
+        return RoomMessageReaction(
+            id: id,
+            messageID: RoomMessageID(messageID.rawValue),
+            userID: ProfileID(userRaw),
+            reaction: reaction,
+            createdAt: ISO8601.date(from: dto.created_at)
         )
     }
 

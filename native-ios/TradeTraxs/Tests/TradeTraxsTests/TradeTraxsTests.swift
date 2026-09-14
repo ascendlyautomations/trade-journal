@@ -3,7 +3,7 @@ import XCTest
 
 final class TradeTraxsTests: XCTestCase {
     func testCompositionRootBootstrapProducesEnvironment() {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         XCTAssertEqual(
             environment.configuration.buildConfiguration,
             BuildConfiguration.current
@@ -11,7 +11,7 @@ final class TradeTraxsTests: XCTestCase {
         XCTAssertNotNil(environment.navigation.store)
         XCTAssertNotNil(environment.dependencies.navigation.coordinator)
         XCTAssertNotNil(environment.networking.client)
-        XCTAssertNotNil(environment.dependencies.networking.requestBuilder)
+        XCTAssertNotNil(environment.networking.requestBuilder)
         XCTAssertNotNil(environment.data.trades)
         XCTAssertNotNil(environment.dependencies.data.feed)
         XCTAssertNotNil(environment.themeManager)

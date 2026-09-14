@@ -123,7 +123,11 @@ final class MediaPresentationTests: XCTestCase {
         let size = info.feedInlineContainerSize(containerWidth: width)
         let naturalHeight = width / info.aspectRatio
         XCTAssertEqual(size.width, width, accuracy: 0.1)
-        XCTAssertEqual(size.height, FeedInlineClipLayout.maxMediaHeight(), accuracy: 0.5)
+        XCTAssertEqual(
+            size.height,
+            FeedInlineClipLayout.maxMediaHeight(screenBounds: FeedInlineClipLayout.referencePhoneScreenBounds),
+            accuracy: 0.5
+        )
         XCTAssertLessThan(size.height, naturalHeight)
         XCTAssertEqual(
             info.containerAspectRatio(for: .feedInline),

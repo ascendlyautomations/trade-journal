@@ -143,12 +143,29 @@ final class DataEnvironment {
         self.vaultStore = vaultStore
     }
 
+    enum LaunchMode: Sendable {
+        case production
+        /// Logged-out shell — no realtime boot, no session store wiring, unconfigured Supabase seam.
+        case loginShell
+    }
+
     static func make(
         appConfiguration: AppConfiguration,
-        networking: NetworkingEnvironment,
+        networking: NetworkingEnvironment? = nil,
         session: any SessionProviding,
-        authenticationManager: AuthenticationManager
+        authenticationManager: AuthenticationManager,
+        launchMode: LaunchMode = .production
     ) -> DataEnvironment {
+        if launchMode == .loginShell {
+            return makeLoginShell(
+                appConfiguration: appConfiguration,
+                session: session,
+                authenticationManager: authenticationManager
+            )
+        }
+        guard let networking else {
+            fatalError("DataEnvironment production launch requires NetworkingEnvironment")
+        }
         let configuration = DataConfiguration.make(for: appConfiguration)
         let supabase = SupabaseInfrastructure.make(
             appConfiguration: appConfiguration,
@@ -302,6 +319,183 @@ final class DataEnvironment {
             contentReports: DefaultContentReportRepository(supabase: supabase),
             vault: vaultRepository,
             vaultStore: VaultStore(repository: vaultRepository)
+        )
+    }
+
+    private static func makeLoginShell(
+        appConfiguration: AppConfiguration,
+        session: any SessionProviding,
+        authenticationManager: AuthenticationManager
+    ) -> DataEnvironment {
+        // Login shell uses `SupabaseInfrastructure.unconfigured` (no transport). Production
+        // `Default*` repos are inert at init except `DefaultContentReportRepository`, which
+        // must not be constructed here — use `LoginShellContentReportRepository` instead.
+        let configuration = StartupTrace.measure("LoginShell.DataConfiguration") {
+            DataConfiguration.make(for: appConfiguration)
+        }
+        let supabase = SupabaseInfrastructure.unconfigured
+        let cache = CacheStack.placeholder()
+        let persistence = PlaceholderPersistenceProvider()
+        let realtimeHub = StartupTrace.measure("LoginShell.RealtimeHub") {
+            RealtimeHub(realtime: supabase.realtime)
+        }
+        let storage = SupabaseObjectStorageProvider(storage: supabase.storage)
+        let uploadService = DefaultUploadService(storage: storage)
+        let downloadService = DefaultDownloadService(storage: storage)
+        // Login does not load media — avoid DefaultImagePipeline / URLSession.shared / ImageIO on cold launch.
+        let imagePipeline: any ImagePipeline = StartupTrace.measure("LoginShell.ImagePipeline") {
+            PlaceholderImagePipeline()
+        }
+        let edgeFunctions = DefaultEdgeFunctionClient(provider: supabase.edgeFunctions)
+        let rpc = DefaultRPCClient(provider: supabase.rpc, database: supabase.database)
+        let detailCache = DetailPresentationCache()
+        let defaultProfiles = DefaultProfileRepository(
+            supabase: supabase,
+            cache: cache,
+            session: session
+        )
+        #if DEBUG
+        let profiles: any ProfileRepository = StartupTrace.measure("LoginShell.Profiles") {
+            DevelopmentProfileRepository(wrapping: defaultProfiles)
+        }
+        #else
+        let profiles: any ProfileRepository = defaultProfiles
+        #endif
+        let interactions: any InteractionRepository = DefaultInteractionRepository(
+            supabase: supabase,
+            session: session
+        )
+        let vaultRepository: any VaultRepository = DefaultVaultRepository(
+            supabase: supabase,
+            session: session
+        )
+        let tradesRepository: any TradeRepository = DefaultTradeRepository(
+            supabase: supabase,
+            cache: cache,
+            session: session
+        )
+        let storeKitSubscriptions: any StoreKitSubscriptionServicing = StoreKitSubscriptionService(
+            syncClient: LoginShellAppleSubscriptionSyncClient()
+        )
+        let repositories = StartupTrace.measure("LoginShell.Repositories") {
+            (
+                feed: DefaultFeedRepository(supabase: supabase, cache: cache, session: session),
+                messages: DefaultMessageRepository(supabase: supabase, cache: cache, session: session),
+                rooms: DefaultRoomRepository(supabase: supabase, cache: cache),
+                notifications: DefaultNotificationRepository(
+                    supabase: supabase,
+                    cache: cache,
+                    session: session
+                ),
+                followRequests: DefaultFollowRequestRepository(supabase: supabase, session: session),
+                calendar: DefaultCalendarRepository(supabase: supabase, cache: cache),
+                leaderboard: DefaultLeaderboardRepository(supabase: supabase, cache: cache),
+                explore: DefaultExploreRepository(supabase: supabase),
+                search: DefaultSearchRepository(supabase: supabase, cache: cache),
+                billing: DefaultBillingRepository(
+                    supabase: supabase,
+                    cache: cache,
+                    storeKitSync: storeKitSubscriptions
+                ),
+                account: DefaultAccountRepository(supabase: supabase),
+                analytics: DefaultAnalyticsRepository(supabase: supabase),
+                achievements: DefaultAchievementRepository(supabase: supabase, cache: cache),
+                referrals: DefaultReferralRepository(supabase: supabase, cache: cache),
+                notificationPreferences: DefaultNotificationPreferencesRepository(
+                    supabase: supabase,
+                    cache: cache
+                ),
+                home: DefaultHomeRepository(supabase: supabase, cache: cache, session: session),
+                ai: DefaultAIRepository(supabase: supabase, session: session),
+                dailyCheckIns: DefaultTraderDailyCheckInRepository(supabase: supabase, cache: cache),
+                psychologyReports: DefaultPsychologyReportRepository(
+                    trades: tradesRepository,
+                    dailyCheckIns: DefaultTraderDailyCheckInRepository(supabase: supabase, cache: cache),
+                    session: session,
+                    detailCache: detailCache
+                ),
+                tradingReports: DefaultTradingReportRepository(
+                    trades: tradesRepository,
+                    session: session,
+                    detailCache: detailCache,
+                    supabase: supabase
+                )
+            )
+        }
+        AppLog.application.info("DataEnvironment ready — login shell (deferred production stack)")
+
+        return DataEnvironment(
+            configuration: configuration,
+            supabase: supabase,
+            session: session,
+            cache: cache,
+            persistence: persistence,
+            realtimeHub: realtimeHub,
+            imagePipeline: imagePipeline,
+            uploadService: uploadService,
+            downloadService: downloadService,
+            objectStorage: storage,
+            edgeFunctions: edgeFunctions,
+            rpc: rpc,
+            detailCache: detailCache,
+            trades: tradesRepository,
+            profiles: profiles,
+            feed: repositories.feed,
+            messages: repositories.messages,
+            rooms: repositories.rooms,
+            notifications: repositories.notifications,
+            followRequests: repositories.followRequests,
+            calendar: repositories.calendar,
+            leaderboard: repositories.leaderboard,
+            explore: repositories.explore,
+            search: repositories.search,
+            billing: repositories.billing,
+            storeKitSubscriptions: storeKitSubscriptions,
+            account: repositories.account,
+            analytics: repositories.analytics,
+            achievements: repositories.achievements,
+            referrals: repositories.referrals,
+            notificationPreferences: repositories.notificationPreferences,
+            authentication: DefaultAuthenticationRepository(manager: authenticationManager),
+            home: repositories.home,
+            interactions: interactions,
+            engagementStore: EngagementStore(repository: interactions),
+            ai: repositories.ai,
+            tradingReports: repositories.tradingReports,
+            psychologyReports: repositories.psychologyReports,
+            dailyCheckIns: repositories.dailyCheckIns,
+            contentReports: LoginShellContentReportRepository(),
+            vault: vaultRepository,
+            vaultStore: VaultStore(repository: vaultRepository)
+        )
+    }
+}
+
+private struct LoginShellAppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {
+    func sync(transactionID: String) async throws -> AppleSubscriptionSyncResponse {
+        _ = transactionID
+        return AppleSubscriptionSyncResponse(
+            traxProActive: false,
+            source: nil,
+            productId: nil,
+            billingInterval: nil,
+            expiresAt: nil,
+            appleSubscriptionStatus: nil
+        )
+    }
+
+    func fetchEntitlement() async throws -> BillingEntitlementResponse {
+        BillingEntitlementResponse(
+            traxProActive: false,
+            source: nil,
+            plan: nil,
+            billingInterval: nil,
+            subscriptionStatus: nil,
+            trialEndsAt: nil,
+            currentPeriodEndsAt: nil,
+            cancelAtPeriodEnd: nil,
+            appleExpiresAt: nil,
+            appleProductId: nil
         )
     }
 }

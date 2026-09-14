@@ -54,6 +54,6 @@ nonisolated struct Message: Hashable, Codable, Sendable, Identifiable {
     var isReadByViewer: Bool
     /// Structured share target persisted in `messages.*_id` columns.
     var sharedContent: SharedContentReference? = nil
-    /// Trade Room only — web `room_message_reactions` embed.
+    /// DM (`message_reactions`) + Trade Room (`room_message_reactions`) embed.
     var roomReactions: [RoomMessageReaction] = []
 }

@@ -21,6 +21,11 @@ final class FeedVideoPlaybackCoordinator {
         static let forwardBufferSeconds: TimeInterval = 3
     }
 
+    private enum ActiveBufferPolicy {
+        /// Active Feed/Clips playback — preferred forward buffer target (not a hard byte cap).
+        static let forwardBufferSeconds: TimeInterval = 5
+    }
+
     private struct InlineClipSessionState {
         var lastPlaybackTime: CMTime = .zero
         var frozenFrame: UIImage?
@@ -63,7 +68,6 @@ final class FeedVideoPlaybackCoordinator {
     private var preparedNeighborReelID: ReelID?
     private var preparedNeighborIndex: Int?
     #if DEBUG
-    private var lastLoggedBytes: [ReelID: Int64] = [:]
     private var loggedFirstFrameReelIDs: Set<ReelID> = []
     #endif
 
@@ -126,7 +130,17 @@ final class FeedVideoPlaybackCoordinator {
         guard !isClipsExperience else { return }
         let reelID = reel.id
         reelsByID[reelID] = reel
-        clipVisibilityFractions[reelID] = min(1, max(0, fraction))
+        let clamped = min(1, max(0, fraction))
+        let previous = clipVisibilityFractions[reelID] ?? -1
+        clipVisibilityFractions[reelID] = clamped
+
+        guard abs(previous - clamped) >= 0.03
+            || crossesStickyThreshold(previous: previous, next: clamped)
+            || resolveStickyOwner() != activeReelID
+        else {
+            return
+        }
+
         applyStickyOwnershipIfNeeded()
     }
 
@@ -194,8 +208,13 @@ final class FeedVideoPlaybackCoordinator {
         #if DEBUG
         ClipsPagerPrefetchProbe.prepareStarted(clipID: reelID.rawValue, index: index)
         #endif
-        preparePlayerOnly(reel: reel, atIndex: index)
-        enforceClipsPlayerBudget(keeping: activeReelID)
+        Task(priority: .utility) { @MainActor [weak self] in
+            guard let self else { return }
+            MainThreadWorkProbe.measure("feed.player.prepare", surface: "feed") {
+                self.preparePlayerOnly(reel: reel, atIndex: index)
+            }
+            self.enforceClipsPlayerBudget(keeping: self.activeReelID)
+        }
     }
 
     func syncPlayback(for reelID: ReelID) {
@@ -260,10 +279,12 @@ final class FeedVideoPlaybackCoordinator {
     }
 
     func releaseAllPlayers(reason: String = "releaseAll") {
-        globalGeneration &+= 1
-        cancelAllFreezeCaptures()
-        for reelID in Array(players.keys) {
-            hardReleasePlayer(for: reelID, reason: reason)
+        MainThreadWorkProbe.measure("feed.releaseAllPlayers", surface: "feed") {
+            globalGeneration &+= 1
+            cancelAllFreezeCaptures()
+            for reelID in Array(players.keys) {
+                hardReleasePlayer(for: reelID, reason: reason)
+            }
         }
         activeReelID = nil
         manuallyPausedReelIDs.removeAll()
@@ -283,6 +304,13 @@ final class FeedVideoPlaybackCoordinator {
             return
         }
         transferOwnership(to: target, reason: ownershipReason(for: target))
+    }
+
+    private func crossesStickyThreshold(previous: CGFloat, next: CGFloat) -> Bool {
+        func crossed(_ threshold: CGFloat) -> Bool {
+            (previous < threshold && next >= threshold) || (previous >= threshold && next < threshold)
+        }
+        return crossed(InlineStickyPolicy.startThreshold) || crossed(InlineStickyPolicy.keepThreshold)
     }
 
     private func resolveStickyOwner() -> ReelID? {
@@ -319,7 +347,10 @@ final class FeedVideoPlaybackCoordinator {
         activeReelID = target
 
         if let target, let reel = reelsByID[target], !manuallyPausedReelIDs.contains(target) {
-            prepareAndPlay(reel, reason: reason)
+            Task { @MainActor [weak self] in
+                guard self?.activeReelID == target else { return }
+                self?.prepareAndPlay(reel, reason: reason)
+            }
         }
 
         InlineClipOwnershipDiagnostics.log(
@@ -372,6 +403,11 @@ final class FeedVideoPlaybackCoordinator {
             )
         }
 
+        #if DEBUG
+        if let item = player.currentItem {
+            VideoAccessLogAccounting.unregisterItem(item)
+        }
+        #endif
         player.replaceCurrentItem(with: nil)
         logPlayerRelease(reelID: reelID, reason: "ownershipLost:\(reason)")
     }
@@ -514,7 +550,15 @@ final class FeedVideoPlaybackCoordinator {
 
         players[reelID] = player
         installLoopObserver(for: reel, item: item, player: player)
-        installAccessLogObserver(for: reelID, item: item)
+        #if DEBUG
+        VideoHTTPAudit.probe(
+            url: url,
+            clipID: reelID.rawValue,
+            surface: "clips",
+            role: "prefetch"
+        )
+        #endif
+        installAccessLogObserver(for: reelID, item: item, player: player)
         installReadinessObserver(
             for: reelID,
             item: item,
@@ -522,6 +566,18 @@ final class FeedVideoPlaybackCoordinator {
             prefetchIndex: index
         )
         warmPresentation(for: reel, prepToken: prepToken, asset: item.asset)
+
+        #if DEBUG
+        VideoTransferAudit.logPlayerCreated(
+            clipID: reelID.rawValue,
+            surface: "clips",
+            role: "prefetch",
+            player: player,
+            item: item,
+            preferredForwardBufferDuration: item.preferredForwardBufferDuration,
+            canUseNetworkWhilePaused: item.canUseNetworkResourcesForLiveStreamingWhilePaused
+        )
+        #endif
 
         ClipBandwidthLogger.log(
             clipID: reelID.rawValue,
@@ -589,50 +645,85 @@ final class FeedVideoPlaybackCoordinator {
             return
         }
 
-        let item = AVPlayerItem(url: url)
-        configureActiveItem(item)
-        let player = AVPlayer(playerItem: item)
-        applyAudioState(to: player)
-        player.actionAtItemEnd = .pause
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard self.activeReelID == reelID, self.preparationGeneration[reelID] == prepToken else {
+                return
+            }
 
-        guard activeReelID == reelID, preparationGeneration[reelID] == prepToken else {
-            player.replaceCurrentItem(with: nil)
-            return
+            let built = await Task.detached(priority: .userInitiated) {
+                let item = AVPlayerItem(url: url)
+                let player = AVPlayer(playerItem: item)
+                return (item, player)
+            }.value
+
+            guard self.activeReelID == reelID, self.preparationGeneration[reelID] == prepToken else {
+                built.1.replaceCurrentItem(with: nil)
+                return
+            }
+
+            let item = built.0
+            let player = built.1
+            self.configureActiveItem(item)
+            self.applyAudioState(to: player)
+            player.actionAtItemEnd = .pause
+
+            self.players[reelID] = player
+            self.seekCompleteReelIDs.remove(reelID)
+            self.installLoopObserver(for: reel, item: item, player: player)
+            #if DEBUG
+            VideoHTTPAudit.probe(
+                url: url,
+                clipID: reelID.rawValue,
+                surface: self.isClipsExperience ? "clips" : "feed",
+                role: "active"
+            )
+            #endif
+            self.installAccessLogObserver(for: reelID, item: item, player: player)
+            self.installReadinessObserver(for: reelID, item: item, prepToken: prepToken, prefetchIndex: nil)
+
+            #if DEBUG
+            VideoTransferAudit.logPlayerCreated(
+                clipID: reelID.rawValue,
+                surface: self.isClipsExperience ? "clips" : "feed",
+                role: "active",
+                player: player,
+                item: item,
+                preferredForwardBufferDuration: item.preferredForwardBufferDuration,
+                canUseNetworkWhilePaused: item.canUseNetworkResourcesForLiveStreamingWhilePaused
+            )
+            #endif
+
+            ClipBandwidthLogger.log(
+                clipID: reelID.rawValue,
+                event: .playerCreated,
+                urlIdentity: reel.playbackURLIdentity,
+                isVisible: self.isClipsExperience
+                    ? (self.activeReelID == reelID)
+                    : ((self.clipVisibilityFractions[reelID] ?? 0) > 0),
+                isCurrentPage: isCurrentPage
+            )
+            #if DEBUG
+            MediaLoadDiagnostics.log(
+                contentType: "video/mp4",
+                mediaID: reelID.rawValue,
+                source: self.isClipsExperience ? .clipsPager : .feedInline,
+                role: .active,
+                urlIdentity: reel.playbackURLIdentity,
+                playerCreated: true,
+                playerReused: false
+            )
+            #endif
+
+            self.warmPresentation(for: reel, prepToken: prepToken, asset: item.asset)
+            self.startPlayback(
+                player: player,
+                reel: reel,
+                reelID: reelID,
+                isCurrentPage: isCurrentPage,
+                reason: reason
+            )
         }
-
-        players[reelID] = player
-        seekCompleteReelIDs.remove(reelID)
-        installLoopObserver(for: reel, item: item, player: player)
-        installAccessLogObserver(for: reelID, item: item)
-        installReadinessObserver(for: reelID, item: item, prepToken: prepToken, prefetchIndex: nil)
-
-        ClipBandwidthLogger.log(
-            clipID: reelID.rawValue,
-            event: .playerCreated,
-            urlIdentity: reel.playbackURLIdentity,
-            isVisible: isClipsExperience ? (activeReelID == reelID) : ((clipVisibilityFractions[reelID] ?? 0) > 0),
-            isCurrentPage: isCurrentPage
-        )
-        #if DEBUG
-        MediaLoadDiagnostics.log(
-            contentType: "video/mp4",
-            mediaID: reelID.rawValue,
-            source: isClipsExperience ? .clipsPager : .feedInline,
-            role: .active,
-            urlIdentity: reel.playbackURLIdentity,
-            playerCreated: true,
-            playerReused: false
-        )
-        #endif
-
-        warmPresentation(for: reel, prepToken: prepToken, asset: item.asset)
-        startPlayback(
-            player: player,
-            reel: reel,
-            reelID: reelID,
-            isCurrentPage: isCurrentPage,
-            reason: reason
-        )
     }
 
     private func startPlayback(
@@ -806,12 +897,12 @@ final class FeedVideoPlaybackCoordinator {
         }
     }
 
-    private func installAccessLogObserver(for reelID: ReelID, item: AVPlayerItem) {
+    private func installAccessLogObserver(for reelID: ReelID, item: AVPlayerItem, player: AVPlayer) {
         #if DEBUG
         if let existing = accessLogObservers.removeValue(forKey: reelID) {
             NotificationCenter.default.removeObserver(existing)
         }
-        lastLoggedBytes[reelID] = nil
+        VideoAccessLogAccounting.registerItem(player: player, item: item)
         accessLogObservers[reelID] = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemNewAccessLogEntry,
             object: item,
@@ -824,6 +915,7 @@ final class FeedVideoPlaybackCoordinator {
         #else
         _ = reelID
         _ = item
+        _ = player
         #endif
     }
 
@@ -831,31 +923,42 @@ final class FeedVideoPlaybackCoordinator {
     private func handleAccessLog(for reelID: ReelID, item: AVPlayerItem) {
         guard players[reelID] != nil else { return }
         guard let event = item.accessLog()?.events.last else { return }
-        let cumulative = event.numberOfBytesTransferred
-        let previous = lastLoggedBytes[reelID] ?? 0
-        let delta = cumulative - previous
-        lastLoggedBytes[reelID] = cumulative
+        guard let accounting = VideoAccessLogAccounting.processNewAccessLogEntry(
+            item: item,
+            player: players[reelID]
+        ) else { return }
+
+        let surface = isClipsExperience ? "clips" : "feed"
+        let role = activeReelID == reelID ? "active" : "prefetch"
+        VideoTransferAudit.logAccessLogEvent(
+            clipID: reelID.rawValue,
+            surface: surface,
+            role: role,
+            item: item,
+            accounting: accounting,
+            reason: "accessLogNewEntry"
+        )
         if isClipsExperience,
            activeReelID == reelID,
-           cumulative > 0,
+           accounting.sessionItemBytes > 0,
            loggedFirstFrameReelIDs.insert(reelID).inserted
         {
             ClipsPagerPlaybackProbe.firstFrame(clipID: reelID.rawValue)
         }
         ClipBandwidthLogger.logAccessLog(
             clipID: reelID.rawValue,
-            cumulativeBytes: cumulative,
-            deltaBytes: delta,
+            cumulativeBytes: accounting.sessionItemBytes,
+            deltaBytes: accounting.newBytes,
             mediaRequests: event.numberOfMediaRequests,
             transferDuration: event.transferDuration,
             observedBitrate: event.observedBitrate
         )
-        if delta > 0 {
+        if accounting.newBytes > 0 {
             MediaEgressTracker.recordNetworkTransfer(
                 type: .video,
                 surface: isClipsExperience ? "clips" : "feed",
                 mediaID: reelID.rawValue,
-                bytes: Int(delta)
+                bytes: Int(accounting.newBytes)
             )
         }
         MediaLoadDiagnostics.log(
@@ -863,8 +966,8 @@ final class FeedVideoPlaybackCoordinator {
             mediaID: reelID.rawValue,
             source: isClipsExperience ? .clipsPager : .feedInline,
             role: activeReelID == reelID ? .active : .prefetch,
-            byteCount: Int(cumulative),
-            cacheHit: delta == 0 && cumulative > 0
+            byteCount: Int(accounting.sessionItemBytes),
+            cacheHit: accounting.newBytes == 0 && accounting.sessionItemBytes > 0
         )
     }
     #endif
@@ -875,8 +978,8 @@ final class FeedVideoPlaybackCoordinator {
     }
 
     private func configureActiveItem(_ item: AVPlayerItem) {
-        item.preferredForwardBufferDuration = 0
-        item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
+        item.preferredForwardBufferDuration = ActiveBufferPolicy.forwardBufferSeconds
+        item.canUseNetworkResourcesForLiveStreamingWhilePaused = false
     }
 
     private func hardReleasePlayer(for reelID: ReelID, reason: String) {
@@ -895,6 +998,11 @@ final class FeedVideoPlaybackCoordinator {
 
         if let player = players.removeValue(forKey: reelID) {
             pausePlayer(player, reelID: reelID, reason: "hardRelease:\(reason)")
+            #if DEBUG
+            if let item = player.currentItem {
+                VideoAccessLogAccounting.unregisterItem(item)
+            }
+            #endif
             player.replaceCurrentItem(with: nil)
             logPlayerRelease(reelID: reelID, reason: reason)
         }
@@ -911,7 +1019,6 @@ final class FeedVideoPlaybackCoordinator {
         if let observer = accessLogObservers.removeValue(forKey: reelID) {
             NotificationCenter.default.removeObserver(observer)
         }
-        lastLoggedBytes.removeValue(forKey: reelID)
         #endif
     }
 

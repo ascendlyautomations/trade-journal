@@ -68,7 +68,9 @@ final class TradeJournalMutationStore {
 
     func noteDeleted(id: TradeID, owner: ProfileID) {
         latest = .deleted(id: id, owner: owner)
+        detailCache?.removeTrade(id: id)
         SessionOwnerTradesStore.shared.remove(id: id, owner: owner)
+        SessionTradeEntityStore.shared.remove(id: id)
         TradeHistorySessionStore.shared.noteDeleted(id: id, owner: owner)
         CalendarMonthSessionStore.shared.noteDeleted(id: id)
         TradePersistedCacheCoordinator.noteDeleted(id: id, owner: owner)
@@ -76,11 +78,15 @@ final class TradeJournalMutationStore {
         revision += 1
     }
 
-    /// CSV / bulk import — lists need revalidation (many rows).
-    func noteBulkImport() {
+    /// CSV / bulk import — bounded invalidation; authoritative reload via mounted observers.
+    func noteBulkImport(owner: ProfileID) {
         latest = .bulkImport
+        detailCache?.invalidateJournalLists()
+        SessionOwnerTradesStore.shared.invalidate(profileID: owner)
+        SessionTradeEntityStore.shared.invalidate()
         TradeHistorySessionStore.shared.invalidateLists()
         CalendarMonthSessionStore.shared.invalidate()
+        ViewerSyncStateRuntime.noteLocalMutation(viewerID: owner)
         SessionNetworkProbe.record(.cacheInvalidated, resource: "journal.bulkImport")
         revision += 1
     }

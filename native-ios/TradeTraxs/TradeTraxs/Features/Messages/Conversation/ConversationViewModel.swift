@@ -94,6 +94,10 @@ final class ConversationViewModel {
     private var bootstrapMarkReadApplied = false
     /// Soft-deleted / locally removed rows — excluded from merge/realtime reconciliation.
     private var suppressedMessageIDs: Set<MessageID> = []
+    private var reactionBusyKeys: Set<String> = []
+    private var outboundSharedContentObserver: NSObjectProtocol?
+    private var sharedContentHydrationTask: Task<Void, Never>?
+    private var sharedContentHydrationBacklog: [Message] = []
 
     init(
         conversationID: ConversationID,
@@ -149,6 +153,13 @@ final class ConversationViewModel {
 
     var isMessagingBlocked: Bool {
         blockStatus?.isMessagingBlocked == true
+    }
+
+    var canReact: Bool {
+        !isMessagingBlocked
+            && !isSelectionMode
+            && viewerID != nil
+            && (phase == .loaded || !messages.isEmpty)
     }
 
     var blockedByMe: Bool {
@@ -359,6 +370,7 @@ final class ConversationViewModel {
     func stopRealtime() {
         syncThreadSessionCache(context: "leave")
         VoiceMessagePlaybackController.shared.stopAll()
+        stopOutboundSharedContentObserver()
         realtimeTask?.cancel()
         realtimeTask = nil
         if inboxStore.activeConversationID == conversationID {
@@ -534,6 +546,57 @@ final class ConversationViewModel {
         sendStates.removeValue(forKey: item.id)
         let imageURL = item.imageReference?.id
         await send(body: item.text ?? "", imageURL: imageURL, localImageData: nil)
+    }
+
+    func reactionSummaries(for message: Message) -> [RoomMessageReactionSummary] {
+        MessageReactionSemantics.aggregate(message.roomReactions, viewerID: viewerID)
+    }
+
+    func reactionConfiguration(for message: Message) -> MessageReactionConfiguration? {
+        guard canReact || !message.roomReactions.isEmpty else { return nil }
+        let summaries = reactionSummaries(for: message).map(MessageReactionSummary.init)
+        return MessageReactionConfiguration(
+            summaries: summaries,
+            supportedEmojis: MessageReactionSemantics.supportedEmojis,
+            isEnabled: canReact,
+            onToggle: { [weak self] emoji in
+                Task { await self?.toggleReaction(messageID: message.id, emoji: emoji) }
+            }
+        )
+    }
+
+    func toggleReaction(messageID: MessageID, emoji: String) async {
+        guard canReact, let viewerID else { return }
+        let busyKey = "\(messageID.rawValue)::\(emoji)"
+        guard !reactionBusyKeys.contains(busyKey) else { return }
+        reactionBusyKeys.insert(busyKey)
+        defer { reactionBusyKeys.remove(busyKey) }
+
+        let reactions = messages.first(where: { $0.id == messageID })?.roomReactions ?? []
+        let skipNetwork = ConversationThreadSupport.isLocalDevelopment(viewerID)
+            || ConversationThreadSupport.isLocalConversation(conversationID)
+        await MessageReactionToggleCoordinator.toggle(
+            messageID: messageID,
+            emoji: emoji,
+            viewerID: viewerID,
+            reactions: reactions,
+            skipNetwork: skipNetwork,
+            patch: { [weak self] id, row, mode in
+                self?.patchMessageReaction(messageID: id, row: row, mode: mode)
+            },
+            insert: { [weak self] optimistic in
+                guard let self else { throw AppError.unknown(message: "released") }
+                return try await self.messagesRepo.insertMessageReaction(
+                    conversationID: self.conversationID,
+                    messageID: messageID,
+                    userID: optimistic.userID,
+                    reaction: optimistic.reaction
+                )
+            },
+            delete: { [weak self] reactionID in
+                try await self?.messagesRepo.deleteMessageReaction(id: reactionID)
+            }
+        )
     }
 
     func canDeleteMessage(_ item: ConversationBubbleItem) -> Bool {
@@ -826,12 +889,14 @@ final class ConversationViewModel {
             await markConversationSeenIfNeeded()
             phase = .loaded
             startRealtime()
+            startOutboundSharedContentObserver()
         } catch ConversationThreadBootstrapLoader.LoaderError.rpcUnavailable {
             do {
                 try await loadFromRepository()
                 await markConversationSeenIfNeeded()
                 phase = .loaded
                 startRealtime()
+                startOutboundSharedContentObserver()
             } catch {
                 await markConversationSeenIfNeeded()
                 phase = .failed(ConversationThreadSupport.message(for: error))
@@ -989,6 +1054,8 @@ final class ConversationViewModel {
             )
             phase = .loaded
             startRealtime()
+            startOutboundSharedContentObserver()
+            await hydrateSharedContent(from: messages)
             let needsWindowBackfill = cached.messages.count < ConversationThreadSessionStore.messageLimit
                 && cached.hasMoreMessages
             if !cached.isSoftStale, unreadBeforeOpen == 0, !needsWindowBackfill {
@@ -1084,6 +1151,11 @@ final class ConversationViewModel {
 
     /// Incremental apply from Realtime — never reloads the whole conversation on V2.
     private func applyRealtimeSignal(_ signal: MessageRealtimeSignal) async {
+        if let reaction = signal.reactionEvent {
+            applyReactionRealtime(reaction, kind: signal.kind)
+            return
+        }
+
         guard let viewerID,
               !ConversationThreadSupport.isLocalDevelopment(viewerID),
               !ConversationThreadSupport.isLocalConversation(conversationID),
@@ -1250,6 +1322,45 @@ final class ConversationViewModel {
         logThreadStateDiagnostics(context: context)
     }
 
+    private func applyReactionRealtime(
+        _ event: MessageRealtimeSignal.ReactionEvent,
+        kind: MessageRealtimeSignal.Kind
+    ) {
+        guard messages.contains(where: { $0.id.rawValue == event.messageID }) else { return }
+        let messageID = MessageID(event.messageID)
+        let row = RoomMessageReaction(
+            id: event.reactionID,
+            messageID: RoomMessageID(event.messageID),
+            userID: ProfileID(event.userID),
+            reaction: event.emoji,
+            createdAt: nil
+        )
+        switch kind {
+        case .insert, .update:
+            patchMessageReaction(messageID: messageID, row: row, mode: .insert)
+        case .delete:
+            patchMessageReaction(messageID: messageID, row: row, mode: .delete)
+        }
+    }
+
+    private func patchMessageReaction(
+        messageID: MessageID,
+        row: RoomMessageReaction,
+        mode: MessageReactionSemantics.PatchMode
+    ) {
+        messages = messages.map { message in
+            guard message.id == messageID else { return message }
+            var updated = message
+            updated.roomReactions = MessageReactionSemantics.patch(
+                message.roomReactions,
+                next: row,
+                mode: mode
+            )
+            return updated
+        }
+        syncThreadSessionCache(context: "reaction.patch")
+    }
+
     private func logThreadStateDiagnostics(context: String) {
 #if DEBUG
         let oldest = ConversationMessageMerge.sortByCreatedAt(messages).first?.id.rawValue
@@ -1359,7 +1470,50 @@ final class ConversationViewModel {
         }
     }
 
+    private func startOutboundSharedContentObserver() {
+        stopOutboundSharedContentObserver()
+        outboundSharedContentObserver = NotificationCenter.default.addObserver(
+            forName: SharedContentOutboundDelivery.notification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let payload = note.object as? SharedContentOutboundDelivery.Payload else { return }
+            Task { await self?.handleOutboundSharedContent(payload) }
+        }
+    }
+
+    private func stopOutboundSharedContentObserver() {
+        if let outboundSharedContentObserver {
+            NotificationCenter.default.removeObserver(outboundSharedContentObserver)
+            self.outboundSharedContentObserver = nil
+        }
+    }
+
+    private func handleOutboundSharedContent(_ payload: SharedContentOutboundDelivery.Payload) async {
+        guard case .dm(let id) = payload.destination, id == conversationID else { return }
+        commitMessages([payload.message])
+        await hydrateSharedContent(from: [payload.message])
+    }
+
     private func hydrateSharedContent(from messages: [Message]) async {
+        guard !messages.isEmpty else { return }
+        sharedContentHydrationBacklog.append(contentsOf: messages)
+        if let existing = sharedContentHydrationTask {
+            await existing.value
+            return
+        }
+        sharedContentHydrationTask = Task { @MainActor in
+            defer { sharedContentHydrationTask = nil }
+            while !sharedContentHydrationBacklog.isEmpty {
+                let batch = sharedContentHydrationBacklog
+                sharedContentHydrationBacklog = []
+                await performSharedContentHydration(from: batch)
+            }
+        }
+        await sharedContentHydrationTask?.value
+    }
+
+    private func performSharedContentHydration(from messages: [Message]) async {
         guard !messages.isEmpty else { return }
 
         let probe = SharedContentHydrationProbe.Session(surface: .dm)

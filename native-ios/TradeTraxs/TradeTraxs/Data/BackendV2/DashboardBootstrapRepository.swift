@@ -62,7 +62,8 @@ enum DashboardBootstrapLoader {
         detailCache: DetailPresentationCache,
         forceNetwork: Bool,
         loadGeneration: UInt64,
-        currentGeneration: @escaping () -> UInt64
+        currentGeneration: @escaping () -> UInt64,
+        skipSoftStaleReconcile: Bool = false
     ) async throws -> DashboardBootstrapLoadResult {
         guard BackendV2FeatureFlags.isEnabled(.dashboard) else {
             throw DashboardBootstrapLoaderError.flagOff
@@ -78,16 +79,14 @@ enum DashboardBootstrapLoader {
                 detailCache: detailCache
             )
             logPath(cached.freshness == .fresh ? .cache_fresh : .cache_stale_revalidate)
-            if cached.freshness == .softStale, !forceNetwork {
-                Task { @MainActor in
-                    await revalidateIfCurrent(
-                        viewerID: viewerID,
-                        rpc: rpc,
-                        detailCache: detailCache,
-                        loadGeneration: loadGeneration,
-                        currentGeneration: currentGeneration
-                    )
-                }
+            if cached.freshness == .softStale, !forceNetwork, !skipSoftStaleReconcile {
+                scheduleSoftStaleReconcile(
+                    viewerID: viewerID,
+                    rpc: rpc,
+                    detailCache: detailCache,
+                    loadGeneration: loadGeneration,
+                    currentGeneration: currentGeneration
+                )
             }
             return DashboardBootstrapLoadResult(
                 applied: applied,
@@ -119,6 +118,7 @@ enum DashboardBootstrapLoader {
             logStage("cache.write.started")
             BackendV2BootstrapDiskCache.saveDashboard(bootstrap, viewerID: uid, accountScope: accountScope)
             logStage("cache.write.completed")
+            ViewerSyncStateCapturer.captureAfterBootstrap(viewerID: uid, rpc: rpc)
             logPath(.v2_rpc)
             return DashboardBootstrapLoadResult(
                 applied: applied,
@@ -148,26 +148,30 @@ enum DashboardBootstrapLoader {
     }
 
     @MainActor
-    private static func revalidateIfCurrent(
+    private static func scheduleSoftStaleReconcile(
         viewerID: ProfileID,
         rpc: any RPCClient,
         detailCache: DetailPresentationCache,
         loadGeneration: UInt64,
         currentGeneration: @escaping () -> UInt64
-    ) async {
-        guard currentGeneration() == loadGeneration else { return }
-        do {
-            _ = try await load(
+    ) {
+        guard BackendV2FeatureFlags.isEnabled(.viewerSyncState) else {
+            BackendV2BootstrapDiskCache.touchDashboard(viewerID: viewerID.rawValue)
+            SyncStateProbe.logFallback("sync_flag_off_touch_dashboard")
+            return
+        }
+        ViewerSyncReconciliationCoordinator.shared.schedule(
+            ViewerSyncReconcileContext(
                 viewerID: viewerID,
                 rpc: rpc,
+                profiles: nil,
                 detailCache: detailCache,
-                forceNetwork: true,
                 loadGeneration: loadGeneration,
-                currentGeneration: currentGeneration
+                currentGeneration: currentGeneration,
+                needsSessionRefresh: false,
+                needsDashboardRefresh: true
             )
-        } catch {
-            // Preserve cached presentation — non-fatal.
-        }
+        )
     }
 
     private static func fetchRPC(

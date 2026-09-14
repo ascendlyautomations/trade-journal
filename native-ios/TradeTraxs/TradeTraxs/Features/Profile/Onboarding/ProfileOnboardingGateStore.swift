@@ -88,6 +88,11 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     }
 
     private func performResolve(forceNetwork: Bool, generation: UInt64) async {
+        #if DEBUG
+        if requiresAuthoritativeResolve {
+            ColdLaunchSummaryProbe.markLaunchStarted()
+        }
+        #endif
         await SessionNetworkGate.shared.awaitReady()
 
         guard let userID = await session.currentUserID else {
@@ -104,7 +109,8 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         let profileID = ProfileID(userID.rawValue)
         let uid = userID.rawValue
         let cacheInspection = SessionWarmStartProbe.inspectSessionDiskCache(viewerID: uid)
-        let cacheWarmPath = !forceNetwork && cacheInspection.usable
+        let sessionDiskUsable = BackendV2BootstrapDiskCache.loadSession(viewerID: uid) != nil
+        let cacheWarmPath = !forceNetwork && sessionDiskUsable
         SessionWarmStartProbe.log(cacheInspection, userID: uid, forceNetwork: forceNetwork)
         if cacheWarmPath {
             SessionWarmStartProbe.warmStartTrace("cacheValidated")
@@ -140,6 +146,14 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
                     SessionWarmStartProbe.warmStartTrace("shellReleaseStarted")
                     SessionWarmStartProbe.logShellRenderedFromCache(true, userID: uid)
                     SessionWarmStartProbe.warmStartTrace("shellReleased")
+                    #if DEBUG
+                    ColdLaunchSummaryProbe.markLaunchSource("disk")
+                    ColdLaunchSummaryProbe.markAuthenticatedShell()
+                    #endif
+                } else {
+                    #if DEBUG
+                    ColdLaunchSummaryProbe.markLaunchSource("network")
+                    #endif
                 }
             } else {
                 onboardingSnapshot = try await profiles.onboardingSnapshot(

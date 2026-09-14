@@ -188,8 +188,7 @@ final class CSVImportViewModel {
             do {
                 let drafts = tradesToImport.map { Self.draft(from: $0, account: account) }
                 let count = try await trades.importCSVTrades(drafts, isInitialImport: true)
-                detailCache.invalidateJournalLists()
-                TradeJournalMutationStore.shared.noteBulkImport()
+                TradeJournalMutationStore.shared.noteBulkImport(owner: account.ownerProfileID)
                 let result = CSVImportResult(
                     importedCount: count,
                     netPnL: tradesToImport.reduce(0) { $0 + $1.realizedPnL },

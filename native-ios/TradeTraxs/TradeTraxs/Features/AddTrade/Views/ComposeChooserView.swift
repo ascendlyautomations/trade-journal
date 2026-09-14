@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// Create hub — Trade / Post / Clip / Achievement / Story.
+/// Create hub — Trade / Post / Clip / Achievement / Story / Payout.
 struct ComposeChooserView: View {
     let onAddTrade: () -> Void
     let onCreatePost: () -> Void
     let onCreateReel: () -> Void
     let onCreateAchievement: () -> Void
     let onCreateStory: () -> Void
+    let onRecordWithdrawal: () -> Void
     let onClose: () -> Void
 
     @Environment(\.themeColors) private var colors
@@ -63,6 +64,16 @@ struct ComposeChooserView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("compose.story")
+
+                Button(action: onRecordWithdrawal) {
+                    SettingsNavigationRow(
+                        title: "Withdrawal",
+                        subtitle: "Record money withdrawn from a Live account",
+                        systemImage: "arrow.down.circle"
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("compose.withdrawal")
             }
         }
         .listStyle(.insetGrouped)

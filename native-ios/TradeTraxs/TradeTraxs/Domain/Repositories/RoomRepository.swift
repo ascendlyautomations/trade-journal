@@ -20,6 +20,8 @@ nonisolated protocol RoomRepository: Sendable {
     func activeMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember]
     /// Web `get_room_unread_counts`.
     func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int]
+    /// Latest `room_messages.created_at` per room — inbox card activity timestamps.
+    func lastMessageActivity(for roomIDs: [RoomID]) async throws -> [RoomID: Date]
     /// Web `mark_room_read` — advances `room_members.last_read_at` / `last_read_message_id`.
     func markRead(roomID: RoomID) async throws
     /// Web `loadSections` — `room_sections` ordered by `position`.
@@ -70,6 +72,7 @@ extension RoomRepository {
     }
 
     func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] { [:] }
+    func lastMessageActivity(for roomIDs: [RoomID]) async throws -> [RoomID: Date] { [:] }
     func activeMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember] {
         []
     }

@@ -65,8 +65,8 @@ struct TradeRoomsHomeView: View {
                     icon: .rooms,
                     title: "No Trade Rooms yet",
                     message: "Create your own Trade Room or join a community room to trade ideas with other traders.",
-                    actionTitle: "Create Trade Room",
-                    action: { viewModel.presentCreateRoom() }
+                    actionTitle: viewModel.viewerOwnedRoom == nil ? "Create Trade Room" : nil,
+                    action: viewModel.viewerOwnedRoom == nil ? { viewModel.presentCreateRoom() } : nil
                 )
             case .loaded:
                 roomList
@@ -76,13 +76,7 @@ struct TradeRoomsHomeView: View {
         .experienceNavigationTitle("Trade Rooms")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    viewModel.presentCreateRoom()
-                } label: {
-                    ExperienceIcon(icon: .compose, size: .md, color: colors.accent)
-                }
-                .accessibilityLabel("Create Trade Room")
-                .accessibilityIdentifier("tradeRooms.create")
+                headerOwnershipAction
             }
         }
         .searchable(
@@ -96,8 +90,14 @@ struct TradeRoomsHomeView: View {
         .task {
             viewModel.loadIfNeeded()
         }
-        .onChange(of: viewModel.phase) { _, phase in
-            viewModel.consumePresentCreateIfNeeded(phase: phase)
+        .onDisappear {
+            viewModel.releaseRealtime()
+        }
+        .onChange(of: viewModel.phase) { _, _ in
+            viewModel.consumePresentCreateIfNeeded()
+        }
+        .onChange(of: viewModel.discoveryPhase) { _, _ in
+            viewModel.consumePresentCreateIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .tradeRoomMetadataDidChange)) { notification in
             guard let room = notification.tradeRoomMetadataPayload else { return }
@@ -129,6 +129,30 @@ struct TradeRoomsHomeView: View {
                     onDismiss: { viewModel.showsCreateRoom = false },
                     onCreated: { room in viewModel.handleRoomCreated(room) }
                 )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var headerOwnershipAction: some View {
+        if viewModel.isHeaderOwnershipResolved {
+            if viewModel.viewerOwnedRoom != nil {
+                Button(action: { viewModel.openOwnedRoom() }) {
+                    Text("Your Room")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(colors.onAccent)
+                        .padding(.horizontal, ExperienceSpacing.sm)
+                        .padding(.vertical, 6)
+                        .background(colors.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("tradeRooms.yourRoom")
+            } else {
+                Button(action: { viewModel.presentCreateRoom() }) {
+                    Label("Create Trade Room", systemImage: "plus")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .accessibilityIdentifier("tradeRooms.create")
             }
         }
     }
@@ -233,15 +257,12 @@ struct TradeRoomsHomeView: View {
                 }
                 .padding(.vertical, ExperienceSpacing.xs)
             } else if viewModel.showsYourRoomsEmptyState {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    Text(viewModel.discoveryMode.emptyMessage)
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                    Button("Browse Suggested Rooms") {
-                        viewModel.browseSuggestedRooms()
-                    }
-                    .font(.footnote.weight(.semibold))
-                }
-                .padding(.vertical, ExperienceSpacing.xs)
+                ExperienceEmptyState(
+                    icon: .rooms,
+                    title: "No rooms yet",
+                    message: viewModel.discoveryMode.emptyMessage
+                )
+                .padding(.vertical, ExperienceSpacing.sm)
             } else if viewModel.displayedDiscoveryRooms.isEmpty {
                 Text(viewModel.discoveryMode.emptyMessage)
                     .experienceStyle(.footnote, color: colors.secondaryText)
@@ -294,11 +315,4 @@ struct TradeRoomsHomeView: View {
         }
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .experienceStyle(.subheadline, color: colors.secondaryText)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, ExperienceSpacing.xs)
-            .accessibilityAddTraits(.isHeader)
-    }
 }

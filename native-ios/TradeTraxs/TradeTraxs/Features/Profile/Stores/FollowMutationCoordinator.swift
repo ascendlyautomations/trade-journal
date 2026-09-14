@@ -76,6 +76,12 @@ final class FollowMutationCoordinator {
 
         syncActiveProfile(target: target, isFollowing: isFollowing)
         syncActiveOwnerFollowingCount(viewer: viewer)
+        ProfilePersistedCacheCoordinator.patchProfileHeader(
+            viewerID: viewer,
+            targetProfileID: target,
+            isFollowing: isFollowing,
+            stats: detailCache?.stats(for: target)
+        )
 
         latest = isFollowing
             ? .followed(viewer: viewer, target: target)

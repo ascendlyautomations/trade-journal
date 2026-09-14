@@ -32,7 +32,7 @@ final class TradeHistoryOwnerSeedTests: XCTestCase {
 
         XCTAssertEqual(result.items.map(\.id.rawValue), ["new", "mid"])
         XCTAssertNotNil(result.nextCursor)
-        XCTAssertTrue(result.isPartial)
+        XCTAssertFalse(result.isPartial)
     }
 
     func testPageReturnsEmptyWhenNoMatches() {

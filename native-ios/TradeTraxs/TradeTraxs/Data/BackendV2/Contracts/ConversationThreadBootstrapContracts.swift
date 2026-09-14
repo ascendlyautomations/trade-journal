@@ -86,6 +86,14 @@ nonisolated struct ConversationThreadMessageV1: Codable, Sendable, Equatable {
     var audio_duration_ms: Int?
     var is_system: PostgresFlexibleBool
     var profiles: ConversationThreadMessageProfileV1?
+    var message_reactions: [ConversationThreadMessageReactionV1]?
+}
+
+nonisolated struct ConversationThreadMessageReactionV1: Codable, Sendable, Equatable {
+    var id: String?
+    var message_id: String?
+    var user_id: String?
+    var reaction: String?
 }
 
 nonisolated struct ConversationThreadMessageProfileV1: Codable, Sendable, Equatable {

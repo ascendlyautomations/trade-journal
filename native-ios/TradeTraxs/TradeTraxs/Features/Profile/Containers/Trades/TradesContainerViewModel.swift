@@ -90,6 +90,12 @@ final class TradesContainerViewModel {
         }
     }
 
+    /// Shown when trades exist but the active filter/sort yields no rows — keeps filters visible (Stats parity).
+    var filterEmptyMessage: String? {
+        guard hasLoaded, !items.isEmpty, visibleItems.isEmpty else { return nil }
+        return emptyMessage
+    }
+
     /// Applies screen bootstrap — uses section data when Stage 2 already filled it.
     func applyBootstrap(_ snapshot: ProfileState) {
         if snapshot.didBootstrap || snapshot.phase == .loaded {
@@ -501,7 +507,7 @@ final class TradesContainerViewModel {
             return
         }
         if visibleItems.isEmpty {
-            state = .empty
+            state = .loaded(itemCount: 0)
             return
         }
         state = .loaded(itemCount: visibleItems.count)

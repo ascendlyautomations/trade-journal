@@ -212,18 +212,13 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
     private struct RouteLifecycleSnapshot: Sendable {
         var activeRoutes: Int
         var joinedTopics: Int
-        var messageConsumers: Int
-        var consumerCount: (String) -> Int
     }
 
     private func routeLifecycleSnapshot(routeKey: String? = nil) -> RouteLifecycleSnapshot {
         withLocked {
-            let messageContinuations = continuations
-            return RouteLifecycleSnapshot(
+            RouteLifecycleSnapshot(
                 activeRoutes: specsByRouteKey.count,
-                joinedTopics: joinedTopics.count,
-                messageConsumers: messageContinuations.values.reduce(0) { $0 + $1.count },
-                consumerCount: { key in messageContinuations[key]?.count ?? 0 }
+                joinedTopics: joinedTopics.count
             )
         }
     }
@@ -464,6 +459,12 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                         filter: "conversation_id=eq.\(conversationID)",
                         routeColumn: "conversation_id",
                         emitsReactionEvents: false
+                    ),
+                    PostgresChangeBinding(
+                        table: "message_reactions",
+                        filter: "conversation_id=eq.\(conversationID)",
+                        routeColumn: "conversation_id",
+                        emitsReactionEvents: true
                     ),
                 ]
             ),
@@ -1568,7 +1569,7 @@ nonisolated struct MessageRealtimeSignal: Sendable {
     var conversationID: String? = nil
     /// Soft-delete flag from `messages.deleted_for_everyone` on UPDATE payloads.
     var deletedForEveryone: Bool = false
-    /// Present when the event originated from `room_message_reactions`.
+    /// Present when the event originated from `room_message_reactions` or `message_reactions`.
     var reactionEvent: ReactionEvent? = nil
 }
 

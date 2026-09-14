@@ -12,6 +12,7 @@ struct ConversationView: View {
     @State private var lastScrollSample: ScrollLayoutSample?
     @State private var userReleasedInitialPin = false
     @State private var showsConversationActions = false
+    @State private var reactionPickerMessageID: MessageID?
     private let imagePipeline: any ImagePipeline
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator?
@@ -73,6 +74,7 @@ struct ConversationView: View {
     var body: some View {
         VStack(spacing: 0) {
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             if let deleteErrorMessage = viewModel.deleteErrorMessage {
                 Text(deleteErrorMessage)
                     .experienceStyle(.caption, color: colors.error)
@@ -95,6 +97,7 @@ struct ConversationView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle(viewModel.isSelectionMode ? viewModel.selectionToolbarTitle : viewModel.title)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 if viewModel.isSelectionMode {
@@ -327,6 +330,10 @@ struct ConversationView: View {
                                 sharedAchievementAuthor: viewModel.sharedAchievement(for: bubble.message)
                                     .map { viewModel.authorProfile(for: $0.ownerProfileID) } ?? nil,
                                 isSharedContentUnavailable: viewModel.isSharedContentUnavailable(bubble.message),
+                                reactionConfiguration: viewModel.reactionConfiguration(for: bubble.message),
+                                onLongPressForReactions: {
+                                    reactionPickerMessageID = bubble.id
+                                },
                                 canDelete: viewModel.canDeleteMessage(bubble),
                                 onRetry: {
                                     Task { await viewModel.retry(bubble) }
@@ -357,6 +364,10 @@ struct ConversationView: View {
                                     viewModel.toggleMessageSelection(bubble.id)
                                 },
                                 onReport: incomingMessageReportAction(for: bubble)
+                            )
+                            .messageReactionPickerAnchor(
+                                messageID: bubble.id,
+                                isActive: reactionPickerMessageID == bubble.id
                             )
                             .id(bubble.id.rawValue)
                             .onAppear {
@@ -431,6 +442,9 @@ struct ConversationView: View {
                     reason: "shared-trades-hydrated"
                 )
                 scheduleSettlingStabilityCheck(proxy: proxy)
+            }
+            .messageReactionPickerOverlay(pickerMessageID: $reactionPickerMessageID) { messageID, emoji in
+                Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
             }
             .overlay(alignment: .bottom) {
                 if viewModel.scrollCoordinator.showsNewMessagesIndicator {

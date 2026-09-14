@@ -112,7 +112,7 @@ final class AuthenticationExperienceTests: XCTestCase {
     }
 
     func testThemePersistenceSurvivesLogout() async throws {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let before = environment.themeManager.selectedIdentifier
         try await environment.authentication.coordinator.continueAsDevelopmentSessionIfAllowed()
         await environment.authentication.coordinator.logout()

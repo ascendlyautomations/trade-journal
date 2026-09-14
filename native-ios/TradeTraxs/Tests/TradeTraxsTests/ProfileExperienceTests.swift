@@ -134,7 +134,7 @@ final class ProfileExperienceTests: XCTestCase {
     }
 
     func testHeaderViewModelFollowRoutesNoOpWithoutProfile() {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let content = ProfileContentStore(
             target: .profile(ProfileID("missing")),
             profiles: environment.data.profiles,
@@ -156,7 +156,7 @@ final class ProfileExperienceTests: XCTestCase {
     }
 
     func testUnifiedProfileContentStoreLoadsOtherUserWithoutOwnerChrome() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let otherID = ProfileID("dev.follower.ada")
         let store = ProfileContentStore(
             target: .profile(otherID),
@@ -196,7 +196,7 @@ final class ProfileExperienceTests: XCTestCase {
     }
 
     func testProfileActionModesHideTradeRoomWhenAbsent() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let noRoomID = ProfileID("dev.follower.grace")
         let store = ProfileContentStore(
             target: .profile(noRoomID),
@@ -227,7 +227,7 @@ final class ProfileExperienceTests: XCTestCase {
     }
 
     func testVisitorTradeRoomCTAMatchesWebViewParity() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let otherID = ProfileID("dev.follower.ada")
         let store = ProfileContentStore(
             target: .profile(otherID),
@@ -258,7 +258,7 @@ final class ProfileExperienceTests: XCTestCase {
     }
 
     func testFollowListViewModelFiltersLocallyAndCachesSession() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let owner = ProfileID("dev.follow-list")
         let viewModel = FollowListViewModel(
             kind: .followers,
@@ -447,14 +447,14 @@ final class ProfileExperienceTests: XCTestCase {
     }
 
     func testThemePersistenceIndependentOfProfileClear() async throws {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let before = environment.themeManager.selectedIdentifier
         environment.currentUserProfile.clear()
         XCTAssertEqual(environment.themeManager.selectedIdentifier, before)
     }
 
     func testProfileShellLazyLoadsOnlySelectedSection() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let profileID = ProfileID("dev.shell-test")
         let shell = ProfileShellViewModel(
             profileID: profileID,
@@ -482,7 +482,7 @@ final class ProfileExperienceTests: XCTestCase {
     }
 
     func testStatsContainerLoadsDevFixturesAndFiltersByMode() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let profileID = ProfileID("dev.stats-test")
         let viewModel = StatsContainerViewModel(
             profileID: profileID,
@@ -566,7 +566,7 @@ final class ProfileExperienceTests: XCTestCase {
     }
 
     func testTradesContainerLoadsFixturesForDevelopmentProfile() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let profileID = ProfileID("dev.trades-test")
         let viewModel = TradesContainerViewModel(
             profileID: profileID,

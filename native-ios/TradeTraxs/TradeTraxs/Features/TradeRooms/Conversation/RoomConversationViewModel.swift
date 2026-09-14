@@ -23,6 +23,8 @@ final class RoomConversationViewModel {
     private(set) var selectedChannelID: RoomChannelID?
     private(set) var messages: [Message] = []
     private(set) var senderProfiles: [ProfileID: Profile] = [:]
+    /// Bumps when ``senderProfiles`` changes so timeline rows re-resolve identity.
+    private(set) var senderProfileGeneration = 0
     private(set) var sendStates: [MessageID: ConversationBubbleItem.SendState] = [:]
     private(set) var isLoadingOlder = false
     private(set) var hasMoreOlder = true
@@ -74,6 +76,10 @@ final class RoomConversationViewModel {
     private var isApplyingRealtime = false
     private var didMarkReadThisOpen = false
     private var reactionBusyKeys: Set<String> = []
+    private var retryingMessageIDs: Set<MessageID> = []
+    private var outboundSharedContentObserver: NSObjectProtocol?
+    private var sharedContentHydrationTask: Task<Void, Never>?
+    private var sharedContentHydrationBacklog: [Message] = []
 
     init(
         roomID: RoomID,
@@ -194,14 +200,25 @@ final class RoomConversationViewModel {
 
     private var tagStore: SessionRoomMemberTagsStore { .shared }
 
-    var canCompose: Bool {
+    /// Member/owner shell — composer may still be read-only on announcement channels.
+    var canShowComposer: Bool {
         guard selectedChannel != nil else { return false }
-        if isOwner || isMember { return true }
-        return false
+        return isOwner || isMember
+    }
+
+    /// Web `canPostInRoom` — owner bypasses channel chat lock.
+    var canPostInSelectedChannel: Bool {
+        guard selectedChannel != nil else { return false }
+        if isOwner { return true }
+        return selectedChannel?.allowMembersChat ?? true
+    }
+
+    var canCompose: Bool {
+        canShowComposer && canPostInSelectedChannel
     }
 
     var canReact: Bool {
-        canCompose && viewerID != nil
+        canShowComposer && viewerID != nil
     }
 
     var showsActivePresence: Bool {
@@ -236,59 +253,36 @@ final class RoomConversationViewModel {
 
     func toggleReaction(messageID: MessageID, emoji: String) async {
         guard canReact, let viewerID else { return }
-        guard RoomMessageReactionSemantics.supportedEmojis.contains(emoji) else { return }
-
         let busyKey = "\(messageID.rawValue)::\(emoji)"
         guard !reactionBusyKeys.contains(busyKey) else { return }
         reactionBusyKeys.insert(busyKey)
         defer { reactionBusyKeys.remove(busyKey) }
 
-        let existing = findReaction(messageID: messageID, viewerID: viewerID, emoji: emoji)
-
-        if let existing {
-            patchMessageReaction(messageID: messageID, row: existing, mode: .delete)
-            if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
-                ExperienceHaptics.play(.selection)
-                return
+        let reactions = messages.first(where: { $0.id == messageID })?.roomReactions ?? []
+        let skipNetwork = MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
+            || roomID.rawValue.hasPrefix("dev-")
+        await MessageReactionToggleCoordinator.toggle(
+            messageID: messageID,
+            emoji: emoji,
+            viewerID: viewerID,
+            reactions: reactions,
+            skipNetwork: skipNetwork,
+            patch: { [weak self] id, row, mode in
+                self?.patchMessageReaction(messageID: id, row: row, mode: mode)
+            },
+            insert: { [weak self] optimistic in
+                guard let self else { throw AppError.unknown(message: "released") }
+                return try await self.rooms.insertMessageReaction(
+                    roomID: self.resolvedRoomID,
+                    messageID: RoomMessageID(optimistic.messageID.rawValue),
+                    userID: optimistic.userID,
+                    reaction: optimistic.reaction
+                )
+            },
+            delete: { [weak self] reactionID in
+                try await self?.rooms.deleteMessageReaction(id: reactionID)
             }
-            do {
-                try await rooms.deleteMessageReaction(id: existing.id)
-                ExperienceHaptics.play(.selection)
-            } catch {
-                patchMessageReaction(messageID: messageID, row: existing, mode: .insert)
-                ExperienceHaptics.play(.error)
-            }
-            return
-        }
-
-        let optimistic = RoomMessageReaction(
-            id: "optimistic-\(messageID.rawValue)-\(emoji)",
-            messageID: RoomMessageID(messageID.rawValue),
-            userID: viewerID,
-            reaction: emoji,
-            createdAt: nil
         )
-        patchMessageReaction(messageID: messageID, row: optimistic, mode: .insert)
-
-        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
-            ExperienceHaptics.play(.selection)
-            return
-        }
-
-        do {
-            let saved = try await rooms.insertMessageReaction(
-                roomID: resolvedRoomID,
-                messageID: RoomMessageID(messageID.rawValue),
-                userID: viewerID,
-                reaction: emoji
-            )
-            patchMessageReaction(messageID: messageID, row: optimistic, mode: .delete)
-            patchMessageReaction(messageID: messageID, row: saved, mode: .insert)
-            ExperienceHaptics.play(.selection)
-        } catch {
-            patchMessageReaction(messageID: messageID, row: optimistic, mode: .delete)
-            ExperienceHaptics.play(.error)
-        }
     }
 
     var joinButtonTitle: String {
@@ -330,7 +324,7 @@ final class RoomConversationViewModel {
     }
 
     func loadIfNeeded() {
-        guard loadTask == nil, phase != .loaded else { return }
+        guard loadTask == nil, phase != .loaded, phase != .loading else { return }
         loadTask = Task { await performInitialLoad() }
     }
 
@@ -463,6 +457,7 @@ final class RoomConversationViewModel {
     func stopRealtime() {
         VoiceMessagePlaybackController.shared.stopAll()
         activePresenceMembers = []
+        stopOutboundSharedContentObserver()
         if inboxStore.activeRoomID == roomID {
             inboxStore.setActiveRoom(nil)
         }
@@ -478,13 +473,13 @@ final class RoomConversationViewModel {
 
     func sendText() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isSending else { return }
+        guard !text.isEmpty, !isSending, canPostInSelectedChannel else { return }
         draft = ""
         await send(body: text, imageURL: nil, localImageData: nil)
     }
 
     func sendImage(_ image: UIImage) async {
-        guard !isSending else { return }
+        guard !isSending, canPostInSelectedChannel else { return }
         guard let data = image.jpegData(compressionQuality: 0.82) else { return }
         await send(
             body: draft.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -495,7 +490,7 @@ final class RoomConversationViewModel {
     }
 
     func sendVoice(localFileURL: URL, duration: TimeInterval) async {
-        guard !isSending else { return }
+        guard !isSending, canPostInSelectedChannel else { return }
         defer { try? FileManager.default.removeItem(at: localFileURL) }
         guard let data = try? Data(contentsOf: localFileURL) else { return }
         await sendVoice(data: data, duration: duration)
@@ -530,7 +525,7 @@ final class RoomConversationViewModel {
     }
 
     func sendTrade(_ trade: Trade) async {
-        guard let viewerID, !isSending, let channelID = selectedChannelID else { return }
+        guard let viewerID, !isSending, canPostInSelectedChannel, let channelID = selectedChannelID else { return }
         showsTradePicker = false
         sharedTrades[trade.id] = trade
         isSending = true
@@ -587,8 +582,13 @@ final class RoomConversationViewModel {
             patchInboxPreview(with: saved)
             ExperienceHaptics.play(.messageSent)
         } catch {
-            sendStates[tempID] = .failed
-            ExperienceHaptics.play(.error)
+            await handleSendFailure(
+                tempID: tempID,
+                optimistic: optimistic,
+                channelID: channelID,
+                content: "Shared a trade",
+                error: error
+            )
         }
     }
 
@@ -630,12 +630,39 @@ final class RoomConversationViewModel {
         return unavailableSharedContentKeys.contains(reference.stableKey)
     }
 
+    func senderProfile(for profileID: ProfileID) -> Profile? {
+        if let profile = senderProfiles[profileID] {
+            return profile
+        }
+        return detailCache.profile(id: profileID)
+    }
+
     func authorProfile(for profileID: ProfileID) -> Profile? {
-        detailCache.profile(id: profileID)
+        senderProfile(for: profileID)
     }
 
     func retry(_ item: ConversationBubbleItem) async {
         guard sendStates[item.id] == .failed else { return }
+        guard !retryingMessageIDs.contains(item.id) else { return }
+        retryingMessageIDs.insert(item.id)
+        defer { retryingMessageIDs.remove(item.id) }
+
+        if let channelID = selectedChannelID,
+           let reconciled = await reconcileOptimisticSend(
+               tempID: item.id,
+               sentAt: item.message.createdAt,
+               content: item.text ?? item.message.body,
+               channelID: channelID
+           )
+        {
+            commitMessages([reconciled])
+            sendStates.removeValue(forKey: item.id)
+            sendStates[reconciled.id] = .sent
+            persistActiveChannelCache(scrollAnchor: reconciled.id)
+            patchInboxPreview(with: reconciled)
+            return
+        }
+
         removeMessage(id: item.id)
         sendStates.removeValue(forKey: item.id)
         let imageURL = item.imageReference?.id
@@ -766,22 +793,49 @@ final class RoomConversationViewModel {
         let viewer = current.map { ProfileID($0.rawValue) }
         viewerID = viewer
 
+        var hydratedFromDisk = false
+        if let viewer,
+           !MessagesInboxSupport.isLocalDevelopmentProfile(viewer),
+           !roomID.rawValue.hasPrefix("dev-"),
+           let disk = SocialPersistedCacheCoordinator.restoreRoomSnapshot(viewerID: viewer, roomID: roomID)
+        {
+            applyDiskSnapshot(disk)
+            hydratedFromDisk = true
+            phase = .loaded
+        }
+
         do {
             if let viewer,
                MessagesInboxSupport.isLocalDevelopmentProfile(viewer)
                 || roomID.rawValue.hasPrefix("dev-")
             {
                 await loadLocalFixtures(viewerID: viewer)
-            } else if let viewer, let rpc, await loadFromRoomBootstrap(rpc: rpc, viewerID: viewer) {
-                // RPC bootstrap applied — skip fragmented REST shell load.
-            } else {
+            } else if let viewer, let rpc {
+                let bootstrapped = await loadFromRoomBootstrap(rpc: rpc, viewerID: viewer)
+                if bootstrapped {
+                    // RPC bootstrap applied — skip fragmented REST shell load.
+                } else if hydratedFromDisk, membership == nil {
+                    SocialPersistedCacheCoordinator.invalidateRoomSnapshot(viewerID: viewer, roomID: roomID)
+                    channelCaches = [:]
+                    replaceMessages([])
+                    hasMoreOlder = false
+                    try await loadFromRepository()
+                } else if !hydratedFromDisk {
+                    try await loadFromRepository()
+                }
+            } else if !hydratedFromDisk {
                 try await loadFromRepository()
             }
             // Web waits until messages finished loading, then `mark_room_read`.
             await markRoomSeenIfNeeded(force: false)
             await reconcileMemberCount(source: .network)
             phase = .loaded
+            if !messages.isEmpty {
+                await hydrateSenders(for: messages)
+                await hydrateSharedContent(from: messages)
+            }
             startRealtime()
+            startOutboundSharedContentObserver()
         } catch {
             await markRoomSeenIfNeeded(force: false)
             phase = .failed(ConversationThreadSupport.message(for: error))
@@ -866,7 +920,7 @@ final class RoomConversationViewModel {
             )
         ownerProfile = owner
         detailCache.seed(owner)
-        senderProfiles[owner.id] = owner
+        mergeSenderProfiles([owner], source: "fixtureOwner")
 
         channels = TradeRoomsFixtures.channels(roomID: roomID)
         channelMetadataCached = true
@@ -921,14 +975,14 @@ final class RoomConversationViewModel {
             membership = applied.membership
             if let cached = detailCache.profile(id: applied.room.ownerProfileID) {
                 ownerProfile = cached
-                senderProfiles[cached.id] = cached
+                mergeSenderProfiles([cached], source: "ownerCache")
             } else if let owner = try? await SessionProfileStore.shared.profiles(
                 ids: [applied.room.ownerProfileID],
                 detailCache: detailCache,
                 repository: profiles
             ).first {
                 ownerProfile = owner
-                senderProfiles[owner.id] = owner
+                mergeSenderProfiles([owner], source: "ownerBatch")
             }
             channels = applied.channels
             channelMetadataCached = true
@@ -968,6 +1022,7 @@ final class RoomConversationViewModel {
                 source: .bootstrap
             )
             await reconcileMemberCount(source: .bootstrap)
+            persistRoomSnapshotToDisk()
             return true
         } catch RoomBootstrapLoader.LoaderError.flagOff,
                 RoomBootstrapLoader.LoaderError.rpcUnavailable {
@@ -992,14 +1047,14 @@ final class RoomConversationViewModel {
             }
             if let cached = detailCache.profile(id: loaded.ownerProfileID) {
                 ownerProfile = cached
-                senderProfiles[cached.id] = cached
+                mergeSenderProfiles([cached], source: "ownerCache")
             } else if let owner = try? await SessionProfileStore.shared.profiles(
                 ids: [loaded.ownerProfileID],
                 detailCache: detailCache,
                 repository: profiles
             ).first {
                 ownerProfile = owner
-                senderProfiles[owner.id] = owner
+                mergeSenderProfiles([owner], source: "ownerBatch")
             }
             channels = try await rooms.channels(roomID: activeRoomID)
             channelMetadataCached = true
@@ -1190,9 +1245,110 @@ final class RoomConversationViewModel {
         }
         existing.isLoaded = true
         channelCaches[selectedChannelID] = existing
+        persistRoomSnapshotToDisk()
+    }
+
+    private func applyDiskSnapshot(_ disk: SocialDiskCache.RoomSnapshotBlob) {
+        room = disk.room
+        membership = disk.membership
+        channels = disk.channels
+        channelMetadataCached = true
+        if let rawSelected = disk.selectedChannelID {
+            let selected = RoomChannelID(rawSelected)
+            selectedChannelID = selected
+        } else {
+            selectedChannelID = channels.first?.id
+        }
+        var restoredCaches: [RoomChannelID: ChannelThreadCache] = [:]
+        for (key, thread) in disk.channelThreads {
+            let channelID = RoomChannelID(key)
+            restoredCaches[channelID] = ChannelThreadCache(
+                messages: thread.messages,
+                nextOlderCursor: thread.nextOlderCursor,
+                hasMoreOlder: thread.hasMoreOlder,
+                scrollAnchorMessageID: thread.messages.last?.id,
+                isLoaded: thread.isLoaded
+            )
+        }
+        channelCaches = restoredCaches
+        if let selectedChannelID, let cache = channelCaches[selectedChannelID] {
+            apply(cache: cache)
+        }
+    }
+
+    private func persistRoomSnapshotToDisk() {
+        guard let viewerID, let room else { return }
+        let channelThreads = Dictionary(uniqueKeysWithValues: channelCaches.map { entry in
+            (
+                entry.key,
+                SocialDiskCache.RoomChannelThreadBlob(
+                    channelID: entry.key.rawValue,
+                    messages: entry.value.messages,
+                    nextOlderCursor: entry.value.nextOlderCursor,
+                    hasMoreOlder: entry.value.hasMoreOlder,
+                    isLoaded: entry.value.isLoaded
+                )
+            )
+        })
+        SocialPersistedCacheCoordinator.persistRoomSnapshot(
+            viewerID: viewerID,
+            roomID: roomID,
+            room: room,
+            membership: membership,
+            channels: channels,
+            selectedChannelID: selectedChannelID,
+            channelThreads: channelThreads
+        )
+    }
+
+    private func startOutboundSharedContentObserver() {
+        stopOutboundSharedContentObserver()
+        outboundSharedContentObserver = NotificationCenter.default.addObserver(
+            forName: SharedContentOutboundDelivery.notification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let payload = note.object as? SharedContentOutboundDelivery.Payload else { return }
+            Task { await self?.handleOutboundSharedContent(payload) }
+        }
+    }
+
+    private func stopOutboundSharedContentObserver() {
+        if let outboundSharedContentObserver {
+            NotificationCenter.default.removeObserver(outboundSharedContentObserver)
+            self.outboundSharedContentObserver = nil
+        }
+    }
+
+    private func handleOutboundSharedContent(_ payload: SharedContentOutboundDelivery.Payload) async {
+        guard case .room(let deliveredRoomID, let channelID) = payload.destination,
+              deliveredRoomID == roomID
+        else { return }
+        if let channelID, selectedChannelID != channelID { return }
+        commitMessages([payload.message])
+        await hydrateSharedContent(from: [payload.message])
+        persistActiveChannelCache(scrollAnchor: messages.last?.id)
     }
 
     private func hydrateSharedContent(from messages: [Message]) async {
+        guard !messages.isEmpty else { return }
+        sharedContentHydrationBacklog.append(contentsOf: messages)
+        if let existing = sharedContentHydrationTask {
+            await existing.value
+            return
+        }
+        sharedContentHydrationTask = Task { @MainActor in
+            defer { sharedContentHydrationTask = nil }
+            while !sharedContentHydrationBacklog.isEmpty {
+                let batch = sharedContentHydrationBacklog
+                sharedContentHydrationBacklog = []
+                await performSharedContentHydration(from: batch)
+            }
+        }
+        await sharedContentHydrationTask?.value
+    }
+
+    private func performSharedContentHydration(from messages: [Message]) async {
         guard !messages.isEmpty else { return }
 
         let probe = SharedContentHydrationProbe.Session(surface: .tradeRoom)
@@ -1322,7 +1478,7 @@ final class RoomConversationViewModel {
     }
 
     private func sendVoice(data: Data, duration: TimeInterval) async {
-        guard let viewerID, let channelID = selectedChannelID else { return }
+        guard let viewerID, canPostInSelectedChannel, let channelID = selectedChannelID else { return }
         isSending = true
         defer { isSending = false }
 
@@ -1396,13 +1552,18 @@ final class RoomConversationViewModel {
             patchInboxPreview(with: saved)
             ExperienceHaptics.play(.messageSent)
         } catch {
-            sendStates[tempID] = .failed
-            ExperienceHaptics.play(.error)
+            await handleSendFailure(
+                tempID: tempID,
+                optimistic: optimistic,
+                channelID: channelID,
+                content: nil,
+                error: error
+            )
         }
     }
 
     private func send(body: String, imageURL: String?, localImageData: Data?) async {
-        guard let viewerID, let channelID = selectedChannelID else { return }
+        guard let viewerID, canPostInSelectedChannel, let channelID = selectedChannelID else { return }
         isSending = true
         defer { isSending = false }
 
@@ -1439,6 +1600,7 @@ final class RoomConversationViewModel {
             return
         }
 
+        var reconcileContent = body
         do {
             var resolvedImageURL = imageURL
             if let localImageData {
@@ -1479,6 +1641,7 @@ final class RoomConversationViewModel {
                 if let resolvedImageURL { return body.isEmpty ? resolvedImageURL : body }
                 return body
             }()
+            reconcileContent = content
             let payload = RoomMessage(
                 id: RoomMessageID(tempID.rawValue),
                 roomID: roomID,
@@ -1493,6 +1656,15 @@ final class RoomConversationViewModel {
                 isPinned: false,
                 createdAt: .now
             )
+            #if DEBUG
+            print(
+                """
+                [RoomMessageSend] compose roomID=\(roomID.rawValue) \
+                channelID=\(channelID.rawValue) membershipJoined=\(membership != nil) \
+                isOwner=\(isOwner)
+                """
+            )
+            #endif
             let savedRoom = try await rooms.send(payload)
             let saved = RoomMessageMapping.displayMessage(from: savedRoom)
             commitMessages([saved])
@@ -1502,9 +1674,98 @@ final class RoomConversationViewModel {
             patchInboxPreview(with: saved)
             ExperienceHaptics.play(.messageSent)
         } catch {
-            sendStates[tempID] = .failed
-            ExperienceHaptics.play(.error)
+            await handleSendFailure(
+                tempID: tempID,
+                optimistic: optimistic,
+                channelID: channelID,
+                content: reconcileContent,
+                error: error
+            )
         }
+    }
+
+    private func isSendCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let app = error as? AppError {
+            switch app {
+            case .cancelled:
+                return true
+            case .transport(.cancelled):
+                return true
+            default:
+                break
+            }
+        }
+        return NetworkTaskCancellation.mapIfCancelled(error) != nil
+    }
+
+    private func reconcileOptimisticSend(
+        tempID: MessageID,
+        sentAt: Date,
+        content: String?,
+        channelID: RoomChannelID
+    ) async -> Message? {
+        guard let viewerID else { return nil }
+        let normalizedContent = content ?? ""
+        do {
+            let channel = channels.first { $0.id == channelID }
+            let page = try await rooms.messages(
+                roomID: roomID,
+                channel: channel,
+                page: PageRequest(limit: 20)
+            )
+            if let match = page.items.first(where: { message in
+                message.senderProfileID == viewerID
+                    && (message.body ?? "") == normalizedContent
+                    && abs(message.createdAt.timeIntervalSince(sentAt)) < 45
+            }) {
+                #if DEBUG
+                RoomMessageSendProbe.logReconciled(
+                    RoomMessageSendProbe.Context(
+                        roomID: roomID.rawValue,
+                        channelID: channelID.rawValue,
+                        senderID: viewerID.rawValue,
+                        messageType: "reconcile",
+                        hasReply: false
+                    ),
+                    messageID: match.id.rawValue
+                )
+                #endif
+                return RoomMessageMapping.displayMessage(from: match)
+            }
+        } catch {
+            // Soft-fail — caller may mark failed or retry.
+        }
+        return nil
+    }
+
+    private func handleSendFailure(
+        tempID: MessageID,
+        optimistic: Message,
+        channelID: RoomChannelID,
+        content: String?,
+        error: Error
+    ) async {
+        if isSendCancellation(error) {
+            sendStates.removeValue(forKey: tempID)
+            return
+        }
+        if let reconciled = await reconcileOptimisticSend(
+            tempID: tempID,
+            sentAt: optimistic.createdAt,
+            content: content,
+            channelID: channelID
+        ) {
+            commitMessages([reconciled])
+            sendStates.removeValue(forKey: tempID)
+            sendStates[reconciled.id] = .sent
+            persistActiveChannelCache(scrollAnchor: reconciled.id)
+            patchInboxPreview(with: reconciled)
+            ExperienceHaptics.play(.messageSent)
+            return
+        }
+        sendStates[tempID] = .failed
+        ExperienceHaptics.play(.error)
     }
 
     private func hydrateSenders(for messages: [Message]) async {
@@ -1513,27 +1774,63 @@ final class RoomConversationViewModel {
         for id in ids {
             if senderProfiles[id] != nil { continue }
             if let cached = detailCache.profile(id: id) {
-                senderProfiles[id] = cached
+                mergeSenderProfiles([cached], source: "detailCache")
                 continue
             }
             if id.rawValue.hasPrefix("dev."),
                let fixture = FollowListFixtures.profile(id: id)
             {
                 detailCache.seed(fixture)
-                senderProfiles[id] = fixture
+                mergeSenderProfiles([fixture], source: "fixture")
                 continue
             }
             missing.append(id)
         }
         guard !missing.isEmpty else { return }
-        let fetched = (try? await SessionProfileStore.shared.profiles(
-            ids: missing,
-            detailCache: detailCache,
-            repository: profiles
-        )) ?? []
-        for profile in fetched {
-            senderProfiles[profile.id] = profile
+        do {
+            let fetched = try await SessionProfileStore.shared.profiles(
+                ids: missing,
+                detailCache: detailCache,
+                repository: profiles
+            )
+            mergeSenderProfiles(fetched, source: "batch")
+            let resolved = Set(fetched.map(\.id))
+            for id in missing where !resolved.contains(id) {
+                RoomSenderResolutionProbe.logUnresolved(
+                    senderID: id,
+                    reason: "profiles.batch returned no row"
+                )
+            }
+        } catch {
+            for id in missing {
+                RoomSenderResolutionProbe.logUnresolved(
+                    senderID: id,
+                    reason: ConversationThreadSupport.message(for: error)
+                )
+            }
         }
+    }
+
+    private func mergeSenderProfiles(_ profiles: [Profile], source: String) {
+        guard !profiles.isEmpty else { return }
+        var merged = senderProfiles
+        var changed = false
+        for profile in profiles {
+            detailCache.seed(profile)
+            if merged[profile.id] != profile {
+                merged[profile.id] = profile
+                changed = true
+            }
+            RoomSenderResolutionProbe.logResolved(
+                senderID: profile.id,
+                source: source,
+                username: profile.username,
+                hasAvatar: profile.avatar != nil
+            )
+        }
+        guard changed else { return }
+        senderProfiles = merged
+        senderProfileGeneration &+= 1
     }
 
     private func patchInboxPreview(with message: Message) {
@@ -1562,6 +1859,7 @@ final class RoomConversationViewModel {
                 ? inboxStore.rooms
                 : (room.map { inboxStore.rooms + [$0] } ?? inboxStore.rooms),
             previews: [roomID: preview],
+            activityAt: [roomID: message.createdAt],
             unread: [roomID: 0]
         )
     }
@@ -1615,7 +1913,7 @@ final class RoomConversationViewModel {
             list.map { message in
                 guard message.id == messageID else { return message }
                 var updated = message
-                updated.roomReactions = RoomMessageReactionSemantics.patch(
+                updated.roomReactions = MessageReactionSemantics.patch(
                     message.roomReactions,
                     next: row,
                     mode: mode
@@ -1640,6 +1938,7 @@ final class RoomConversationViewModel {
     }
 
     private func buildTimeline(from messages: [Message]) -> [ConversationTimelineItem] {
+        _ = senderProfileGeneration
         var items: [ConversationTimelineItem] = []
         let calendar = Calendar.current
         var lastDay: DateComponents?
@@ -1658,12 +1957,13 @@ final class RoomConversationViewModel {
             let previous = index > 0 ? messages[index - 1] : nil
             let next = index + 1 < messages.count ? messages[index + 1] : nil
             let isOutgoing = message.senderProfileID == viewerID
-            let showsAvatar = !isOutgoing && (
-                previous?.senderProfileID != message.senderProfileID
-                    || previous.map { abs($0.createdAt.timeIntervalSince(message.createdAt)) > 300 } ?? true
+            let startsSenderGroup = ConversationThreadSupport.tradeRoomStartsSenderGroup(
+                message: message,
+                previous: previous
             )
-            let showsTimestamp = next?.senderProfileID != message.senderProfileID
-                || next.map { abs($0.createdAt.timeIntervalSince(message.createdAt)) > 300 } ?? true
+            let showsAvatar = !isOutgoing && startsSenderGroup
+            let showsAuthorName = showsAvatar
+            let showsTimestamp = next.map { $0.senderProfileID != message.senderProfileID } ?? true
             items.append(
                 .message(
                     ConversationBubbleItem(
@@ -1673,13 +1973,15 @@ final class RoomConversationViewModel {
                         showsAvatar: showsAvatar,
                         showsTimestamp: showsTimestamp,
                         sendState: sendStates[message.id] ?? .sent,
-                        authorProfile: senderProfiles[message.senderProfileID],
-                        showsAuthorName: showsAvatar,
+                        authorProfile: senderProfile(for: message.senderProfileID),
+                        showsAuthorName: showsAuthorName,
                         authorTags: tagStore.tags(
                             for: message.senderProfileID,
                             roomID: roomID
                         ),
-                        showsOwnerBadge: room?.ownerProfileID == message.senderProfileID
+                        showsOwnerBadge: room?.ownerProfileID == message.senderProfileID,
+                        startsSenderGroup: startsSenderGroup,
+                        addsSenderGroupTopInset: previous != nil && startsSenderGroup
                     )
                 )
             )

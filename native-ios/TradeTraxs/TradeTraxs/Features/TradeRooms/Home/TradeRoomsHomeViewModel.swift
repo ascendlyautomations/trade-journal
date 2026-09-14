@@ -20,7 +20,7 @@ final class TradeRoomsHomeViewModel {
     private let presentCreateOnAppear: Bool
     private var didAutoPresentCreate = false
 
-    private(set) var discoveryMode: TradeRoomDiscoveryMode = .suggested
+    private(set) var discoveryMode: TradeRoomDiscoveryMode = .yourRooms
     private(set) var discoveryScope: TradeRoomDiscoveryScope = .all
     private var didApplyInitialDiscoveryMode = false
     private(set) var yourRoomsItems: [ExploreRoomSuggestion] = []
@@ -112,7 +112,16 @@ final class TradeRoomsHomeViewModel {
 
     var discoverableRooms: [ExploreRoomSuggestion] {
         let source = discoveryMode == .popular ? popularItems : suggestedItems
-        return source.filter { !joinedRoomIDs.contains($0.id) }
+        let filtered = source.filter { !joinedRoomIDs.contains($0.id) }
+        #if DEBUG
+        RoomDiscoveryProbe.logClientFilter(
+            section: discoveryMode.rawValue,
+            before: source.count,
+            after: filtered.count,
+            reason: "alreadyJoinedInInbox"
+        )
+        #endif
+        return filtered
     }
 
     /// Authoritative Your Rooms rows from home bootstrap RPC (`is_owner` / `is_member`).
@@ -141,9 +150,20 @@ final class TradeRoomsHomeViewModel {
         discoveryMode == .yourRooms && yourRooms.isEmpty && discoveryPhase == .loaded
     }
 
-    func consumePresentCreateIfNeeded(phase: Phase) {
-        guard presentCreateOnAppear, !didAutoPresentCreate, phase == .loaded else { return }
+    /// True once home bootstrap + member rooms load finished — avoids flashing Create before ownership is known.
+    var isHeaderOwnershipResolved: Bool {
+        discoveryPhase == .loaded && phase != .idle && phase != .loading
+    }
+
+    /// Viewer-owned Trade Room from bootstrap RPC (`is_owner`) — at most one.
+    var viewerOwnedRoom: ExploreRoomSuggestion? {
+        yourRoomsItems.first(where: \.viewerIsOwner)
+    }
+
+    func consumePresentCreateIfNeeded() {
+        guard presentCreateOnAppear, !didAutoPresentCreate, isHeaderOwnershipResolved else { return }
         didAutoPresentCreate = true
+        guard viewerOwnedRoom == nil else { return }
         presentCreateRoom()
     }
 
@@ -155,7 +175,6 @@ final class TradeRoomsHomeViewModel {
         if mode != .yourRooms {
             Task { await loadHomeBootstrap(forceNetwork: true) }
         }
-        reconcileDiscoveryModeAfterMembershipChange()
     }
 
     func browseSuggestedRooms() {
@@ -172,6 +191,11 @@ final class TradeRoomsHomeViewModel {
     func openDiscoveryRoom(_ room: ExploreRoomSuggestion) {
         ExperienceHaptics.play(.selection)
         navigationCoordinator.open(navigationHost.room(room.id))
+    }
+
+    func openOwnedRoom() {
+        guard let viewerOwnedRoom else { return }
+        openDiscoveryRoom(viewerOwnedRoom)
     }
 
     func joinDiscoveryRoom(_ room: ExploreRoomSuggestion) async {
@@ -195,7 +219,6 @@ final class TradeRoomsHomeViewModel {
             patchDiscoveryRoomJoined(room.id)
             SessionTradeRoomsDiscoveryStore.shared.invalidate(viewerID: viewerID)
             await loadHomeBootstrap(forceNetwork: true)
-            reconcileDiscoveryModeAfterMembershipChange()
         } else if result == .requested {
             patchDiscoveryRoomRequested(room.id)
         }
@@ -211,7 +234,7 @@ final class TradeRoomsHomeViewModel {
 
     func joinState(for roomID: RoomID) -> TradeRoomDiscoveryJoinState {
         if joinedRoomIDs.contains(roomID) { return .joined }
-        let pool = suggestedItems + popularItems
+        let pool = yourRoomsItems + suggestedItems + popularItems
         guard let room = pool.first(where: { $0.id == roomID }) else {
             return joinCoordinator.mutationStates[roomID] ?? .idle
         }
@@ -283,6 +306,10 @@ final class TradeRoomsHomeViewModel {
         await performLoad(forceNetwork: true)
     }
 
+    func releaseRealtime() {
+        domain.releaseRealtime()
+    }
+
     func openRoom(_ item: TradeRoomInboxItem) {
         ExperienceHaptics.play(.selection)
         // Mark-read runs inside ``NavigationCoordinator`` for `.messages(.room)`.
@@ -311,7 +338,7 @@ final class TradeRoomsHomeViewModel {
                     ownerName: nil,
                     ownerIsVerified: false,
                     preview: room.description ?? "No messages yet",
-                    timestamp: room.createdAt,
+                    timestamp: inboxStore.roomActivityAt[room.id],
                     unreadCount: 0,
                     isMuted: false
                 )
@@ -346,12 +373,10 @@ final class TradeRoomsHomeViewModel {
         ExperienceHaptics.play(.warning)
         guard let viewerID else {
             inboxStore.removeRoom(id: id)
-            reconcileDiscoveryModeAfterMembershipChange()
             return
         }
         if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || id.rawValue.hasPrefix("dev-") {
             inboxStore.removeRoom(id: id)
-            reconcileDiscoveryModeAfterMembershipChange()
             return
         }
         do {
@@ -360,7 +385,6 @@ final class TradeRoomsHomeViewModel {
             SessionTradeRoomsDiscoveryStore.shared.invalidate(viewerID: viewerID)
             yourRoomsItems.removeAll { $0.id == id }
             await loadHomeBootstrap(forceNetwork: true)
-            reconcileDiscoveryModeAfterMembershipChange()
             ExperienceHaptics.play(.success)
         } catch {
             ExperienceHaptics.play(.warning)
@@ -386,7 +410,8 @@ final class TradeRoomsHomeViewModel {
         }
         phase = domain.state.phase
         applyInitialDiscoveryModeIfNeeded()
-        reconcileDiscoveryModeAfterMembershipChange()
+        reconcileYourRoomsWithMembership()
+        logDisplayedRooms()
         await domain.retainRealtime()
         loadTask = nil
     }
@@ -394,16 +419,10 @@ final class TradeRoomsHomeViewModel {
     private func applyInitialDiscoveryModeIfNeeded() {
         guard !didApplyInitialDiscoveryMode else { return }
         didApplyInitialDiscoveryMode = true
-        discoveryMode = yourRoomsItems.isEmpty ? .suggested : .yourRooms
+        discoveryMode = .yourRooms
         #if DEBUG
         TradeRoomsHomeBootstrapProbe.initialCategory(discoveryMode)
         #endif
-    }
-
-    private func reconcileDiscoveryModeAfterMembershipChange() {
-        if discoveryMode == .yourRooms, yourRoomsItems.isEmpty {
-            discoveryMode = .suggested
-        }
     }
 
     private func loadHomeBootstrap(forceNetwork: Bool) async {
@@ -477,6 +496,43 @@ final class TradeRoomsHomeViewModel {
         yourRoomsItems = bootstrap.yourRooms
         suggestedItems = bootstrap.suggested
         popularItems = bootstrap.popular
+        reconcileYourRoomsWithMembership()
+        logDisplayedRooms()
+    }
+
+    /// Web sidebar parity — inbox member rooms must appear in Your Rooms even when
+    /// bootstrap RPC omits private/non-profile rooms.
+    private func reconcileYourRoomsWithMembership() {
+        guard let viewerID else { return }
+        var merged = yourRoomsItems
+        var ids = Set(merged.map(\.id))
+        for item in items {
+            guard !ids.contains(item.id) else { continue }
+            let suggestion = ExploreRoomSuggestion.fromMembership(
+                room: item.room,
+                ownerName: item.ownerName,
+                ownerUsername: nil,
+                viewerID: viewerID,
+                isOwner: item.room.ownerProfileID == viewerID,
+                isMember: true
+            )
+            merged.append(suggestion)
+            ids.insert(item.id)
+            RoomDiscoveryProbe.logMergedFromMembership(roomID: item.id)
+        }
+        merged.sort { lhs, rhs in
+            if lhs.viewerIsOwner != rhs.viewerIsOwner { return lhs.viewerIsOwner }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        yourRoomsItems = merged
+    }
+
+    private func logDisplayedRooms() {
+        RoomDiscoveryProbe.logDisplayed(
+            memberCards: showsDiscoverySection ? items.count : filteredItems.count,
+            discoveryRows: displayedDiscoveryRooms.count,
+            mode: discoveryMode.rawValue
+        )
     }
 
     private func buildItems() -> [TradeRoomInboxItem] {
@@ -487,7 +543,7 @@ final class TradeRoomsHomeViewModel {
                 ownerName: owner?.displayName,
                 ownerIsVerified: owner?.isCreator == true,
                 preview: inboxStore.roomPreviews[room.id] ?? room.description ?? "No messages yet",
-                timestamp: room.createdAt,
+                timestamp: inboxStore.roomActivityAt[room.id],
                 unreadCount: inboxStore.roomUnread[room.id] ?? 0,
                 isMuted: inboxStore.isRoomMuted(room.id)
             )

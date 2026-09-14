@@ -5,6 +5,7 @@ struct RoomConversationView: View {
     @State private var viewModel: RoomConversationViewModel
     @State private var contentRevealed = false
     @State private var didApplyInitialScrollToLatest = false
+    @State private var reactionPickerMessageID: MessageID?
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
@@ -73,10 +74,12 @@ struct RoomConversationView: View {
                 }
             }
             content
-            if viewModel.showsRoomChrome, viewModel.canCompose {
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            if viewModel.showsRoomChrome, viewModel.canShowComposer {
                 MessageComposerBar(
                     draft: $viewModel.draft,
                     isSending: viewModel.isSending,
+                    isEnabled: viewModel.canPostInSelectedChannel,
                     placeholder: composerPlaceholder,
                     onSend: {
                         Task { await viewModel.sendText() }
@@ -95,6 +98,7 @@ struct RoomConversationView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle(viewModel.title)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 0) {
@@ -191,6 +195,9 @@ struct RoomConversationView: View {
     }
 
     private var composerPlaceholder: String {
+        if !viewModel.canPostInSelectedChannel {
+            return "Owner announcements only"
+        }
         if let channel = viewModel.selectedChannel {
             return "Message \(channel.displayTitle)"
         }
@@ -283,7 +290,7 @@ struct RoomConversationView: View {
                         case .message(let bubble):
                             ConversationBubbleView(
                                 item: bubble,
-                                peerProfile: bubble.authorProfile,
+                                peerProfile: viewModel.senderProfile(for: bubble.message.senderProfileID),
                                 imagePipeline: imagePipeline,
                                 sharedTrade: viewModel.sharedTrade(for: bubble.message),
                                 sharedPost: viewModel.sharedPost(for: bubble.message),
@@ -297,6 +304,9 @@ struct RoomConversationView: View {
                                     .map { viewModel.authorProfile(for: $0.ownerProfileID) } ?? nil,
                                 isSharedContentUnavailable: viewModel.isSharedContentUnavailable(bubble.message),
                                 reactionConfiguration: viewModel.reactionConfiguration(for: bubble.message),
+                                onLongPressForReactions: {
+                                    reactionPickerMessageID = bubble.id
+                                },
                                 onRetry: {
                                     Task { await viewModel.retry(bubble) }
                                 },
@@ -322,7 +332,13 @@ struct RoomConversationView: View {
                                 },
                                 onReport: incomingRoomMessageReportAction(for: bubble)
                             )
-                            .padding(.vertical, 2)
+                            .padding(
+                                .top,
+                                bubble.addsSenderGroupTopInset
+                                    ? ExperienceSpacing.sm
+                                    : (bubble.startsSenderGroup ? ExperienceSpacing.xxs : 0)
+                            )
+                            .padding(.bottom, bubble.startsSenderGroup ? ExperienceSpacing.xxs : 0)
                             .background {
                                 if viewModel.highlightedMessageID == bubble.id {
                                     RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
@@ -334,6 +350,10 @@ struct RoomConversationView: View {
                             .animation(
                                 ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
                                 value: viewModel.highlightedMessageID
+                            )
+                            .messageReactionPickerAnchor(
+                                messageID: bubble.id,
+                                isActive: reactionPickerMessageID == bubble.id
                             )
                             .id(bubble.id.rawValue)
                             .onAppear {
@@ -352,6 +372,9 @@ struct RoomConversationView: View {
                 .padding(.vertical, ExperienceSpacing.sm)
             }
             .scrollDismissesKeyboard(.interactively)
+            .messageReactionPickerOverlay(pickerMessageID: $reactionPickerMessageID) { messageID, emoji in
+                Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
+            }
             .onChange(of: viewModel.phase) { _, phase in
                 guard phase == .loaded, !didApplyInitialScrollToLatest else { return }
                 // Non-empty threads wait for the newest bubble's onAppear before scrolling.

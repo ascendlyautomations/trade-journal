@@ -9,13 +9,18 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     private static let memberRoomSelect = """
     room_id,room:rooms!room_members_room_id_fkey(\
     id,name,description,slug,image_url,owner_user_id,show_on_profile,is_private,category,discovery_tags,join_policy,rules,\
-    members_can_message,members_can_share_trades,members_can_share_media,room_kind)
+    members_can_message,members_can_share_trades,members_can_share_media,room_kind,created_at)
     """
 
     /// Web `lib/roomMessageSelect.ts` — explicit embed hint avoids PGRST201.
     private static let messageSelect = """
     id,room_id,user_id,seen_by,pinned,section_id,parent_message_id,type,trade_id,content,image_url,created_at,\
     room_message_reactions!room_message_reactions_message_room_fkey(id,message_id,user_id,reaction)
+    """
+
+    /// Compact insert-return shape — web `ROOM_MESSAGE_SELECT_COMPACT` without embeds (stable decode).
+    private static let messageInsertReturningSelect = """
+    id,room_id,user_id,section_id,parent_message_id,type,trade_id,content,image_url,audio_url,audio_duration_ms,created_at,pinned
     """
 
     init(supabase: SupabaseInfrastructure, cache: CacheStack = .placeholder()) {
@@ -149,11 +154,43 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 URLQueryItem(name: "left_at", value: "is.null"),
             ]
         )
-        let items = rows.compactMap { row -> TradeRoom? in
-            guard let room = row.room else { return nil }
-            return try? mapRoom(room)
+        var droppedEmbed = 0
+        var items = rows.compactMap { row -> TradeRoom? in
+            guard let room = row.room else {
+                droppedEmbed += 1
+                RoomDiscoveryProbe.logDropped(roomID: row.room_id, reason: "memberEmbedNil")
+                return nil
+            }
+            guard let mapped = try? mapRoom(room) else {
+                RoomDiscoveryProbe.logDropped(roomID: row.room_id, reason: "memberMapFailed")
+                return nil
+            }
+            return mapped
         }
-        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        let decodedCount = items.count
+        if let ownedPage = try? await rooms(for: profileID, page: PageRequest(limit: page.limit)),
+           !ownedPage.items.isEmpty
+        {
+            let memberIDs = Set(items.map(\.id))
+            for owned in ownedPage.items where !memberIDs.contains(owned.id) {
+                items.append(owned)
+                RoomDiscoveryProbe.logMergedFromMembership(roomID: owned.id)
+            }
+        }
+
+        items.sort { lhs, rhs in
+            if lhs.ownerProfileID == profileID, rhs.ownerProfileID != profileID { return true }
+            if lhs.ownerProfileID != profileID, rhs.ownerProfileID == profileID { return false }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+
+        RoomDiscoveryProbe.logMemberRooms(
+            serverReturned: rows.count,
+            decoded: decodedCount,
+            afterOwnedMerge: items.count,
+            droppedEmbed: droppedEmbed
+        )
 
         let limited = Array(items.prefix(page.limit))
         return CursorPage(
@@ -345,13 +382,10 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 content: "Shared a trade",
                 section_id: message.channelID?.rawValue
             )
-            let dto: RoomDTO.Message = try await supabase.database.insert(
+            return try await insertRoomMessage(
                 body,
-                into: "room_messages",
-                returning: RoomDTO.Message.self
+                probeContext: roomMessageProbeContext(for: message, messageType: "trade")
             )
-            guard let mapped = mapMessage(dto) else { return message }
-            return mapped
         }
 
         if let shareType = message.shareType,
@@ -372,17 +406,14 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 content: content,
                 section_id: message.channelID?.rawValue
             )
-            let dto: RoomDTO.Message = try await supabase.database.insert(
+            return try await insertRoomMessage(
                 body,
-                into: "room_messages",
-                returning: RoomDTO.Message.self
+                probeContext: roomMessageProbeContext(for: message, messageType: shareType)
             )
-            guard let mapped = mapMessage(dto) else { return message }
-            return mapped
         }
 
         if let content = message.body,
-           StoryShareMessageSupport.isStoryShare(type: StoryShareMessageSupport.messageType, content: content)
+           StoryShareMessageSupport.isStoryShare(type: message.shareType, content: content)
         {
             struct StoryShareBody: Encodable {
                 var room_id: String
@@ -398,13 +429,13 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 content: content,
                 section_id: message.channelID?.rawValue
             )
-            let dto: RoomDTO.Message = try await supabase.database.insert(
+            return try await insertRoomMessage(
                 body,
-                into: "room_messages",
-                returning: RoomDTO.Message.self
+                probeContext: roomMessageProbeContext(
+                    for: message,
+                    messageType: StoryShareMessageSupport.messageType
+                )
             )
-            guard let mapped = mapMessage(dto) else { return message }
-            return mapped
         }
 
         if let audio = message.media.first(where: { $0.kind == .audio }) {
@@ -429,36 +460,92 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 audio_duration_ms: durationMs,
                 section_id: message.channelID?.rawValue
             )
+            return try await insertRoomMessage(
+                body,
+                probeContext: roomMessageProbeContext(for: message, messageType: "voice")
+            )
+        }
+
+        if let imageMedia = message.media.first(where: { $0.kind == .image }) {
+            struct ImageBody: Encodable {
+                var room_id: String
+                var user_id: String
+                var type: String
+                var image_url: String
+                var content: String?
+                var section_id: String?
+            }
+            let body = ImageBody(
+                room_id: message.roomID.rawValue,
+                user_id: message.senderProfileID.rawValue,
+                type: "image",
+                image_url: imageMedia.id,
+                content: message.body,
+                section_id: message.channelID?.rawValue
+            )
+            return try await insertRoomMessage(
+                body,
+                probeContext: roomMessageProbeContext(for: message, messageType: "image")
+            )
+        }
+
+        struct TextBody: Encodable {
+            var room_id: String
+            var user_id: String
+            var content: String
+            var section_id: String?
+        }
+        guard let content = message.body?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !content.isEmpty
+        else {
+            throw AppError.unknown(message: "Empty room message")
+        }
+        let body = TextBody(
+            room_id: message.roomID.rawValue,
+            user_id: message.senderProfileID.rawValue,
+            content: content,
+            section_id: message.channelID?.rawValue
+        )
+        return try await insertRoomMessage(
+            body,
+            probeContext: roomMessageProbeContext(for: message, messageType: "text")
+        )
+    }
+
+    private func roomMessageProbeContext(
+        for message: RoomMessage,
+        messageType: String
+    ) -> RoomMessageSendProbe.Context {
+        RoomMessageSendProbe.Context(
+            roomID: message.roomID.rawValue,
+            channelID: message.channelID?.rawValue,
+            senderID: message.senderProfileID.rawValue,
+            messageType: messageType,
+            hasReply: message.parentMessageID != nil
+        )
+    }
+
+    private func insertRoomMessage<Body: Encodable>(
+        _ body: Body,
+        probeContext: RoomMessageSendProbe.Context
+    ) async throws -> RoomMessage {
+        RoomMessageSendProbe.logInsertAttempt(probeContext)
+        do {
             let dto: RoomDTO.Message = try await supabase.database.insert(
                 body,
                 into: "room_messages",
+                query: [SupabaseQuery.select(Self.messageInsertReturningSelect)],
                 returning: RoomDTO.Message.self
             )
-            guard let mapped = mapMessage(dto) else { return message }
+            guard let mapped = mapMessage(dto) else {
+                throw AppError.unknown(message: "Failed to map inserted room message")
+            }
+            RoomMessageSendProbe.logInsertSuccess(probeContext, messageID: mapped.id.rawValue)
             return mapped
+        } catch {
+            RoomMessageSendProbe.logFailed(probeContext, error: error)
+            throw error
         }
-
-        struct Body: Encodable {
-            var room_id: String
-            var user_id: String
-            var content: String?
-            var type: String
-            var section_id: String?
-        }
-        let body = Body(
-            room_id: message.roomID.rawValue,
-            user_id: message.senderProfileID.rawValue,
-            content: message.body,
-            type: message.media.isEmpty ? "text" : "image",
-            section_id: message.channelID?.rawValue
-        )
-        let dto: RoomDTO.Message = try await supabase.database.insert(
-            body,
-            into: "room_messages",
-            returning: RoomDTO.Message.self
-        )
-        guard let mapped = mapMessage(dto) else { return message }
-        return mapped
     }
 
     func insertMessageReaction(
@@ -566,8 +653,40 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             membersCanShareTrades: dto.members_can_share_trades ?? true,
             membersCanShareMedia: dto.members_can_share_media ?? true,
             roomKind: roomKind,
-            createdAt: ISO8601.date(from: dto.created_at) ?? Date()
+            createdAt: ISO8601.date(from: dto.created_at) ?? .distantPast
         )
+    }
+
+    func lastMessageActivity(for roomIDs: [RoomID]) async throws -> [RoomID: Date] {
+        let unique = Array(Set(roomIDs.map(\.rawValue))).filter { !$0.isEmpty }
+        guard !unique.isEmpty else { return [:] }
+
+        struct Row: Decodable, Sendable {
+            var room_id: String?
+            var created_at: String?
+        }
+
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "room_messages",
+            query: [
+                SupabaseQuery.select("room_id,created_at"),
+                SupabaseQuery.isIn("room_id", unique),
+                URLQueryItem(name: "order", value: "created_at.desc"),
+                URLQueryItem(name: "limit", value: "\(min(unique.count * 3, 200))"),
+            ]
+        )
+
+        var result: [RoomID: Date] = [:]
+        for row in rows {
+            guard let raw = row.room_id else { continue }
+            let roomID = RoomID(raw)
+            guard result[roomID] == nil else { continue }
+            if let at = row.created_at.flatMap({ ISO8601.date(from: $0) }) {
+                result[roomID] = at
+            }
+        }
+        return result
     }
 
     func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] {

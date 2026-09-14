@@ -4,7 +4,7 @@ import XCTest
 @MainActor
 final class DetailExperienceTests: XCTestCase {
     func testDetailCacheSeedsAvoidRefetchPathForTrade() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let cache = environment.data.detailCache
         let profileID = ProfileID("dev.detail-trade")
         let trade = ProfileTradeFixtures.samples(owner: profileID)[0]
@@ -37,7 +37,7 @@ final class DetailExperienceTests: XCTestCase {
     }
 
     func testOpenTradePushesProfileTradeRoute() {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         environment.navigation.coordinator.markAuthenticated()
         let profileID = ProfileID("dev.detail-nav")
         let viewModel = TradesContainerViewModel(
@@ -60,7 +60,7 @@ final class DetailExperienceTests: XCTestCase {
     }
 
     func testOpenPostAndClipPushDetailRoutes() {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         environment.navigation.coordinator.markAuthenticated()
         let profileID = ProfileID("dev.detail-social")
 
@@ -89,7 +89,7 @@ final class DetailExperienceTests: XCTestCase {
     }
 
     func testPostDetailLoadsFromCache() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         let profileID = ProfileID("dev.detail-post")
         let post = ProfilePostFixtures.samples(owner: profileID)[0]
         environment.data.detailCache.seed(post)
@@ -112,7 +112,7 @@ final class DetailExperienceTests: XCTestCase {
     }
 
     func testAchievementDetailLoadsFromCacheAndOpensRoute() async {
-        let environment = CompositionRoot.bootstrap()
+        let environment = CompositionRoot.bootstrapAppEnvironment()
         environment.navigation.coordinator.markAuthenticated()
         let profileID = ProfileID("dev.detail-achievement")
         let achievement = ProfileAchievementFixtures.samples(owner: profileID)[0]

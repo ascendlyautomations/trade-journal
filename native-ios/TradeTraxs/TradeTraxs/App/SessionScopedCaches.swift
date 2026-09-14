@@ -20,6 +20,7 @@ enum SessionScopedCaches {
         Task { await LeaderboardTradeRowsCache.shared.invalidate() }
         TradeHistorySessionStore.shared.invalidate()
         FeedSessionStore.shared.invalidate()
+        ProfileSessionStore.shared.invalidate()
         FeedStoriesCatalogStore.shared.invalidate()
         FeedBlockedAuthorsFilter.shared.clear()
         ViewerActiveStoryStore.shared.invalidate()
@@ -29,6 +30,8 @@ enum SessionScopedCaches {
         CalendarMonthSessionStore.shared.invalidate()
         SessionAccountsStore.shared.invalidate()
         SessionPayoutCyclesStore.shared.invalidateAll()
+        SessionPayoutEntriesStore.shared.invalidate()
+        WithdrawalsHistoryStore.shared.invalidate()
         SessionProfileStore.shared.invalidate()
         SessionTradeEntityStore.shared.invalidate()
         SessionOwnerTradesStore.shared.invalidate()
@@ -40,12 +43,19 @@ enum SessionScopedCaches {
         Task { await SessionFollowingStore.shared.invalidate() }
         SessionBootstrapStore.shared.clear()
         BackendV2BootstrapDiskCache.clearAll()
+        ViewerSyncStateDiskCache.clear()
+        ViewerSyncReconciliationCoordinator.shared.reset()
+        ViewerSyncStateRuntime.reset()
+        data.cache.memory.removeAll()
         Task {
             await BackendV2SingleFlight.shared.clear()
             await BackendV2RpcAvailability.shared.clear()
             await SessionBootstrapRefreshCommit.shared.reset()
         }
         SessionDiskCache.clearAll()
+        SocialPersistedCacheCoordinator.clearAll()
+        FeedPersistedCacheCoordinator.clearAll()
+        ProfilePersistedCacheCoordinator.clearAll()
         TradeJournalMutationStore.shared.invalidate()
         AccountMutationStore.shared.invalidate()
         ContentMutationStore.shared.invalidate()
@@ -70,6 +80,13 @@ enum SessionScopedCaches {
         #if DEBUG
         SessionNetworkProbe.resetForTesting()
         SupabaseSessionUsage.resetForTesting()
+        FeedPersistentCacheProbe.resetForTesting()
+        ProfilePersistentCacheProbe.resetForTesting()
+        SocialEntityCacheProbe.resetForTesting()
+        TradeHistoryCacheProbe.resetForTesting()
+        CalendarCacheProbe.resetForTesting()
+        DiskCacheIOProbe.resetForTesting()
+        ColdLaunchSummaryProbe.resetForTesting()
         #endif
     }
 }

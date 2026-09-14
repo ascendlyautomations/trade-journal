@@ -5,6 +5,9 @@ import Foundation
 /// Converts `/storage/v1/object/public/{bucket}/path` into
 /// `/storage/v1/render/image/public/{bucket}/path?width=&quality=&resize=`.
 nonisolated enum StorageImageTransform {
+    /// Bump when feed render query params change so image caches miss stale cropped bytes.
+    static let feedDisplayCacheRevision = 2
+
     enum Preset: Sendable {
         case avatar
         case feedThumb
@@ -57,6 +60,8 @@ nonisolated enum StorageImageTransform {
             query = [
                 URLQueryItem(name: "width", value: "640"),
                 URLQueryItem(name: "quality", value: "75"),
+                // Downscale only — default `cover` center-crops when only width is set.
+                URLQueryItem(name: "resize", value: "contain"),
             ]
         case .feedDetail:
             query = [

@@ -29,6 +29,8 @@ nonisolated enum BackendV2FeatureFlag: String, CaseIterable, Sendable {
     case propFirm
     case tradesList
     case gettingStarted
+    /// Lightweight cache reconciliation RPC — enable only after `rpc_v1_viewer_sync_state` is deployed.
+    case viewerSyncState
 
     var dottedName: String { "backendV2.\(rawValue)" }
 

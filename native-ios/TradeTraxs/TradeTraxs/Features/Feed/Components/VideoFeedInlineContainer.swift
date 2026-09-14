@@ -74,11 +74,15 @@ struct VideoFeedInlineContainer<Overlay: View>: View {
     private var layoutMetrics: CGSize {
         let width = UIScreen.main.bounds.width
         if let presentation {
-            return presentation.feedInlineContainerSize(containerWidth: width)
+            return presentation.feedInlineContainerSize(
+                containerWidth: width,
+                screenBounds: UIScreen.main.bounds
+            )
         }
         return FeedInlineClipLayout.containerSize(
             containerWidth: width,
-            videoAspectRatio: FeedInlineClipLayout.placeholderAspectRatio
+            videoAspectRatio: FeedInlineClipLayout.placeholderAspectRatio,
+            screenBounds: UIScreen.main.bounds
         )
     }
 
@@ -88,7 +92,10 @@ struct VideoFeedInlineContainer<Overlay: View>: View {
         guard !didLogPresentation, let presentation else { return }
         didLogPresentation = true
         let width = UIScreen.main.bounds.width
-        let metrics = presentation.feedInlineContainerSize(containerWidth: width)
+        let metrics = presentation.feedInlineContainerSize(
+            containerWidth: width,
+            screenBounds: UIScreen.main.bounds
+        )
         InlineClipPresentationDiagnostics.log(
             clipID: reel.id.rawValue,
             sourceSize: "\(Int(presentation.rawSize.width))x\(Int(presentation.rawSize.height))",

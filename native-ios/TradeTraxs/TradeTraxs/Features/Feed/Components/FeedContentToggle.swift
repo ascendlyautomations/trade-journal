@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact SF Symbol filter strip — All / Trades / Posts / Clips / Achievements.
+/// Compact SF Symbol filter strip — All / Trades / Clips / Posts / Achievements.
 struct FeedContentToggle: View {
     let filter: FeedContentFilter
     let onSelect: (FeedContentFilter) -> Void
@@ -9,7 +9,7 @@ struct FeedContentToggle: View {
 
     var body: some View {
         HStack(spacing: ExperienceSpacing.sm) {
-            ForEach(FeedContentFilter.allCases, id: \.self) { value in
+            ForEach(FeedContentFilter.filterStripOrder, id: \.self) { value in
                 filterButton(value)
             }
             Spacer(minLength: 0)

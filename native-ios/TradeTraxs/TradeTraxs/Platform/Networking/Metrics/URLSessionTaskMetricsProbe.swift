@@ -32,6 +32,15 @@ nonisolated enum NetworkTaskMetricsProbe {
         category: "NetworkTaskMetrics"
     )
 
+    static func responseWaitMilliseconds(metrics: URLSessionTaskMetrics?) -> Double? {
+        guard let metrics else { return nil }
+        let transaction = metrics.transactionMetrics.last
+        guard let start = transaction?.requestEndDate,
+              let end = transaction?.responseStartDate
+        else { return nil }
+        return max(0, end.timeIntervalSince(start) * 1000)
+    }
+
     static func logRPCIfPresent(path: String, metrics: URLSessionTaskMetrics?) {
         guard let metrics else { return }
         guard path.contains("/rest/v1/rpc/") else { return }
@@ -104,6 +113,8 @@ final class URLSessionTaskMetricsCollector: NSObject, URLSessionTaskDelegate, @u
 }
 
 nonisolated enum NetworkTaskMetricsProbe {
+    static func responseWaitMilliseconds(metrics: URLSessionTaskMetrics?) -> Double? { nil }
+
     static func logRPCIfPresent(path: String, metrics: URLSessionTaskMetrics?) {
         _ = (path, metrics)
     }

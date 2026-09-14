@@ -1,16 +1,38 @@
 import SwiftUI
 
-/// Account + date range menus with Trades and Reports tools — compact header controls.
+/// Account + date range menus with Trades, Reports, and Withdrawals tools — compact header controls.
 struct DashboardFilterBar: View {
     @Bindable var viewModel: DashboardViewModel
 
     @Environment(\.themeColors) private var colors
+    @State private var filterBarWidth: CGFloat = 0
 
     var body: some View {
-        HStack(spacing: ExperienceSpacing.sm) {
+        HStack(spacing: ExperienceSpacing.xs) {
             accountMenu
+                .layoutPriority(1)
             dateMenu
-            Spacer(minLength: 0)
+                .layoutPriority(2)
+                .fixedSize(horizontal: true, vertical: false)
+            Spacer(minLength: ExperienceSpacing.xxs)
+            dashboardToolButtons
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(2)
+        }
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { filterBarWidth = geo.size.width }
+                    .onChange(of: geo.size.width) { _, width in
+                        filterBarWidth = width
+                    }
+            }
+        }
+        .accessibilityIdentifier("dashboard.filters")
+    }
+
+    private var dashboardToolButtons: some View {
+        HStack(spacing: ExperienceSpacing.xxs) {
             toolButton(
                 icon: .trades,
                 accessibilityLabel: "Trades",
@@ -26,15 +48,14 @@ struct DashboardFilterBar: View {
             ) {
                 viewModel.openReports()
             }
-            toolProfileBankButton(
-                accessibilityLabel: "Payouts",
-                accessibilityIdentifier: "dashboard.payouts"
+            toolButton(
+                icon: .payouts,
+                accessibilityLabel: "Withdrawals",
+                accessibilityIdentifier: "dashboard.withdrawals"
             ) {
-                ExperienceHaptics.play(.selection)
-                viewModel.openPayouts()
+                viewModel.openWithdrawalsHistory()
             }
         }
-        .accessibilityIdentifier("dashboard.filters")
     }
 
     private func toolButton(
@@ -45,24 +66,6 @@ struct DashboardFilterBar: View {
     ) -> some View {
         Button(action: action) {
             ExperienceIcon(icon: icon, size: .md, color: colors.primaryText)
-                .frame(
-                    width: ExperienceAccessibility.minTouchTarget,
-                    height: ExperienceAccessibility.minTouchTarget
-                )
-                .background(colors.fillSecondary, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityIdentifier(accessibilityIdentifier)
-    }
-
-    private func toolProfileBankButton(
-        accessibilityLabel: String,
-        accessibilityIdentifier: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            ProfileBankIcon.image(color: colors.primaryText)
                 .frame(
                     width: ExperienceAccessibility.minTouchTarget,
                     height: ExperienceAccessibility.minTouchTarget
@@ -92,7 +95,7 @@ struct DashboardFilterBar: View {
             boundary: .dashboard,
             profileID: viewModel.ownerAccountsProfileID
         ) {
-            menuLabel(selectedAccountTitle)
+            accountMenuLabel(selectedAccountTitle)
         }
         .accessibilityLabel("Account")
         .accessibilityValue(selectedAccountTitle)
@@ -131,16 +134,39 @@ struct DashboardFilterBar: View {
         .accessibilityIdentifier("dashboard.dateRange")
     }
 
+    private func accountMenuLabel(_ title: String) -> some View {
+        menuLabel(title)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(
+                maxWidth: maxAccountSelectorWidth(in: filterBarWidth),
+                alignment: .leading
+            )
+    }
+
     private func menuLabel(_ title: String) -> some View {
         HStack(spacing: 4) {
             Text(title)
                 .experienceStyle(.footnote, color: colors.primaryText)
                 .lineLimit(1)
+                .truncationMode(.tail)
             ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.secondaryText)
         }
         .padding(.horizontal, ExperienceSpacing.sm)
         .frame(minHeight: 32)
         .background(colors.fillSecondary)
         .clipShape(Capsule())
+    }
+
+    /// Caps account label width so three tool buttons + date range stay on one row (176 max unchanged).
+    private func maxAccountSelectorWidth(in totalWidth: CGFloat) -> CGFloat {
+        guard totalWidth > 0 else { return 176 }
+        let touch = ExperienceAccessibility.minTouchTarget
+        let rowGap = ExperienceSpacing.xs
+        let toolGap = ExperienceSpacing.xxs
+        let dateReserve: CGFloat = 76
+        let toolsWidth = touch * 3 + toolGap * 2
+        let reserved = dateReserve + toolsWidth + rowGap * 2 + ExperienceSpacing.xxs
+        let available = totalWidth - reserved
+        return min(max(available, 112), 176)
     }
 }

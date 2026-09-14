@@ -6,31 +6,39 @@ nonisolated enum ActivityBootstrapApplier {
         var unreadCount: Int
         var pendingFollowRequestCount: Int
         var nextCursor: String?
+        var actorProfiles: [Profile]
     }
 
-    @MainActor
-    static func apply(
-        _ bootstrap: ActivityBootstrapV1,
-        detailCache: DetailPresentationCache?
-    ) -> Applied {
+    /// Decode/transform off the MainActor — no detail-cache mutation.
+    nonisolated static func transform(_ bootstrap: ActivityBootstrapV1) -> Applied {
+        let decodedCount = bootstrap.data.notifications.count
         let notifications = bootstrap.data.notifications.compactMap {
             DefaultNotificationRepository.mapNotification($0.asNotificationDTO())
         }
-
-        if let detailCache {
-            for (_, card) in bootstrap.data.actors {
-                if let profile = mapActor(card) {
-                    detailCache.seed(profile)
-                }
-            }
-        }
-
+        let actorProfiles = bootstrap.data.actors.values.compactMap { mapActor($0) }
+        ActivityPipelineProbe.record(
+            stage: "rpcDecoded",
+            decoded: decodedCount,
+            stored: notifications.count,
+            note: decodedCount > notifications.count ? "mappingDropped=\(decodedCount - notifications.count)" : nil
+        )
         return Applied(
             items: notifications,
             unreadCount: bootstrap.data.unread_total,
             pendingFollowRequestCount: bootstrap.data.follow_requests.count,
-            nextCursor: bootstrap.data.next_cursor
+            nextCursor: bootstrap.data.next_cursor,
+            actorProfiles: actorProfiles
         )
+    }
+
+    @MainActor
+    static func seedActors(_ profiles: [Profile], detailCache: DetailPresentationCache?) {
+        guard let detailCache, !profiles.isEmpty else { return }
+        MainThreadWorkProbe.measure("activity.seedActors", surface: "activity") {
+            for profile in profiles {
+                detailCache.seed(profile)
+            }
+        }
     }
 
     private static func mapActor(_ card: AuthorCardV1) -> Profile? {

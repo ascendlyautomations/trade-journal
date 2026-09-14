@@ -25,7 +25,8 @@ struct SharedContentShareSheet: View {
                 target: target,
                 messagesRepo: data.messages,
                 roomsRepo: data.rooms,
-                session: data.session
+                session: data.session,
+                detailCache: data.detailCache
             )
         )
     }
@@ -83,8 +84,11 @@ struct SharedContentShareSheet: View {
             SharedContentShareRecipientPickerView(
                 scope: scope,
                 viewModel: viewModel,
-                onSelectConversation: { _ in onClose() },
-                onSelectRoom: { _ in onClose() },
+                imagePipeline: data.imagePipeline,
+                onSendSuccess: {
+                    recipientScope = nil
+                    onClose()
+                },
                 onClose: { recipientScope = nil }
             )
         }

@@ -5,17 +5,17 @@ import os.log
 
 /// DEBUG-only PostgREST / RPC tracing. Search Xcode console for `[DB_REQUEST]`.
 enum DatabaseRequestDebugLog {
-    static let prefix = "[DB_REQUEST]"
+    nonisolated static let prefix = "[DB_REQUEST]"
 
-    private static let logger = Logger(
+    nonisolated private static let logger = Logger(
         subsystem: "com.tradetraxs.TradeTraxs",
         category: "DB-Request"
     )
 
-    private static let lock = NSLock()
-    private static var inFlightKeys: Set<String> = []
+    nonisolated private static let lock = NSLock()
+    nonisolated(unsafe) private static var inFlightKeys: Set<String> = []
 
-    static func log(
+    nonisolated static func log(
         feature: String = "unknown",
         operation: String,
         key: String,
@@ -29,7 +29,7 @@ enum DatabaseRequestDebugLog {
         print(line)
     }
 
-    static func begin(operation: String, key: String) -> (deduped: Bool, token: String) {
+    nonisolated static func begin(operation: String, key: String) -> (deduped: Bool, token: String) {
         let token = "\(operation)|\(key)"
         lock.lock()
         let deduped = inFlightKeys.contains(token)
@@ -38,13 +38,13 @@ enum DatabaseRequestDebugLog {
         return (deduped, token)
     }
 
-    static func end(token: String) {
+    nonisolated static func end(token: String) {
         lock.lock()
         inFlightKeys.remove(token)
         lock.unlock()
     }
 
-    static func table(_ table: String, query: [URLQueryItem], feature: String = "unknown") {
+    nonisolated static func table(_ table: String, query: [URLQueryItem], feature: String = "unknown") {
         let filterKey = query
             .filter { ["conversation_id", "user_id", "id", "room_id"].contains($0.name) }
             .map { "\($0.name)=\($0.value ?? "")" }
@@ -60,7 +60,7 @@ enum DatabaseRequestDebugLog {
         end(token: snapshot.token)
     }
 
-    static func rpc(_ functionName: String, feature: String = "unknown") {
+    nonisolated static func rpc(_ functionName: String, feature: String = "unknown") {
         let snapshot = begin(operation: "rpc:\(functionName)", key: functionName)
         log(
             feature: feature,
@@ -71,7 +71,7 @@ enum DatabaseRequestDebugLog {
         end(token: snapshot.token)
     }
 
-    static func write(
+    nonisolated static func write(
         operation: String,
         target: String,
         reason: String = "unknown",
@@ -86,7 +86,7 @@ enum DatabaseRequestDebugLog {
 }
 #else
 enum DatabaseRequestDebugLog {
-    static func log(
+    nonisolated static func log(
         feature: String = "unknown",
         operation: String,
         key: String,
@@ -94,9 +94,9 @@ enum DatabaseRequestDebugLog {
         deduped: Bool = false
     ) {}
 
-    static func table(_ table: String, query: [URLQueryItem], feature: String = "unknown") {}
-    static func rpc(_ functionName: String, feature: String = "unknown") {}
-    static func write(
+    nonisolated static func table(_ table: String, query: [URLQueryItem], feature: String = "unknown") {}
+    nonisolated static func rpc(_ functionName: String, feature: String = "unknown") {}
+    nonisolated static func write(
         operation: String,
         target: String,
         reason: String = "unknown",

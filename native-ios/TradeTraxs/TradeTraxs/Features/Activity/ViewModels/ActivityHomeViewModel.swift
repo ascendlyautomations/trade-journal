@@ -65,6 +65,8 @@ final class ActivityHomeViewModel {
     }
 
     func refresh() async {
+        ActivityFeedBootstrapPriorityGate.setScreenActive(true)
+        defer { ActivityFeedBootstrapPriorityGate.setScreenActive(false) }
         await load(force: true)
     }
 
@@ -159,6 +161,7 @@ final class ActivityHomeViewModel {
         Task {
             do {
                 _ = try await notifications.markRead(ids: unreadIDs)
+                AppIconBadgeSync.refresh(animated: true)
                 NotificationReadDiagnostics.logBulkMarkRead(
                     ids: unreadIDs.count,
                     requests: 1,
@@ -168,6 +171,24 @@ final class ActivityHomeViewModel {
                 for id in unreadIDs {
                     inboxStore.markUnreadLocally(id: id)
                 }
+                ExperienceHaptics.play(.warning)
+            }
+        }
+    }
+
+    func delete(row: ActivityRowModel) {
+        ExperienceHaptics.play(.selection)
+        let ids = row.groupedNotificationIDs
+        let removed = inboxStore.removeLocally(ids: ids)
+        guard !removed.isEmpty else { return }
+
+        Task {
+            do {
+                _ = try await notifications.delete(ids: ids)
+                AppIconBadgeSync.refresh(animated: true)
+            } catch {
+                inboxStore.restoreLocally(removed)
+                ExperienceHaptics.play(.warning)
             }
         }
     }
@@ -218,22 +239,10 @@ final class ActivityHomeViewModel {
     // MARK: - Private
 
     private func load(force: Bool) async {
-        if !force, inboxStore.hasLoaded {
-            phase = .loaded
-            await hydrateActors(for: inboxStore.items)
-            await inboxStore.startIfNeeded(
-                notifications: notifications,
-                followRequests: followRequests,
-                session: session,
-                realtimeHub: realtimeHub,
-                detailCache: detailCache,
-                rpc: rpc
-            )
-            return
-        }
-
-        if !inboxStore.hasLoaded {
+        if !inboxStore.hasLoaded, !force {
             phase = .loading
+        } else if inboxStore.hasLoaded {
+            phase = .loaded
         }
 
         await inboxStore.startIfNeeded(
@@ -242,7 +251,8 @@ final class ActivityHomeViewModel {
             session: session,
             realtimeHub: realtimeHub,
             detailCache: detailCache,
-            rpc: rpc
+            rpc: rpc,
+            feedPresentation: true
         )
 
         if force {
@@ -267,6 +277,16 @@ final class ActivityHomeViewModel {
         }
 
         await hydrateActors(for: inboxStore.items)
+#if DEBUG
+        let grouped = ActivityPresentation.sections(from: inboxStore.items, actors: actors)
+            .flatMap(\.rows)
+            .count
+        ActivityPipelineProbe.record(
+            stage: "viewModelLoaded",
+            stored: inboxStore.items.count,
+            grouped: grouped
+        )
+#endif
     }
 
     private func hydrateActors(for items: [ActivityNotification]) async {

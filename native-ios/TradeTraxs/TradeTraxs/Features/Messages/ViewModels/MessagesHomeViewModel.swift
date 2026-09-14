@@ -83,7 +83,8 @@ final class MessagesHomeViewModel {
             && !showsEmpty
             && pinnedItems.isEmpty
             && directMessageItems.isEmpty
-            && tradeRoomItems.isEmpty
+            && ownedTradeRoomItem == nil
+            && joinedTradeRoomItems.isEmpty
     }
 
     var canonicalInboxStore: MessagesInboxStore { inboxStore }
@@ -96,7 +97,22 @@ final class MessagesHomeViewModel {
         filteredDirectMessages.filter { !$0.isPinned }
     }
 
-    var tradeRoomItems: [TradeRoomInboxItem] {
+    /// Member rooms matching search — use ``joinedTradeRoomItems`` / ``ownedTradeRoomItem`` for layout.
+    var tradeRoomItems: [TradeRoomInboxItem] { filteredTradeRoomItems }
+
+    /// Viewer-owned room (`TradeRoom.ownerProfileID`) — at most one row, excluded from ``joinedTradeRoomItems``.
+    var ownedTradeRoomItem: TradeRoomInboxItem? {
+        guard let viewerID else { return nil }
+        return filteredTradeRoomItems.first { $0.room.ownerProfileID == viewerID }
+    }
+
+    /// Member rooms the viewer does not own.
+    var joinedTradeRoomItems: [TradeRoomInboxItem] {
+        guard let viewerID else { return filteredTradeRoomItems }
+        return filteredTradeRoomItems.filter { $0.room.ownerProfileID != viewerID }
+    }
+
+    private var filteredTradeRoomItems: [TradeRoomInboxItem] {
         let query = normalizedQuery
         let items = inboxStore.rooms.map(makeRoomItem)
         guard !query.isEmpty else { return items }
@@ -130,6 +146,10 @@ final class MessagesHomeViewModel {
         await domain.bootstrapHomeIfNeeded(forceNetwork: false)
         syncFromDomain()
         await domain.retainRealtime()
+    }
+
+    func releaseRealtime() {
+        domain.releaseRealtime()
     }
 
     func setHomeScreenVisible(_ visible: Bool) {
@@ -394,7 +414,7 @@ final class MessagesHomeViewModel {
             ownerName: owner?.displayName,
             ownerIsVerified: owner?.isCreator == true,
             preview: preview,
-            timestamp: room.createdAt,
+            timestamp: inboxStore.roomActivityAt[room.id],
             unreadCount: inboxStore.roomUnread[room.id] ?? 0,
             isMuted: inboxStore.isRoomMuted(room.id)
         )

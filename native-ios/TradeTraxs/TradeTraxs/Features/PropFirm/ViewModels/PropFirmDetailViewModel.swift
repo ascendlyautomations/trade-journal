@@ -17,7 +17,6 @@ final class PropFirmDetailViewModel {
 
     private var hasLoaded = false
     private var watchedChannel: RealtimeChannelID?
-    private var realtimeTask: Task<Void, Never>?
 
     init(
         accountID: TradingAccountID,
@@ -156,16 +155,9 @@ final class PropFirmDetailViewModel {
         )
         watchedChannel = channel
         try? await realtimeHub.subscriptions.subscribe(channel)
-        realtimeTask = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 60_000_000_000)
-            }
-        }
     }
 
     private func stopRealtime() async {
-        realtimeTask?.cancel()
-        realtimeTask = nil
         guard let realtimeHub, let channel = watchedChannel else { return }
         try? await realtimeHub.subscriptions.unsubscribe(channel)
         watchedChannel = nil

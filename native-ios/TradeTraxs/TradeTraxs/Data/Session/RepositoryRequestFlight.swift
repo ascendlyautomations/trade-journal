@@ -28,12 +28,26 @@ nonisolated final class RepositoryRequestFlight: @unchecked Sendable {
 
     private init() {}
 
+    struct CoalescedValue<T: Sendable>: Sendable {
+        var value: T
+        var deduped: Bool
+    }
+
     /// Shares one network operation across concurrent callers with the same key.
     func coalesce<T: Sendable>(
         key: String,
         resource: String,
         fetch: @escaping @Sendable () async throws -> T
     ) async throws -> T {
+        try await coalesceWithMetadata(key: key, resource: resource, fetch: fetch).value
+    }
+
+    /// Like ``coalesce`` but reports whether this caller joined an in-flight peer.
+    func coalesceWithMetadata<T: Sendable>(
+        key: String,
+        resource: String,
+        fetch: @escaping @Sendable () async throws -> T
+    ) async throws -> CoalescedValue<T> {
         let outcome: RepositoryRequestCoalesceOutcome<T> = state.withLock { flight in
             if let existing = flight.tasks[key] as? Task<T, Error> {
                 return .join(existing)
@@ -54,14 +68,14 @@ nonisolated final class RepositoryRequestFlight: @unchecked Sendable {
                 detail: key
             )
             #endif
-            return try await existing.value
+            return CoalescedValue(value: try await existing.value, deduped: true)
         case .lead(let task):
             defer {
                 state.withLock { flight in
                     flight.tasks[key] = nil
                 }
             }
-            return try await task.value
+            return CoalescedValue(value: try await task.value, deduped: false)
         }
     }
 

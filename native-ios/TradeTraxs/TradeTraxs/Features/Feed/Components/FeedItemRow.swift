@@ -164,7 +164,7 @@ struct FeedItemRow: View {
                 imagePipeline: imagePipeline,
                 emptyIcon: .chart,
                 accessibilityIdentifier: "feed.trade.media",
-                deliveryQuality: .fullResolution,
+                deliveryQuality: .feedDisplay,
                 auditSurface: "feed",
                 onSingleTap: onOpen,
                 onDoubleTapLike: {
@@ -183,7 +183,7 @@ struct FeedItemRow: View {
                     imagePipeline: imagePipeline,
                     emptyIcon: .photo,
                     accessibilityIdentifier: "feed.post.media",
-                    deliveryQuality: .fullResolution,
+                    deliveryQuality: .feedDisplay,
                     auditSurface: "feed",
                     onSingleTap: onOpen,
                     onDoubleTapLike: {
@@ -215,7 +215,7 @@ struct FeedItemRow: View {
                 imagePipeline: imagePipeline,
                 emptyIcon: .leaderboard,
                 accessibilityIdentifier: "feed.achievement.media",
-                deliveryQuality: .fullResolution,
+                deliveryQuality: .feedDisplay,
                 auditSurface: "feed",
                 onSingleTap: onOpen,
                 onDoubleTapLike: {

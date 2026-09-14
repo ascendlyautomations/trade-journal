@@ -47,7 +47,12 @@ nonisolated struct RequestBuilder: Sendable {
             body: body,
             timeout: timeout ?? configuration.environment.requestTimeout,
             idempotencyKey: idempotencyKey,
-            allowsRetry: endpoint.isIdempotent
+            allowsRetry: endpoint.isIdempotent,
+            schedulingPriority: NetworkConcurrencyCoordinator.inferPriority(
+                path: endpoint.path,
+                method: endpoint.method,
+                queryItems: endpoint.queryItems
+            )
         )
     }
 

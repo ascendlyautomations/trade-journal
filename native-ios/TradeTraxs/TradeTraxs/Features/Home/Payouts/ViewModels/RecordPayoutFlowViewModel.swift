@@ -154,7 +154,24 @@ final class RecordPayoutFlowViewModel {
             lastRecordedAmount = payoutAmount
             lastRecordedDate = payoutDate
             if let profileID = await session.currentUserID.map({ ProfileID($0.rawValue) }) {
-                SessionPayoutCyclesStore.shared.invalidate(accountID: accountID, profileID: profileID)
+                let completedCycle = AccountPayoutCycle(
+                    id: result.cycleID,
+                    accountID: accountID,
+                    startedAt: context.activeCycle?.startedAt ?? payoutDate,
+                    endedAt: payoutDate,
+                    cycleStartBalance: context.activeCycle?.cycleStartBalance ?? context.startingBalance,
+                    payoutAmount: payoutAmount,
+                    note: nil,
+                    balanceBeforePayout: context.balanceBeforePayout,
+                    balanceAfterPayout: balanceAfter,
+                    drawdownBehavior: drawdownBehavior,
+                    drawdownFloorAfterPayout: drawdownFloor,
+                    cycleNumber: context.activeCycle?.cycleNumber
+                )
+                WithdrawalsHistoryStore.shared.prependCompletedPropCycle(
+                    completedCycle,
+                    profileID: profileID
+                )
             }
             AccountMutationStore.shared.notePayoutRecorded(accountID: accountID)
             #if DEBUG

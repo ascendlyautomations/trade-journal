@@ -38,7 +38,13 @@ nonisolated enum DashboardBootstrapApplier {
             detailCache: detailCache,
             kind: .rest
         )
-        SessionOwnerTradesStore.shared.seed(mapped.trades, for: profileID, detailCache: detailCache)
+        SessionOwnerTradesStore.shared.seed(
+            mapped.trades,
+            for: profileID,
+            detailCache: detailCache,
+            historyComplete: bootstrap.data.trade_window_meta.history_complete,
+            totalTradeCount: bootstrap.data.trade_window_meta.total_trade_count
+        )
         detailCache.seed(trades: mapped.trades)
 
         let payout = bootstrap.data.payout_total?.decimal
@@ -51,6 +57,14 @@ nonisolated enum DashboardBootstrapApplier {
             totalTradeCount: bootstrap.data.trade_window_meta.total_trade_count,
             tradeHistoryComplete: bootstrap.data.trade_window_meta.history_complete
         )
+    }
+
+    /// Accounts from a cached dashboard bootstrap payload — no network.
+    nonisolated static func mappedAccounts(
+        from bootstrap: DashboardBootstrapV1,
+        ownerID: ProfileID
+    ) -> [TradingAccount] {
+        mapAccounts(bootstrap.data.accounts, ownerID: ownerID)
     }
 
     private static func mapAccounts(

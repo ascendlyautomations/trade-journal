@@ -12,9 +12,50 @@ struct TradesContainerView: View {
     @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
+        ProfileSectionContainerChrome(
+            section: .trades,
+            state: viewModel.state,
+            emptyTitle: viewModel.emptyTitle,
+            emptyMessage: viewModel.emptyMessage,
+            emptyActionTitle: viewModel.showsOwnerActions && viewModel.filter == .all
+                ? "Add Trade"
+                : nil,
+            emptyAction: viewModel.showsOwnerActions && viewModel.filter == .all
+                ? { viewModel.addTrade() }
+                : nil,
+            onRetry: { Task { await viewModel.refresh() } }
+        ) {
+            tradesContent
+        }
+        .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
+            viewModel.handleJournalMutation()
+        }
+        .sheet(item: $viewModel.sharePayload) { payload in
+            TradeShareSheet(items: [payload.text])
+        }
+        .confirmationDialog(
+            "Delete Trade?",
+            isPresented: Binding(
+                get: { viewModel.pendingDelete != nil },
+                set: { if !$0 { viewModel.pendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Trade", role: .destructive) {
+                Task { await viewModel.confirmDelete() }
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.pendingDelete = nil
+            }
+        } message: {
+            Text("This action cannot be undone.")
+        }
+    }
+
+    @ViewBuilder
+    private var tradesContent: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             ProfileTradesFilterBar(viewModel: viewModel)
-                .experiencePadding(.horizontal, .lg)
 
             if let paginationErrorMessage = viewModel.paginationErrorMessage {
                 ExperienceBanner(
@@ -24,22 +65,13 @@ struct TradesContainerView: View {
                     actionTitle: "Try again",
                     action: { viewModel.retryLoadMore() }
                 )
-                .experiencePadding(.horizontal, .lg)
             }
 
-            ProfileSectionContainerChrome(
-                section: .trades,
-                state: viewModel.state,
-                emptyTitle: viewModel.emptyTitle,
-                emptyMessage: viewModel.emptyMessage,
-                emptyActionTitle: viewModel.showsOwnerActions && viewModel.filter == .all
-                    ? "Add Trade"
-                    : nil,
-                emptyAction: viewModel.showsOwnerActions && viewModel.filter == .all
-                    ? { viewModel.addTrade() }
-                    : nil,
-                onRetry: { Task { await viewModel.refresh() } }
-            ) {
+            if let message = viewModel.filterEmptyMessage {
+                Text(message)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .accessibilityIdentifier("profile.trades.filterEmpty")
+            } else {
                 LazyVStack(spacing: ExperienceSpacing.sm) {
                     ForEach(viewModel.visibleItems) { trade in
                         ProfileTradeCard(
@@ -75,30 +107,8 @@ struct TradesContainerView: View {
                 .onAppear {
                     viewModel.prefetchEngagement(for: viewModel.visibleItems.map(\.id))
                 }
+                .accessibilityIdentifier("profile.trades.list")
             }
-        }
-        .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
-            viewModel.handleJournalMutation()
-        }
-        .sheet(item: $viewModel.sharePayload) { payload in
-            TradeShareSheet(items: [payload.text])
-        }
-        .confirmationDialog(
-            "Delete Trade?",
-            isPresented: Binding(
-                get: { viewModel.pendingDelete != nil },
-                set: { if !$0 { viewModel.pendingDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete Trade", role: .destructive) {
-                Task { await viewModel.confirmDelete() }
-            }
-            Button("Cancel", role: .cancel) {
-                viewModel.pendingDelete = nil
-            }
-        } message: {
-            Text("This action cannot be undone.")
         }
     }
 

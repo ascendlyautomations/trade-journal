@@ -5,44 +5,44 @@ import os.log
 
 /// DEBUG-only Realtime lifecycle tracing. Search Xcode console for `[RT-Lifecycle]`.
 enum RealtimeLifecycleDebugLog {
-    static let prefix = "[RT-Lifecycle]"
+    nonisolated static let prefix = "[RT-Lifecycle]"
 
-    private static let logger = Logger(
+    nonisolated private static let logger = Logger(
         subsystem: "com.tradetraxs.TradeTraxs",
         category: "RT-Lifecycle"
     )
 
-    static func log(_ message: String) {
+    nonisolated static func log(_ message: String) {
         let line = "\(prefix) \(message)"
         logger.debug("\(line, privacy: .public)")
         print(line)
     }
 
-    static func connect() {
+    nonisolated static func connect() {
         log("CONNECT socket")
     }
 
-    static func disconnect(activeRoutes: Int) {
+    nonisolated static func disconnect(activeRoutes: Int) {
         log("DISCONNECT activeRoutes=\(activeRoutes)")
     }
 
-    static func foregroundResume(connected: Bool, activeRoutes: Int) {
+    nonisolated static func foregroundResume(connected: Bool, activeRoutes: Int) {
         log("FOREGROUND-RESUME connected=\(connected) activeRoutes=\(activeRoutes)")
     }
 
-    static func socketDropped(activeRoutes: Int) {
+    nonisolated static func socketDropped(activeRoutes: Int) {
         log("SOCKET-DROPPED scheduling-reconnect activeRoutes=\(activeRoutes)")
     }
 
-    static func reconnectBegin(activeRoutes: Int, attempt: Int) {
+    nonisolated static func reconnectBegin(activeRoutes: Int, attempt: Int) {
         log("RECONNECT-BEGIN activeRoutes=\(activeRoutes) attempt=\(attempt)")
     }
 
-    static func reconnectEnd(activeRoutes: Int, joinedTopics: Int) {
+    nonisolated static func reconnectEnd(activeRoutes: Int, joinedTopics: Int) {
         log("RECONNECT-END activeRoutes=\(activeRoutes) joinedTopics=\(joinedTopics)")
     }
 
-    static func start(
+    nonisolated static func start(
         routeKey: String,
         topic: String,
         consumers: Int,
@@ -62,7 +62,7 @@ enum RealtimeLifecycleDebugLog {
         }
     }
 
-    static func stop(
+    nonisolated static func stop(
         routeKey: String,
         topic: String?,
         consumersRemoved: Int,
@@ -77,14 +77,14 @@ enum RealtimeLifecycleDebugLog {
         )
     }
 
-    static func join(topic: String, routeKey: String, activeRoutes: Int, joinedTopics: Int) {
+    nonisolated static func join(topic: String, routeKey: String, activeRoutes: Int, joinedTopics: Int) {
         log(
             "JOIN phx_join route=\(routeKey) topic=\(topic) "
                 + "activeRoutes=\(activeRoutes) joinedTopics=\(joinedTopics)"
         )
     }
 
-    static func leave(topic: String, routeKey: String?, activeRoutes: Int, joinedTopics: Int) {
+    nonisolated static func leave(topic: String, routeKey: String?, activeRoutes: Int, joinedTopics: Int) {
         let routePart = routeKey.map { " route=\($0)" } ?? ""
         log(
             "LEAVE phx_leave\(routePart) topic=\(topic) "
@@ -92,7 +92,7 @@ enum RealtimeLifecycleDebugLog {
         )
     }
 
-    static func rejoin(
+    nonisolated static func rejoin(
         routeKey: String,
         topic: String,
         skipped: Bool,
@@ -105,39 +105,39 @@ enum RealtimeLifecycleDebugLog {
         )
     }
 
-    static func registrySubscribe(kind: String, topic: String, refcount: Int, registered: Int) {
+    nonisolated static func registrySubscribe(kind: String, topic: String, refcount: Int, registered: Int) {
         log(
             "REGISTRY-SUBSCRIBE kind=\(kind) topic=\(topic) refcount=\(refcount) registered=\(registered)"
         )
     }
 
-    static func registryUnsubscribe(kind: String, topic: String, refcount: Int, registered: Int) {
+    nonisolated static func registryUnsubscribe(kind: String, topic: String, refcount: Int, registered: Int) {
         log(
             "REGISTRY-UNSUBSCRIBE kind=\(kind) topic=\(topic) refcount=\(refcount) registered=\(registered)"
         )
     }
 
-    static func hubStart() {
+    nonisolated static func hubStart() {
         log("HUB-START")
     }
 
-    static func hubStop() {
+    nonisolated static func hubStop() {
         log("HUB-STOP")
     }
 
-    static func hubResumeIfNeeded() {
+    nonisolated static func hubResumeIfNeeded() {
         log("HUB-RESUME-IF-NEEDED")
     }
 }
 #else
 enum RealtimeLifecycleDebugLog {
-    static func connect() {}
-    static func disconnect(activeRoutes: Int) {}
-    static func foregroundResume(connected: Bool, activeRoutes: Int) {}
-    static func socketDropped(activeRoutes: Int) {}
-    static func reconnectBegin(activeRoutes: Int, attempt: Int) {}
-    static func reconnectEnd(activeRoutes: Int, joinedTopics: Int) {}
-    static func start(
+    nonisolated static func connect() {}
+    nonisolated static func disconnect(activeRoutes: Int) {}
+    nonisolated static func foregroundResume(connected: Bool, activeRoutes: Int) {}
+    nonisolated static func socketDropped(activeRoutes: Int) {}
+    nonisolated static func reconnectBegin(activeRoutes: Int, attempt: Int) {}
+    nonisolated static func reconnectEnd(activeRoutes: Int, joinedTopics: Int) {}
+    nonisolated static func start(
         routeKey: String,
         topic: String,
         consumers: Int,
@@ -145,7 +145,7 @@ enum RealtimeLifecycleDebugLog {
         joinedTopics: Int,
         newJoin: Bool
     ) {}
-    static func stop(
+    nonisolated static func stop(
         routeKey: String,
         topic: String?,
         consumersRemoved: Int,
@@ -153,19 +153,19 @@ enum RealtimeLifecycleDebugLog {
         joinedTopics: Int,
         willLeave: Bool
     ) {}
-    static func join(topic: String, routeKey: String, activeRoutes: Int, joinedTopics: Int) {}
-    static func leave(topic: String, routeKey: String?, activeRoutes: Int, joinedTopics: Int) {}
-    static func rejoin(
+    nonisolated static func join(topic: String, routeKey: String, activeRoutes: Int, joinedTopics: Int) {}
+    nonisolated static func leave(topic: String, routeKey: String?, activeRoutes: Int, joinedTopics: Int) {}
+    nonisolated static func rejoin(
         routeKey: String,
         topic: String,
         skipped: Bool,
         activeRoutes: Int,
         joinedTopics: Int
     ) {}
-    static func registrySubscribe(kind: String, topic: String, refcount: Int, registered: Int) {}
-    static func registryUnsubscribe(kind: String, topic: String, refcount: Int, registered: Int) {}
-    static func hubStart() {}
-    static func hubStop() {}
-    static func hubResumeIfNeeded() {}
+    nonisolated static func registrySubscribe(kind: String, topic: String, refcount: Int, registered: Int) {}
+    nonisolated static func registryUnsubscribe(kind: String, topic: String, refcount: Int, registered: Int) {}
+    nonisolated static func hubStart() {}
+    nonisolated static func hubStop() {}
+    nonisolated static func hubResumeIfNeeded() {}
 }
 #endif

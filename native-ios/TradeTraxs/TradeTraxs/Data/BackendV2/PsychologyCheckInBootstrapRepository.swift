@@ -18,6 +18,19 @@ nonisolated enum PsychologyCheckInBootstrapLoader {
         rpc: any RPCClient,
         accountID: TradingAccountID?
     ) async throws -> [TraderDailyCheckIn] {
+        let flightKey = "psychologyCheckIn:\(accountID?.rawValue ?? "all")"
+        return try await RepositoryRequestFlight.shared.coalesce(
+            key: flightKey,
+            resource: "psychologyCheckIn"
+        ) {
+            try await loadUncoalesced(rpc: rpc, accountID: accountID)
+        }
+    }
+
+    private static func loadUncoalesced(
+        rpc: any RPCClient,
+        accountID: TradingAccountID?
+    ) async throws -> [TraderDailyCheckIn] {
         let client = BackendV2RPCClient(transport: rpc)
         let args = PsychologyCheckInRpcArguments(
             p_account_id: accountID?.rawValue

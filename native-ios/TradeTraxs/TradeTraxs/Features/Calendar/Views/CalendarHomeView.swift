@@ -5,6 +5,8 @@ struct CalendarHomeView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appEnvironment) private var appEnvironment
+    @Environment(CurrentUserProfileStore.self) private var currentUserProfile
 
     init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
         _viewModel = State(
@@ -51,7 +53,10 @@ struct CalendarHomeView: View {
         .experienceNavigationTitle("Calendar")
         .toolbar { toolbar }
         .refreshable { await viewModel.refresh() }
-        .onAppear { viewModel.loadIfNeeded() }
+        .onAppear {
+            viewModel.primeFromKnownViewer(currentUserProfile.profile?.id)
+            viewModel.loadIfNeeded()
+        }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
             viewModel.handleJournalMutation()
         }
@@ -136,7 +141,10 @@ struct CalendarHomeView: View {
 
     private var accountMenu: some View {
         OwnerAccountFilterDropdown(
-            accounts: viewModel.accountsForMenu,
+            accounts: viewModel.menuAccounts(
+                viewerID: currentUserProfile.profile?.id,
+                detailCache: appEnvironment.data.detailCache
+            ),
             isAllAccountsSelected: {
                 if case .all = viewModel.accountFilter { return true }
                 return false
@@ -150,7 +158,8 @@ struct CalendarHomeView: View {
             onManageAccounts: { viewModel.openManageAccounts() },
             accessibilityIdentifier: "calendar.account",
             boundary: .calendar,
-            profileID: viewModel.ownerAccountsProfileID
+            profileID: viewModel.ownerAccountsProfileID ?? currentUserProfile.profile?.id,
+            detailCache: appEnvironment.data.detailCache
         ) {
             HStack(spacing: 4) {
                 Text(viewModel.accountFilterToolbarTitle)
