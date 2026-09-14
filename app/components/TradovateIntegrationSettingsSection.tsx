@@ -4,6 +4,9 @@ import ActionButton from "@/app/components/ui/ActionButton"
 import { startTradovateOAuthConnect } from "@/lib/startTradovateOAuthConnect"
 import { supabase } from "@/lib/supabaseClient"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
+import { invalidateTradesCache } from "@/lib/appDataCache"
+import { ensureAccountsLoaded } from "@/lib/appDataCache"
+import { invalidateTradingAccountsSettingsCache } from "@/lib/tradingAccountsSettingsCache"
 import { loadTradingAccounts } from "@/lib/tradingAccounts"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import { useCallback, useEffect, useState } from "react"
@@ -24,6 +27,8 @@ type BrokerAccount = {
   tradetraxsAccountId: string | null
   tradetraxsAccountName: string | null
   status: string
+  lastSyncSuccessAt?: string | null
+  lastSyncStatus?: string
 }
 
 type ConnectionAccountsPayload = {
@@ -52,6 +57,8 @@ export default function TradovateIntegrationSettingsSection({
   const [linkMode, setLinkMode] = useState<"create" | "link">("create")
   const [selectedAccountId, setSelectedAccountId] = useState("")
   const [createSize, setCreateSize] = useState("")
+  const [syncingMappingId, setSyncingMappingId] = useState<string | null>(null)
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null)
 
   const loadConnectionAccounts = useCallback(
     async (connectionId: string, refresh?: boolean) => {
@@ -170,6 +177,80 @@ export default function TradovateIntegrationSettingsSection({
     }
   }
 
+  async function handleSyncTrades(connectionId: string, account: BrokerAccount) {
+    if (!account.tradetraxsAccountId) return
+    setSyncingMappingId(account.id)
+    setSyncFeedback(null)
+    setError(null)
+    try {
+      const headers = {
+        ...(await supabaseBearerHeaders()),
+        "Content-Type": "application/json",
+      }
+      const res = await fetch(
+        `/api/integrations/tradovate/connections/${connectionId}/accounts/${account.id}/sync`,
+        { method: "POST", headers }
+      )
+      const data = (await res.json()) as {
+        error?: string
+        summary?: {
+          fetched: number
+          newExecutions: number
+          duplicateExecutions: number
+          tradesCreated: number
+          tradesUpdated: number
+          status: string
+          error?: string
+        }
+        accounts?: BrokerAccount[]
+      }
+      if (!res.ok) {
+        throw new Error(
+          data.summary?.error ?? data.error ?? "Could not sync trades."
+        )
+      }
+      if (data.accounts) {
+        setAccountsByConnection((prev) => ({
+          ...prev,
+          [connectionId]: {
+            state: prev[connectionId]?.state ?? "connected",
+            accounts: data.accounts!,
+          },
+        }))
+      }
+      const s = data.summary
+      if (s) {
+        const imported = s.tradesCreated
+        const updated = s.tradesUpdated
+        const dup = s.duplicateExecutions
+        setSyncFeedback(
+          imported > 0
+            ? `Imported ${imported} new trade${imported === 1 ? "" : "s"}${updated > 0 ? `, updated ${updated}` : ""}.`
+            : updated > 0
+              ? `Updated ${updated} trade${updated === 1 ? "" : "s"}.`
+              : dup > 0
+                ? `${dup} execution${dup === 1 ? "" : "s"} already up to date.`
+                : "Sync complete — no new activity."
+        )
+      }
+      if (userId) {
+        invalidateTradesCache(userId)
+        void ensureAccountsLoaded(supabase, userId, { force: true })
+      }
+    } catch (err) {
+      setError(toUserFacingErrorMessage(err, "Could not sync trades."))
+    } finally {
+      setSyncingMappingId(null)
+    }
+  }
+
+  function formatLastSynced(iso: string | null | undefined): string {
+    if (!iso) return "Never synced"
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return "Never synced"
+    return `Last synced: ${d.toLocaleString()}`
+  }
+
   async function submitLink() {
     if (!linkTarget) return
     setBusy(true)
@@ -204,6 +285,10 @@ export default function TradovateIntegrationSettingsSection({
             accounts: data.accounts!,
           },
         }))
+      }
+      if (userId) {
+        invalidateTradingAccountsSettingsCache(userId)
+        void ensureAccountsLoaded(supabase, userId, { force: true })
       }
       setLinkTarget(null)
     } catch (err) {
@@ -344,21 +429,38 @@ export default function TradovateIntegrationSettingsSection({
                               <div>
                                 <p className="text-sm text-white">{label}</p>
                                 {linked ? (
-                                  <p className="text-xs text-emerald-300">
-                                    Linked → {row.tradetraxsAccountName ?? "Trading account"}
-                                  </p>
+                                  <>
+                                    <p className="text-xs text-emerald-300">
+                                      Linked → {row.tradetraxsAccountName ?? "Trading account"}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      {formatLastSynced(row.lastSyncSuccessAt)}
+                                    </p>
+                                  </>
                                 ) : (
                                   <p className="text-xs text-gray-400">Not linked</p>
                                 )}
                               </div>
-                              <ActionButton
-                                type="button"
-                                className="rounded-lg border border-blue-400/40 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-200"
-                                disabled={busy}
-                                onClick={() => void openLinkModal(connection.id, row)}
-                              >
-                                {linked ? "Manage" : "Link Account"}
-                              </ActionButton>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {linked ? (
+                                  <ActionButton
+                                    type="button"
+                                    className="rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200"
+                                    disabled={busy || syncingMappingId === row.id}
+                                    onClick={() => void handleSyncTrades(connection.id, row)}
+                                  >
+                                    {syncingMappingId === row.id ? "Syncing…" : "Sync Trades"}
+                                  </ActionButton>
+                                ) : null}
+                                <ActionButton
+                                  type="button"
+                                  className="rounded-lg border border-blue-400/40 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-200"
+                                  disabled={busy}
+                                  onClick={() => void openLinkModal(connection.id, row)}
+                                >
+                                  {linked ? "Manage" : "Link Account"}
+                                </ActionButton>
+                              </div>
                             </li>
                           )
                         })}
@@ -371,6 +473,10 @@ export default function TradovateIntegrationSettingsSection({
           })}
         </div>
       )}
+
+      {syncFeedback ? (
+        <p className="text-sm text-emerald-200/90">{syncFeedback}</p>
+      ) : null}
 
       {linkTarget ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">

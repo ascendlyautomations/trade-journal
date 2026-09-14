@@ -55,7 +55,7 @@ export async function POST(req: Request, context: RouteContext) {
   const { data: brokerRow, error: brokerError } = await integrationDb
     .from("broker_integration_accounts")
     .select(
-      "id, user_id, provider, connection_id, external_account_id, external_account_name, external_metadata"
+      "id, user_id, provider, connection_id, external_account_id, external_account_name, external_metadata, tradetraxs_account_id"
     )
     .eq("id", brokerIntegrationAccountId)
     .eq("user_id", user.id)
@@ -88,6 +88,31 @@ export async function POST(req: Request, context: RouteContext) {
       return Response.json({ error: "Could not link account." }, { status: 500 })
     }
   } else {
+    const existingLinkId = brokerRow.tradetraxs_account_id?.trim()
+    if (existingLinkId) {
+      const { data: existingAccount, error: existingError } = await integrationDb
+        .from("accounts")
+        .select("id")
+        .eq("id", existingLinkId)
+        .eq("user_id", user.id)
+        .maybeSingle()
+
+      if (!existingError && existingAccount) {
+        const accounts = await listSafeBrokerIntegrationAccounts(integrationDb, {
+          userId: user.id,
+          provider: "tradovate",
+          connectionId,
+        })
+        return Response.json({
+          ok: true,
+          connectionId,
+          accounts,
+          tradetraxsAccountId: existingLinkId,
+          alreadyLinked: true,
+        })
+      }
+    }
+
     const metadata = (brokerRow.external_metadata ?? {}) as Record<string, unknown>
     const evaluationSize =
       typeof metadata.evaluationSize === "number" ? metadata.evaluationSize : null
@@ -138,5 +163,13 @@ export async function POST(req: Request, context: RouteContext) {
     connectionId,
   })
 
-  return Response.json({ ok: true, connectionId, accounts })
+  const linkedBrokerView = accounts.find((a) => a.id === brokerIntegrationAccountId)
+
+  return Response.json({
+    ok: true,
+    connectionId,
+    accounts,
+    tradetraxsAccountId:
+      linkedBrokerView?.tradetraxsAccountId ?? body.tradetraxsAccountId?.trim() ?? null,
+  })
 }

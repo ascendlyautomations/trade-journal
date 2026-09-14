@@ -117,5 +117,10 @@ export async function loadTradovateConnectionAccounts(
     connectionId,
   })
 
-  return { connectionStatus, discovery, accounts }
+  const { attachSyncViewsToBrokerAccounts } = await import(
+    "@/lib/integrations/tradovate/runTradovateAccountTradeSync"
+  )
+  const accountsWithSync = await attachSyncViewsToBrokerAccounts(supabase, accounts)
+
+  return { connectionStatus, discovery, accounts: accountsWithSync }
 }

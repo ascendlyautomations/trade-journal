@@ -152,7 +152,11 @@ export default function TradingAccountsSettingsSection({
 
     return subscribeAppDataCache(() => {
       const next = getCachedAccounts(userId)
-      if (next) setAccounts(mapCachedAccountRows(next))
+      if (next) {
+        setAccounts(mapCachedAccountRows(next))
+        return
+      }
+      void refreshAccounts()
     })
   }, [userId, refreshAccounts])
 
