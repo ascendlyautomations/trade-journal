@@ -17,6 +17,7 @@ import {
 } from "@/lib/integrations/tradovate/tradovateMarketDataClient"
 import { upsertReconstructedBrokerTrades } from "@/lib/integrations/tradovate/persistBrokerTrades"
 import {
+  BROKER_EXECUTION_RECONSTRUCTION_SELECT,
   listBrokerExecutionsForExternalAccount,
   refreshBrokerExecutionRowAfterDuplicateInsert,
 } from "@/lib/integrations/brokerExecutionIdentity"
@@ -302,8 +303,7 @@ export async function syncTradovateBrokerAccount(
         provider: "tradovate",
         externalAccountId: targetAccountId,
         fallbackMappingId: brokerIntegrationAccountId,
-        select:
-          "external_fill_id, external_contract_id, side, quantity, price, executed_at",
+        select: BROKER_EXECUTION_RECONSTRUCTION_SELECT,
       }
     )
 

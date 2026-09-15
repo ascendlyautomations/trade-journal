@@ -4,6 +4,7 @@ import {
   tryAcquireBrokerSyncLock,
 } from "@/lib/integrations/brokerIntegrationSync"
 import {
+  BROKER_EXECUTION_RITHMIC_RECONSTRUCTION_SELECT,
   listBrokerExecutionsForExternalAccount,
   refreshBrokerExecutionRowAfterDuplicateInsert,
 } from "@/lib/integrations/brokerExecutionIdentity"
@@ -285,8 +286,7 @@ export async function syncRithmicBrokerAccount(
         provider: "rithmic",
         externalAccountId: targetAccountId,
         fallbackMappingId: brokerIntegrationAccountId,
-        select:
-          "external_fill_id, external_contract_id, side, quantity, price, executed_at, symbol_root, contract_name",
+        select: BROKER_EXECUTION_RITHMIC_RECONSTRUCTION_SELECT,
       }
     )
 
