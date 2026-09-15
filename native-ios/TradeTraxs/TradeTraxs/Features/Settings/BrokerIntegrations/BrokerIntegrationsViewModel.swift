@@ -12,25 +12,34 @@ final class BrokerIntegrationsViewModel {
     }
 
     private(set) var phase: Phase = .idle
-    private(set) var connections: [TradovateConnectionSummary] = []
+    private(set) var tradovateConnections: [TradovateConnectionSummary] = []
+    private(set) var rithmicConnections: [TradovateConnectionSummary] = []
+    private(set) var rithmicConnectCapabilities: RithmicConnectCapabilitiesResponse?
     private(set) var accountsByConnection: [String: [BrokerIntegrationAccount]] = [:]
     private(set) var isConnecting = false
+    private(set) var isConnectingRithmic = false
     private(set) var isDisconnecting = false
     private var activeConnectTask: Task<Void, Never>?
 
+    var showsRithmicConnectSheet = false
+    private(set) var rithmicSystemChoices: [String] = []
+    var rithmicReconnectConnectionId: String?
+
     var isBrokerConnectionMutationActive: Bool {
-        isConnecting || isDisconnecting
+        isConnecting || isConnectingRithmic || isDisconnecting
     }
     private(set) var isRefreshingAccounts: Set<String> = []
     private(set) var importingMappingIds: Set<String> = []
-    /// Link/import/disconnect feedback — not OAuth.
     private(set) var actionMessage: String?
     private(set) var actionIsError = false
-    /// Recoverable Tradovate connect / sign-in URL errors — does not hide existing connections.
     private(set) var oauthErrorMessage: String?
 
     var pendingReviewTradeIDs: [TradeID] = []
     var showsReviewImportedTrades = false
+
+    var isRithmicConnectUIAvailable: Bool {
+        rithmicConnectCapabilities?.showConnectUi == true
+    }
 
     private let broker: any BrokerIntegrationRepository
     private let manageAccounts: ManageAccountsViewModel
@@ -59,25 +68,47 @@ final class BrokerIntegrationsViewModel {
     }
 
     func refreshAll() async {
-        let hadConnections = !connections.isEmpty
+        let hadConnections = !tradovateConnections.isEmpty || !rithmicConnections.isEmpty
         if !hadConnections {
             phase = .loading
         }
+        var loadError: String?
+
         do {
             let response = try await broker.listTradovateConnections()
-            connections = response.connections
-            BrokerIntegrationDebugLog.uiConnections(count: connections.count)
-            for connection in connections where connection.isActiveForBrokerUI {
-                await loadAccounts(connectionId: connection.id, forceRefresh: false)
+            tradovateConnections = response.connections
+            BrokerIntegrationDebugLog.uiConnections(count: tradovateConnections.count)
+            for connection in tradovateConnections where connection.isActiveForBrokerUI {
+                await loadAccounts(provider: .tradovate, connectionId: connection.id, forceRefresh: false)
             }
-            phase = .loaded
         } catch {
-            let message = UserFacingError.message(for: error)
-            if hadConnections {
-                phase = .loaded
-                presentMessage(message, error: true)
-            } else {
-                phase = .failed(message)
+            loadError = UserFacingError.message(for: error)
+        }
+
+        do {
+            let response = try await broker.listRithmicConnections()
+            rithmicConnections = response.connections
+            for connection in rithmicConnections where connection.isActiveForBrokerUI {
+                await loadAccounts(provider: .rithmic, connectionId: connection.id, forceRefresh: false)
+            }
+        } catch {
+            if loadError == nil {
+                loadError = UserFacingError.message(for: error)
+            }
+        }
+
+        do {
+            rithmicConnectCapabilities = try await broker.fetchRithmicConnectCapabilities()
+        } catch {
+            rithmicConnectCapabilities = nil
+        }
+
+        if tradovateConnections.isEmpty, rithmicConnections.isEmpty, let loadError {
+            phase = .failed(loadError)
+        } else {
+            phase = .loaded
+            if let loadError {
+                presentMessage(loadError, error: true)
             }
         }
     }
@@ -115,28 +146,73 @@ final class BrokerIntegrationsViewModel {
         }
     }
 
-    func disconnect(connectionId: String) async {
+    func presentRithmicConnect(reconnectConnectionId: String? = nil) {
+        guard isRithmicConnectUIAvailable, !isBrokerConnectionMutationActive else { return }
+        rithmicReconnectConnectionId = reconnectConnectionId
+        if reconnectConnectionId == nil {
+            rithmicSystemChoices = []
+        }
+        showsRithmicConnectSheet = true
+    }
+
+    func submitRithmicConnect(username: String, password: String, systemName: String?) async {
         guard !isBrokerConnectionMutationActive else { return }
-        isDisconnecting = true
-        defer { isDisconnecting = false }
+        isConnectingRithmic = true
+        defer { isConnectingRithmic = false }
         do {
-            try await broker.disconnectTradovate(connectionId: connectionId)
-            accountsByConnection[connectionId] = nil
-            await refreshAll()
-            presentMessage("Tradovate disconnected. Your trades and accounts were kept.", error: false)
+            let outcome = try await broker.connectRithmic(
+                username: username,
+                password: password,
+                systemName: systemName,
+                reconnectConnectionId: rithmicReconnectConnectionId
+            )
+            switch outcome {
+            case .systemSelectionRequired(let names, let message):
+                rithmicSystemChoices = names
+                presentMessage(message, error: false)
+            case .connected:
+                rithmicSystemChoices = []
+                rithmicReconnectConnectionId = nil
+                showsRithmicConnectSheet = false
+                await refreshAll()
+                presentMessage("Rithmic connected.", error: false)
+            }
         } catch {
             presentMessage(UserFacingError.message(for: error), error: true)
         }
     }
 
-    func loadAccounts(connectionId: String, forceRefresh: Bool) async {
+    func disconnect(provider: BrokerIntegrationProvider, connectionId: String) async {
+        guard !isBrokerConnectionMutationActive else { return }
+        isDisconnecting = true
+        defer { isDisconnecting = false }
+        do {
+            switch provider {
+            case .tradovate:
+                try await broker.disconnectTradovate(connectionId: connectionId)
+            case .rithmic:
+                try await broker.disconnectRithmic(connectionId: connectionId)
+            }
+            accountsByConnection[connectionId] = nil
+            await refreshAll()
+            let label = provider == .tradovate ? "Tradovate" : "Rithmic"
+            presentMessage("\(label) disconnected. Your trades and accounts were kept.", error: false)
+        } catch {
+            presentMessage(UserFacingError.message(for: error), error: true)
+        }
+    }
+
+    func loadAccounts(provider: BrokerIntegrationProvider, connectionId: String, forceRefresh: Bool) async {
         isRefreshingAccounts.insert(connectionId)
         defer { isRefreshingAccounts.remove(connectionId) }
         do {
-            let payload = try await broker.listTradovateAccounts(
-                connectionId: connectionId,
-                forceRefresh: forceRefresh
-            )
+            let payload: TradovateConnectionAccountsResponse
+            switch provider {
+            case .tradovate:
+                payload = try await broker.listTradovateAccounts(connectionId: connectionId, forceRefresh: forceRefresh)
+            case .rithmic:
+                payload = try await broker.listRithmicAccounts(connectionId: connectionId)
+            }
             accountsByConnection[connectionId] = payload.accounts
         } catch {
             presentMessage(UserFacingError.message(for: error), error: true)
@@ -148,16 +224,27 @@ final class BrokerIntegrationsViewModel {
     }
 
     func linkExisting(
+        provider: BrokerIntegrationProvider,
         connectionId: String,
         brokerAccount: BrokerIntegrationAccount,
         tradetraxsAccountId: TradingAccountID
     ) async -> Bool {
         do {
-            let response = try await broker.linkTradovateAccount(
-                connectionId: connectionId,
-                brokerIntegrationAccountId: brokerAccount.id,
-                tradetraxsAccountId: tradetraxsAccountId.rawValue
-            )
+            let response: BrokerLinkAccountsResponse
+            switch provider {
+            case .tradovate:
+                response = try await broker.linkTradovateAccount(
+                    connectionId: connectionId,
+                    brokerIntegrationAccountId: brokerAccount.id,
+                    tradetraxsAccountId: tradetraxsAccountId.rawValue
+                )
+            case .rithmic:
+                response = try await broker.linkRithmicAccount(
+                    connectionId: connectionId,
+                    brokerIntegrationAccountId: brokerAccount.id,
+                    tradetraxsAccountId: tradetraxsAccountId.rawValue
+                )
+            }
             accountsByConnection[connectionId] = response.accounts
             await refreshCanonicalAccounts()
             presentMessage("Account linked.", error: false)
@@ -169,16 +256,27 @@ final class BrokerIntegrationsViewModel {
     }
 
     func createAndLink(
+        provider: BrokerIntegrationProvider,
         connectionId: String,
         brokerAccount: BrokerIntegrationAccount,
         draft: TradingAccountDraft
     ) async -> Bool {
         do {
-            let response = try await broker.createAndLinkTradovateAccount(
-                connectionId: connectionId,
-                brokerIntegrationAccountId: brokerAccount.id,
-                draft: draft
-            )
+            let response: BrokerLinkAccountsResponse
+            switch provider {
+            case .tradovate:
+                response = try await broker.createAndLinkTradovateAccount(
+                    connectionId: connectionId,
+                    brokerIntegrationAccountId: brokerAccount.id,
+                    draft: draft
+                )
+            case .rithmic:
+                response = try await broker.createAndLinkRithmicAccount(
+                    connectionId: connectionId,
+                    brokerIntegrationAccountId: brokerAccount.id,
+                    draft: draft
+                )
+            }
             accountsByConnection[connectionId] = response.accounts
             await refreshCanonicalAccounts()
             presentMessage("Trading account created and linked.", error: false)
@@ -189,14 +287,17 @@ final class BrokerIntegrationsViewModel {
         }
     }
 
-    func importTrades(connectionId: String, mappingId: String) async {
+    func importTrades(provider: BrokerIntegrationProvider, connectionId: String, mappingId: String) async {
         importingMappingIds.insert(mappingId)
         defer { importingMappingIds.remove(mappingId) }
         do {
-            let response = try await broker.syncTradovateAccount(
-                connectionId: connectionId,
-                mappingId: mappingId
-            )
+            let response: TradovateAccountSyncResponse
+            switch provider {
+            case .tradovate:
+                response = try await broker.syncTradovateAccount(connectionId: connectionId, mappingId: mappingId)
+            case .rithmic:
+                response = try await broker.syncRithmicAccount(connectionId: connectionId, mappingId: mappingId)
+            }
             accountsByConnection[connectionId] = response.accounts
             let newIds = response.summary.newTradeIds
             await refreshTradesAfterImport(newTradeIds: newIds)
@@ -227,11 +328,21 @@ final class BrokerIntegrationsViewModel {
     }
 
     func draftForCreate(from account: BrokerIntegrationAccount) -> TradingAccountDraft {
-        BrokerIntegrationAccountDraftEncoding.draft(
-            externalAccountId: account.externalAccountId,
-            externalAccountName: account.externalAccountName,
-            metadata: account.metadata
-        )
+        switch account.provider {
+        case .rithmic:
+            return BrokerIntegrationAccountDraftEncoding.rithmicDraft(
+                externalAccountId: account.externalAccountId,
+                externalAccountName: account.externalAccountName,
+                externalDisplayName: account.externalDisplayName,
+                metadata: account.metadata
+            )
+        case .tradovate:
+            return BrokerIntegrationAccountDraftEncoding.draft(
+                externalAccountId: account.externalAccountId,
+                externalAccountName: account.externalAccountName,
+                metadata: account.metadata
+            )
+        }
     }
 
     // MARK: - Private

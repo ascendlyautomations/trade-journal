@@ -145,6 +145,8 @@ enum PushNotificationPayloadParser {
             return .tradingReport
         case "daily_check_in":
             return .dailyCheckIn
+        case "trade_import_reminder":
+            return .tradeImportReminder
         case "like", "like_batch", "like_milestone", "comment", "follow",
              "follow_request_accepted", "follow_batch", "room_join",
              "trade_room_join_request", "trade_room_join_accepted", "trade_room_join_declined",

@@ -60,6 +60,17 @@ final class SettingsNotificationsViewModel {
         Task { await DailyCheckInReminderCoordinator.shared.sync() }
     }
 
+    var tradeImportReminderEnabled: Bool {
+        TradeImportReminderPreferences.isEnabled
+    }
+
+    func setTradeImportReminderEnabled(_ enabled: Bool) {
+        guard TradeImportReminderPreferences.isEnabled != enabled else { return }
+        TradeImportReminderPreferences.isEnabled = enabled
+        ExperienceHaptics.play(.selection)
+        Task { await TradeImportReminderCoordinator.shared.sync() }
+    }
+
     func loadIfNeeded() {
         guard !hasLoaded else { return }
         hasLoaded = true

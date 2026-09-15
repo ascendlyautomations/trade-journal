@@ -344,6 +344,12 @@ struct AppRootView: View {
                             navigation.coordinator.open(.home(.checkInHistory))
                         }
                     )
+                case .tradeImportReminder:
+                    TradeImportReminderDestinationView(
+                        data: appEnvironment.data,
+                        navigation: navigation.coordinator,
+                        onClose: { navigation.coordinator.dismissSheet() }
+                    )
                 default:
                     NavigationInfrastructurePlaceholder(
                         title: sheetTitle(destination),

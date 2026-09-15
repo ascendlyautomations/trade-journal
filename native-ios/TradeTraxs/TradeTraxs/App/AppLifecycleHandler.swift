@@ -29,6 +29,7 @@ final class AppLifecycleHandler {
             await pushNotifications?.refreshAuthorizationStatus()
             pushNotifications?.syncBadgeFromActivity()
             await DailyCheckInReminderCoordinator.shared.sync()
+            await TradeImportReminderCoordinator.shared.sync()
         }
     }
 

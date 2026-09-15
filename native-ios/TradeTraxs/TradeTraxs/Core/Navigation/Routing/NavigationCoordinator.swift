@@ -42,7 +42,7 @@ final class NavigationCoordinator {
         case .settingsStack(let routes):
             openSettingsDeepLink(routes)
         case .sheet(let sheet):
-            if sheet == .dailyCheckIn {
+            if sheet == .dailyCheckIn || sheet == .tradeImportReminder {
                 selectTab(.home)
             }
             present(sheet: sheet)

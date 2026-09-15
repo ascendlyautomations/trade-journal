@@ -127,7 +127,33 @@ nonisolated enum TradingAccountDisplay {
         String(normalized.filter(\.isNumber).suffix(4))
     }
 
-    /// Single-line owner dropdown label: `Name · Mode · ••••4821`.
+    /// Owner dropdown account name — max 13 characters, no ellipsis.
+    static func ownerDropdownDisplayName(_ name: String?) -> String {
+        let trimmed = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 13 else { return trimmed }
+        return String(trimmed.prefix(13))
+    }
+
+    /// Owner dropdown account tail — last four digits when present, otherwise last up to four characters.
+    static func ownerDropdownAccountNumberTail(_ raw: String?) -> String? {
+        guard let normalized = normalizedAccountNumber(raw) else { return nil }
+
+        if let canonical = canonicalMaskedAccountNumberSuffix(normalized) {
+            return String(canonical.dropFirst(4))
+        }
+
+        let digits = normalized.filter(\.isNumber)
+        if !digits.isEmpty {
+            return String(digits.suffix(4))
+        }
+
+        if normalized.count <= 4 {
+            return normalized
+        }
+        return String(normalized.suffix(4))
+    }
+
+    /// Single-line owner dropdown label: `Name · Mode · 4821`.
     static func ownerDropdownLine(for account: TradingAccount) -> String {
         ownerDropdownLine(
             name: account.name,
@@ -141,14 +167,14 @@ nonisolated enum TradingAccountDisplay {
         mode: TradingAccountMode,
         accountNumber: String?
     ) -> String {
-        let trimmedName = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         var parts: [String] = []
-        if !trimmedName.isEmpty {
-            parts.append(trimmedName)
+        let displayName = ownerDropdownDisplayName(name)
+        if !displayName.isEmpty {
+            parts.append(displayName)
         }
         parts.append(ownerDropdownModeLabel(mode))
-        if let suffix = maskedAccountNumberSuffix(accountNumber) {
-            parts.append(suffix)
+        if let tail = ownerDropdownAccountNumberTail(accountNumber) {
+            parts.append(tail)
         }
         return parts.joined(separator: ownerDropdownSeparator)
     }

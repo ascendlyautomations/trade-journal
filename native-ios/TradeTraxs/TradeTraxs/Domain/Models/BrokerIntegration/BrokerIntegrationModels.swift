@@ -440,6 +440,32 @@ nonisolated enum TradovateBrokerOAuthOutcome: Sendable, Equatable {
     case error(reason: String?)
 }
 
+// MARK: - Rithmic BFF
+
+nonisolated struct RithmicConnectCapabilitiesResponse: Codable, Sendable {
+    var userConnectEnabled: Bool
+    var productionUserAuthConfirmed: Bool
+    var apiEnvironment: String
+    var showConnectUi: Bool
+    var credentialModelStatus: String
+}
+
+nonisolated struct RithmicConnectResponse: Codable, Sendable {
+    var ok: Bool
+    var code: String?
+    var userMessage: String?
+    var systemNames: [String]?
+    var connectionId: String?
+    var systemName: String?
+    var accountCount: Int?
+    var reconnect: Bool?
+}
+
+nonisolated enum RithmicConnectOutcome: Sendable, Equatable {
+    case connected(connectionId: String, systemName: String, accountCount: Int)
+    case systemSelectionRequired(systemNames: [String], message: String)
+}
+
 private extension String {
     var nonEmpty: String? {
         isEmpty ? nil : self

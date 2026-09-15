@@ -498,6 +498,20 @@ private struct LoginShellBrokerIntegrationRepository: BrokerIntegrationRepositor
     func runBrokerImport(mappingIds: [String]) async throws -> BrokerManualImportResponse { throw unavailable() }
     func importEligibility() async throws -> BrokerImportEligibilityResponse { throw unavailable() }
     func disconnectTradovate(connectionId: String) async throws { throw unavailable() }
+    func fetchRithmicConnectCapabilities() async throws -> RithmicConnectCapabilitiesResponse { throw unavailable() }
+    func listRithmicConnections() async throws -> TradovateConnectionsResponse { throw unavailable() }
+    func connectRithmic(username: String, password: String, systemName: String?, reconnectConnectionId: String?) async throws -> RithmicConnectOutcome {
+        throw unavailable()
+    }
+    func listRithmicAccounts(connectionId: String) async throws -> TradovateConnectionAccountsResponse { throw unavailable() }
+    func linkRithmicAccount(connectionId: String, brokerIntegrationAccountId: String, tradetraxsAccountId: String) async throws -> BrokerLinkAccountsResponse {
+        throw unavailable()
+    }
+    func createAndLinkRithmicAccount(connectionId: String, brokerIntegrationAccountId: String, draft: TradingAccountDraft) async throws -> BrokerLinkAccountsResponse {
+        throw unavailable()
+    }
+    func syncRithmicAccount(connectionId: String, mappingId: String) async throws -> TradovateAccountSyncResponse { throw unavailable() }
+    func disconnectRithmic(connectionId: String) async throws { throw unavailable() }
 }
 
 private struct LoginShellAppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {

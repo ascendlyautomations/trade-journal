@@ -105,25 +105,65 @@ final class TradingAccountDisplayTests: XCTestCase {
         )
     }
 
-    func testOwnerDropdownLineMasksLongAccountNumberOnce() {
+    func testOwnerDropdownLineUsesLastFourDigitsWithoutBullets() {
         XCTAssertEqual(
             TradingAccountDisplay.ownerDropdownLine(
                 name: "Alpha Futures",
                 mode: .evaluation,
                 accountNumber: "500123"
             ),
-            "Alpha Futures · Eval · ••••0123"
+            "Alpha Futures · Eval · 0123"
+        )
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "Alpha Futures",
+                mode: .evaluation,
+                accountNumber: "3913"
+            ),
+            "Alpha Futures · Eval · 3913"
+        )
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "Alpha Futures",
+                mode: .funded,
+                accountNumber: "7293"
+            ),
+            "Alpha Futures · Funded · 7293"
+        )
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "APEX475021000003",
+                mode: .evaluation,
+                accountNumber: "0000008591"
+            ),
+            "APEX475021000 · Eval · 8591"
+        )
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "Lucid",
+                mode: .evaluation,
+                accountNumber: "0001"
+            ),
+            "Lucid · Eval · 0001"
+        )
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "Test",
+                mode: .funded,
+                accountNumber: "0555"
+            ),
+            "Test · Funded · 0555"
         )
     }
 
-    func testOwnerDropdownLineDoesNotRemaskAlreadyMaskedNumber() {
+    func testOwnerDropdownLineNormalizesAlreadyMaskedNumbersToLastFour() {
         XCTAssertEqual(
             TradingAccountDisplay.ownerDropdownLine(
                 name: "Alpha Futures",
                 mode: .evaluation,
                 accountNumber: "••••0123"
             ),
-            "Alpha Futures · Eval · ••••0123"
+            "Alpha Futures · Eval · 0123"
         )
         XCTAssertEqual(
             TradingAccountDisplay.ownerDropdownLine(
@@ -131,7 +171,7 @@ final class TradingAccountDisplayTests: XCTestCase {
                 mode: .live,
                 accountNumber: "****0482"
             ),
-            "Tradovate Personal · Live · ••••0482"
+            "Tradovate Per · Live · 0482"
         )
         XCTAssertEqual(
             TradingAccountDisplay.ownerDropdownLine(
@@ -139,7 +179,7 @@ final class TradingAccountDisplayTests: XCTestCase {
                 mode: .evaluation,
                 accountNumber: "•••• 0123"
             ),
-            "Alpha Futures · Eval · ••••0123"
+            "Alpha Futures · Eval · 0123"
         )
         XCTAssertEqual(
             TradingAccountDisplay.ownerDropdownLine(
@@ -147,11 +187,11 @@ final class TradingAccountDisplayTests: XCTestCase {
                 mode: .evaluation,
                 accountNumber: "•••• •••• 0123"
             ),
-            "Alpha Futures · Eval · ••••0123"
+            "Alpha Futures · Eval · 0123"
         )
     }
 
-    func testOwnerDropdownLineShowsShortNumbersUnmasked() {
+    func testOwnerDropdownLineShowsShortNumbersInFull() {
         XCTAssertEqual(
             TradingAccountDisplay.ownerDropdownLine(
                 name: "Topstep",
@@ -159,6 +199,22 @@ final class TradingAccountDisplayTests: XCTestCase {
                 accountNumber: "0123"
             ),
             "Topstep · Funded · 0123"
+        )
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownLine(
+                name: "Topstep",
+                mode: .funded,
+                accountNumber: "12"
+            ),
+            "Topstep · Funded · 12"
+        )
+    }
+
+    func testOwnerDropdownDisplayNameTruncatesToThirteenCharactersWithoutEllipsis() {
+        XCTAssertEqual(TradingAccountDisplay.ownerDropdownDisplayName("Alpha Futures"), "Alpha Futures")
+        XCTAssertEqual(
+            TradingAccountDisplay.ownerDropdownDisplayName("APEX475021000003"),
+            "APEX475021000"
         )
     }
 

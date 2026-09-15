@@ -190,7 +190,172 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
         }
     }
 
+    // MARK: - Rithmic
+
+    func fetchRithmicConnectCapabilities() async throws -> RithmicConnectCapabilitiesResponse {
+        try await get("/api/integrations/rithmic/connect")
+    }
+
+    func listRithmicConnections() async throws -> TradovateConnectionsResponse {
+        try await get("/api/integrations/rithmic/connections")
+    }
+
+    func connectRithmic(
+        username: String,
+        password: String,
+        systemName: String?,
+        reconnectConnectionId: String?
+    ) async throws -> RithmicConnectOutcome {
+        struct Body: Encodable {
+            var username: String
+            var password: String
+            var systemName: String?
+            var reconnectConnectionId: String?
+        }
+        let trimmedUser = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = try transport.encodeJSON(
+            Body(
+                username: trimmedUser,
+                password: password,
+                systemName: Self.optionalTrimmed(systemName),
+                reconnectConnectionId: Self.optionalTrimmed(reconnectConnectionId)
+            )
+        )
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/integrations/rithmic/connect",
+            method: .post,
+            body: body,
+            requiresAuthentication: true
+        )
+        let decoded: RithmicConnectResponse
+        do {
+            decoded = try transport.decoder.decode(RithmicConnectResponse.self, from: response)
+        } catch {
+            BrokerIntegrationDebugLog.decodeFailure(context: "rithmic.connect", detail: String(describing: error))
+            throw AppError.unknown(message: brokerDecodeUserMessage)
+        }
+        if decoded.code == "system_selection_required",
+           let names = decoded.systemNames,
+           !names.isEmpty
+        {
+            return .systemSelectionRequired(
+                systemNames: names,
+                message: decoded.userMessage ?? "Select a Rithmic system."
+            )
+        }
+        guard (200 ... 299).contains(response.statusCode), decoded.ok,
+              let connectionId = Self.optionalTrimmed(decoded.connectionId),
+              let system = Self.optionalTrimmed(decoded.systemName)
+        else {
+            let message = Self.optionalTrimmed(decoded.userMessage)
+                ?? "Could not connect Rithmic."
+            throw AppError.unknown(message: message)
+        }
+        return .connected(
+            connectionId: connectionId,
+            systemName: system,
+            accountCount: decoded.accountCount ?? 0
+        )
+    }
+
+    func listRithmicAccounts(connectionId: String) async throws -> TradovateConnectionAccountsResponse {
+        let trimmedId = connectionId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try await get("/api/integrations/rithmic/connections/\(trimmedId)/accounts")
+    }
+
+    func linkRithmicAccount(
+        connectionId: String,
+        brokerIntegrationAccountId: String,
+        tradetraxsAccountId: String
+    ) async throws -> BrokerLinkAccountsResponse {
+        struct Body: Encodable {
+            var action: String = "link"
+            var brokerIntegrationAccountId: String
+            var tradetraxsAccountId: String
+        }
+        let body = try transport.encodeJSON(
+            Body(
+                brokerIntegrationAccountId: brokerIntegrationAccountId,
+                tradetraxsAccountId: tradetraxsAccountId
+            )
+        )
+        return try await post("/api/integrations/rithmic/connections/\(connectionId)/accounts/link", body: body)
+    }
+
+    func createAndLinkRithmicAccount(
+        connectionId: String,
+        brokerIntegrationAccountId: String,
+        draft: TradingAccountDraft
+    ) async throws -> BrokerLinkAccountsResponse {
+        struct CreatePayload: Encodable {
+            var name: String
+            var size: String
+            var accountNumber: String
+            var category: String
+            var mode: String
+            var rules: String? = nil
+        }
+        struct Body: Encodable {
+            var action: String = "create"
+            var brokerIntegrationAccountId: String
+            var createAccount: CreatePayload
+        }
+        let payload = CreatePayload(
+            name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+            size: draft.sizeDigits.trimmingCharacters(in: .whitespacesAndNewlines),
+            accountNumber: draft.accountNumber.trimmingCharacters(in: .whitespacesAndNewlines),
+            category: BrokerIntegrationAccountDraftEncoding.webCategory(draft.category),
+            mode: BrokerIntegrationAccountDraftEncoding.webMode(draft.mode, category: draft.category)
+        )
+        let body = try transport.encodeJSON(
+            Body(brokerIntegrationAccountId: brokerIntegrationAccountId, createAccount: payload)
+        )
+        return try await post("/api/integrations/rithmic/connections/\(connectionId)/accounts/link", body: body)
+    }
+
+    func syncRithmicAccount(connectionId: String, mappingId: String) async throws -> TradovateAccountSyncResponse {
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/integrations/rithmic/connections/\(connectionId)/accounts/\(mappingId)/sync",
+            method: .post,
+            body: Data(),
+            requiresAuthentication: true
+        )
+        if response.statusCode == 409 {
+            struct BusyBody: Decodable {
+                var summary: TradovateSyncSummaryPayload?
+                var userMessage: String?
+            }
+            if let busy = try? transport.decoder.decode(BusyBody.self, from: response),
+               let summary = busy.summary
+            {
+                throw AppError.unknown(message: summary.error ?? "Import already in progress.")
+            }
+        }
+        return try decode(TradovateAccountSyncResponse.self, from: response, context: "rithmic.sync")
+    }
+
+    func disconnectRithmic(connectionId: String) async throws {
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/integrations/rithmic/connections/\(connectionId)/disconnect",
+            method: .post,
+            body: Data(),
+            requiresAuthentication: true
+        )
+        guard (200 ... 299).contains(response.statusCode) else {
+            throw brokerError(from: response, fallback: "Could not disconnect Rithmic.")
+        }
+    }
+
     // MARK: - HTTP helpers
+
+    private static func optionalTrimmed(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 
     private var brokerDecodeUserMessage: String {
         "Could not read broker response. Check for an app update or try again later."
@@ -246,6 +411,12 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
 }
 
 nonisolated enum BrokerIntegrationAccountDraftEncoding {
+    private static func trimmedNonEmpty(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     static func webCategory(_ category: TradingAccountCategory) -> String {
         switch category {
         case .personal: return "Personal"
@@ -264,6 +435,39 @@ nonisolated enum BrokerIntegrationAccountDraftEncoding {
         case .personal, .broker:
             return mode == .sim ? "Sim" : "Live"
         }
+    }
+
+    static func rithmicDraft(
+        externalAccountId: String,
+        externalAccountName: String?,
+        externalDisplayName: String?,
+        metadata: [String: JSONBrokerValue]
+    ) -> TradingAccountDraft {
+        let accountIdFromMeta: String = {
+            if case .string(let value) = metadata["accountId"] {
+                return value.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return ""
+        }()
+        let displayName =
+            trimmedNonEmpty(externalAccountName)
+            ?? trimmedNonEmpty(externalDisplayName)
+            ?? trimmedNonEmpty(accountIdFromMeta)
+            ?? trimmedNonEmpty(externalAccountId.split(separator: "|").last.map(String.init))
+            ?? "Rithmic account"
+        let accountNumber =
+            trimmedNonEmpty(accountIdFromMeta)
+            ?? trimmedNonEmpty(externalAccountId.split(separator: "|").last.map(String.init))
+            ?? externalAccountId
+        return TradingAccountDraft(
+            name: displayName,
+            sizeDigits: "",
+            accountNumber: accountNumber,
+            category: .personal,
+            mode: .live,
+            note: "",
+            propFirmRules: nil
+        )
     }
 
     static func draft(
