@@ -59,7 +59,6 @@ struct RithmicConnectSheet: View {
                             let system = selectedSystem.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
                                 ?? systemChoices.singleOrNil
                             await onSubmit(username, password, system)
-                            clearSecrets()
                         }
                     }
                     .disabled(isBusy || !canSubmit)

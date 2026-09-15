@@ -1,14 +1,15 @@
 import Foundation
 
 enum BrokerIntegrationDisplay {
-    static func maskedAccountNumber(_ externalAccountId: String, name: String?) -> String {
+    /// Broker-side account identifier — last four characters only (no masking bullets).
+    static func brokerAccountNumberTail(_ externalAccountId: String, name: String?) -> String {
         let source = name?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? externalAccountId
-        if let suffix = TradingAccountDisplay.maskedAccountNumberSuffix(source) {
-            return suffix
+        if let tail = TradingAccountDisplay.ownerDropdownAccountNumberTail(source) {
+            return tail
         }
         let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count > 4 else { return "••••" }
-        return "•••• \(trimmed.suffix(4))"
+        guard trimmed.count > 4 else { return trimmed }
+        return String(trimmed.suffix(4))
     }
 
     static func providerLabel(_ provider: BrokerIntegrationProvider) -> String {

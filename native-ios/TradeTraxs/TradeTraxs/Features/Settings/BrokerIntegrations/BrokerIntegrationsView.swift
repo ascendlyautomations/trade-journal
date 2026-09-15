@@ -378,10 +378,13 @@ struct BrokerIntegrationsView: View {
         if !caps.userConnectEnabled {
             return "Rithmic user connection is disabled on this server."
         }
-        if caps.apiEnvironment != "test" {
-            return "Only the Rithmic Test environment is enabled for mobile connect."
+        if caps.apiEnvironment == "production", !caps.productionUserAuthConfirmed {
+            return "Production Rithmic login is not approved yet."
         }
-        return "Connect is not offered until server configuration is complete."
+        if caps.apiEnvironment != "test", !caps.showConnectUi {
+            return "Only the supported Rithmic Test environment is enabled for connect."
+        }
+        return "Rithmic connect is unavailable until server protocol configuration is complete."
     }
 
     private var brokerSectionDividerRow: some View {
@@ -487,7 +490,7 @@ struct BrokerIntegrationsView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             Text(account.displayTitle)
                 .experienceStyle(.subheadline, color: colors.primaryText)
-            Text(BrokerIntegrationDisplay.maskedAccountNumber(account.externalAccountId, name: account.externalAccountName))
+            Text(BrokerIntegrationDisplay.brokerAccountNumberTail(account.externalAccountId, name: account.externalAccountName))
                 .experienceStyle(.caption, color: colors.tertiaryText)
             if let linkedLine = BrokerIntegrationDisplay.linkedTradeTraxsLine(
                 for: account,
