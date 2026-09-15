@@ -7,6 +7,7 @@ export type BrokerAccountSyncView = {
   lastSyncErrorCode: string | null
   autoSyncEnabled: boolean
   lastAutoSyncAt: string | null
+  lastEventAt: string | null
 }
 
 const SYNC_LOCK_MS = 120_000
@@ -21,7 +22,7 @@ export async function loadBrokerAccountSyncViews(
   const { data, error } = await supabase
     .from("broker_integration_account_sync")
     .select(
-      "broker_integration_account_id, last_sync_attempt_at, last_sync_success_at, last_sync_status, last_sync_error_code, auto_sync_enabled, last_auto_sync_at"
+      "broker_integration_account_id, last_sync_attempt_at, last_sync_success_at, last_sync_status, last_sync_error_code, auto_sync_enabled, last_auto_sync_at, last_event_at"
     )
     .in("broker_integration_account_id", mappingIds)
 
@@ -35,6 +36,7 @@ export async function loadBrokerAccountSyncViews(
       lastSyncErrorCode: row.last_sync_error_code,
       autoSyncEnabled: row.auto_sync_enabled !== false,
       lastAutoSyncAt: row.last_auto_sync_at,
+      lastEventAt: row.last_event_at,
     })
   }
   return out

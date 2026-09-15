@@ -13,6 +13,7 @@ import {
 import { logTradovateSync } from "../../lib/integrations/tradovate/tradovateSyncLogger.ts"
 
 const REFRESH_CONNECTIONS_MS = 60_000
+const WORKER_HEARTBEAT_MS = 45_000
 
 function requireEnv(name: string): string {
   const v = process.env[name]?.trim()
@@ -81,11 +82,25 @@ async function main(): Promise<void> {
     }
   }
 
+  async function heartbeatManagedConnections(): Promise<void> {
+    const now = new Date().toISOString()
+    const ids = [...sessions.keys()]
+    if (ids.length === 0) return
+    await supabase
+      .from("broker_integration_connections")
+      .update({ listener_worker_heartbeat_at: now, updated_at: now })
+      .in("id", ids)
+  }
+
   logTradovateSync("worker_started", { provider: "tradovate" })
   await reconcileSessions()
+  void heartbeatManagedConnections()
   setInterval(() => {
     void reconcileSessions()
   }, REFRESH_CONNECTIONS_MS)
+  setInterval(() => {
+    void heartbeatManagedConnections()
+  }, WORKER_HEARTBEAT_MS)
 }
 
 void main().catch((err) => {

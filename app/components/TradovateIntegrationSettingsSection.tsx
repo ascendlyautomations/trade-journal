@@ -13,6 +13,9 @@ import { ensureAccountsLoaded } from "@/lib/appDataCache"
 import { invalidateTradingAccountsSettingsCache } from "@/lib/tradingAccountsSettingsCache"
 import { loadTradingAccounts } from "@/lib/tradingAccounts"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import type { TradovateListenerSnapshot } from "@/lib/integrations/tradovate/tradovateListenerStatus"
+import { queueBrokerEnrichment } from "@/lib/brokerEnrichment/queueBrokerEnrichment"
+import { invalidateBrokerEnrichmentPendingCount } from "@/lib/brokerEnrichment/brokerEnrichmentPendingCount"
 import { useCallback, useEffect, useState } from "react"
 
 type TradovateConnection = {
@@ -36,6 +39,7 @@ type BrokerAccount = {
   lastSyncSuccessAt?: string | null
   lastSyncStatus?: string
   autoSyncEnabled?: boolean
+  lastBrokerEventAt?: string | null
 }
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
@@ -43,6 +47,7 @@ type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 type ConnectionAccountsPayload = {
   state: string
   accounts: BrokerAccount[]
+  listener?: TradovateListenerSnapshot | null
 }
 
 export default function TradovateIntegrationSettingsSection({
@@ -185,47 +190,6 @@ export default function TradovateIntegrationSettingsSection({
     }
   }
 
-  async function handleToggleAutoSync(
-    connectionId: string,
-    account: BrokerAccount,
-    enabled: boolean
-  ) {
-    if (!account.tradetraxsAccountId) return
-    setBusy(true)
-    setError(null)
-    try {
-      const headers = {
-        ...(await supabaseBearerHeaders()),
-        "Content-Type": "application/json",
-      }
-      const res = await fetch(
-        `/api/integrations/tradovate/connections/${connectionId}/accounts/${account.id}/auto-sync`,
-        {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify({ enabled }),
-        }
-      )
-      const data = (await res.json()) as { error?: string; accounts?: BrokerAccount[] }
-      if (!res.ok) {
-        throw new Error(data.error ?? "Could not update automatic sync.")
-      }
-      if (data.accounts) {
-        setAccountsByConnection((prev) => ({
-          ...prev,
-          [connectionId]: {
-            state: prev[connectionId]?.state ?? "connected",
-            accounts: data.accounts!,
-          },
-        }))
-      }
-    } catch (err) {
-      setError(toUserFacingErrorMessage(err, "Could not update automatic sync."))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function handleSyncTrades(connectionId: string, account: BrokerAccount) {
     if (!account.tradetraxsAccountId) return
     setSyncingMappingId(account.id)
@@ -248,6 +212,7 @@ export default function TradovateIntegrationSettingsSection({
           duplicateExecutions: number
           tradesCreated: number
           tradesUpdated: number
+          newTradeIds?: string[]
           status: string
           error?: string
         }
@@ -274,17 +239,22 @@ export default function TradovateIntegrationSettingsSection({
         const dup = s.duplicateExecutions
         setSyncFeedback(
           imported > 0
-            ? `Imported ${imported} new trade${imported === 1 ? "" : "s"}${updated > 0 ? `, updated ${updated}` : ""}.`
+            ? `${imported} new trade${imported === 1 ? "" : "s"} found${updated > 0 ? ` (${updated} updated)` : ""}.`
             : updated > 0
               ? `Updated ${updated} trade${updated === 1 ? "" : "s"}.`
-              : dup > 0
-                ? `${dup} execution${dup === 1 ? "" : "s"} already up to date.`
-                : "Sync complete — no new activity."
+              : dup > 0 || imported === 0
+                ? "You're all caught up — no new Tradovate trades."
+                : "Import complete."
         )
       }
       if (userId) {
         invalidateTradesCache(userId)
+        invalidateBrokerEnrichmentPendingCount(userId)
         void ensureAccountsLoaded(supabase, userId, { force: true })
+      }
+      const newIds = s?.newTradeIds ?? []
+      if (newIds.length > 0) {
+        queueBrokerEnrichment(newIds)
       }
     } catch (err) {
       setError(toUserFacingErrorMessage(err, "Could not sync trades."))
@@ -549,9 +519,6 @@ export default function TradovateIntegrationSettingsSection({
                                       Linked → {row.tradetraxsAccountName ?? "Trading account"}
                                     </p>
                                     <p className="text-xs text-gray-500">
-                                      Automatic sync{" "}
-                                      {row.autoSyncEnabled === false ? "OFF" : "ON"}
-                                      {" · "}
                                       {formatLastSynced(row.lastSyncSuccessAt)}
                                     </p>
                                   </>
@@ -561,30 +528,14 @@ export default function TradovateIntegrationSettingsSection({
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
                                 {linked ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-xs text-gray-300"
-                                      disabled={busy}
-                                      onClick={() =>
-                                        void handleToggleAutoSync(
-                                          connection.id,
-                                          row,
-                                          row.autoSyncEnabled === false
-                                        )
-                                      }
-                                    >
-                                      Auto {row.autoSyncEnabled === false ? "Off" : "On"}
-                                    </button>
-                                    <ActionButton
-                                      type="button"
-                                      className="rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200"
-                                      disabled={busy || syncingMappingId === row.id}
-                                      onClick={() => void handleSyncTrades(connection.id, row)}
-                                    >
-                                      {syncingMappingId === row.id ? "Syncing…" : "Sync Now"}
-                                    </ActionButton>
-                                  </>
+                                  <ActionButton
+                                    type="button"
+                                    className="rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200"
+                                    disabled={busy || syncingMappingId === row.id}
+                                    onClick={() => void handleSyncTrades(connection.id, row)}
+                                  >
+                                    {syncingMappingId === row.id ? "Importing…" : "Import new trades"}
+                                  </ActionButton>
                                 ) : null}
                                 <ActionButton
                                   type="button"

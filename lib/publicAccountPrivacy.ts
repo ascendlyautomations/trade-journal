@@ -76,6 +76,10 @@ export const TRADES_APP_SELECT = [
   "top_confluences",
   "is_initial_import",
   "source_account_id",
+  "import_source",
+  "broker_enrichment_status",
+  "broker_lifecycle_id",
+  "last_broker_sync_at",
 ].join(", ")
 
 export function tradeSelectForViewer(isOwner: boolean): string {

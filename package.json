@@ -20,12 +20,13 @@
     "test:referral-attribution": "node --experimental-strip-types --test lib/referralAttribution.test.ts lib/referralPersistence.test.ts",
     "test:leaderboard": "node --experimental-strip-types --test lib/leaderboardTimeframeFallback.test.ts",
     "test:lib-units": "node --experimental-strip-types --test lib/validateQuickTradeForm.test.ts lib/zoomPanCrop.test.ts lib/tradeScreenshotDisplay.test.ts lib/tradeRr.test.ts lib/resolveTradePoints.test.ts lib/renderTradeImageCrop.test.ts lib/pageHeadingStyles.test.ts lib/optimizedStorageImage.test.ts lib/authPasswordManagement.test.ts lib/analyzeTradeProgress.test.ts lib/webSocialOAuthPolicy.test.ts lib/voiceMessage.test.ts",
-    "test:tradovate-sync": "node --experimental-strip-types --test lib/integrations/tradovate/tradeReconstruction.test.ts lib/integrations/tradovate/tradovateSyncCoalesce.test.ts lib/integrations/tradovate/tradovateUserSyncWebSocket.test.ts",
-    "broker-sync-worker": "node --experimental-strip-types services/tradovate-sync-worker/run.ts",
+    "test:tradovate-sync": "node --experimental-strip-types --test lib/integrations/tradovate/tradeReconstruction.test.ts lib/integrations/tradovate/tradovateSyncCoalesce.test.ts lib/integrations/tradovate/tradovateUserSyncWebSocket.test.ts lib/integrations/tradovate/tradovateListenerStatus.test.ts",
+    "broker-sync-worker": "tsx --import ./services/tradovate-sync-worker/register-loader.mjs services/tradovate-sync-worker/run.ts",
     "types:supabase": "supabase gen types typescript --project-id \"${SUPABASE_PROJECT_ID}\" --schema public > lib/database.types.ts",
     "migrate:affiliate-promos": "node scripts/migrate-affiliate-promos-to-once.mjs",
     "generate:og-image": "node scripts/generate-og-image.mjs",
-    "export:marketing-ads": "node scripts/export-marketing-ads.mjs"
+    "export:marketing-ads": "node scripts/export-marketing-ads.mjs",
+    "rithmic:phase1-discovery": "tsx scripts/rithmic-phase1-discovery.ts"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^1.6.0",
@@ -41,10 +42,13 @@
     "next": "^16.2.3",
     "openai": "^6.33.0",
     "papaparse": "^5.5.3",
+    "protobufjs": "^8.8.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.0",
-    "stripe": "^21.0.1"
+    "stripe": "^21.0.1",
+    "tsx": "^4.23.13",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -52,6 +56,7 @@
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "playwright": "^1.61.1",

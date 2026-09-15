@@ -18,6 +18,8 @@ import FreePlanAccountSlotShell from "./components/FreePlanAccountSlotShell"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
 import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProvider"
 import BrokerImportedTradesRealtimeBridge from "./components/BrokerImportedTradesRealtimeBridge"
+import BrokerEnrichmentBridge from "./components/BrokerEnrichmentBridge"
+import BrokerTradovateLoginImportGate from "./components/BrokerTradovateLoginImportGate"
 import NativeAppShell from "./components/NativeAppShell"
 import NativeHomeRedirect from "./components/NativeHomeRedirect"
 import NativeSessionPersistence from "./components/NativeSessionPersistence"
@@ -151,6 +153,8 @@ export default async function RootLayout({
           <UserProfileProvider>
             <GettingStartedProgressProvider>
             <BrokerImportedTradesRealtimeBridge />
+            <BrokerEnrichmentBridge />
+            <BrokerTradovateLoginImportGate />
             <NativeAppShell />
             <NativeSilentCacheBootstrap />
             <MessagingInAppBanner />

@@ -5,8 +5,11 @@ import {
   type IntegrationCredentialPayload,
 } from "@/lib/integrations/credentialEncryption"
 import type { TradovateApiEnvironment } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
+import type { RithmicApiEnvironment } from "@/lib/integrations/rithmic/rithmicEnv"
 
-export type BrokerIntegrationProvider = "tradovate"
+export type BrokerIntegrationProvider = "tradovate" | "rithmic"
+
+export type BrokerApiEnvironment = TradovateApiEnvironment | RithmicApiEnvironment
 
 export type BrokerIntegrationStatus =
   | "connected"
@@ -25,7 +28,7 @@ export type SafeBrokerConnectionView = {
   provider_user_id: string | null
   provider_display_name: string | null
   connection_label: string | null
-  api_environment: TradovateApiEnvironment | null
+  api_environment: BrokerApiEnvironment | null
 }
 
 type ConnectionRow = {
@@ -50,6 +53,7 @@ const ACTIVE_STATUSES = ["connected", "reconnect_required", "error"] as const
 function connectionLabel(row: ConnectionRow, index: number): string {
   if (row.connection_label?.trim()) return row.connection_label.trim()
   if (row.provider_display_name?.trim()) return row.provider_display_name.trim()
+  if (row.provider === "rithmic") return `Rithmic Connection ${index + 1}`
   return `Tradovate Connection ${index + 1}`
 }
 
@@ -70,8 +74,11 @@ function toSafeConnectionView(
     provider_display_name: row.provider_display_name,
     connection_label: row.connection_label,
     api_environment:
-      connected && (row.api_environment === "demo" || row.api_environment === "live")
-        ? row.api_environment
+      connected &&
+      (row.api_environment === "demo" ||
+        row.api_environment === "live" ||
+        row.api_environment === "test")
+        ? (row.api_environment as BrokerApiEnvironment)
         : null,
   }
 }

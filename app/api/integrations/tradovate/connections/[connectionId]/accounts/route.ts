@@ -56,6 +56,7 @@ export async function GET(req: Request, context: RouteContext) {
       connectionStatus: payload.connectionStatus,
       discovery: payload.discovery,
       accounts: payload.accounts,
+      listener: payload.listener,
     })
   } catch (err) {
     console.error(

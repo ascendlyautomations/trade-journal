@@ -72,6 +72,7 @@ export class TradovateConnectionAutoSyncSession {
   private mappingsByExternalAccount = new Map<string, LinkedMapping>()
   private reconnectAttempt = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private mappingsRefreshTimer: ReturnType<typeof setInterval> | null = null
   private stopped = false
   private readonly supabase: SupabaseClient
   private connection: ActiveTradovateConnection
@@ -83,14 +84,28 @@ export class TradovateConnectionAutoSyncSession {
 
   async start(): Promise<void> {
     this.stopped = false
+    logTradovateSync("connection_listener_start", {
+      connectionId: this.connection.id,
+      provider: "tradovate",
+    })
     await this.refreshMappings()
+    logTradovateSync("connection_mappings_loaded", {
+      connectionId: this.connection.id,
+      provider: "tradovate",
+    })
     await this.reconcileAll("startup")
     await this.openSocket()
+    if (this.mappingsRefreshTimer) clearInterval(this.mappingsRefreshTimer)
+    this.mappingsRefreshTimer = setInterval(() => {
+      void this.refreshMappings()
+    }, 60_000)
   }
 
   stop(): void {
     this.stopped = true
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    if (this.mappingsRefreshTimer) clearInterval(this.mappingsRefreshTimer)
+    this.mappingsRefreshTimer = null
     this.socket?.close()
     this.socket = null
     void this.patchListenerStatus("stopped")
@@ -133,6 +148,13 @@ export class TradovateConnectionAutoSyncSession {
       })
       .eq("broker_integration_account_id", mapping.mappingId)
 
+    logTradovateSync("sync_coalesced_schedule", {
+      connectionId: this.connection.id,
+      mappingId: mapping.mappingId,
+      eventCategory,
+      externalAccountId: mapping.externalAccountId,
+      trigger: "auto",
+    })
     this.coalescer.schedule(mapping.mappingId, async () => {
       logTradovateSync("auto_sync_debounced", {
         connectionId: this.connection.id,
@@ -167,6 +189,11 @@ export class TradovateConnectionAutoSyncSession {
       provider: "tradovate",
     })
     if (!externalAccountId) {
+      logTradovateSync("external_account_unresolved", {
+        connectionId: this.connection.id,
+        eventCategory: `${event.entityType}.${event.eventType}`,
+        provider: "tradovate",
+      })
       for (const mapping of this.mappingsByExternalAccount.values()) {
         if (mapping.autoSyncEnabled) {
           this.scheduleMappingSync(mapping, `${event.entityType}.${event.eventType}`)
@@ -174,8 +201,28 @@ export class TradovateConnectionAutoSyncSession {
       }
       return
     }
+    logTradovateSync("external_account_identified", {
+      connectionId: this.connection.id,
+      externalAccountId,
+      eventCategory: `${event.entityType}.${event.eventType}`,
+      provider: "tradovate",
+    })
     const mapping = this.mappingsByExternalAccount.get(externalAccountId)
-    if (mapping) this.scheduleMappingSync(mapping, `${event.entityType}.${event.eventType}`)
+    if (mapping) {
+      logTradovateSync("mapping_identified", {
+        connectionId: this.connection.id,
+        mappingId: mapping.mappingId,
+        externalAccountId,
+        provider: "tradovate",
+      })
+      this.scheduleMappingSync(mapping, `${event.entityType}.${event.eventType}`)
+    } else {
+      logTradovateSync("mapping_not_found", {
+        connectionId: this.connection.id,
+        externalAccountId,
+        provider: "tradovate",
+      })
+    }
   }
 
   private async ensureAccessToken(): Promise<string | null> {
@@ -249,6 +296,15 @@ export class TradovateConnectionAutoSyncSession {
         onPropsEvent: (ev) => this.onPropsEvent(ev),
         onConnected: async () => {
           this.reconnectAttempt = 0
+          logTradovateSync("connection_authenticated", {
+            connectionId: this.connection.id,
+            provider: "tradovate",
+          })
+          logTradovateSync("subscription_established", {
+            connectionId: this.connection.id,
+            providerUserId: this.connection.provider_user_id,
+            provider: "tradovate",
+          })
           await this.patchListenerStatus("connected")
         },
         onDisconnected: (reason) => {
@@ -264,6 +320,12 @@ export class TradovateConnectionAutoSyncSession {
 
   private async handleDisconnect(reason: string): Promise<void> {
     if (this.stopped) return
+    logTradovateSync("connection_reconnect_scheduled", {
+      connectionId: this.connection.id,
+      errorCode: reason,
+      reconnectCount: this.reconnectAttempt + 1,
+      provider: "tradovate",
+    })
     await this.patchListenerStatus("error", reason)
     this.socket?.close()
     this.socket = null
@@ -292,6 +354,7 @@ export class TradovateConnectionAutoSyncSession {
       patch.listener_last_connected_at = now
       patch.listener_last_error_code = null
       patch.listener_last_error_message = null
+      patch.listener_worker_heartbeat_at = now
     }
     if (status === "stopped" || status === "error") {
       patch.listener_last_disconnected_at = now

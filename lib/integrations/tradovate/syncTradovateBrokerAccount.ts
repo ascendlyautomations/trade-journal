@@ -33,6 +33,8 @@ export type TradovateSyncSummary = {
   duplicateExecutions: number
   tradesCreated: number
   tradesUpdated: number
+  newTradeIds: string[]
+  updatedTradeIds: string[]
   openPositions: number
   durationMs?: number
   error?: string
@@ -123,6 +125,8 @@ function emptySummary(
     duplicateExecutions: 0,
     tradesCreated: 0,
     tradesUpdated: 0,
+    newTradeIds: [],
+    updatedTradeIds: [],
     openPositions: 0,
     ...patch,
   }
@@ -314,7 +318,8 @@ export async function syncTradovateBrokerAccount(
       feeFillIds
     )
 
-    const { tradesCreated, tradesUpdated } = await upsertReconstructedBrokerTrades(
+    const { tradesCreated, tradesUpdated, newTradeIds, updatedTradeIds } =
+      await upsertReconstructedBrokerTrades(
       supabase,
       {
         userId,
@@ -339,6 +344,15 @@ export async function syncTradovateBrokerAccount(
       lastAutoSyncAt: trigger === "manual" ? undefined : successAt,
     })
 
+    logTradovateSync("fills_fetched", {
+      connectionId,
+      mappingId: brokerIntegrationAccountId,
+      trigger,
+      fetched: accountFills.length,
+      newExecutions,
+      provider: "tradovate",
+    })
+
     logTradovateSync("sync_success", {
       userId,
       connectionId,
@@ -360,6 +374,8 @@ export async function syncTradovateBrokerAccount(
       duplicateExecutions,
       tradesCreated,
       tradesUpdated,
+      newTradeIds,
+      updatedTradeIds,
       openPositions: openByContract.size,
       durationMs,
     }

@@ -1,0 +1,69 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
+import {
+  rithmicAccountSafeMetadata,
+  type RithmicDiscoveredAccount,
+} from "@/lib/integrations/rithmic/rithmicAccountModels"
+
+export async function upsertDiscoveredRithmicAccounts(
+  supabase: SupabaseClient,
+  params: {
+    userId: string
+    connectionId: string
+    discovered: RithmicDiscoveredAccount[]
+  }
+): Promise<void> {
+  const now = new Date().toISOString()
+  for (const account of params.discovered) {
+    const { data: existing } = await supabase
+      .from("broker_integration_accounts")
+      .select("id, tradetraxs_account_id, status")
+      .eq("connection_id", params.connectionId)
+      .eq("provider", "rithmic")
+      .eq("external_account_id", account.externalAccountId)
+      .maybeSingle()
+
+    const metadata = {
+      ...rithmicAccountSafeMetadata({
+        fcmId: account.fcmId,
+        ibId: account.ibId,
+        accountId: account.accountId,
+        accountName: account.name,
+        accountCurrency: account.accountCurrency,
+        lossLimit: null,
+        accountAutoLiquidate: null,
+        autoLiqThresholdCurrentValue: null,
+      }),
+      ...account.metadata,
+    }
+
+    if (existing) {
+      const { error } = await supabase
+        .from("broker_integration_accounts")
+        .update({
+          external_account_name: account.name,
+          external_display_name: account.displayName,
+          external_metadata: metadata,
+          last_seen_at: now,
+          updated_at: now,
+          status: existing.tradetraxs_account_id ? "linked" : existing.status,
+        })
+        .eq("id", existing.id)
+      if (error) throw new Error("rithmic_broker_accounts_update_failed")
+      continue
+    }
+
+    const { error } = await supabase.from("broker_integration_accounts").insert({
+      user_id: params.userId,
+      connection_id: params.connectionId,
+      provider: "rithmic",
+      external_account_id: account.externalAccountId,
+      external_account_name: account.name,
+      external_display_name: account.displayName,
+      external_metadata: metadata,
+      last_seen_at: now,
+      updated_at: now,
+      status: "discovered",
+    })
+    if (error) throw new Error("rithmic_broker_accounts_insert_failed")
+  }
+}

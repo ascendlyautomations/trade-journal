@@ -32,6 +32,7 @@ import {
 import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
 import ProUpgradeModal from "../../components/ProUpgradeModal"
 import PlatformTradesHeader from "@/app/components/platform/PlatformTradesHeader"
+import BrokerEnrichmentInboxBanner from "@/app/components/BrokerEnrichmentInboxBanner"
 import {
   sortTradesForDisplay,
   type TradesSortKey,
@@ -448,6 +449,7 @@ export default function TradesPage() {
         />
 
         <div className="w-full px-1 md:px-6 md:max-w-[1600px] md:mx-auto">
+          <BrokerEnrichmentInboxBanner />
           <TradesPageMainContent
             loading={loading}
             accounts={accounts}

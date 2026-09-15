@@ -9,6 +9,7 @@ import {
   normalizeTradovateAccountRow,
   type TradovateAccountListItemRaw,
 } from "@/lib/integrations/tradovate/tradovateAccountModels"
+import type { TradovateListenerSnapshot } from "@/lib/integrations/tradovate/tradovateListenerStatus"
 import { fetchTradovateAccountListRaw, TradovateApiError } from "@/lib/integrations/tradovate/tradovateApiClient"
 
 export const TRADOVATE_ACCOUNT_DISCOVERY_STALE_MS = 15 * 60 * 1000
@@ -84,6 +85,7 @@ export async function loadTradovateConnectionAccounts(
   connectionStatus: string
   discovery: TradovateAccountDiscoveryResult | null
   accounts: Awaited<ReturnType<typeof listSafeBrokerIntegrationAccounts>>
+  listener: TradovateListenerSnapshot | null
 }> {
   const owned = await loadOwnedBrokerConnection(supabase, {
     userId,
@@ -97,6 +99,7 @@ export async function loadTradovateConnectionAccounts(
       connectionStatus,
       discovery: null,
       accounts: [],
+      listener: null,
     }
   }
 
@@ -122,5 +125,14 @@ export async function loadTradovateConnectionAccounts(
   )
   const accountsWithSync = await attachSyncViewsToBrokerAccounts(supabase, accounts)
 
-  return { connectionStatus, discovery, accounts: accountsWithSync }
+  const { loadTradovateConnectionListenerSnapshot } = await import(
+    "@/lib/integrations/tradovate/tradovateConnectionListener"
+  )
+  const listener = await loadTradovateConnectionListenerSnapshot(
+    supabase,
+    connectionId,
+    userId
+  )
+
+  return { connectionStatus, discovery, accounts: accountsWithSync, listener }
 }

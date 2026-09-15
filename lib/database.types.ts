@@ -2455,6 +2455,7 @@ export type Database = {
           has_email_password: boolean
           has_seen_getting_started_intro: boolean
           has_seen_onboarding_complete_popup: boolean
+          tradovate_login_import_reminder_opt_out: boolean
           has_used_csv_import: boolean | null
           has_used_initial_import: boolean | null
           id: string
@@ -2517,6 +2518,7 @@ export type Database = {
           has_email_password?: boolean
           has_seen_getting_started_intro?: boolean
           has_seen_onboarding_complete_popup?: boolean
+          tradovate_login_import_reminder_opt_out?: boolean
           has_used_csv_import?: boolean | null
           has_used_initial_import?: boolean | null
           id: string
@@ -2579,6 +2581,7 @@ export type Database = {
           has_email_password?: boolean
           has_seen_getting_started_intro?: boolean
           has_seen_onboarding_complete_popup?: boolean
+          tradovate_login_import_reminder_opt_out?: boolean
           has_used_csv_import?: boolean | null
           has_used_initial_import?: boolean | null
           id?: string
@@ -3901,6 +3904,11 @@ export type Database = {
           account_name: string | null
           account_size: string | null
           account_type: string | null
+          broker_connection_id: string | null
+          broker_enrichment_status: string | null
+          broker_integration_account_id: string | null
+          broker_lifecycle_id: string | null
+          last_broker_sync_at: string | null
           ai_feedback: string | null
           ai_feedback_created_at: string | null
           confidence: number | null
@@ -3958,6 +3966,11 @@ export type Database = {
           account_name?: string | null
           account_size?: string | null
           account_type?: string | null
+          broker_connection_id?: string | null
+          broker_enrichment_status?: string | null
+          broker_integration_account_id?: string | null
+          broker_lifecycle_id?: string | null
+          last_broker_sync_at?: string | null
           ai_feedback?: string | null
           ai_feedback_created_at?: string | null
           confidence?: number | null
@@ -4015,6 +4028,11 @@ export type Database = {
           account_name?: string | null
           account_size?: string | null
           account_type?: string | null
+          broker_connection_id?: string | null
+          broker_enrichment_status?: string | null
+          broker_integration_account_id?: string | null
+          broker_lifecycle_id?: string | null
+          last_broker_sync_at?: string | null
           ai_feedback?: string | null
           ai_feedback_created_at?: string | null
           confidence?: number | null

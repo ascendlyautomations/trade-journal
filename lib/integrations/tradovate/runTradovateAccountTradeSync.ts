@@ -33,6 +33,7 @@ export async function attachSyncViewsToBrokerAccounts<
     lastSyncStatus: string
     autoSyncEnabled: boolean
     lastAutoSyncAt: string | null
+    lastBrokerEventAt: string | null
   })[]
 > {
   const views = await loadBrokerAccountSyncViews(
@@ -47,6 +48,7 @@ export async function attachSyncViewsToBrokerAccounts<
       lastSyncStatus: sync?.lastSyncStatus ?? "never",
       autoSyncEnabled: sync?.autoSyncEnabled ?? true,
       lastAutoSyncAt: sync?.lastAutoSyncAt ?? null,
+      lastBrokerEventAt: sync?.lastEventAt ?? null,
     }
   })
 }

@@ -13,6 +13,8 @@ export type TradovateSyncLogContext = {
   coalesced?: boolean
   reconnectCount?: number
   errorCode?: string
+  externalAccountId?: string
+  providerUserId?: string
 }
 
 export function logTradovateSync(

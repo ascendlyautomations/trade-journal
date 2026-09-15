@@ -38,6 +38,8 @@ const USER_AUTHORITATIVE_TRADE_FIELDS = new Set([
   "reviewed",
   "is_pinned",
   "rr",
+  "broker_enrichment_status",
+  "reviewed",
 ])
 
 function durationFromIso(entry: string, exit: string): {
@@ -73,9 +75,16 @@ export async function upsertReconstructedBrokerTrades(
       { clearingFee: number; exchangeFee: number; nfaFee: number; commission: number }
     >
   }
-): Promise<{ tradesCreated: number; tradesUpdated: number }> {
+): Promise<{
+  tradesCreated: number
+  tradesUpdated: number
+  newTradeIds: string[]
+  updatedTradeIds: string[]
+}> {
   let tradesCreated = 0
   let tradesUpdated = 0
+  const newTradeIds: string[] = []
+  const updatedTradeIds: string[] = []
   const nowIso = new Date().toISOString()
   const modeDisplay = String(params.account.mode ?? "Live").trim() || "Live"
   const accountType = modeDisplay.toLowerCase()
@@ -135,9 +144,10 @@ export async function upsertReconstructedBrokerTrades(
       broker_lifecycle_id: lifecycle.lifecycleKey,
       last_broker_sync_at: nowIso,
       is_public: false,
-      notes: null,
       public_description: "",
       image_url: null,
+      broker_enrichment_status: "pending",
+      reviewed: false,
     }
 
     const { data: existing } = await supabase
@@ -158,7 +168,10 @@ export async function upsertReconstructedBrokerTrades(
         .update(patch)
         .eq("id", existing.id)
         .eq("user_id", params.userId)
-      if (!error) tradesUpdated += 1
+      if (!error) {
+        tradesUpdated += 1
+        updatedTradeIds.push(String(existing.id))
+      }
 
       await supabase
         .from("broker_integration_executions")
@@ -180,6 +193,7 @@ export async function upsertReconstructedBrokerTrades(
 
     if (error || !inserted) continue
     tradesCreated += 1
+    newTradeIds.push(String(inserted.id))
 
     await supabase
       .from("broker_integration_executions")
@@ -195,5 +209,5 @@ export async function upsertReconstructedBrokerTrades(
       )
   }
 
-  return { tradesCreated, tradesUpdated }
+  return { tradesCreated, tradesUpdated, newTradeIds, updatedTradeIds }
 }
