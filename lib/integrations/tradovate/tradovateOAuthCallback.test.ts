@@ -3,7 +3,10 @@ import { describe, it } from "node:test"
 import {
   parseTradovateCallbackQuery,
   TRADOVATE_OAUTH_REDIRECT_URI,
+  TRADOVATE_NATIVE_OAUTH_RETURN_URL,
+  buildNativeTradovateIntegrationResultUrl,
   buildTradovateIntegrationResultUrl,
+  isAllowedNativeTradovateOAuthReturn,
   tradovateCallbackUserMessage,
 } from "./tradovateOAuthCallback"
 
@@ -39,5 +42,20 @@ describe("tradovateOAuthCallback", () => {
     })
     assert.match(url, /\/settings\/integrations\/tradovate\?/)
     assert.match(url, /reason=invalid_state/)
+  })
+
+  it("allows native iOS Tradovate OAuth return URL", () => {
+    assert.equal(
+      TRADOVATE_NATIVE_OAUTH_RETURN_URL,
+      "tradetraxs://settings/broker-integrations/tradovate"
+    )
+    assert.equal(isAllowedNativeTradovateOAuthReturn(TRADOVATE_NATIVE_OAUTH_RETURN_URL), true)
+    assert.equal(isAllowedNativeTradovateOAuthReturn("https://evil.example/steal"), false)
+  })
+
+  it("builds native broker integration redirect URLs", () => {
+    const url = buildNativeTradovateIntegrationResultUrl({ kind: "success" })
+    assert.match(url, /^tradetraxs:\/\/settings\/broker-integrations\/tradovate\?/)
+    assert.match(url, /status=success/)
   })
 })

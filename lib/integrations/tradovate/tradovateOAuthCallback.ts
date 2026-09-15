@@ -1,3 +1,4 @@
+import { NATIVE_IOS_TRADOVATE_BROKER_OAUTH_RETURN } from "@/lib/nativeIosOAuthUrls"
 import { resolveAppUrl } from "@/lib/stripeServer"
 
 export const TRADOVATE_OAUTH_CALLBACK_PATH =
@@ -45,6 +46,36 @@ export function tradovateCallbackUserMessage(outcome: TradovateCallbackOutcome):
   return REASON_MESSAGES[outcome.reason]
 }
 
+export const TRADOVATE_NATIVE_OAUTH_RETURN_URL = NATIVE_IOS_TRADOVATE_BROKER_OAUTH_RETURN
+
+export function isAllowedNativeTradovateOAuthReturn(redirectAfter: string | null | undefined): boolean {
+  const trimmed = redirectAfter?.trim()
+  if (!trimmed) return false
+  try {
+    const parsed = new URL(trimmed)
+    const expected = new URL(TRADOVATE_NATIVE_OAUTH_RETURN_URL)
+    return (
+      parsed.protocol === expected.protocol &&
+      parsed.host === expected.host &&
+      parsed.pathname === expected.pathname
+    )
+  } catch {
+    return false
+  }
+}
+
+export function buildNativeTradovateIntegrationResultUrl(
+  outcome: TradovateCallbackOutcome,
+  baseReturnUrl: string = TRADOVATE_NATIVE_OAUTH_RETURN_URL
+): string {
+  const url = new URL(baseReturnUrl)
+  url.searchParams.set("status", outcome.kind === "success" ? "success" : "error")
+  if (outcome.kind === "error") {
+    url.searchParams.set("reason", outcome.reason)
+  }
+  return url.toString()
+}
+
 export function buildTradovateIntegrationResultUrl(
   req: Request,
   outcome: TradovateCallbackOutcome
@@ -56,6 +87,17 @@ export function buildTradovateIntegrationResultUrl(
     url.searchParams.set("reason", outcome.reason)
   }
   return url.toString()
+}
+
+export function resolveTradovateOAuthResultRedirectUrl(
+  req: Request,
+  outcome: TradovateCallbackOutcome,
+  redirectAfter: string | null | undefined
+): string {
+  if (isAllowedNativeTradovateOAuthReturn(redirectAfter)) {
+    return buildNativeTradovateIntegrationResultUrl(outcome, redirectAfter!.trim())
+  }
+  return buildTradovateIntegrationResultUrl(req, outcome)
 }
 
 export type TradovateCallbackQuery = {

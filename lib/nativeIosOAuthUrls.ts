@@ -21,3 +21,7 @@ export const NATIVE_IOS_OAUTH_CALLBACK =
  */
 export const NATIVE_IOS_OAUTH_HTTPS_BRIDGE =
   `${SITE_URL}/api/auth/native-callback` as const
+
+/** ASWebAuthenticationSession return URL after Tradovate broker OAuth (Settings → Broker Integrations). */
+export const NATIVE_IOS_TRADOVATE_BROKER_OAUTH_RETURN =
+  `${NATIVE_IOS_OAUTH_SCHEME}://settings/broker-integrations/tradovate` as const

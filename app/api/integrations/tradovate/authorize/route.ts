@@ -13,6 +13,14 @@ import {
   verifyTradovateAuthorizeHandoffValue,
   type TradovateAuthorizeHandoffPayload,
 } from "@/lib/integrations/tradovate/tradovateAuthorizeHandoff"
+import {
+  buildNativeTradovateAuthorizeJsonResponse,
+  buildWebTradovateAuthorizeJsonResponse,
+  isNativeTradovateAuthorizeRequest,
+  parseTradovateAuthorizePostBody,
+  TRADOVATE_NATIVE_OAUTH_CLIENT_HEADER,
+  TRADOVATE_NATIVE_OAUTH_REDIRECT_AFTER,
+} from "@/lib/integrations/tradovate/tradovateAuthorizePost"
 import { resolveAppUrl } from "@/lib/stripeServer"
 
 export const runtime = "nodejs"
@@ -58,20 +66,21 @@ async function resolveAuthorizeHandoff(
   return null
 }
 
-async function beginTradovateOAuthRedirect(
-  request: NextRequest,
-  handoff: TradovateAuthorizeHandoffPayload
-): Promise<NextResponse> {
+async function createTradovateAuthorizeUrlForHandoff(
+  handoff: TradovateAuthorizeHandoffPayload,
+  redirectAfter: string
+): Promise<{ ok: true; authorizeUrl: string } | { ok: false; response: NextResponse }> {
   try {
     getTradovateOAuthConfig()
   } catch {
     console.error("[tradovate/authorize] oauth_config_missing")
-    const res = NextResponse.json(
-      { error: "Tradovate connection is temporarily unavailable." },
-      { status: 503 }
-    )
-    clearHandoffCookie(res)
-    return res
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Tradovate connection is temporarily unavailable." },
+        { status: 503 }
+      ),
+    }
   }
 
   if (handoff.oauthIntent === "reconnect" && handoff.targetConnectionId) {
@@ -81,12 +90,13 @@ async function beginTradovateOAuthRedirect(
       provider: "tradovate",
     })
     if (!owned) {
-      const res = NextResponse.json(
-        { error: "Tradovate connection not found." },
-        { status: 404 }
-      )
-      clearHandoffCookie(res)
-      return res
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "Tradovate connection not found." },
+          { status: 404 }
+        ),
+      }
     }
   }
 
@@ -95,7 +105,7 @@ async function beginTradovateOAuthRedirect(
     const created = await createIntegrationOAuthState(supabaseServiceRole, {
       provider: "tradovate",
       userId: handoff.userId,
-      redirectAfter: "/settings/integrations/tradovate",
+      redirectAfter,
       oauthIntent: handoff.oauthIntent,
       targetConnectionId: handoff.targetConnectionId,
     })
@@ -105,16 +115,33 @@ async function beginTradovateOAuthRedirect(
       "[tradovate/authorize] state_create_failed",
       err instanceof Error ? err.message : "unknown"
     )
-    const res = NextResponse.json(
-      { error: "Could not start Tradovate connection. Please try again." },
-      { status: 500 }
-    )
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Could not start Tradovate connection. Please try again." },
+        { status: 500 }
+      ),
+    }
+  }
+
+  return { ok: true, authorizeUrl: buildTradovateAuthorizationUrl({ state }) }
+}
+
+async function beginTradovateOAuthRedirect(
+  request: NextRequest,
+  handoff: TradovateAuthorizeHandoffPayload
+): Promise<NextResponse> {
+  const created = await createTradovateAuthorizeUrlForHandoff(
+    handoff,
+    "/settings/integrations/tradovate"
+  )
+  if (!created.ok) {
+    const res = created.response
     clearHandoffCookie(res)
     return res
   }
 
-  const authorizeUrl = buildTradovateAuthorizationUrl({ state })
-  const response = NextResponse.redirect(authorizeUrl, { status: 302 })
+  const response = NextResponse.redirect(created.authorizeUrl, { status: 302 })
   clearHandoffCookie(response)
   return response
 }
@@ -135,15 +162,20 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  let body: { reconnectConnectionId?: string } = {}
+  let rawBody: unknown = {}
   try {
-    body = (await request.json()) as { reconnectConnectionId?: string }
+    rawBody = await request.json()
   } catch {
-    body = {}
+    rawBody = {}
   }
+  const body = parseTradovateAuthorizePostBody(rawBody)
 
   const reconnectConnectionId = body.reconnectConnectionId?.trim() || null
   const oauthIntent = reconnectConnectionId ? "reconnect" : "connect_new"
+  const nativeClient = isNativeTradovateAuthorizeRequest(
+    body,
+    request.headers.get(TRADOVATE_NATIVE_OAUTH_CLIENT_HEADER)
+  )
 
   if (reconnectConnectionId) {
     const owned = await loadOwnedBrokerConnection(supabaseServiceRole, {
@@ -154,6 +186,27 @@ export async function POST(request: NextRequest) {
     if (!owned) {
       return NextResponse.json({ error: "Tradovate connection not found." }, { status: 404 })
     }
+  }
+
+  if (nativeClient) {
+    const handoff: TradovateAuthorizeHandoffPayload = {
+      userId: user.id,
+      oauthIntent,
+      targetConnectionId: reconnectConnectionId,
+    }
+    const created = await createTradovateAuthorizeUrlForHandoff(
+      handoff,
+      TRADOVATE_NATIVE_OAUTH_REDIRECT_AFTER
+    )
+    if (!created.ok) {
+      return created.response
+    }
+    console.info("[tradovate/authorize] post_contract=native", {
+      hasAuthorizeUrl: true,
+    })
+    return NextResponse.json(
+      buildNativeTradovateAuthorizeJsonResponse(created.authorizeUrl)
+    )
   }
 
   let handoffValue: string
@@ -174,7 +227,8 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const response = NextResponse.json({ ok: true })
+  console.info("[tradovate/authorize] post_contract=web_handoff")
+  const response = NextResponse.json(buildWebTradovateAuthorizeJsonResponse())
   response.cookies.set(TRADOVATE_AUTHORIZE_HANDOFF_COOKIE, handoffValue, {
     ...tradovateAuthorizeHandoffCookieOptions(),
   })

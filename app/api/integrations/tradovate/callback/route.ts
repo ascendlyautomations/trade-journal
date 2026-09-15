@@ -6,8 +6,8 @@ import {
 } from "@/lib/integrations/brokerIntegrationConnection"
 import { consumeIntegrationOAuthState } from "@/lib/integrations/integrationOAuthState"
 import {
-  buildTradovateIntegrationResultUrl,
   parseTradovateCallbackQuery,
+  resolveTradovateOAuthResultRedirectUrl,
   type TradovateCallbackOutcome,
 } from "@/lib/integrations/tradovate/tradovateOAuthCallback"
 import { getTradovateOAuthConfig } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
@@ -20,8 +20,12 @@ import {
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-function redirectOutcome(req: NextRequest, outcome: TradovateCallbackOutcome) {
-  const target = buildTradovateIntegrationResultUrl(req, outcome)
+function redirectOutcome(
+  req: NextRequest,
+  outcome: TradovateCallbackOutcome,
+  redirectAfter: string | null = null
+) {
+  const target = resolveTradovateOAuthResultRedirectUrl(req, outcome, redirectAfter)
   return NextResponse.redirect(target, { status: 302 })
 }
 
@@ -58,15 +62,17 @@ export async function GET(request: NextRequest) {
     return redirectOutcome(request, { kind: "error", reason: "invalid_state" })
   }
 
+  const oauthReturnTo = boundUser.redirect_after
+
   if (!query.code) {
-    return redirectOutcome(request, { kind: "error", reason: "missing_code" })
+    return redirectOutcome(request, { kind: "error", reason: "missing_code" }, oauthReturnTo)
   }
 
   try {
     getTradovateOAuthConfig()
   } catch {
     console.error("[tradovate/callback] oauth_config_missing")
-    return redirectOutcome(request, { kind: "error", reason: "server" })
+    return redirectOutcome(request, { kind: "error", reason: "server" }, oauthReturnTo)
   }
 
   const exchange = await exchangeTradovateAuthorizationCode(query.code)
@@ -75,7 +81,7 @@ export async function GET(request: NextRequest) {
       reason: exchange.reason,
       oauthError: exchange.oauthError ?? null,
     })
-    return redirectOutcome(request, { kind: "error", reason: "token_exchange" })
+    return redirectOutcome(request, { kind: "error", reason: "token_exchange" }, oauthReturnTo)
   }
 
   const tokens = exchange.tokens
@@ -122,13 +128,17 @@ export async function GET(request: NextRequest) {
     connectionId = persisted.connectionId
   } catch (err) {
     if (err instanceof BrokerOAuthIdentityMismatchError) {
-      return redirectOutcome(request, { kind: "error", reason: "identity_mismatch" })
+      return redirectOutcome(
+        request,
+        { kind: "error", reason: "identity_mismatch" },
+        oauthReturnTo
+      )
     }
     console.error(
       "[tradovate/callback] connection_persist_failed",
       err instanceof Error ? err.message : "unknown"
     )
-    return redirectOutcome(request, { kind: "error", reason: "server" })
+    return redirectOutcome(request, { kind: "error", reason: "server" }, oauthReturnTo)
   }
 
   console.info("[tradovate/callback] connection_established", {
@@ -150,5 +160,5 @@ export async function GET(request: NextRequest) {
     )
   })
 
-  return redirectOutcome(request, { kind: "success" })
+  return redirectOutcome(request, { kind: "success" }, oauthReturnTo)
 }
