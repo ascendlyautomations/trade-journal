@@ -18,6 +18,8 @@ export const RithmicTemplateId = {
   ResponseShowFillHistory: 3513,
 } as const
 
+export const RITHMIC_FILL_HISTORY_MAX_RECORD_COUNT = 10_000
+
 /** request_login.proto SysInfraType */
 export const RithmicInfraType = {
   TICKER_PLANT: 1,

@@ -52,12 +52,29 @@ function compareFills(a: ReconstructionFill, b: ReconstructionFill): number {
   return a.fillId.localeCompare(b.fillId, undefined, { numeric: true })
 }
 
+export function buildBrokerLifecycleKey(
+  provider: "tradovate" | "rithmic",
+  mappingId: string,
+  contractId: string,
+  lifecycleIndex: number
+): string {
+  return `${provider}:v1:${mappingId}:${contractId}:${lifecycleIndex}`
+}
+
 export function buildTradovateLifecycleKey(
   mappingId: string,
   contractId: string,
   lifecycleIndex: number
 ): string {
-  return `tradovate:v1:${mappingId}:${contractId}:${lifecycleIndex}`
+  return buildBrokerLifecycleKey("tradovate", mappingId, contractId, lifecycleIndex)
+}
+
+export function buildRithmicLifecycleKey(
+  mappingId: string,
+  contractId: string,
+  lifecycleIndex: number
+): string {
+  return buildBrokerLifecycleKey("rithmic", mappingId, contractId, lifecycleIndex)
 }
 
 /**
@@ -66,8 +83,13 @@ export function buildTradovateLifecycleKey(
  */
 export function reconstructCompletedTradesForContract(
   fills: ReconstructionFill[],
-  params: { mappingId: string; contractId: string }
+  params: {
+    mappingId: string
+    contractId: string
+    lifecycleProvider?: "tradovate" | "rithmic"
+  }
 ): { completed: ReconstructedLifecycleTrade[]; openSignedQty: number } {
+  const lifecycleProvider = params.lifecycleProvider ?? "tradovate"
   const sorted = [...fills].sort(compareFills)
   let position = 0
   let lifecycleIndex = 0
@@ -81,7 +103,8 @@ export function reconstructCompletedTradesForContract(
     const exitPrice = current.exitValue / current.exitQty
     const direction = current.direction
     completed.push({
-      lifecycleKey: buildTradovateLifecycleKey(
+      lifecycleKey: buildBrokerLifecycleKey(
+        lifecycleProvider,
         params.mappingId,
         params.contractId,
         lifecycleIndex
@@ -168,7 +191,8 @@ export function reconstructCompletedTradesForContract(
 
 export function reconstructAllCompletedTrades(
   fills: ReconstructionFill[],
-  mappingId: string
+  mappingId: string,
+  options?: { lifecycleProvider?: "tradovate" | "rithmic" }
 ): {
   completed: ReconstructedLifecycleTrade[]
   openByContract: Map<string, number>
@@ -193,6 +217,7 @@ export function reconstructAllCompletedTrades(
     const result = reconstructCompletedTradesForContract(contractFills, {
       mappingId,
       contractId,
+      lifecycleProvider: options?.lifecycleProvider,
     })
     completed.push(...result.completed)
     if (result.openSignedQty !== 0) {

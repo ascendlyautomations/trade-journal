@@ -104,7 +104,8 @@ export async function releaseBrokerSyncLock(
     lastSyncSuccessAt?: string | null
     lastSyncErrorCode?: string | null
     lastSyncErrorMessage?: string | null
-    maxExternalFillId?: number | null
+    maxExternalFillId?: string | number | null
+    providerSyncState?: Record<string, unknown>
     maxExecutedAt?: string | null
     lastAutoSyncAt?: string | null
   }
@@ -117,7 +118,9 @@ export async function releaseBrokerSyncLock(
       last_sync_success_at: patch.lastSyncSuccessAt ?? undefined,
       last_sync_error_code: patch.lastSyncErrorCode ?? null,
       last_sync_error_message: patch.lastSyncErrorMessage ?? null,
-      max_external_fill_id: patch.maxExternalFillId ?? undefined,
+      max_external_fill_id:
+        patch.maxExternalFillId != null ? String(patch.maxExternalFillId) : undefined,
+      provider_sync_state: patch.providerSyncState ?? undefined,
       max_executed_at: patch.maxExecutedAt ?? undefined,
       last_auto_sync_at: patch.lastAutoSyncAt ?? undefined,
       sync_lock_until: null,

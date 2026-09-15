@@ -8,7 +8,17 @@ import {
   type RithmicProtoTypes,
 } from "@/lib/integrations/rithmic/rithmicProtoLoader"
 import { logRithmicDiagnostic } from "@/lib/integrations/rithmic/rithmicSyncLogger"
-import { RithmicInfraType, RithmicTemplateId } from "@/lib/integrations/rithmic/rithmicTemplates"
+import type { RithmicFillHistoryRow } from "@/lib/integrations/rithmic/rithmicFillModels"
+import {
+  normalizeRithmicSymbolRoot,
+  rithmicExecutedAtFromSsboe,
+  rithmicSideFromTransactionType,
+} from "@/lib/integrations/rithmic/rithmicFillModels"
+import {
+  RithmicInfraType,
+  RithmicTemplateId,
+  RITHMIC_FILL_HISTORY_MAX_RECORD_COUNT,
+} from "@/lib/integrations/rithmic/rithmicTemplates"
 
 const DEFAULT_RECV_TIMEOUT_MS = 25_000
 
@@ -279,6 +289,113 @@ export class RithmicProtocolClient {
     }
 
     return { accounts, rpCode: finalRpCode }
+  }
+
+  async requestShowFillHistory(params: {
+    fcmId: string
+    ibId: string
+    accountId: string
+    indexFormat: "ssboe"
+    startIndex: number
+    finishIndex: number
+    maxRecordCount?: number
+  }): Promise<{ fills: RithmicFillHistoryRow[]; rpCode: string[] }> {
+    logRithmicDiagnostic("rithmic_fill_history_requested")
+
+    const maxRecordCount = Math.min(
+      params.maxRecordCount ?? RITHMIC_FILL_HISTORY_MAX_RECORD_COUNT,
+      RITHMIC_FILL_HISTORY_MAX_RECORD_COUNT
+    )
+
+    const buf = encodeMessage(this.proto().RequestShowFillHistory, {
+      templateId: RithmicTemplateId.RequestShowFillHistory,
+      userMsg: ["TradeTraxs", "fill_history"],
+      fcmId: params.fcmId,
+      ibId: params.ibId,
+      accountId: params.accountId,
+      indexFormat: params.indexFormat,
+      startIndex: params.startIndex,
+      finishIndex: params.finishIndex,
+      maxRecordCount,
+    })
+    await this.send(buf)
+
+    const fills: RithmicFillHistoryRow[] = []
+    let finalRpCode: string[] = []
+
+    for (;;) {
+      const raw = await this.recvWithHeartbeat("fill_history_timeout")
+      const rp = decodeMessage<{
+        rqHandlerRpCode?: string[]
+        rpCode?: string[]
+        fcmId?: string
+        ibId?: string
+        accountId?: string
+        symbol?: string
+        exchange?: string
+        transactionType?: string
+        fillId?: string
+        fillPrice?: number
+        price?: number
+        fillSize?: string | number
+        ssboe?: number
+        usecs?: number
+        sequenceNumber?: string
+      }>(this.proto().ResponseShowFillHistory, raw)
+
+      const handlerOk =
+        (rp.rqHandlerRpCode?.length ?? 0) > 0 && rp.rqHandlerRpCode?.[0] === "0"
+
+      if (
+        handlerOk &&
+        rp.fillId &&
+        rp.symbol &&
+        rp.exchange &&
+        rp.fcmId &&
+        rp.ibId &&
+        rp.accountId
+      ) {
+        const side = rithmicSideFromTransactionType(rp.transactionType)
+        const qtyRaw = rp.fillSize
+        const quantity =
+          typeof qtyRaw === "string" ? Number(qtyRaw) : Number(qtyRaw ?? 0)
+        const price = Number(rp.fillPrice ?? rp.price ?? 0)
+        const executedAt =
+          rithmicExecutedAtFromSsboe(rp.ssboe ?? null, rp.usecs ?? null) ??
+          new Date(0).toISOString()
+
+        if (side && Number.isFinite(quantity) && quantity > 0 && Number.isFinite(price)) {
+          fills.push({
+            fillId: String(rp.fillId),
+            fcmId: rp.fcmId,
+            ibId: rp.ibId,
+            accountId: rp.accountId,
+            symbol: rp.symbol,
+            exchange: rp.exchange,
+            side,
+            quantity,
+            price,
+            executedAt,
+            ssboe: rp.ssboe ?? null,
+            usecs: rp.usecs ?? null,
+            sequenceNumber: rp.sequenceNumber ?? null,
+            rawSymbol: rp.symbol,
+            transactionTypeRaw: rp.transactionType ?? null,
+          })
+        }
+      }
+
+      if ((rp.rpCode?.length ?? 0) > 0) {
+        finalRpCode = rp.rpCode ?? []
+        logRithmicDiagnostic("rithmic_fill_history_response", {
+          rpCode0: finalRpCode[0] ?? null,
+          fillCount: fills.length,
+        })
+        break
+      }
+    }
+
+    return { fills, rpCode: finalRpCode }
   }
 
   async logout(): Promise<void> {

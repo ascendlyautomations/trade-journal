@@ -1565,7 +1565,7 @@ export default function SettingsPage() {
             {activeTab === "trading-accounts" && (
               <div className="space-y-6">
                 <TradovateIntegrationSettingsSection userId={user?.id} />
-                <RithmicIntegrationSettingsSection />
+                <RithmicIntegrationSettingsSection userId={user?.id} />
                 <TradingAccountsSettingsSection
                   userId={user?.id}
                   isPro={isProActive(profile)}

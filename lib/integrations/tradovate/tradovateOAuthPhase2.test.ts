@@ -24,7 +24,10 @@ describe("tradovate OAuth phase 2", () => {
       }
       const ciphertext = encryptIntegrationCredentials(payload)
       assert.match(ciphertext, /^v1:/)
-      assert.deepEqual(decryptIntegrationCredentials(ciphertext), payload)
+      assert.deepEqual(decryptIntegrationCredentials(ciphertext), {
+        kind: "tradovate",
+        ...payload,
+      })
     } finally {
       if (prior === undefined) {
         delete process.env.INTEGRATION_CREDENTIALS_ENCRYPTION_KEY

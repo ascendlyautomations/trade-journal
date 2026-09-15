@@ -108,6 +108,7 @@ export async function GET(request: NextRequest) {
       providerUserId,
       providerDisplayName,
       credentials: {
+        kind: "tradovate",
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token ?? null,
         token_type: tokens.token_type ?? null,

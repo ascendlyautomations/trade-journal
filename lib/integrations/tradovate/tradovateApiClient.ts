@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   decryptIntegrationCredentials,
+  isTradovateIntegrationCredentials,
   type IntegrationCredentialPayload,
+  type TradovateIntegrationCredentials,
 } from "@/lib/integrations/credentialEncryption"
 import {
   markBrokerConnectionReconnectRequired,
@@ -18,6 +20,15 @@ import {
 import { runTradovateTokenRefreshSingleFlight } from "@/lib/integrations/tradovate/tradovateTokenRefreshFlight"
 
 const ACCESS_TOKEN_SKEW_MS = 60_000
+
+function requireTradovateCredentials(
+  payload: IntegrationCredentialPayload
+): TradovateIntegrationCredentials {
+  if (!isTradovateIntegrationCredentials(payload)) {
+    throw new Error("tradovate_connection_credentials_invalid")
+  }
+  return payload
+}
 
 type ConnectedTradovateConnection = {
   id: string
@@ -94,7 +105,9 @@ async function ensureValidAccessToken(
   supabase: SupabaseClient,
   connection: ConnectedTradovateConnection
 ): Promise<string> {
-  let credentials = decryptIntegrationCredentials(connection.credentials_ciphertext)
+  let credentials = requireTradovateCredentials(
+    decryptIntegrationCredentials(connection.credentials_ciphertext)
+  )
 
   if (!accessTokenExpired(connection.access_token_expires_at)) {
     return credentials.access_token
@@ -104,7 +117,9 @@ async function ensureValidAccessToken(
   const refreshed = await runTradovateTokenRefreshSingleFlight(flightKey, async () => {
     const latest = await loadConnectedConnection(supabase, connection.user_id, connection.id)
     if (!latest) return false
-    const current = decryptIntegrationCredentials(latest.credentials_ciphertext)
+    const current = requireTradovateCredentials(
+      decryptIntegrationCredentials(latest.credentials_ciphertext)
+    )
     if (!current.refresh_token?.trim()) {
       await markBrokerConnectionReconnectRequired(supabase, connection.id, connection.user_id)
       return false
@@ -134,7 +149,9 @@ async function ensureValidAccessToken(
 
   const reloaded = await loadConnectedConnection(supabase, connection.user_id, connection.id)
   if (!reloaded) throw new TradovateApiError("not_connected")
-  credentials = decryptIntegrationCredentials(reloaded.credentials_ciphertext)
+  credentials = requireTradovateCredentials(
+    decryptIntegrationCredentials(reloaded.credentials_ciphertext)
+  )
   return credentials.access_token
 }
 
@@ -179,7 +196,9 @@ export async function tradovateAuthedJsonRequest<T>(
   }
 
   if (response.status === 401 && !init?.retried) {
-    const current = decryptIntegrationCredentials(connection.credentials_ciphertext)
+    const current = requireTradovateCredentials(
+      decryptIntegrationCredentials(connection.credentials_ciphertext)
+    )
     if (!current.refresh_token?.trim()) {
       await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
       throw new TradovateApiError("reconnect_required")

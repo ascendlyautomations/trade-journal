@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { decryptIntegrationCredentials } from "@/lib/integrations/credentialEncryption"
+import {
+  decryptIntegrationCredentials,
+  isTradovateIntegrationCredentials,
+} from "@/lib/integrations/credentialEncryption"
 import { markBrokerConnectionReconnectRequired } from "@/lib/integrations/brokerIntegrationConnection"
 import { TradovateMappingSyncCoalescer } from "@/lib/integrations/tradovate/tradovateSyncCoalesce"
 import { syncTradovateBrokerAccount } from "@/lib/integrations/tradovate/syncTradovateBrokerAccount"
@@ -229,6 +232,9 @@ export class TradovateConnectionAutoSyncSession {
     let credentials = decryptIntegrationCredentials(
       this.connection.credentials_ciphertext
     )
+    if (!isTradovateIntegrationCredentials(credentials)) {
+      throw new Error("tradovate_connection_credentials_invalid")
+    }
     const expiresAt = this.connection.access_token_expires_at
     const skewMs = 60_000
     if (expiresAt) {
@@ -274,7 +280,11 @@ export class TradovateConnectionAutoSyncSession {
         credentials_ciphertext: data.credentials_ciphertext,
         access_token_expires_at: data.access_token_expires_at,
       }
-      credentials = decryptIntegrationCredentials(data.credentials_ciphertext)
+      const decrypted = decryptIntegrationCredentials(data.credentials_ciphertext)
+      if (!isTradovateIntegrationCredentials(decrypted)) {
+        throw new Error("tradovate_connection_credentials_invalid")
+      }
+      credentials = decrypted
     }
     return credentials.access_token
   }

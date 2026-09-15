@@ -61,6 +61,12 @@ function tradeDateFromIso(iso: string): string {
   return d.toISOString().slice(0, 10)
 }
 
+export type BrokerContractMeta = {
+  symbolRoot: string
+  contractName?: string | null
+  valuePerPoint?: number | null
+}
+
 export async function upsertReconstructedBrokerTrades(
   supabase: SupabaseClient,
   params: {
@@ -69,11 +75,12 @@ export async function upsertReconstructedBrokerTrades(
     mappingId: string
     account: CanonicalAccountSnapshot
     completed: ReconstructedLifecycleTrade[]
-    contracts: Map<string, ResolvedTradovateContract>
+    contracts: Map<string, BrokerContractMeta>
     feesByFillId: Map<
       string,
       { clearingFee: number; exchangeFee: number; nfaFee: number; commission: number }
     >
+    importSource?: "tradovate" | "rithmic"
   }
 ): Promise<{
   tradesCreated: number
@@ -88,11 +95,12 @@ export async function upsertReconstructedBrokerTrades(
   const nowIso = new Date().toISOString()
   const modeDisplay = String(params.account.mode ?? "Live").trim() || "Live"
   const accountType = modeDisplay.toLowerCase()
+  const importSource = params.importSource ?? "tradovate"
 
   for (const lifecycle of params.completed) {
     const contract = params.contracts.get(lifecycle.contractId)
     const ticker = contract?.symbolRoot ?? lifecycle.contractId
-    const valuePerPoint = contract?.valuePerPoint
+    const valuePerPoint = contract?.valuePerPoint ?? null
 
     let pnl: number | null = null
     if (valuePerPoint != null && valuePerPoint > 0) {
@@ -137,7 +145,7 @@ export async function upsertReconstructedBrokerTrades(
       mode: modeDisplay,
       account_type: accountType,
       account_category: params.account.category,
-      import_source: "tradovate",
+      import_source: importSource,
       import_fingerprint: lifecycle.lifecycleKey,
       broker_connection_id: params.connectionId,
       broker_integration_account_id: params.mappingId,
@@ -181,7 +189,7 @@ export async function upsertReconstructedBrokerTrades(
           updated_at: nowIso,
         })
         .eq("broker_integration_account_id", params.mappingId)
-        .in("external_fill_id", lifecycle.fillIds.map((id) => Number(id)))
+        .in("external_fill_id", lifecycle.fillIds)
       continue
     }
 
@@ -203,10 +211,7 @@ export async function upsertReconstructedBrokerTrades(
         updated_at: nowIso,
       })
       .eq("broker_integration_account_id", params.mappingId)
-      .in(
-        "external_fill_id",
-        lifecycle.fillIds.map((id) => Number(id))
-      )
+      .in("external_fill_id", lifecycle.fillIds)
   }
 
   return { tradesCreated, tradesUpdated, newTradeIds, updatedTradeIds }

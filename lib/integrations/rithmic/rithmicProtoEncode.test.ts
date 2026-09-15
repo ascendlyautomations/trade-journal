@@ -83,6 +83,25 @@ describe("Rithmic Phase 1 protobuf encode", () => {
     assert.ok(buf.length > 0)
   })
 
+  it("RequestShowFillHistory encodes template 3512 with account scope", () => {
+    const type = loadRithmicProtoTypes().RequestShowFillHistory
+    const buf = encodeMessage(type, {
+      templateId: RithmicTemplateId.RequestShowFillHistory,
+      userMsg: ["TradeTraxs", "fill_history"],
+      fcmId: "FCM",
+      ibId: "IB",
+      accountId: "ACC",
+      indexFormat: "ssboe",
+      startIndex: 0,
+      finishIndex: 1_700_000_000,
+      maxRecordCount: 10_000,
+    })
+    assert.ok(buf.length > 0)
+    const decoded = decodeMessage<{ templateId?: number; accountId?: string }>(type, buf)
+    assert.equal(decoded.templateId, 3512)
+    assert.equal(decoded.accountId, "ACC")
+  })
+
   it("normalizePayload maps official snake_case field names", () => {
     const type = loadRithmicProtoTypes().RequestHeartbeat
     const normalized = normalizePayloadForProtobufType(type, {

@@ -240,10 +240,10 @@ export async function syncTradovateBrokerAccount(
           connection_id: connectionId,
           broker_integration_account_id: brokerIntegrationAccountId,
           provider: "tradovate",
-          external_fill_id: fillIdNum,
+          external_fill_id: String(fillId),
           external_order_id:
-            fill.orderId != null ? Number(fill.orderId) : null,
-          external_contract_id: Number(fill.contractId),
+            fill.orderId != null ? String(fill.orderId) : null,
+          external_contract_id: String(fill.contractId),
           side: tradovateSide(fill),
           quantity: Number(fill.qty),
           price: Number(fill.price),
@@ -280,7 +280,7 @@ export async function syncTradovateBrokerAccount(
           updated_at: new Date().toISOString(),
         })
         .eq("broker_integration_account_id", brokerIntegrationAccountId)
-        .eq("external_contract_id", Number(contractId))
+        .eq("external_contract_id", String(contractId))
     }
 
     const { data: storedExecutions, error: loadExecError } = await supabase
@@ -339,7 +339,7 @@ export async function syncTradovateBrokerAccount(
       lastSyncSuccessAt: successAt,
       lastSyncErrorCode: null,
       lastSyncErrorMessage: null,
-      maxExternalFillId: maxFillId,
+      maxExternalFillId: maxFillId != null ? String(maxFillId) : null,
       maxExecutedAt: maxExecutedAt,
       lastAutoSyncAt: trigger === "manual" ? undefined : successAt,
     })

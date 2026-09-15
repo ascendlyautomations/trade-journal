@@ -23,6 +23,8 @@ export function rithmicProtoFilePaths(): string[] {
     path.join(protoRoot, "request_logout.proto"),
     path.join(protoRoot, "request_heartbeat.proto"),
     path.join(protoRoot, "response_heartbeat.proto"),
+    path.join(protoRoot, "request_show_fill_history.proto"),
+    path.join(protoRoot, "response_show_fill_history.proto"),
   ]
 }
 

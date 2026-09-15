@@ -1,0 +1,63 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
+import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { loadOwnedBrokerConnection } from "@/lib/integrations/brokerConnectionAccess"
+import { listSafeBrokerIntegrationAccounts } from "@/lib/integrations/brokerIntegrationAccounts"
+import { attachSyncViewsToBrokerAccounts } from "@/lib/integrations/tradovate/runTradovateAccountTradeSync"
+import { syncRithmicBrokerAccount } from "@/lib/integrations/rithmic/syncRithmicBrokerAccount"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const maxDuration = 120
+
+const integrationDb = supabaseServiceRole as SupabaseClient
+
+type RouteContext = {
+  params: Promise<{ connectionId: string; mappingId: string }>
+}
+
+export async function POST(_req: Request, context: RouteContext) {
+  const user = await getRouteUser(_req)
+  if (!user?.id) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const { connectionId, mappingId } = await context.params
+  const owned = await loadOwnedBrokerConnection(integrationDb, {
+    userId: user.id,
+    connectionId,
+    provider: "rithmic",
+  })
+  if (!owned) {
+    return Response.json({ error: "Connection not found." }, { status: 404 })
+  }
+
+  const summary = await syncRithmicBrokerAccount(integrationDb, {
+    userId: user.id,
+    connectionId,
+    brokerIntegrationAccountId: mappingId,
+    trigger: "manual",
+  })
+
+  const accounts = await listSafeBrokerIntegrationAccounts(integrationDb, {
+    userId: user.id,
+    provider: "rithmic",
+    connectionId,
+  })
+  const accountsWithSync = await attachSyncViewsToBrokerAccounts(
+    integrationDb,
+    accounts
+  )
+
+  const status = summary.ok ? 200 : summary.status === "syncing" ? 409 : 400
+
+  return Response.json(
+    {
+      ok: summary.ok,
+      connectionId,
+      mappingId,
+      summary,
+      accounts: accountsWithSync,
+    },
+    { status }
+  )
+}

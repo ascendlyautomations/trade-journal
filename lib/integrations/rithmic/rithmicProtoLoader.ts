@@ -12,6 +12,8 @@ export type RithmicProtoTypes = {
   ResponseAccountList: protobuf.Type
   RequestLogout: protobuf.Type
   RequestHeartbeat: protobuf.Type
+  RequestShowFillHistory: protobuf.Type
+  ResponseShowFillHistory: protobuf.Type
   Base: protobuf.Type
 }
 
@@ -58,6 +60,8 @@ export function loadRithmicProtoTypes(): RithmicProtoTypes {
     ResponseAccountList: type("ResponseAccountList"),
     RequestLogout: type("RequestLogout"),
     RequestHeartbeat: type("RequestHeartbeat"),
+    RequestShowFillHistory: type("RequestShowFillHistory"),
+    ResponseShowFillHistory: type("ResponseShowFillHistory"),
     Base: type("Base"),
   }
 

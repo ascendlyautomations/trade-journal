@@ -1,6 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import RithmicBrokerAccountsPanel from "@/app/components/RithmicBrokerAccountsPanel"
+import RithmicUserConnectionsPanel from "@/app/components/RithmicUserConnectionsPanel"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 
 type EnvPresence = {
@@ -71,7 +73,11 @@ function resolveApiErrorMessage(data: ApiErrorBody, status: number): string {
   return "Discovery failed."
 }
 
-export default function RithmicIntegrationSettingsSection() {
+export default function RithmicIntegrationSettingsSection({
+  userId,
+}: {
+  userId?: string
+}) {
   const [meta, setMeta] = useState<Phase1Meta | null>(null)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<DiscoveryResult | null>(null)
@@ -152,7 +158,7 @@ export default function RithmicIntegrationSettingsSection() {
   return (
     <section className="space-y-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6">
       <div>
-        <h2 className="text-lg font-semibold text-white">Rithmic (Test — Phase 1)</h2>
+        <h2 className="text-lg font-semibold text-white">Rithmic (Test)</h2>
         <p className="mt-1 text-sm text-white/70">
           Development-only connectivity check. Uses TradeTraxs server Test credentials — not
           production-ready Connect. Sign required agreements in R | Trader (Test) before running.
@@ -246,6 +252,13 @@ export default function RithmicIntegrationSettingsSection() {
           )}
         </div>
       )}
+
+      <RithmicUserConnectionsPanel userId={userId} />
+
+      <RithmicBrokerAccountsPanel
+        userId={userId}
+        onDiscoveryPersist={() => void runDiscovery(true)}
+      />
     </section>
   )
 }

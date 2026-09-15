@@ -25,6 +25,7 @@ import BrokerImportModalShell, {
 import ActionButton from "@/app/components/ui/ActionButton"
 
 type LinkedAccount = {
+  provider: "tradovate" | "rithmic"
   mappingId: string
   connectionId: string
   brokerAccountLabel: string | null
@@ -39,15 +40,22 @@ type FlowStep =
   | "caught_up"
   | "error"
 
-function TradovateImportPromptAccountCard({
+function providerLabel(provider: LinkedAccount["provider"]): string {
+  return provider === "rithmic" ? "Rithmic" : "Tradovate"
+}
+
+function BrokerImportPromptAccountCard({
   accounts,
 }: {
   accounts: LinkedAccount[]
 }) {
   if (accounts.length > 1) {
+    const providers = [...new Set(accounts.map((a) => a.provider))]
+    const brokerLine =
+      providers.length === 1 ? providerLabel(providers[0]!) : "Linked brokers"
     return (
       <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-        <p className="text-xs font-medium text-gray-400">Tradovate</p>
+        <p className="text-xs font-medium text-gray-400">{brokerLine}</p>
         <p className="mt-1 truncate text-sm font-medium text-white">
           {accounts.length} linked accounts
         </p>
@@ -66,7 +74,7 @@ function TradovateImportPromptAccountCard({
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-      <p className="text-xs font-medium text-gray-400">Tradovate</p>
+      <p className="text-xs font-medium text-gray-400">{providerLabel(acc.provider)}</p>
       <p className="mt-1 truncate text-sm font-medium text-white" title={primaryLine}>
         {primaryLine}
       </p>
@@ -123,7 +131,7 @@ export default function BrokerTradovateLoginImportGate() {
           ...(await supabaseBearerHeaders()),
           "Content-Type": "application/json",
         }
-        const res = await fetch("/api/integrations/tradovate/import/run", {
+        const res = await fetch("/api/integrations/broker/import/run", {
           method: "POST",
           headers,
           body: JSON.stringify({ mappingIds }),
@@ -179,7 +187,7 @@ export default function BrokerTradovateLoginImportGate() {
 
     void (async () => {
       const headers = await supabaseBearerHeaders()
-      const res = await fetch("/api/integrations/tradovate/import/eligibility", {
+      const res = await fetch("/api/integrations/broker/import/eligibility", {
         headers,
       })
       if (!res.ok) return
@@ -203,9 +211,9 @@ export default function BrokerTradovateLoginImportGate() {
         <BrokerImportModalShell
           open
           onClose={dismissPrompt}
-          ariaLabel="Import Tradovate trades"
+          ariaLabel="Import broker trades"
           title="Made any trades?"
-          description="Import your latest Tradovate trades and keep your journal up to date."
+          description="Import your latest linked broker trades and keep your journal up to date."
           footer={
             <div className={brokerImportFooterActionsClass}>
               <ActionButton
@@ -225,7 +233,7 @@ export default function BrokerTradovateLoginImportGate() {
             </div>
           }
         >
-          <TradovateImportPromptAccountCard accounts={linkedAccounts} />
+          <BrokerImportPromptAccountCard accounts={linkedAccounts} />
           <label className="mt-5 flex cursor-pointer items-start gap-3">
             <input
               type="checkbox"
@@ -290,7 +298,10 @@ export default function BrokerTradovateLoginImportGate() {
                       }}
                       className="h-4 w-4 shrink-0 rounded border-white/25"
                     />
-                    <span className="truncate text-sm text-white">{label}</span>
+                    <span className="truncate text-sm text-white">
+                      {acc.provider === "rithmic" ? "Rithmic · " : "Tradovate · "}
+                      {label}
+                    </span>
                   </label>
                 </li>
               )
@@ -304,7 +315,7 @@ export default function BrokerTradovateLoginImportGate() {
           open
           onClose={() => {}}
           ariaLabel="Importing trades"
-          title="Checking Tradovate…"
+          title="Checking brokers…"
           showCloseButton={false}
           closeDisabled
         >
@@ -319,7 +330,7 @@ export default function BrokerTradovateLoginImportGate() {
           ariaLabel="Import complete"
           title="You're all caught up"
           titleTone="success"
-          description="No new Tradovate trades were found."
+          description="No new broker trades were found."
           footer={
             <div className={brokerImportFooterActionsClass}>
               <ActionButton

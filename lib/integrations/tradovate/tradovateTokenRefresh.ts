@@ -74,6 +74,7 @@ export function credentialsFromRefreshTokens(
   tokens: TradovateOAuthTokenSuccess
 ): IntegrationCredentialPayload {
   return {
+    kind: "tradovate",
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token ?? null,
     token_type: tokens.token_type ?? null,

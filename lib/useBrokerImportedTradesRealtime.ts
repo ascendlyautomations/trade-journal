@@ -30,7 +30,9 @@ export function useBrokerImportedTradesRealtime(userId: string | undefined) {
             import_source?: string | null
             broker_enrichment_status?: string | null
           } | null
-          if (row?.import_source !== "tradovate") return
+          if (!row) return
+          const src = row.import_source
+          if (src !== "tradovate" && src !== "rithmic") return
           invalidateTradesCache(userId)
           void ensureTradesLoaded(supabase, userId, { force: true, fullHistory: true })
           if (
