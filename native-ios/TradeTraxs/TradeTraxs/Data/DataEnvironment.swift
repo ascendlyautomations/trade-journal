@@ -322,7 +322,14 @@ final class DataEnvironment {
             contentReports: DefaultContentReportRepository(supabase: supabase),
             vault: vaultRepository,
             vaultStore: VaultStore(repository: vaultRepository),
-            brokerIntegrations: DefaultBrokerIntegrationRepository(transport: transport)
+            brokerIntegrations: {
+                let repository = DefaultBrokerIntegrationRepository(transport: transport)
+                BrokerImportEligibilityStore.shared.configure(
+                    broker: repository,
+                    session: session
+                )
+                return repository
+            }()
         )
     }
 

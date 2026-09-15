@@ -16,15 +16,17 @@ struct VideoFeedInlineContainer<Overlay: View>: View {
         ZStack {
             colors.fillPrimary
 
-            if shouldShowPoster {
-                FeedClipPosterImage(
-                    reference: reel.thumbnail ?? reel.video,
-                    imagePipeline: imagePipeline,
-                    feedItemID: feedItemID ?? reel.id.rawValue,
-                    contentMode: .fit
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            FeedClipPosterImage(
+                thumbnail: reel.thumbnail,
+                video: reel.video,
+                imagePipeline: imagePipeline,
+                objectStorage: playbackCoordinator.objectStorage,
+                feedItemID: feedItemID ?? reel.id.rawValue,
+                contentMode: .fit
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .opacity(playbackCoordinator.shouldHidePoster(for: reel.id) ? 0 : 1)
+            .allowsHitTesting(false)
 
             if let frozenFrame = playbackCoordinator.frozenFrame(for: reel.id),
                !playbackCoordinator.shouldShowLivePlayer(for: reel.id)
@@ -43,7 +45,14 @@ struct VideoFeedInlineContainer<Overlay: View>: View {
                     clipID: reel.id.rawValue,
                     player: player,
                     containerSize: layoutMetrics,
-                    videoGravity: resolvedGravity
+                    videoGravity: resolvedGravity,
+                    onReadyForDisplayChange: { ready in
+                        if ready {
+                            playbackCoordinator.noteVideoReadyForDisplay(reel.id)
+                        } else {
+                            playbackCoordinator.noteVideoDisplayLost(reel.id)
+                        }
+                    }
                 )
                 .frame(width: layoutMetrics.width, height: layoutMetrics.height)
                 .allowsHitTesting(false)
@@ -60,11 +69,6 @@ struct VideoFeedInlineContainer<Overlay: View>: View {
         .onChange(of: layoutMetrics.height) { _, _ in
             logPresentationOnce()
         }
-    }
-
-    private var shouldShowPoster: Bool {
-        !playbackCoordinator.shouldShowLivePlayer(for: reel.id)
-            && playbackCoordinator.frozenFrame(for: reel.id) == nil
     }
 
     private var resolvedGravity: AVLayerVideoGravity {
@@ -110,10 +114,13 @@ struct VideoFeedInlineContainer<Overlay: View>: View {
 
 /// Poster frame for inline / pager clip surfaces.
 struct FeedClipPosterImage: View {
-    let reference: MediaReference?
+    let thumbnail: MediaReference?
+    let video: MediaReference
     let imagePipeline: any ImagePipeline
+    let objectStorage: any ObjectStorageProviding
     var feedItemID: String? = nil
     var contentMode: ContentMode = .fill
+    var mediaBucket: StorageBucket = .reels
 
     @Environment(\.displayScale) private var displayScale
     @State private var displayImage: UIImage?
@@ -128,47 +135,30 @@ struct FeedClipPosterImage: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: reference?.id) {
+        .task(id: posterTaskID) {
             await loadDisplayImage()
         }
     }
 
+    private var posterTaskID: String {
+        "\(video.id)|\(thumbnail?.id ?? "")"
+    }
+
     private func loadDisplayImage() async {
-        guard let reference else {
-            displayImage = nil
-            return
-        }
-        let request = ImageRequest(
-            reference: reference,
-            purpose: .reelThumbnail,
-            maxPixelSize: nil,
-            allowsProgressiveLoading: true
+        let itemID = feedItemID ?? video.id
+        let scale = displayScale
+        let image = await VideoPosterFrameLoader.loadPoster(
+            thumbnail: thumbnail,
+            video: video,
+            imagePipeline: imagePipeline,
+            storage: objectStorage,
+            bucket: mediaBucket,
+            displayScale: scale
         )
-        let itemID = feedItemID ?? reference.id
-        do {
-            let source: String
-            let data: Data
-            if let cached = await imagePipeline.cachedImageData(for: request) {
-                source = "memory"
-                data = cached
-            } else {
-                source = "network"
-                data = try await imagePipeline.data(for: request)
-            }
-            let scale = displayScale
-            let image = await Task.detached(priority: .userInitiated) {
-                UIImage(data: data, scale: scale)
-            }.value
-            guard let image else {
-                displayImage = nil
-                return
-            }
-            displayImage = image
-            FeedMediaReadyProbe.log(itemID: itemID, kind: "clip-thumbnail", source: source)
-        } catch is CancellationError {
-            // Keep poster during transient cancellation.
-        } catch {
-            displayImage = nil
+        guard !Task.isCancelled else { return }
+        displayImage = image
+        if image != nil {
+            FeedMediaReadyProbe.log(itemID: itemID, kind: "clip-thumbnail", source: "poster")
         }
     }
 }

@@ -2,12 +2,14 @@ import Foundation
 
 /// Keeps Trade Room pushes on the tab stack that opened the room.
 enum TradeRoomNavigationHost: Hashable, Sendable {
+    case home
     case messages
     case feed
     case profile
 
     func room(_ id: RoomID) -> AppDestination {
         switch self {
+        case .home: return .home(.room(id))
         case .messages: return .messages(.room(id))
         case .feed: return .feed(.room(id))
         case .profile: return .profile(.room(id))
@@ -16,6 +18,7 @@ enum TradeRoomNavigationHost: Hashable, Sendable {
 
     func members(_ id: RoomID) -> AppDestination {
         switch self {
+        case .home: return .home(.room(id))
         case .messages: return .messages(.roomMembers(id))
         case .feed: return .feed(.roomMembers(id))
         case .profile: return .profile(.roomMembers(id))
@@ -24,6 +27,7 @@ enum TradeRoomNavigationHost: Hashable, Sendable {
 
     func info(_ id: RoomID) -> AppDestination {
         switch self {
+        case .home: return .home(.room(id))
         case .messages: return .messages(.roomInfo(id))
         case .feed: return .feed(.roomInfo(id))
         case .profile: return .profile(.roomInfo(id))
@@ -32,14 +36,25 @@ enum TradeRoomNavigationHost: Hashable, Sendable {
 
     func manageRoom(_ id: RoomID) -> AppDestination {
         switch self {
+        case .home: return .home(.room(id))
         case .messages: return .messages(.manageRoom(id))
         case .feed: return .feed(.manageRoom(id))
         case .profile: return .profile(.manageRoom(id))
         }
     }
 
+    func roomSettings(_ id: RoomID) -> AppDestination {
+        switch self {
+        case .home: return .home(.room(id))
+        case .messages: return .messages(.roomSettings(id))
+        case .feed: return .feed(.roomSettings(id))
+        case .profile: return .profile(.roomSettings(id))
+        }
+    }
+
     func profile(_ id: ProfileID) -> AppDestination {
         switch self {
+        case .home: return .home(.otherProfile(id))
         case .messages: return .messages(.profile(id))
         case .feed: return .feed(.profile(id))
         case .profile: return .profile(.otherProfile(id))
@@ -48,6 +63,7 @@ enum TradeRoomNavigationHost: Hashable, Sendable {
 
     func sharedTrade(_ id: TradeID) -> AppDestination {
         switch self {
+        case .home: return .home(.socialTrade(id))
         case .messages: return .messages(.sharedTrade(id))
         case .feed: return .feed(.trade(id))
         case .profile: return .profile(.trade(id))

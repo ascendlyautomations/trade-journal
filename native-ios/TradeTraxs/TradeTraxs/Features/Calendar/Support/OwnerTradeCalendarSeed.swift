@@ -17,4 +17,18 @@ enum OwnerTradeCalendarSeed {
         }
         return filtered
     }
+
+    /// Trades whose entry window falls in any month of `year` (same bounds as 12× month seed).
+    static func tradesForYear(from ownerTrades: [Trade], year: Int) -> [Trade]? {
+        var merged: [TradeID: Trade] = [:]
+        for month in 1...12 {
+            guard let monthTrades = trades(from: ownerTrades, year: year, month: month) else {
+                continue
+            }
+            for trade in monthTrades {
+                merged[trade.id] = trade
+            }
+        }
+        return Array(merged.values)
+    }
 }

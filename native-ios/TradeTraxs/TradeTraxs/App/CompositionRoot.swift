@@ -447,6 +447,8 @@ enum CompositionRoot {
                 pushNotifications.syncRegistrationForAuthenticatedSession()
                 pushNotifications.syncBadgeFromActivity()
                 await DailyCheckInReminderCoordinator.shared.sync()
+                await TradeImportReminderCoordinator.shared.sync()
+                BrokerImportEligibilityStore.shared.loadIfNeeded()
                 await data.storeKitSubscriptions.startTransactionListenerIfNeeded()
                 try? await data.storeKitSubscriptions.syncVerifiedTransactionsToServer()
             }

@@ -342,7 +342,7 @@ struct ConversationView: View {
                                     Task { await viewModel.deleteMessage(bubble) }
                                 },
                                 onSharedTradeTap: { tradeID in
-                                    navigationCoordinator?.pushMessages(.sharedTrade(tradeID))
+                                    navigationCoordinator?.pushSocialTrade(tradeID, cache: detailCache)
                                 },
                                 onSharedContentTap: { reference in
                                     SharedContentNavigation.open(

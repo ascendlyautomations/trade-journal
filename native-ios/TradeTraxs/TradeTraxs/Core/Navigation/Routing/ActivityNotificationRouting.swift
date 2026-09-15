@@ -175,7 +175,181 @@ enum ActivityNotificationRouting {
         }
     }
 
-    /// Activity-local destination resolution (keeps Profile stack when possible).
+    /// Push onto the Activity screen's tab stack — never switches tabs for preset Feed/Profile parents.
+    @MainActor
+    static func open(
+        _ notification: ActivityNotification,
+        host: ActivityNavigationHost,
+        coordinator: NavigationCoordinator,
+        router: any NotificationRouting = NotificationRouter()
+    ) {
+        switch host {
+        case .home:
+            openOnHomeStack(notification, coordinator: coordinator, router: router)
+        case .profile:
+            openOnProfileStack(notification, coordinator: coordinator, router: router)
+        }
+    }
+
+    @MainActor
+    private static func openOnHomeStack(
+        _ notification: ActivityNotification,
+        coordinator: NavigationCoordinator,
+        router: any NotificationRouting
+    ) {
+        switch notification.kind {
+        case .followRequest:
+            coordinator.pushHome(.followRequests)
+        case .tradeRoomJoinRequest:
+            if let joinRequestID = notification.joinRequestID, !joinRequestID.isEmpty {
+                coordinator.pushHome(.tradeRoomJoinRequest(joinRequestID))
+            } else {
+                coordinator.pushHome(.activity)
+            }
+        case .tradeRoomJoinAccepted, .tradeRoomJoinDeclined:
+            if let roomID = notification.roomID {
+                coordinator.pushHome(.room(roomID))
+            } else {
+                coordinator.pushHome(.rooms)
+            }
+        case .follow, .followRequestAccepted:
+            if let profileID = notification.actorProfileID {
+                coordinator.pushHome(.otherProfile(profileID))
+            } else {
+                coordinator.pushHome(.activity)
+            }
+        case .like, .comment:
+            if let reelID = notification.reelID {
+                coordinator.pushHome(.reel(reelID))
+            } else if let achievementPostID = notification.achievementPostID {
+                coordinator.pushHome(.achievementDetail(AchievementID(achievementPostID.rawValue)))
+            } else if let postID = notification.postID ?? notification.profilePostID {
+                coordinator.pushHome(.post(postID))
+            } else if let tradeID = notification.tradeID {
+                coordinator.pushHome(.socialTrade(tradeID))
+            } else if let profileID = notification.actorProfileID {
+                coordinator.pushHome(.otherProfile(profileID))
+            } else {
+                coordinator.pushHome(.activity)
+            }
+        case .roomJoin, .roomMention:
+            if let roomID = notification.roomID {
+                coordinator.pushHome(.room(roomID))
+            } else {
+                coordinator.pushHome(.rooms)
+            }
+        case .tradingReport:
+            if let reportID = notification.reportID {
+                coordinator.pushHome(.report(reportID))
+            }
+        case .affiliateReferral, .affiliateCommissionEarned:
+            coordinator.pushHome(.affiliate)
+        case .message, .system:
+            pushExternalDestination(
+                router.destination(for: notificationDestination(for: notification)),
+                coordinator: coordinator,
+                fallback: { coordinator.pushHome(.activity) }
+            )
+        }
+    }
+
+    @MainActor
+    private static func openOnProfileStack(
+        _ notification: ActivityNotification,
+        coordinator: NavigationCoordinator,
+        router: any NotificationRouting
+    ) {
+        switch notification.kind {
+        case .followRequest:
+            coordinator.pushProfile(.followRequests)
+        case .tradeRoomJoinRequest:
+            if let joinRequestID = notification.joinRequestID, !joinRequestID.isEmpty {
+                coordinator.pushProfile(.tradeRoomJoinRequest(joinRequestID))
+            } else {
+                coordinator.pushProfile(.activity)
+            }
+        case .tradeRoomJoinAccepted, .tradeRoomJoinDeclined:
+            if let roomID = notification.roomID {
+                coordinator.pushProfile(.room(roomID))
+            } else {
+                coordinator.pushProfile(.rooms)
+            }
+        case .follow, .followRequestAccepted:
+            if let profileID = notification.actorProfileID {
+                coordinator.pushProfile(.otherProfile(profileID))
+            } else {
+                coordinator.pushProfile(.activity)
+            }
+        case .like, .comment:
+            if let reelID = notification.reelID {
+                coordinator.pushProfile(.reel(reelID))
+            } else if let achievementPostID = notification.achievementPostID {
+                coordinator.pushProfile(.achievement(AchievementID(achievementPostID.rawValue)))
+            } else if let postID = notification.postID ?? notification.profilePostID {
+                coordinator.pushProfile(.post(postID))
+            } else if let tradeID = notification.tradeID {
+                coordinator.pushProfile(.trade(tradeID))
+            } else if let profileID = notification.actorProfileID {
+                coordinator.pushProfile(.otherProfile(profileID))
+            } else {
+                coordinator.pushProfile(.activity)
+            }
+        case .roomJoin, .roomMention:
+            if let roomID = notification.roomID {
+                coordinator.pushProfile(.room(roomID))
+            } else {
+                coordinator.pushProfile(.rooms)
+            }
+        case .tradingReport:
+            if let reportID = notification.reportID {
+                coordinator.pushHome(.report(reportID))
+            }
+        case .affiliateReferral, .affiliateCommissionEarned:
+            coordinator.pushProfile(.affiliate)
+        case .message, .system:
+            pushExternalDestination(
+                router.destination(for: notificationDestination(for: notification)),
+                coordinator: coordinator,
+                fallback: { coordinator.pushProfile(.activity) }
+            )
+        }
+    }
+
+    @MainActor
+    private static func pushExternalDestination(
+        _ destination: AppDestination?,
+        coordinator: NavigationCoordinator,
+        fallback: () -> Void
+    ) {
+        guard let destination else {
+            fallback()
+            return
+        }
+        switch destination {
+        case .messages(let route):
+            coordinator.pushMessages(route)
+        case .home(let route):
+            coordinator.pushHome(route)
+        case .feed(let route):
+            coordinator.pushFeed(route)
+        case .profile(let route):
+            coordinator.pushProfile(route)
+        case .tab(let tab):
+            coordinator.selectTab(tab)
+        case .sheet(let sheet):
+            coordinator.present(sheet: sheet)
+        case .fullScreen(let cover):
+            coordinator.present(fullScreen: cover)
+        case .compose(let kind):
+            coordinator.openCompose(kind)
+        case .settingsStack:
+            coordinator.open(destination)
+        case .auth, .pop, .popToRoot, .dismissPresentation:
+            fallback()
+        }
+    }
+
+    /// Activity-local destination resolution (legacy — prefer ``open(_:host:coordinator:router:)``).
     static func appDestination(
         for notification: ActivityNotification,
         router: any NotificationRouting = NotificationRouter()

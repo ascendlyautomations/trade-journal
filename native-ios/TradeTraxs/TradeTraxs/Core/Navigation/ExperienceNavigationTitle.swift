@@ -26,4 +26,35 @@ extension View {
                 }
             }
     }
+
+    /// Arrow-only custom back control for nested flows (share pickers, step wizards).
+    func experienceArrowBackToolbarButton(action: @escaping () -> Void) -> some View {
+        toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                ExperienceArrowBackButton(action: action)
+            }
+        }
+    }
 }
+
+/// Chevron-only back affordance — preserves accessibility label without visible title text.
+struct ExperienceArrowBackButton: View {
+    let action: () -> Void
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.left")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(colors.accent)
+                .frame(
+                    minWidth: ExperienceAccessibility.minTouchTarget,
+                    minHeight: ExperienceAccessibility.minTouchTarget
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Back")
+    }
+}
+

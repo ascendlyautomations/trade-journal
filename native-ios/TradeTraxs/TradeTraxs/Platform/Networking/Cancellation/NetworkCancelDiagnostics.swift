@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-enum NetworkCancelDiagnostics {
+nonisolated enum NetworkCancelDiagnostics {
     static func log(requestPath: String, reason: String, cancelSource: String?) {
         print(
             """
@@ -12,7 +12,7 @@ enum NetworkCancelDiagnostics {
     }
 }
 #else
-enum NetworkCancelDiagnostics {
+nonisolated enum NetworkCancelDiagnostics {
     static func log(requestPath: String, reason: String, cancelSource: String?) {}
 }
 #endif

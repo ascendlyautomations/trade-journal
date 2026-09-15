@@ -2,7 +2,9 @@ import SwiftUI
 
 struct ProfileClipCard: View {
     let reel: Reel
+    let detailCache: DetailPresentationCache
     let imagePipeline: any ImagePipeline
+    let objectStorage: any ObjectStorageProviding
     let engagementStore: EngagementStore
     let vaultStore: VaultStore
     let onOpen: () -> Void
@@ -18,10 +20,11 @@ struct ProfileClipCard: View {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 HStack(alignment: .top, spacing: ExperienceSpacing.md) {
                     ZStack(alignment: .bottomTrailing) {
-                        TradeImageView(
-                            reference: reel.thumbnail,
+                        FeedClipPosterImage(
+                            thumbnail: reel.thumbnail,
+                            video: reel.video,
                             imagePipeline: imagePipeline,
-                            purpose: .reelThumbnail,
+                            objectStorage: objectStorage,
                             contentMode: .fill
                         )
                         Image(systemName: "play.circle.fill")
@@ -33,7 +36,7 @@ struct ProfileClipCard: View {
                     .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                        Text(reel.caption?.isEmpty == false ? reel.caption! : "Clip")
+                        Text(ClipDisplayTitle.text(for: reel, cache: detailCache))
                             .experienceStyle(.headline, color: colors.primaryText)
                             .lineLimit(3)
 

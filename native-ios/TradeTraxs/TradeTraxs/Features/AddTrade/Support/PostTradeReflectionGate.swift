@@ -33,7 +33,7 @@ final class PostTradeReflectionGate {
             return nil
         }
 
-        var draft = TradeDraft(
+        let draft = TradeDraft(
             accountID: trade.accountID,
             symbol: trade.symbol,
             side: trade.side,

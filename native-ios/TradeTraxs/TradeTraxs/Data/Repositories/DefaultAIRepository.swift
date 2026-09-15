@@ -42,15 +42,17 @@ nonisolated struct DefaultAIRepository: AIRepository {
             guard let reply, !reply.isEmpty else {
                 throw AppError.unknown(message: "No response generated")
             }
-            return TradeAIAnalyzeResponse(reply: reply)
+            return TradeAIAnalyzeResponse(reply: AIGeneratedTextNormalizer.normalize(reply))
         case 401:
             throw AppError.domain(.permission(.notAuthenticated))
         case 403:
             return TradeAIAnalyzeResponse(
-                reply: ProEntitlementResponseSanitizer.message(
-                    statusCode: 403,
-                    error: decoded?.error,
-                    reply: reply
+                reply: AIGeneratedTextNormalizer.normalize(
+                    ProEntitlementResponseSanitizer.message(
+                        statusCode: 403,
+                        error: decoded?.error,
+                        reply: reply
+                    )
                 )
             )
         case 429:
@@ -137,7 +139,7 @@ nonisolated struct DefaultAIRepository: AIRepository {
             guard let reply, !reply.isEmpty else {
                 throw AppError.unknown(message: "No response generated")
             }
-            return PsychologyCoachAIResponse(reply: reply)
+            return PsychologyCoachAIResponse(reply: AIGeneratedTextNormalizer.normalize(reply))
         case 401:
             throw AppError.domain(.permission(.notAuthenticated))
         case 403:
@@ -267,7 +269,9 @@ private nonisolated struct TradeAIMessageDTO: Decodable {
         return TradeAIMessage(
             id: id ?? UUID().uuidString,
             role: role,
-            content: content,
+            content: role == .assistant
+                ? AIGeneratedTextNormalizer.normalize(content)
+                : content,
             promptKey: prompt_key,
             createdAt: created_at.flatMap(ISO8601.date(from:)) ?? Date()
         )

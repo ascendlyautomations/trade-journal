@@ -78,7 +78,7 @@ enum ProfileTabBootstrapLoader {
         case rpcUnavailable
     }
 
-    static let defaultPageSize = 24
+    nonisolated static let defaultPageSize = 24
 
     @MainActor
     static func load(

@@ -37,6 +37,12 @@ struct SettingsDestinationView: View {
                     navigationCoordinator: navigationCoordinator,
                     pushNotifications: appEnvironment.pushNotifications
                 )
+            case .notificationsTradetraxsReminders:
+                SettingsTradetraxsRemindersView(
+                    data: data,
+                    navigationCoordinator: navigationCoordinator,
+                    pushNotifications: appEnvironment.pushNotifications
+                )
             case .appearance:
                 SettingsAppearanceView(themeManager: appEnvironment.themeManager)
             case .notificationsMessages:

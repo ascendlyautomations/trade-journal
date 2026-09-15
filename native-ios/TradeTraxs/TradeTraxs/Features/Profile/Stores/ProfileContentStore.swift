@@ -114,6 +114,12 @@ final class ProfileContentStore {
     /// When true, ``ProfileScreenViewModel`` owns network — ``loadIfNeeded`` is a no-op.
     private(set) var isScreenOwned = false
 
+    /// Header skeleton until bootstrap confirms failure or profile payload arrives.
+    var showsHeaderLoadingPresentation: Bool {
+        guard profile == nil else { return false }
+        return phase != .failed
+    }
+
     /// Applies header fields from the screen bootstrap. Does not hit the network.
     func applyBootstrap(_ state: ProfileState) {
         isScreenOwned = true
@@ -139,10 +145,14 @@ final class ProfileContentStore {
             }
         }
         switch state.phase {
-        case .idle: phase = .idle
-        case .loading: phase = profile == nil ? .loading : phase
-        case .loaded: phase = .loaded
-        case .failed: phase = .failed
+        case .idle:
+            phase = (isScreenOwned && profile == nil) ? .loading : .idle
+        case .loading:
+            phase = profile == nil ? .loading : .loaded
+        case .loaded:
+            phase = .loaded
+        case .failed:
+            phase = profile == nil ? .failed : .loaded
         }
         if let profile {
             Task { await loadAvatarIfNeeded(for: profile, force: false) }

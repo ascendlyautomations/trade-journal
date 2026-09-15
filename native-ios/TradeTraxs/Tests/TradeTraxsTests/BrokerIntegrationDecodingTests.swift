@@ -80,4 +80,30 @@ final class BrokerIntegrationDecodingTests: XCTestCase {
         XCTAssertTrue(decoded.ok)
         XCTAssertNotNil(decoded.resolvedAuthorizeURLString)
     }
+
+    func testDecodesBrokerImportEligibilityPayloadWithLinkedMapping() throws {
+        let json = """
+        {
+          "eligible": false,
+          "optOut": false,
+          "connectionCount": 1,
+          "linkedAccountCount": 1,
+          "linkedAccounts": [
+            {
+              "provider": "tradovate",
+              "mappingId": "22222222-2222-2222-2222-222222222222",
+              "connectionId": "11111111-1111-1111-1111-111111111111",
+              "brokerAccountLabel": null,
+              "tradetraxsAccountName": "Eval 50K"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+        let decoded = try decoder.decode(BrokerImportEligibilityResponse.self, from: json)
+        XCTAssertEqual(decoded.connectionCount, 1)
+        XCTAssertEqual(decoded.linkedAccountCount, 1)
+        XCTAssertEqual(decoded.linkedAccounts.count, 1)
+        XCTAssertEqual(decoded.linkedAccounts[0].provider, .tradovate)
+        XCTAssertEqual(decoded.linkedAccounts[0].brokerAccountLabel, "22222222-2222-2222-2222-222222222222")
+    }
 }

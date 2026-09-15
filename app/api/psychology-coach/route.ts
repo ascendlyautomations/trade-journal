@@ -6,6 +6,7 @@ import {
   buildPsychologyCoachUserPrompt,
   type PsychologyCoachFactsPayload,
 } from "@/lib/psychologyCoachPrompt"
+import { normalizeAIProseResponse } from "@/lib/normalizeAIGeneratedText"
 import {
   consumeDurableUserRateLimit,
   rateLimitExceededResponse,
@@ -92,7 +93,8 @@ export async function POST(req: Request) {
       max_tokens: maxTokens,
     })
 
-    const reply = completion.choices[0]?.message?.content?.trim()
+    const rawReply = completion.choices[0]?.message?.content?.trim()
+    const reply = normalizeAIProseResponse(rawReply) ?? rawReply
     if (!reply) {
       return NextResponse.json({ error: "No response generated" }, { status: 500 })
     }

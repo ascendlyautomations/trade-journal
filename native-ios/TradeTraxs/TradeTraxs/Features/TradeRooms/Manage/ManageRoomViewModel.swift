@@ -59,6 +59,7 @@ final class ManageRoomViewModel {
     var isMutatingMember = false
     var isMutatingTag = false
     var isMutatingChannel = false
+    private(set) var savingChannelPermissionID: RoomChannelID?
     var isMutatingJoinRequest = false
 
     // Editable room details (shared model with create flow)
@@ -408,6 +409,7 @@ final class ManageRoomViewModel {
         defer { isMutatingTag = false }
         do {
             try await rooms.deleteMemberTag(tagID: tag.id, roomID: roomID)
+            tags.removeAll { $0.id == tag.id }
             await refreshTags()
             statusMessage = "Tag deleted."
             ExperienceHaptics.play(.success)
@@ -447,6 +449,11 @@ final class ManageRoomViewModel {
         navigationCoordinator?.open(navigationHost.profile(profileID))
     }
 
+    func openRoomSettings() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator?.open(navigationHost.roomSettings(roomID))
+    }
+
     func refreshChannels() async {
         do {
             channels = try await rooms.channels(roomID: roomID)
@@ -475,6 +482,30 @@ final class ManageRoomViewModel {
             statusMessage = ConversationThreadSupport.message(for: error)
             ExperienceHaptics.play(.error)
             return false
+        }
+    }
+
+    func setChannelPostingPermission(_ channel: RoomChannel, allowMembersChat: Bool) async {
+        guard canManageRoom, channel.allowMembersChat != allowMembersChat else { return }
+        savingChannelPermissionID = channel.id
+        defer { savingChannelPermissionID = nil }
+        do {
+            let updated = try await rooms.updateChannel(
+                channelID: channel.id,
+                request: RoomChannelUpdateRequest(
+                    name: nil,
+                    allowMembersChat: allowMembersChat,
+                    position: nil
+                )
+            )
+            if let index = channels.firstIndex(where: { $0.id == channel.id }) {
+                channels[index] = updated
+            }
+            RoomMetadataSync.channelsDidChange(roomID: roomID)
+            ExperienceHaptics.play(.success)
+        } catch {
+            statusMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.error)
         }
     }
 

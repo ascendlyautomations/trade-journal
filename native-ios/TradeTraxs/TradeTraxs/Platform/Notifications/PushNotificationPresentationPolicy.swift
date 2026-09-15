@@ -26,7 +26,7 @@ enum PushNotificationPresentationPolicy {
             return .normal
         case .tradingReport:
             return .normal
-        case .dailyCheckIn:
+        case .dailyCheckIn, .tradeImportReminder:
             return .normal
         case .activity:
             switch type {

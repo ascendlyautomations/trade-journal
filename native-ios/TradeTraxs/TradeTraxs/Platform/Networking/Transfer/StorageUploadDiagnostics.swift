@@ -1,6 +1,6 @@
 import Foundation
 
-enum StorageUploadDiagnostics {
+nonisolated enum StorageUploadDiagnostics {
     struct ObjectLocation: Sendable {
         var bucket: String
         var path: String

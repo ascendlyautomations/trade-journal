@@ -38,6 +38,9 @@ nonisolated struct NotificationRouter: NotificationRouting {
         case .dailyCheckIn:
             return .sheet(.dailyCheckIn)
 
+        case .tradeImportReminder:
+            return .sheet(.tradeImportReminder)
+
         case .activity:
             let type = (notification.rawUserInfo["type"] ?? "").lowercased()
             if type == "trade_room_join_request" {

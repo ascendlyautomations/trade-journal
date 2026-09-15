@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { getSessionFromDate } from "@/lib/getSession"
+import { findCanonicalTradeIdForBrokerFillIds } from "@/lib/integrations/brokerExecutionIdentity"
 import type { ReconstructedLifecycleTrade } from "@/lib/integrations/tradovate/tradeReconstruction"
 import {
   computeFuturesGrossPnl,
@@ -73,6 +74,7 @@ export async function upsertReconstructedBrokerTrades(
     userId: string
     connectionId: string
     mappingId: string
+    externalBrokerAccountId: string
     account: CanonicalAccountSnapshot
     completed: ReconstructedLifecycleTrade[]
     contracts: Map<string, BrokerContractMeta>
@@ -158,37 +160,51 @@ export async function upsertReconstructedBrokerTrades(
       reviewed: false,
     }
 
-    const { data: existing } = await supabase
+    const { data: existingByLifecycle } = await supabase
       .from("trades")
       .select("id")
       .eq("user_id", params.userId)
       .eq("broker_lifecycle_id", lifecycle.lifecycleKey)
       .maybeSingle()
 
-    if (existing?.id) {
+    const existingTradeId =
+      (existingByLifecycle?.id ? String(existingByLifecycle.id) : null) ??
+      (await findCanonicalTradeIdForBrokerFillIds(supabase, {
+        userId: params.userId,
+        provider: importSource,
+        fillIds: lifecycle.fillIds,
+      }))
+
+    if (existingTradeId) {
       const patch: Record<string, unknown> = { ...brokerRow }
       for (const key of USER_AUTHORITATIVE_TRADE_FIELDS) {
         delete patch[key]
       }
       delete patch.created_at
+      patch.broker_lifecycle_id = lifecycle.lifecycleKey
+      patch.broker_integration_account_id = params.mappingId
+      patch.broker_connection_id = params.connectionId
       const { error } = await supabase
         .from("trades")
         .update(patch)
-        .eq("id", existing.id)
+        .eq("id", existingTradeId)
         .eq("user_id", params.userId)
       if (!error) {
         tradesUpdated += 1
-        updatedTradeIds.push(String(existing.id))
+        updatedTradeIds.push(existingTradeId)
       }
 
       await supabase
         .from("broker_integration_executions")
         .update({
           lifecycle_key: lifecycle.lifecycleKey,
-          canonical_trade_id: existing.id,
+          canonical_trade_id: existingTradeId,
+          broker_integration_account_id: params.mappingId,
+          connection_id: params.connectionId,
           updated_at: nowIso,
         })
-        .eq("broker_integration_account_id", params.mappingId)
+        .eq("user_id", params.userId)
+        .eq("provider", importSource)
         .in("external_fill_id", lifecycle.fillIds)
       continue
     }
@@ -208,9 +224,12 @@ export async function upsertReconstructedBrokerTrades(
       .update({
         lifecycle_key: lifecycle.lifecycleKey,
         canonical_trade_id: inserted.id,
+        broker_integration_account_id: params.mappingId,
+        connection_id: params.connectionId,
         updated_at: nowIso,
       })
-      .eq("broker_integration_account_id", params.mappingId)
+      .eq("user_id", params.userId)
+      .eq("provider", importSource)
       .in("external_fill_id", lifecycle.fillIds)
   }
 

@@ -55,10 +55,10 @@ struct DashboardInsightsSection: View {
                     .fontWeight(.semibold)
                     .textCase(.uppercase)
                     .tracking(0.5)
-                Text(insight.title)
+                Text(insight.displayTitle)
                     .experienceStyle(.subheadline, color: colors.primaryText)
                     .fontWeight(.semibold)
-                Text(insight.body)
+                Text(insight.displayBody)
                     .experienceStyle(.callout, color: colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -74,7 +74,7 @@ struct DashboardInsightsSection: View {
                 .stroke(colors.accent.opacity(0.18), lineWidth: ExperienceBorder.hairline)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(insight.title). \(insight.body)")
+        .accessibilityLabel("\(insight.displayTitle). \(insight.displayBody)")
         .accessibilityIdentifier("dashboard.insight.\(insight.id)")
     }
 

@@ -54,27 +54,27 @@ function compareFills(a: ReconstructionFill, b: ReconstructionFill): number {
 
 export function buildBrokerLifecycleKey(
   provider: "tradovate" | "rithmic",
-  mappingId: string,
+  brokerAccountScopeId: string,
   contractId: string,
   lifecycleIndex: number
 ): string {
-  return `${provider}:v1:${mappingId}:${contractId}:${lifecycleIndex}`
+  return `${provider}:v2:${brokerAccountScopeId}:${contractId}:${lifecycleIndex}`
 }
 
 export function buildTradovateLifecycleKey(
-  mappingId: string,
+  brokerAccountScopeId: string,
   contractId: string,
   lifecycleIndex: number
 ): string {
-  return buildBrokerLifecycleKey("tradovate", mappingId, contractId, lifecycleIndex)
+  return buildBrokerLifecycleKey("tradovate", brokerAccountScopeId, contractId, lifecycleIndex)
 }
 
 export function buildRithmicLifecycleKey(
-  mappingId: string,
+  brokerAccountScopeId: string,
   contractId: string,
   lifecycleIndex: number
 ): string {
-  return buildBrokerLifecycleKey("rithmic", mappingId, contractId, lifecycleIndex)
+  return buildBrokerLifecycleKey("rithmic", brokerAccountScopeId, contractId, lifecycleIndex)
 }
 
 /**
@@ -84,7 +84,8 @@ export function buildRithmicLifecycleKey(
 export function reconstructCompletedTradesForContract(
   fills: ReconstructionFill[],
   params: {
-    mappingId: string
+    /** Stable broker account scope — Tradovate/Rithmic external_account_id (not mapping uuid). */
+    brokerAccountScopeId: string
     contractId: string
     lifecycleProvider?: "tradovate" | "rithmic"
   }
@@ -105,7 +106,7 @@ export function reconstructCompletedTradesForContract(
     completed.push({
       lifecycleKey: buildBrokerLifecycleKey(
         lifecycleProvider,
-        params.mappingId,
+        params.brokerAccountScopeId,
         params.contractId,
         lifecycleIndex
       ),
@@ -191,7 +192,7 @@ export function reconstructCompletedTradesForContract(
 
 export function reconstructAllCompletedTrades(
   fills: ReconstructionFill[],
-  mappingId: string,
+  brokerAccountScopeId: string,
   options?: { lifecycleProvider?: "tradovate" | "rithmic" }
 ): {
   completed: ReconstructedLifecycleTrade[]
@@ -215,7 +216,7 @@ export function reconstructAllCompletedTrades(
 
   for (const [contractId, contractFills] of byContract) {
     const result = reconstructCompletedTradesForContract(contractFills, {
-      mappingId,
+      brokerAccountScopeId,
       contractId,
       lifecycleProvider: options?.lifecycleProvider,
     })

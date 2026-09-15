@@ -6,6 +6,7 @@ import {
   buildAnalyzeTradeHistoryContext,
   buildTradeAnalysisPrompt,
 } from "@/lib/analyzeTradePrompt"
+import { normalizeAIProseResponse } from "@/lib/normalizeAIGeneratedText"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import {
   consumeDurableUserRateLimit,
@@ -192,7 +193,8 @@ export async function POST(req: Request) {
       priorMessages
     )
 
-    const aiResult = response.choices[0].message.content
+    const rawResult = response.choices[0].message.content
+    const aiResult = normalizeAIProseResponse(rawResult) ?? rawResult
 
     await supabaseAdmin
       .from("trades")

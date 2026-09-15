@@ -256,6 +256,11 @@ struct StoryEditorView: View {
     }
 }
 
+private enum StoryTextTransformMetrics {
+    static let hitPadding: CGFloat = 28
+    static let minimumHitSize = CGSize(width: 96, height: 64)
+}
+
 private struct StoryTextOverlayView: View {
     let overlay: StoryTextOverlay
     let canvasSize: CGSize
@@ -270,39 +275,70 @@ private struct StoryTextOverlayView: View {
     @State private var dragStartCenter: CGPoint?
     @State private var scaleStart: CGFloat?
     @State private var rotationStart: CGFloat?
+    @State private var measuredTextSize: CGSize = .zero
 
     var body: some View {
         let center = CGPoint(
             x: overlay.normalizedCenter.x * canvasSize.width,
             y: overlay.normalizedCenter.y * canvasSize.height
         )
+        let baseFontSize = max(18, canvasSize.width * 0.065) * overlay.scale
+        let hitSize = manipulationHitSize
 
-        Text(overlay.text.isEmpty ? " " : overlay.text)
-            .font(.system(size: max(18, canvasSize.width * 0.065) * overlay.scale, weight: .semibold))
-            .foregroundStyle(overlay.color.swiftUIColor)
-            .multilineTextAlignment(overlay.alignment)
-            .padding(overlay.showsBackground ? 8 : 0)
-            .background {
-                if overlay.showsBackground {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.black.opacity(0.45))
+        ZStack {
+            Text(overlay.text.isEmpty ? " " : overlay.text)
+                .font(.system(size: baseFontSize, weight: .semibold))
+                .foregroundStyle(overlay.color.swiftUIColor)
+                .multilineTextAlignment(overlay.alignment)
+                .padding(overlay.showsBackground ? 8 : 0)
+                .background {
+                    if overlay.showsBackground {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.black.opacity(0.45))
+                    }
                 }
-            }
-            .rotationEffect(.radians(Double(overlay.rotationRadians)))
-            .position(center)
-            .overlay {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(Color.white.opacity(0.8), lineWidth: 1)
-                        .frame(width: 120, height: 44)
-                        .position(center)
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear { measuredTextSize = proxy.size }
+                            .onChange(of: proxy.size) { _, newSize in
+                                measuredTextSize = newSize
+                            }
+                            .onChange(of: overlay.text) { _, _ in
+                                measuredTextSize = proxy.size
+                            }
+                            .onChange(of: overlay.scale) { _, _ in
+                                measuredTextSize = proxy.size
+                            }
+                    }
                 }
+        }
+        .frame(width: hitSize.width, height: hitSize.height)
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            if isSelected, transformsEnabled {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.white.opacity(0.85), lineWidth: 1)
             }
-            .onTapGesture(count: 2, perform: onEdit)
-            .onTapGesture(count: 1, perform: onSelect)
-            .gesture(transformsEnabled ? dragGesture : nil)
-            .simultaneousGesture(transformsEnabled ? pinchGesture : nil)
-            .simultaneousGesture(transformsEnabled ? rotationGesture : nil)
+        }
+        .rotationEffect(.radians(Double(overlay.rotationRadians)))
+        .position(center)
+        .onTapGesture(count: 2, perform: onEdit)
+        .onTapGesture(count: 1, perform: onSelect)
+        .gesture(transformsEnabled ? dragGesture : nil)
+        .highPriorityGesture(transformsEnabled && isSelected ? pinchGesture : nil)
+        .simultaneousGesture(transformsEnabled && isSelected ? rotationGesture : nil)
+    }
+
+    private var manipulationHitSize: CGSize {
+        let padded = CGSize(
+            width: measuredTextSize.width + StoryTextTransformMetrics.hitPadding * 2,
+            height: measuredTextSize.height + StoryTextTransformMetrics.hitPadding * 2
+        )
+        return CGSize(
+            width: max(padded.width, StoryTextTransformMetrics.minimumHitSize.width),
+            height: max(padded.height, StoryTextTransformMetrics.minimumHitSize.height)
+        )
     }
 
     private var dragGesture: some Gesture {

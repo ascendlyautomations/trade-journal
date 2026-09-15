@@ -31,12 +31,8 @@ struct ProfileAchievementCard: View {
                     .accessibilityHidden(true)
                 } metadata: {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                        HStack(spacing: ExperienceSpacing.xs) {
-                            if achievement.isFeatured {
-                                ExperienceTag(title: "Featured", tone: .success)
-                            }
-                            ExperienceTag(title: achievement.tier.rawValue.capitalized, tone: .info)
-                            Spacer(minLength: 0)
+                        if achievement.isFeatured {
+                            ExperienceTag(title: "Featured", tone: .success)
                         }
 
                         Text(achievement.title)

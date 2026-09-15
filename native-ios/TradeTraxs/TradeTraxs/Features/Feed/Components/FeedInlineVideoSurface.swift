@@ -27,15 +27,18 @@ struct FeedInlineVideoSurface: UIViewRepresentable {
     let player: AVPlayer?
     var containerSize: CGSize = .zero
     var videoGravity: AVLayerVideoGravity = .resizeAspect
+    var onReadyForDisplayChange: ((Bool) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(clipID: clipID)
+        Coordinator(clipID: clipID, onReadyForDisplayChange: onReadyForDisplayChange)
     }
 
     func makeUIView(context: Context) -> FeedPlayerLayerView {
         let view = FeedPlayerLayerView()
         view.playerLayer.videoGravity = videoGravity
         view.backgroundColor = .clear
+        view.playerLayer.player = player
+        context.coordinator.bindReadyForDisplayObservation(to: view.playerLayer)
         view.onDidLayout = { [weak coordinator = context.coordinator] layerView in
             coordinator?.logLayoutIfNeeded(
                 layerView: layerView,
@@ -48,9 +51,11 @@ struct FeedInlineVideoSurface: UIViewRepresentable {
 
     func updateUIView(_ uiView: FeedPlayerLayerView, context: Context) {
         context.coordinator.containerSize = containerSize
+        context.coordinator.onReadyForDisplayChange = onReadyForDisplayChange
 
         if uiView.playerLayer.player !== player {
             uiView.playerLayer.player = player
+            context.coordinator.bindReadyForDisplayObservation(to: uiView.playerLayer)
         }
         if uiView.playerLayer.videoGravity != videoGravity {
             uiView.playerLayer.videoGravity = videoGravity
@@ -65,16 +70,35 @@ struct FeedInlineVideoSurface: UIViewRepresentable {
         if uiView.bounds.size != containerSize, containerSize.width > 1, containerSize.height > 1 {
             uiView.setNeedsLayout()
         }
+        context.coordinator.bindReadyForDisplayObservation(to: uiView.playerLayer)
     }
 
     final class Coordinator {
         let clipID: String
         var containerSize: CGSize = .zero
+        var onReadyForDisplayChange: ((Bool) -> Void)?
         private var lastLoggedBounds: CGRect = .zero
         private var metadataLoadGeneration: UInt64 = 0
+        private var readyForDisplayObservation: NSKeyValueObservation?
 
-        init(clipID: String) {
+        init(clipID: String, onReadyForDisplayChange: ((Bool) -> Void)?) {
             self.clipID = clipID
+            self.onReadyForDisplayChange = onReadyForDisplayChange
+        }
+
+        func bindReadyForDisplayObservation(to layer: AVPlayerLayer) {
+            readyForDisplayObservation?.invalidate()
+            readyForDisplayObservation = layer.observe(\.isReadyForDisplay, options: [.initial, .new]) {
+                [weak self] layer, _ in
+                let ready = layer.isReadyForDisplay
+                DispatchQueue.main.async {
+                    self?.onReadyForDisplayChange?(ready)
+                }
+            }
+        }
+
+        deinit {
+            readyForDisplayObservation?.invalidate()
         }
 
         func logLayoutIfNeeded(

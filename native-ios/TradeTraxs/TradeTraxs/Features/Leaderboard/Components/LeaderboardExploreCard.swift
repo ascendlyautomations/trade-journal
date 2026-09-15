@@ -1,60 +1,64 @@
 import SwiftUI
 
-/// Large Explore entry point into the native Leaderboards screen.
+/// Compact Explore entry into Leaderboards — navigation row, not a hero card.
 struct LeaderboardExploreCard: View {
     let onOpen: () -> Void
 
     @Environment(\.themeColors) private var colors
 
+    private enum Metrics {
+        static let iconDiameter: CGFloat = 44
+        static let rowMinHeight: CGFloat = 72
+        static let cornerRadius = ExperienceRadius.sm
+    }
+
+    private let subtitle = "Rankings across the community"
+
     var body: some View {
         Button(action: onOpen) {
-            HStack(spacing: ExperienceSpacing.md) {
+            HStack(spacing: ExperienceSpacing.sm) {
                 ZStack {
                     Circle()
-                        .fill(colors.accent.opacity(0.16))
-                        .frame(width: 56, height: 56)
+                        .fill(colors.accentMuted)
+                        .frame(width: Metrics.iconDiameter, height: Metrics.iconDiameter)
                     Image(systemName: AppIcon.leaderboard.systemName)
-                        .font(.system(size: 24, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(colors.accent)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Leaderboards")
-                        .experienceStyle(.title3, color: colors.primaryText)
-                        .fontWeight(.bold)
-                    Text("See how you stack up against traders you follow and the community.")
+                        .font(.system(.subheadline, design: .default).weight(.semibold))
+                        .foregroundStyle(colors.primaryText)
+                        .lineLimit(1)
+                    Text(subtitle)
                         .experienceStyle(.caption, color: colors.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(2)
                 }
 
-                Spacer(minLength: ExperienceSpacing.sm)
+                Spacer(minLength: 0)
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(colors.tertiaryText)
             }
-            .padding(ExperienceSpacing.md)
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.vertical, ExperienceSpacing.sm + 2)
+            .frame(minHeight: Metrics.rowMinHeight, alignment: .center)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                LinearGradient(
-                    colors: [
-                        colors.fillPrimary,
-                        colors.accent.opacity(0.08),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+            .background(colors.surfacePrimary)
+            .clipShape(
+                RoundedRectangle(cornerRadius: Metrics.cornerRadius, style: .continuous)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                    .stroke(colors.accent.opacity(0.22), lineWidth: 1)
+                RoundedRectangle(cornerRadius: Metrics.cornerRadius, style: .continuous)
+                    .stroke(colors.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
         .padding(.horizontal, ExperienceSpacing.md)
         .accessibilityIdentifier("explore.leaderboards.card")
-        .accessibilityLabel("Leaderboards")
+        .accessibilityLabel("Leaderboards. \(subtitle)")
         .accessibilityHint("Opens the Leaderboards screen")
     }
 }

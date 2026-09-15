@@ -63,13 +63,15 @@ nonisolated enum ProfileStatisticsBootstrapApplier {
     }
 
     private static func mapResult(_ wire: ModeWire) -> ProfileStatisticsMetrics.Result {
-        let equity: [ProfileStatisticsMetrics.EquityPoint] = wire.equity_data.map { point in
-            ProfileStatisticsMetrics.EquityPoint(
-                index: point.index,
-                equity: point.equity?.decimal ?? 0,
-                date: point.date.flatMap { ISO8601.date(from: $0) }
-            )
-        }
+        let equity: [ProfileStatisticsMetrics.EquityPoint] = ProfileStatisticsMetrics.chartOrderedEquityPoints(
+            wire.equity_data.map { point in
+                ProfileStatisticsMetrics.EquityPoint(
+                    index: point.index,
+                    equity: point.equity?.decimal ?? 0,
+                    date: point.date.flatMap { ISO8601.date(from: $0) }
+                )
+            }
+        )
         let sessions = wire.session_breakdown.map {
             ProfileStatisticsMetrics.SessionRow(label: $0.label, count: $0.count, pct: $0.pct)
         }

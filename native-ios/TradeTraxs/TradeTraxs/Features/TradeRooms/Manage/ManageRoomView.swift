@@ -155,6 +155,9 @@ struct ManageRoomView: View {
                 hubRow("Banned Members", systemImage: "hand.raised") {
                     navigationSection = .banned
                 }
+                hubRow("Trade Room Settings", systemImage: "gearshape") {
+                    viewModel.openRoomSettings()
+                }
             }
             if let statusMessage = viewModel.statusMessage {
                 Section {
@@ -373,53 +376,12 @@ struct ManageRoomView: View {
     }
 
     private var tagsScreen: some View {
-        List {
-            Section("Create Tag") {
-                TextField("Tag name", text: $newTagName)
-                Picker("Color", selection: $newTagColorKey) {
-                    ForEach(RoomMemberTagSupport.presetColorKeys, id: \.key) { option in
-                        Text(option.label).tag(option.key)
-                    }
-                }
-                Button("Create Tag") {
-                    Task {
-                        await viewModel.createTag(name: newTagName, colorKey: newTagColorKey)
-                        newTagName = ""
-                    }
-                }
-                .disabled(newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isMutatingTag)
-            }
-            Section("Tags") {
-                ForEach(viewModel.tags) { tag in
-                    Button {
-                        editingTag = tag
-                    } label: {
-                        HStack {
-                            Circle()
-                                .fill(RoomMemberTagSupport.color(for: tag.colorKey, colors: colors))
-                                .frame(width: 10, height: 10)
-                            Text(tag.name)
-                                .experienceStyle(.body, color: colors.primaryText)
-                            if tag.isPreset {
-                                Text("Preset")
-                                    .experienceStyle(.caption2, color: colors.tertiaryText)
-                            }
-                            Spacer()
-                        }
-                    }
-                }
-                .onDelete { indexSet in
-                    for index in indexSet {
-                        let tag = viewModel.tags[index]
-                        Task { await viewModel.deleteTag(tag) }
-                    }
-                }
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .experienceNavigationTitle("Tags")
-        .refreshable { await viewModel.refreshTags() }
+        ManageRoomTagsView(
+            viewModel: viewModel,
+            newTagName: $newTagName,
+            newTagColorKey: $newTagColorKey,
+            editingTag: $editingTag
+        )
     }
 
     private var bannedScreen: some View {
@@ -548,64 +510,11 @@ struct ManageRoomView: View {
     }
 
     private var channelsScreen: some View {
-        List {
-            Section {
-                ForEach(Array(viewModel.channels.sorted { $0.position < $1.position }.enumerated()), id: \.element.id) { index, channel in
-                    HStack {
-                        Button {
-                            editingChannel = channel
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(channel.displayTitle)
-                                    .experienceStyle(.body, color: colors.primaryText)
-                                Text(channel.allowMembersChat ? "Members can chat" : "Owner announcements only")
-                                    .experienceStyle(.caption, color: colors.secondaryText)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        Spacer()
-                        if index > 0 {
-                            Button {
-                                Task { await viewModel.moveChannel(channel, direction: -1) }
-                            } label: {
-                                Image(systemName: "chevron.up")
-                            }
-                            .disabled(viewModel.isMutatingChannel)
-                        }
-                        if index < viewModel.channels.count - 1 {
-                            Button {
-                                Task { await viewModel.moveChannel(channel, direction: 1) }
-                            } label: {
-                                Image(systemName: "chevron.down")
-                            }
-                            .disabled(viewModel.isMutatingChannel)
-                        }
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) {
-                            Task { await viewModel.requestDeleteChannel(channel) }
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                        .disabled(viewModel.channels.count <= RoomChannelValidation.minCount)
-                    }
-                }
-            }
-            if viewModel.channels.count < RoomChannelValidation.maxCount {
-                Section {
-                    Button {
-                        showsCreateChannel = true
-                    } label: {
-                        Label("Create Channel", systemImage: "plus")
-                    }
-                    .disabled(viewModel.isMutatingChannel)
-                }
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .experienceNavigationTitle("Channels")
-        .refreshable { await viewModel.refreshChannels() }
+        ManageRoomChannelsView(
+            viewModel: viewModel,
+            editingChannel: $editingChannel,
+            showsCreateChannel: $showsCreateChannel
+        )
     }
 
     @ViewBuilder

@@ -11,10 +11,10 @@ struct ProfileHeaderView: View {
 
     var body: some View {
         Group {
-            if store.phase == .loading && store.profile == nil {
-                ProfileHeaderSkeleton()
-            } else if let profile = store.profile {
+            if let profile = store.profile {
                 loadedHeader(profile)
+            } else if store.showsHeaderLoadingPresentation {
+                ProfileHeaderSkeleton()
             } else {
                 errorState
             }

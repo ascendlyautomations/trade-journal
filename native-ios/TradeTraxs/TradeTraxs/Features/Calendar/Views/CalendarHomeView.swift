@@ -70,22 +70,43 @@ struct CalendarHomeView: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                header
-                if let month = viewModel.month {
-                    CalendarMonthGrid(month: month, selectedDayKey: nil) { dayKey in
-                        viewModel.selectDay(dayKey)
-                    }
-                    .opacity(viewModel.isMonthTransitioning && !reduceMotion ? 0.55 : 1)
-                    .animation(
-                        ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
-                        value: viewModel.isMonthTransitioning
-                    )
-                    .animation(
-                        ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
-                        value: month.title
-                    )
+                scopePicker
 
-                    CalendarMonthSummaryBar(summary: month.monthSummary)
+                switch viewModel.displayScope {
+                case .month:
+                    monthHeader
+                    if let month = viewModel.month {
+                        CalendarMonthGrid(month: month, selectedDayKey: nil) { dayKey in
+                            viewModel.selectDay(dayKey)
+                        }
+                        .opacity(viewModel.isMonthTransitioning && !reduceMotion ? 0.55 : 1)
+                        .animation(
+                            ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
+                            value: viewModel.isMonthTransitioning
+                        )
+                        .animation(
+                            ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
+                            value: month.title
+                        )
+
+                        CalendarMonthSummaryBar(summary: month.monthSummary)
+                    }
+                case .year:
+                    yearHeader
+                    if let overview = viewModel.yearOverview {
+                        CalendarYearView(overview: overview) { month in
+                            viewModel.openMonthFromYear(month)
+                        }
+                        .opacity(viewModel.isYearTransitioning && !reduceMotion ? 0.55 : 1)
+                        .animation(
+                            ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
+                            value: viewModel.isYearTransitioning
+                        )
+                    } else if viewModel.phase == .loaded {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, ExperienceSpacing.xl)
+                    }
                 }
             }
             .padding(.horizontal, ExperienceSpacing.md)
@@ -93,7 +114,19 @@ struct CalendarHomeView: View {
         }
     }
 
-    private var header: some View {
+    private var scopePicker: some View {
+        Picker("Calendar view", selection: Binding(
+            get: { viewModel.displayScope },
+            set: { viewModel.setDisplayScope($0) }
+        )) {
+            Text("Month").tag(CalendarDisplayScope.month)
+            Text("Year").tag(CalendarDisplayScope.year)
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("calendar.scopePicker")
+    }
+
+    private var monthHeader: some View {
         HStack {
             Button {
                 viewModel.goToPreviousMonth()
@@ -139,6 +172,52 @@ struct CalendarHomeView: View {
         .accessibilityIdentifier("calendar.header")
     }
 
+    private var yearHeader: some View {
+        HStack {
+            Button {
+                viewModel.goToPreviousYear()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(colors.primaryText)
+                    .frame(width: 36, height: 36)
+                    .background(colors.fillSecondary, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .experienceTouchTarget()
+            .accessibilityLabel("Previous year")
+
+            Spacer()
+
+            VStack(spacing: 2) {
+                Text(String(viewModel.visibleYear))
+                    .experienceStyle(.headline, color: colors.primaryText)
+                Button("This Year") {
+                    viewModel.goToCurrentYear()
+                }
+                .font(.system(.caption, design: .default).weight(.semibold))
+                .foregroundStyle(colors.accent)
+            }
+
+            Spacer()
+
+            Button {
+                viewModel.goToNextYear()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(colors.primaryText)
+                    .frame(width: 36, height: 36)
+                    .background(colors.fillSecondary, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .experienceTouchTarget()
+            .accessibilityLabel("Next year")
+        }
+        .padding(.bottom, ExperienceSpacing.xxs)
+        .accessibilityIdentifier("calendar.yearHeader")
+    }
+
     private var accountMenu: some View {
         OwnerAccountFilterDropdown(
             accounts: viewModel.menuAccounts(
@@ -177,7 +256,7 @@ struct CalendarHomeView: View {
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             HStack(spacing: ExperienceSpacing.sm) {
-                if viewModel.isMonthTransitioning {
+                if viewModel.isMonthTransitioning || viewModel.isYearTransitioning {
                     ProgressView()
                 }
                 accountMenu

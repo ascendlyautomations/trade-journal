@@ -1,3 +1,4 @@
+import AVFoundation
 import AVKit
 import SwiftUI
 import UIKit
@@ -8,6 +9,7 @@ struct ClipPlayerView: UIViewControllerRepresentable {
     let player: AVPlayer
     var videoGravity: AVLayerVideoGravity = .resizeAspect
     var onDoubleTapLike: (() -> Void)? = nil
+    var onReadyForDisplayChange: ((Bool) -> Void)? = nil
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
@@ -15,7 +17,10 @@ struct ClipPlayerView: UIViewControllerRepresentable {
         controller.showsPlaybackControls = true
         controller.allowsPictureInPicturePlayback = true
         controller.videoGravity = videoGravity
+        controller.view.backgroundColor = .clear
+        context.coordinator.onReadyForDisplayChange = onReadyForDisplayChange
         context.coordinator.attachDoubleTap(to: controller)
+        context.coordinator.observeReadyForDisplay(in: controller)
         return controller
     }
 
@@ -27,20 +32,60 @@ struct ClipPlayerView: UIViewControllerRepresentable {
             controller.videoGravity = videoGravity
         }
         context.coordinator.onDoubleTapLike = onDoubleTapLike
+        context.coordinator.onReadyForDisplayChange = onReadyForDisplayChange
         context.coordinator.attachDoubleTap(to: controller)
+        context.coordinator.observeReadyForDisplay(in: controller)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onDoubleTapLike: onDoubleTapLike)
+        Coordinator(onDoubleTapLike: onDoubleTapLike, onReadyForDisplayChange: onReadyForDisplayChange)
     }
 
     final class Coordinator: NSObject {
         var onDoubleTapLike: (() -> Void)?
+        var onReadyForDisplayChange: ((Bool) -> Void)?
         private weak var attachedView: UIView?
         private var recognizer: UITapGestureRecognizer?
+        private var readyForDisplayObservation: NSKeyValueObservation?
 
-        init(onDoubleTapLike: (() -> Void)?) {
+        init(onDoubleTapLike: (() -> Void)?, onReadyForDisplayChange: ((Bool) -> Void)?) {
             self.onDoubleTapLike = onDoubleTapLike
+            self.onReadyForDisplayChange = onReadyForDisplayChange
+        }
+
+        func observeReadyForDisplay(in controller: AVPlayerViewController) {
+            readyForDisplayObservation?.invalidate()
+            guard let layer = Self.findPlayerLayer(in: controller.view) else { return }
+            readyForDisplayObservation = layer.observe(\.isReadyForDisplay, options: [.initial, .new]) {
+                [weak self] layer, _ in
+                let ready = layer.isReadyForDisplay
+                DispatchQueue.main.async {
+                    self?.onReadyForDisplayChange?(ready)
+                }
+            }
+        }
+
+        private static func findPlayerLayer(in view: UIView) -> AVPlayerLayer? {
+            if let playerLayer = view.layer as? AVPlayerLayer {
+                return playerLayer
+            }
+            for subview in view.subviews {
+                if let found = findPlayerLayer(in: subview) {
+                    return found
+                }
+            }
+            if let sublayers = view.layer.sublayers {
+                for layer in sublayers {
+                    if let playerLayer = layer as? AVPlayerLayer {
+                        return playerLayer
+                    }
+                }
+            }
+            return nil
+        }
+
+        deinit {
+            readyForDisplayObservation?.invalidate()
         }
 
         func attachDoubleTap(to controller: AVPlayerViewController) {

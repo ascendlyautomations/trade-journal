@@ -111,6 +111,7 @@ final class BrokerIntegrationsViewModel {
                 presentMessage(loadError, error: true)
             }
         }
+        BrokerImportEligibilityStore.shared.refresh()
     }
 
     func connectTradovate(reconnectConnectionId: String? = nil) {
@@ -247,6 +248,7 @@ final class BrokerIntegrationsViewModel {
             }
             accountsByConnection[connectionId] = response.accounts
             await refreshCanonicalAccounts()
+            BrokerImportEligibilityStore.shared.refresh(fromUserAction: false)
             presentMessage("Account linked.", error: false)
             return true
         } catch {
@@ -279,6 +281,7 @@ final class BrokerIntegrationsViewModel {
             }
             accountsByConnection[connectionId] = response.accounts
             await refreshCanonicalAccounts()
+            BrokerImportEligibilityStore.shared.refresh(fromUserAction: false)
             presentMessage("Trading account created and linked.", error: false)
             return true
         } catch {
@@ -302,19 +305,24 @@ final class BrokerIntegrationsViewModel {
             let newIds = response.summary.newTradeIds
             await refreshTradesAfterImport(newTradeIds: newIds)
             if response.summary.ok {
-                if newIds.isEmpty {
-                    presentMessage("Import finished — no new trades.", error: false)
-                } else {
+                presentMessage(BrokerIntegrationDisplay.importResultMessage(newTradeCount: newIds.count), error: false)
+                if !newIds.isEmpty {
                     pendingReviewTradeIDs = newIds.map { TradeID($0) }
                     showsReviewImportedTrades = true
-                    presentMessage("Imported \(newIds.count) trade(s).", error: false)
                 }
             } else {
-                presentMessage(response.summary.error ?? "Import did not complete.", error: true)
+                presentMessage(
+                    BrokerIntegrationDisplay.importFailureMessage(serverSummary: response.summary.error),
+                    error: true
+                )
             }
         } catch {
-            presentMessage(UserFacingError.message(for: error), error: true)
+            presentMessage(BrokerIntegrationDisplay.importFailureMessage(for: error), error: true)
         }
+    }
+
+    func isImportingTrades(mappingId: String) -> Bool {
+        importingMappingIds.contains(mappingId)
     }
 
     func handleOAuthDeepLink(status: String?, reason: String?) async {

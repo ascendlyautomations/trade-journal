@@ -41,20 +41,16 @@ struct SettingsTradingAccountsView: View {
     }
 
     var body: some View {
-        List {
-            if let data {
-                Section {
-                    NavigationLink {
-                        BrokerIntegrationsView(data: data)
-                    } label: {
-                        Label("Broker Integrations", systemImage: "link.circle")
-                    }
-                    .accessibilityIdentifier("settings.tradingAccounts.brokerIntegrations")
-                } footer: {
-                    Text("Connect Tradovate and import trades through TradeTraxs servers.")
-                }
+        VStack(spacing: 0) {
+            if !viewModel.accounts.isEmpty {
+                ManageAccountsFilterBar(viewModel: viewModel)
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.top, ExperienceSpacing.xs)
+                    .padding(.bottom, ExperienceSpacing.xxs)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            List {
             if let error = viewModel.errorMessage {
                 Section {
                     SettingsInlineError(message: error) {
@@ -63,35 +59,34 @@ struct SettingsTradingAccountsView: View {
                 }
             }
 
-            if !viewModel.accounts.isEmpty {
+            if let data {
                 Section {
-                    ManageAccountsFilterBar(viewModel: viewModel)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                }
-
-                Section {
-                    Text(
-                        "Use the toggles below to choose which accounts appear in account selectors throughout TradeTraxs. Turning an account off does not delete the account or its trading data."
-                    )
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .listRowInsets(
-                        EdgeInsets(
-                            top: ExperienceSpacing.xxs,
-                            leading: ExperienceSpacing.md,
-                            bottom: ExperienceSpacing.sm,
-                            trailing: ExperienceSpacing.md
-                        )
-                    )
+                    NavigationLink {
+                        BrokerIntegrationsView(data: data)
+                    } label: {
+                        brokerIntegrationsRow
+                    }
+                    .accessibilityIdentifier("settings.tradingAccounts.brokerIntegrations")
                 } header: {
-                    Text("Account Dropdowns")
+                    Text("Broker Integrations")
                 }
-                .accessibilityIdentifier("manageAccounts.dropdownIntro")
             }
 
             if viewModel.showsFilteredEmptyState {
                 Section {
+                    Text("Choose which accounts appear in account selectors throughout TradeTraxs.")
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                        .lineLimit(3)
+                        .listRowInsets(
+                            EdgeInsets(
+                                top: 0,
+                                leading: ExperienceSpacing.md,
+                                bottom: ExperienceSpacing.xxs,
+                                trailing: ExperienceSpacing.md
+                            )
+                        )
+                        .accessibilityIdentifier("manageAccounts.dropdownIntro")
+
                     SettingsIntroBlock(
                         title: "No matching accounts",
                         message: "Try changing your Prop Firm or Account Type filter."
@@ -100,6 +95,8 @@ struct SettingsTradingAccountsView: View {
                         viewModel.clearFilters()
                     }
                     .accessibilityIdentifier("manageAccounts.clearFilters")
+                } header: {
+                    Text("Your Accounts")
                 }
             } else if viewModel.accounts.isEmpty, !viewModel.isLoading {
                 Section {
@@ -107,11 +104,26 @@ struct SettingsTradingAccountsView: View {
                         title: "No trading accounts yet",
                         message: "Add an account to organize your trades by broker, prop firm, or backtest."
                     )
+                } header: {
+                    Text("Your Accounts")
                 } footer: {
                     Text("Tap + to create your first account.")
                 }
             } else {
                 Section {
+                    Text("Choose which accounts appear in account selectors throughout TradeTraxs.")
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                        .lineLimit(3)
+                        .listRowInsets(
+                            EdgeInsets(
+                                top: 0,
+                                leading: ExperienceSpacing.md,
+                                bottom: ExperienceSpacing.xxs,
+                                trailing: ExperienceSpacing.md
+                            )
+                        )
+                        .accessibilityIdentifier("manageAccounts.dropdownIntro")
+
                     ForEach(viewModel.filteredAccounts) { account in
                         HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
                             CompactAccountDropdownToggle(
@@ -195,9 +207,12 @@ struct SettingsTradingAccountsView: View {
                     Text("Swipe to activate or deactivate. Deactivated accounts stay in history but hide from trade pickers.")
                 }
             }
+            }
+            .listStyle(.insetGrouped)
+            .listSectionSpacing(ExperienceSpacing.xxs)
+            .contentMargins(.top, viewModel.accounts.isEmpty ? ExperienceSpacing.xs : 0, for: .scrollContent)
+            .scrollContentBackground(.hidden)
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Manage Accounts")
         .toolbar {
@@ -243,5 +258,24 @@ struct SettingsTradingAccountsView: View {
             Task { await viewModel.refresh() }
         }
         .accessibilityIdentifier("settings.tradingAccounts")
+    }
+
+    private var brokerIntegrationsRow: some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            Image(systemName: "link.circle")
+                .font(.body.weight(.medium))
+                .foregroundStyle(colors.accent)
+                .frame(width: 28, alignment: .center)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Broker Integrations")
+                    .experienceStyle(.body, color: colors.primaryText)
+                Text("Connect & import trades")
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            }
+            Spacer(minLength: ExperienceSpacing.xs)
+        }
+        .padding(.vertical, ExperienceSpacing.xxs)
+        .contentShape(Rectangle())
     }
 }

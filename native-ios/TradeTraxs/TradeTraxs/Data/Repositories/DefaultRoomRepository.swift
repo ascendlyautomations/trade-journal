@@ -999,6 +999,13 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         return try mapRoom(dto)
     }
 
+    func deleteRoom(roomID: RoomID) async throws {
+        try await supabase.database.delete(
+            from: "rooms",
+            query: [SupabaseQuery.eq("id", roomID.rawValue)]
+        )
+    }
+
     func managedMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember] {
         let members = try await activeMembers(roomID: roomID, ownerProfileID: ownerProfileID)
         let tagsByUser = (try? await memberTagsByUser(roomID: roomID)) ?? [:]

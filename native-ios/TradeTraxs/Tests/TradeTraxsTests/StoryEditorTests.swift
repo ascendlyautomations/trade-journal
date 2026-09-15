@@ -54,6 +54,22 @@ final class StoryEditorTests: XCTestCase {
         XCTAssertLessThan(rect.maxY, canvasSize.height)
     }
 
+    @MainActor
+    func testOverlayScaleClampsToEditorBounds() {
+        let viewModel = StoryEditorViewModel(sourceImage: makeSolidImage(size: CGSize(width: 100, height: 100)))
+        viewModel.beginAddingText()
+        guard let id = viewModel.canvas.selectedTextID else {
+            XCTFail("Expected overlay")
+            return
+        }
+        viewModel.updateDraftText("Hi")
+        viewModel.finishEditingText()
+        viewModel.updateOverlayScale(id: id, scale: 10)
+        XCTAssertEqual(viewModel.canvas.textOverlays.first?.scale, 3, accuracy: 0.001)
+        viewModel.updateOverlayScale(id: id, scale: 0.01)
+        XCTAssertEqual(viewModel.canvas.textOverlays.first?.scale, 0.5, accuracy: 0.001)
+    }
+
     private func makeSolidImage(size: CGSize) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: size)
         return renderer.image { context in

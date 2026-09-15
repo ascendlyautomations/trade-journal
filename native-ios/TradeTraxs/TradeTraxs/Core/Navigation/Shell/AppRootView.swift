@@ -388,7 +388,7 @@ struct AppRootView: View {
                 case .addTrade:
                     TradeEntryHubView(
                         data: appEnvironment.data,
-                        initialTab: .manual,
+                        initialTab: TradeEntryLaunchIntent.consumeHubTab() ?? .manual,
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
                 case .editTrade(let tradeID):
@@ -483,7 +483,13 @@ struct AppRootView: View {
 
     private func detents(for destination: SheetDestination) -> Set<PresentationDetent> {
         switch destination {
-        case .composeChooser, .quickTrade, .accountSwitcher, .dailyCheckIn:
+        case .composeChooser:
+            return [.fraction(0.60)]
+        case .dailyCheckIn:
+            return [.fraction(0.65)]
+        case .tradeImportReminder:
+            return [.fraction(0.55)]
+        case .quickTrade, .accountSwitcher:
             return [.medium, .large]
         default:
             return [.medium, .large]
@@ -509,6 +515,7 @@ struct AppRootView: View {
         case .accountSwitcher: return "Accounts"
         case .notificationPermission: return "Notifications"
         case .dailyCheckIn: return "Daily Check-In"
+        case .tradeImportReminder: return "Import Trades"
         }
     }
 

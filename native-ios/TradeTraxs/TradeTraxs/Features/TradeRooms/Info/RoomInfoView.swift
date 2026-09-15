@@ -1,6 +1,5 @@
 import SwiftUI
 import UIKit
-import PhotosUI
 
 struct RoomInfoView: View {
     @State private var viewModel: RoomInfoViewModel
@@ -9,8 +8,7 @@ struct RoomInfoView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.appEnvironment) private var appEnvironment
     @State private var logoImage: Image?
-    @State private var photoItem: PhotosPickerItem?
-    @State private var cropSourceImage: UIImage?
+    @State private var inviteLinkCopied = false
 
     init(
         roomID: RoomID,
@@ -55,228 +53,160 @@ struct RoomInfoView: View {
             }
         }
         .experienceScreenBackground()
-        .experienceNavigationTitle(viewModel.canManageRoom ? "Room Information" : "Room Info")
-        .toolbar {
-            if viewModel.canManageRoom, case .loaded = viewModel.phase {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        Task { await viewModel.saveDetails() }
-                    }
-                    .fontWeight(.semibold)
-                    .disabled(viewModel.isSavingDetails)
-                    .accessibilityIdentifier("tradeRooms.info.save")
-                }
-            }
-        }
+        .experienceNavigationTitle("Room Info")
         .task {
             viewModel.loadIfNeeded()
         }
         .task(id: viewModel.room?.image?.id) {
             await loadLogo()
         }
-        .onChange(of: photoItem) { _, item in
-            Task { await presentRoomImageCrop(for: item) }
-        }
-        .imageCropSelection(
-            sourceImage: $cropSourceImage,
-            preset: .room,
-            onConfirm: { result in
-                viewModel.setCroppedRoomImage(result)
-                cropSourceImage = nil
-                photoItem = nil
-            },
-            onCancel: {
-                photoItem = nil
-            }
-        )
-        .confirmationDialog(
-            "Leave this Trade Room?",
-            isPresented: $viewModel.showsLeaveConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Leave Room", role: .destructive) {
-                Task { await viewModel.leaveRoom() }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
         .accessibilityIdentifier("tradeRooms.info")
     }
 
     private var content: some View {
         List {
-            if viewModel.canManageRoom {
-                ownerEditorSections
-            } else {
-                readOnlyHeaderSection
-            }
-            sharedFooterSections
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .experienceProtectedFormDismiss(viewModel.canManageRoom && viewModel.isSavingDetails)
-        .disabled(viewModel.isSavingDetails)
-    }
+            roomNameSection
+            roomPictureSection
+            membersSection
+            descriptionSection
+            inviteLinkSection
 
-    @ViewBuilder
-    private var ownerEditorSections: some View {
-        Section {
-            HStack(spacing: ExperienceSpacing.sm) {
-                logo
-                VStack(alignment: .leading, spacing: 3) {
-                    TextField("Room name", text: $viewModel.editName)
-                        .font(.headline)
-                    Text("\(ProfileDisplay.compactCount(viewModel.displayedMemberCount ?? 0)) members")
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                    if viewModel.pendingImagePreview != nil {
-                        Text("New photo selected")
-                            .experienceStyle(.caption2, color: colors.accent)
+            Section("Owner") {
+                if let owner = viewModel.ownerProfile {
+                    Button {
+                        viewModel.openOwner()
+                    } label: {
+                        HStack {
+                            Text(owner.displayName)
+                                .experienceStyle(.body, color: colors.primaryText)
+                            Spacer()
+                            Text("@\(owner.username)")
+                                .experienceStyle(.caption, color: colors.secondaryText)
+                        }
+                    }
+                } else {
+                    Text("Unavailable")
+                        .experienceStyle(.body, color: colors.tertiaryText)
+                }
+            }
+
+            Section {
+                Button("Trade Room Settings") {
+                    viewModel.openRoomSettings()
+                }
+            }
+
+            if !viewModel.isOwner {
+                Section {
+                    Button("Report Room") {
+                        ExperienceHaptics.play(.selection)
+                        ContentReportSupport.presentTradeRoom(
+                            roomID: viewModel.roomID,
+                            roomName: viewModel.room?.name,
+                            ownerID: viewModel.room?.ownerProfileID,
+                            presenter: appEnvironment.contentReportPresenter
+                        )
                     }
                 }
             }
-            .listRowBackground(colors.backgroundSecondary)
-        }
 
-        Section("Description") {
-            TextField("Description", text: $viewModel.editDescription, axis: .vertical)
-                .lineLimit(3...6)
-        }
-
-        Section("Picture") {
-            PhotosPicker(selection: $photoItem, matching: .images) {
-                Label("Choose New Picture", systemImage: "photo")
-            }
-        }
-
-        Section("Privacy") {
-            Toggle("Show on my profile", isOn: $viewModel.editShowsOnProfile)
-        }
-
-        Section("Manage") {
-            Button("Manage Room") { viewModel.openManageRoom() }
-            Button("Members") { viewModel.openMembers() }
-        }
-    }
-
-    @ViewBuilder
-    private var readOnlyHeaderSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                HStack(spacing: ExperienceSpacing.sm) {
-                    logo
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(viewModel.room?.name ?? "Trade Room")
-                            .experienceStyle(.headline, color: colors.primaryText)
-                        Text("\(ProfileDisplay.compactCount(viewModel.displayedMemberCount ?? 0)) members")
-                            .experienceStyle(.caption, color: colors.secondaryText)
-                    }
-                }
-                if let raw = viewModel.room?.description {
-                    let description = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !description.isEmpty,
-                       description.caseInsensitiveCompare("Personal Trade Room") != .orderedSame
-                    {
-                        Text(description)
-                            .experienceStyle(.body, color: colors.primaryText)
-                    }
-                }
-            }
-            .listRowBackground(colors.backgroundSecondary)
-        }
-    }
-
-    @ViewBuilder
-    private var sharedFooterSections: some View {
-        Section("Rules") {
-            Text(viewModel.rulesText)
-                .experienceStyle(.footnote, color: colors.secondaryText)
-        }
-
-        Section("Invite") {
-            Button {
-                UIPasteboard.general.string = viewModel.inviteLink
-                ExperienceHaptics.play(.selection)
-                viewModel.statusMessage = "Invite link copied."
-            } label: {
-                HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                    Image(systemName: "link")
-                    Text(viewModel.inviteLink)
-                        .experienceStyle(.footnote, color: colors.accent)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
-            }
-        }
-
-        Section("Owner") {
-            if let owner = viewModel.ownerProfile {
-                Button {
-                    viewModel.openOwner()
-                } label: {
-                    HStack {
-                        Text(owner.displayName)
-                            .experienceStyle(.body, color: colors.primaryText)
-                        Spacer()
-                        Text("@\(owner.username)")
-                            .experienceStyle(.caption, color: colors.secondaryText)
-                    }
-                }
-            } else {
-                Text("Unavailable")
-                    .experienceStyle(.body, color: colors.tertiaryText)
-            }
-        }
-
-        if !viewModel.isOwner {
-            Section {
-                Button("Members") {
-                    viewModel.openMembers()
-                }
-                Button("Leave Room", role: .destructive) {
-                    viewModel.showsLeaveConfirmation = true
-                }
-                Button("Report Room") {
-                    ExperienceHaptics.play(.selection)
-                    ContentReportSupport.presentTradeRoom(
-                        roomID: viewModel.roomID,
-                        roomName: viewModel.room?.name,
-                        ownerID: viewModel.room?.ownerProfileID,
-                        presenter: appEnvironment.contentReportPresenter
-                    )
-                }
-            }
-        } else {
-            Section {
-                Button("Leave Room", role: .destructive) {
-                    viewModel.showsLeaveConfirmation = true
-                }
-            }
-        }
-
-        if let statusMessage = viewModel.statusMessage {
-            Section {
-                Text(statusMessage)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
-        }
-
-        if viewModel.isSavingDetails {
-            Section {
-                HStack {
-                    ProgressView()
-                    Text("Saving…")
+            if let statusMessage = viewModel.statusMessage {
+                Section {
+                    Text(statusMessage)
                         .experienceStyle(.footnote, color: colors.secondaryText)
                 }
             }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var roomNameSection: some View {
+        Section("Room Name") {
+            Text(viewModel.room?.name ?? "Trade Room")
+                .experienceStyle(.body, color: colors.primaryText)
+        }
+    }
+
+    private var roomPictureSection: some View {
+        Section("Room Picture") {
+            HStack(spacing: ExperienceSpacing.md) {
+                logo
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var membersSection: some View {
+        Section("Members") {
+            Button {
+                viewModel.openMembers()
+            } label: {
+                HStack {
+                    Text("\(ProfileDisplay.compactCount(viewModel.displayedMemberCount ?? 0)) members")
+                        .experienceStyle(.body, color: colors.primaryText)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(colors.tertiaryText)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var descriptionSection: some View {
+        Section("Description") {
+            if let raw = viewModel.room?.description {
+                let description = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if description.isEmpty
+                    || description.caseInsensitiveCompare("Personal Trade Room") == .orderedSame
+                {
+                    Text("No description")
+                        .experienceStyle(.body, color: colors.tertiaryText)
+                } else {
+                    Text(description)
+                        .experienceStyle(.body, color: colors.primaryText)
+                }
+            } else {
+                Text("No description")
+                    .experienceStyle(.body, color: colors.tertiaryText)
+            }
+        }
+    }
+
+    private var inviteLinkSection: some View {
+        Section("Invite Link") {
+            HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+                Text(viewModel.inviteLink)
+                    .experienceStyle(.footnote, color: colors.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(inviteLinkCopied ? "Copied" : "Copy") {
+                    copyInviteLink()
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.accent)
+                .accessibilityIdentifier("tradeRooms.info.invite.copy")
+            }
+        }
+    }
+
+    private func copyInviteLink() {
+        UIPasteboard.general.string = viewModel.inviteLink
+        ExperienceHaptics.play(.selection)
+        inviteLinkCopied = true
+        viewModel.statusMessage = "Invite link copied."
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            inviteLinkCopied = false
         }
     }
 
     private var logo: some View {
         Group {
-            if let pending = viewModel.pendingImagePreview {
-                Image(uiImage: pending)
-                    .resizable()
-                    .scaledToFill()
-            } else if let logoImage {
+            if let logoImage {
                 logoImage.resizable().scaledToFill()
             } else {
                 ZStack {
@@ -289,15 +219,7 @@ struct RoomInfoView: View {
         .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
     }
 
-    private func presentRoomImageCrop(for item: PhotosPickerItem?) async {
-        guard let image = await ImageCropSelectionSupport.loadUIImage(from: item) else { return }
-        cropSourceImage = image
-    }
-
     private func loadLogo() async {
-        if viewModel.pendingImagePreview != nil {
-            return
-        }
         guard let reference = viewModel.room?.image else {
             logoImage = nil
             return

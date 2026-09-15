@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import {
+  brokerAccountFieldsAfterRediscovery,
+  findPriorBrokerAccountMappingForExternalId,
+} from "@/lib/integrations/brokerIntegrationAccounts"
+import {
   rithmicAccountSafeMetadata,
   type RithmicDiscoveredAccount,
 } from "@/lib/integrations/rithmic/rithmicAccountModels"
@@ -37,6 +41,7 @@ export async function upsertDiscoveredRithmicAccounts(
     }
 
     if (existing) {
+      const continuity = brokerAccountFieldsAfterRediscovery(existing)
       const { error } = await supabase
         .from("broker_integration_accounts")
         .update({
@@ -45,12 +50,21 @@ export async function upsertDiscoveredRithmicAccounts(
           external_metadata: metadata,
           last_seen_at: now,
           updated_at: now,
-          status: existing.tradetraxs_account_id ? "linked" : existing.status,
+          status: continuity.status,
+          sync_enabled: continuity.syncEnabled,
         })
         .eq("id", existing.id)
       if (error) throw new Error("rithmic_broker_accounts_update_failed")
       continue
     }
+
+    const prior = await findPriorBrokerAccountMappingForExternalId(supabase, {
+      userId: params.userId,
+      provider: "rithmic",
+      externalAccountId: account.externalAccountId,
+      excludeConnectionId: params.connectionId,
+    })
+    const inheritedTradetraxsId = prior?.tradetraxs_account_id ?? null
 
     const { error } = await supabase.from("broker_integration_accounts").insert({
       user_id: params.userId,
@@ -60,9 +74,11 @@ export async function upsertDiscoveredRithmicAccounts(
       external_account_name: account.name,
       external_display_name: account.displayName,
       external_metadata: metadata,
+      tradetraxs_account_id: inheritedTradetraxsId,
+      sync_enabled: Boolean(inheritedTradetraxsId),
       last_seen_at: now,
       updated_at: now,
-      status: "discovered",
+      status: inheritedTradetraxsId ? "linked" : "discovered",
     })
     if (error) throw new Error("rithmic_broker_accounts_insert_failed")
   }

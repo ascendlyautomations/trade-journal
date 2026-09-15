@@ -2,7 +2,9 @@ import SwiftUI
 
 struct ClipsContainerView: View {
     @Bindable var viewModel: ClipsContainerViewModel
+    let detailCache: DetailPresentationCache
     let imagePipeline: any ImagePipeline
+    let objectStorage: any ObjectStorageProviding
     @Bindable var engagementStore: EngagementStore
     @Bindable var vaultStore: VaultStore
 
@@ -19,7 +21,9 @@ struct ClipsContainerView: View {
                 ForEach(viewModel.items) { reel in
                     ProfileClipCard(
                         reel: reel,
+                        detailCache: detailCache,
                         imagePipeline: imagePipeline,
+                        objectStorage: objectStorage,
                         engagementStore: engagementStore,
                         vaultStore: vaultStore,
                         onOpen: { viewModel.openClip(reel) },

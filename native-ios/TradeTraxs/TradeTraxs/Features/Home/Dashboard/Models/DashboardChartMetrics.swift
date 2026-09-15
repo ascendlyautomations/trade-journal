@@ -137,10 +137,11 @@ nonisolated enum DashboardChartMetrics {
         let statsInputs = filtered.map {
             ProfileStatisticsMetrics.TradeInput(
                 pnl: $0.trade.realizedPnL?.amount,
-                createdAt: $0.trade.entryAt,
+                createdAt: $0.trade.exitAt ?? $0.trade.entryAt,
                 isLong: $0.trade.side == .long,
                 session: $0.trade.sessionLabel,
-                accountMode: $0.trade.accountMode ?? TradingAccountMode.parseWireValue($0.accountType)
+                accountMode: $0.trade.accountMode ?? TradingAccountMode.parseWireValue($0.accountType),
+                sortKey: $0.trade.id.rawValue
             )
         }
         let profileStats = ProfileStatisticsMetrics.compute(from: statsInputs, selectedMode: .all)
@@ -509,7 +510,7 @@ nonisolated enum DashboardChartMetrics {
                 DashboardInsightItem(
                     id: "session",
                     title: "Protect your best session",
-                    body: "Most of your tagged volume lands in \(bestSession.label) (\(Int(bestSession.pct.rounded()))%). Review those setups first — that’s where your process is already concentrated.",
+                    body: "Most of your tagged volume lands in \(bestSession.label) (\(Int(bestSession.pct.rounded()))%). Review those setups first, that's where your process is already concentrated.",
                     kind: .session
                 )
             )
@@ -545,7 +546,7 @@ nonisolated enum DashboardChartMetrics {
                 DashboardInsightItem(
                     id: "direction",
                     title: "Check your directional bias",
-                    body: "You’re taking more \(edge) trades (\(majority) of \(trades.count)). Confirm that matches your plan — bias without intent becomes drift.",
+                    body: "You're taking more \(edge) trades (\(majority) of \(trades.count)). Confirm that matches your plan, bias without intent becomes drift.",
                     kind: .direction
                 )
             )

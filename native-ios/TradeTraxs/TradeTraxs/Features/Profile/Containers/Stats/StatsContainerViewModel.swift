@@ -31,6 +31,8 @@ final class StatsContainerViewModel {
     private var analyticsFetchedAt: Date?
     private var canViewContent = true
     private var isScreenOwned = false
+    private var awaitingScreenBootstrap = false
+    private let initialLoadFailureGrace = ProfileSectionFailureGrace()
 
     init(
         profileID: ProfileID,
@@ -65,6 +67,11 @@ final class StatsContainerViewModel {
         canViewContent = true
         accountModes = snapshot.accountModes
 
+        awaitingScreenBootstrap = isScreenOwned
+            && metrics == nil
+            && !hasLoadedAnalytics
+            && (snapshot.phase == .loading || snapshot.didBootstrap)
+
         if let updated = snapshot.lastUpdated,
            let fetchedAt = analyticsFetchedAt,
            updated > fetchedAt
@@ -75,6 +82,11 @@ final class StatsContainerViewModel {
 
         if (snapshot.phase == .loading || snapshot.didBootstrap), metrics == nil, !hasLoadedAnalytics {
             state = .loading
+        }
+
+        if snapshot.phase == .loaded || hasLoadedAnalytics || metrics != nil {
+            awaitingScreenBootstrap = false
+            initialLoadFailureGrace.cancel()
         }
 
         scheduleAnalyticsLoadIfNeeded()
@@ -135,6 +147,7 @@ final class StatsContainerViewModel {
         }
 
         state = metrics == nil ? .loading : state
+        initialLoadFailureGrace.cancel()
 
         if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
             do {
@@ -145,6 +158,7 @@ final class StatsContainerViewModel {
                 modeResults = applied.modeResults
                 hasLoadedAnalytics = true
                 analyticsFetchedAt = Date()
+                initialLoadFailureGrace.cancel()
                 recompute()
                 return
             } catch ProfileStatisticsBootstrapLoader.LoaderError.flagOff,
@@ -172,11 +186,22 @@ final class StatsContainerViewModel {
             )
             hasLoadedAnalytics = true
             analyticsFetchedAt = Date()
+            initialLoadFailureGrace.cancel()
             recompute()
         } catch {
             guard !Task.isCancelled else { return }
             if metrics == nil {
-                state = .failed(message: ProfileSectionSupport.message(for: error))
+                if awaitingScreenBootstrap {
+                    state = .loading
+                } else {
+                    let message = ProfileSectionSupport.message(for: error)
+                    initialLoadFailureGrace.scheduleIfNeeded(message: message) { [weak self] in
+                        guard let self else { return false }
+                        return metrics == nil && !hasLoadedAnalytics && !awaitingScreenBootstrap
+                    } present: { [weak self] message in
+                        self?.state = .failed(message: message)
+                    }
+                }
             }
         }
     }

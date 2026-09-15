@@ -127,6 +127,9 @@ struct RoomConversationView: View {
                     .accessibilityIdentifier("tradeRooms.conversation.manage")
                 } else {
                     Menu {
+                        Button("Trade Room Settings", systemImage: "gearshape") {
+                            viewModel.openRoomSettings()
+                        }
                         Button(
                             viewModel.isMuted ? "Unmute notifications" : "Mute notifications",
                             systemImage: viewModel.isMuted ? "bell.fill" : "bell.slash"
@@ -311,15 +314,20 @@ struct RoomConversationView: View {
                                     Task { await viewModel.retry(bubble) }
                                 },
                                 onSharedTradeTap: { tradeID in
-                                    guard let navigationCoordinator else { return }
-                                    navigationCoordinator.open(navigationHost.sharedTrade(tradeID))
+                                    guard let navigationCoordinator, let data else { return }
+                                    navigationCoordinator.pushSharedTrade(
+                                        tradeID,
+                                        host: navigationHost,
+                                        cache: data.detailCache
+                                    )
                                 },
                                 onSharedContentTap: { reference in
                                     guard let data else { return }
                                     SharedContentNavigation.open(
                                         reference: reference,
                                         cache: data.detailCache,
-                                        coordinator: navigationCoordinator
+                                        coordinator: navigationCoordinator,
+                                        host: navigationHost
                                     )
                                 },
                                 onSharedStoryTap: { payload in

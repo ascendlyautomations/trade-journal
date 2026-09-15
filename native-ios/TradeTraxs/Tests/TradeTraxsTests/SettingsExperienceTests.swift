@@ -7,13 +7,15 @@ final class SettingsExperienceTests: XCTestCase {
         let sections = SettingsHomeModel.sections
         XCTAssertFalse(sections.isEmpty)
         XCTAssertTrue(sections.contains { $0.id == "account" })
-        XCTAssertTrue(sections.contains { $0.id == "preferences" })
+        XCTAssertTrue(sections.contains { $0.id == "tradetraxs" })
         XCTAssertTrue(sections.contains { $0.id == "legal" })
         let allRoutes = sections.flatMap(\.items).map(\.route)
         XCTAssertTrue(allRoutes.contains(.account))
+        XCTAssertTrue(allRoutes.contains(.privacy))
         XCTAssertTrue(allRoutes.contains(.notifications))
         XCTAssertTrue(allRoutes.contains(.appearance))
         XCTAssertTrue(allRoutes.contains(.subscription))
+        XCTAssertFalse(allRoutes.contains(.security))
         XCTAssertFalse(allRoutes.contains(.home))
     }
 

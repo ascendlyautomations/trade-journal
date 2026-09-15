@@ -34,8 +34,9 @@ final class TradesContainerViewModel {
     private var paginationGeneration = 0
     private var syncGeneration: UInt64 = 0
     private var canViewContent = true
-    /// When true, initial data comes from ``ProfileScreenViewModel`` bootstrap.
     private var isScreenOwned = false
+    private var awaitingScreenBootstrap = false
+    private let initialLoadFailureGrace = ProfileSectionFailureGrace()
 
     var hasAuthoritativePayload: Bool { hasLoaded }
 
@@ -115,12 +116,22 @@ final class TradesContainerViewModel {
             return
         }
         canViewContent = true
+        awaitingScreenBootstrap = ProfileSectionInitialLoad.awaitingScreenBootstrap(
+            isScreenOwned: isScreenOwned,
+            snapshot: snapshot,
+            didLoadSection: snapshot.didLoadTrades,
+            sectionItemsEmpty: snapshot.trades.isEmpty,
+            localItemsEmpty: items.isEmpty
+        )
         guard snapshot.didLoadTrades || !snapshot.trades.isEmpty else {
             if (snapshot.phase == .loading || snapshot.didBootstrap), items.isEmpty {
                 state = .loading
             }
             return
         }
+
+        awaitingScreenBootstrap = false
+        initialLoadFailureGrace.cancel()
 
         if hasLoaded {
             guard !snapshot.trades.isEmpty else { return }
@@ -176,6 +187,12 @@ final class TradesContainerViewModel {
         guard canViewContent else {
             hasLoaded = true
             state = .empty
+            return
+        }
+        if awaitingScreenBootstrap {
+            if items.isEmpty {
+                state = .loading
+            }
             return
         }
         syncGeneration &+= 1
@@ -496,6 +513,7 @@ final class TradesContainerViewModel {
         if reset, items.isEmpty {
             state = .loading
         }
+        initialLoadFailureGrace.cancel()
 
         do {
             let pageItems: [Trade]
@@ -543,6 +561,7 @@ final class TradesContainerViewModel {
             seedCachesFromItems()
             hasLoaded = true
             paginationErrorMessage = nil
+            initialLoadFailureGrace.cancel()
             updateStateForVisibleItems()
             prefetchEngagement(for: visibleItems.map(\.id))
         } catch {
@@ -552,7 +571,21 @@ final class TradesContainerViewModel {
                 return
             }
             if items.isEmpty {
-                state = .failed(message: ProfileSectionSupport.message(for: error))
+                if awaitingScreenBootstrap {
+                    state = .loading
+                } else {
+                    let message = ProfileSectionSupport.message(for: error)
+                    let failedGeneration = generation
+                    initialLoadFailureGrace.scheduleIfNeeded(message: message) { [weak self] in
+                        guard let self else { return false }
+                        return !hasLoaded
+                            && items.isEmpty
+                            && syncGeneration == failedGeneration
+                            && !awaitingScreenBootstrap
+                    } present: { [weak self] message in
+                        self?.state = .failed(message: message)
+                    }
+                }
             } else {
                 paginationErrorMessage = ProfileSectionSupport.message(for: error)
             }

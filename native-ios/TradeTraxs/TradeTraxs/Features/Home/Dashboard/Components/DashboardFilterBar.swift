@@ -5,12 +5,12 @@ struct DashboardFilterBar: View {
     @Bindable var viewModel: DashboardViewModel
 
     @Environment(\.themeColors) private var colors
-    @State private var filterBarWidth: CGFloat = 0
 
     var body: some View {
         HStack(spacing: ExperienceSpacing.xs) {
             accountMenu
-                .layoutPriority(1)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(0)
             dateMenu
                 .layoutPriority(2)
                 .fixedSize(horizontal: true, vertical: false)
@@ -18,15 +18,6 @@ struct DashboardFilterBar: View {
             dashboardToolButtons
                 .fixedSize(horizontal: true, vertical: false)
                 .layoutPriority(2)
-        }
-        .background {
-            GeometryReader { geo in
-                Color.clear
-                    .onAppear { filterBarWidth = geo.size.width }
-                    .onChange(of: geo.size.width) { _, width in
-                        filterBarWidth = width
-                    }
-            }
         }
         .accessibilityIdentifier("dashboard.filters")
     }
@@ -135,12 +126,20 @@ struct DashboardFilterBar: View {
     }
 
     private func accountMenuLabel(_ title: String) -> some View {
-        menuLabel(title)
-            .fixedSize(horizontal: true, vertical: false)
-            .frame(
-                maxWidth: maxAccountSelectorWidth(in: filterBarWidth),
-                alignment: .leading
-            )
+        HStack(spacing: 4) {
+            Text(title)
+                .experienceStyle(.footnote, color: colors.primaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+            ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.secondaryText)
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
+        }
+        .padding(.horizontal, ExperienceSpacing.sm)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 32, alignment: .leading)
+        .background(colors.fillSecondary)
+        .clipShape(Capsule())
     }
 
     private func menuLabel(_ title: String) -> some View {
@@ -155,18 +154,5 @@ struct DashboardFilterBar: View {
         .frame(minHeight: 32)
         .background(colors.fillSecondary)
         .clipShape(Capsule())
-    }
-
-    /// Caps account label width so three tool buttons + date range stay on one row (176 max unchanged).
-    private func maxAccountSelectorWidth(in totalWidth: CGFloat) -> CGFloat {
-        guard totalWidth > 0 else { return 176 }
-        let touch = ExperienceAccessibility.minTouchTarget
-        let rowGap = ExperienceSpacing.xs
-        let toolGap = ExperienceSpacing.xxs
-        let dateReserve: CGFloat = 76
-        let toolsWidth = touch * 3 + toolGap * 2
-        let reserved = dateReserve + toolsWidth + rowGap * 2 + ExperienceSpacing.xxs
-        let available = totalWidth - reserved
-        return min(max(available, 112), 176)
     }
 }

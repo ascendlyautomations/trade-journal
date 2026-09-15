@@ -3,6 +3,93 @@ import XCTest
 
 @MainActor
 final class ProfileExperienceTests: XCTestCase {
+    func testMessagingListDisplayNameFallbacks() {
+        let profileID = ProfileID("ab12cd34-0000-0000-0000-000000000000")
+        let shell = ProfileUsernamePolicy.generatedShellUsername(for: profileID)
+
+        XCTAssertEqual(
+            ProfileDisplayNameResolver.profileDisplayName(
+                displayName: "Nick Rivard",
+                username: "nrltrades",
+                profileID: profileID
+            ),
+            "Nick Rivard"
+        )
+        XCTAssertEqual(
+            ProfileDisplayNameResolver.profileDisplayName(
+                displayName: nil,
+                username: "nrltrades",
+                profileID: profileID
+            ),
+            "nrltrades"
+        )
+        XCTAssertEqual(
+            ProfileDisplayNameResolver.profileDisplayName(
+                displayName: "New User",
+                username: shell,
+                profileID: profileID
+            ),
+            ProfileDisplayNameResolver.newUserFallback
+        )
+        XCTAssertEqual(
+            ProfileDisplayNameResolver.profileDisplayName(
+                displayName: nil,
+                username: shell,
+                profileID: profileID
+            ),
+            ProfileDisplayNameResolver.newUserFallback
+        )
+        XCTAssertEqual(
+            ProfileDisplayNameResolver.profileDisplayName(
+                displayName: nil,
+                username: nil,
+                profileID: profileID
+            ),
+            ProfileDisplayNameResolver.newUserFallback
+        )
+        XCTAssertNil(
+            ProfileDisplayNameResolver.messagingUsernameSubtitle(username: shell, profileID: profileID)
+        )
+        XCTAssertEqual(
+            ProfileDisplayNameResolver.messagingUsernameSubtitle(username: "nrltrades", profileID: profileID),
+            "@nrltrades"
+        )
+    }
+
+    func testClipDisplayTitlePrefersLinkedTradeDescription() {
+        let owner = ProfileID("dev.fixture")
+        let reel = ProfileClipFixtures.samples(owner: owner)[0]
+        let trade = ProfileClipFixtures.linkedTrades(for: [reel])[0]
+        let cache = DetailPresentationCache()
+        cache.seed(trade)
+
+        XCTAssertEqual(
+            ClipDisplayTitle.text(for: reel, cache: cache),
+            "Break and retest"
+        )
+        XCTAssertEqual(
+            ClipDisplayTitle.text(for: reel, linkedTrade: nil),
+            "Open drive clip — NQ continuation"
+        )
+
+        let standalone = ProfileClipFixtures.samples(owner: owner)[1]
+        XCTAssertEqual(ClipDisplayTitle.text(for: standalone, linkedTrade: nil), "Process over outcome")
+
+        var linkedNoDescription = reel
+        linkedNoDescription.linkedTradeID = TradeID("trade-no-caption")
+        var tradeNoCaption = trade
+        tradeNoCaption.id = TradeID("trade-no-caption")
+        tradeNoCaption.publicCaption = nil
+        XCTAssertEqual(
+            ClipDisplayTitle.text(for: linkedNoDescription, linkedTrade: tradeNoCaption),
+            "Open drive clip — NQ continuation"
+        )
+        XCTAssertEqual(
+            ClipDisplayTitle.text(for: linkedNoDescription, linkedTrade: tradeNoCaption),
+            ClipDisplayTitle.text(for: linkedNoDescription, linkedTrade: nil)
+        )
+    }
+
     func testProfileDisplayInitials() {
         XCTAssertEqual(
             ProfileDisplay.initials(displayName: "Ada Lovelace", username: "ada"),

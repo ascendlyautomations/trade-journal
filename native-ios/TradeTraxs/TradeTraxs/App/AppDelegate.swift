@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // Prefer the edge-anchored tab bar presentation over the floating capsule
         // when the OS still exposes that preference (iPad historically; harmless on iPhone).
         UserDefaults.standard.register(defaults: ["UseFloatingTabBar": false])
+        ExperienceNavigationBarAppearance.configureArrowOnlyBackButtons()
         StartupTrace.event("AppDelegate.didFinishLaunching")
         AppLog.application.info("AppDelegate.didFinishLaunching")
         pushNotifications?.bindIfNeeded()

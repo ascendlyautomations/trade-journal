@@ -7,44 +7,28 @@ struct DailyCheckInCard: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: ExperienceSpacing.md) {
+        DashboardQuickActionRow(
+            title: "Daily Check-In",
+            subtitle: subtitle,
+            accessibilityIdentifier: "dailyCheckIn.card",
+            icon: {
                 ZStack {
                     Circle()
-                        .fill(store.isCompletedToday ? colors.profit.opacity(0.15) : colors.accent.opacity(0.12))
-                        .frame(width: 40, height: 40)
+                        .fill(
+                            store.isCompletedToday
+                                ? colors.profit.opacity(0.15)
+                                : colors.accent.opacity(0.12)
+                        )
+                        .frame(
+                            width: DashboardQuickActionStyle.iconDiameter,
+                            height: DashboardQuickActionStyle.iconDiameter
+                        )
                     Image(systemName: store.isCompletedToday ? "checkmark.circle.fill" : "sun.horizon.fill")
-                        .font(.body.weight(.semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(store.isCompletedToday ? colors.profit : colors.accent)
                 }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Daily Check-In")
-                        .experienceStyle(.headline, color: colors.primaryText)
-                    Text(subtitle)
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(colors.tertiaryText)
-            }
-            .padding(ExperienceSpacing.md)
-            .background(colors.surfacePrimary)
-            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                    .stroke(colors.border, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("dailyCheckIn.card")
-        .accessibilityLabel(
-            store.isCompletedToday
-                ? "Daily Check-In. Completed today."
-                : "Daily Check-In. Log how you're feeling today."
+            },
+            onTap: onTap
         )
     }
 

@@ -40,7 +40,6 @@ struct DashboardEquityHero: View {
                 .accessibilityLabel(title == "Account Value" ? "Account value curve" : "Equity curve")
                 .accessibilityHint("Drag to inspect date and \(title.lowercased())")
         }
-        .padding(.top, ExperienceSpacing.sm)
         .padding(.bottom, ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(

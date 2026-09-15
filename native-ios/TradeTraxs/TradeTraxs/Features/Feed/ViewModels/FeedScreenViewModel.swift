@@ -313,23 +313,23 @@ final class FeedScreenViewModel {
             if let postID = entry.feedTradeEngagementPostID {
                 detailCache.seedFeedEngagementTarget(.feedPost(postID), forTrade: trade.id)
             }
-            navigationCoordinator.open(.feed(.trade(trade.id)))
+            navigationCoordinator.pushFeed(.trade(trade.id))
         case .post(_, let post):
             detailCache.seed(post)
-            navigationCoordinator.open(.feed(.post(post.id)))
+            navigationCoordinator.pushFeed(.post(post.id))
         case .clip(_, let reel):
             detailCache.seed(reel)
-            navigationCoordinator.open(.feed(.reel(reel.id)))
+            navigationCoordinator.pushFeed(.reel(reel.id))
         case .achievement(_, let achievement):
             detailCache.seed(achievement)
             detailCache.seedFeedEngagementTarget(entry.interactionTarget, forAchievement: achievement.id)
-            navigationCoordinator.open(.feed(.achievement(achievement.id)))
+            navigationCoordinator.pushFeed(.achievement(achievement.id))
         }
     }
 
     func openAuthor(_ profileID: ProfileID) {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.feed(.profile(profileID)))
+        navigationCoordinator.pushFeed(.profile(profileID))
     }
 
     func openLinkedTrade(_ tradeID: TradeID) {
@@ -340,7 +340,7 @@ final class FeedScreenViewModel {
         ExperienceHaptics.play(.selection)
         guard let reel = detailCache.reel(id: reelID) else { return }
         detailCache.seed(reel)
-        navigationCoordinator.open(.feed(.reel(reelID)))
+        navigationCoordinator.pushFeed(.reel(reelID))
     }
 
     func openStory(_ story: Story) {

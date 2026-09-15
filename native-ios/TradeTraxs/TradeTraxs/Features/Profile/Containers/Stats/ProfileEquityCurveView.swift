@@ -10,11 +10,16 @@ struct ProfileEquityCurveView: View {
     @Environment(\.themeColors) private var colors
     @State private var selectedIndex: Int?
 
+    /// Canonical ascending index series — same ordering for path, axis, and scrubber.
+    private var orderedPoints: [ProfileStatisticsMetrics.EquityPoint] {
+        ProfileStatisticsMetrics.chartOrderedEquityPoints(points)
+    }
+
     var body: some View {
         Group {
-            if points.count >= 2 {
+            if orderedPoints.count >= 2 {
                 chart
-            } else if let only = points.first {
+            } else if let only = orderedPoints.first {
                 Text(StatsContainerView.equityMoneyText(only.equity))
                     .experienceStyle(.callout, color: colors.secondaryText)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -181,7 +186,7 @@ struct ProfileEquityCurveView: View {
     }
 
     private var chartPoints: [ChartPoint] {
-        points.map {
+        orderedPoints.map {
             ChartPoint(
                 index: $0.index,
                 equity: $0.equity,
@@ -197,7 +202,7 @@ struct ProfileEquityCurveView: View {
     }
 
     private var xDomain: ClosedRange<Int> {
-        let maxIndex = points.map(\.index).max() ?? 1
+        let maxIndex = orderedPoints.map(\.index).max() ?? 1
         return 0...max(1, maxIndex)
     }
 
@@ -214,14 +219,14 @@ struct ProfileEquityCurveView: View {
     }
 
     private var xAxisValues: [Int] {
-        guard let last = points.map(\.index).max(), last > 0 else { return [0] }
+        guard let last = orderedPoints.map(\.index).max(), last > 0 else { return [0] }
         if last < 3 { return Array(0...last) }
         let mid = last / 2
         return [0, mid, last]
     }
 
     private func xLabel(for index: Int) -> String {
-        if let point = points.first(where: { $0.index == index }), let date = point.date {
+        if let point = orderedPoints.first(where: { $0.index == index }), let date = point.date {
             let formatter = DateFormatter()
             formatter.setLocalizedDateFormatFromTemplate("MMMd")
             return formatter.string(from: date)

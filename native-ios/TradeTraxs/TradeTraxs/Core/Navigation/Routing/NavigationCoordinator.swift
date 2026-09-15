@@ -202,7 +202,7 @@ final class NavigationCoordinator {
             InboxMarkReadCoordinator.shared.prepareOpenConversation(conversationID)
         case .room(let roomID):
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
-        case .roomMembers, .roomInfo, .manageRoom, .sharedTrade, .sharedPost, .sharedReel, .sharedAchievement, .profile, .settings:
+        case .roomMembers, .roomInfo, .manageRoom, .roomSettings, .sharedTrade, .sharedPost, .sharedReel, .sharedAchievement, .profile, .settings:
             break
         }
         let pathBefore = store.paths.messages.count
@@ -237,17 +237,220 @@ final class NavigationCoordinator {
         emit(.pushed(tab: .profile, description: String(describing: route)))
     }
 
-    /// Opens trade detail on the active tab stack without switching tabs.
+    /// Opens social trade detail on the active tab stack without switching tabs.
     func pushTradeDetail(_ tradeID: TradeID, cache: DetailPresentationCache) {
+        pushSocialTrade(tradeID, cache: cache)
+    }
+
+    func pushSocialTrade(_ tradeID: TradeID, cache: DetailPresentationCache? = nil) {
         ExperienceHaptics.play(.selection)
-        if let trade = cache.trade(id: tradeID) {
+        if let cache, let trade = cache.trade(id: tradeID) {
             cache.seed(trade)
         }
         switch store.selectedTab {
+        case .home:
+            pushHome(.socialTrade(tradeID))
+        case .feed:
+            pushFeed(.trade(tradeID))
+        case .messages:
+            pushMessages(.sharedTrade(tradeID))
         case .profile:
             pushProfile(.trade(tradeID))
-        default:
+        case .create:
+            break
+        }
+    }
+
+    func pushPostDetail(_ postID: PostID) {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.post(postID))
+        case .feed:
+            pushFeed(.post(postID))
+        case .messages:
+            pushMessages(.sharedPost(postID))
+        case .profile:
+            pushProfile(.post(postID))
+        case .create:
+            break
+        }
+    }
+
+    func pushReelDetail(_ reelID: ReelID) {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.reel(reelID))
+        case .feed:
+            pushFeed(.reel(reelID))
+        case .messages:
+            pushMessages(.sharedReel(reelID))
+        case .profile:
+            pushProfile(.reel(reelID))
+        case .create:
+            break
+        }
+    }
+
+    func pushAchievementDetail(_ achievementID: AchievementID) {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.achievementDetail(achievementID))
+        case .feed:
+            pushFeed(.achievement(achievementID))
+        case .messages:
+            pushMessages(.sharedAchievement(achievementID))
+        case .profile:
+            pushProfile(.achievement(achievementID))
+        case .create:
+            break
+        }
+    }
+
+    func pushOtherProfile(_ profileID: ProfileID) {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.otherProfile(profileID))
+        case .feed:
+            pushFeed(.profile(profileID))
+        case .messages:
+            pushMessages(.profile(profileID))
+        case .profile:
+            pushProfile(.otherProfile(profileID))
+        case .create:
+            break
+        }
+    }
+
+    func pushRoom(_ roomID: RoomID) {
+        ExperienceHaptics.play(.selection)
+        InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.room(roomID))
+        case .feed:
+            pushFeed(.room(roomID))
+        case .messages:
+            pushMessages(.room(roomID))
+        case .profile:
+            pushProfile(.room(roomID))
+        case .create:
+            break
+        }
+    }
+
+    /// Push using an explicit tab stack (e.g. Trade Room host) without changing the selected tab.
+    func pushSharedContent(
+        _ reference: SharedContentReference,
+        cache: DetailPresentationCache,
+        host: TradeRoomNavigationHost
+    ) {
+        ExperienceHaptics.play(.selection)
+        switch host {
+        case .messages:
+            pushSharedContentOnMessagesStack(reference, cache: cache)
+        case .feed:
+            pushSharedContentOnFeedStack(reference, cache: cache)
+        case .profile:
+            pushSharedContentOnProfileStack(reference, cache: cache)
+        case .home:
+            pushSharedContentOnHomeStack(reference, cache: cache)
+        }
+    }
+
+    func pushSharedTrade(_ tradeID: TradeID, host: TradeRoomNavigationHost, cache: DetailPresentationCache? = nil) {
+        ExperienceHaptics.play(.selection)
+        if let cache, let trade = cache.trade(id: tradeID) {
+            cache.seed(trade)
+        }
+        switch host {
+        case .home:
+            pushHome(.socialTrade(tradeID))
+        case .feed:
             pushFeed(.trade(tradeID))
+        case .messages:
+            pushMessages(.sharedTrade(tradeID))
+        case .profile:
+            pushProfile(.trade(tradeID))
+        }
+    }
+
+    private func pushSharedContentOnMessagesStack(_ reference: SharedContentReference, cache: DetailPresentationCache) {
+        switch reference {
+        case .feedPost(let postID):
+            if let post = cache.post(id: postID), let tradeID = post.linkedTradeID {
+                pushMessages(.sharedTrade(tradeID))
+            } else {
+                pushMessages(.sharedPost(postID))
+            }
+        case .profilePost(let postID):
+            pushMessages(.sharedPost(postID))
+        case .achievementPost(let postID):
+            pushMessages(.sharedAchievement(AchievementID(postID.rawValue)))
+        case .reel(let reelID):
+            pushMessages(.sharedReel(reelID))
+        case .trade(let tradeID):
+            pushMessages(.sharedTrade(tradeID))
+        }
+    }
+
+    private func pushSharedContentOnFeedStack(_ reference: SharedContentReference, cache: DetailPresentationCache) {
+        switch reference {
+        case .feedPost(let postID):
+            if let post = cache.post(id: postID), let tradeID = post.linkedTradeID {
+                pushFeed(.trade(tradeID))
+            } else {
+                pushFeed(.post(postID))
+            }
+        case .profilePost(let postID):
+            pushFeed(.post(postID))
+        case .achievementPost(let postID):
+            pushFeed(.achievement(AchievementID(postID.rawValue)))
+        case .reel(let reelID):
+            pushFeed(.reel(reelID))
+        case .trade(let tradeID):
+            pushFeed(.trade(tradeID))
+        }
+    }
+
+    private func pushSharedContentOnProfileStack(_ reference: SharedContentReference, cache: DetailPresentationCache) {
+        switch reference {
+        case .feedPost(let postID):
+            if let post = cache.post(id: postID), let tradeID = post.linkedTradeID {
+                pushProfile(.trade(tradeID))
+            } else {
+                pushProfile(.post(postID))
+            }
+        case .profilePost(let postID):
+            pushProfile(.post(postID))
+        case .achievementPost(let postID):
+            pushProfile(.achievement(AchievementID(postID.rawValue)))
+        case .reel(let reelID):
+            pushProfile(.reel(reelID))
+        case .trade(let tradeID):
+            pushProfile(.trade(tradeID))
+        }
+    }
+
+    private func pushSharedContentOnHomeStack(_ reference: SharedContentReference, cache: DetailPresentationCache) {
+        switch reference {
+        case .feedPost(let postID):
+            if let post = cache.post(id: postID), let tradeID = post.linkedTradeID {
+                pushHome(.socialTrade(tradeID))
+            } else {
+                pushHome(.post(postID))
+            }
+        case .profilePost(let postID):
+            pushHome(.post(postID))
+        case .achievementPost(let postID):
+            pushHome(.achievementDetail(AchievementID(postID.rawValue)))
+        case .reel(let reelID):
+            pushHome(.reel(reelID))
+        case .trade(let tradeID):
+            pushHome(.socialTrade(tradeID))
         }
     }
 
@@ -265,6 +468,27 @@ final class NavigationCoordinator {
             pathAfter: pathCount(for: tab)
         )
         emit(.popped(tab: tab))
+    }
+
+    /// Owner deleted a journal trade — always land on Home → Trades (not the prior screen).
+    func completeTradeDeletionNavigation() {
+        dismissPresentation()
+        let pathBefore = store.paths.home.count
+        if store.selectedTab != .home {
+            store.rememberContentTabIfNeeded(.home)
+            store.selectedTab = .home
+            emit(.tabSelected(.home))
+        }
+        store.paths.home = [.trades]
+        logNavigationEvent(
+            action: "replace",
+            source: "completeTradeDeletionNavigation",
+            destination: "trades",
+            tab: .home,
+            pathBefore: pathBefore,
+            pathAfter: store.paths.home.count
+        )
+        emit(.poppedToRoot(.home))
     }
 
     func popToRoot(_ tab: TabIdentifier) {

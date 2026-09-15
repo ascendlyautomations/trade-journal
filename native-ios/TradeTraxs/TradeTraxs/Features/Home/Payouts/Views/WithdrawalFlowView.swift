@@ -162,12 +162,10 @@ struct WithdrawalFlowView: View {
                 }
             }
         }
+        .experienceArrowBackToolbarButton {
+            selectedAccountID = nil
+        }
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Back") {
-                    selectedAccountID = nil
-                }
-            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     Task {

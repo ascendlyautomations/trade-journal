@@ -8,6 +8,7 @@ struct DashboardHomeView: View {
     @State private var deferredDashboardBootstrapStarted = false
     @State private var gettingStartedStore = GettingStartedStore.shared
     @State private var dailyCheckInStore = TraderDailyCheckInStore.shared
+    @Bindable private var brokerImportEligibilityStore = BrokerImportEligibilityStore.shared
     private let navigationCoordinator: NavigationCoordinator
     private let data: DataEnvironment?
 
@@ -108,10 +109,12 @@ struct DashboardHomeView: View {
         }
         .refreshable {
             await viewModel.refresh()
+            await brokerImportEligibilityStore.refreshAndWait(fromUserAction: true)
         }
         .task(id: tabIsActive) {
             guard tabIsActive else { return }
             viewModel.loadIfNeeded()
+            brokerImportEligibilityStore.loadIfNeeded()
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-uitesting-dashboard-propfirm") {
                 try? await Task.sleep(nanoseconds: 200_000_000)
@@ -148,6 +151,7 @@ struct DashboardHomeView: View {
         }
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
             viewModel.handleAccountMutation()
+            brokerImportEligibilityStore.refresh(fromUserAction: false)
         }
         .onChange(of: viewModel.summary?.tradeCount) { _, _ in
             revealContentIfNeeded()
@@ -168,11 +172,7 @@ struct DashboardHomeView: View {
                     )
                     .padding(.horizontal, ExperienceSpacing.md)
                 }
-                DailyCheckInCard(store: dailyCheckInStore) {
-                    ExperienceHaptics.play(.selection)
-                    navigationCoordinator.present(sheet: .dailyCheckIn)
-                }
-                .padding(.horizontal, ExperienceSpacing.md)
+                dashboardQuickActionsGroup(includeBrokerImport: true)
                 ExperienceEmptyState(
                     icon: .chart,
                     title: "No trades yet",
@@ -201,12 +201,7 @@ struct DashboardHomeView: View {
                         .padding(.bottom, ExperienceSpacing.lg)
                     }
 
-                    DailyCheckInCard(store: dailyCheckInStore) {
-                        ExperienceHaptics.play(.selection)
-                        navigationCoordinator.present(sheet: .dailyCheckIn)
-                    }
-                    .padding(.horizontal, ExperienceSpacing.md)
-                    .padding(.bottom, ExperienceSpacing.lg)
+                    dashboardQuickActionsGroup(includeBrokerImport: true)
 
                     DashboardEquityHero(
                         summary: summary,
@@ -365,7 +360,9 @@ struct DashboardHomeView: View {
         VStack(spacing: ExperienceSpacing.md) {
             ExperienceSkeleton(height: 36, cornerRadius: ExperienceRadius.sm)
                 .padding(.horizontal, ExperienceSpacing.md)
-            ExperienceSkeleton(height: 88, cornerRadius: ExperienceRadius.sm)
+            ExperienceSkeleton(height: 60, cornerRadius: ExperienceRadius.sm)
+                .padding(.horizontal, ExperienceSpacing.md)
+            ExperienceSkeleton(height: 60, cornerRadius: ExperienceRadius.sm)
                 .padding(.horizontal, ExperienceSpacing.md)
             ExperienceSkeleton(height: 280, cornerRadius: ExperienceRadius.md)
                 .padding(.horizontal, ExperienceSpacing.md)
@@ -383,6 +380,25 @@ struct DashboardHomeView: View {
         .transition(.opacity)
     }
 
+    @ViewBuilder
+    private func dashboardQuickActionsGroup(includeBrokerImport: Bool) -> some View {
+        VStack(spacing: ExperienceSpacing.xs) {
+            DailyCheckInCard(store: dailyCheckInStore) {
+                ExperienceHaptics.play(.selection)
+                navigationCoordinator.present(sheet: .dailyCheckIn)
+            }
+
+            if includeBrokerImport, brokerImportEligibilityStore.showsDashboardImportAction {
+                DashboardBrokerImportCard(store: brokerImportEligibilityStore) {
+                    ExperienceHaptics.play(.selection)
+                    navigationCoordinator.present(sheet: .tradeImportReminder)
+                }
+            }
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.bottom, ExperienceSpacing.sm)
+    }
+
     private func toneColor(_ tone: DashboardMetricTone) -> Color {
         switch tone {
         case .neutral: return colors.primaryText
@@ -398,6 +414,7 @@ struct DashboardHomeView: View {
         Task(priority: .utility) {
             gettingStartedStore.loadIfNeeded()
             dailyCheckInStore.loadIfNeeded()
+            brokerImportEligibilityStore.loadIfNeeded()
             if let data {
                 activityStore.ensureUnreadBootstrap(
                     notifications: data.notifications,

@@ -144,6 +144,19 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
         }
     }
 
+    func testDeleteTradeNavigatesToTradesList() {
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        store.selectedTab = .home
+        store.paths.home = [.tradeDetail(TradeID("del-nav-1"))]
+        let coordinator = NavigationCoordinator(store: store)
+
+        coordinator.completeTradeDeletionNavigation()
+
+        XCTAssertEqual(store.selectedTab, .home)
+        XCTAssertEqual(store.paths.home, [.trades])
+    }
+
     func testApplyUpdatedRefreshesTradeDetailWithoutReload() async {
         let environment = CompositionRoot.bootstrapAppEnvironment()
         TradeJournalMutationStore.shared.configure(detailCache: environment.data.detailCache)

@@ -86,6 +86,28 @@ nonisolated struct TradingCalendarMonth: Hashable, Sendable {
     var days: [String: TradingDaySummary]
 }
 
+/// One month tile in the year overview (matches ``TradingCalendarAggregator/buildMonth`` totals).
+nonisolated struct TradingYearMonthCard: Hashable, Sendable, Identifiable {
+    var month: Int
+    var abbreviation: String
+    var summary: TradingMonthSummary
+    /// Civil month is after the current month in the current year — display neutral empty P&L.
+    var isFutureMonth: Bool
+
+    var id: Int { month }
+}
+
+/// Year-at-a-glance snapshot derived from the same month aggregation as Month view.
+nonisolated struct TradingYearOverview: Hashable, Sendable {
+    var year: Int
+    var months: [TradingYearMonthCard]
+    var netPnL: Decimal
+    var tradingDayCount: Int
+    var tradeWinRate: Decimal?
+    var bestMonthAbbreviation: String?
+    var bestMonthPnL: Decimal?
+}
+
 /// Year-month identity for cache keys / navigation.
 nonisolated struct CalendarMonthID: Hashable, Codable, Sendable, Comparable {
     var year: Int

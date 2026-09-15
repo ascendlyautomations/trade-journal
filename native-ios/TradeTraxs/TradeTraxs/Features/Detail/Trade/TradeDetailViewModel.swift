@@ -151,7 +151,7 @@ final class TradeDetailViewModel {
             cache.removeTrade(id: tradeID)
             TradeJournalMutationStore.shared.noteDeleted(id: tradeID, owner: owner)
             ExperienceHaptics.play(.success)
-            navigationCoordinator.pop()
+            navigationCoordinator.completeTradeDeletionNavigation()
             return true
         } catch {
             deleteErrorMessage = ProfileSectionSupport.message(for: error)
@@ -187,7 +187,7 @@ final class TradeDetailViewModel {
         case .updated(let trade) where trade.id == tradeID:
             applyUpdated(trade)
         case .deleted(let id, _) where id == tradeID:
-            navigationCoordinator.pop()
+            navigationCoordinator.completeTradeDeletionNavigation()
         default:
             break
         }

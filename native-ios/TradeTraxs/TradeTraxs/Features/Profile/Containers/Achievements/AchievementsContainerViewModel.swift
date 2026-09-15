@@ -21,6 +21,8 @@ final class AchievementsContainerViewModel {
     private var isLoadingMore = false
     private var paginationGeneration = 0
     private var isScreenOwned = false
+    private var awaitingScreenBootstrap = false
+    private let initialLoadFailureGrace = ProfileSectionFailureGrace()
 
     var hasAuthoritativePayload: Bool { hasLoaded }
 
@@ -54,12 +56,22 @@ final class AchievementsContainerViewModel {
         if snapshot.didBootstrap || snapshot.phase == .loaded {
             isScreenOwned = true
         }
+        awaitingScreenBootstrap = ProfileSectionInitialLoad.awaitingScreenBootstrap(
+            isScreenOwned: isScreenOwned,
+            snapshot: snapshot,
+            didLoadSection: snapshot.didLoadAchievements,
+            sectionItemsEmpty: snapshot.achievements.isEmpty,
+            localItemsEmpty: items.isEmpty
+        )
         guard snapshot.didLoadAchievements || !snapshot.achievements.isEmpty else {
             if (snapshot.phase == .loading || snapshot.didBootstrap), items.isEmpty {
                 state = .loading
             }
             return
         }
+
+        awaitingScreenBootstrap = false
+        initialLoadFailureGrace.cancel()
         let reconciled = ProfileSectionSupport.reconcileSectionItems(
             snapshotItems: snapshot.achievements,
             loadedItems: items,
@@ -75,6 +87,12 @@ final class AchievementsContainerViewModel {
 
     func loadIfNeeded() {
         guard !hasLoaded, loadTask == nil else { return }
+        if awaitingScreenBootstrap {
+            if items.isEmpty {
+                state = .loading
+            }
+            return
+        }
         loadTask = Task { await performLoad(reset: true) }
     }
 
@@ -136,6 +154,7 @@ final class AchievementsContainerViewModel {
         }
 
         state = items.isEmpty ? .loading : state
+        initialLoadFailureGrace.cancel()
         do {
             let pageItems: [Achievement]
             let cursor: String?
@@ -165,12 +184,23 @@ final class AchievementsContainerViewModel {
             nextCursor = cursor
             detailCache.seed(achievements: items)
             hasLoaded = true
+            initialLoadFailureGrace.cancel()
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
             prefetchEngagement(for: items.map(\.id))
         } catch {
             guard !Task.isCancelled else { return }
             if items.isEmpty {
-                state = .failed(message: ProfileSectionSupport.message(for: error))
+                if awaitingScreenBootstrap {
+                    state = .loading
+                } else {
+                    let message = ProfileSectionSupport.message(for: error)
+                    initialLoadFailureGrace.scheduleIfNeeded(message: message) { [weak self] in
+                        guard let self else { return false }
+                        return !hasLoaded && items.isEmpty && !awaitingScreenBootstrap
+                    } present: { [weak self] message in
+                        self?.state = .failed(message: message)
+                    }
+                }
             }
         }
         loadTask = nil

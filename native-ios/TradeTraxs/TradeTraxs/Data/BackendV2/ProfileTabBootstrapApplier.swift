@@ -80,8 +80,20 @@ nonisolated enum ProfileTabBootstrapApplier {
             guard let wires = try? decoder.decode([ProfileTabWireMapping.ReelWire].self, from: payload) else {
                 return emptyApplied(tab: tab, bootstrap: bootstrap)
             }
-            let reels = wires.compactMap { ProfileTabWireMapping.mapReel($0, ownerID: ownerID) }
-            return Applied(reels: reels, nextCursor: bootstrap.data.next_cursor)
+            var reels: [Reel] = []
+            var linkedTrades: [Trade] = []
+            for wire in wires {
+                guard let reel = ProfileTabWireMapping.mapReel(wire, ownerID: ownerID) else { continue }
+                reels.append(reel)
+                if let trade = ProfileTabWireMapping.mapLinkedTrade(from: wire, ownerID: ownerID) {
+                    linkedTrades.append(trade)
+                }
+            }
+            return Applied(
+                trades: linkedTrades.isEmpty ? nil : linkedTrades,
+                reels: reels,
+                nextCursor: bootstrap.data.next_cursor
+            )
 
         case .achievements:
             guard let wires = try? decoder.decode([AchievementDTO.Achievement].self, from: payload) else {
@@ -115,6 +127,31 @@ nonisolated enum ProfileTabWireMapping {
         var visibility: String?
         var trade_id: String?
         var created_at: String?
+        /// Joined trade row when `rpc_v1_profile_tab_reels` embeds `trades`.
+        var trades: ReelTradeJoinBox?
+    }
+
+    struct ReelTradeJoinWire: Codable, Sendable {
+        var id: String?
+        var public_description: String?
+        var is_public: Bool?
+        var ticker: String?
+        var direction: String?
+        var pnl: FlexibleNumber?
+        var rr: FlexibleNumber?
+    }
+
+    /// PostgREST / RPC may return a single trade object or a one-element array.
+    struct ReelTradeJoinBox: Codable, Sendable {
+        var trades: [ReelTradeJoinWire]
+
+        init(from decoder: Decoder) throws {
+            if let single = try? ReelTradeJoinWire(from: decoder) {
+                trades = [single]
+                return
+            }
+            trades = try [ReelTradeJoinWire](from: decoder)
+        }
     }
 
     static func mapWallPost(_ dto: FeedDTO.ProfileWallPost) -> Post? {
@@ -163,6 +200,25 @@ nonisolated enum ProfileTabWireMapping {
             durationSeconds: row.duration_seconds,
             createdAt: ISO8601.date(from: row.created_at) ?? Date()
         )
+    }
+
+    static func mapLinkedTrade(from row: ReelWire, ownerID: ProfileID) -> Trade? {
+        let tradeIDRaw = row.trade_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !tradeIDRaw.isEmpty else { return nil }
+        guard let join = row.trades?.trades.first else { return nil }
+        guard join.is_public != false else { return nil }
+
+        var dto = TradeDTO.Trade()
+        dto.id = join.id ?? tradeIDRaw
+        dto.user_id = ownerID.rawValue
+        dto.ticker = join.ticker
+        dto.direction = join.direction
+        dto.public_description = join.public_description
+        dto.pnl = join.pnl
+        dto.rr = join.rr
+        dto.is_public = join.is_public ?? true
+        dto.created_at = row.created_at
+        return try? TradeMapper.mapToDomain(dto)
     }
 
     static func mapAchievement(_ dto: AchievementDTO.Achievement) -> Achievement? {

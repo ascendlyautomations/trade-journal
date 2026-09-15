@@ -242,9 +242,12 @@ final class RoomMembersViewModel {
             }
             RoomMembersLoadProbe.profilesReturned(count: fetchedProfiles.count)
 
-            let profileByID = Dictionary(
-                uniqueKeysWithValues: (fetchedProfiles + activeRows.map(\.profile)).map { ($0.id, $0) }
-            )
+            let embeddedProfiles = activeRows.map(\.profile)
+            let profileByID = ProfileDictionaryByID.build(embeddedProfiles, fetchedProfiles) { id, _, _ in
+                #if DEBUG
+                RoomMembersLoadProbe.duplicateProfileIDInHydration(id)
+                #endif
+            }
 
             members = activeRows.map { row in
                 RoomMemberItem(

@@ -175,6 +175,7 @@ struct FeedStoryViewerView: View {
                 StoryPlaybackMediaView(
                     reference: story.media,
                     imagePipeline: imagePipeline,
+                    objectStorage: data.objectStorage,
                     player: viewModel.playback.player,
                     isVideo: viewModel.isVideoStory
                 )

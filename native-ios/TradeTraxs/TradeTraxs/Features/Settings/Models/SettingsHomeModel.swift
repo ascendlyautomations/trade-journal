@@ -5,7 +5,10 @@ struct SettingsHomeItem: Identifiable, Hashable, Sendable {
     var id: SettingsRoute { route }
     let route: SettingsRoute
     let systemImage: String
-    var subtitle: String? = nil
+    /// Optional home-row label; destination screens keep ``SettingsRoute/title``.
+    var displayTitle: String? = nil
+
+    var rowTitle: String { displayTitle ?? route.title }
 }
 
 struct SettingsHomeSection: Identifiable, Hashable, Sendable {
@@ -23,52 +26,39 @@ enum SettingsHomeModel {
             items: [
                 SettingsHomeItem(route: .account, systemImage: "person.crop.circle"),
                 SettingsHomeItem(route: .profile, systemImage: "person.text.rectangle"),
-                SettingsHomeItem(route: .security, systemImage: "lock.shield"),
-            ]
-        ),
-        SettingsHomeSection(
-            id: "preferences",
-            title: "Preferences",
-            items: [
+                SettingsHomeItem(route: .privacy, systemImage: "hand.raised"),
                 SettingsHomeItem(route: .notifications, systemImage: "bell"),
-                SettingsHomeItem(route: .appearance, systemImage: "circle.lefthalf.filled"),
-            ]
-        ),
-        SettingsHomeSection(
-            id: "personal",
-            title: "Personal",
-            items: [
-                SettingsHomeItem(
-                    route: .vault,
-                    systemImage: "hexagon.fill",
-                    subtitle: "Saved trades, clips, posts & achievements"
-                ),
             ]
         ),
         SettingsHomeSection(
             id: "tradetraxs",
             title: "TradeTraxs",
             items: [
-                SettingsHomeItem(route: .subscription, systemImage: "creditcard"),
-                SettingsHomeItem(route: .tradingAccounts, systemImage: "chart.bar.doc.horizontal"),
                 SettingsHomeItem(
-                    route: .payouts,
-                    systemImage: "building.columns",
-                    subtitle: "Withdrawal history and totals"
+                    route: .subscription,
+                    systemImage: "creditcard",
+                    displayTitle: "Subscription"
                 ),
+                SettingsHomeItem(
+                    route: .tradingAccounts,
+                    systemImage: "chart.bar.doc.horizontal",
+                    displayTitle: "Trading Accounts"
+                ),
+                SettingsHomeItem(route: .payouts, systemImage: "building.columns"),
                 SettingsHomeItem(route: .affiliate, systemImage: "gift"),
             ]
         ),
         SettingsHomeSection(
-            id: "privacy",
-            title: "Privacy & Safety",
+            id: "personal",
+            title: "Personal",
             items: [
-                SettingsHomeItem(route: .privacy, systemImage: "hand.raised"),
+                SettingsHomeItem(route: .vault, systemImage: "hexagon.fill"),
+                SettingsHomeItem(route: .appearance, systemImage: "circle.lefthalf.filled"),
             ]
         ),
         SettingsHomeSection(
             id: "support",
-            title: "Support & Information",
+            title: "Support",
             items: [
                 SettingsHomeItem(route: .support, systemImage: "questionmark.circle"),
                 SettingsHomeItem(route: .about, systemImage: "info.circle"),

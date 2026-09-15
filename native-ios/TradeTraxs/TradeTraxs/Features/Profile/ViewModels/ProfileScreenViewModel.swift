@@ -57,6 +57,9 @@ final class ProfileScreenViewModel {
             navigationCoordinator: navigationCoordinator,
             detailCache: data.detailCache
         )
+        var loading = ProfileState()
+        loading.phase = .loading
+        content.applyBootstrap(loading)
     }
 
     var showsSettingsToolbar: Bool {

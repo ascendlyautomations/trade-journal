@@ -63,7 +63,6 @@ enum TradeImportReminderScheduler {
 
         guard isEnabled else { return }
 
-        let calendar = easternCalendar
         for slot in slots {
             var components = DateComponents()
             components.timeZone = easternTimeZone

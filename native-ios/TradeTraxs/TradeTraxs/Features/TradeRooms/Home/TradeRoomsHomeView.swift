@@ -136,16 +136,21 @@ struct TradeRoomsHomeView: View {
     @ViewBuilder
     private var headerOwnershipAction: some View {
         if viewModel.isHeaderOwnershipResolved {
-            if viewModel.viewerOwnedRoom != nil {
+            if let ownedRoom = viewModel.viewerOwnedRoom {
                 Button(action: { viewModel.openOwnedRoom() }) {
-                    Text("Your Room")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(colors.onAccent)
-                        .padding(.horizontal, ExperienceSpacing.xs)
-                        .padding(.vertical, ExperienceSpacing.xxs)
-                        .background(colors.accent, in: Capsule())
+                    TradeRoomCircularAvatar(
+                        imageReference: ownedRoom.imageReference,
+                        imagePipeline: imagePipeline,
+                        diameter: 32
+                    )
+                    .frame(
+                        width: ExperienceAccessibility.minTouchTarget,
+                        height: ExperienceAccessibility.minTouchTarget
+                    )
+                    .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Your Room")
                 .accessibilityIdentifier("tradeRooms.yourRoom")
             } else {
                 Button(action: { viewModel.presentCreateRoom() }) {

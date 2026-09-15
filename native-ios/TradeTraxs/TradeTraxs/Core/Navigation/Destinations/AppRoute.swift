@@ -37,6 +37,14 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case followRequests
     /// Trade Room join request detail opened from Activity / push.
     case tradeRoomJoinRequest(String)
+    /// Social / shared trade detail (not owner journal AI detail).
+    case socialTrade(TradeID)
+    case post(PostID)
+    case reel(ReelID)
+    case otherProfile(ProfileID)
+    case room(RoomID)
+    case rooms
+    case affiliate
     /// Hierarchical Settings — owned by the Home tab stack that opened Settings.
     case settings(SettingsRoute)
 }
@@ -57,6 +65,7 @@ enum FeedRoute: Hashable, Codable, Sendable {
     case roomMembers(RoomID)
     case roomInfo(RoomID)
     case manageRoom(RoomID)
+    case roomSettings(RoomID)
     /// Hierarchical Settings — owned by the Feed tab stack that opened Settings.
     case settings(SettingsRoute)
 }
@@ -73,6 +82,7 @@ enum MessagesRoute: Hashable, Codable, Sendable {
     case roomMembers(RoomID)
     case roomInfo(RoomID)
     case manageRoom(RoomID)
+    case roomSettings(RoomID)
     /// Hierarchical Settings — owned by the Messages tab stack that opened Settings.
     case settings(SettingsRoute)
 }
@@ -101,6 +111,7 @@ enum ProfileRoute: Hashable, Codable, Sendable {
     case roomMembers(RoomID)
     case roomInfo(RoomID)
     case manageRoom(RoomID)
+    case roomSettings(RoomID)
 }
 
 /// Settings navigation hierarchy (Instagram / Apple Settings style).
@@ -114,6 +125,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case profile
     case notifications
     case appearance
+    case notificationsTradetraxsReminders = "notifications-tradetraxs-reminders"
     case notificationsMessages = "notifications-messages"
     case notificationsSocial = "notifications-social"
     case notificationsRooms = "notifications-rooms"
@@ -144,6 +156,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .profile: return "Profile"
         case .notifications: return "Notifications"
         case .appearance: return "Appearance"
+        case .notificationsTradetraxsReminders: return "TradeTraxs Reminders"
         case .notificationsMessages: return "Messages"
         case .notificationsSocial: return "Social Activity"
         case .notificationsRooms: return "Trade Rooms"

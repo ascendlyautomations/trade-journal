@@ -7,6 +7,11 @@ enum CalendarLoadPhase: Equatable, Sendable {
     case failed(String)
 }
 
+enum CalendarDisplayScope: String, CaseIterable, Sendable {
+    case month
+    case year
+}
+
 nonisolated enum CalendarFormatting {
     /// Compact day-cell P&L (`+$842`, `-$1.2K`).
     static func compactPnL(_ value: Decimal) -> String {

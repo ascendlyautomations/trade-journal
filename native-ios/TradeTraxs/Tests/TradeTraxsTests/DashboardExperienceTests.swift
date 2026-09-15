@@ -356,6 +356,81 @@ final class DashboardExperienceTests: XCTestCase {
         XCTAssertEqual(summary.currentEquity, 70)
     }
 
+    func testDashboardInsightDisplayCopyNeverContainsEmDash() {
+        let emDash = "\u{2014}"
+        let insight = DashboardInsightItem(
+            id: "session",
+            title: "Protect your best session",
+            body: "Your strongest session is New York — consider focusing there.",
+            kind: .session
+        )
+        XCTAssertFalse(insight.displayTitle.contains(emDash))
+        XCTAssertFalse(insight.displayBody.contains(emDash))
+        XCTAssertEqual(
+            insight.displayBody,
+            "Your strongest session is New York, consider focusing there."
+        )
+    }
+
+    func testEquityCurveDatesIncreaseWithPointIndexWhenTradeInputsUnsorted() {
+        let profileID = ProfileID("dev.dashboard")
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        func trade(id: String, month: Int, day: Int, pnl: Decimal) -> Trade {
+            var components = calendar.dateComponents([.year], from: now)
+            components.month = month
+            components.day = day
+            components.hour = 12
+            let stamp = calendar.date(from: components) ?? now
+            return Trade(
+                id: TradeID(id),
+                ownerProfileID: profileID,
+                accountID: nil,
+                symbol: Symbol(ticker: "MNQ"),
+                side: .long,
+                mode: .live,
+                quantity: 1,
+                entryPrice: 1,
+                exitPrice: 1,
+                entryAt: stamp,
+                exitAt: stamp,
+                realizedPnL: Money(amount: pnl),
+                riskReward: nil,
+                points: nil,
+                sessionLabel: "NY",
+                visibility: .private,
+                publicCaption: nil,
+                thumbnail: nil,
+                notePreview: nil,
+                createdAt: stamp,
+                updatedAt: stamp
+            )
+        }
+        // Deliberately unsorted: Jun 17, Jun 13, Jun 21
+        let inputs = [
+            trade(id: "mid", month: 6, day: 17, pnl: 10),
+            trade(id: "early", month: 6, day: 13, pnl: 20),
+            trade(id: "late", month: 6, day: 21, pnl: -5),
+        ].map { DashboardChartMetrics.Input(trade: $0, accountType: nil) }
+
+        let summary = DashboardChartMetrics.compute(
+            from: inputs,
+            accountFilter: .all,
+            dateRange: .all,
+            payoutTotal: nil,
+            now: now
+        )
+
+        XCTAssertEqual(summary.equityData.count, 3)
+        let dates = summary.equityData.compactMap(\.date)
+        XCTAssertEqual(dates.count, 3)
+        for index in 0..<(dates.count - 1) {
+            XCTAssertLessThanOrEqual(dates[index], dates[index + 1])
+        }
+        XCTAssertEqual(summary.equityData.map(\.index), [0, 1, 2])
+        XCTAssertEqual(summary.currentEquity, 25)
+    }
+
     func testEquityHeroPresentationOffsetsPropAccountOnly() {
         let points: [ProfileStatisticsMetrics.EquityPoint] = [
             .init(index: 0, equity: 500, date: nil),

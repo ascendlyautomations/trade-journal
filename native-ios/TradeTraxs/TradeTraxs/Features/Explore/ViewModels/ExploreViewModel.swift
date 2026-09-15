@@ -298,6 +298,11 @@ final class ExploreViewModel {
         navigationCoordinator.open(.feed(.suggestedTraders))
     }
 
+    func openTradeRooms() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.open(.feed(.rooms))
+    }
+
     // MARK: - Private
 
     private func bootstrap() async {

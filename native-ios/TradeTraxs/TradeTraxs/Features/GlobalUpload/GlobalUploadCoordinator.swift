@@ -474,8 +474,8 @@ final class GlobalUploadCoordinator {
                         feed: services.feed,
                         uploadService: services.uploadService,
                         objectStorage: services.objectStorage,
-                        onProgress: { [weak self] value in
-                            Task { @MainActor in
+                        onProgress: { value in
+                            Task { @MainActor [weak self] in
                                 self?.updateJob(jobID) { job in
                                     if value < 0.2 {
                                         job.phase = .encoding
@@ -873,8 +873,8 @@ final class GlobalUploadCoordinator {
                 }
                 let draft = snapshot.asDraft
                 reelDraftForCleanup = draft
-                resolvedReel = try await ReelEncodingPipeline.resolveUploadVideo(draft: draft) { [weak self] value in
-                    Task { @MainActor in
+                resolvedReel = try await ReelEncodingPipeline.resolveUploadVideo(draft: draft) { value in
+                    Task { @MainActor [weak self] in
                         self?.updateJob(jobID) { job in
                             job.phase = .encoding
                             job.progress = value * 0.2
@@ -901,8 +901,8 @@ final class GlobalUploadCoordinator {
                 await UploadProgressRelay.shared.configureAggregate(
                     jobID: jobID,
                     totalBytes: aggregateTotal
-                ) { [weak self] fraction in
-                    Task { @MainActor in
+                ) { fraction in
+                    Task { @MainActor [weak self] in
                         self?.updateJob(jobID) { job in
                             job.phase = .uploading
                             job.progress = min(0.85, fraction * 0.85)

@@ -109,6 +109,32 @@ final class CalendarExperienceTests: XCTestCase {
         XCTAssertFalse(month.weekSummaries.isEmpty)
     }
 
+    func testYearOverviewMonthTotalsMatchBuildMonth() {
+        let owner = CalendarFixtures.viewerID
+        let trades = CalendarFixtures.trades(owner: owner)
+        let year = 2026
+        let overview = TradingCalendarAggregator.buildYearOverview(
+            year: year,
+            trades: trades,
+            accountFilter: .all,
+            now: Calendar.current.date(from: DateComponents(year: 2026, month: 12, day: 31))!
+        )
+        for card in overview.months where !card.isFutureMonth {
+            let month = TradingCalendarAggregator.buildMonth(
+                year: year,
+                month: card.month,
+                trades: trades,
+                accountFilter: .all,
+                todayKey: nil
+            )
+            XCTAssertEqual(
+                card.summary.netPnL,
+                month.monthSummary.netPnL,
+                "Month \(card.month) P&L mismatch"
+            )
+        }
+    }
+
     func testEmptyDayVersusBreakevenAreDistinct() {
         let cells = TradingCalendarAggregator.makeGridCells(
             year: 2026,

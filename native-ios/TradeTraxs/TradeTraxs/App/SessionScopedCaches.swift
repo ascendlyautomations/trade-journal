@@ -63,7 +63,11 @@ enum SessionScopedCaches {
         FollowMutationCoordinator.shared.invalidate()
         GettingStartedStore.shared.invalidate()
         TraderDailyCheckInStore.shared.invalidate()
-        Task { await DailyCheckInReminderCoordinator.shared.cancelAll() }
+        BrokerImportEligibilityStore.shared.invalidate()
+        Task {
+            await DailyCheckInReminderCoordinator.shared.cancelAll()
+            await TradeImportReminderCoordinator.shared.cancelAll()
+        }
         SessionDailyCheckInsStore.shared.invalidate()
         PsychologyAnalyticsSessionStore.shared.update(nil)
         PsychologyCoachSessionStore.shared.invalidate()

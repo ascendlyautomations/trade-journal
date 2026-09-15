@@ -82,6 +82,7 @@ final class SettingsNotificationsViewModel {
             phase = .loading
         }
         systemAuthorization = await SystemNotificationAuthorization.currentStatus()
+        TradeImportReminderPreferences.applyDefaultIfNeeded(authorizationGranted: systemAuthorization.isEnabled)
         do {
             guard let userID = await session.currentUserID else {
                 phase = .failed("Sign in to continue.")
@@ -112,6 +113,8 @@ final class SettingsNotificationsViewModel {
         systemAuthorization = await SystemNotificationAuthorization.currentStatus()
         await pushNotifications?.refreshAuthorizationStatus()
         await DailyCheckInReminderCoordinator.shared.sync()
+        TradeImportReminderPreferences.applyDefaultIfNeeded(authorizationGranted: systemAuthorization.isEnabled)
+        await TradeImportReminderCoordinator.shared.sync()
     }
 
     func binding(for key: NotificationPreferenceKey) -> Bool {

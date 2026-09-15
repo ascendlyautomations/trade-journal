@@ -71,8 +71,7 @@ struct CreateAchievementView: View {
         .experienceNavigationTitle("Add Achievement")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Back", action: requestDismiss)
-                    .font(.body.weight(.regular))
+                ExperienceArrowBackButton(action: requestDismiss)
             }
         }
         .confirmationDialog(

@@ -3,6 +3,10 @@ import {
   releaseBrokerSyncLock,
   tryAcquireBrokerSyncLock,
 } from "@/lib/integrations/brokerIntegrationSync"
+import {
+  listBrokerExecutionsForExternalAccount,
+  refreshBrokerExecutionRowAfterDuplicateInsert,
+} from "@/lib/integrations/brokerExecutionIdentity"
 import { upsertReconstructedBrokerTrades } from "@/lib/integrations/tradovate/persistBrokerTrades"
 import {
   reconstructAllCompletedTrades,
@@ -141,7 +145,9 @@ export async function syncRithmicBrokerAccount(
     return emptySummary({ error: "Linked Rithmic account not available." })
   }
 
-  const accountParts = parseRithmicExternalAccountParts(mapping.external_account_id)
+  const targetAccountId = String(mapping.external_account_id)
+
+  const accountParts = parseRithmicExternalAccountParts(targetAccountId)
   if (!accountParts) {
     return emptySummary({ error: "Invalid Rithmic account identity on mapping." })
   }
@@ -241,8 +247,16 @@ export async function syncRithmicBrokerAccount(
       })
 
       if (insertError) {
-        if (insertError.code === "23505") duplicateExecutions += 1
-        else throw new Error("execution_persist_failed")
+        if (insertError.code === "23505") {
+          duplicateExecutions += 1
+          await refreshBrokerExecutionRowAfterDuplicateInsert(supabase, {
+            userId,
+            provider: "rithmic",
+            externalFillId,
+            connectionId,
+            brokerIntegrationAccountId,
+          })
+        } else throw new Error("execution_persist_failed")
       } else {
         newExecutions += 1
       }
@@ -264,18 +278,17 @@ export async function syncRithmicBrokerAccount(
       }
     }
 
-    const { data: storedExecutions, error: loadExecError } = await supabase
-      .from("broker_integration_executions")
-      .select(
-        "external_fill_id, external_contract_id, side, quantity, price, executed_at, symbol_root, contract_name"
-      )
-      .eq("broker_integration_account_id", brokerIntegrationAccountId)
-      .order("executed_at", { ascending: true })
-      .order("external_fill_id", { ascending: true })
-
-    if (loadExecError || !storedExecutions) {
-      throw new Error("execution_load_failed")
-    }
+    const storedExecutions = await listBrokerExecutionsForExternalAccount(
+      supabase,
+      {
+        userId,
+        provider: "rithmic",
+        externalAccountId: targetAccountId,
+        fallbackMappingId: brokerIntegrationAccountId,
+        select:
+          "external_fill_id, external_contract_id, side, quantity, price, executed_at, symbol_root, contract_name",
+      }
+    )
 
     const reconstructionFills: ReconstructionFill[] = storedExecutions
       .map((row) => ({
@@ -290,7 +303,7 @@ export async function syncRithmicBrokerAccount(
 
     const { completed, openByContract } = reconstructAllCompletedTrades(
       reconstructionFills,
-      brokerIntegrationAccountId,
+      targetAccountId,
       { lifecycleProvider: "rithmic" }
     )
 
@@ -313,6 +326,7 @@ export async function syncRithmicBrokerAccount(
         userId,
         connectionId,
         mappingId: brokerIntegrationAccountId,
+        externalBrokerAccountId: targetAccountId,
         account: mapping.account,
         completed,
         contracts,

@@ -2,8 +2,8 @@ import Foundation
 import OSLog
 
 #if DEBUG
-enum BrokerOAuthDebugLog {
-    private static let log = Logger(subsystem: "com.tradetraxs.TradeTraxs", category: "BrokerOAuth")
+nonisolated enum BrokerOAuthDebugLog {
+    private static let log = Logger(subsystem: AppLog.subsystem, category: "BrokerOAuth")
 
     static func tap() {
         log.info("[BrokerOAuth] tap")
@@ -48,7 +48,7 @@ enum BrokerOAuthDebugLog {
     }
 }
 #else
-enum BrokerOAuthDebugLog {
+nonisolated enum BrokerOAuthDebugLog {
     static func tap() {}
     static func authorizeRequest(client: String, bodyIncluded: Bool) {}
     static func authorizeResponse(status: Int, ok: Bool, hasAuthorizeURL: Bool) {}

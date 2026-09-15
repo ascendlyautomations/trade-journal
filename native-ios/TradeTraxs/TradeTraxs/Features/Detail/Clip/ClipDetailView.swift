@@ -12,6 +12,7 @@ struct ClipDetailView: View {
     @State private var showLikeHeart = false
     @State private var contentRevealed = false
     @State private var showsDeleteConfirm = false
+    @State private var isDisplayingVideoFrame = false
 
     init(reelID: ReelID, data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
         _viewModel = State(
@@ -206,21 +207,41 @@ struct ClipDetailView: View {
 
     @ViewBuilder
     private var playerSection: some View {
-        if let player = viewModel.player {
-            ClipPlayerView(
-                player: player,
-                videoGravity: viewModel.videoPresentation?.playerGravity(for: .clipsPager) ?? .resizeAspect,
-                onDoubleTapLike: {
-                    presentLikeFeedback()
-                    Task { await data.engagementStore.ensureLiked(on: .reel(viewModel.reelID)) }
-                }
-            )
-            .accessibilityIdentifier("detail.clip.player")
-        } else {
-            ZStack {
+        ZStack {
+            if let reel = viewModel.reel {
+                FeedClipPosterImage(
+                    thumbnail: reel.thumbnail,
+                    video: reel.video,
+                    imagePipeline: data.imagePipeline,
+                    objectStorage: data.objectStorage,
+                    contentMode: .fit
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(isDisplayingVideoFrame ? 0 : 1)
+                .allowsHitTesting(false)
+            } else {
                 Color.black
+            }
+
+            if let player = viewModel.player {
+                ClipPlayerView(
+                    player: player,
+                    videoGravity: viewModel.videoPresentation?.playerGravity(for: .clipsPager) ?? .resizeAspect,
+                    onDoubleTapLike: {
+                        presentLikeFeedback()
+                        Task { await data.engagementStore.ensureLiked(on: .reel(viewModel.reelID)) }
+                    },
+                    onReadyForDisplayChange: { ready in
+                        isDisplayingVideoFrame = ready
+                    }
+                )
+                .accessibilityIdentifier("detail.clip.player")
+            } else if viewModel.reel != nil {
                 ExperienceLoadingSpinner(label: "Preparing video")
             }
+        }
+        .onChange(of: viewModel.player?.currentItem) { _, _ in
+            isDisplayingVideoFrame = false
         }
     }
 

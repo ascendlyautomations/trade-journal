@@ -169,6 +169,20 @@ final class FeedVideoPlaybackCoordinatorTests: XCTestCase {
         XCTAssertTrue(coordinator.isActive(second.id))
         XCTAssertEqual(coordinator.retainedPlayerCount, 1)
     }
+
+    func testPosterStaysVisibleUntilVideoFrameIsDisplayed() {
+        let coordinator = FeedVideoPlaybackCoordinator(storage: FeedClipStubStorage())
+        let reel = samples[0]
+
+        coordinator.setClipVisible(reel, visible: true)
+        XCTAssertFalse(coordinator.shouldHidePoster(for: reel.id))
+
+        coordinator.noteVideoReadyForDisplay(reel.id)
+        XCTAssertFalse(
+            coordinator.shouldHidePoster(for: reel.id),
+            "Poster remains until live player is showing"
+        )
+    }
 }
 
 private struct FeedClipStubStorage: ObjectStorageProviding {

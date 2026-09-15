@@ -178,6 +178,11 @@ final class RoomInfoViewModel {
         navigationCoordinator?.open(navigationHost.members(roomID))
     }
 
+    func openRoomSettings() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator?.open(navigationHost.roomSettings(roomID))
+    }
+
     func leaveRoom() async {
         guard let viewerID else { return }
         ExperienceHaptics.play(.warning)

@@ -271,7 +271,9 @@ struct ProfileView: View {
             if let viewModel = shell.clips {
                 ClipsContainerView(
                     viewModel: viewModel,
+                    detailCache: appEnvironment.data.detailCache,
                     imagePipeline: appEnvironment.data.imagePipeline,
+                    objectStorage: appEnvironment.data.objectStorage,
                     engagementStore: appEnvironment.data.engagementStore,
                     vaultStore: appEnvironment.data.vaultStore
                 )

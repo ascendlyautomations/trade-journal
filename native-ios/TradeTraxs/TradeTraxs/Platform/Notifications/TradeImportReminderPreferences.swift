@@ -4,16 +4,23 @@ import Foundation
 enum TradeImportReminderPreferences {
     private static let enabledKey = "tt.ios.tradeImportReminder.enabled"
 
-    /// Defaults to `true` when unset — opt-out per device.
+    /// Unset means “follow iOS permission default” until ``applyDefaultIfNeeded`` runs.
     static var isEnabled: Bool {
         get {
-            if UserDefaults.standard.object(forKey: enabledKey) == nil {
-                return true
+            guard UserDefaults.standard.object(forKey: enabledKey) != nil else {
+                return false
             }
             return UserDefaults.standard.bool(forKey: enabledKey)
         }
         set {
             UserDefaults.standard.set(newValue, forKey: enabledKey)
         }
+    }
+
+    /// Default ON once the user has granted TradeTraxs notification permission.
+    static func applyDefaultIfNeeded(authorizationGranted: Bool) {
+        guard UserDefaults.standard.object(forKey: enabledKey) == nil else { return }
+        guard authorizationGranted else { return }
+        UserDefaults.standard.set(true, forKey: enabledKey)
     }
 }

@@ -19,6 +19,7 @@ final class TradeImportReminderCoordinator {
     func sync() async {
         guard !Task.isCancelled else { return }
         let authorization = await SystemNotificationAuthorization.currentStatus()
+        TradeImportReminderPreferences.applyDefaultIfNeeded(authorizationGranted: authorization.isEnabled)
         let preferenceEnabled = TradeImportReminderPreferences.isEnabled
         await TradeImportReminderScheduler.sync(
             isEnabled: preferenceEnabled && authorization.isEnabled

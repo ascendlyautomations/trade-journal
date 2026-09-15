@@ -267,4 +267,86 @@ nonisolated enum TradingCalendarAggregator {
         }
         .sorted { $0.createdAt > $1.createdAt }
     }
+
+    /// Builds 12 month summaries using the same rules as ``buildMonth`` (Month view parity).
+    static func buildYearOverview(
+        year: Int,
+        trades: [Trade],
+        accountFilter: DashboardAccountFilter,
+        now: Date = Date()
+    ) -> TradingYearOverview {
+        let current = CalendarMonthID.current(now: now)
+        var cards: [TradingYearMonthCard] = []
+        var totalNet: Decimal = 0
+        var totalTradingDays = 0
+        var winWeighted: Decimal = 0
+        var tradeCountTotal: Decimal = 0
+        var bestAbbrev: String?
+        var bestPnL: Decimal?
+
+        for month in 1...12 {
+            let built = buildMonth(
+                year: year,
+                month: month,
+                trades: trades,
+                accountFilter: accountFilter
+            )
+            let isFuture = year > current.year || (year == current.year && month > current.month)
+            let summary = built.monthSummary
+            let abbrev = TradingCalendarDay.monthAbbreviation(year: year, month: month)
+
+            if !isFuture {
+                totalNet += summary.netPnL
+                totalTradingDays += summary.tradingDayCount
+                if summary.tradeCount > 0, let rate = summary.tradeWinRate {
+                    winWeighted += rate * Decimal(summary.tradeCount)
+                    tradeCountTotal += Decimal(summary.tradeCount)
+                }
+                if summary.tradingDayCount > 0 {
+                    if bestPnL == nil || summary.netPnL > (bestPnL ?? 0) {
+                        bestPnL = summary.netPnL
+                        bestAbbrev = abbrev
+                    }
+                }
+            }
+
+            cards.append(
+                TradingYearMonthCard(
+                    month: month,
+                    abbreviation: abbrev,
+                    summary: isFuture
+                        ? TradingMonthSummary(
+                            year: year,
+                            month: month,
+                            netPnL: 0,
+                            tradeCount: 0,
+                            tradingDayCount: 0,
+                            winningDayCount: 0,
+                            losingDayCount: 0,
+                            breakevenDayCount: 0,
+                            bestDayKey: nil,
+                            bestDayPnL: nil,
+                            worstDayKey: nil,
+                            worstDayPnL: nil,
+                            averageDailyPnL: nil,
+                            tradeWinRate: nil
+                        )
+                        : summary,
+                    isFutureMonth: isFuture
+                )
+            )
+        }
+
+        let winRate: Decimal? = tradeCountTotal > 0 ? winWeighted / tradeCountTotal : nil
+
+        return TradingYearOverview(
+            year: year,
+            months: cards,
+            netPnL: totalNet,
+            tradingDayCount: totalTradingDays,
+            tradeWinRate: winRate,
+            bestMonthAbbreviation: bestAbbrev,
+            bestMonthPnL: bestPnL
+        )
+    }
 }

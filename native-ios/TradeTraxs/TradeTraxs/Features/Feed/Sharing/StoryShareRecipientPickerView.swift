@@ -30,11 +30,7 @@ struct StoryShareRecipientPickerView: View {
             .experienceScreenBackground()
             .navigationTitle(scope == .messages ? "Messages" : "Trade Rooms")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Back", action: onClose)
-                }
-            }
+            .experienceArrowBackToolbarButton(action: onClose)
             .searchable(text: $searchText, prompt: searchPrompt)
             .task(id: scope) {
                 await viewModel.loadRecipients(for: scope)

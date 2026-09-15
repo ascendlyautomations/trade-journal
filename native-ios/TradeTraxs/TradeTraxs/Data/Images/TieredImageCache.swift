@@ -13,7 +13,7 @@ nonisolated final class TieredImageCache: ImageCaching, @unchecked Sendable {
     }
 
     func markDiskEligible(key: String) {
-        diskEligibleKeys.withLock { $0.insert(key) }
+        _ = diskEligibleKeys.withLock { $0.insert(key) }
     }
 
     func imageData(forKey key: String) async -> Data? {
@@ -42,7 +42,7 @@ nonisolated final class TieredImageCache: ImageCaching, @unchecked Sendable {
     }
 
     func removeImage(forKey key: String) async {
-        diskEligibleKeys.withLock { $0.remove(key) }
+        _ = diskEligibleKeys.withLock { $0.remove(key) }
         await memory.removeImage(forKey: key)
         await disk.removeImage(forKey: key)
     }

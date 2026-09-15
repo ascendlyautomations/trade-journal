@@ -19,6 +19,18 @@ final class TradeAIExperienceTests: XCTestCase {
         XCTAssertEqual(TradeAISuggestedPrompts.default.id, "analyze")
     }
 
+    func testAIGeneratedTextNormalizerReplacesEmDashWithComma() {
+        let input = "You traded well today — your strongest session was the NY open."
+        XCTAssertEqual(
+            AIGeneratedTextNormalizer.normalize(input),
+            "You traded well today, your strongest session was the NY open."
+        )
+        XCTAssertEqual(
+            AIGeneratedTextNormalizer.normalize("User caption — unchanged scope is server-side"),
+            "User caption, unchanged scope is server-side"
+        )
+    }
+
     func testEveryPresetHasSpecializedCoachPrompt() {
         for preset in TradeAISuggestedPrompts.all {
             let content = TradeAICoachPrompts.apiContent(for: preset)

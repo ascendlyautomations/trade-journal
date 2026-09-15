@@ -33,6 +33,8 @@ nonisolated protocol RoomManagementRepository: RoomRepository, Sendable {
     func pendingJoinRequests(roomID: RoomID) async throws -> [RoomJoinRequestRecord]
     /// Owner — `rpc_v1_resolve_trade_room_join_request`.
     func resolveJoinRequest(requestID: String, action: TradeRoomJoinRequestResolution) async throws
+    /// Owner-only — deletes `rooms` row; RLS `rooms_delete_owner` enforces `auth.uid()`.
+    func deleteRoom(roomID: RoomID) async throws
 }
 
 extension RoomManagementRepository {
@@ -43,5 +45,9 @@ extension RoomManagementRepository {
         action: TradeRoomJoinRequestResolution
     ) async throws {
         throw DomainError.businessRule(.message("Join request management is not supported by this repository."))
+    }
+
+    func deleteRoom(roomID: RoomID) async throws {
+        throw DomainError.businessRule(.message("Delete room is not supported by this repository."))
     }
 }

@@ -263,8 +263,48 @@ struct HomeNavigationStack: View {
                 requestID: requestID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator,
-                navigationHost: .profile
+                navigationHost: .home
             )
+        case .socialTrade(let tradeID):
+            SocialTradeDetailView(
+                tradeID: tradeID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .post(let postID):
+            PostDetailView(
+                postID: postID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .reel(let reelID):
+            ClipDetailView(
+                reelID: reelID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .otherProfile(let profileID):
+            ProfileView(
+                profileID: profileID,
+                currentUserProfile: currentUserProfile,
+                navigationCoordinator: coordinator,
+                data: appEnvironment.data
+            )
+        case .room(let roomID):
+            RoomConversationView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .home
+            )
+        case .rooms:
+            TradeRoomsHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .home
+            )
+        case .affiliate:
+            SettingsAffiliateView(data: appEnvironment.data)
         case .psychologyAnalytics:
             if let report = PsychologyAnalyticsSessionStore.shared.report {
                 PsychologyAnalyticsDetailView(
@@ -341,6 +381,13 @@ struct HomeNavigationStack: View {
         case .activity: return "Activity"
         case .followRequests: return "Follow Requests"
         case .tradeRoomJoinRequest: return "Join Request"
+        case .socialTrade: return "Trade"
+        case .post: return "Post"
+        case .reel: return "Clip"
+        case .otherProfile: return "Profile"
+        case .room: return "Trade Room"
+        case .rooms: return "Trade Rooms"
+        case .affiliate: return "Affiliate"
         case .settings(let route): return route.title
         }
     }
@@ -448,6 +495,13 @@ struct FeedNavigationStack: View {
                 navigationCoordinator: coordinator,
                 navigationHost: .feed
             )
+        case .roomSettings(let roomID):
+            RoomSettingsView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .feed
+            )
         case .story(let storyID):
             FeedStoryViewerView(
                 storyID: storyID,
@@ -495,6 +549,7 @@ struct FeedNavigationStack: View {
         case .roomMembers: return "Members"
         case .roomInfo: return "Room Info"
         case .manageRoom: return "Manage Room"
+        case .roomSettings: return "Trade Room Settings"
         case .settings(let route): return route.title
         }
     }
@@ -567,6 +622,12 @@ struct MessagesNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .roomSettings(let roomID):
+            RoomSettingsView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .sharedTrade(let tradeID):
             SocialTradeDetailView(
                 tradeID: tradeID,
@@ -613,6 +674,7 @@ struct MessagesNavigationStack: View {
         case .roomMembers: return "Members"
         case .roomInfo: return "Room Info"
         case .manageRoom: return "Manage Room"
+        case .roomSettings: return "Trade Room Settings"
         case .settings(let settingsRoute): return settingsRoute.title
         }
     }
@@ -725,6 +787,13 @@ struct ProfileNavigationStack: View {
                 navigationCoordinator: coordinator,
                 navigationHost: .profile
             )
+        case .roomSettings(let roomID):
+            RoomSettingsView(
+                roomID: roomID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .profile
+            )
         case .settings(let settingsRoute):
             SettingsDestinationView(
                 route: settingsRoute,
@@ -779,6 +848,7 @@ struct ProfileNavigationStack: View {
         case .roomMembers: return "Members"
         case .roomInfo: return "Room Info"
         case .manageRoom: return "Manage Room"
+        case .roomSettings: return "Trade Room Settings"
         }
     }
 }

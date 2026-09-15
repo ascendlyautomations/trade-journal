@@ -28,7 +28,7 @@ function fill(
 
 function lifecycles(fills: ReconstructionFill[]) {
   return reconstructCompletedTradesForContract(fills, {
-    mappingId: M,
+    brokerAccountScopeId: M,
     contractId: C,
   })
 }

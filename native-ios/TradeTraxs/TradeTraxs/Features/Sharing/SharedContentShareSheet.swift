@@ -123,24 +123,29 @@ enum SharedContentNavigation {
     static func open(
         reference: SharedContentReference,
         cache: DetailPresentationCache,
-        coordinator: NavigationCoordinator?
+        coordinator: NavigationCoordinator?,
+        host: TradeRoomNavigationHost? = nil
     ) {
-        ExperienceHaptics.play(.selection)
+        guard let coordinator else { return }
+        if let host {
+            coordinator.pushSharedContent(reference, cache: cache, host: host)
+            return
+        }
         switch reference {
         case .feedPost(let postID):
             if let post = cache.post(id: postID), let tradeID = post.linkedTradeID {
-                coordinator?.pushMessages(.sharedTrade(tradeID))
+                coordinator.pushSocialTrade(tradeID, cache: cache)
             } else {
-                coordinator?.pushMessages(.sharedPost(postID))
+                coordinator.pushPostDetail(postID)
             }
         case .profilePost(let postID):
-            coordinator?.pushMessages(.sharedPost(postID))
+            coordinator.pushPostDetail(postID)
         case .achievementPost(let postID):
-            coordinator?.pushMessages(.sharedAchievement(AchievementID(postID.rawValue)))
+            coordinator.pushAchievementDetail(AchievementID(postID.rawValue))
         case .reel(let reelID):
-            coordinator?.pushMessages(.sharedReel(reelID))
+            coordinator.pushReelDetail(reelID)
         case .trade(let tradeID):
-            coordinator?.pushMessages(.sharedTrade(tradeID))
+            coordinator.pushSocialTrade(tradeID, cache: cache)
         }
     }
 }

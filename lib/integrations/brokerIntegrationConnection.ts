@@ -168,6 +168,30 @@ async function findActiveConnectionByProviderUserId(
   return (data as ConnectionRow | null) ?? null
 }
 
+async function findDisconnectedConnectionByProviderUserId(
+  supabase: SupabaseClient,
+  params: {
+    userId: string
+    provider: BrokerIntegrationProvider
+    providerUserId: string
+  }
+): Promise<ConnectionRow | null> {
+  const { data } = await supabase
+    .from("broker_integration_connections")
+    .select(
+      "id, user_id, provider, status, provider_user_id, provider_display_name, connection_label, credentials_ciphertext, access_token_expires_at, refresh_token_expires_at, api_environment, connected_at, disconnected_at, last_sync_at"
+    )
+    .eq("user_id", params.userId)
+    .eq("provider", params.provider)
+    .eq("provider_user_id", params.providerUserId)
+    .eq("status", "disconnected")
+    .order("disconnected_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+
+  return (data as ConnectionRow | null) ?? null
+}
+
 export async function persistTradovateConnectionAfterOAuth(
   supabase: SupabaseClient,
   params: {
@@ -244,6 +268,32 @@ export async function persistTradovateConnectionAfterOAuth(
         .eq("id", existing.id)
       if (error) throw new Error("broker_integration_connection_update_failed")
       return { connectionId: existing.id }
+    }
+
+    const disconnected = await findDisconnectedConnectionByProviderUserId(supabase, {
+      userId: params.userId,
+      provider: "tradovate",
+      providerUserId: params.providerUserId,
+    })
+    if (disconnected) {
+      const { error } = await supabase
+        .from("broker_integration_connections")
+        .update({
+          ...baseUpdate,
+          provider_display_name:
+            params.providerDisplayName ?? disconnected.provider_display_name,
+        })
+        .eq("id", disconnected.id)
+      if (error) throw new Error("broker_integration_connection_update_failed")
+
+      const { reactivateBrokerAccountMappingsForConnection } = await import(
+        "@/lib/integrations/brokerIntegrationAccounts"
+      )
+      await reactivateBrokerAccountMappingsForConnection(supabase, {
+        userId: params.userId,
+        connectionId: disconnected.id,
+      })
+      return { connectionId: disconnected.id }
     }
   }
 

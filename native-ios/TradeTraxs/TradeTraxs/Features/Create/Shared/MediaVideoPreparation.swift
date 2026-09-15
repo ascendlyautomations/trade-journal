@@ -5,16 +5,16 @@ import UniformTypeIdentifiers
 
 /// Web `lib/reelVideo.ts` limits — inspect, delivery-optimize, thumbnail, upload-ready output.
 enum MediaVideoPreparation {
-    static let maxDurationSeconds = 90
+    nonisolated static let maxDurationSeconds = 90
     /// Final optimized upload must remain below this ceiling.
-    static let maxFileBytes = 100 * 1024 * 1024
-    static let maxFinalUploadBytes = maxFileBytes
+    nonisolated static let maxFileBytes = 100 * 1024 * 1024
+    nonisolated static let maxFinalUploadBytes = maxFileBytes
     /// Generous pre-compression source ceiling — large camera originals may compress below final limit.
-    static let maxSourceFileBytes = 500 * 1024 * 1024
-    static let maxCaptionLength = 2200
-    static let durationLimitMessage = "Clips must be 90 seconds (1 minute 30 seconds) or less."
-    static let sourceTooLargeMessage = "This video is too large to process on device. Try a shorter clip."
-    static let compressionFailedMessage = "Couldn't prepare this video. Try another clip or record again."
+    nonisolated static let maxSourceFileBytes = 500 * 1024 * 1024
+    nonisolated static let maxCaptionLength = 2200
+    nonisolated static let durationLimitMessage = "Clips must be 90 seconds (1 minute 30 seconds) or less."
+    nonisolated static let sourceTooLargeMessage = "This video is too large to process on device. Try a shorter clip."
+    nonisolated static let compressionFailedMessage = "Couldn't prepare this video. Try another clip or record again."
 
     private static let acceptedExtensions: Set<String> = ["mp4", "mov", "m4v"]
     private static let acceptedTypes: Set<UTType> = [.mpeg4Movie, .quickTimeMovie, .movie]

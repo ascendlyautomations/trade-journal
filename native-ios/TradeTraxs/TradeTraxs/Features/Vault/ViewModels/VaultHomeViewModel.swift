@@ -127,15 +127,13 @@ final class VaultHomeViewModel {
         ExperienceHaptics.play(.selection)
         switch item.ref.contentType {
         case .trade:
-            navigationCoordinator.open(.feed(.trade(TradeID(item.ref.contentID))))
-        case .profilePost:
-            navigationCoordinator.open(.profile(.post(PostID(item.ref.contentID))))
-        case .feedPost:
-            navigationCoordinator.open(.feed(.post(PostID(item.ref.contentID))))
+            navigationCoordinator.pushSocialTrade(TradeID(item.ref.contentID))
+        case .profilePost, .feedPost:
+            navigationCoordinator.pushPostDetail(PostID(item.ref.contentID))
         case .reel:
-            navigationCoordinator.open(.profile(.reel(ReelID(item.ref.contentID))))
+            navigationCoordinator.pushReelDetail(ReelID(item.ref.contentID))
         case .achievement:
-            navigationCoordinator.open(.profile(.achievement(AchievementID(item.ref.contentID))))
+            navigationCoordinator.pushAchievementDetail(AchievementID(item.ref.contentID))
         }
     }
 

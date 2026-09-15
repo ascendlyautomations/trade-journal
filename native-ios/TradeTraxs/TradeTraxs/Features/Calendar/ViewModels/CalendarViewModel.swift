@@ -13,7 +13,13 @@ final class CalendarViewModel {
     private(set) var isMonthTransitioning = false
 
     var accountFilter: DashboardAccountFilter = .all
+    var displayScope: CalendarDisplayScope = .month
     private(set) var visibleMonth: CalendarMonthID = .current()
+    private(set) var visibleYear: Int = CalendarMonthID.current().year
+    private(set) var yearOverview: TradingYearOverview?
+    private(set) var isYearTransitioning = false
+
+    private static let yearTradeFetchLimit = 2500
 
     private let trades: any TradeRepository
     private let session: any SessionProviding
@@ -26,6 +32,8 @@ final class CalendarViewModel {
     private var allTrades: [Trade] = []
     /// Session cache: month id → trades that fall in that month's fetch window.
     private var monthTradeCache: [String: [Trade]] = [:]
+    /// Session cache: calendar year → trades across all month fetch windows.
+    private var yearTradeCache: [Int: [Trade]] = [:]
     private var loadTask: Task<Void, Never>?
     private var watchedChannel: RealtimeChannelID?
     private var hasLoadedAccounts = false
@@ -153,6 +161,7 @@ final class CalendarViewModel {
         isRefreshing = true
         defer { isRefreshing = false }
         monthTradeCache.removeAll()
+        yearTradeCache.removeAll()
         CalendarMonthSessionStore.shared.invalidate()
         await performLoad(forceNetwork: true)
     }
@@ -179,6 +188,7 @@ final class CalendarViewModel {
             accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
             hasLoadedAccounts = true
             recompute()
+            recomputeYearOverview()
         }
     }
 
@@ -197,6 +207,46 @@ final class CalendarViewModel {
     func goToCurrentMonth() {
         ExperienceHaptics.play(.selection)
         visibleMonth = .current()
+        visibleYear = visibleMonth.year
+        Task { await loadVisibleMonth() }
+    }
+
+    func setDisplayScope(_ scope: CalendarDisplayScope) {
+        guard displayScope != scope else { return }
+        ExperienceHaptics.play(.selection)
+        displayScope = scope
+        if scope == .year {
+            visibleYear = visibleMonth.year
+            Task { await loadVisibleYear() }
+        } else {
+            visibleMonth = CalendarMonthID(year: visibleYear, month: visibleMonth.month)
+            Task { await loadVisibleMonth() }
+        }
+    }
+
+    func goToPreviousYear() {
+        ExperienceHaptics.play(.selection)
+        visibleYear -= 1
+        Task { await loadVisibleYear() }
+    }
+
+    func goToNextYear() {
+        ExperienceHaptics.play(.selection)
+        visibleYear += 1
+        Task { await loadVisibleYear() }
+    }
+
+    func goToCurrentYear() {
+        ExperienceHaptics.play(.selection)
+        visibleYear = CalendarMonthID.current().year
+        Task { await loadVisibleYear() }
+    }
+
+    func openMonthFromYear(_ month: Int) {
+        guard (1...12).contains(month) else { return }
+        ExperienceHaptics.play(.selection)
+        displayScope = .month
+        visibleMonth = CalendarMonthID(year: visibleYear, month: month)
         Task { await loadVisibleMonth() }
     }
 
@@ -205,6 +255,7 @@ final class CalendarViewModel {
         ExperienceHaptics.play(.selection)
         accountFilter = filter
         recompute()
+        recomputeYearOverview()
     }
 
     func openManageAccounts() {
@@ -337,6 +388,9 @@ final class CalendarViewModel {
             }
 
             await loadVisibleMonth(forceNetwork: forceNetwork)
+            if displayScope == .year {
+                await loadVisibleYear(forceNetwork: forceNetwork)
+            }
             phase = .loaded
             await startRealtime(profileID: profileID)
         } catch {
@@ -513,6 +567,12 @@ final class CalendarViewModel {
         let id = visibleMonth
         monthTradeCache[id.cacheKey] = samples
         recompute()
+        yearTradeCache[id.year] = samples
+        yearOverview = TradingCalendarAggregator.buildYearOverview(
+            year: id.year,
+            trades: samples,
+            accountFilter: accountFilter
+        )
     }
 
     private func mergeTrades(_ trades: [Trade]) {
@@ -533,6 +593,100 @@ final class CalendarViewModel {
                 trades: scopedTrades,
                 accountFilter: accountFilter
             )
+        }
+    }
+
+    private func recomputeYearOverview() {
+        guard let trades = yearTradeCache[visibleYear] else { return }
+        yearOverview = TradingCalendarAggregator.buildYearOverview(
+            year: visibleYear,
+            trades: trades,
+            accountFilter: accountFilter
+        )
+    }
+
+    private func storeYearTrades(_ trades: [Trade], year: Int) {
+        yearTradeCache[year] = trades
+        for month in 1...12 {
+            let key = CalendarMonthID(year: year, month: month).cacheKey
+            if let seeded = OwnerTradeCalendarSeed.trades(from: trades, year: year, month: month) {
+                monthTradeCache[key] = seeded
+                CalendarMonthSessionStore.shared.store(seeded, year: year, month: month)
+            }
+        }
+        yearOverview = TradingCalendarAggregator.buildYearOverview(
+            year: year,
+            trades: trades,
+            accountFilter: accountFilter
+        )
+    }
+
+    func loadVisibleYear(forceNetwork: Bool = false) async {
+        let year = visibleYear
+        if !forceNetwork, yearTradeCache[year] != nil {
+            recomputeYearOverview()
+            return
+        }
+
+        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID ?? ProfileID("")) {
+            if let samples = monthTradeCache.values.first ?? Optional(allTrades).flatMap({ $0.isEmpty ? nil : $0 }) {
+                storeYearTrades(samples, year: year)
+            }
+            return
+        }
+
+        if !forceNetwork, let profileID {
+            _ = SessionOwnerTradesStore.shared.hydrateFromDiskIfNeeded(
+                for: profileID,
+                detailCache: detailCache
+            )
+            let metadata = SessionOwnerTradesStore.shared.snapshotMetadata(for: profileID)
+            let complete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+            if OwnerTradeCacheCompleteness.canSeedCalendarMonth(metadata: metadata),
+               let ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID),
+               let yearTrades = OwnerTradeCalendarSeed.tradesForYear(from: ownerTrades, year: year)
+            {
+                CacheDecisionProbe.log(
+                    surface: "calendar",
+                    cacheExists: true,
+                    cacheUsable: true,
+                    historyComplete: complete,
+                    action: "renderCache",
+                    reason: "ownerTradesYearSeed"
+                )
+                storeYearTrades(yearTrades, year: year)
+                mergeTrades(yearTrades)
+                return
+            }
+        }
+
+        isYearTransitioning = yearOverview != nil
+        defer { isYearTransitioning = false }
+
+        guard
+            let window = TradingCalendarDay.fetchYearWindow(year: year),
+            let profileID
+        else {
+            recomputeYearOverview()
+            return
+        }
+
+        do {
+            SessionNetworkProbe.record(.networkFetch, resource: "calendar.year", detail: "\(year)")
+            let fetched = try await trades.trades(
+                ownedBy: profileID,
+                accountID: calendarAccountFilterID(),
+                entryFrom: window.start,
+                entryTo: window.end,
+                limit: Self.yearTradeFetchLimit
+            )
+            detailCache.seed(trades: fetched)
+            storeYearTrades(fetched, year: year)
+            mergeTrades(fetched)
+        } catch {
+            if yearOverview == nil, month == nil {
+                phase = .failed(ProfileSectionSupport.message(for: error))
+            }
         }
     }
 
@@ -575,6 +729,7 @@ final class CalendarViewModel {
             }
         }
         recompute()
+        recomputeYearOverview()
     }
 
     func applyRealtimeDelete(id: TradeID) {
@@ -582,6 +737,10 @@ final class CalendarViewModel {
         for key in monthTradeCache.keys {
             monthTradeCache[key]?.removeAll { $0.id == id }
         }
+        for year in yearTradeCache.keys {
+            yearTradeCache[year]?.removeAll { $0.id == id }
+        }
         recompute()
+        recomputeYearOverview()
     }
 }

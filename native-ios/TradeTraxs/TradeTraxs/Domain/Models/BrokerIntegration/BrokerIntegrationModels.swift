@@ -261,6 +261,14 @@ nonisolated struct BrokerIntegrationAccount: Codable, Sendable, Hashable, Identi
 
     var isLinked: Bool { status == .linked || tradetraxsAccountId != nil }
 
+    /// Authoritative mapping for manual import — matches Broker Integrations BFF rows.
+    var hasTradetraxsMapping: Bool {
+        guard let raw = tradetraxsAccountId?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return false
+        }
+        return !raw.isEmpty
+    }
+
     var displayTitle: String {
         externalDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
             ?? externalAccountName?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
@@ -386,7 +394,65 @@ nonisolated struct BrokerManualImportResponse: Codable, Sendable {
 nonisolated struct BrokerImportEligibilityResponse: Codable, Sendable {
     var eligible: Bool
     var optOut: Bool
+    var connectionCount: Int
+    var linkedAccountCount: Int
     var linkedAccounts: [BrokerImportEligibilityTarget]
+
+    enum CodingKeys: String, CodingKey {
+        case eligible
+        case optOut
+        case opt_out
+        case connectionCount
+        case connection_count
+        case linkedAccountCount
+        case linked_account_count
+        case linkedAccounts
+        case linked_accounts
+    }
+
+    init(
+        eligible: Bool,
+        optOut: Bool,
+        connectionCount: Int,
+        linkedAccountCount: Int,
+        linkedAccounts: [BrokerImportEligibilityTarget]
+    ) {
+        self.eligible = eligible
+        self.optOut = optOut
+        self.connectionCount = connectionCount
+        self.linkedAccountCount = linkedAccountCount
+        self.linkedAccounts = linkedAccounts
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        eligible = try container.decodeIfPresent(Bool.self, forKey: .eligible) ?? false
+        optOut =
+            try container.decodeIfPresent(Bool.self, forKey: .optOut)
+            ?? container.decodeIfPresent(Bool.self, forKey: .opt_out)
+            ?? false
+        connectionCount =
+            try container.decodeIfPresent(Int.self, forKey: .connectionCount)
+            ?? container.decodeIfPresent(Int.self, forKey: .connection_count)
+            ?? 0
+        linkedAccountCount =
+            try container.decodeIfPresent(Int.self, forKey: .linkedAccountCount)
+            ?? container.decodeIfPresent(Int.self, forKey: .linked_account_count)
+            ?? 0
+        linkedAccounts =
+            try container.decodeIfPresent([BrokerImportEligibilityTarget].self, forKey: .linkedAccounts)
+            ?? container.decodeIfPresent([BrokerImportEligibilityTarget].self, forKey: .linked_accounts)
+            ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(eligible, forKey: .eligible)
+        try container.encode(optOut, forKey: .optOut)
+        try container.encode(connectionCount, forKey: .connectionCount)
+        try container.encode(linkedAccountCount, forKey: .linkedAccountCount)
+        try container.encode(linkedAccounts, forKey: .linkedAccounts)
+    }
 }
 
 nonisolated struct BrokerImportEligibilityTarget: Codable, Sendable, Hashable, Identifiable {
@@ -397,6 +463,61 @@ nonisolated struct BrokerImportEligibilityTarget: Codable, Sendable, Hashable, I
     var tradetraxsAccountName: String?
 
     var id: String { mappingId }
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case mappingId
+        case mapping_id
+        case connectionId
+        case connection_id
+        case brokerAccountLabel
+        case broker_account_label
+        case tradetraxsAccountName
+        case tradetraxs_account_name
+    }
+
+    init(
+        provider: BrokerIntegrationProvider,
+        mappingId: String,
+        connectionId: String,
+        brokerAccountLabel: String,
+        tradetraxsAccountName: String?
+    ) {
+        self.provider = provider
+        self.mappingId = mappingId
+        self.connectionId = connectionId
+        self.brokerAccountLabel = brokerAccountLabel
+        self.tradetraxsAccountName = tradetraxsAccountName
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try container.decode(BrokerIntegrationProvider.self, forKey: .provider)
+        mappingId =
+            try container.decodeIfPresent(String.self, forKey: .mappingId)
+            ?? container.decode(String.self, forKey: .mapping_id)
+        connectionId =
+            try container.decodeIfPresent(String.self, forKey: .connectionId)
+            ?? container.decode(String.self, forKey: .connection_id)
+        let label =
+            try container.decodeIfPresent(String.self, forKey: .brokerAccountLabel)
+            ?? container.decodeIfPresent(String.self, forKey: .broker_account_label)
+        brokerAccountLabel = label?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? label!
+            : mappingId
+        tradetraxsAccountName =
+            try container.decodeIfPresent(String.self, forKey: .tradetraxsAccountName)
+            ?? container.decodeIfPresent(String.self, forKey: .tradetraxs_account_name)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(provider, forKey: .provider)
+        try container.encode(mappingId, forKey: .mappingId)
+        try container.encode(connectionId, forKey: .connectionId)
+        try container.encode(brokerAccountLabel, forKey: .brokerAccountLabel)
+        try container.encodeIfPresent(tradetraxsAccountName, forKey: .tradetraxsAccountName)
+    }
 }
 
 nonisolated struct TradovateAuthorizeNativeResponse: Codable, Sendable {
@@ -467,7 +588,7 @@ nonisolated enum RithmicConnectOutcome: Sendable, Equatable {
 }
 
 private extension String {
-    var nonEmpty: String? {
+    nonisolated var nonEmpty: String? {
         isEmpty ? nil : self
     }
 }

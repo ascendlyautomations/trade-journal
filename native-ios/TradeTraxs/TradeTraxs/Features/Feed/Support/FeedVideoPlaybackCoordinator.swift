@@ -56,6 +56,8 @@ final class FeedVideoPlaybackCoordinator {
     private var readinessObservers: [ReelID: NSKeyValueObservation] = [:]
     private var playerReadyReelIDs: Set<ReelID> = []
     private var seekCompleteReelIDs: Set<ReelID> = []
+    /// True only while ``AVPlayerLayer`` is actively displaying a video frame for this reel.
+    private var displayingVideoFrameReelIDs: Set<ReelID> = []
     private var manuallyPausedReelIDs: Set<ReelID> = []
     private var clipVisibilityFractions: [ReelID: CGFloat] = [:]
     private var reelsByID: [ReelID: Reel] = [:]
@@ -70,6 +72,8 @@ final class FeedVideoPlaybackCoordinator {
     #if DEBUG
     private var loggedFirstFrameReelIDs: Set<ReelID> = []
     #endif
+
+    var objectStorage: any ObjectStorageProviding { storage }
 
     init(storage: any ObjectStorageProviding) {
         self.storage = storage
@@ -108,6 +112,23 @@ final class FeedVideoPlaybackCoordinator {
     func hasRenderedFrame(for reelID: ReelID) -> Bool {
         let state = inlineSessionStates[reelID]
         return state?.hasRenderedVideo == true || state?.frozenFrame != nil
+    }
+
+    /// Poster stays visible until the inline layer is actually rendering video (not merely allocated).
+    func shouldHidePoster(for reelID: ReelID) -> Bool {
+        if shouldShowLivePlayer(for: reelID) {
+            return displayingVideoFrameReelIDs.contains(reelID)
+        }
+        return frozenFrame(for: reelID) != nil
+    }
+
+    func noteVideoReadyForDisplay(_ reelID: ReelID) {
+        displayingVideoFrameReelIDs.insert(reelID)
+        markRenderedVideo(reelID)
+    }
+
+    func noteVideoDisplayLost(_ reelID: ReelID) {
+        displayingVideoFrameReelIDs.remove(reelID)
     }
 
     func shouldShowPlayIndicator(for reelID: ReelID) -> Bool {
@@ -1017,6 +1038,7 @@ final class FeedVideoPlaybackCoordinator {
         readinessObservers.removeValue(forKey: reelID)?.invalidate()
         playerReadyReelIDs.remove(reelID)
         seekCompleteReelIDs.remove(reelID)
+        displayingVideoFrameReelIDs.remove(reelID)
         #if DEBUG
         if let observer = accessLogObservers.removeValue(forKey: reelID) {
             NotificationCenter.default.removeObserver(observer)
@@ -1039,7 +1061,6 @@ final class FeedVideoPlaybackCoordinator {
 
         applyAudioState(to: player)
         player.play()
-        markRenderedVideo(reelID)
 
         if isClipsExperience, activeReelID == reelID {
             ClipsPagerPlaybackProbe.playRequested(clipID: reelID.rawValue)

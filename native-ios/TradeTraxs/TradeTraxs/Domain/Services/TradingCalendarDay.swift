@@ -83,6 +83,15 @@ nonisolated enum TradingCalendarDay {
         return DateIntervalValue(start: windowStart, end: lastTradingDayEnd)
     }
 
+    /// Full calendar year fetch window (Jan–Dec trading months, inclusive of session padding).
+    static func fetchYearWindow(year: Int) -> DateIntervalValue? {
+        guard
+            let january = fetchWindow(year: year, month: 1),
+            let december = fetchWindow(year: year, month: 12)
+        else { return nil }
+        return DateIntervalValue(start: january.start, end: december.end)
+    }
+
     static func monthTitle(year: Int, month: Int) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -95,6 +104,20 @@ nonisolated enum TradingCalendarDay {
         formatter.locale = .current
         formatter.setLocalizedDateFormatFromTemplate("MMMM yyyy")
         return formatter.string(from: date)
+    }
+
+    static func monthAbbreviation(year: Int, month: Int) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        guard let date = calendar.date(from: DateComponents(year: year, month: month, day: 1)) else {
+            return String(format: "%02d", month)
+        }
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM"
+        return formatter.string(from: date).uppercased()
     }
 
     static func displayDate(from key: String) -> String {

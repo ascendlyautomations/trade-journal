@@ -47,6 +47,7 @@ struct SettingsNotificationsView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(ExperienceSpacing.sm)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle(category?.title ?? "Notifications")
@@ -67,45 +68,6 @@ struct SettingsNotificationsView: View {
     @ViewBuilder
     private var rootContent: some View {
         Section {
-            SettingsInfoRow(title: "iOS Permission", value: viewModel.systemPushStatusLabel)
-            if viewModel.showsOpenSystemSettings {
-                Button {
-                    viewModel.openSystemSettings()
-                } label: {
-                    SettingsNavigationRow(
-                        title: "Open iOS Settings",
-                        subtitle: "Enable notifications for TradeTraxs",
-                        systemImage: "gear"
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        } header: {
-            Text("Device")
-        } footer: {
-            Text("This is your phone’s permission. It’s separate from the preferences below.")
-        }
-
-        Section {
-            SettingsToggleRow(
-                title: "Daily Check-In Reminder",
-                subtitle: "Remind me before the market opens if I haven't completed my daily check-in.",
-                isOn: Binding(
-                    get: { viewModel.dailyCheckInReminderEnabled },
-                    set: { viewModel.setDailyCheckInReminderEnabled($0) }
-                ),
-                isEnabled: viewModel.systemAuthorization.isEnabled
-            )
-            .accessibilityIdentifier("settings.notifications.dailyCheckInReminder")
-        } footer: {
-            if viewModel.systemAuthorization.isEnabled {
-                Text("Weekday reminders arrive at 9:15 AM in your local time zone.")
-            } else {
-                Text("Turn on iOS notifications to receive weekday check-in reminders at 9:15 AM.")
-            }
-        }
-
-        Section {
             SettingsToggleRow(
                 title: NotificationPreferenceKey.notificationsEnabled.title,
                 subtitle: NotificationPreferenceKey.notificationsEnabled.subtitle,
@@ -114,13 +76,40 @@ struct SettingsNotificationsView: View {
                     set: { viewModel.set(.notificationsEnabled, enabled: $0) }
                 )
             )
+            .accessibilityIdentifier("settings.notifications.allow")
+
+            if viewModel.showsOpenSystemSettings {
+                Button {
+                    viewModel.openSystemSettings()
+                } label: {
+                    SettingsNavigationRow(
+                        title: "Open iOS Settings",
+                        subtitle: nil,
+                        systemImage: "gear",
+                        showsChevron: true
+                    )
+                }
+                .buttonStyle(.plain)
+            }
         } header: {
-            Text("Notifications")
+            Text("iOS Permissions")
         } footer: {
-            Text("Choose which notifications you’d like to receive.")
+            Text(iosPermissionsFooter)
         }
 
         Section {
+            Button {
+                ExperienceHaptics.play(.selection)
+                stackNavigation?.pushSettings(.notificationsTradetraxsReminders)
+            } label: {
+                SettingsNavigationRow(
+                    title: "TradeTraxs Reminders",
+                    systemImage: "bell.badge"
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.notifications.category.tradetraxsReminders")
+
             ForEach(
                 [
                     NotificationPreferenceCategory.messages,
@@ -156,6 +145,13 @@ struct SettingsNotificationsView: View {
                 }
             }
         }
+    }
+
+    private var iosPermissionsFooter: String {
+        if viewModel.showsOpenSystemSettings {
+            return "Status: \(viewModel.systemPushStatusLabel). Enable notifications in iOS Settings to receive alerts."
+        }
+        return "Device permission is separate from the categories below."
     }
 
     @ViewBuilder

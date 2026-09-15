@@ -111,10 +111,8 @@ final class SessionProfileStore {
     }
 
     private func merge(_ a: [Profile], _ b: [Profile]) -> [Profile] {
-        var map = Dictionary(uniqueKeysWithValues: a.map { ($0.id, $0) })
-        for profile in b {
-            map[profile.id] = profile
-        }
+        // Cached (`a`) first, then network (`b`); duplicates never trap.
+        let map = ProfileDictionaryByID.build(a, b)
         return Array(map.values)
     }
 

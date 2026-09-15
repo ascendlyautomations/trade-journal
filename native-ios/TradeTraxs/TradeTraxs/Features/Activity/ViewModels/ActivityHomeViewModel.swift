@@ -99,16 +99,22 @@ final class ActivityHomeViewModel {
                 messageID: row.notification.roomMessageID?.rawValue
             )
         }
-        let destination = ActivityNotificationRouting.appDestination(
-            for: row.notification,
+        ActivityNotificationRouting.open(
+            row.notification,
+            host: navigationHost,
+            coordinator: navigationCoordinator,
             router: router
         )
-        navigationCoordinator.open(destination)
     }
 
     func openActor(_ profileID: ProfileID) {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.profile(.otherProfile(profileID)))
+        switch navigationHost {
+        case .home:
+            navigationCoordinator.pushHome(.otherProfile(profileID))
+        case .profile:
+            navigationCoordinator.pushProfile(.otherProfile(profileID))
+        }
     }
 
     func openFollowRequests() {

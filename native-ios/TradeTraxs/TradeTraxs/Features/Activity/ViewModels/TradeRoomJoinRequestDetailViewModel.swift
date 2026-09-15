@@ -67,15 +67,15 @@ final class TradeRoomJoinRequestDetailViewModel {
     }
 
     func openRequester() {
-        guard let requester else { return }
+        guard let requester, let navigationCoordinator else { return }
         ExperienceHaptics.play(.selection)
-        navigationCoordinator?.open(navigationHost.profile(requester.id))
+        navigationCoordinator.pushOtherProfile(requester.id)
     }
 
     func openRoom() {
-        guard let room else { return }
+        guard let room, let navigationCoordinator else { return }
         ExperienceHaptics.play(.selection)
-        navigationCoordinator?.open(navigationHost.room(room.id))
+        navigationCoordinator.pushRoom(room.id)
     }
 
     func approve() async {

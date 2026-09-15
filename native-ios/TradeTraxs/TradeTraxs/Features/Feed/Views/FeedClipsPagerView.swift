@@ -307,19 +307,34 @@ private struct FeedClipsPageView: View {
 
         ZStack {
             FeedClipPosterImage(
-                reference: reel.thumbnail ?? reel.video,
+                thumbnail: reel.thumbnail,
+                video: reel.video,
                 imagePipeline: imagePipeline,
+                objectStorage: playbackCoordinator.objectStorage,
                 contentMode: posterMode
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black)
+            .opacity(playbackCoordinator.shouldHidePoster(for: reel.id) ? 0 : 1)
+            .allowsHitTesting(false)
 
             if playbackCoordinator.isActive(reel.id),
                let player = playbackCoordinator.player(for: reel.id)
             {
-                FeedInlineVideoSurface(player: player, videoGravity: gravity)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .allowsHitTesting(false)
+                FeedInlineVideoSurface(
+                    clipID: reel.id.rawValue,
+                    player: player,
+                    videoGravity: gravity,
+                    onReadyForDisplayChange: { ready in
+                        if ready {
+                            playbackCoordinator.noteVideoReadyForDisplay(reel.id)
+                        } else {
+                            playbackCoordinator.noteVideoDisplayLost(reel.id)
+                        }
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
             }
 
             if playbackCoordinator.shouldShowPlayIndicator(for: reel.id) {

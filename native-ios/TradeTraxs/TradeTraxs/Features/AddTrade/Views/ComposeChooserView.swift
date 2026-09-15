@@ -23,6 +23,7 @@ struct ComposeChooserView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.addTrade")
 
                 Button(action: onCreatePost) {
@@ -33,6 +34,7 @@ struct ComposeChooserView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.post")
 
                 Button(action: onCreateReel) {
@@ -43,6 +45,7 @@ struct ComposeChooserView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.reel")
 
                 Button(action: onCreateAchievement) {
@@ -53,6 +56,7 @@ struct ComposeChooserView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.achievement")
 
                 Button(action: onCreateStory) {
@@ -63,6 +67,7 @@ struct ComposeChooserView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.story")
 
                 Button(action: onRecordWithdrawal) {
@@ -73,10 +78,13 @@ struct ComposeChooserView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.withdrawal")
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(ExperienceSpacing.xs)
+        .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Create")
@@ -86,5 +94,14 @@ struct ComposeChooserView: View {
             }
         }
         .accessibilityIdentifier("compose.chooser")
+    }
+
+    private var composeRowInsets: EdgeInsets {
+        EdgeInsets(
+            top: ExperienceSpacing.xxs,
+            leading: ExperienceSpacing.md,
+            bottom: ExperienceSpacing.xxs,
+            trailing: ExperienceSpacing.md
+        )
     }
 }

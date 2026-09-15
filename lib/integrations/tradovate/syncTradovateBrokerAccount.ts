@@ -17,6 +17,10 @@ import {
 } from "@/lib/integrations/tradovate/tradovateMarketDataClient"
 import { upsertReconstructedBrokerTrades } from "@/lib/integrations/tradovate/persistBrokerTrades"
 import {
+  listBrokerExecutionsForExternalAccount,
+  refreshBrokerExecutionRowAfterDuplicateInsert,
+} from "@/lib/integrations/brokerExecutionIdentity"
+import {
   reconstructAllCompletedTrades,
   type ReconstructionFill,
 } from "@/lib/integrations/tradovate/tradeReconstruction"
@@ -257,8 +261,16 @@ export async function syncTradovateBrokerAccount(
         })
 
       if (insertError) {
-        if (insertError.code === "23505") duplicateExecutions += 1
-        else throw new Error("execution_persist_failed")
+        if (insertError.code === "23505") {
+          duplicateExecutions += 1
+          await refreshBrokerExecutionRowAfterDuplicateInsert(supabase, {
+            userId,
+            provider: "tradovate",
+            externalFillId: String(fillId),
+            connectionId,
+            brokerIntegrationAccountId,
+          })
+        } else throw new Error("execution_persist_failed")
       } else {
         newExecutions += 1
       }
@@ -283,18 +295,17 @@ export async function syncTradovateBrokerAccount(
         .eq("external_contract_id", String(contractId))
     }
 
-    const { data: storedExecutions, error: loadExecError } = await supabase
-      .from("broker_integration_executions")
-      .select(
-        "external_fill_id, external_contract_id, side, quantity, price, executed_at"
-      )
-      .eq("broker_integration_account_id", brokerIntegrationAccountId)
-      .order("executed_at", { ascending: true })
-      .order("external_fill_id", { ascending: true })
-
-    if (loadExecError || !storedExecutions) {
-      throw new Error("execution_load_failed")
-    }
+    const storedExecutions = await listBrokerExecutionsForExternalAccount(
+      supabase,
+      {
+        userId,
+        provider: "tradovate",
+        externalAccountId: targetAccountId,
+        fallbackMappingId: brokerIntegrationAccountId,
+        select:
+          "external_fill_id, external_contract_id, side, quantity, price, executed_at",
+      }
+    )
 
     const reconstructionFills: ReconstructionFill[] = storedExecutions.map((row) => ({
       fillId: String(row.external_fill_id),
@@ -307,7 +318,7 @@ export async function syncTradovateBrokerAccount(
 
     const { completed, openByContract } = reconstructAllCompletedTrades(
       reconstructionFills,
-      brokerIntegrationAccountId
+      targetAccountId
     )
 
     const feeFillIds = [...new Set(completed.flatMap((t) => t.fillIds))]
@@ -325,6 +336,7 @@ export async function syncTradovateBrokerAccount(
         userId,
         connectionId,
         mappingId: brokerIntegrationAccountId,
+        externalBrokerAccountId: targetAccountId,
         account: mapping.account,
         completed,
         contracts,

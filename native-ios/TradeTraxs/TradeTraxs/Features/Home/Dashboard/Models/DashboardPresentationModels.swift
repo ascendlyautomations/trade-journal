@@ -177,4 +177,8 @@ nonisolated struct DashboardInsightItem: Identifiable, Hashable, Sendable {
     var title: String
     var body: String
     var kind: DashboardInsightKind
+
+    /// Display copy — em dashes normalized to commas (templates + future dynamic text).
+    var displayTitle: String { GeneratedProseNormalizer.normalize(title) }
+    var displayBody: String { GeneratedProseNormalizer.normalize(body) }
 }

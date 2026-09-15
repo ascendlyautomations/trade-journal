@@ -33,6 +33,10 @@ enum RoomMembersLoadProbe {
         print("[RoomMembers] profilesReturned count=\(count)")
     }
 
+    nonisolated static func duplicateProfileIDInHydration(_ id: ProfileID) {
+        print("[RoomMembers] duplicate ProfileID in hydration merge id=\(id.rawValue) using later layer")
+    }
+
     nonisolated static func decoded(count: Int) {
         print("[RoomMembers] decoded count=\(count)")
     }
@@ -156,6 +160,7 @@ enum RoomMembersLoadProbe {
     static func membershipsReturned(count: Int, httpStatus: Int? = nil) {}
     static func profilesRequested(count: Int) {}
     static func profilesReturned(count: Int) {}
+    static func duplicateProfileIDInHydration(_ id: ProfileID) {}
     static func decoded(count: Int) {}
     static func uiVisibleCount(_ count: Int) {}
     static func ensureDefaults(status: String) {}

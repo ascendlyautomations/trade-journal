@@ -49,6 +49,8 @@ nonisolated enum ProfileStatisticsMetrics {
         var session: String?
         /// Authoritative account mode for this trade.
         var accountMode: TradingAccountMode?
+        /// Stable tie-break when timestamps collide (typically trade id).
+        var sortKey: String? = nil
     }
 
     struct EquityPoint: Sendable, Equatable, Identifiable {
@@ -102,11 +104,49 @@ nonisolated enum ProfileStatisticsMetrics {
     ) -> TradeInput {
         TradeInput(
             pnl: trade.realizedPnL?.amount,
-            createdAt: trade.createdAt,
+            createdAt: trade.exitAt ?? trade.entryAt,
             isLong: trade.side == .long,
             session: trade.sessionLabel,
-            accountMode: resolveAccountMode(trade: trade, accountModes: accountModes)
+            accountMode: resolveAccountMode(trade: trade, accountModes: accountModes),
+            sortKey: trade.id.rawValue
         )
+    }
+
+    /// Chronological order for equity curve + scrubber (ascending time, stable id tie-break).
+    static func chronologicalTradeOrder(_ trades: [TradeInput]) -> [TradeInput] {
+        trades.sorted { lhs, rhs in
+            let left = lhs.createdAt ?? .distantPast
+            let right = rhs.createdAt ?? .distantPast
+            if left != right { return left < right }
+            return (lhs.sortKey ?? "") < (rhs.sortKey ?? "")
+        }
+    }
+
+    /// Single series for chart render + scrubber — ascending index with monotonic dates.
+    static func chartOrderedEquityPoints(_ points: [EquityPoint]) -> [EquityPoint] {
+        guard points.count >= 2 else { return points }
+        let sorted = points.sorted { lhs, rhs in
+            if lhs.index != rhs.index { return lhs.index < rhs.index }
+            let left = lhs.date ?? .distantPast
+            let right = rhs.date ?? .distantPast
+            if left != right { return left < right }
+            return false
+        }
+        var lastDate: Date?
+        for point in sorted {
+            if let date = point.date, let lastDate, date < lastDate {
+                #if DEBUG
+                print(
+                    "[EquityCurve] non-monotonic date at index=\(point.index) date=\(date) after=\(lastDate)"
+                )
+                #endif
+                break
+            }
+            lastDate = point.date ?? lastDate
+        }
+        return sorted.enumerated().map { offset, point in
+            EquityPoint(index: offset, equity: point.equity, date: point.date)
+        }
     }
 
     static func compute(from trades: [TradeInput], selectedMode: Mode) -> Result {
@@ -124,9 +164,8 @@ nonisolated enum ProfileStatisticsMetrics {
         let biggestLoss: Decimal? = losingPnls.isEmpty ? nil : losingPnls.min()
         let longTrades = analytics.filter(\.isLong).count
 
-        // Web builds equity from newest→oldest reversed to chronological order.
         let equityData: [EquityPoint] = {
-            let chronological = analytics.reversed()
+            let chronological = chronologicalTradeOrder(analytics)
             var points: [EquityPoint] = []
             var running = Decimal(0)
             for (index, trade) in chronological.enumerated() {
@@ -135,7 +174,7 @@ nonisolated enum ProfileStatisticsMetrics {
                     EquityPoint(index: index, equity: running, date: trade.createdAt)
                 )
             }
-            return points
+            return chartOrderedEquityPoints(points)
         }()
         let currentEquity = equityData.last?.equity ?? 0
 

@@ -106,6 +106,32 @@ export async function persistVerifiedRithmicUserConnection(
       if (error) throw new Error("rithmic_connection_update_failed")
       connectionId = existing.id
     } else {
+      const { data: disconnected } = await supabase
+        .from("broker_integration_connections")
+        .select("id")
+        .eq("user_id", params.userId)
+        .eq("provider", "rithmic")
+        .eq("provider_user_id", providerUserId)
+        .eq("status", "disconnected")
+        .order("disconnected_at", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (disconnected?.id) {
+        const { error } = await supabase
+          .from("broker_integration_connections")
+          .update(baseRow)
+          .eq("id", disconnected.id)
+        if (error) throw new Error("rithmic_connection_update_failed")
+        connectionId = disconnected.id
+        const { reactivateBrokerAccountMappingsForConnection } = await import(
+          "@/lib/integrations/brokerIntegrationAccounts"
+        )
+        await reactivateBrokerAccountMappingsForConnection(supabase, {
+          userId: params.userId,
+          connectionId: disconnected.id,
+        })
+      } else {
       const { data: inserted, error: insertError } = await supabase
         .from("broker_integration_connections")
         .insert({
@@ -118,6 +144,7 @@ export async function persistVerifiedRithmicUserConnection(
 
       if (insertError || !inserted) throw new Error("rithmic_connection_insert_failed")
       connectionId = inserted.id
+      }
     }
   }
 

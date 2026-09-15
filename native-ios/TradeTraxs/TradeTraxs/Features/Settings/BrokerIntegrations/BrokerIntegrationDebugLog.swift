@@ -2,8 +2,8 @@ import Foundation
 import OSLog
 
 #if DEBUG
-enum BrokerIntegrationDebugLog {
-    private static let log = Logger(subsystem: "com.tradetraxs.TradeTraxs", category: "BrokerIntegration")
+nonisolated enum BrokerIntegrationDebugLog {
+    private static let log = Logger(subsystem: AppLog.subsystem, category: "BrokerIntegration")
 
     static func connectionsResponse(status: Int, bytes: Int) {
         log.info("[BrokerIntegration] connections.response status=\(status, privacy: .public) bytes=\(bytes, privacy: .public)")
@@ -42,7 +42,7 @@ enum BrokerIntegrationDebugLog {
     }
 }
 #else
-enum BrokerIntegrationDebugLog {
+nonisolated enum BrokerIntegrationDebugLog {
     static func connectionsResponse(status: Int, bytes: Int) {}
     static func connectionsDecoded(count: Int) {}
     static func connectionsActive(count: Int) {}

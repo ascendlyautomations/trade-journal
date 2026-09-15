@@ -17,8 +17,7 @@ struct SettingsHomeView: View {
                             stackNavigation?.pushSettings(item.route)
                         } label: {
                             SettingsNavigationRow(
-                                title: item.route.title,
-                                subtitle: item.subtitle,
+                                title: item.rowTitle,
                                 systemImage: item.systemImage
                             )
                         }
@@ -27,10 +26,6 @@ struct SettingsHomeView: View {
                     }
                 } header: {
                     Text(section.title)
-                } footer: {
-                    if let footer = sectionFooter(for: section.id) {
-                        Text(footer)
-                    }
                 }
             }
 
@@ -49,6 +44,7 @@ struct SettingsHomeView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(ExperienceSpacing.xxs)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Settings")
@@ -64,24 +60,5 @@ struct SettingsHomeView: View {
             Button("Cancel", role: .cancel) {}
         }
         .accessibilityIdentifier("settings.home")
-    }
-
-    private func sectionFooter(for sectionID: String) -> String? {
-        switch sectionID {
-        case "preferences":
-            return "Choose which notifications you’d like to receive."
-        case "personal":
-            return "Private saved content — only you can see your Vault."
-        case "tradetraxs":
-            return "Membership, accounts, and referrals."
-        case "privacy":
-            return "Control what other traders can see."
-        case "support":
-            return "Help, feedback, and app information."
-        case "legal":
-            return "Policies that apply to your use of TradeTraxs."
-        default:
-            return nil
-        }
     }
 }

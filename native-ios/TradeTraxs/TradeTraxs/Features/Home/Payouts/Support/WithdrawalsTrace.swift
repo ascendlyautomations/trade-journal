@@ -16,6 +16,7 @@ nonisolated enum WithdrawalsTrace {
         }
     }
 
+    @MainActor
     static func storeIdentity(_ label: String) {
         let identity = ObjectIdentifier(WithdrawalsHistoryStore.shared)
         log("storeIdentity", detail: "\(label) identity=\(identity)")

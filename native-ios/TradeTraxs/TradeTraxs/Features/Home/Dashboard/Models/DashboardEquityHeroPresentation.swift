@@ -29,8 +29,9 @@ nonisolated enum DashboardEquityHeroPresentation {
         _ points: [ProfileStatisticsMetrics.EquityPoint],
         propStartingBalance: Decimal?
     ) -> [ProfileStatisticsMetrics.EquityPoint] {
-        guard let balance = propStartingBalance else { return points }
-        return points.map {
+        let ordered = ProfileStatisticsMetrics.chartOrderedEquityPoints(points)
+        guard let balance = propStartingBalance else { return ordered }
+        return ordered.map {
             ProfileStatisticsMetrics.EquityPoint(
                 index: $0.index,
                 equity: $0.equity + balance,

@@ -144,24 +144,9 @@ struct AchievementDetailView: View {
             )
 
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text(achievement.title)
-                    .experienceStyle(.title, color: colors.primaryText)
+                achievementTitleRow(achievement)
 
-                HStack(spacing: ExperienceSpacing.xs) {
-                    ExperienceTag(title: achievement.tier.rawValue.capitalized, tone: .info)
-                    if achievement.isFeatured {
-                        ExperienceTag(title: "Featured", tone: .success)
-                    }
-                    if let value = achievement.value {
-                        Text(TradeDisplay.pnlText(value))
-                            .experienceStyle(
-                                .metric,
-                                color: theme.metricColor(
-                                    for: NSDecimalNumber(decimal: value.amount).doubleValue
-                                )
-                            )
-                    }
-                }
+                achievementMetadataTags(achievement)
 
                 if let description = achievement.description?
                     .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -194,5 +179,75 @@ struct AchievementDetailView: View {
     private func engagementTarget(for achievement: Achievement) -> InteractionTarget {
         data.detailCache.feedEngagementTarget(forAchievement: achievement.id)
             ?? .achievement(achievement.id)
+    }
+
+    @ViewBuilder
+    private func achievementTitleRow(_ achievement: Achievement) -> some View {
+        if ProfilePayoutTotals.isPayout(achievement.kind),
+           let payoutText = payoutDisplayText(for: achievement)
+        {
+            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
+                Text(achievement.title)
+                    .font(ExperienceTypography.title)
+                    .foregroundStyle(colors.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                    .layoutPriority(1)
+
+                Spacer(minLength: ExperienceSpacing.xs)
+
+                Text(payoutText)
+                    .font(ExperienceTypography.title.monospacedDigit())
+                    .foregroundStyle(payoutAmountColor(for: achievement))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("detail.achievement.payoutHeadline")
+        } else {
+            Text(achievement.title)
+                .experienceStyle(.title, color: colors.primaryText)
+        }
+    }
+
+    @ViewBuilder
+    private func achievementMetadataTags(_ achievement: Achievement) -> some View {
+        let showsInlinePayout =
+            ProfilePayoutTotals.isPayout(achievement.kind)
+            && payoutDisplayText(for: achievement) != nil
+        let showsValueTag = !showsInlinePayout && achievement.value != nil
+        if achievement.isFeatured || showsValueTag {
+            HStack(spacing: ExperienceSpacing.xs) {
+                if achievement.isFeatured {
+                    ExperienceTag(title: "Featured", tone: .success)
+                }
+                if !showsInlinePayout, let value = achievement.value {
+                    Text(TradeDisplay.pnlText(value))
+                        .experienceStyle(
+                            .metric,
+                            color: theme.metricColor(
+                                for: NSDecimalNumber(decimal: value.amount).doubleValue
+                            )
+                        )
+                }
+            }
+        }
+    }
+
+    private func payoutDisplayText(for achievement: Achievement) -> String? {
+        if let value = achievement.value {
+            return TradeDisplay.pnlText(value)
+        }
+        let trimmed = achievement.valueText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func payoutAmountColor(for achievement: Achievement) -> Color {
+        if let value = achievement.value {
+            return theme.metricColor(
+                for: NSDecimalNumber(decimal: value.amount).doubleValue
+            )
+        }
+        return colors.primaryText
     }
 }

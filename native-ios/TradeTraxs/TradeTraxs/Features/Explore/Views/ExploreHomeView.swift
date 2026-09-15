@@ -121,7 +121,7 @@ struct ExploreHomeView: View {
 
     private var discoveryScroll: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                 leaderboardsSection
 
                 if let message = viewModel.tradersFailedMessage, viewModel.suggestedTraders.isEmpty {
@@ -149,16 +149,8 @@ struct ExploreHomeView: View {
     }
 
     private var leaderboardsSection: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            ExploreSectionHeader(
-                title: "Leaderboards",
-                subtitle: "Rankings across the community"
-            )
-            .padding(.horizontal, ExperienceSpacing.md)
-
-            LeaderboardExploreCard {
-                viewModel.openLeaderboards()
-            }
+        LeaderboardExploreCard {
+            viewModel.openLeaderboards()
         }
         .accessibilityIdentifier("explore.leaderboards.section")
     }
@@ -201,7 +193,9 @@ struct ExploreHomeView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             ExploreSectionHeader(
                 title: "Popular Trade Rooms",
-                subtitle: "Communities ordered by membership"
+                subtitle: "Communities ordered by membership",
+                trailingTitle: "View More",
+                onTrailing: { viewModel.openTradeRooms() }
             )
             .padding(.horizontal, ExperienceSpacing.md)
 

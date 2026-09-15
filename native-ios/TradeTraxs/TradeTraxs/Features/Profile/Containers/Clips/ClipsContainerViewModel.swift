@@ -21,6 +21,8 @@ final class ClipsContainerViewModel {
     private var paginationGeneration = 0
     private var hasLoaded = false
     private var isScreenOwned = false
+    private var awaitingScreenBootstrap = false
+    private let initialLoadFailureGrace = ProfileSectionFailureGrace()
     private var syncGeneration: UInt64 = 0
     private var trackedPublishedReelID: ReelID?
 
@@ -53,6 +55,13 @@ final class ClipsContainerViewModel {
         if snapshot.didBootstrap || snapshot.phase == .loaded {
             isScreenOwned = true
         }
+        awaitingScreenBootstrap = ProfileSectionInitialLoad.awaitingScreenBootstrap(
+            isScreenOwned: isScreenOwned,
+            snapshot: snapshot,
+            didLoadSection: snapshot.didLoadClips,
+            sectionItemsEmpty: snapshot.clips.isEmpty,
+            localItemsEmpty: items.isEmpty
+        )
         let beforeCount = items.count
         guard snapshot.didLoadClips || !snapshot.clips.isEmpty else {
             if (snapshot.phase == .loading || snapshot.didBootstrap), items.isEmpty {
@@ -60,6 +69,9 @@ final class ClipsContainerViewModel {
             }
             return
         }
+
+        awaitingScreenBootstrap = false
+        initialLoadFailureGrace.cancel()
 
         if hasLoaded {
             guard !snapshot.clips.isEmpty else { return }
@@ -131,6 +143,12 @@ final class ClipsContainerViewModel {
 
     func loadIfNeeded() {
         guard !hasLoaded, loadTask == nil else { return }
+        if awaitingScreenBootstrap {
+            if items.isEmpty {
+                state = .loading
+            }
+            return
+        }
         syncGeneration &+= 1
         let generation = syncGeneration
         loadTask = Task { await performLoad(generation: generation) }
@@ -215,6 +233,7 @@ final class ClipsContainerViewModel {
 
         state = items.isEmpty ? .loading : state
         paginationGeneration &+= 1
+        initialLoadFailureGrace.cancel()
         do {
             let pageReels: [Reel]
             let cursor: String?
@@ -227,6 +246,9 @@ final class ClipsContainerViewModel {
                 )
                 pageReels = applied.reels ?? []
                 cursor = applied.nextCursor
+                if let linkedTrades = applied.trades, !linkedTrades.isEmpty {
+                    detailCache.seed(trades: linkedTrades)
+                }
             } else {
                 let result = try await feed.profileReels(for: profileOwnerID)
                 pageReels = result.reels
@@ -256,6 +278,7 @@ final class ClipsContainerViewModel {
             nextCursor = cursor
             detailCache.seed(reels: items)
             hasLoaded = true
+            initialLoadFailureGrace.cancel()
             #if DEBUG
             ProfileClipsSync.logFetch(
                 userID: profileOwnerID.rawValue,
@@ -301,7 +324,21 @@ final class ClipsContainerViewModel {
                 return
             }
             if items.isEmpty {
-                state = .failed(message: ProfileSectionSupport.message(for: error))
+                if awaitingScreenBootstrap {
+                    state = .loading
+                } else {
+                    let message = ProfileSectionSupport.message(for: error)
+                    let failedGeneration = generation
+                    initialLoadFailureGrace.scheduleIfNeeded(message: message) { [weak self] in
+                        guard let self else { return false }
+                        return !hasLoaded
+                            && items.isEmpty
+                            && syncGeneration == failedGeneration
+                            && !awaitingScreenBootstrap
+                    } present: { [weak self] message in
+                        self?.state = .failed(message: message)
+                    }
+                }
             }
         }
         loadTask = nil
@@ -321,6 +358,9 @@ final class ClipsContainerViewModel {
                 )
                 pageReels = applied.reels ?? []
                 newCursor = applied.nextCursor
+                if let linkedTrades = applied.trades, !linkedTrades.isEmpty {
+                    detailCache.seed(trades: linkedTrades)
+                }
             } else {
                 return
             }

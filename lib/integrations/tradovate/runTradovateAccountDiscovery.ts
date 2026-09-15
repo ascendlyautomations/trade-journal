@@ -94,6 +94,24 @@ export async function loadTradovateConnectionAccounts(
   })
 
   const connectionStatus = owned?.status ?? "disconnected"
+
+  if (
+    connectionStatus === "reconnect_required" ||
+    connectionStatus === "error"
+  ) {
+    const accounts = await listSafeBrokerIntegrationAccounts(supabase, {
+      userId,
+      provider: "tradovate",
+      connectionId,
+    })
+    return {
+      connectionStatus,
+      discovery: null,
+      accounts,
+      listener: null,
+    }
+  }
+
   if (connectionStatus !== "connected") {
     return {
       connectionStatus,

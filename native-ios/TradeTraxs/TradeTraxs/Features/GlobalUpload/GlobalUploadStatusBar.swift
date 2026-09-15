@@ -113,7 +113,13 @@ struct GlobalUploadChromeModifier: ViewModifier {
 }
 
 extension View {
-    func globalUploadChrome(coordinator: GlobalUploadCoordinator = .shared) -> some View {
+    @MainActor
+    func globalUploadChrome() -> some View {
+        globalUploadChrome(coordinator: GlobalUploadCoordinator.shared)
+    }
+
+    @MainActor
+    func globalUploadChrome(coordinator: GlobalUploadCoordinator) -> some View {
         modifier(GlobalUploadChromeModifier(coordinator: coordinator))
     }
 }

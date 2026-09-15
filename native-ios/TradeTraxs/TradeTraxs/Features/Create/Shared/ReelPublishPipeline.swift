@@ -112,7 +112,7 @@ enum ReelPublishPipeline {
 
     private static let reelVideoCacheControl = "31536000"
 
-    static func normalizedCaption(_ raw: String) -> String? {
+    nonisolated static func normalizedCaption(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return String(trimmed.prefix(MediaVideoPreparation.maxCaptionLength))

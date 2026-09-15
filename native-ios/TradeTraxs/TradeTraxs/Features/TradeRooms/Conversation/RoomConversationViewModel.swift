@@ -764,6 +764,11 @@ final class RoomConversationViewModel {
         navigationCoordinator?.open(navigationHost.manageRoom(roomID))
     }
 
+    func openRoomSettings() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator?.open(navigationHost.roomSettings(roomID))
+    }
+
     func openProfile(_ profileID: ProfileID) {
         ExperienceHaptics.play(.selection)
         navigationCoordinator?.open(navigationHost.profile(profileID))

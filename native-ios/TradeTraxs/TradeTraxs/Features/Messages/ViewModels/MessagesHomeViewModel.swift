@@ -177,7 +177,7 @@ final class MessagesHomeViewModel {
 
     func openSettings() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.pushMessages(.settings(.home))
+        navigationCoordinator.pushMessages(.settings(.notifications))
     }
 
     func presentNewChat() {
@@ -378,20 +378,34 @@ final class MessagesHomeViewModel {
         let peer = peerID.flatMap { domain.profile(id: $0) }
         let unread = inboxStore.unreadCount(for: conversation)
         let preview = conversation.lastMessagePreview?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let username: String? = {
-            if conversation.isGroup { return nil }
-            if let peerUsername = conversation.peerUsername, !peerUsername.isEmpty {
-                return "@\(peerUsername)"
+        let displayName: String = {
+            if conversation.isGroup,
+               let title = conversation.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !title.isEmpty
+            {
+                return title
             }
-            return peer.map { "@\($0.username)" }
+            if let peer {
+                return ProfileDisplayNameResolver.profileDisplayName(for: peer)
+            }
+            return ProfileDisplayNameResolver.profileDisplayName(
+                displayName: conversation.title,
+                username: conversation.peerUsername,
+                profileID: peerID
+            )
+        }()
+        let username: String? = {
+            guard !conversation.isGroup else { return nil }
+            let raw = conversation.peerUsername ?? peer?.username
+            return ProfileDisplayNameResolver.messagingUsernameSubtitle(
+                username: raw,
+                profileID: peer?.id ?? peerID
+            )
         }()
         return DirectMessageInboxItem(
             conversation: conversation,
             peer: peer,
-            displayName: conversation.title
-                ?? peer?.displayName
-                ?? peer?.username
-                ?? "Conversation",
+            displayName: displayName,
             username: username,
             preview: (preview?.isEmpty == false ? preview! : "No messages yet"),
             timestamp: conversation.lastMessageAt,

@@ -104,7 +104,7 @@ struct BrokerIntegrationsView: View {
             } header: {
                 Text("Tradovate")
             } footer: {
-                Text("Connect your Tradovate login to discover accounts and import trades. Credentials stay on TradeTraxs servers.")
+                Text("Connect your Tradovate login to discover accounts and import trades.")
             }
 
             Section {
@@ -256,22 +256,49 @@ struct BrokerIntegrationsView: View {
         }
 
         ForEach(viewModel.tradovateConnections) { connection in
-            brokerConnectionBlock(
-                provider: .tradovate,
-                connection: connection,
-                onDisconnect: { disconnectTarget = .tradovate(connection) },
-                onReconnect: { viewModel.connectTradovate(reconnectConnectionId: connection.id) },
-                onConnectAnotherLogin: { viewModel.connectTradovate() }
-            )
-        }
+            brokerConnectionHeader(connection)
 
-        if !viewModel.tradovateConnections.isEmpty {
-            Button {
-                viewModel.connectTradovate()
-            } label: {
-                Label("Connect Another Tradovate Login", systemImage: "plus.circle")
+            ForEach(viewModel.accounts(for: connection.id)) { account in
+                brokerAccountRow(
+                    provider: .tradovate,
+                    connection: connection,
+                    account: account
+                )
             }
-            .disabled(viewModel.isBrokerConnectionMutationActive)
+
+            if connection.isActiveForBrokerUI {
+                if connection.status == .reconnectRequired {
+                    brokerReconnectRequiredRow(
+                        provider: .tradovate,
+                        onReconnect: {
+                            viewModel.connectTradovate(reconnectConnectionId: connection.id)
+                        }
+                    )
+                }
+
+                if connection.connected {
+                    brokerRefreshAccountsRow(provider: .tradovate, connectionId: connection.id)
+                }
+
+                brokerDisconnectRow {
+                    disconnectTarget = .tradovate(connection)
+                }
+
+                if connection.id == viewModel.tradovateConnections.last?.id {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                        Button {
+                            viewModel.connectTradovate()
+                        } label: {
+                            Label("Connect Another Tradovate Login", systemImage: "plus.circle")
+                        }
+                        .disabled(viewModel.isBrokerConnectionMutationActive)
+
+                        Text("TradeTraxs never stores your Tradovate password.")
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
         }
     }
 
@@ -289,16 +316,39 @@ struct BrokerIntegrationsView: View {
             }
 
             ForEach(viewModel.rithmicConnections) { connection in
-                brokerConnectionBlock(
-                    provider: .rithmic,
-                    connection: connection,
-                    onDisconnect: { disconnectTarget = .rithmic(connection) },
-                    onReconnect: { viewModel.presentRithmicConnect(reconnectConnectionId: connection.id) },
-                    onConnectAnotherLogin: { viewModel.presentRithmicConnect() }
-                )
+                brokerConnectionHeader(connection)
+
+                ForEach(viewModel.accounts(for: connection.id)) { account in
+                    brokerAccountRow(
+                        provider: .rithmic,
+                        connection: connection,
+                        account: account
+                    )
+                }
+
+                if connection.isActiveForBrokerUI {
+                    if connection.status == .reconnectRequired {
+                        brokerReconnectRequiredRow(
+                            provider: .rithmic,
+                            onReconnect: {
+                                viewModel.presentRithmicConnect(reconnectConnectionId: connection.id)
+                            }
+                        )
+                    }
+
+                    if connection.connected {
+                        brokerRefreshAccountsRow(provider: .rithmic, connectionId: connection.id)
+                    }
+
+                    brokerDisconnectRow {
+                        disconnectTarget = .rithmic(connection)
+                    }
+                }
             }
 
             if !viewModel.rithmicConnections.isEmpty {
+                brokerSectionDividerRow
+
                 Button {
                     viewModel.presentRithmicConnect()
                 } label: {
@@ -334,14 +384,16 @@ struct BrokerIntegrationsView: View {
         return "Connect is not offered until server configuration is complete."
     }
 
+    private var brokerSectionDividerRow: some View {
+        Color.clear
+            .frame(height: 1)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(colors.groupedBackground)
+            .accessibilityHidden(true)
+    }
+
     @ViewBuilder
-    private func brokerConnectionBlock(
-        provider: BrokerIntegrationProvider,
-        connection: TradovateConnectionSummary,
-        onDisconnect: @escaping () -> Void,
-        onReconnect: @escaping () -> Void,
-        onConnectAnotherLogin: @escaping () -> Void
-    ) -> some View {
+    private func brokerConnectionHeader(_ connection: TradovateConnectionSummary) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             HStack {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
@@ -366,56 +418,70 @@ struct BrokerIntegrationsView: View {
                 Text("\(accounts.count) broker account(s)")
                     .experienceStyle(.caption, color: colors.tertiaryText)
             }
-
-            ForEach(accounts) { account in
-                brokerAccountRow(provider: provider, connectionId: connection.id, account: account)
-            }
-
-            if connection.isActiveForBrokerUI {
-                if connection.status == .reconnectRequired {
-                    Button("Reconnect") {
-                        onReconnect()
-                    }
-                    .font(.footnote)
-                    .disabled(viewModel.isBrokerConnectionMutationActive)
-                }
-
-                if connection.connected {
-                    Button("Refresh Accounts") {
-                        Task {
-                            await viewModel.loadAccounts(
-                                provider: provider,
-                                connectionId: connection.id,
-                                forceRefresh: provider == .tradovate
-                            )
-                        }
-                    }
-                    .font(.footnote)
-                    .disabled(viewModel.isBrokerConnectionMutationActive)
-
-                    if provider == .tradovate {
-                        Button("Connect Another Account") {
-                            onConnectAnotherLogin()
-                        }
-                        .font(.footnote)
-                        .disabled(viewModel.isBrokerConnectionMutationActive)
-                    }
-                }
-
-                Button("Disconnect", role: .destructive) {
-                    onDisconnect()
-                }
-                .font(.footnote)
-                .disabled(viewModel.isBrokerConnectionMutationActive)
-            }
         }
         .padding(.vertical, ExperienceSpacing.xxs)
+        .listRowInsets(
+            EdgeInsets(
+                top: ExperienceSpacing.xs,
+                leading: ExperienceSpacing.md,
+                bottom: ExperienceSpacing.xxs,
+                trailing: ExperienceSpacing.md
+            )
+        )
+    }
+
+    private func brokerReconnectRequiredRow(
+        provider: BrokerIntegrationProvider,
+        onReconnect: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            Text(
+                provider == .tradovate
+                    ? "Tradovate authorization needs refreshing. Your linked accounts stay saved on TradeTraxs."
+                    : "Rithmic authorization needs refreshing. Your linked accounts stay saved on TradeTraxs."
+            )
+            .experienceStyle(.caption, color: colors.secondaryText)
+            Button("Reconnect", action: onReconnect)
+                .font(.footnote)
+                .buttonStyle(.borderless)
+                .disabled(viewModel.isBrokerConnectionMutationActive)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func brokerRefreshAccountsRow(
+        provider: BrokerIntegrationProvider,
+        connectionId: String
+    ) -> some View {
+        Button {
+            Task {
+                await viewModel.loadAccounts(
+                    provider: provider,
+                    connectionId: connectionId,
+                    forceRefresh: provider == .tradovate
+                )
+            }
+        } label: {
+            Text("Refresh Accounts")
+                .font(.footnote)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.borderless)
+        .disabled(viewModel.isBrokerConnectionMutationActive)
+    }
+
+    private func brokerDisconnectRow(onDisconnect: @escaping () -> Void) -> some View {
+        Button("Disconnect", role: .destructive, action: onDisconnect)
+            .font(.footnote)
+            .buttonStyle(.borderless)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .disabled(viewModel.isBrokerConnectionMutationActive)
     }
 
     @ViewBuilder
     private func brokerAccountRow(
         provider: BrokerIntegrationProvider,
-        connectionId: String,
+        connection: TradovateConnectionSummary,
         account: BrokerIntegrationAccount
     ) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
@@ -423,37 +489,57 @@ struct BrokerIntegrationsView: View {
                 .experienceStyle(.subheadline, color: colors.primaryText)
             Text(BrokerIntegrationDisplay.maskedAccountNumber(account.externalAccountId, name: account.externalAccountName))
                 .experienceStyle(.caption, color: colors.tertiaryText)
-            Text(BrokerIntegrationDisplay.linkStatusLabel(for: account))
-                .experienceStyle(.caption, color: colors.secondaryText)
+            if let linkedLine = BrokerIntegrationDisplay.linkedTradeTraxsLine(
+                for: account,
+                tradingAccounts: manageAccountsViewModel.accounts
+            ) {
+                Text(linkedLine)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            } else {
+                Text(BrokerIntegrationDisplay.linkStatusLabel(for: account))
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            }
 
-            if account.isLinked {
+            if account.hasTradetraxsMapping, connection.connected {
                 Button {
                     Task {
                         await viewModel.importTrades(
                             provider: provider,
-                            connectionId: connectionId,
+                            connectionId: connection.id,
                             mappingId: account.id
                         )
                     }
                 } label: {
-                    if viewModel.importingMappingIds.contains(account.id) {
+                    if viewModel.isImportingTrades(mappingId: account.id) {
                         Label("Importing…", systemImage: "arrow.triangle.2.circlepath")
                     } else {
-                        Label("Import New Trades", systemImage: "square.and.arrow.down")
+                        Label("Import Trades", systemImage: "square.and.arrow.down")
                     }
                 }
-                .disabled(viewModel.importingMappingIds.contains(account.id))
-            } else {
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(viewModel.isImportingTrades(mappingId: account.id))
+                .accessibilityIdentifier("brokerIntegrations.importTrades.\(account.id)")
+            } else if !account.hasTradetraxsMapping, connection.connected {
                 Button("Link Account") {
                     linkTarget = BrokerLinkTarget(
                         provider: provider,
-                        connectionId: connectionId,
+                        connectionId: connection.id,
                         account: account
                     )
                 }
+                .buttonStyle(.borderless)
             }
         }
         .padding(.vertical, ExperienceSpacing.xxs)
+        .listRowInsets(
+            EdgeInsets(
+                top: ExperienceSpacing.xxs,
+                leading: ExperienceSpacing.md,
+                bottom: ExperienceSpacing.xxs,
+                trailing: ExperienceSpacing.md
+            )
+        )
     }
 
     private func connectionSubtitle(_ connection: TradovateConnectionSummary) -> String {
@@ -461,7 +547,9 @@ struct BrokerIntegrationsView: View {
         if let name = connection.providerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
             parts.append(name)
         }
-        if connection.connected {
+        if connection.status == .reconnectRequired {
+            parts.append("Authorization refresh needed")
+        } else if connection.connected {
             parts.append("Connected")
         } else {
             parts.append(connection.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
