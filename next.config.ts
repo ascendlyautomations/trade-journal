@@ -14,6 +14,14 @@ function supabaseStorageHostname(): string | undefined {
 const supabaseHost = supabaseStorageHostname()
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["ws", "protobufjs"],
+  outputFileTracingIncludes: {
+    "/api/integrations/rithmic/phase1/discovery": [
+      "./third_party/rithmic/0.89.0.0/proto/**/*.proto",
+      "./third_party/rithmic/0.89.0.0/samples/samples.py/base.proto",
+      "./lib/integrations/rithmic/rithmic_ssl_cert_auth_params",
+    ],
+  },
   images: {
     qualities: [75, 85, 100],
     deviceSizes: [640, 828, 1200, 1920],

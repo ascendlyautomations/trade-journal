@@ -7,10 +7,16 @@ import {
   rithmicPhase1ErrorMessage,
   type RithmicPhase1ApiErrorCode,
 } from "@/lib/integrations/rithmic/rithmicPhase1ApiErrors"
+import {
+  defaultRithmicSslCaPath,
+  verifyRithmicRuntimeAssets,
+} from "@/lib/integrations/rithmic/rithmicPaths"
 import { runRithmicPhase1Discovery } from "@/lib/integrations/rithmic/runRithmicPhase1Discovery"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+/** Allow system-info + login + account list on Vercel (Pro). */
+export const maxDuration = 60
 
 function jsonError(code: RithmicPhase1ApiErrorCode, status: number, extra?: Record<string, unknown>) {
   return Response.json(
@@ -40,6 +46,10 @@ export async function POST(req: Request) {
     return jsonError("rithmic_env_missing", 503, { envPresence })
   }
 
+  if (!envPresence.apiEnvIsTest) {
+    return jsonError("rithmic_env_invalid", 503, { envPresence })
+  }
+
   let persist = false
   try {
     const body = (await req.json().catch(() => ({}))) as { persist?: boolean }
@@ -56,23 +66,49 @@ export async function POST(req: Request) {
     return Response.json(result)
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown"
+    console.error("[rithmic/phase1/discovery] unhandled", message)
+
     if (message === "rithmic_api_credentials_missing") {
       return jsonError("rithmic_env_missing", 503, { envPresence: rithmicEnvPresenceDiagnostic() })
     }
     if (message === "rithmic_api_env_must_be_test" || message === "rithmic_wss_url_must_use_wss") {
       return jsonError("rithmic_env_invalid", 503)
     }
+
+    const runtimeAssets = verifyRithmicRuntimeAssets(defaultRithmicSslCaPath())
+    if (
+      message.includes("ENOENT") ||
+      message.includes("rithmic_proto") ||
+      message.includes("no such file")
+    ) {
+      return Response.json({
+        ok: false,
+        userMessage:
+          "Rithmic protocol files are missing on the server. Redeploy with third_party Rithmic assets included.",
+        code: "runtime_assets_missing",
+        runtimeAssets,
+        envPresence: rithmicEnvPresenceDiagnostic(),
+        lastSuccessfulStage: "env_preflight",
+        failureStage: "runtime_assets_verified",
+        diagnostics: [message.slice(0, 120)],
+      })
+    }
+
     if (
       message.includes("ECONNREFUSED") ||
       message.includes("ENOTFOUND") ||
-      message.includes("rithmic_socket") ||
       message.includes("WebSocket")
     ) {
-      console.error("[rithmic/phase1/discovery] wss_failed", message)
-      return jsonError("rithmic_wss_connect_failed", 502)
+      return jsonError("rithmic_wss_connect_failed", 502, {
+        detail: message.slice(0, 120),
+        runtimeAssets,
+      })
     }
-    console.error("[rithmic/phase1/discovery]", message)
-    return jsonError("rithmic_discovery_failed", 500)
+
+    return jsonError("rithmic_discovery_failed", 500, {
+      detail: message.slice(0, 120),
+      runtimeAssets,
+    })
   }
 }
 
@@ -93,5 +129,6 @@ export async function GET(req: Request) {
   return Response.json({
     ...base,
     envPresence: rithmicEnvPresenceDiagnostic(),
+    runtimeAssets: verifyRithmicRuntimeAssets(defaultRithmicSslCaPath()),
   })
 }

@@ -1,4 +1,4 @@
-import path from "path"
+import { defaultRithmicSslCaPath } from "@/lib/integrations/rithmic/rithmicPaths"
 
 export type RithmicApiEnvironment = "test"
 
@@ -17,7 +17,7 @@ export type RithmicServerConfig = {
 const DEFAULT_TEST_WSS = "wss://rituz00100.rithmic.com:443"
 
 export function rithmicSslCaPath(): string {
-  return path.join(process.cwd(), "lib/integrations/rithmic/rithmic_ssl_cert_auth_params")
+  return defaultRithmicSslCaPath()
 }
 
 export function loadRithmicServerConfigFromEnv(): RithmicServerConfig {
@@ -58,12 +58,15 @@ export function isRithmicPhase1ApiEnabled(): boolean {
 export function rithmicEnvPresenceDiagnostic(): {
   phase1ApiEnabled: boolean
   apiEnvSet: boolean
+  apiEnvIsTest: boolean
   apiUserSet: boolean
   apiPasswordSet: boolean
 } {
+  const apiEnv = process.env.RITHMIC_API_ENV?.trim() || "test"
   return {
     phase1ApiEnabled: isRithmicPhase1ApiEnabled(),
     apiEnvSet: Boolean(process.env.RITHMIC_API_ENV?.trim()),
+    apiEnvIsTest: apiEnv === "test",
     apiUserSet: Boolean(process.env.RITHMIC_API_USER?.trim()),
     apiPasswordSet: Boolean(process.env.RITHMIC_API_PASSWORD?.trim()),
   }

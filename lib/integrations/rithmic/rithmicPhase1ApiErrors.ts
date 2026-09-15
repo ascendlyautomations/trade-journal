@@ -31,8 +31,26 @@ export function rithmicDiscoveryDiagnosticHint(diagnostics: string[]): string | 
     if (d.includes("sign_agreements") || d === "sign_agreements_in_rtrader_test") {
       return "Sign the required Rithmic Test agreements in R | Trader."
     }
-    if (d === "system_name_not_selected_set_RITHMIC_SYSTEM_NAME") {
+    if (
+      d === "system_name_not_selected_set_RITHMIC_SYSTEM_NAME" ||
+      d === "multiple_systems_set_RITHMIC_SYSTEM_NAME"
+    ) {
       return "Rithmic system selection required. Set RITHMIC_SYSTEM_NAME on the server."
+    }
+    if (d === "runtime_proto_bundle_missing" || d === "runtime_proto_load_failed") {
+      return "Rithmic protocol files are missing on the server (deployment packaging)."
+    }
+    if (d === "runtime_ssl_ca_missing") {
+      return "Rithmic Test TLS certificate bundle is missing on the server."
+    }
+    if (d === "system_info_timeout") {
+      return "Rithmic system discovery timed out."
+    }
+    if (d === "login_timeout") {
+      return "Rithmic Test login timed out."
+    }
+    if (d === "account_list_timeout") {
+      return "Rithmic account discovery timed out."
     }
     if (d === "login_not_successful") {
       return "Rithmic Test login was rejected."

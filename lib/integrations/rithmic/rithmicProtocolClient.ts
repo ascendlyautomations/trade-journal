@@ -5,11 +5,12 @@ import {
   decodeMessage,
   encodeMessage,
   loadRithmicProtoTypes,
+  type RithmicProtoTypes,
 } from "@/lib/integrations/rithmic/rithmicProtoLoader"
 import { logRithmicDiagnostic } from "@/lib/integrations/rithmic/rithmicSyncLogger"
 import { RithmicInfraType, RithmicTemplateId } from "@/lib/integrations/rithmic/rithmicTemplates"
 
-const DEFAULT_RECV_TIMEOUT_MS = 30_000
+const DEFAULT_RECV_TIMEOUT_MS = 25_000
 
 export type RithmicSystemInfoResult = {
   systemNames: string[]
@@ -48,14 +49,26 @@ export type RithmicDiscoveredAccountRow = {
 
 export class RithmicProtocolClient {
   private ws: WebSocket | null = null
-  private readonly proto = loadRithmicProtoTypes()
+  private protoTypes: RithmicProtoTypes | null = null
 
   constructor(private readonly config: RithmicServerConfig) {}
 
-  async connect(): Promise<void> {
-    logRithmicDiagnostic("rithmic_socket_connecting", { wssHost: hostFromUrl(this.config.wssUrl) })
+  private proto(): RithmicProtoTypes {
+    if (!this.protoTypes) {
+      this.protoTypes = loadRithmicProtoTypes()
+    }
+    return this.protoTypes
+  }
+
+  async connect(stageLabel: "rithmic_socket_connecting" | "login_socket_connecting"): Promise<void> {
+    logRithmicDiagnostic(stageLabel, { wssHost: hostFromUrl(this.config.wssUrl) })
 
     const ca = fs.readFileSync(this.config.sslCaPath)
+    const connectedEvent =
+      stageLabel === "login_socket_connecting"
+        ? "login_socket_connected"
+        : "rithmic_socket_connected"
+
     await new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(this.config.wssUrl, {
         rejectUnauthorized: true,
@@ -65,7 +78,7 @@ export class RithmicProtocolClient {
 
       ws.on("open", () => {
         this.ws = ws
-        logRithmicDiagnostic("rithmic_socket_connected", { wssHost: hostFromUrl(this.config.wssUrl) })
+        logRithmicDiagnostic(connectedEvent, { wssHost: hostFromUrl(this.config.wssUrl) })
         resolve()
       })
       ws.on("error", (err) => reject(err))
@@ -82,17 +95,18 @@ export class RithmicProtocolClient {
   }
 
   async requestSystemInfo(): Promise<RithmicSystemInfoResult> {
-    const buf = encodeMessage(this.proto.RequestRithmicSystemInfo, {
+    logRithmicDiagnostic("system_info_requested")
+    const buf = encodeMessage(this.proto().RequestRithmicSystemInfo, {
       template_id: RithmicTemplateId.RequestRithmicSystemInfo,
       user_msg: ["TradeTraxs", "system_info"],
     })
     await this.send(buf)
-    const raw = await this.recv()
+    const raw = await this.recv("system_info_timeout")
     const rp = decodeMessage<{
       template_id?: number
       system_name?: string[]
       rp_code?: string[]
-    }>(this.proto.ResponseRithmicSystemInfo, raw)
+    }>(this.proto().ResponseRithmicSystemInfo, raw)
 
     logRithmicDiagnostic("rithmic_system_info_received", {
       systemCount: rp.system_name?.length ?? 0,
@@ -111,7 +125,7 @@ export class RithmicProtocolClient {
       infraType: RithmicInfraType.ORDER_PLANT,
     })
 
-    const buf = encodeMessage(this.proto.RequestLogin, {
+    const buf = encodeMessage(this.proto().RequestLogin, {
       template_id: RithmicTemplateId.RequestLogin,
       template_version: this.config.templateVersion,
       user_msg: ["TradeTraxs", "login"],
@@ -123,14 +137,18 @@ export class RithmicProtocolClient {
       infra_type: RithmicInfraType.ORDER_PLANT,
     })
     await this.send(buf)
-    const raw = await this.recv()
+    const raw = await this.recv("login_timeout")
     const rp = decodeMessage<{
       rp_code?: string[]
       fcm_id?: string
       ib_id?: string
       unique_user_id?: string
       heartbeat_interval?: number
-    }>(this.proto.ResponseLogin, raw)
+    }>(this.proto().ResponseLogin, raw)
+
+    logRithmicDiagnostic("rithmic_login_response", {
+      rpCode0: rp.rp_code?.[0] ?? null,
+    })
 
     const rpCode = rp.rp_code ?? []
     const success = rpCode.length === 1 && rpCode[0] === "0"
@@ -140,12 +158,10 @@ export class RithmicProtocolClient {
       logRithmicDiagnostic("rithmic_login_success", {
         unique_user_id: rp.unique_user_id ?? null,
       })
+    } else if (agreementLikely) {
+      logRithmicDiagnostic("rithmic_agreement_required", { rpCode0: rpCode[0] ?? null })
     } else {
-      if (agreementLikely) {
-        logRithmicDiagnostic("rithmic_agreement_required", { rpCode0: rpCode[0] ?? null })
-      } else {
-        logRithmicDiagnostic("rithmic_login_failed", { rpCode0: rpCode[0] ?? null })
-      }
+      logRithmicDiagnostic("rithmic_login_failed", { rpCode0: rpCode[0] ?? null })
     }
 
     return {
@@ -160,12 +176,12 @@ export class RithmicProtocolClient {
   }
 
   async requestLoginInfo(): Promise<RithmicLoginInfoResult> {
-    const buf = encodeMessage(this.proto.RequestLoginInfo, {
+    const buf = encodeMessage(this.proto().RequestLoginInfo, {
       template_id: RithmicTemplateId.RequestLoginInfo,
       user_msg: ["TradeTraxs", "login_info"],
     })
     await this.send(buf)
-    const raw = await this.recv()
+    const raw = await this.recv("login_info_timeout")
     const rp = decodeMessage<{
       rp_code?: string[]
       fcm_id?: string
@@ -173,7 +189,7 @@ export class RithmicProtocolClient {
       user_type?: number
       first_name?: string
       last_name?: string
-    }>(this.proto.ResponseLoginInfo, raw)
+    }>(this.proto().ResponseLoginInfo, raw)
 
     logRithmicDiagnostic("rithmic_login_info_received", {
       rpCode0: rp.rp_code?.[0] ?? null,
@@ -197,7 +213,7 @@ export class RithmicProtocolClient {
   }): Promise<{ accounts: RithmicDiscoveredAccountRow[]; rpCode: string[] }> {
     logRithmicDiagnostic("rithmic_account_list_requested")
 
-    const buf = encodeMessage(this.proto.RequestAccountList, {
+    const buf = encodeMessage(this.proto().RequestAccountList, {
       template_id: RithmicTemplateId.RequestAccountList,
       user_msg: ["TradeTraxs", "account_list"],
       fcm_id: params.fcmId,
@@ -210,7 +226,7 @@ export class RithmicProtocolClient {
     let finalRpCode: string[] = []
 
     for (;;) {
-      const raw = await this.recvWithHeartbeat()
+      const raw = await this.recvWithHeartbeat("account_list_timeout")
       const rp = decodeMessage<{
         rq_handler_rp_code?: string[]
         rp_code?: string[]
@@ -222,7 +238,7 @@ export class RithmicProtocolClient {
         loss_limit?: string
         account_auto_liquidate?: string
         auto_liq_threshold_current_value?: string
-      }>(this.proto.ResponseAccountList, raw)
+      }>(this.proto().ResponseAccountList, raw)
 
       const handlerOk =
         (rp.rq_handler_rp_code?.length ?? 0) > 0 && rp.rq_handler_rp_code?.[0] === "0"
@@ -253,6 +269,10 @@ export class RithmicProtocolClient {
 
       if ((rp.rp_code?.length ?? 0) > 0) {
         finalRpCode = rp.rp_code ?? []
+        logRithmicDiagnostic("account_list_response", {
+          rpCode0: finalRpCode[0] ?? null,
+          accountCount: accounts.length,
+        })
         break
       }
     }
@@ -262,7 +282,7 @@ export class RithmicProtocolClient {
 
   async logout(): Promise<void> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
-    const buf = encodeMessage(this.proto.RequestLogout, {
+    const buf = encodeMessage(this.proto().RequestLogout, {
       template_id: RithmicTemplateId.RequestLogout,
       user_msg: ["TradeTraxs", "logout"],
     })
@@ -280,14 +300,14 @@ export class RithmicProtocolClient {
     })
   }
 
-  private async recv(timeoutMs = DEFAULT_RECV_TIMEOUT_MS): Promise<Uint8Array> {
+  private async recv(timeoutErrorCode: string, timeoutMs = DEFAULT_RECV_TIMEOUT_MS): Promise<Uint8Array> {
     const ws = this.ws
     if (!ws) throw new Error("rithmic_socket_not_open")
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         cleanup()
-        reject(new Error("rithmic_recv_timeout"))
+        reject(new Error(timeoutErrorCode))
       }, timeoutMs)
 
       const onMessage = (data: WebSocket.RawData) => {
@@ -317,20 +337,23 @@ export class RithmicProtocolClient {
     })
   }
 
-  private async recvWithHeartbeat(timeoutMs = DEFAULT_RECV_TIMEOUT_MS): Promise<Uint8Array> {
+  private async recvWithHeartbeat(
+    timeoutErrorCode: string,
+    timeoutMs = DEFAULT_RECV_TIMEOUT_MS
+  ): Promise<Uint8Array> {
     try {
-      return await this.recv(timeoutMs)
+      return await this.recv(timeoutErrorCode, timeoutMs)
     } catch (err) {
-      if (err instanceof Error && err.message === "rithmic_recv_timeout") {
+      if (err instanceof Error && err.message === timeoutErrorCode) {
         await this.sendHeartbeat()
-        return this.recv(timeoutMs)
+        return this.recv(timeoutErrorCode, timeoutMs)
       }
       throw err
     }
   }
 
   private async sendHeartbeat(): Promise<void> {
-    const buf = encodeMessage(this.proto.RequestHeartbeat, {
+    const buf = encodeMessage(this.proto().RequestHeartbeat, {
       template_id: RithmicTemplateId.RequestHeartbeat,
     })
     await this.send(buf)
