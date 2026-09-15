@@ -53,3 +53,18 @@ export function loadRithmicServerConfigFromEnv(): RithmicServerConfig {
 export function isRithmicPhase1ApiEnabled(): boolean {
   return process.env.RITHMIC_PHASE1_API_ENABLED === "1"
 }
+
+/** Safe server-side check — presence only, never values. */
+export function rithmicEnvPresenceDiagnostic(): {
+  phase1ApiEnabled: boolean
+  apiEnvSet: boolean
+  apiUserSet: boolean
+  apiPasswordSet: boolean
+} {
+  return {
+    phase1ApiEnabled: isRithmicPhase1ApiEnabled(),
+    apiEnvSet: Boolean(process.env.RITHMIC_API_ENV?.trim()),
+    apiUserSet: Boolean(process.env.RITHMIC_API_USER?.trim()),
+    apiPasswordSet: Boolean(process.env.RITHMIC_API_PASSWORD?.trim()),
+  }
+}

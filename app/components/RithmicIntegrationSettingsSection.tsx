@@ -1,12 +1,20 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
+import { rithmicDiscoveryDiagnosticHint } from "@/lib/integrations/rithmic/rithmicPhase1ApiErrors"
 
 type Phase1Meta = {
   enabled: boolean
   phase: number
   scope: string
   productionReady: boolean
+  envPresence?: {
+    phase1ApiEnabled: boolean
+    apiEnvSet: boolean
+    apiUserSet: boolean
+    apiPasswordSet: boolean
+  }
 }
 
 type DiscoveryResult = {
@@ -26,6 +34,20 @@ type DiscoveryResult = {
   diagnostics: string[]
 }
 
+type ApiErrorBody = {
+  error?: string
+  code?: string
+  envPresence?: Phase1Meta["envPresence"]
+}
+
+function resolveApiErrorMessage(data: ApiErrorBody, status: number): string {
+  if (data.error?.trim()) return data.error.trim()
+  if (status === 401) {
+    return "Your TradeTraxs session expired. Please sign in again."
+  }
+  return "Discovery failed."
+}
+
 export default function RithmicIntegrationSettingsSection() {
   const [meta, setMeta] = useState<Phase1Meta | null>(null)
   const [loading, setLoading] = useState(false)
@@ -33,10 +55,16 @@ export default function RithmicIntegrationSettingsSection() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/api/integrations/rithmic/phase1/discovery")
-      .then((r) => r.json())
-      .then((data) => setMeta(data as Phase1Meta))
-      .catch(() => setMeta(null))
+    void (async () => {
+      try {
+        const headers = await supabaseBearerHeaders()
+        const res = await fetch("/api/integrations/rithmic/phase1/discovery", { headers })
+        const data = (await res.json()) as Phase1Meta
+        setMeta(data)
+      } catch {
+        setMeta(null)
+      }
+    })()
   }, [])
 
   const runDiscovery = useCallback(async (persist: boolean) => {
@@ -44,17 +72,28 @@ export default function RithmicIntegrationSettingsSection() {
     setError(null)
     setResult(null)
     try {
+      const headers = {
+        ...(await supabaseBearerHeaders()),
+        "Content-Type": "application/json",
+      }
       const res = await fetch("/api/integrations/rithmic/phase1/discovery", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ persist }),
       })
-      const data = (await res.json()) as DiscoveryResult & { error?: string }
+      const data = (await res.json()) as DiscoveryResult & ApiErrorBody
       if (!res.ok) {
-        setError(data.error ?? "Discovery failed")
+        setError(resolveApiErrorMessage(data, res.status))
         return
       }
       setResult(data)
+      if (!data.ok) {
+        const hint =
+          (data.agreementRequired
+            ? "Sign the required Rithmic Test agreements in R | Trader."
+            : null) ?? rithmicDiscoveryDiagnosticHint(data.diagnostics ?? [])
+        if (hint) setError(hint)
+      }
     } catch {
       setError("Network error")
     } finally {
@@ -66,6 +105,11 @@ export default function RithmicIntegrationSettingsSection() {
     return null
   }
 
+  const envOk =
+    meta?.envPresence?.apiUserSet &&
+    meta?.envPresence?.apiPasswordSet &&
+    meta?.envPresence?.phase1ApiEnabled
+
   return (
     <section className="space-y-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6">
       <div>
@@ -74,6 +118,11 @@ export default function RithmicIntegrationSettingsSection() {
           Development-only connectivity check. Uses TradeTraxs server Test credentials — not
           production-ready Connect. Sign required agreements in R | Trader (Test) before running.
         </p>
+        {meta?.envPresence && !envOk ? (
+          <p className="mt-2 text-sm text-amber-200/90">
+            Server Rithmic Test configuration looks incomplete. Confirm Vercel env vars and redeploy.
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -105,6 +154,11 @@ export default function RithmicIntegrationSettingsSection() {
               {result.ok ? "OK" : "Incomplete or failed"}
             </span>
           </p>
+          {result.systemNames.length > 1 && (
+            <p className="text-xs text-white/60">
+              Systems reported: {result.systemNames.join(", ")}
+            </p>
+          )}
           {result.agreementRequired && (
             <p className="text-amber-200">
               Agreement may be required — log into Rithmic Test with R | Trader / R | Trader Pro and

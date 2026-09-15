@@ -33,6 +33,46 @@ type FlowStep =
   | "caught_up"
   | "error"
 
+function TradovateImportPromptAccountCard({
+  accounts,
+}: {
+  accounts: LinkedAccount[]
+}) {
+  if (accounts.length > 1) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+        <p className="text-xs font-medium text-gray-400">Tradovate</p>
+        <p className="mt-1 truncate text-sm font-medium text-white">
+          {accounts.length} linked accounts
+        </p>
+      </div>
+    )
+  }
+
+  const acc = accounts[0]
+  if (!acc) return null
+
+  const tradetraxsName = acc.tradetraxsAccountName?.trim() || null
+  const brokerLabel = acc.brokerAccountLabel?.trim() || null
+  const primaryLine = tradetraxsName || brokerLabel || "Linked account"
+  const secondaryLine =
+    tradetraxsName && brokerLabel && brokerLabel !== tradetraxsName ? brokerLabel : null
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+      <p className="text-xs font-medium text-gray-400">Tradovate</p>
+      <p className="mt-1 truncate text-sm font-medium text-white" title={primaryLine}>
+        {primaryLine}
+      </p>
+      {secondaryLine ? (
+        <p className="mt-0.5 truncate text-xs text-gray-500" title={secondaryLine}>
+          {secondaryLine}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export default function BrokerTradovateLoginImportGate() {
   const pathname = usePathname()
   const { user, profile, loading: profileLoading } = useUserProfile()
@@ -145,13 +185,6 @@ export default function BrokerTradovateLoginImportGate() {
 
   if (step === "closed" || !user?.id) return null
 
-  const primaryAccountLabel =
-    linkedAccounts.length === 1
-      ? linkedAccounts[0]?.tradetraxsAccountName ??
-        linkedAccounts[0]?.brokerAccountLabel ??
-        "Linked account"
-      : `${linkedAccounts.length} linked accounts`
-
   return (
     <>
       {step === "prompt" ? (
@@ -165,50 +198,52 @@ export default function BrokerTradovateLoginImportGate() {
           ariaLabel="Import Tradovate trades"
           overlayClassName="z-[105] bg-black/60 backdrop-blur-sm"
           panelClassName="max-w-md rounded-2xl border-white/10 bg-[#152238]"
+          headerClassName="shrink-0 border-b-0 px-5 pb-0 pt-5"
+          bodyClassName="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-4"
+          footerClassName="shrink-0 border-t border-white/10 px-5 py-4"
           header={
             <>
               <h2 className="text-lg font-semibold text-white">Made any trades?</h2>
               <p className="mt-2 text-sm leading-relaxed text-gray-300">
                 Import your latest Tradovate trades and keep your journal up to date.
               </p>
-              <p className="mt-3 text-sm text-emerald-200/90">Tradovate · {primaryAccountLabel}</p>
             </>
           }
           footer={
-            <div className="flex flex-col gap-3">
-              <label className="flex items-center gap-2 text-sm text-gray-400">
-                <input
-                  type="checkbox"
-                  checked={dontRemind}
-                  onChange={(e) => setDontRemind(e.target.checked)}
-                  className="rounded border-white/20"
-                />
-                Don&apos;t remind me when I log in
-              </label>
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <ActionButton
-                  type="button"
-                  className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-gray-200"
-                  onClick={() => {
-                    markTradovateLoginImportDismissedThisSession()
-                    void saveDontRemindIfNeeded()
-                    closeAll()
-                  }}
-                >
-                  Not now
-                </ActionButton>
-                <ActionButton
-                  type="button"
-                  className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"
-                  onClick={() => startImportFlow()}
-                >
-                  Import trades
-                </ActionButton>
-              </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+              <ActionButton
+                type="button"
+                className="min-h-[2.5rem] rounded-xl border border-white/15 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/5"
+                onClick={() => {
+                  markTradovateLoginImportDismissedThisSession()
+                  void saveDontRemindIfNeeded()
+                  closeAll()
+                }}
+              >
+                Not now
+              </ActionButton>
+              <ActionButton
+                type="button"
+                className="min-h-[2.5rem] rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
+                onClick={() => startImportFlow()}
+              >
+                Import trades
+              </ActionButton>
             </div>
           }
         >
-          <div />
+          <TradovateImportPromptAccountCard accounts={linkedAccounts} />
+          <label className="mt-5 flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={dontRemind}
+              onChange={(e) => setDontRemind(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/25 bg-white/5 text-blue-600 focus:ring-blue-500/40"
+            />
+            <span className="text-sm leading-snug text-gray-300">
+              Don&apos;t remind me when I log in
+            </span>
+          </label>
         </ScrollableModalShell>
       ) : null}
 
