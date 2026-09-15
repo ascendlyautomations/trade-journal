@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
+import BrokerImportModalShell, {
+  brokerImportFooterActionsClass,
+  brokerImportGhostButtonClass,
+  brokerImportPrimaryButtonClass,
+  brokerImportSecondaryButtonClass,
+} from "@/app/components/brokerImport/BrokerImportModalShell"
 import {
   brokerEnrichmentAccountLine,
   brokerEnrichmentContractsLine,
@@ -86,58 +91,60 @@ export default function BrokerTradeEnrichmentModal({
   }
 
   return (
-    <ScrollableModalShell
+    <BrokerImportModalShell
       open={open}
       onClose={onClose}
       ariaLabel="Finish imported trade"
-      overlayClassName="z-[110] bg-black/60 backdrop-blur-sm"
-      panelClassName="max-w-lg rounded-2xl border-white/10 bg-[#152238]"
-      header={
+      variant="enrichment"
+      size="lg"
+      title={title}
+      description={
         <>
           {importCountLabel ? (
-            <p className="text-sm font-medium text-emerald-300">{importCountLabel}</p>
+            <p className="mb-2 text-sm font-medium text-emerald-300">{importCountLabel}</p>
           ) : null}
-          <h2 className="text-lg font-semibold text-white">{title}</h2>
-          <p className="mt-1 text-sm text-gray-400">Finish your trade</p>
+          <p>Add RR and notes while the trade is fresh.</p>
         </>
       }
       footer={
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between sm:items-center">
+          <button
+            type="button"
+            className="text-left text-sm text-gray-400 hover:text-gray-200 disabled:opacity-50"
+            disabled={saving}
+            onClick={() => void handleDismiss()}
+          >
+            Don&apos;t ask again for this trade
+          </button>
+          <div className={brokerImportFooterActionsClass}>
             <button
               type="button"
-              className="text-sm text-gray-400 hover:text-gray-200 disabled:opacity-50"
+              className={brokerImportSecondaryButtonClass}
               disabled={saving}
-              onClick={() => void handleDismiss()}
+              onClick={onClose}
             >
-              Don&apos;t ask again for this trade
+              Skip for now
             </button>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-gray-200"
-                disabled={saving}
-                onClick={onClose}
-              >
-                Skip for now
-              </button>
-              <button
-                type="button"
-                className="rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                disabled={saving}
-                onClick={() => void handleSave()}
-              >
-                {saving ? "Saving…" : multi ? "Save & next" : "Save"}
-              </button>
-            </div>
+            <button
+              type="button"
+              className={brokerImportPrimaryButtonClass}
+              disabled={saving}
+              onClick={() => void handleSave()}
+            >
+              {saving ? "Saving…" : multi ? "Save & next" : "Save"}
+            </button>
           </div>
         </div>
       }
     >
-      <div className="space-y-4 px-1">
-        <div className="rounded-xl border border-white/10 bg-black/25 p-4 space-y-2">
-          <p className="text-xs uppercase tracking-wide text-gray-500">Tradovate · {brokerEnrichmentAccountLine(trade)}</p>
-          <p className="text-lg font-semibold text-white">{brokerEnrichmentTradeHeadline(trade)}</p>
+      <div className="space-y-4">
+        <div className="space-y-2 rounded-xl border border-white/10 bg-black/25 p-4">
+          <p className="text-xs uppercase tracking-wide text-gray-500">
+            Tradovate · {brokerEnrichmentAccountLine(trade)}
+          </p>
+          <p className="text-lg font-semibold text-white">
+            {brokerEnrichmentTradeHeadline(trade)}
+          </p>
           <p className="text-base text-emerald-200">{brokerEnrichmentPnlLine(trade)}</p>
           <p className="text-sm text-gray-300">{brokerEnrichmentContractsLine(trade)}</p>
           <p className="text-sm text-gray-400">{brokerEnrichmentTimeRangeLine(trade)}</p>
@@ -176,6 +183,6 @@ export default function BrokerTradeEnrichmentModal({
 
         {error ? <p className="text-sm text-red-300">{error}</p> : null}
       </div>
-    </ScrollableModalShell>
+    </BrokerImportModalShell>
   )
 }

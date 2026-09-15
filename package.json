@@ -21,6 +21,7 @@
     "test:leaderboard": "node --experimental-strip-types --test lib/leaderboardTimeframeFallback.test.ts",
     "test:lib-units": "node --experimental-strip-types --test lib/validateQuickTradeForm.test.ts lib/zoomPanCrop.test.ts lib/tradeScreenshotDisplay.test.ts lib/tradeRr.test.ts lib/resolveTradePoints.test.ts lib/renderTradeImageCrop.test.ts lib/pageHeadingStyles.test.ts lib/optimizedStorageImage.test.ts lib/authPasswordManagement.test.ts lib/analyzeTradeProgress.test.ts lib/webSocialOAuthPolicy.test.ts lib/voiceMessage.test.ts",
     "test:tradovate-sync": "node --experimental-strip-types --test lib/integrations/tradovate/tradeReconstruction.test.ts lib/integrations/tradovate/tradovateSyncCoalesce.test.ts lib/integrations/tradovate/tradovateUserSyncWebSocket.test.ts lib/integrations/tradovate/tradovateListenerStatus.test.ts",
+    "test:rithmic-proto": "tsx --test lib/integrations/rithmic/rithmicProtoEncode.test.ts",
     "broker-sync-worker": "tsx --import ./services/tradovate-sync-worker/register-loader.mjs services/tradovate-sync-worker/run.ts",
     "types:supabase": "supabase gen types typescript --project-id \"${SUPABASE_PROJECT_ID}\" --schema public > lib/database.types.ts",
     "migrate:affiliate-promos": "node scripts/migrate-affiliate-promos-to-once.mjs",

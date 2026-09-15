@@ -15,7 +15,13 @@ import {
 import { queueBrokerEnrichment } from "@/lib/brokerEnrichment/queueBrokerEnrichment"
 import { invalidateBrokerEnrichmentPendingCount } from "@/lib/brokerEnrichment/brokerEnrichmentPendingCount"
 import { invalidateTradesCache } from "@/lib/appDataCache"
-import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
+import BrokerImportModalShell, {
+  BrokerImportLoadingBody,
+  brokerImportFooterActionsClass,
+  brokerImportPrimaryButtonClass,
+  brokerImportSecondaryButtonClass,
+  brokerImportGhostButtonClass,
+} from "@/app/components/brokerImport/BrokerImportModalShell"
 import ActionButton from "@/app/components/ui/ActionButton"
 
 type LinkedAccount = {
@@ -100,6 +106,12 @@ export default function BrokerTradovateLoginImportGate() {
       body: JSON.stringify({ optOut: true }),
     })
   }, [dontRemind, user?.id])
+
+  const dismissPrompt = useCallback(() => {
+    markTradovateLoginImportDismissedThisSession()
+    void saveDontRemindIfNeeded()
+    closeAll()
+  }, [closeAll, saveDontRemindIfNeeded])
 
   const runImport = useCallback(
     async (mappingIds: string[]) => {
@@ -188,43 +200,24 @@ export default function BrokerTradovateLoginImportGate() {
   return (
     <>
       {step === "prompt" ? (
-        <ScrollableModalShell
+        <BrokerImportModalShell
           open
-          onClose={() => {
-            markTradovateLoginImportDismissedThisSession()
-            void saveDontRemindIfNeeded()
-            closeAll()
-          }}
+          onClose={dismissPrompt}
           ariaLabel="Import Tradovate trades"
-          overlayClassName="z-[105] bg-black/60 backdrop-blur-sm"
-          panelClassName="max-w-md rounded-2xl border-white/10 bg-[#152238]"
-          headerClassName="shrink-0 border-b-0 px-5 pb-0 pt-5"
-          bodyClassName="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-4"
-          footerClassName="shrink-0 border-t border-white/10 px-5 py-4"
-          header={
-            <>
-              <h2 className="text-lg font-semibold text-white">Made any trades?</h2>
-              <p className="mt-2 text-sm leading-relaxed text-gray-300">
-                Import your latest Tradovate trades and keep your journal up to date.
-              </p>
-            </>
-          }
+          title="Made any trades?"
+          description="Import your latest Tradovate trades and keep your journal up to date."
           footer={
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+            <div className={brokerImportFooterActionsClass}>
               <ActionButton
                 type="button"
-                className="min-h-[2.5rem] rounded-xl border border-white/15 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/5"
-                onClick={() => {
-                  markTradovateLoginImportDismissedThisSession()
-                  void saveDontRemindIfNeeded()
-                  closeAll()
-                }}
+                className={brokerImportSecondaryButtonClass}
+                onClick={dismissPrompt}
               >
                 Not now
               </ActionButton>
               <ActionButton
                 type="button"
-                className="min-h-[2.5rem] rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
+                className={brokerImportPrimaryButtonClass}
                 onClick={() => startImportFlow()}
               >
                 Import trades
@@ -244,36 +237,28 @@ export default function BrokerTradovateLoginImportGate() {
               Don&apos;t remind me when I log in
             </span>
           </label>
-        </ScrollableModalShell>
+        </BrokerImportModalShell>
       ) : null}
 
       {step === "select_accounts" ? (
-        <ScrollableModalShell
+        <BrokerImportModalShell
           open
           onClose={closeAll}
           ariaLabel="Select accounts to import"
-          overlayClassName="z-[105] bg-black/60 backdrop-blur-sm"
-          panelClassName="max-w-md rounded-2xl border-white/10 bg-[#152238]"
-          header={
-            <>
-              <h2 className="text-lg font-semibold text-white">Import trades</h2>
-              <p className="mt-2 text-sm text-gray-300">
-                Choose which linked accounts to check for new trades.
-              </p>
-            </>
-          }
+          title="Import trades"
+          description="Choose which linked accounts to check for new trades."
           footer={
-            <div className="flex justify-end gap-2">
+            <div className={brokerImportFooterActionsClass}>
               <ActionButton
                 type="button"
-                className="rounded-xl border border-white/15 px-4 py-2 text-sm text-gray-200"
+                className={brokerImportSecondaryButtonClass}
                 onClick={closeAll}
               >
                 Cancel
               </ActionButton>
               <ActionButton
                 type="button"
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+                className={brokerImportPrimaryButtonClass}
                 disabled={selectedIds.size === 0}
                 onClick={() => void runImport([...selectedIds])}
               >
@@ -291,7 +276,7 @@ export default function BrokerTradovateLoginImportGate() {
                 "Linked account"
               return (
                 <li key={acc.mappingId}>
-                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2.5">
                     <input
                       type="checkbox"
                       checked={checked}
@@ -303,86 +288,79 @@ export default function BrokerTradovateLoginImportGate() {
                           return next
                         })
                       }}
+                      className="h-4 w-4 shrink-0 rounded border-white/25"
                     />
-                    <span className="text-sm text-white">{label}</span>
+                    <span className="truncate text-sm text-white">{label}</span>
                   </label>
                 </li>
               )
             })}
           </ul>
-        </ScrollableModalShell>
+        </BrokerImportModalShell>
       ) : null}
 
       {step === "importing" ? (
-        <ScrollableModalShell
+        <BrokerImportModalShell
           open
           onClose={() => {}}
           ariaLabel="Importing trades"
-          overlayClassName="z-[105] bg-black/60 backdrop-blur-sm"
-          panelClassName="max-w-sm rounded-2xl border-white/10 bg-[#152238]"
+          title="Checking Tradovate…"
           showCloseButton={false}
-          header={
-            <h2 className="text-lg font-semibold text-white">Checking Tradovate…</h2>
-          }
+          closeDisabled
         >
-          <p className="text-sm text-gray-400">Importing your latest trades into your journal.</p>
-        </ScrollableModalShell>
+          <BrokerImportLoadingBody message="Looking for new trades." />
+        </BrokerImportModalShell>
       ) : null}
 
       {step === "caught_up" ? (
-        <ScrollableModalShell
+        <BrokerImportModalShell
           open
           onClose={closeAll}
           ariaLabel="Import complete"
-          overlayClassName="z-[105] bg-black/60 backdrop-blur-sm"
-          panelClassName="max-w-sm rounded-2xl border-white/10 bg-[#152238]"
-          header={
-            <>
-              <h2 className="text-lg font-semibold text-emerald-300">You&apos;re all caught up</h2>
-              <p className="mt-2 text-sm text-gray-300">No new Tradovate trades were found.</p>
-            </>
-          }
+          title="You're all caught up"
+          titleTone="success"
+          description="No new Tradovate trades were found."
           footer={
-            <div className="flex justify-end">
+            <div className={brokerImportFooterActionsClass}>
               <ActionButton
                 type="button"
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+                className={brokerImportPrimaryButtonClass}
                 onClick={closeAll}
               >
                 Done
               </ActionButton>
             </div>
           }
-        >
-          <div />
-        </ScrollableModalShell>
+        />
       ) : null}
 
       {step === "error" ? (
-        <ScrollableModalShell
+        <BrokerImportModalShell
           open
           onClose={closeAll}
           ariaLabel="Import error"
-          overlayClassName="z-[105] bg-black/60 backdrop-blur-sm"
-          panelClassName="max-w-sm rounded-2xl border-white/10 bg-[#152238]"
-          header={<h2 className="text-lg font-semibold text-red-300">Import failed</h2>}
+          title="Import failed"
+          titleTone="error"
+          description={importError ?? "Could not import trades."}
           footer={
-            <div className="flex justify-end gap-2">
-              <ActionButton type="button" className="text-sm text-gray-300" onClick={closeAll}>
+            <div className={brokerImportFooterActionsClass}>
+              <ActionButton
+                type="button"
+                className={brokerImportGhostButtonClass}
+                onClick={closeAll}
+              >
                 Close
               </ActionButton>
               <ActionButton
                 type="button"
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white"
+                className={brokerImportPrimaryButtonClass}
                 onClick={() => startImportFlow()}
               >
                 Retry
               </ActionButton>
             </div>
           }
-        >
-          <p className="text-sm text-gray-300">{importError}</p>
-        </ScrollableModalShell>
+        />
       ) : null}
     </>
   )

@@ -97,25 +97,26 @@ export class RithmicProtocolClient {
   async requestSystemInfo(): Promise<RithmicSystemInfoResult> {
     logRithmicDiagnostic("system_info_requested")
     const buf = encodeMessage(this.proto().RequestRithmicSystemInfo, {
-      template_id: RithmicTemplateId.RequestRithmicSystemInfo,
-      user_msg: ["TradeTraxs", "system_info"],
+      templateId: RithmicTemplateId.RequestRithmicSystemInfo,
+      userMsg: ["TradeTraxs", "system_info"],
     })
+    logRithmicDiagnostic("system_info_encoded", { byteLength: buf.length })
     await this.send(buf)
+    logRithmicDiagnostic("system_info_sent")
     const raw = await this.recv("system_info_timeout")
     const rp = decodeMessage<{
-      template_id?: number
-      system_name?: string[]
-      rp_code?: string[]
+      systemName?: string[]
+      rpCode?: string[]
     }>(this.proto().ResponseRithmicSystemInfo, raw)
 
     logRithmicDiagnostic("rithmic_system_info_received", {
-      systemCount: rp.system_name?.length ?? 0,
-      rpCode0: rp.rp_code?.[0] ?? null,
+      systemCount: rp.systemName?.length ?? 0,
+      rpCode0: rp.rpCode?.[0] ?? null,
     })
 
     return {
-      systemNames: rp.system_name ?? [],
-      rpCode: rp.rp_code ?? [],
+      systemNames: rp.systemName ?? [],
+      rpCode: rp.rpCode ?? [],
     }
   }
 
@@ -126,37 +127,37 @@ export class RithmicProtocolClient {
     })
 
     const buf = encodeMessage(this.proto().RequestLogin, {
-      template_id: RithmicTemplateId.RequestLogin,
-      template_version: this.config.templateVersion,
-      user_msg: ["TradeTraxs", "login"],
+      templateId: RithmicTemplateId.RequestLogin,
+      templateVersion: this.config.templateVersion,
+      userMsg: ["TradeTraxs", "login"],
       user: this.config.user,
       password: this.config.password,
-      app_name: this.config.appName,
-      app_version: this.config.appVersion,
-      system_name: systemName,
-      infra_type: RithmicInfraType.ORDER_PLANT,
+      appName: this.config.appName,
+      appVersion: this.config.appVersion,
+      systemName: systemName,
+      infraType: RithmicInfraType.ORDER_PLANT,
     })
     await this.send(buf)
     const raw = await this.recv("login_timeout")
     const rp = decodeMessage<{
-      rp_code?: string[]
-      fcm_id?: string
-      ib_id?: string
-      unique_user_id?: string
-      heartbeat_interval?: number
+      rpCode?: string[]
+      fcmId?: string
+      ibId?: string
+      uniqueUserId?: string
+      heartbeatInterval?: number
     }>(this.proto().ResponseLogin, raw)
 
     logRithmicDiagnostic("rithmic_login_response", {
-      rpCode0: rp.rp_code?.[0] ?? null,
+      rpCode0: rp.rpCode?.[0] ?? null,
     })
 
-    const rpCode = rp.rp_code ?? []
+    const rpCode = rp.rpCode ?? []
     const success = rpCode.length === 1 && rpCode[0] === "0"
     const agreementLikely = !success && rpCode.some((c) => looksLikeAgreementIssue(c, rpCode))
 
     if (success) {
       logRithmicDiagnostic("rithmic_login_success", {
-        unique_user_id: rp.unique_user_id ?? null,
+        unique_user_id: rp.uniqueUserId ?? null,
       })
     } else if (agreementLikely) {
       logRithmicDiagnostic("rithmic_agreement_required", { rpCode0: rpCode[0] ?? null })
@@ -167,42 +168,42 @@ export class RithmicProtocolClient {
     return {
       success,
       rpCode,
-      fcmId: rp.fcm_id ?? null,
-      ibId: rp.ib_id ?? null,
-      uniqueUserId: rp.unique_user_id ?? null,
-      heartbeatIntervalSec: rp.heartbeat_interval ?? null,
+      fcmId: rp.fcmId ?? null,
+      ibId: rp.ibId ?? null,
+      uniqueUserId: rp.uniqueUserId ?? null,
+      heartbeatIntervalSec: rp.heartbeatInterval ?? null,
       agreementLikely,
     }
   }
 
   async requestLoginInfo(): Promise<RithmicLoginInfoResult> {
     const buf = encodeMessage(this.proto().RequestLoginInfo, {
-      template_id: RithmicTemplateId.RequestLoginInfo,
-      user_msg: ["TradeTraxs", "login_info"],
+      templateId: RithmicTemplateId.RequestLoginInfo,
+      userMsg: ["TradeTraxs", "login_info"],
     })
     await this.send(buf)
     const raw = await this.recv("login_info_timeout")
     const rp = decodeMessage<{
-      rp_code?: string[]
-      fcm_id?: string
-      ib_id?: string
-      user_type?: number
-      first_name?: string
-      last_name?: string
+      rpCode?: string[]
+      fcmId?: string
+      ibId?: string
+      userType?: number
+      firstName?: string
+      lastName?: string
     }>(this.proto().ResponseLoginInfo, raw)
 
     logRithmicDiagnostic("rithmic_login_info_received", {
-      rpCode0: rp.rp_code?.[0] ?? null,
-      userType: rp.user_type ?? null,
+      rpCode0: rp.rpCode?.[0] ?? null,
+      userType: rp.userType ?? null,
     })
 
     return {
-      rpCode: rp.rp_code ?? [],
-      fcmId: rp.fcm_id ?? null,
-      ibId: rp.ib_id ?? null,
-      userType: rp.user_type ?? null,
-      firstName: rp.first_name ?? null,
-      lastName: rp.last_name ?? null,
+      rpCode: rp.rpCode ?? [],
+      fcmId: rp.fcmId ?? null,
+      ibId: rp.ibId ?? null,
+      userType: rp.userType ?? null,
+      firstName: rp.firstName ?? null,
+      lastName: rp.lastName ?? null,
     }
   }
 
@@ -214,11 +215,11 @@ export class RithmicProtocolClient {
     logRithmicDiagnostic("rithmic_account_list_requested")
 
     const buf = encodeMessage(this.proto().RequestAccountList, {
-      template_id: RithmicTemplateId.RequestAccountList,
-      user_msg: ["TradeTraxs", "account_list"],
-      fcm_id: params.fcmId,
-      ib_id: params.ibId,
-      user_type: params.userType,
+      templateId: RithmicTemplateId.RequestAccountList,
+      userMsg: ["TradeTraxs", "account_list"],
+      fcmId: params.fcmId,
+      ibId: params.ibId,
+      userType: params.userType,
     })
     await this.send(buf)
 
@@ -228,47 +229,47 @@ export class RithmicProtocolClient {
     for (;;) {
       const raw = await this.recvWithHeartbeat("account_list_timeout")
       const rp = decodeMessage<{
-        rq_handler_rp_code?: string[]
-        rp_code?: string[]
-        fcm_id?: string
-        ib_id?: string
-        account_id?: string
-        account_name?: string
-        account_currency?: string
-        loss_limit?: string
-        account_auto_liquidate?: string
-        auto_liq_threshold_current_value?: string
+        rqHandlerRpCode?: string[]
+        rpCode?: string[]
+        fcmId?: string
+        ibId?: string
+        accountId?: string
+        accountName?: string
+        accountCurrency?: string
+        lossLimit?: string
+        accountAutoLiquidate?: string
+        autoLiqThresholdCurrentValue?: string
       }>(this.proto().ResponseAccountList, raw)
 
       const handlerOk =
-        (rp.rq_handler_rp_code?.length ?? 0) > 0 && rp.rq_handler_rp_code?.[0] === "0"
+        (rp.rqHandlerRpCode?.length ?? 0) > 0 && rp.rqHandlerRpCode?.[0] === "0"
 
       if (
         handlerOk &&
-        rp.fcm_id &&
-        rp.ib_id &&
-        rp.account_id &&
-        rp.fcm_id.length > 0 &&
-        rp.ib_id.length > 0 &&
-        rp.account_id.length > 0
+        rp.fcmId &&
+        rp.ibId &&
+        rp.accountId &&
+        rp.fcmId.length > 0 &&
+        rp.ibId.length > 0 &&
+        rp.accountId.length > 0
       ) {
         accounts.push({
-          fcmId: rp.fcm_id,
-          ibId: rp.ib_id,
-          accountId: rp.account_id,
-          accountName: rp.account_name ?? null,
-          accountCurrency: rp.account_currency ?? null,
-          lossLimit: rp.loss_limit ?? null,
-          accountAutoLiquidate: rp.account_auto_liquidate ?? null,
-          autoLiqThresholdCurrentValue: rp.auto_liq_threshold_current_value ?? null,
+          fcmId: rp.fcmId,
+          ibId: rp.ibId,
+          accountId: rp.accountId,
+          accountName: rp.accountName ?? null,
+          accountCurrency: rp.accountCurrency ?? null,
+          lossLimit: rp.lossLimit ?? null,
+          accountAutoLiquidate: rp.accountAutoLiquidate ?? null,
+          autoLiqThresholdCurrentValue: rp.autoLiqThresholdCurrentValue ?? null,
         })
         logRithmicDiagnostic("rithmic_account_discovered", {
-          account_id: rp.account_id,
+          account_id: rp.accountId,
         })
       }
 
-      if ((rp.rp_code?.length ?? 0) > 0) {
-        finalRpCode = rp.rp_code ?? []
+      if ((rp.rpCode?.length ?? 0) > 0) {
+        finalRpCode = rp.rpCode ?? []
         logRithmicDiagnostic("account_list_response", {
           rpCode0: finalRpCode[0] ?? null,
           accountCount: accounts.length,
@@ -283,8 +284,8 @@ export class RithmicProtocolClient {
   async logout(): Promise<void> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
     const buf = encodeMessage(this.proto().RequestLogout, {
-      template_id: RithmicTemplateId.RequestLogout,
-      user_msg: ["TradeTraxs", "logout"],
+      templateId: RithmicTemplateId.RequestLogout,
+      userMsg: ["TradeTraxs", "logout"],
     })
     await this.send(buf)
     logRithmicDiagnostic("rithmic_logout")
@@ -354,7 +355,7 @@ export class RithmicProtocolClient {
 
   private async sendHeartbeat(): Promise<void> {
     const buf = encodeMessage(this.proto().RequestHeartbeat, {
-      template_id: RithmicTemplateId.RequestHeartbeat,
+      templateId: RithmicTemplateId.RequestHeartbeat,
     })
     await this.send(buf)
   }

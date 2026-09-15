@@ -3,6 +3,8 @@ export type RithmicDiagnosticEvent =
   | "rithmic_socket_connected"
   | "login_socket_connecting"
   | "login_socket_connected"
+  | "system_info_encoded"
+  | "system_info_sent"
   | "system_info_requested"
   | "rithmic_system_info_received"
   | "rithmic_login_started"

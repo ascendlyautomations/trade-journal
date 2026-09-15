@@ -26,6 +26,9 @@ export function buildRithmicPhase1UserMessage(params: {
   }
 
   for (const d of params.diagnostics) {
+    if (d === "rithmic_proto_encode_failed" || d.startsWith("rithmic_proto_encode_failed:")) {
+      return "Rithmic protocol message encoding failed (protobuf field types)."
+    }
     if (d === "system_info_timeout") {
       return "Rithmic system discovery timed out."
     }

@@ -3,6 +3,8 @@ export const RithmicPhase1Stage = {
   runtimeAssetsVerified: "runtime_assets_verified",
   systemInfoConnecting: "rithmic_socket_connecting",
   systemInfoConnected: "rithmic_socket_connected",
+  systemInfoEncoded: "system_info_encoded",
+  systemInfoSent: "system_info_sent",
   systemInfoRequested: "system_info_requested",
   systemInfoReceived: "rithmic_system_info_received",
   systemNameSelected: "system_name_selected",

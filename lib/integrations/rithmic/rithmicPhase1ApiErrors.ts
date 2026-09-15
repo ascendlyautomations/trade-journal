@@ -40,6 +40,9 @@ export function rithmicDiscoveryDiagnosticHint(diagnostics: string[]): string | 
     if (d === "runtime_proto_bundle_missing" || d === "runtime_proto_load_failed") {
       return "Rithmic protocol files are missing on the server (deployment packaging)."
     }
+    if (d === "rithmic_proto_encode_failed" || d.startsWith("rithmic_proto_encode_failed:")) {
+      return "Rithmic protocol message encoding failed (protobuf field types)."
+    }
     if (d === "runtime_ssl_ca_missing") {
       return "Rithmic Test TLS certificate bundle is missing on the server."
     }

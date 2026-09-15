@@ -21,6 +21,7 @@ import {
   type RithmicRuntimeAssetsStatus,
 } from "@/lib/integrations/rithmic/rithmicPaths"
 import { safeRpCodeForClient } from "@/lib/integrations/rithmic/rithmicSafeRpCode"
+import { RithmicProtoEncodeError } from "@/lib/integrations/rithmic/rithmicProtoLoader"
 import { logRithmicDiagnostic } from "@/lib/integrations/rithmic/rithmicSyncLogger"
 import { RithmicInfraType } from "@/lib/integrations/rithmic/rithmicTemplates"
 import { upsertDiscoveredRithmicAccounts } from "@/lib/integrations/rithmic/upsertDiscoveredRithmicAccounts"
@@ -108,6 +109,7 @@ export async function runRithmicPhase1Discovery(options?: {
 
   let systemNames: string[] = []
   let selectedSystemName: string | null = null
+  let systemInfoSucceeded = false
 
   {
     const client = new RithmicProtocolClient(config)
@@ -116,8 +118,12 @@ export async function runRithmicPhase1Discovery(options?: {
       await client.connect("rithmic_socket_connecting")
       tracker.mark(RithmicPhase1Stage.systemInfoConnected)
 
+      tracker.mark(RithmicPhase1Stage.systemInfoRequested)
       const info = await client.requestSystemInfo()
+      tracker.mark(RithmicPhase1Stage.systemInfoEncoded)
+      tracker.mark(RithmicPhase1Stage.systemInfoSent)
       tracker.mark(RithmicPhase1Stage.systemInfoReceived)
+      systemInfoSucceeded = true
 
       systemNames = info.systemNames
       if (info.rpCode[0] !== "0") {
@@ -126,18 +132,47 @@ export async function runRithmicPhase1Discovery(options?: {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown_error"
       logRithmicDiagnostic("rithmic_error", { message: msg })
-      diagnostics.push(msg)
-      if (msg === "system_info_timeout") {
-        tracker.fail(RithmicPhase1Stage.systemInfoRequested)
-      } else if (msg.includes("ENOENT") || msg.includes("rithmic_proto")) {
-        tracker.fail(RithmicPhase1Stage.runtimeAssetsVerified)
+      if (err instanceof RithmicProtoEncodeError) {
+        diagnostics.push("rithmic_proto_encode_failed")
+        diagnostics.push(msg.slice(0, 160))
+        tracker.fail(RithmicPhase1Stage.systemInfoEncoded)
+      } else if (msg.startsWith("runtime_proto_load_failed")) {
         diagnostics.push("runtime_proto_load_failed")
+        tracker.fail(RithmicPhase1Stage.runtimeAssetsVerified)
       } else {
-        tracker.fail(RithmicPhase1Stage.systemInfoConnecting)
+        diagnostics.push(msg)
+        if (msg === "system_info_timeout") {
+          tracker.fail(RithmicPhase1Stage.systemInfoSent)
+        } else if (msg.includes("ENOENT")) {
+          tracker.fail(RithmicPhase1Stage.runtimeAssetsVerified)
+          diagnostics.push("runtime_ssl_or_proto_missing")
+        } else {
+          tracker.fail(RithmicPhase1Stage.systemInfoConnecting)
+        }
       }
     } finally {
       await client.close().catch(() => undefined)
     }
+  }
+
+  if (!systemInfoSucceeded) {
+    return finalizeResult({
+      tracker,
+      diagnostics,
+      config,
+      runtimeAssets,
+      systemNames,
+      selectedSystemName: null,
+      loginAttempted: false,
+      accountListAttempted: false,
+      loginSuccess: false,
+      loginRpCode: [],
+      agreementRequired: false,
+      uniqueUserId: null,
+      accountListRpCode: [],
+      normalizedAccounts: [],
+      connectionId: null,
+    })
   }
 
   if (systemNames.length === 0 && !config.systemNameOverride) {
