@@ -7,11 +7,8 @@ import {
   assertRithmicConnectResponseSafe,
   sanitizeConnectRequestBody,
 } from "@/lib/integrations/rithmic/rithmicConnectSafeResponse"
-import {
-  isRithmicProductionUserAuthConfirmed,
-  isRithmicUserConnectEnabled,
-  loadRithmicProtocolEnv,
-} from "@/lib/integrations/rithmic/rithmicProtocolEnv"
+import { resolveRithmicConnectCapabilities } from "@/lib/integrations/rithmic/rithmicConnectCapabilities"
+import { isRithmicUserConnectEnabled } from "@/lib/integrations/rithmic/rithmicProtocolEnv"
 import { safeRpCodeForClient } from "@/lib/integrations/rithmic/rithmicSafeRpCode"
 import { toSafeRithmicDiscoveredAccountView } from "@/lib/integrations/rithmic/rithmicAccountModels"
 
@@ -27,24 +24,7 @@ export async function GET(req: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  let protocolEnv: ReturnType<typeof loadRithmicProtocolEnv> | null = null
-  try {
-    protocolEnv = loadRithmicProtocolEnv()
-  } catch {
-    protocolEnv = null
-  }
-
-  const body = {
-    userConnectEnabled: isRithmicUserConnectEnabled(),
-    productionUserAuthConfirmed: isRithmicProductionUserAuthConfirmed(),
-    apiEnvironment: protocolEnv?.apiEnvironment ?? "test",
-    showConnectUi:
-      isRithmicUserConnectEnabled() &&
-      protocolEnv?.apiEnvironment === "test",
-    credentialModelStatus: isRithmicProductionUserAuthConfirmed()
-      ? "confirmed_with_vendor"
-      : "not_yet_confirmed",
-  }
+  const body = resolveRithmicConnectCapabilities()
   assertRithmicConnectResponseSafe(body)
   return Response.json(body)
 }
