@@ -84,6 +84,8 @@ struct SettingsDestinationView: View {
                     data: data,
                     navigationCoordinator: navigationCoordinator
                 )
+            case .brokerIntegrations:
+                BrokerIntegrationsView(data: data)
             case .payouts:
                 PayoutsScreenView(data: data, navigationCoordinator: navigationCoordinator)
             case .privacy:

@@ -189,6 +189,9 @@ struct DeepLinkParser: DeepLinkParsing {
             let leafRoute = SettingsRoute.fromDeepLinkSegment(leaf) ?? .notificationsMessages
             return .settingsStack([.home, .notifications, leafRoute])
         }
+        if first == "broker-integrations" {
+            return .settingsStack([.home, .tradingAccounts, .brokerIntegrations])
+        }
         guard let route = SettingsRoute.fromDeepLinkSegment(first) else {
             return .settingsStack([.home])
         }

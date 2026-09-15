@@ -121,6 +121,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case notificationsProduct = "notifications-product"
     case subscription
     case tradingAccounts = "trading-accounts"
+    case brokerIntegrations = "broker-integrations"
     case payouts
     case privacy
     case privacyBlockedAccounts = "privacy-blocked-accounts"
@@ -150,6 +151,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .notificationsProduct: return "Product Updates"
         case .subscription: return "Plan"
         case .tradingAccounts: return "Manage Accounts"
+        case .brokerIntegrations: return "Broker Integrations"
         case .payouts: return "Withdrawals"
         case .privacy: return "Privacy"
         case .privacyBlockedAccounts: return "Blocked Accounts"

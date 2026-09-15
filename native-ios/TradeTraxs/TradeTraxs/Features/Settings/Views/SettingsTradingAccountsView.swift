@@ -42,6 +42,19 @@ struct SettingsTradingAccountsView: View {
 
     var body: some View {
         List {
+            if let data {
+                Section {
+                    NavigationLink {
+                        BrokerIntegrationsView(data: data)
+                    } label: {
+                        Label("Broker Integrations", systemImage: "link.circle")
+                    }
+                    .accessibilityIdentifier("settings.tradingAccounts.brokerIntegrations")
+                } footer: {
+                    Text("Connect Tradovate and import trades through TradeTraxs servers.")
+                }
+            }
+
             if let error = viewModel.errorMessage {
                 Section {
                     SettingsInlineError(message: error) {

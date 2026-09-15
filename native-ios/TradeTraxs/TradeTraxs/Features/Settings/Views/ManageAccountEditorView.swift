@@ -21,18 +21,21 @@ struct ManageAccountEditorView: View {
 
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
+    private let onCreateSubmit: ((TradingAccountDraft) async -> Bool)?
 
     init(
         viewModel: ManageAccountsViewModel,
         mode: Mode,
         draft: TradingAccountDraft,
         data: DataEnvironment? = nil,
-        navigationCoordinator: NavigationCoordinator? = nil
+        navigationCoordinator: NavigationCoordinator? = nil,
+        onCreateSubmit: ((TradingAccountDraft) async -> Bool)? = nil
     ) {
         self.viewModel = viewModel
         self.mode = mode
         self.data = data
         self.navigationCoordinator = navigationCoordinator
+        self.onCreateSubmit = onCreateSubmit
         _draft = State(initialValue: draft)
         if case .edit(let account) = mode {
             _showInAccountDropdowns = State(initialValue: account.showInAccountDropdowns)
@@ -298,7 +301,11 @@ struct ManageAccountEditorView: View {
         var ok: Bool
         switch mode {
         case .create:
-            ok = await viewModel.create(draft)
+            if let onCreateSubmit {
+                ok = await onCreateSubmit(draft)
+            } else {
+                ok = await viewModel.create(draft)
+            }
         case .edit(let account):
             ok = await viewModel.update(id: account.id, draft: draft)
             if ok {

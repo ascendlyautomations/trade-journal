@@ -81,6 +81,20 @@ final class SettingsExperienceTests: XCTestCase {
         XCTAssertEqual(routes, [.home, .subscription])
     }
 
+    func testDeepLinkSettingsBrokerIntegrations() {
+        let parser = DeepLinkParser()
+        let destination = parser.parse(
+            url: URL(string: "tradetraxs://settings/broker-integrations/tradovate?status=success")!
+        )
+        guard case .settingsStack(let routes) = destination else {
+            return XCTFail("Expected settingsStack")
+        }
+        XCTAssertEqual(routes, [.home, .tradingAccounts, .brokerIntegrations])
+        XCTAssertTrue(NativeOAuthConfiguration.isTradovateBrokerOAuthCallbackURL(
+            URL(string: "tradetraxs://settings/broker-integrations/tradovate?status=success")!
+        ))
+    }
+
     func testNotificationPreferenceDefaultsAndMasterGate() {
         var prefs = NotificationPreferences.defaults(for: SettingsFixtures.viewerID)
         XCTAssertTrue(prefs.isEnabled(.directMessagesEnabled))

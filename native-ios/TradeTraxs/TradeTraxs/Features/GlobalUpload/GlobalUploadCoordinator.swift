@@ -406,7 +406,7 @@ final class GlobalUploadCoordinator {
     }
 
     private func releasePendingUploadResources() {
-        for (_, spec, _) in retryReel {
+        for (_, (spec, _)) in retryReel {
             cleanupReelFiles(spec.snapshot.asDraft)
         }
     }

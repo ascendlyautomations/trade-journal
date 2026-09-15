@@ -54,6 +54,7 @@ final class DataEnvironment {
     let vault: any VaultRepository
     /// Session-scoped private Vault cache — shared by Feed, detail, and Vault home.
     let vaultStore: VaultStore
+    let brokerIntegrations: any BrokerIntegrationRepository
 
     init(
         configuration: DataConfiguration,
@@ -97,7 +98,8 @@ final class DataEnvironment {
         dailyCheckIns: any TraderDailyCheckInRepository,
         contentReports: any ContentReportRepository,
         vault: any VaultRepository,
-        vaultStore: VaultStore
+        vaultStore: VaultStore,
+        brokerIntegrations: any BrokerIntegrationRepository
     ) {
         self.configuration = configuration
         self.supabase = supabase
@@ -141,6 +143,7 @@ final class DataEnvironment {
         self.contentReports = contentReports
         self.vault = vault
         self.vaultStore = vaultStore
+        self.brokerIntegrations = brokerIntegrations
     }
 
     enum LaunchMode: Sendable {
@@ -318,7 +321,8 @@ final class DataEnvironment {
             dailyCheckIns: dailyCheckInRepository,
             contentReports: DefaultContentReportRepository(supabase: supabase),
             vault: vaultRepository,
-            vaultStore: VaultStore(repository: vaultRepository)
+            vaultStore: VaultStore(repository: vaultRepository),
+            brokerIntegrations: DefaultBrokerIntegrationRepository(transport: transport)
         )
     }
 
@@ -466,9 +470,34 @@ final class DataEnvironment {
             dailyCheckIns: repositories.dailyCheckIns,
             contentReports: LoginShellContentReportRepository(),
             vault: vaultRepository,
-            vaultStore: VaultStore(repository: vaultRepository)
+            vaultStore: VaultStore(repository: vaultRepository),
+            brokerIntegrations: LoginShellBrokerIntegrationRepository()
         )
     }
+}
+
+private struct LoginShellBrokerIntegrationRepository: BrokerIntegrationRepository {
+    private func unavailable() -> AppError {
+        .authentication(.sessionMissing)
+    }
+
+    func listTradovateConnections() async throws -> TradovateConnectionsResponse { throw unavailable() }
+    func beginTradovateNativeOAuth(reconnectConnectionId: String?) async throws -> URL { throw unavailable() }
+    func listTradovateAccounts(connectionId: String, forceRefresh: Bool) async throws -> TradovateConnectionAccountsResponse {
+        throw unavailable()
+    }
+    func linkTradovateAccount(connectionId: String, brokerIntegrationAccountId: String, tradetraxsAccountId: String) async throws -> BrokerLinkAccountsResponse {
+        throw unavailable()
+    }
+    func createAndLinkTradovateAccount(connectionId: String, brokerIntegrationAccountId: String, draft: TradingAccountDraft) async throws -> BrokerLinkAccountsResponse {
+        throw unavailable()
+    }
+    func syncTradovateAccount(connectionId: String, mappingId: String) async throws -> TradovateAccountSyncResponse {
+        throw unavailable()
+    }
+    func runBrokerImport(mappingIds: [String]) async throws -> BrokerManualImportResponse { throw unavailable() }
+    func importEligibility() async throws -> BrokerImportEligibilityResponse { throw unavailable() }
+    func disconnectTradovate(connectionId: String) async throws { throw unavailable() }
 }
 
 private struct LoginShellAppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {

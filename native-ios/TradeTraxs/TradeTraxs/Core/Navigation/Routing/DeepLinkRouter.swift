@@ -40,6 +40,10 @@ struct DeepLinkRouter: Sendable {
             return true
         }
 
+        if NativeOAuthConfiguration.isTradovateBrokerOAuthCallbackURL(url) {
+            TradovateBrokerOAuthNotificationPayload.post(from: url)
+        }
+
         coordinator.open(destination)
         return true
     }

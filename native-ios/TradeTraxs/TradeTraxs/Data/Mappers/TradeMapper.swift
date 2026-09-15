@@ -148,8 +148,7 @@ nonisolated enum TradeMapper: DTOMapper {
     }
 
     private static func mapImportSource(_ raw: String?) -> TradeImportSource? {
-        guard let raw else { return nil }
-        return TradeImportSource(rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        TradeImportSource(wireValue: raw)
     }
 
     private static func durationFields(from draft: TradeDraft) -> (seconds: Int?, text: String?) {

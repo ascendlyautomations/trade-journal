@@ -114,4 +114,14 @@ nonisolated enum TradeImportSource: String, Hashable, Codable, Sendable {
     case manual
     case csv
     case screenshot
+    case tradovate
+    case rithmic
+
+    /// Unknown future `import_source` values decode as nil (forward-compatible).
+    init?(wireValue: String?) {
+        guard let raw = wireValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !raw.isEmpty
+        else { return nil }
+        self.init(rawValue: raw)
+    }
 }

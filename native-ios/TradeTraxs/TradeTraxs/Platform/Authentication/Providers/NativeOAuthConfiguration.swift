@@ -7,6 +7,24 @@ nonisolated enum NativeOAuthConfiguration {
     static let callbackScheme = "tradetraxs"
     static let callbackDeepLink = "tradetraxs://auth/callback"
 
+    /// Must match ``NATIVE_IOS_TRADOVATE_BROKER_OAUTH_RETURN`` on the BFF.
+    static let tradovateBrokerOAuthReturnURL =
+        "tradetraxs://settings/broker-integrations/tradovate"
+
+    static func isTradovateBrokerOAuthCallbackURL(_ url: URL) -> Bool {
+        let scheme = (url.scheme ?? "").lowercased()
+        guard scheme == callbackScheme else { return false }
+        var parts: [String] = []
+        if let host = url.host, !host.isEmpty {
+            parts.append(host)
+        }
+        parts.append(contentsOf: url.path.split(separator: "/").map(String.init))
+        return parts.count >= 3
+            && parts[0] == "settings"
+            && parts[1] == "broker-integrations"
+            && parts[2] == "tradovate"
+    }
+
     /// Production HTTPS bridge used as Supabase `redirect_to` (never a bare custom scheme).
     static func httpsBridgeURL(configuration: AppConfiguration) -> URL {
         let base = configuration.apiBaseURL ?? AppConfiguration.productionBFFBaseURL

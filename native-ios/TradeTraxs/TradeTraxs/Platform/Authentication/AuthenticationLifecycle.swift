@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import OSLog
 
 /// App lifecycle hooks for authentication (background / foreground).
@@ -9,6 +10,8 @@ final class AuthenticationLifecycle {
     private(set) var initialRestoreCompleted = false
 
     /// Bound by ``CompositionRoot`` — coalesced TraxPro entitlement refresh on foreground.
+    /// Not part of SwiftUI observation (closure isolation is incompatible with `@Observable` synthesis).
+    @ObservationIgnored
     var refreshBillingEntitlementsOnForeground: (@MainActor () async -> Void)?
 
     init(
