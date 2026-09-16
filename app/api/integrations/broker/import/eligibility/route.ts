@@ -38,15 +38,30 @@ export async function GET(req: Request) {
     ])
 
   const connectionCount = tradovateConnections.length + rithmicConnections.length
+  const hasSupportedConnection =
+    tradovateConnections.some((c) => c.connected) ||
+    rithmicConnections.some((c) => c.connected)
+  const hasLinkedAccount = importTargets.length > 0
+  const canImportImmediately = hasLinkedAccount
+  const needsAccountLinking = hasSupportedConnection && !hasLinkedAccount
+  const onboardingComplete = profile?.onboarding_completed === true
+  const optOut = profile?.tradovate_login_import_reminder_opt_out === true
 
   return Response.json({
+    /** @deprecated Prefer `canImportImmediately` — legacy login-import reminder gate. */
     eligible:
-      profile?.onboarding_completed === true &&
-      profile?.tradovate_login_import_reminder_opt_out !== true &&
-      importTargets.length > 0,
-    optOut: profile?.tradovate_login_import_reminder_opt_out === true,
+      onboardingComplete && !optOut && canImportImmediately,
+    optOut,
     connectionCount,
     linkedAccountCount: linkedMappings.length,
+    hasSupportedConnection,
+    hasLinkedAccount,
+    canImportImmediately,
+    needsAccountLinking,
+    connectedProviders: {
+      tradovate: tradovateConnections.some((c) => c.connected),
+      rithmic: rithmicConnections.some((c) => c.connected),
+    },
     linkedAccounts: linkedMappings.map((t) => ({
       provider: t.provider,
       mappingId: t.mappingId,

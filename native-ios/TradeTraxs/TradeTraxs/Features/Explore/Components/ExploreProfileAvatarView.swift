@@ -1,17 +1,14 @@
 import SwiftUI
 import UIKit
 
-/// Fixed-size rounded-square profile thumbnail for Explore trader surfaces.
-/// Uses the shared image pipeline; does not let the source image aspect ratio affect layout.
+/// Fixed-size circular profile thumbnail for Explore — same pipeline/presentation as ``TradeRoomCircularAvatar``.
 struct ExploreProfileAvatarView: View {
     let profile: Profile
     let imagePipeline: any ImagePipeline
-    var size: CGFloat = 48
-
-    @State private var displayImage: UIImage?
+    var diameter: CGFloat = 52
 
     @Environment(\.themeColors) private var colors
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var avatarImage: Image?
 
     private var initials: String {
         ProfileDisplay.initials(
@@ -20,51 +17,36 @@ struct ExploreProfileAvatarView: View {
         )
     }
 
-    private var cornerRadius: CGFloat {
-        ExperienceRadius.sm
-    }
-
-    private var clipShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    }
-
     var body: some View {
-        ZStack {
-            clipShape
-                .fill(colors.fillPrimary)
-
-            Text(initials)
-                .experienceStyle(.caption, color: colors.secondaryText)
-                .opacity(displayImage == nil ? 1 : 0)
-
-            if let displayImage {
-                Image(uiImage: displayImage)
+        Group {
+            if let avatarImage {
+                avatarImage
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: size, height: size)
-                    .transition(reduceMotion ? .identity : .opacity)
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    colors.fillSecondary
+                    Text(initials)
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                }
             }
         }
-        .frame(width: size, height: size)
-        .clipShape(clipShape)
-        .overlay {
-            clipShape.stroke(colors.border, lineWidth: ExperienceBorder.hairline)
-        }
-        .fixedSize()
-        .animation(
-            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-            value: displayImage == nil
+        .frame(width: diameter, height: diameter)
+        .clipShape(Circle())
+        .overlay(
+            Circle()
+                .stroke(colors.border.opacity(0.35), lineWidth: 0.5)
         )
         .task(id: profile.avatar?.id) {
-            await load()
+            await loadAvatar()
         }
         .accessibilityLabel(Text(initials.isEmpty ? "Avatar" : initials))
         .accessibilityIdentifier("explore.profile.avatar.\(profile.id.rawValue)")
     }
 
-    private func load() async {
+    private func loadAvatar() async {
         guard let reference = profile.avatar else {
-            displayImage = nil
+            avatarImage = nil
             return
         }
         do {
@@ -72,16 +54,16 @@ struct ExploreProfileAvatarView: View {
                 for: ImageRequest(
                     reference: reference,
                     purpose: .profileAvatar,
-                    maxPixelSize: 128
+                    maxPixelSize: max(96, Int(diameter * 3))
                 )
             )
             if let ui = UIImage(data: data) {
-                displayImage = MediaImageOrientation.normalized(ui)
+                avatarImage = Image(uiImage: MediaImageOrientation.normalized(ui))
             } else {
-                displayImage = nil
+                avatarImage = nil
             }
         } catch {
-            displayImage = nil
+            avatarImage = nil
         }
     }
 }

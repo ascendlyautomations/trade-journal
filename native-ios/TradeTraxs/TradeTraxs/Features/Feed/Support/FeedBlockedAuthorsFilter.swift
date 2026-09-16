@@ -53,6 +53,14 @@ final class FeedBlockedAuthorsFilter {
         }
     }
 
+    func filterConversationMessages(_ messages: [Message], viewerID: ProfileID?) -> [Message] {
+        guard !blockedPeerIDs.isEmpty else { return messages }
+        return messages.filter { message in
+            if message.senderProfileID == viewerID { return true }
+            return !contains(message.senderProfileID)
+        }
+    }
+
 #if DEBUG
     func resetForTesting() {
         blockedPeerIDs = []

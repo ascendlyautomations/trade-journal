@@ -11,6 +11,12 @@ import { resolveRithmicConnectCapabilities } from "@/lib/integrations/rithmic/ri
 import { isRithmicUserConnectEnabled } from "@/lib/integrations/rithmic/rithmicProtocolEnv"
 import { safeRpCodeForClient } from "@/lib/integrations/rithmic/rithmicSafeRpCode"
 import { toSafeRithmicDiscoveredAccountView } from "@/lib/integrations/rithmic/rithmicAccountModels"
+import {
+  flushRithmicConnectTiming,
+  logRithmicConnectTiming,
+  markRithmicConnectPhase,
+  resetRithmicConnectTiming,
+} from "@/lib/integrations/rithmic/rithmicConnectTiming"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -90,18 +96,25 @@ export async function POST(req: Request): Promise<Response> {
 
   const { username, password, systemName, reconnectConnectionId } = parsed
 
+  resetRithmicConnectTiming()
+  markRithmicConnectPhase("request_parsed")
+
   const config = buildRithmicServerConfigForVerification({
     username,
     password,
     systemName,
   })
 
+  markRithmicConnectPhase("config_built")
   const verification = await runRithmicConnectionVerification({
     config,
     systemName,
   })
+  markRithmicConnectPhase("verification_complete")
 
   if (!verification.ok) {
+    logRithmicConnectTiming(`failed:${verification.code}`)
+    flushRithmicConnectTiming()
     const failBody: ConnectResponse = {
       ok: false,
       code: verification.code,
@@ -130,12 +143,12 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
+    markRithmicConnectPhase("persist_started")
     const { connectionId } = await persistVerifiedRithmicUserConnection(
       integrationDb,
       {
         userId: user.id,
         username,
-        password,
         systemName: verification.selectedSystemName,
         apiEnvironment: "test",
         uniqueUserId: verification.uniqueUserId,
@@ -152,11 +165,16 @@ export async function POST(req: Request): Promise<Response> {
       reconnect: Boolean(reconnectConnectionId),
     }
     assertRithmicConnectResponseSafe(successBody)
+    markRithmicConnectPhase("persist_complete")
+    logRithmicConnectTiming("success")
+    flushRithmicConnectTiming()
     return Response.json({
       ...successBody,
       accounts: verification.accounts.map(toSafeRithmicDiscoveredAccountView),
     })
   } catch (err) {
+    logRithmicConnectTiming("persist_failed")
+    flushRithmicConnectTiming()
     const message = err instanceof Error ? err.message : "connect_failed"
     const userMessage =
       message === "rithmic_reconnect_identity_mismatch"

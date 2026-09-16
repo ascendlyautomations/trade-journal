@@ -8,12 +8,13 @@ import {
 import {
   assertRithmicConnectResponseSafe,
   sanitizeConnectRequestBody,
+  sanitizeRithmicSyncRequestBody,
 } from "@/lib/integrations/rithmic/rithmicConnectSafeResponse"
 
 describe("Rithmic Phase 3 connection security", () => {
   const keyPrior = process.env.INTEGRATION_CREDENTIALS_ENCRYPTION_KEY
 
-  it("encrypts Rithmic credentials with kind rithmic", () => {
+  it("credential encryption still supports legacy rithmic kind (passwords are not persisted)", () => {
     process.env.INTEGRATION_CREDENTIALS_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString(
       "base64url"
     )
@@ -38,6 +39,13 @@ describe("Rithmic Phase 3 connection security", () => {
 
   it("sanitizeConnectRequestBody rejects missing password", () => {
     assert.equal(sanitizeConnectRequestBody({ username: "a" }), null)
+  })
+
+  it("sanitizeRithmicSyncRequestBody accepts password in POST body only", () => {
+    assert.equal(sanitizeRithmicSyncRequestBody({}), null)
+    assert.deepEqual(sanitizeRithmicSyncRequestBody({ password: "x" }), {
+      password: "x",
+    })
   })
 
   it("connect API response must not include password fields", () => {

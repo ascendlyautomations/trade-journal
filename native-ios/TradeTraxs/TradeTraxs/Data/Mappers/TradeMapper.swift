@@ -657,6 +657,7 @@ nonisolated enum TradingAccountMapper {
             return PropFirmAccountRules(
                 consistencyPercent: DecimalParser.parseFlexible(dto.consistency),
                 maxDrawdown: DecimalParser.parseFlexible(dto.max_drawdown),
+                drawdownType: PropFirmDrawdownType.parse(raw: dto.drawdown_type),
                 dailyDrawdown: DecimalParser.parseFlexible(dto.daily_drawdown),
                 profitTarget: DecimalParser.parseFlexible(dto.profit_target),
                 winningDaysRequired: DecimalParser.parseFlexible(dto.winning_days).map {
@@ -719,7 +720,7 @@ nonisolated enum TradingAccountMapper {
         canAddTrades: Bool? = nil
     ) -> TradeDTO.AccountWriteBody {
         let rules = draft.category == .propFirm ? draft.propFirmRules : nil
-        let size = draft.sizeDigits.trimmingCharacters(in: .whitespacesAndNewlines)
+        let size = NumericInputFieldSupport.plainNumericString(from: draft.sizeDigits)
         let number = draft.accountNumber.trimmingCharacters(in: .whitespacesAndNewlines)
         let note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
         return TradeDTO.AccountWriteBody(
@@ -734,6 +735,7 @@ nonisolated enum TradingAccountMapper {
             note: note.isEmpty ? nil : note,
             consistency: rules?.consistencyPercent.map { NSDecimalNumber(decimal: $0).doubleValue },
             max_drawdown: rules?.maxDrawdown.map { NSDecimalNumber(decimal: $0).doubleValue },
+            drawdown_type: rules?.drawdownType?.rawValue,
             daily_drawdown: rules?.dailyDrawdown.map { NSDecimalNumber(decimal: $0).doubleValue },
             profit_target: rules?.profitTarget.map { NSDecimalNumber(decimal: $0).doubleValue },
             winning_days: rules?.winningDaysRequired.map { Double($0) },
@@ -800,8 +802,8 @@ nonisolated enum AccountPayoutEntryMapper {
         accountID: TradingAccountID,
         draft: AccountPayoutEntryDraft
     ) throws -> TradeDTO.AccountPayoutEntryWriteBody {
-        let amountDigits = draft.amountDigits.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let amount = Decimal(string: amountDigits), amount > 0 else {
+        let amountDigits = NumericInputFieldSupport.plainNumericString(from: draft.amountDigits)
+        guard let amount = NumericInputFieldSupport.parse(amountDigits, style: .unsignedCurrency), amount > 0 else {
             throw AppError.unknown(message: "Enter a payout amount greater than zero.")
         }
         let note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -820,8 +822,8 @@ nonisolated enum AccountPayoutEntryMapper {
     }
 
     static func updateBody(from draft: AccountPayoutEntryDraft) throws -> TradeDTO.AccountPayoutEntryUpdateBody {
-        let amountDigits = draft.amountDigits.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let amount = Decimal(string: amountDigits), amount > 0 else {
+        let amountDigits = NumericInputFieldSupport.plainNumericString(from: draft.amountDigits)
+        guard let amount = NumericInputFieldSupport.parse(amountDigits, style: .unsignedCurrency), amount > 0 else {
             throw AppError.unknown(message: "Enter a payout amount greater than zero.")
         }
         let note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)

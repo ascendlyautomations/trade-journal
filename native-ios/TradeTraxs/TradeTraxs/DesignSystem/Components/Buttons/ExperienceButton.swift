@@ -13,6 +13,8 @@ struct ExperienceButton: View {
     var icon: AppIcon? = nil
     var kind: ExperienceButtonStyleKind = .primary
     var isEnabled: Bool = true
+    /// When true, primary/destructive colors stay at full opacity while `isEnabled` is false.
+    var keepsEnabledAppearanceWhenDisabled: Bool = false
     var isLoading: Bool = false
     var accessibilityIdentifier: String? = nil
     let action: () -> Void
@@ -52,7 +54,9 @@ struct ExperienceButton: View {
                         .stroke(colors.border, lineWidth: ExperienceBorder.thin)
                 }
             }
-            .opacity(isEnabled ? ExperienceOpacity.opaque : ExperienceOpacity.disabled)
+            .opacity(isEnabled || keepsEnabledAppearanceWhenDisabled
+                ? ExperienceOpacity.opaque
+                : ExperienceOpacity.disabled)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled || isLoading)

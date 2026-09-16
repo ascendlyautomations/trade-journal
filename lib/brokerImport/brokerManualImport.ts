@@ -50,7 +50,8 @@ export async function listLinkedBrokerImportTargets(
 export async function runBrokerManualImportBatch(
   supabase: SupabaseClient,
   userId: string,
-  targets: LinkedBrokerImportTarget[]
+  targets: LinkedBrokerImportTarget[],
+  options?: { rithmicPassword?: string | null }
 ): Promise<BrokerManualImportBatchResult> {
   const tradovateTargets = targets.filter(
     (t): t is LinkedTradovateImportTarget & { provider: "tradovate" } =>
@@ -71,7 +72,9 @@ export async function runBrokerManualImportBatch(
           totalTradesUpdated: 0,
         }),
     rithmicTargets.length > 0
-      ? runRithmicManualImportBatch(supabase, userId, rithmicTargets)
+      ? runRithmicManualImportBatch(supabase, userId, rithmicTargets, {
+          transientPassword: options?.rithmicPassword ?? null,
+        })
       : Promise.resolve({
           ok: true,
           results: [],

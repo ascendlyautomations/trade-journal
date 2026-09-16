@@ -33,29 +33,25 @@ private struct CalendarYearSummaryBar: View {
                     metric(
                         label: "Year P&L",
                         value: CalendarFormatting.fullPnL(overview.netPnL),
-                        tone: overview.netPnL,
-                        emphasis: true
+                        tone: overview.netPnL
                     )
                     divider
                     metric(
-                        label: "Trading Days",
+                        label: "Trade Days",
                         value: "\(overview.tradingDayCount)",
-                        tone: nil,
-                        emphasis: false
+                        tone: nil
                     )
                     divider
                     metric(
                         label: "Win Rate",
                         value: overview.tradeWinRate.map(NumberDisplay.winRate) ?? "—",
-                        tone: nil,
-                        emphasis: false
+                        tone: nil
                     )
                     divider
                     metric(
                         label: "Best Month",
                         value: bestMonthValue,
-                        tone: overview.bestMonthPnL,
-                        emphasis: false
+                        tone: overview.bestMonthPnL
                     )
                 }
             }
@@ -76,7 +72,7 @@ private struct CalendarYearSummaryBar: View {
             .padding(.vertical, ExperienceSpacing.xxs)
     }
 
-    private func metric(label: String, value: String, tone: Decimal?, emphasis: Bool) -> some View {
+    private func metric(label: String, value: String, tone: Decimal?) -> some View {
         VStack(spacing: 3) {
             Text(label)
                 .font(.system(.caption2, design: .default).weight(.semibold))
@@ -86,19 +82,15 @@ private struct CalendarYearSummaryBar: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(value)
-                .font(
-                    emphasis
-                        ? .system(.title3, design: .rounded).weight(.bold).monospacedDigit()
-                        : .system(.caption, design: .rounded).weight(.semibold).monospacedDigit()
-                )
-                .foregroundStyle(valueColor(for: tone, emphasis: emphasis))
+                .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                .foregroundStyle(valueColor(for: tone))
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
         }
         .frame(maxWidth: .infinity)
     }
 
-    private func valueColor(for tone: Decimal?, emphasis: Bool) -> Color {
+    private func valueColor(for tone: Decimal?) -> Color {
         guard let tone else { return colors.primaryText }
         return theme.metricColor(for: NSDecimalNumber(decimal: tone).doubleValue)
     }
@@ -173,6 +165,7 @@ private struct CalendarYearMonthlyPnLChart: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
+    @State private var selectedMonthIndex: Int?
 
     var body: some View {
         ProfileStatsDashboardSection(
@@ -180,25 +173,59 @@ private struct CalendarYearMonthlyPnLChart: View {
             accessibilityID: "calendar.year.monthlyChart"
         ) {
             ProfileStatsDashboardCard {
-                Chart(chartPoints) { point in
-                    BarMark(
-                        x: .value("Month", point.label),
-                        y: .value("P&L", point.value)
-                    )
-                    .foregroundStyle(barColor(for: point.value))
-                    .cornerRadius(3)
+                Chart {
+                    ForEach(chartPoints) { point in
+                        BarMark(
+                            x: .value("Month", point.index),
+                            y: .value("P&L", point.value)
+                        )
+                        .foregroundStyle(
+                            barColor(for: point.netPnL)
+                                .opacity(barOpacity(for: point.index))
+                        )
+                        .cornerRadius(3)
+                    }
+
+                    if let selectedMonthIndex {
+                        RuleMark(x: .value("Selected", selectedMonthIndex))
+                            .foregroundStyle(colors.tertiaryText.opacity(0.55))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    }
                 }
+                .chartXScale(domain: xDomain)
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 4))
                 }
                 .chartXAxis {
-                    AxisMarks { value in
+                    AxisMarks(values: xAxisIndices) { value in
                         AxisValueLabel {
-                            if let label = value.as(String.self) {
-                                Text(label)
+                            if let index = value.as(Int.self),
+                               let point = chartPoints.first(where: { $0.index == index })
+                            {
+                                Text(point.abbreviation)
                                     .font(.system(.caption2, design: .rounded))
                                     .foregroundStyle(colors.tertiaryText)
                             }
+                        }
+                    }
+                }
+                .chartXSelection(value: $selectedMonthIndex)
+                .chartOverlay { proxy in
+                    GeometryReader { geo in
+                        if let selectedMonthIndex,
+                           let card = months.first(where: { $0.month - 1 == selectedMonthIndex }),
+                           let xPos = proxy.position(forX: selectedMonthIndex),
+                           let anchor = proxy.plotFrame
+                        {
+                            let plotFrame = geo[anchor]
+                            scrubOverlay(for: card)
+                                .position(
+                                    x: min(
+                                        max(plotFrame.minX + 72, plotFrame.minX + xPos),
+                                        plotFrame.maxX - 72
+                                    ),
+                                    y: plotFrame.minY + 28
+                                )
                         }
                     }
                 }
@@ -209,24 +236,80 @@ private struct CalendarYearMonthlyPnLChart: View {
     }
 
     private struct ChartPoint: Identifiable {
-        var id: String { label }
-        var label: String
+        var id: Int { index }
+        var index: Int
+        var abbreviation: String
+        var netPnL: Decimal
         var value: Double
     }
 
     private var chartPoints: [ChartPoint] {
         months.map { card in
-            let amount: Double
+            let netPnL: Decimal
             if card.isFutureMonth {
-                amount = 0
+                netPnL = 0
             } else {
-                amount = NSDecimalNumber(decimal: card.summary.netPnL).doubleValue
+                netPnL = card.summary.netPnL
             }
-            return ChartPoint(label: card.abbreviation, value: amount)
+            return ChartPoint(
+                index: card.month - 1,
+                abbreviation: card.abbreviation,
+                netPnL: netPnL,
+                value: NSDecimalNumber(decimal: netPnL).doubleValue
+            )
         }
     }
 
-    private func barColor(for value: Double) -> Color {
-        theme.metricColor(for: value).opacity(0.9)
+    private var xDomain: ClosedRange<Int> {
+        0...max(months.count - 1, 0)
+    }
+
+    private var xAxisIndices: [Int] {
+        chartPoints.map(\.index)
+    }
+
+    private func barColor(for netPnL: Decimal) -> Color {
+        theme.metricColor(for: NSDecimalNumber(decimal: netPnL).doubleValue)
+    }
+
+    private func barOpacity(for index: Int) -> Double {
+        guard let selectedMonthIndex else { return 0.9 }
+        return selectedMonthIndex == index ? 0.95 : 0.38
+    }
+
+    private func scrubOverlay(for card: TradingYearMonthCard) -> some View {
+        let netPnL = card.isFutureMonth ? Decimal(0) : card.summary.netPnL
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(fullMonthName(card.month))
+                .font(.system(.caption2, design: .rounded))
+                .foregroundStyle(colors.secondaryText)
+            Text(CalendarFormatting.fullPnL(netPnL))
+                .font(.system(.subheadline, design: .rounded).weight(.bold).monospacedDigit())
+                .foregroundStyle(theme.metricColor(for: NSDecimalNumber(decimal: netPnL).doubleValue))
+        }
+        .padding(.horizontal, ExperienceSpacing.sm)
+        .padding(.vertical, ExperienceSpacing.xs)
+        .background(
+            .ultraThinMaterial,
+            in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                .stroke(colors.border.opacity(0.5), lineWidth: ExperienceBorder.hairline)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func fullMonthName(_ month: Int) -> String {
+        var components = DateComponents()
+        components.month = month
+        components.day = 1
+        components.year = 2000
+        guard let date = Calendar.current.date(from: components) else {
+            return "Month \(month)"
+        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM"
+        return formatter.string(from: date)
     }
 }

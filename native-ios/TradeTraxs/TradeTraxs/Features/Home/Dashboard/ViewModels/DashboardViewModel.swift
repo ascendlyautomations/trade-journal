@@ -812,14 +812,26 @@ final class DashboardViewModel {
     }
 
     private func applyFixtures(profileID: ProfileID) {
-        let samples = ProfileTradeFixtures.samples(owner: profileID)
-        let modes = ProfileTradeFixtures.accountModes()
-        accounts = PropFirmFixtures.accounts(owner: profileID)
+        let samples: [Trade]
+        let modes: [TradingAccountID: TradingAccountMode]
+        let seededAccounts: [TradingAccount]
+        if profileID == DemoExperienceSupport.profileID {
+            samples = DemoCanonicalDataset.trades()
+            modes = DemoCanonicalDataset.accountModes()
+            seededAccounts = DemoCanonicalDataset.accounts()
+        } else {
+            samples = ProfileTradeFixtures.samples(owner: profileID)
+            modes = ProfileTradeFixtures.accountModes()
+            seededAccounts = PropFirmFixtures.accounts(owner: profileID)
+        }
+        accounts = seededAccounts
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
         detailCache.seed(accounts: accounts, for: profileID)
         payoutTotal = ProfilePayoutTotals.sum(
-            from: ProfileAchievementFixtures.samples(owner: profileID)
+            from: profileID == DemoExperienceSupport.profileID
+                ? DemoCanonicalDataset.achievements()
+                : ProfileAchievementFixtures.samples(owner: profileID)
         )
         tradeInputs = samples.map { trade in
             DashboardChartMetrics.Input(

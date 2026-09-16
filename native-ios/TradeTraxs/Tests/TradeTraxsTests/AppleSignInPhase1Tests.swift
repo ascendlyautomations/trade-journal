@@ -26,6 +26,29 @@ final class AppleSignInPhase1Tests: XCTestCase {
         XCTAssertNil(result.firstLoginHint)
     }
 
+    func testSwappableBackendForwardsIDTokenAfterInstall() async throws {
+        let swappable = SwappableAuthenticationBackend(initial: PlaceholderAuthenticationBackend())
+        do {
+            _ = try await swappable.signInWithIDToken(
+                provider: .apple,
+                idToken: "token",
+                nonce: "nonce"
+            )
+            XCTFail("Expected placeholder backend to reject ID token exchange before install")
+        } catch AuthenticationError.notConfigured {
+            // Expected before deferred bootstrap installs Supabase.
+        }
+
+        let memory = InMemoryAuthenticationBackend()
+        swappable.install(memory)
+        let session = try await swappable.signInWithIDToken(
+            provider: .apple,
+            idToken: "valid-token",
+            nonce: "nonce"
+        )
+        XCTAssertEqual(session.provider, .apple)
+    }
+
     func testSuccessfulIDTokenAuthentication() async throws {
         let backend = InMemoryAuthenticationBackend()
         let provider = AppleSignInProvider(

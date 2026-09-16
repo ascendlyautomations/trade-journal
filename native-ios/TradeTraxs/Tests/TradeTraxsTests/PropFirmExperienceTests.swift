@@ -165,6 +165,122 @@ final class PropFirmExperienceTests: XCTestCase {
         }
     }
 
+    func testDetailContentPlanDoesNotRepeatNoConsistencyRuleInGlance() throws {
+        let profileID = ProfileID("dev.propfirm")
+        var accounts = PropFirmFixtures.accounts(owner: profileID)
+        guard var prop = accounts.first(where: \.isPropFirmAccount) else {
+            XCTFail("missing prop fixture")
+            return
+        }
+        prop.propFirmRules = PropFirmAccountRules(
+            maxDrawdown: 2_000,
+            dailyDrawdown: 1_000,
+            profitTarget: 3_000,
+            winningDaysRequired: 5
+        )
+        guard let snapshot = PropFirmStatusSnapshot.build(
+            account: prop,
+            trades: PropFirmFixtures.trades(owner: profileID, accountID: prop.id)
+        ) else {
+            XCTFail("expected snapshot")
+            return
+        }
+        XCTAssertFalse(snapshot.consistencyRequired)
+        let plan = PropFirmDetailContentPlan(snapshot: snapshot)
+        let glanceText = plan.glanceLines().map(\.text).joined(separator: " ")
+        XCTAssertFalse(glanceText.localizedCaseInsensitiveContains("consistency"))
+        let expandableTitles = plan.expandableRules().map(\.title)
+        XCTAssertFalse(expandableTitles.contains("Consistency rule"))
+    }
+
+    func testDetailContentPlanKeepsDistinctRulesWithSameAmount() throws {
+        let profileID = ProfileID("dev.propfirm")
+        var accounts = PropFirmFixtures.accounts(owner: profileID)
+        guard var prop = accounts.first(where: \.isPropFirmAccount) else {
+            XCTFail("missing prop fixture")
+            return
+        }
+        prop.propFirmRules = PropFirmAccountRules(
+            maxDrawdown: 3_000,
+            profitTarget: 3_000
+        )
+        guard let snapshot = PropFirmStatusSnapshot.build(
+            account: prop,
+            trades: PropFirmFixtures.trades(owner: profileID, accountID: prop.id)
+        ) else {
+            XCTFail("expected snapshot")
+            return
+        }
+        XCTAssertEqual(snapshot.profitTarget, 3_000)
+        XCTAssertEqual(snapshot.maxDrawdownLimit, 3_000)
+        let tags = PropFirmDetailContentPlan(snapshot: snapshot).heroSummaryTags().map(\.0)
+        XCTAssertFalse(tags.contains(where: { $0.localizedCaseInsensitiveContains("target") }))
+        XCTAssertFalse(tags.contains(where: { $0.hasPrefix("DD ") }))
+    }
+
+    func testDrawdownTypeParsesAndDisplaysWithoutGuessing() throws {
+        XCTAssertEqual(PropFirmDrawdownType.parse(raw: "intraday_trailing"), .intradayTrailing)
+        XCTAssertEqual(PropFirmDrawdownType.parse(raw: " STATIC "), .staticThreshold)
+        XCTAssertNil(PropFirmDrawdownType.parse(raw: nil))
+        XCTAssertNil(PropFirmDrawdownType.parse(raw: "trailing"))
+
+        let profileID = ProfileID("dev.propfirm")
+        var accounts = PropFirmFixtures.accounts(owner: profileID)
+        guard var prop = accounts.first(where: \.isPropFirmAccount) else {
+            XCTFail("missing prop fixture")
+            return
+        }
+        prop.propFirmRules = PropFirmAccountRules(
+            maxDrawdown: 2_000,
+            drawdownType: .endOfDayTrailing
+        )
+        guard let snapshot = PropFirmStatusSnapshot.build(
+            account: prop,
+            trades: PropFirmFixtures.trades(owner: profileID, accountID: prop.id)
+        ) else {
+            XCTFail("expected snapshot")
+            return
+        }
+        XCTAssertEqual(snapshot.drawdownType, .endOfDayTrailing)
+        XCTAssertEqual(
+            PropFirmDetailPresentation.drawdownTypeLabel(snapshot.drawdownType),
+            "End-of-Day Trailing"
+        )
+        XCTAssertEqual(
+            PropFirmDetailPresentation.drawdownTypeLabel(nil),
+            "Unspecified"
+        )
+    }
+
+    func testDetailContentPlanDedupesPayoutRequirementsAgainstEvaluationTiles() throws {
+        let profileID = ProfileID("dev.propfirm")
+        var accounts = PropFirmFixtures.accounts(owner: profileID)
+        guard var prop = accounts.first(where: \.isPropFirmAccount) else {
+            XCTFail("missing prop fixture")
+            return
+        }
+        prop.mode = .funded
+        prop.propFirmRules = PropFirmAccountRules(
+            consistencyPercent: 40,
+            maxDrawdown: 2_000,
+            dailyDrawdown: 1_000,
+            profitTarget: 3_000,
+            winningDaysRequired: 5,
+            payoutDrawdownBehavior: PayoutDrawdownBehavior.keepTrailing.rawValue
+        )
+        guard let snapshot = PropFirmStatusSnapshot.build(
+            account: prop,
+            trades: PropFirmFixtures.trades(owner: profileID, accountID: prop.id)
+        ) else {
+            XCTFail("expected snapshot")
+            return
+        }
+        let plan = PropFirmDetailContentPlan(snapshot: snapshot)
+        XCTAssertTrue(plan.payoutRequirementRows().isEmpty)
+        XCTAssertFalse(plan.expandableRules().contains(where: { $0.title == "Trailing drawdown" }))
+        XCTAssertFalse(plan.expandableRules().contains(where: { $0.title == "Payout drawdown behavior" }))
+    }
+
     func testCategoryMapperRecognizesPropFirmSnakeCase() throws {
         let dto = TradeDTO.Account(
             id: "a1",

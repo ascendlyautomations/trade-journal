@@ -17,6 +17,7 @@ struct AppRootView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
+    @Bindable private var launchController = AppLaunchController.shared
     @State private var isLaunchBootstrapping = true
 
     var body: some View {
@@ -28,6 +29,8 @@ struct AppRootView: View {
         // Root fill only — do not also apply bar chrome here (owned by MainTabShellView)
         // so safe-area insets are not compensated twice.
         .experienceScreenBackground()
+        .experienceKeyboardDismissOnTapOutside()
+        .experienceKeyboardDoneToolbar()
         .animation(
             ThemeAnimation.preferred(reduceMotion: reduceMotion),
             value: themeManager.selectedIdentifier
@@ -104,8 +107,10 @@ struct AppRootView: View {
             if phase == .active {
                 Task {
                     await authenticationLifecycle.applicationWillEnterForeground()
-                    appEnvironment.data.realtimeHub.resumeIfNeeded()
-                    GettingStartedStore.shared.onForeground()
+                    if !launchController.isDemoExperienceActive {
+                        appEnvironment.data.realtimeHub.resumeIfNeeded()
+                        GettingStartedStore.shared.onForeground()
+                    }
                 }
             }
         }
@@ -126,45 +131,58 @@ struct AppRootView: View {
 
     @ViewBuilder
     private var authRootContent: some View {
+        if launchController.isDemoExperienceActive {
+            demoExperienceShell
+        } else if shouldPresentSignInRoot {
+            signInRoot
+        } else {
+            switch authenticationManager.state {
+            case .unknown, .refreshing:
+                if authenticationManager.isValidationRetryInFlight {
+                    sessionValidationSurface(isRetrying: true)
+                } else {
+                    SplashView()
+                        .onAppear { StartupTrace.event("launchLoadingPresented") }
+                }
+
+            case .sessionValidationFailed:
+                sessionValidationSurface(isRetrying: false)
+
+            case .authenticated, .locked:
+                if navigation.store.sessionPhase == .authenticated, authenticationManager.state.isSessionReady {
+                    authenticatedShell
+                } else {
+                    SplashView()
+                }
+
+            case .unauthenticated, .failure, .authenticating:
+                signInRoot
+            }
+        }
+    }
+
+    /// Sign-in root takes precedence over session-validation recovery once auth is definitively cleared.
+    private var shouldPresentSignInRoot: Bool {
         switch authenticationManager.state {
-        case .unknown, .refreshing:
-            if authenticationManager.isValidationRetryInFlight {
-                sessionValidationSurface(isRetrying: true)
-            } else {
-                SplashView()
-                    .onAppear { StartupTrace.event("launchLoadingPresented") }
-            }
-
-        case .sessionValidationFailed:
-            sessionValidationSurface(isRetrying: false)
-
-        case .authenticated, .locked:
-            if navigation.store.sessionPhase == .authenticated, authenticationManager.state.isSessionReady {
-                authenticatedShell
-            } else {
-                SplashView()
-            }
-
         case .unauthenticated, .failure:
-            AuthInfrastructureView(
-                store: navigation.store,
-                coordinator: navigation.coordinator,
-                authenticationCoordinator: authenticationCoordinator,
-                authenticationManager: authenticationManager,
-                allowsDevelopmentBypass: allowsDevelopmentBypass
-            )
-            .onAppear {
-                UnauthLaunchProbe.loginFirstFramePresented()
-            }
+            return true
+        case .sessionValidationFailed(_, let error):
+            return error.isTerminalRefreshFailure
+        default:
+            return false
+        }
+    }
 
-        case .authenticating:
-            AuthInfrastructureView(
-                store: navigation.store,
-                coordinator: navigation.coordinator,
-                authenticationCoordinator: authenticationCoordinator,
-                authenticationManager: authenticationManager,
-                allowsDevelopmentBypass: allowsDevelopmentBypass
-            )
+    private var signInRoot: some View {
+        AuthInfrastructureView(
+            store: navigation.store,
+            coordinator: navigation.coordinator,
+            authenticationCoordinator: authenticationCoordinator,
+            authenticationManager: authenticationManager,
+            allowsDevelopmentBypass: allowsDevelopmentBypass
+        )
+        .onAppear {
+            UnauthLaunchProbe.loginFirstFramePresented()
         }
     }
 
@@ -194,6 +212,12 @@ struct AppRootView: View {
                     }
                 )
 
+            case .brokerOnboarding:
+                BrokerOnboardingView(
+                    data: appEnvironment.data,
+                    gateStore: profileOnboardingGate
+                )
+
             case .complete:
                 mainAuthenticatedShell
 
@@ -210,6 +234,18 @@ struct AppRootView: View {
                 )
             }
         }
+    }
+
+    private var demoExperienceShell: some View {
+        MainTabShellView(
+            store: navigation.store,
+            coordinator: navigation.coordinator,
+            authenticationCoordinator: authenticationCoordinator,
+            currentUserProfile: currentUserProfile,
+            showsDemoExperienceChrome: true
+        )
+        .ownerAccountFilterDropdownOverlay()
+        .demoExperienceShellChrome()
     }
 
     private var mainAuthenticatedShell: some View {
@@ -256,7 +292,7 @@ struct AppRootView: View {
             onRetry: {
                 Task { await authenticationCoordinator.retrySessionValidation() }
             },
-            onSignIn: {
+            onSignOut: {
                 Task { await authenticationCoordinator.logout() }
             }
         )
@@ -264,7 +300,7 @@ struct AppRootView: View {
 
     private var sessionValidationMessage: String {
         guard let error = authenticationManager.lastSessionValidationError else {
-            return "Check your connection and try again, or sign in again."
+            return "Check your connection and try again, or sign out to continue."
         }
         if error.isTransientRefreshFailure {
             switch error {
@@ -273,10 +309,10 @@ struct AppRootView: View {
             case .unknown(let reason) where reason == "serverUnavailable":
                 return "Our servers are temporarily unavailable. Try again shortly."
             default:
-                return "We couldn't reach the server. Try again or sign in again."
+                return "We couldn't reach the server. Try again or sign out to continue."
             }
         }
-        return "Your session could not be restored. Sign in again to continue."
+        return "Your session could not be restored. Sign out to return to the sign-in screen."
     }
 
     private var sheetBinding: Binding<SheetDestination?> {
@@ -431,8 +467,7 @@ struct AppRootView: View {
                 case .importCSV:
                     TradeEntryHubView(
                         data: appEnvironment.data,
-                        initialTab: .importTrades,
-                        initialImportChannel: .csv,
+                        initialTab: .csv,
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
                 case .upgrade:
@@ -461,6 +496,8 @@ struct AppRootView: View {
             }
         }
         .experienceProtectedFormDismiss(fullScreenRequiresProtectedFormDismiss(destination))
+        .experienceKeyboardDismissOnTapOutside()
+        .experienceKeyboardDoneToolbar()
     }
 
     private func requiresProtectedFormDismiss(_ destination: SheetDestination) -> Bool {
@@ -523,7 +560,7 @@ struct AppRootView: View {
         switch destination {
         case .addTrade: return "Add Trade"
         case .editTrade: return "Edit Trade"
-        case .importCSV: return "Import"
+        case .importCSV: return "Add Trade"
         case .importReview: return "Review Import"
         case .newPost: return "New Post"
         case .newAchievement: return "New Achievement"

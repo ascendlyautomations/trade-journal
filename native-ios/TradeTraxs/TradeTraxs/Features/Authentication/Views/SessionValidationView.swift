@@ -5,7 +5,7 @@ struct SessionValidationView: View {
     let message: String
     let isRetrying: Bool
     let onRetry: () -> Void
-    let onSignIn: () -> Void
+    let onSignOut: () -> Void
 
     @Environment(\.themeColors) private var colors
 
@@ -39,12 +39,12 @@ struct SessionValidationView: View {
                 .accessibilityIdentifier("auth.validation.retry")
 
                 Button {
-                    onSignIn()
+                    onSignOut()
                 } label: {
-                    Text("Sign In")
+                    Text("Sign Out")
                         .experienceStyle(.body, color: colors.accent)
                 }
-                .accessibilityIdentifier("auth.validation.signIn")
+                .accessibilityIdentifier("auth.validation.signOut")
             }
             .padding(.horizontal, ExperienceSpacing.xl)
 

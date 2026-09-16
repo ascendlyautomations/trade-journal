@@ -57,7 +57,8 @@ export async function listLinkedRithmicImportTargets(
 export async function runRithmicManualImportBatch(
   supabase: SupabaseClient,
   userId: string,
-  targets: LinkedRithmicImportTarget[]
+  targets: LinkedRithmicImportTarget[],
+  options?: { transientPassword?: string | null }
 ): Promise<{
   ok: boolean
   results: {
@@ -98,6 +99,7 @@ export async function runRithmicManualImportBatch(
       connectionId: target.connectionId,
       brokerIntegrationAccountId: target.mappingId,
       trigger: "manual",
+      transientPassword: options?.transientPassword ?? null,
     })
     const createdIds = summary.newTradeIds ?? []
     results.push({

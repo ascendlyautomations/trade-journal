@@ -1,9 +1,9 @@
 import Foundation
 
 nonisolated enum ProfileSectionSupport {
-    /// Debug development sessions use `dev.*` IDs that are not in Supabase.
+    /// Bundled local profiles — debug `dev.*` and production Explore Mode demo trader.
     static func isLocalDevelopmentProfile(_ id: ProfileID) -> Bool {
-        id.rawValue.hasPrefix("dev.")
+        DemoExperienceSupport.usesLocalBundledData(id)
     }
 
     static func message(for error: Error) -> String {

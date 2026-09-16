@@ -31,6 +31,9 @@ struct DashboardBrokerImportCard: View {
     }
 
     private var subtitle: String {
+        if store.needsAccountLinking {
+            return "Link your broker account, then import new trades"
+        }
         let accounts = store.linkedAccounts
         guard !accounts.isEmpty else {
             return "Import new trades from your connected broker"

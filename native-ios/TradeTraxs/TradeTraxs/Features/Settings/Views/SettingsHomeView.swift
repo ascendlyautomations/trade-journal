@@ -5,10 +5,38 @@ struct SettingsHomeView: View {
 
     @Environment(\.stackNavigation) private var stackNavigation
     @Environment(\.themeColors) private var colors
+    @Bindable private var launchController = AppLaunchController.shared
     @State private var confirmsLogout = false
 
     var body: some View {
         List {
+            if launchController.isDemoExperienceActive {
+                Section {
+                    Button {
+                        launchController.exitDemoExplore(authIntent: .createAccount)
+                    } label: {
+                        SettingsNavigationRow(
+                            title: "Create Account",
+                            systemImage: "person.crop.circle.badge.plus"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        launchController.exitDemoExplore()
+                    } label: {
+                        SettingsNavigationRow(
+                            title: "Exit Demo",
+                            systemImage: "arrow.backward.circle",
+                            isDestructive: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.exitDemo")
+                } header: {
+                    Text("Demo Mode")
+                }
+            }
+
             ForEach(SettingsHomeModel.sections) { section in
                 Section {
                     ForEach(section.items) { item in
@@ -29,18 +57,20 @@ struct SettingsHomeView: View {
                 }
             }
 
-            Section {
-                Button {
-                    confirmsLogout = true
-                } label: {
-                    SettingsNavigationRow(
-                        title: "Log Out",
-                        systemImage: "rectangle.portrait.and.arrow.right",
-                        isDestructive: true
-                    )
+            if !launchController.isDemoExperienceActive {
+                Section {
+                    Button {
+                        confirmsLogout = true
+                    } label: {
+                        SettingsNavigationRow(
+                            title: "Log Out",
+                            systemImage: "rectangle.portrait.and.arrow.right",
+                            isDestructive: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.logout")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings.logout")
             }
         }
         .listStyle(.insetGrouped)

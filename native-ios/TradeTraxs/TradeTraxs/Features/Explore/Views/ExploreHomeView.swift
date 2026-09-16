@@ -166,7 +166,7 @@ struct ExploreHomeView: View {
             .padding(.horizontal, ExperienceSpacing.md)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: ExperienceSpacing.sm) {
+                LazyHStack(alignment: .top, spacing: ExperienceSpacing.sm) {
                     ForEach(viewModel.suggestedTraders) { trader in
                         ExploreTraderCard(
                             trader: trader,
@@ -185,8 +185,11 @@ struct ExploreHomeView: View {
                 }
                 .padding(.horizontal, ExperienceSpacing.md)
             }
+            .frame(height: ExploreTraderCard.railHeight)
+            .padding(.bottom, ExperienceSpacing.xs)
             .accessibilityIdentifier("explore.traders.rail")
         }
+        .padding(.bottom, ExperienceSpacing.sm)
     }
 
     private var roomsSection: some View {

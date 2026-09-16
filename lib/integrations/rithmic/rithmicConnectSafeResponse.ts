@@ -52,3 +52,13 @@ export function sanitizeConnectRequestBody(body: unknown): {
       : null
   return { username, password, systemName, reconnectConnectionId }
 }
+
+export function sanitizeRithmicSyncRequestBody(body: unknown): {
+  password: string
+} | null {
+  if (!body || typeof body !== "object") return null
+  const o = body as Record<string, unknown>
+  const password = typeof o.password === "string" ? o.password : ""
+  if (!password) return null
+  return { password }
+}

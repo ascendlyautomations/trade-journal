@@ -34,6 +34,22 @@ enum MessagingBootstrap: ScreenBootstrap {
     static func loadHome(_ context: Context) async throws -> Result {
         let viewer = await context.session.currentUserID.map { ProfileID($0.rawValue) }
 
+        if let viewer, DemoExperienceSupport.usesExploreDemoInbox(viewer) {
+            let conversations = DemoExploreInboxFixtures.conversations(viewerID: viewer)
+            context.inboxStore.replaceConversations(conversations)
+            let peers = DemoExploreInboxFixtures.profiles(for: conversations, viewerID: viewer)
+            for profile in peers {
+                context.detailCache.seed(profile)
+            }
+            return Result(
+                viewerID: viewer,
+                peerProfiles: Dictionary(uniqueKeysWithValues: peers.map { ($0.id, $0) }),
+                usedDevelopmentFixtures: true,
+                loadedConversations: true,
+                loadedRooms: false
+            )
+        }
+
         if let viewer, MessagesInboxSupport.isLocalDevelopmentProfile(viewer) {
             MessagesInboxFixtures.seedStore(context.inboxStore, viewerID: viewer)
             let peers = MessagesInboxFixtures.profiles(

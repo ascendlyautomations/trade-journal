@@ -3,28 +3,15 @@ import SwiftUI
 struct BrokerIntegrationsView: View {
     @State private var viewModel: BrokerIntegrationsViewModel
     @State private var manageAccountsViewModel: ManageAccountsViewModel
-    @State private var linkTarget: BrokerLinkTarget?
-    @State private var createLinkTarget: BrokerCreateLinkTarget?
+    @State private var linkTarget: BrokerIntegrationLinkTarget?
+    @State private var createLinkTarget: BrokerIntegrationCreateLinkTarget?
     @State private var disconnectTarget: BrokerDisconnectTarget?
+    @State private var brokerSearchText = ""
+    @State private var expandedBrokers: Set<BrokerIntegrationProvider> = []
 
     @Environment(\.themeColors) private var colors
 
     private let data: DataEnvironment
-
-    private struct BrokerLinkTarget: Identifiable {
-        let provider: BrokerIntegrationProvider
-        let connectionId: String
-        let account: BrokerIntegrationAccount
-        var id: String { account.id }
-    }
-
-    private struct BrokerCreateLinkTarget: Identifiable {
-        let provider: BrokerIntegrationProvider
-        let connectionId: String
-        let account: BrokerIntegrationAccount
-        let draft: TradingAccountDraft
-        var id: String { account.id }
-    }
 
     private enum BrokerDisconnectTarget: Identifiable {
         case tradovate(TradovateConnectionSummary)
@@ -91,49 +78,26 @@ struct BrokerIntegrationsView: View {
                 }
             }
 
-            if case .failed(let error) = viewModel.phase {
+            ForEach(visibleBrokerProviders, id: \.self) { provider in
                 Section {
-                    SettingsInlineError(message: error) {
-                        Task { await viewModel.refreshAll() }
-                    }
+                    brokerCollapsibleSection(provider)
                 }
-            }
-
-            Section {
-                tradovateSection
-            } header: {
-                Text("Tradovate")
-            } footer: {
-                Text("Connect your Tradovate login to discover accounts and import trades.")
-            }
-
-            Section {
-                rithmicSection
-            } header: {
-                Text("Rithmic")
-            } footer: {
-                rithmicSectionFooter
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Broker Integrations")
-        .overlay {
-            if viewModel.isConnecting {
-                ProgressView("Opening Tradovate…")
-                    .padding(ExperienceSpacing.lg)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-            } else if viewModel.isConnectingRithmic {
-                ProgressView("Connecting Rithmic…")
-                    .padding(ExperienceSpacing.lg)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-            } else if viewModel.phase == .loading,
-                      viewModel.tradovateConnections.isEmpty,
-                      viewModel.rithmicConnections.isEmpty
-            {
-                ProgressView()
-            }
+        .searchable(text: $brokerSearchText, prompt: "Search brokers")
+        .background {
+            BrokerIntegrationConnectionCoordinator(
+                viewModel: viewModel,
+                manageAccountsViewModel: manageAccountsViewModel,
+                data: data,
+                linkTarget: $linkTarget,
+                createLinkTarget: $createLinkTarget,
+                showsImportedTradesReview: true
+            )
         }
         .confirmationDialog(
             disconnectDialogTitle,
@@ -155,74 +119,20 @@ struct BrokerIntegrationsView: View {
             Text("Your TradeTraxs accounts and imported trades will stay in the journal.")
         }
         .onAppear {
+            BrokerIntegrationsLoadPriorityGate.setScreenActive(true)
             manageAccountsViewModel.loadIfNeeded()
             Task { await viewModel.refreshAll() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .tradovateBrokerOAuthCompleted)) { note in
-            let status = note.userInfo?[TradovateBrokerOAuthNotificationPayload.statusKey] as? String
-            let reason = note.userInfo?[TradovateBrokerOAuthNotificationPayload.reasonKey] as? String
-            Task { await viewModel.handleOAuthDeepLink(status: status, reason: reason) }
+        .onDisappear {
+            BrokerIntegrationsLoadPriorityGate.setScreenActive(false)
         }
-        .sheet(item: $linkTarget) { target in
-            BrokerLinkExistingAccountSheet(
-                viewModel: viewModel,
-                manageAccounts: manageAccountsViewModel.accounts,
-                provider: target.provider,
-                connectionId: target.connectionId,
-                brokerAccount: target.account,
-                onCreateNew: {
-                    linkTarget = nil
-                    createLinkTarget = BrokerCreateLinkTarget(
-                        provider: target.provider,
-                        connectionId: target.connectionId,
-                        account: target.account,
-                        draft: viewModel.draftForCreate(from: target.account)
-                    )
-                }
-            )
+        .onChange(of: viewModel.tradovateConnections.count) { oldCount, newCount in
+            guard newCount > 0, oldCount == 0 else { return }
+            expandedBrokers.insert(.tradovate)
         }
-        .sheet(item: $createLinkTarget) { target in
-            NavigationStack {
-                ManageAccountEditorView(
-                    viewModel: manageAccountsViewModel,
-                    mode: .create,
-                    draft: target.draft,
-                    data: data,
-                    onCreateSubmit: { draft in
-                        await viewModel.createAndLink(
-                            provider: target.provider,
-                            connectionId: target.connectionId,
-                            brokerAccount: target.account,
-                            draft: draft
-                        )
-                    }
-                )
-            }
-            .experienceProtectedFormDismiss()
-        }
-        .sheet(isPresented: $viewModel.showsRithmicConnectSheet) {
-            RithmicConnectSheet(
-                isBusy: viewModel.isConnectingRithmic,
-                systemChoices: viewModel.rithmicSystemChoices,
-                reconnectTitle: viewModel.rithmicReconnectConnectionId == nil
-                    ? "Your Rithmic password is sent once over HTTPS and is never stored on this device."
-                    : "Reconnect with your Rithmic credentials.",
-                onSubmit: { username, password, systemName in
-                    await viewModel.submitRithmicConnect(
-                        username: username,
-                        password: password,
-                        systemName: systemName
-                    )
-                }
-            )
-        }
-        .sheet(isPresented: $viewModel.showsReviewImportedTrades) {
-            BrokerImportedTradesReviewView(
-                tradeIDs: viewModel.pendingReviewTradeIDs,
-                data: data
-            ) {
-                viewModel.pendingReviewTradeIDs = []
-            }
+        .onChange(of: viewModel.rithmicConnections.count) { oldCount, newCount in
+            guard newCount > 0, oldCount == 0 else { return }
+            expandedBrokers.insert(.rithmic)
         }
         .accessibilityIdentifier("settings.brokerIntegrations")
     }
@@ -234,18 +144,108 @@ struct BrokerIntegrationsView: View {
         }
     }
 
+    private var visibleBrokerProviders: [BrokerIntegrationProvider] {
+        BrokerIntegrationsCatalog.filteredProviders(matching: brokerSearchText)
+    }
+
     @ViewBuilder
-    private var rithmicSectionFooter: some View {
-        if viewModel.isRithmicConnectUIAvailable {
-            Text("Test environment only. Rithmic credentials are verified on TradeTraxs servers and encrypted there — not on this device.")
-        } else {
-            Text("Rithmic connection is not available on this server yet.")
+    private func brokerCollapsibleSection(_ provider: BrokerIntegrationProvider) -> some View {
+        let isExpanded = expandedBrokers.contains(provider)
+
+        Button {
+            ExperienceHaptics.play(.selection)
+            if isExpanded {
+                expandedBrokers.remove(provider)
+            } else {
+                expandedBrokers.insert(provider)
+            }
+        } label: {
+            brokerSectionHeader(provider: provider, isExpanded: isExpanded)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("brokerIntegrations.section.\(provider.rawValue)")
+
+        if isExpanded {
+            switch provider {
+            case .tradovate:
+                tradovateSection
+                Text("Connect your Tradovate login to discover accounts and import trades.")
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .listRowBackground(colors.groupedBackground)
+            case .rithmic:
+                rithmicSection
+                rithmicExpandedFooter
+            }
+        }
+    }
+
+    private func brokerSectionHeader(provider: BrokerIntegrationProvider, isExpanded: Bool) -> some View {
+        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                Text(BrokerIntegrationsCatalog.displayName(for: provider))
+                    .experienceStyle(.body, color: colors.primaryText)
+                Text(viewModel.collapsedSummary(for: provider))
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            }
+            Spacer(minLength: ExperienceSpacing.sm)
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(colors.tertiaryText)
+                .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
+        .padding(.vertical, ExperienceSpacing.xxs)
+    }
+
+    @ViewBuilder
+    private var rithmicExpandedFooter: some View {
+        switch viewModel.rithmicConnectCapabilitiesPhase {
+        case .loading:
+            EmptyView()
+        case .failed:
+            EmptyView()
+        case .loaded:
+            if viewModel.isRithmicConnectUIAvailable {
+                Text("Test environment only. Your Rithmic password is used only when you connect or import and is not saved by TradeTraxs.")
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .listRowBackground(colors.groupedBackground)
+            } else {
+                Text("Rithmic connection is not available on this server yet.")
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .listRowBackground(colors.groupedBackground)
+            }
         }
     }
 
     @ViewBuilder
     private var tradovateSection: some View {
-        if viewModel.tradovateConnections.isEmpty, viewModel.phase != .loading {
+        switch viewModel.tradovateLoadPhase {
+        case .loading where viewModel.tradovateConnections.isEmpty:
+            HStack(spacing: ExperienceSpacing.sm) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Loading Tradovate…")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .failed(let message) where viewModel.tradovateConnections.isEmpty:
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                Text(message)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                Button("Retry") {
+                    Task { await viewModel.refreshAll() }
+                }
+                .font(.footnote)
+                .buttonStyle(.borderless)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        default:
+            EmptyView()
+        }
+
+        if viewModel.tradovateConnections.isEmpty,
+           viewModel.tradovateLoadPhase != .loading
+        {
             Button {
                 viewModel.connectTradovate()
             } label: {
@@ -304,76 +304,125 @@ struct BrokerIntegrationsView: View {
 
     @ViewBuilder
     private var rithmicSection: some View {
-        if viewModel.isRithmicConnectUIAvailable {
-            if viewModel.rithmicConnections.isEmpty, viewModel.phase != .loading {
-                Button {
-                    viewModel.presentRithmicConnect()
-                } label: {
-                    Label("Connect Rithmic", systemImage: "link")
+        switch viewModel.rithmicConnectionsLoadPhase {
+        case .loading where viewModel.rithmicConnections.isEmpty:
+            HStack(spacing: ExperienceSpacing.sm) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Loading Rithmic connections…")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .failed(let message) where viewModel.rithmicConnections.isEmpty:
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                Text(message)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                Button("Retry") {
+                    Task { await viewModel.refreshAll() }
                 }
-                .disabled(viewModel.isBrokerConnectionMutationActive)
-                .accessibilityIdentifier("brokerIntegrations.connectRithmic")
+                .font(.footnote)
+                .buttonStyle(.borderless)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        default:
+            EmptyView()
+        }
+
+        rithmicConnectionRows
+
+        switch viewModel.rithmicConnectCapabilitiesPhase {
+        case .loading where viewModel.rithmicConnections.isEmpty:
+            HStack(spacing: ExperienceSpacing.sm) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Checking Rithmic availability…")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .failed where viewModel.rithmicConnections.isEmpty:
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                Text("Couldn’t load Rithmic availability.")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                Button("Retry") {
+                    Task { await viewModel.refreshAll() }
+                }
+                .font(.footnote)
+                .buttonStyle(.borderless)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .loaded:
+            if viewModel.isRithmicConnectUIAvailable {
+                if viewModel.rithmicConnections.isEmpty {
+                    Button {
+                        viewModel.presentRithmicConnect()
+                    } label: {
+                        Label("Connect Rithmic", systemImage: "link")
+                    }
+                    .disabled(viewModel.isBrokerConnectionMutationActive)
+                    .accessibilityIdentifier("brokerIntegrations.connectRithmic")
+                }
+            } else if viewModel.rithmicConnections.isEmpty {
+                Text(rithmicUnavailableLabel)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var rithmicConnectionRows: some View {
+        ForEach(viewModel.rithmicConnections) { connection in
+            brokerConnectionHeader(connection)
+
+            ForEach(viewModel.accounts(for: connection.id)) { account in
+                brokerAccountRow(
+                    provider: .rithmic,
+                    connection: connection,
+                    account: account
+                )
             }
 
-            ForEach(viewModel.rithmicConnections) { connection in
-                brokerConnectionHeader(connection)
-
-                ForEach(viewModel.accounts(for: connection.id)) { account in
-                    brokerAccountRow(
+            if connection.isActiveForBrokerUI {
+                if connection.status == .reconnectRequired {
+                    brokerReconnectRequiredRow(
                         provider: .rithmic,
-                        connection: connection,
-                        account: account
+                        onReconnect: {
+                            viewModel.presentRithmicConnect(reconnectConnectionId: connection.id)
+                        }
                     )
                 }
 
-                if connection.isActiveForBrokerUI {
-                    if connection.status == .reconnectRequired {
-                        brokerReconnectRequiredRow(
-                            provider: .rithmic,
-                            onReconnect: {
-                                viewModel.presentRithmicConnect(reconnectConnectionId: connection.id)
-                            }
-                        )
-                    }
-
-                    if connection.connected {
-                        brokerRefreshAccountsRow(provider: .rithmic, connectionId: connection.id)
-                    }
-
-                    brokerDisconnectRow {
-                        disconnectTarget = .rithmic(connection)
-                    }
+                if connection.connected {
+                    brokerRefreshAccountsRow(provider: .rithmic, connectionId: connection.id)
                 }
-            }
 
-            if !viewModel.rithmicConnections.isEmpty {
-                brokerSectionDividerRow
+                brokerDisconnectRow {
+                    disconnectTarget = .rithmic(connection)
+                }
 
-                Button {
-                    viewModel.presentRithmicConnect()
-                } label: {
-                    Label("Connect Another Rithmic Login", systemImage: "plus.circle")
+                if connection.id == viewModel.rithmicConnections.last?.id {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                        Button {
+                            viewModel.presentRithmicConnect()
+                        } label: {
+                            Label("Connect Another Rithmic Login", systemImage: "plus.circle")
+                        }
+                        .disabled(viewModel.isBrokerConnectionMutationActive)
+
+                        Text("Your Rithmic password is sent once over HTTPS and is never stored on this device.")
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .disabled(viewModel.isBrokerConnectionMutationActive)
-            }
-        } else {
-            HStack {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                    Text("Unavailable")
-                        .experienceStyle(.body, color: colors.primaryText)
-                    Text(rithmicUnavailableLabel)
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                }
-                Spacer()
-                Image(systemName: "lock.fill")
-                    .foregroundStyle(colors.tertiaryText)
             }
         }
     }
 
     private var rithmicUnavailableLabel: String {
         guard let caps = viewModel.rithmicConnectCapabilities else {
-            return "Could not load Rithmic availability."
+            return "Rithmic connect is unavailable on this server."
         }
         if !caps.userConnectEnabled {
             return "Rithmic user connection is disabled on this server."
@@ -385,14 +434,6 @@ struct BrokerIntegrationsView: View {
             return "Only the supported Rithmic Test environment is enabled for connect."
         }
         return "Rithmic connect is unavailable until server protocol configuration is complete."
-    }
-
-    private var brokerSectionDividerRow: some View {
-        Color.clear
-            .frame(height: 1)
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(colors.groupedBackground)
-            .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -525,7 +566,7 @@ struct BrokerIntegrationsView: View {
                 .accessibilityIdentifier("brokerIntegrations.importTrades.\(account.id)")
             } else if !account.hasTradetraxsMapping, connection.connected {
                 Button("Link Account") {
-                    linkTarget = BrokerLinkTarget(
+                    linkTarget = BrokerIntegrationLinkTarget(
                         provider: provider,
                         connectionId: connection.id,
                         account: account
@@ -561,84 +602,5 @@ struct BrokerIntegrationsView: View {
             parts.append(env.uppercased())
         }
         return parts.joined(separator: " · ")
-    }
-}
-
-// MARK: - Link existing sheet
-
-private struct BrokerLinkExistingAccountSheet: View {
-    let viewModel: BrokerIntegrationsViewModel
-    let manageAccounts: [TradingAccount]
-    let provider: BrokerIntegrationProvider
-    let connectionId: String
-    let brokerAccount: BrokerIntegrationAccount
-    let onCreateNew: () -> Void
-
-    @State private var selectedAccountID: TradingAccountID?
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Text(brokerAccount.displayTitle)
-                        .experienceStyle(.body, color: colors.primaryText)
-                    Text("Choose a TradeTraxs account to link, or create a new one.")
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                }
-
-                Section("Link Existing") {
-                    ForEach(manageAccounts) { account in
-                        Button {
-                            selectedAccountID = account.id
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(account.name)
-                                    Text(account.category.rawValue.capitalized)
-                                        .experienceStyle(.caption, color: colors.secondaryText)
-                                }
-                                Spacer()
-                                if selectedAccountID == account.id {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(colors.accent)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                Section {
-                    Button("Create New Trading Account") {
-                        dismiss()
-                        onCreateNew()
-                    }
-                }
-            }
-            .experienceNavigationTitle("Link Account")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Link") {
-                        Task {
-                            guard let id = selectedAccountID else { return }
-                            if await viewModel.linkExisting(
-                                provider: provider,
-                                connectionId: connectionId,
-                                brokerAccount: brokerAccount,
-                                tradetraxsAccountId: id
-                            ) {
-                                dismiss()
-                            }
-                        }
-                    }
-                    .disabled(selectedAccountID == nil)
-                }
-            }
-        }
     }
 }

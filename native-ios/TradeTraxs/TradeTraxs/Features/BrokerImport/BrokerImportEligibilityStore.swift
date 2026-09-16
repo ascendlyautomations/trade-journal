@@ -11,6 +11,10 @@ final class BrokerImportEligibilityStore {
     private(set) var linkedAccounts: [BrokerImportEligibilityTarget] = []
     private(set) var connectionCount = 0
     private(set) var linkedAccountCount = 0
+    private(set) var hasSupportedConnection = false
+    private(set) var needsAccountLinking = false
+    private(set) var canImportImmediately = false
+    private(set) var optOut = false
     /// True after a successful eligibility response (including legitimately empty).
     private(set) var isReady = false
     private(set) var isRefreshing = false
@@ -20,7 +24,7 @@ final class BrokerImportEligibilityStore {
     }
 
     var showsDashboardImportAction: Bool {
-        hasLinkedBrokerAccount
+        !optOut && hasSupportedConnection
     }
 
     private var broker: (any BrokerIntegrationRepository)?
@@ -36,7 +40,6 @@ final class BrokerImportEligibilityStore {
     ) {
         self.broker = broker
         self.session = session
-        // Production repository binds after launch; refetch so Dashboard is not stuck on a pre-config failure.
         refresh(fromUserAction: false)
     }
 
@@ -64,6 +67,10 @@ final class BrokerImportEligibilityStore {
         linkedAccounts = response.linkedAccounts
         connectionCount = response.connectionCount
         linkedAccountCount = max(response.linkedAccountCount, response.linkedAccounts.count)
+        optOut = response.optOut
+        hasSupportedConnection = response.resolvedHasSupportedConnection
+        needsAccountLinking = response.resolvedNeedsAccountLinking
+        canImportImmediately = response.resolvedCanImportImmediately
         isReady = true
         logLoaded(response)
     }
@@ -74,6 +81,10 @@ final class BrokerImportEligibilityStore {
         linkedAccounts = []
         connectionCount = 0
         linkedAccountCount = 0
+        hasSupportedConnection = false
+        needsAccountLinking = false
+        canImportImmediately = false
+        optOut = false
         isReady = false
         isRefreshing = false
         loadGeneration &+= 1
@@ -105,6 +116,9 @@ final class BrokerImportEligibilityStore {
                 linkedAccounts = []
                 connectionCount = 0
                 linkedAccountCount = 0
+                hasSupportedConnection = false
+                needsAccountLinking = false
+                canImportImmediately = false
                 isReady = false
             }
             return
@@ -113,31 +127,39 @@ final class BrokerImportEligibilityStore {
         do {
             _ = try await fetchEligibility()
         } catch {
-            if generation == loadGeneration {
-                // Keep last-known linked accounts; allow retry on a later load/refresh.
-                isReady = false
-                #if DEBUG
-                AppLog.application.debug(
-                    "dashboard.brokerImportEligibility.loadFailed error=\(String(describing: error), privacy: .public)"
-                )
-                #endif
+            guard generation == loadGeneration else { return }
+            if Self.isBenignCancellation(error) || Task.isCancelled {
+                return
             }
+            #if DEBUG
+            AppLog.application.debug(
+                "dashboard.brokerImportEligibility.loadFailed error=\(String(describing: error), privacy: .public)"
+            )
+            #endif
         }
+    }
+
+    private static func isBenignCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if case NetworkError.cancelled = error { return true }
+        if case AppError.cancelled = error { return true }
+        return false
     }
 
     #if DEBUG
     private func logLoaded(_ response: BrokerImportEligibilityResponse) {
         let providers = response.linkedAccounts.map(\.provider.rawValue).joined(separator: ",")
-        let mappingLinked = response.linkedAccountCount > 0
         let cardVisible = showsDashboardImportAction
         AppLog.application.debug(
             """
             dashboard.brokerImport.connectionCount=\(response.connectionCount, privacy: .public) \
             dashboard.brokerImport.linkedAccountCount=\(response.linkedAccountCount, privacy: .public) \
             dashboard.brokerImport.provider=\(providers.isEmpty ? "none" : providers, privacy: .public) \
-            dashboard.brokerImport.mappingLinked=\(mappingLinked, privacy: .public) \
+            dashboard.brokerImport.mappingLinked=\(response.resolvedHasLinkedAccount, privacy: .public) \
             dashboard.brokerImport.cardVisible=\(cardVisible, privacy: .public) \
-            dashboard.brokerImportEligibility.loaded importEligible=\(response.eligible, privacy: .public)
+            dashboard.brokerImportEligibility.loaded importEligible=\(response.eligible, privacy: .public) \
+            dashboard.brokerImport.hasSupportedConnection=\(self.hasSupportedConnection, privacy: .public) \
+            dashboard.brokerImport.needsAccountLinking=\(self.needsAccountLinking, privacy: .public)
             """
         )
     }

@@ -23,26 +23,68 @@ struct LoginView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xl) {
-                header
-                social
-                AuthDivider()
-                form
-                actions
-                footer
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        brandingHeader
+                            .padding(.bottom, ExperienceSpacing.sm)
+                            .onTapGesture { releaseLoginKeyboardFocus() }
+
+                        modeSwitchRow
+                            .padding(.bottom, ExperienceSpacing.md)
+
+                        social
+                            .padding(.bottom, ExperienceSpacing.sm)
+
+                        credentials
+
+                        if viewModel.mode == .signUp {
+                            AuthLegalAgreementFootnote(presentation: .createAccountAgreement)
+                                .padding(.top, ExperienceSpacing.sm)
+                        }
+
+                        primaryAction
+                            .padding(.top, viewModel.mode == .signUp ? ExperienceSpacing.xs : ExperienceSpacing.md)
+
+                        if viewModel.mode == .signIn {
+                            forgotPasswordLink
+                                .padding(.top, ExperienceSpacing.xxs)
+                        }
+
+                        exploreTradeTraxsAction
+                            .padding(
+                                .top,
+                                viewModel.mode == .signUp ? ExperienceSpacing.lg : ExperienceSpacing.xxs
+                            )
+                    }
+
+                    Spacer(minLength: ExperienceSpacing.sm)
+
+                    AuthLegalAgreementFootnote(presentation: .footerLinks)
+                        .padding(.bottom, ExperienceSpacing.sm)
+                }
+                .experiencePadding(.lg)
+                .frame(maxWidth: 480)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: geometry.size.height, alignment: .top)
+                .padding(.top, ExperienceSpacing.sm)
             }
-            .experiencePadding(.xl)
-            .frame(maxWidth: 480)
-            .frame(maxWidth: .infinity)
+            .experienceFormScrollKeyboard()
         }
-        .scrollDismissesKeyboard(.interactively)
         .experienceScreenBackground()
+        .experienceKeyboardDismissOnTapOutside()
+        .experienceFormKeyboard(focus: $focusedField, releaseOnDisappear: false)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             StartupTrace.event("LoginView.body.onAppear")
             LoginFocusProbe.installKeyboardObserversIfNeeded()
+            let appliedDemoExitIntent = applyDemoExitAuthIntentIfNeeded()
+            if !appliedDemoExitIntent {
+                applyFreshInstallLandingModeIfNeeded()
+            }
+            AuthLandingInstallState.shared.recordLoggedOutAuthLandingPresented()
         }
         .onDisappear {
             releaseLoginKeyboardFocus()
@@ -54,6 +96,12 @@ struct LoginView: View {
         }
         .onChange(of: viewModel.mode) { _, _ in
             releaseLoginKeyboardFocus()
+        }
+        .onChange(of: AppLaunchController.shared.bootstrapGeneration) { _, _ in
+            let appliedDemoExitIntent = applyDemoExitAuthIntentIfNeeded()
+            if !appliedDemoExitIntent {
+                applyFreshInstallLandingModeIfNeeded()
+            }
         }
         .onChange(of: focusedField) { _, newValue in
             switch newValue {
@@ -67,53 +115,69 @@ struct LoginView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+    private var brandingHeader: some View {
+        VStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+            Image("AppLogo")
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: 96, height: 96)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .accessibilityHidden(true)
+
             Text("TradeTraxs")
-                .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                .font(.system(size: 34, weight: .bold, design: .rounded))
                 .foregroundStyle(colors.primaryText)
                 .accessibilityAddTraits(.isHeader)
-
-            Text(viewModel.mode == .signIn ? "Welcome back" : "Create your account")
-                .experienceStyle(.title2, color: colors.primaryText)
-
-            Text(
-                viewModel.mode == .signIn
-                    ? "Sign in to continue your journal."
-                    : "Start journaling trades in seconds."
-            )
-            .experienceStyle(.body, color: colors.secondaryText)
         }
-        .padding(.top, ExperienceSpacing.xxl)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var modeSwitchRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
+            if viewModel.mode == .signIn {
+                Text("Sign in to your Account")
+                    .font(ExperienceTypography.callout)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(colors.primaryText)
+                Text("or")
+                    .font(ExperienceTypography.callout)
+                    .foregroundStyle(colors.secondaryText)
+                alternateModeButton("Create Account")
+            } else {
+                Text("Create Account")
+                    .font(ExperienceTypography.callout)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(colors.primaryText)
+                Text("or")
+                    .font(ExperienceTypography.callout)
+                    .foregroundStyle(colors.secondaryText)
+                alternateModeButton("Sign in to your Account")
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
         .animation(
             ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
             value: viewModel.mode
         )
     }
 
-    private var social: some View {
-        SocialSignInButtons(
-            isEnabled: !viewModel.isSubmitting,
-            isLoading: viewModel.isSubmitting,
-            onAppleCredential: { credential in
-                releaseLoginKeyboardFocus()
-                Task { await viewModel.signInWithApple(credential: credential) }
-            },
-            onAppleCancelled: {
-                viewModel.handleAppleSignInCancelled()
-            },
-            onAppleFailure: { error in
-                viewModel.handleAppleSignInFailure(error)
-            },
-            onGoogle: {
-                releaseLoginKeyboardFocus()
-                Task { await viewModel.signInWithGoogle() }
-            }
-        )
+    private func alternateModeButton(_ title: String) -> some View {
+        Button {
+            releaseLoginKeyboardFocus()
+            viewModel.toggleMode()
+        } label: {
+            Text(title)
+                .font(ExperienceTypography.callout)
+                .fontWeight(.semibold)
+                .foregroundStyle(colors.accent)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("auth.toggleMode")
     }
 
-    private var form: some View {
-        VStack(spacing: ExperienceSpacing.md) {
+    private var credentials: some View {
+        VStack(spacing: ExperienceSpacing.sm) {
             AuthTextField(
                 title: "Email",
                 text: $viewModel.email,
@@ -133,179 +197,141 @@ struct LoginView: View {
                 textContentType: viewModel.mode == .signUp ? .newPassword : .password,
                 submitLabel: .go,
                 onSubmit: {
-                    releaseLoginKeyboardFocus()
                     Task { await viewModel.submit() }
                 },
                 loginField: .password,
                 loginFocusedField: $focusedField
             )
 
-            #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-uitesting-login-native-ab") {
-                loginNativeABControls
-            }
-            #endif
-
-            if viewModel.mode == .signIn {
-                HStack {
-                    Spacer()
-                    Button("Forgot password?") {
-                        ExperienceHaptics.play(.selection)
-                        releaseLoginKeyboardFocus()
-                        navigationCoordinator.open(.auth(.resetPassword))
-                    }
-                    .font(ExperienceTypography.footnote)
-                    .foregroundStyle(colors.accent)
-                    .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-                    .accessibilityIdentifier("auth.forgotPassword")
-                }
-            }
-
-            if let errorMessage = viewModel.errorMessage {
-                Text(errorMessage)
-                    .experienceStyle(.footnote, color: colors.error)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("auth.error")
-                    .animation(
-                        ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                        value: viewModel.errorMessage
-                    )
-            }
-
-            if let informationalMessage = viewModel.informationalMessage {
-                Text(informationalMessage)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("auth.confirmationPending")
-            }
-
-            if viewModel.pendingConfirmationEmail != nil {
-                Button {
-                    Task { await viewModel.resendConfirmationEmail() }
-                } label: {
-                    if viewModel.isResendingConfirmation {
-                        ProgressView()
-                    } else {
-                        Text("Resend confirmation email")
-                    }
-                }
-                .font(ExperienceTypography.footnote)
-                .foregroundStyle(colors.accent)
-                .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-                .disabled(viewModel.isResendingConfirmation)
-                .accessibilityLabel("Resend confirmation email")
-                .accessibilityIdentifier("auth.resendConfirmation")
-            }
-
-            if let confirmationResentMessage = viewModel.confirmationResentMessage {
-                Text(confirmationResentMessage)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("auth.confirmationResent")
-            }
+            authFeedback
         }
     }
 
-    private var actions: some View {
-        VStack(spacing: ExperienceSpacing.sm) {
-            ExperienceButton(
-                title: viewModel.primaryButtonTitle,
-                kind: .primary,
-                isEnabled: viewModel.canSubmit,
-                isLoading: viewModel.isSubmitting,
-                accessibilityIdentifier: "auth.submit"
-            ) {
-                releaseLoginKeyboardFocus()
-                Task { await viewModel.submit() }
-            }
-
-            if viewModel.showsDevelopmentContinue {
-                ExperienceButton(
-                    title: "Continue (Debug)",
-                    kind: .secondary,
-                    isEnabled: !viewModel.isSubmitting,
-                    isLoading: false,
-                    accessibilityIdentifier: "auth.continue"
-                ) {
-                    Task { await viewModel.continueAsDevelopment() }
-                }
-            }
+    @ViewBuilder
+    private var authFeedback: some View {
+        if let errorMessage = viewModel.errorMessage {
+            Text(errorMessage)
+                .experienceStyle(.footnote, color: colors.error)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("auth.error")
         }
-    }
 
-    private var footer: some View {
-        VStack(spacing: ExperienceSpacing.md) {
-            AuthLegalAgreementFootnote()
-                .padding(.top, ExperienceSpacing.sm)
+        if let informationalMessage = viewModel.informationalMessage {
+            Text(informationalMessage)
+                .experienceStyle(.footnote, color: colors.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("auth.confirmationPending")
+        }
 
+        if viewModel.pendingConfirmationEmail != nil {
             Button {
-                releaseLoginKeyboardFocus()
-                viewModel.toggleMode()
+                Task { await viewModel.resendConfirmationEmail() }
             } label: {
-                (
-                    Text(viewModel.mode == .signIn ? "New here? " : "Already have an account? ")
-                        + Text(viewModel.mode == .signIn ? "Create account" : "Sign in")
-                        .foregroundColor(colors.accent)
-                )
-                .experienceStyle(.callout, color: colors.secondaryText)
-                .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("auth.toggleMode")
-
-            Button("Take a quick tour") {
-                ExperienceHaptics.play(.selection)
-                releaseLoginKeyboardFocus()
-                navigationCoordinator.open(.auth(.onboarding))
+                if viewModel.isResendingConfirmation {
+                    ProgressView()
+                } else {
+                    Text("Resend confirmation email")
+                }
             }
             .font(ExperienceTypography.footnote)
-            .foregroundStyle(colors.secondaryText)
+            .foregroundStyle(colors.accent)
             .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-            .accessibilityIdentifier("auth.onboarding")
+            .disabled(viewModel.isResendingConfirmation)
+            .accessibilityIdentifier("auth.resendConfirmation")
         }
-        .frame(maxWidth: .infinity)
-        .padding(.bottom, ExperienceSpacing.xxl)
+
+        if let confirmationResentMessage = viewModel.confirmationResentMessage {
+            Text(confirmationResentMessage)
+                .experienceStyle(.footnote, color: colors.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("auth.confirmationResent")
+        }
     }
 
-    #if DEBUG
-    /// Plain SwiftUI controls for A/B against ``AuthTextField`` — launch arg `-uitesting-login-native-ab`.
-    private var loginNativeABControls: some View {
-        LoginNativeABControls(isSignUp: viewModel.mode == .signUp)
-            .padding(.top, ExperienceSpacing.md)
+    private var primaryAction: some View {
+        ExperienceButton(
+            title: viewModel.primaryButtonTitle,
+            kind: .primary,
+            isEnabled: !viewModel.isSubmitting,
+            isLoading: viewModel.isSubmitting,
+            accessibilityIdentifier: "auth.submit"
+        ) {
+            Task { await viewModel.submit() }
+        }
     }
-    #endif
 
-    /// Ends RTI/text session before OAuth, navigation, or auth state tears down Login.
+    private var forgotPasswordLink: some View {
+        HStack {
+            Spacer()
+            Button("Forgot Password?") {
+                ExperienceHaptics.play(.selection)
+                releaseLoginKeyboardFocus()
+                navigationCoordinator.open(.auth(.resetPassword))
+            }
+            .font(ExperienceTypography.subheadline)
+            .foregroundStyle(colors.accent)
+            .frame(minHeight: ExperienceAccessibility.minTouchTarget)
+            .accessibilityIdentifier("auth.forgotPassword")
+        }
+    }
+
+    private var social: some View {
+        SocialSignInButtons(
+            isEnabled: !viewModel.isSubmitting && !viewModel.isOAuthInteractionInFlight,
+            isLoading: viewModel.isSubmitting || viewModel.isOAuthInteractionInFlight,
+            onAppleInteractionBegan: {
+                viewModel.beginOAuthProviderInteraction()
+            },
+            onAppleCredential: { credential in
+                releaseLoginKeyboardFocus()
+                Task { await viewModel.signInWithApple(credential: credential) }
+            },
+            onAppleCancelled: {
+                viewModel.handleAppleSignInCancelled()
+            },
+            onAppleFailure: { error in
+                viewModel.handleAppleSignInFailure(error)
+            },
+            onGoogleInteractionBegan: {
+                viewModel.beginOAuthProviderInteraction()
+            },
+            onGoogle: {
+                releaseLoginKeyboardFocus()
+                Task { await viewModel.signInWithGoogle() }
+            }
+        )
+    }
+
+    private var exploreTradeTraxsAction: some View {
+        ExperienceButton(
+            title: "Explore as Guest",
+            kind: .secondary,
+            accessibilityIdentifier: "auth.exploreDemo"
+        ) {
+            releaseLoginKeyboardFocus()
+            AppLaunchController.shared.enterDemoExplore()
+        }
+    }
+
     private func releaseLoginKeyboardFocus() {
-        focusedField = nil
-        ExperienceKeyboard.dismiss()
+        ExperienceKeyboard.dismissFormKeyboard()
     }
-}
 
-#if DEBUG
-/// Isolated A/B fields — separate text/focus from production ``AuthTextField`` controls.
-private struct LoginNativeABControls: View {
-    let isSignUp: Bool
-    @State private var abEmail = ""
-    @State private var abPassword = ""
-    @FocusState private var abFocusedField: AuthLoginField?
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Native A/B (DEBUG)")
-                .experienceStyle(.caption, color: colors.secondaryText)
-            TextField("AB Email", text: $abEmail)
-                .textContentType(.username)
-                .keyboardType(.emailAddress)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($abFocusedField, equals: .email)
-            SecureField("AB Password", text: $abPassword)
-                .textContentType(isSignUp ? .newPassword : .password)
-                .focused($abFocusedField, equals: .password)
+    @discardableResult
+    private func applyDemoExitAuthIntentIfNeeded() -> Bool {
+        guard let intent = AppLaunchController.shared.consumeDemoExitAuthIntent() else { return false }
+        switch intent {
+        case .signIn:
+            viewModel.mode = .signIn
+        case .createAccount:
+            viewModel.mode = .signUp
         }
+        return true
+    }
+
+    /// First logged-out landing only — returning users already default to Sign In via ``AuthLandingInstallState``.
+    private func applyFreshInstallLandingModeIfNeeded() {
+        guard AuthLandingInstallState.shared.initialLoginMode == .signUp else { return }
+        viewModel.mode = .signUp
     }
 }
-#endif

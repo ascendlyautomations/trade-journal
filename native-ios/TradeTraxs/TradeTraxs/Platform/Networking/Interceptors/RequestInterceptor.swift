@@ -30,14 +30,21 @@ nonisolated struct AuthenticationRequestInterceptor: RequestInterceptor {
     var accessTokenProvider: @Sendable () async -> String? = { nil }
 
     func intercept(_ request: HTTPRequest) async throws -> HTTPRequest {
-        guard request.endpoint.requiresAuthentication else { return request }
-        guard let token = await accessTokenProvider(), !token.isEmpty else {
-            // Do not send an unauthenticated BFF/Supabase call and then surface a
-            // cryptic 401 → AppError.authentication (NSError "error 3").
-            throw AppError.authentication(.sessionMissing)
+        let userToken = await accessTokenProvider()
+        let hasUserToken = userToken.map { !$0.isEmpty } ?? false
+
+        if hasUserToken, let userToken {
+            var copy = request
+            copy.headers["Authorization"] = "Bearer \(userToken)"
+            return copy
         }
-        var copy = request
-        copy.headers["Authorization"] = "Bearer \(token)"
-        return copy
+
+        guard request.endpoint.requiresAuthentication else {
+            // Anonymous public Supabase (apikey + anon Bearer) applied by ``SupabaseHeadersInterceptor``.
+            return request
+        }
+
+        // Do not send an unauthenticated BFF/Supabase call and then surface a cryptic 401.
+        throw AppError.authentication(.sessionMissing)
     }
 }

@@ -131,6 +131,10 @@ struct RoomConversationHeaderView: View {
             logoImage = nil
             return
         }
+        if let ui = DemoExploreBundledAvatar.uiImage(for: reference) {
+            logoImage = Image(uiImage: ui)
+            return
+        }
         do {
             let data = try await imagePipeline.data(
                 for: ImageRequest(

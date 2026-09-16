@@ -93,7 +93,9 @@ struct GlobalUploadQueueSheet: View {
     }
 }
 
-struct GlobalUploadChromeModifier: ViewModifier {
+/// Inserts the upload banner below the navigation bar and above scrollable stack content.
+/// Apply only to tab-root ``NavigationStack`` views in ``MainTabShellView`` — not the outer ``TabView``.
+struct GlobalUploadNavigationInsetModifier: ViewModifier {
     @Bindable var coordinator: GlobalUploadCoordinator
 
     func body(content: Content) -> some View {
@@ -106,6 +108,15 @@ struct GlobalUploadChromeModifier: ViewModifier {
                     )
                 }
             }
+    }
+}
+
+/// Upload queue sheet — attach once on ``MainTabShellView`` (not per tab stack).
+struct GlobalUploadQueueSheetModifier: ViewModifier {
+    @Bindable var coordinator: GlobalUploadCoordinator
+
+    func body(content: Content) -> some View {
+        content
             .sheet(isPresented: $coordinator.isQueuePresented) {
                 GlobalUploadQueueSheet(coordinator: coordinator)
             }
@@ -114,12 +125,22 @@ struct GlobalUploadChromeModifier: ViewModifier {
 
 extension View {
     @MainActor
-    func globalUploadChrome() -> some View {
-        globalUploadChrome(coordinator: GlobalUploadCoordinator.shared)
+    func globalUploadNavigationInset() -> some View {
+        globalUploadNavigationInset(coordinator: GlobalUploadCoordinator.shared)
     }
 
     @MainActor
-    func globalUploadChrome(coordinator: GlobalUploadCoordinator) -> some View {
-        modifier(GlobalUploadChromeModifier(coordinator: coordinator))
+    func globalUploadNavigationInset(coordinator: GlobalUploadCoordinator) -> some View {
+        modifier(GlobalUploadNavigationInsetModifier(coordinator: coordinator))
+    }
+
+    @MainActor
+    func globalUploadQueueSheet() -> some View {
+        globalUploadQueueSheet(coordinator: GlobalUploadCoordinator.shared)
+    }
+
+    @MainActor
+    func globalUploadQueueSheet(coordinator: GlobalUploadCoordinator) -> some View {
+        modifier(GlobalUploadQueueSheetModifier(coordinator: coordinator))
     }
 }

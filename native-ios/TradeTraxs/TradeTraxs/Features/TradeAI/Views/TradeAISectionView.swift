@@ -7,40 +7,36 @@ struct TradeAISectionView: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            header
+        TradeDetailGroupedSurface {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                header
 
-            if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
-                ProgressView()
-                    .controlSize(.small)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityLabel("Loading previous analyses")
+                if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityLabel("Loading previous analyses")
+                }
+
+                if !viewModel.messages.isEmpty {
+                    messages
+                }
+
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        .experienceStyle(.caption, color: colors.error)
+                }
+
+                analysisSelectorRow
+
+                customQuestionSection
+
+                ComplianceDisclaimerFootnote(
+                    text: ComplianceDisclaimerCopy.tradeAI,
+                    showsTermsLink: true
+                )
             }
-
-            if !viewModel.messages.isEmpty {
-                messages
-            }
-
-            if let error = viewModel.errorMessage {
-                Text(error)
-                    .experienceStyle(.caption, color: colors.error)
-            }
-
-            analysisSelectorRow
-
-            customQuestionSection
-
-            ComplianceDisclaimerFootnote(
-                text: ComplianceDisclaimerCopy.tradeAI,
-                showsTermsLink: true
-            )
         }
-        .padding(ExperienceSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            colors.fillPrimary,
-            in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-        )
         .accessibilityIdentifier("detail.trade.ai.section")
     }
 

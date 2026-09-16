@@ -7,6 +7,39 @@ final class FeedBlockFilterTests: XCTestCase {
         FeedBlockedAuthorsFilter.shared.resetForTesting()
     }
 
+    func testBlockedAuthorFilteredFromConversationMessages() {
+        let viewer = FeedFixtures.viewerID
+        let blocked = ProfileID("blocked-room-author")
+        let messages = [
+            Message(
+                id: MessageID("m1"),
+                conversationID: ConversationID("room-channel"),
+                senderProfileID: blocked,
+                kind: .text,
+                body: "blocked",
+                attachments: [],
+                replyToMessageID: nil,
+                createdAt: .now,
+                isReadByViewer: true
+            ),
+            Message(
+                id: MessageID("m2"),
+                conversationID: ConversationID("room-channel"),
+                senderProfileID: viewer,
+                kind: .text,
+                body: "mine",
+                attachments: [],
+                replyToMessageID: nil,
+                createdAt: .now,
+                isReadByViewer: true
+            ),
+        ]
+        FeedBlockedAuthorsFilter.shared.noteBlock(peerID: blocked)
+        let visible = FeedBlockedAuthorsFilter.shared.filterConversationMessages(messages, viewerID: viewer)
+        XCTAssertEqual(visible.count, 1)
+        XCTAssertEqual(visible.first?.senderProfileID, viewer)
+    }
+
     func testBlockedAuthorFilteredFromFeedEntries() {
         let entries = FeedFixtures.timeline()
         let blockedID = entries.first!.authorProfileID

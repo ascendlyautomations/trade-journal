@@ -4,7 +4,6 @@ struct ProfileClipCard: View {
     let reel: Reel
     let detailCache: DetailPresentationCache
     let imagePipeline: any ImagePipeline
-    let objectStorage: any ObjectStorageProviding
     let engagementStore: EngagementStore
     let vaultStore: VaultStore
     let onOpen: () -> Void
@@ -18,14 +17,12 @@ struct ProfileClipCard: View {
     var body: some View {
         ExperienceCard {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                ProfileCompactCardMediaSection {
                     ZStack(alignment: .bottomTrailing) {
-                        FeedClipPosterImage(
-                            thumbnail: reel.thumbnail,
-                            video: reel.video,
-                            imagePipeline: imagePipeline,
-                            objectStorage: objectStorage,
-                            contentMode: .fill
+                        ProfileCompactMediaThumbnail(
+                            reference: reel.thumbnail,
+                            purpose: .reelThumbnail,
+                            imagePipeline: imagePipeline
                         )
                         Image(systemName: "play.circle.fill")
                             .font(.system(size: 22))
@@ -34,7 +31,7 @@ struct ProfileClipCard: View {
                             .padding(6)
                     }
                     .accessibilityHidden(true)
-
+                } metadata: {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                         Text(ClipDisplayTitle.text(for: reel, cache: detailCache))
                             .experienceStyle(.headline, color: colors.primaryText)

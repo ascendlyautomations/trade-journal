@@ -28,6 +28,8 @@ final class AuthenticationCoordinator {
     private var signInGeneration: UInt64 = 0
     /// Prevents stale restore completion from publishing authenticated shell.
     private var restoreGeneration: UInt64 = 0
+    /// Single-flight logout — duplicate taps must not re-enter teardown or push unregister.
+    private var logoutInFlight = false
 
     init(
         authenticationManager: AuthenticationManager,
@@ -99,9 +101,17 @@ final class AuthenticationCoordinator {
         applyNavigation(for: authenticationManager.state)
     }
 
-    func signIn(email: String, password: String) async throws {
+    func signIn(
+        email: String,
+        password: String,
+        smartSignUpIfNewEmail: Bool = false
+    ) async throws {
         try await performSignIn(operation: {
-            try await self.authenticationManager.signIn(email: email, password: password)
+            try await self.authenticationManager.signIn(
+                email: email,
+                password: password,
+                smartSignUpIfNewEmail: smartSignUpIfNewEmail
+            )
         })
     }
 
@@ -179,6 +189,10 @@ final class AuthenticationCoordinator {
         correlationLabel: String,
         useAccountDeletionTeardown: Bool
     ) async {
+        guard !logoutInFlight else { return }
+        logoutInFlight = true
+        defer { logoutInFlight = false }
+
         restoreGeneration &+= 1
         let correlation = AuthFlowTracer.beginCorrelation()
         AuthFlowTracer.trace(
@@ -187,23 +201,26 @@ final class AuthenticationCoordinator {
             correlation: correlation,
             generation: restoreGeneration
         )
-        if useAccountDeletionTeardown, let prepareAccountDeletion {
-            await prepareAccountDeletion()
-        } else if let prepareSessionTeardown {
-            await prepareSessionTeardown()
-        }
+
         await authenticationManager.logout()
         await invalidateCachesForSessionChange()
         boundUserID = nil
         navigation.clearDeferredAuthenticatedSnapshot()
         navigation.clearPersistedState()
         navigation.coordinator.markUnauthenticated()
+        applyNavigation(for: authenticationManager.state, correlation: correlation)
         AuthFlowTracer.trace(
             "\(correlationLabel).completed",
             phase: .unauthenticated,
             correlation: correlation,
             generation: restoreGeneration
         )
+
+        if useAccountDeletionTeardown, let prepareAccountDeletion {
+            Task { await prepareAccountDeletion() }
+        } else if let prepareSessionTeardown {
+            Task { await prepareSessionTeardown() }
+        }
     }
 
     /// Authenticated session email when present (nil for development bypass).
@@ -265,15 +282,6 @@ final class AuthenticationCoordinator {
                 navigation.coordinator.markUnauthenticated()
             }
             navigation.clearDeferredAuthenticatedSnapshot()
-            if boundUserID != nil {
-                boundUserID = nil
-                Task {
-                    if let prepareSessionTeardown {
-                        await prepareSessionTeardown()
-                    }
-                    await invalidateCachesForSessionChange()
-                }
-            }
 
         case .refreshing, .unknown:
             if navigation.store.sessionPhase == .authenticated {
@@ -287,12 +295,7 @@ final class AuthenticationCoordinator {
             navigation.clearDeferredAuthenticatedSnapshot()
             if boundUserID != nil {
                 boundUserID = nil
-                Task {
-                    if let prepareSessionTeardown {
-                        await prepareSessionTeardown()
-                    }
-                    await invalidateCachesForSessionChange()
-                }
+                Task { await invalidateCachesForSessionChange() }
             }
             if case .unauthenticated = state {
                 navigation.clearPersistedState()
@@ -332,6 +335,12 @@ final class AuthenticationCoordinator {
                     correlation: correlation,
                     generation: generation
                 )
+                if authenticationManager.state.isSessionReady {
+                    await bindAuthenticatedUser()
+                    navigation.coordinator.markAuthenticated(
+                        applyingDeferred: navigation.consumeDeferredAuthenticatedSnapshot()
+                    )
+                }
                 return
             }
             guard authenticationManager.state.isSessionReady else {
@@ -402,6 +411,7 @@ final class AuthenticationCoordinator {
         let isNewBind = boundUserID == nil && newID != nil
         boundUserID = newID
         if isNewBind || switchedAccounts {
+            AuthLandingInstallState.shared.recordLoggedOutAuthLandingPresented()
             if authenticationManager.state.session?.provider == .google {
                 AppLog.authentication.info("OAuth authenticated session bound")
             }

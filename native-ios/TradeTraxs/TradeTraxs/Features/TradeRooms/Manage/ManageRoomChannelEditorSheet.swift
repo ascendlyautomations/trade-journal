@@ -36,6 +36,7 @@ struct ManageRoomChannelEditorSheet: View {
                     Toggle("Members can chat", isOn: $allowMembersChat)
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .scrollContentBackground(.hidden)
             .experienceScreenBackground()
             .experienceNavigationTitle(channel == nil ? "New Channel" : "Edit Channel")

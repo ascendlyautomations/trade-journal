@@ -3,6 +3,14 @@ import SwiftUI
 /// Lightweight per-trade editor before bulk import.
 struct CSVImportTradeReviewView: View {
     @State private var draft: CSVParsedTrade
+    @State private var pnlText: String
+    @State private var quantityText: String
+    @State private var entryText: String
+    @State private var exitText: String
+    @State private var pointsText: String
+    @State private var rrText: String
+    @FocusState private var isPnlFocused: Bool
+
     let onSave: (CSVParsedTrade) -> Void
     let onCancel: () -> Void
 
@@ -14,6 +22,20 @@ struct CSVImportTradeReviewView: View {
         onCancel: @escaping () -> Void
     ) {
         _draft = State(initialValue: trade)
+        _pnlText = State(initialValue: NumericInputFieldSupport.seedEditingText(from: trade.realizedPnL, style: .signedPnL))
+        _quantityText = State(initialValue: NumericInputFieldSupport.seedEditingText(from: trade.quantity, style: .tradeQuantity))
+        _entryText = State(initialValue: trade.entryPrice.map {
+            NumericInputFieldSupport.seedEditingText(from: $0, style: .tradePrice)
+        } ?? "")
+        _exitText = State(initialValue: trade.exitPrice.map {
+            NumericInputFieldSupport.seedEditingText(from: $0, style: .tradePrice)
+        } ?? "")
+        _pointsText = State(initialValue: trade.points.map {
+            NumericInputFieldSupport.seedEditingText(from: $0, style: .tradeQuantity)
+        } ?? "")
+        _rrText = State(initialValue: trade.riskReward.map {
+            NumericInputFieldSupport.seedEditingText(from: $0, style: .riskReward)
+        } ?? "")
         self.onSave = onSave
         self.onCancel = onCancel
     }
@@ -27,17 +49,18 @@ struct CSVImportTradeReviewView: View {
                     Text("Long").tag(TradeSide.long)
                     Text("Short").tag(TradeSide.short)
                 }
-                TextField("P&L", text: pnlBinding)
+                TextField("P&L", text: $pnlText.numericInput(.signedPnL))
                     .keyboardType(.decimalPad)
-                TextField("Contracts", text: quantityBinding)
+                    .focused($isPnlFocused)
+                TextField("Contracts", text: $quantityText.numericInput(.tradeQuantity))
                     .keyboardType(.decimalPad)
-                TextField("Entry Price", text: entryBinding)
+                TextField("Entry Price", text: $entryText.numericInput(.tradePrice))
                     .keyboardType(.decimalPad)
-                TextField("Exit Price", text: exitBinding)
+                TextField("Exit Price", text: $exitText.numericInput(.tradePrice))
                     .keyboardType(.decimalPad)
-                TextField("Points", text: pointsBinding)
+                TextField("Points", text: $pointsText.numericInput(.tradeQuantity))
                     .keyboardType(.decimalPad)
-                TextField("R:R", text: rrBinding)
+                TextField("R:R", text: $rrText.numericInput(.riskReward))
                     .keyboardType(.decimalPad)
             }
 
@@ -52,13 +75,16 @@ struct CSVImportTradeReviewView: View {
         }
         .experienceNavigationTitle("Review Trade")
         .scrollDismissesKeyboard(.interactively)
-        .experienceKeyboardDoneToolbar()
+        .experienceSignedDecimalKeyboardSignToggle(isActive: isPnlFocused) {
+            pnlText = NumericInputFieldSupport.toggleSignOnDisplay(pnlText, style: .signedPnL)
+        }
+        .experienceFormKeyboard(isFocused: $isPnlFocused)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel", action: onCancel)
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Save") { onSave(draft) }
+                Button("Save") { saveTrade() }
                     .disabled(draft.symbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -66,58 +92,18 @@ struct CSVImportTradeReviewView: View {
         .accessibilityIdentifier("csvImport.review")
     }
 
-    private var pnlBinding: Binding<String> {
-        decimalBinding(\.realizedPnL, required: true)
-    }
+    private func saveTrade() {
+        guard let pnl = NumericInputFieldSupport.parse(pnlText, style: .signedPnL),
+              let quantity = NumericInputFieldSupport.parse(quantityText, style: .tradeQuantity)
+        else { return }
 
-    private var quantityBinding: Binding<String> {
-        decimalBinding(\.quantity, required: true)
-    }
-
-    private var entryBinding: Binding<String> {
-        optionalDecimalBinding(\.entryPrice)
-    }
-
-    private var exitBinding: Binding<String> {
-        optionalDecimalBinding(\.exitPrice)
-    }
-
-    private var pointsBinding: Binding<String> {
-        optionalDecimalBinding(\.points)
-    }
-
-    private var rrBinding: Binding<String> {
-        optionalDecimalBinding(\.riskReward)
-    }
-
-    private func decimalBinding(
-        _ keyPath: WritableKeyPath<CSVParsedTrade, Decimal>,
-        required: Bool
-    ) -> Binding<String> {
-        Binding(
-            get: { NSDecimalNumber(decimal: draft[keyPath: keyPath]).stringValue },
-            set: { raw in
-                if let value = CSVNumericParser.parse(raw) {
-                    draft[keyPath: keyPath] = value
-                } else if !required, raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    // no-op for required
-                }
-            }
-        )
-    }
-
-    private func optionalDecimalBinding(
-        _ keyPath: WritableKeyPath<CSVParsedTrade, Decimal?>
-    ) -> Binding<String> {
-        Binding(
-            get: {
-                guard let value = draft[keyPath: keyPath] else { return "" }
-                return NSDecimalNumber(decimal: value).stringValue
-            },
-            set: { raw in
-                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                draft[keyPath: keyPath] = trimmed.isEmpty ? nil : CSVNumericParser.parse(trimmed)
-            }
-        )
+        var updated = draft
+        updated.realizedPnL = pnl
+        updated.quantity = quantity
+        updated.entryPrice = NumericInputFieldSupport.parse(entryText, style: .tradePrice)
+        updated.exitPrice = NumericInputFieldSupport.parse(exitText, style: .tradePrice)
+        updated.points = NumericInputFieldSupport.parse(pointsText, style: .tradeQuantity)
+        updated.riskReward = NumericInputFieldSupport.parse(rrText, style: .riskReward)
+        onSave(updated)
     }
 }

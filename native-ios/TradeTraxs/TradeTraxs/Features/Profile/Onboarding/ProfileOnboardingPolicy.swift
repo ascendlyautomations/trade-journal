@@ -46,10 +46,15 @@ nonisolated enum ProfileOnboardingPolicy {
         return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    static func profileNeedsDisplayName(_ name: String?) -> Bool {
+        profileFieldMissing(name) || ProfileDisplayNamePolicy.isPlaceholder(name)
+    }
+
     /// True when the user must complete global onboarding before app access.
     static func profileNeedsOnboarding(_ snapshot: ProfileOnboardingSnapshot) -> Bool {
         if snapshot.onboardingCompleted { return false }
-        return profileNeedsUsername(snapshot.username)
+        return profileNeedsDisplayName(snapshot.displayName)
+            || profileNeedsUsername(snapshot.username)
             || profileFieldMissing(snapshot.traderType)
             || profileFieldMissing(snapshot.tradingStyle)
             || profileFieldMissing(snapshot.startedTrading)

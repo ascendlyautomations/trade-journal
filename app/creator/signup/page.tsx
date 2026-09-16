@@ -450,7 +450,7 @@ function CreatorSignupInner() {
                 type="button"
                 onClick={() => void handleReset()}
                 disabled={loadingReset}
-                className="mt-2 w-full rounded bg-blue-500 py-2 text-white hover:bg-blue-600 disabled:opacity-50"
+                className="mt-2 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 md:py-2.5"
               >
                 {loadingReset ? "Sending..." : "Send Reset Link"}
               </button>

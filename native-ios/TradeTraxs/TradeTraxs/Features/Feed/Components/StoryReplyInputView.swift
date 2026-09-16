@@ -53,6 +53,7 @@ struct StoryReplyInputView: View {
         .onChange(of: isFocused) { _, focused in
             fieldFocused = focused
         }
+        .experienceFormFocusSync($fieldFocused)
     }
 
     private func sendIfPossible() {

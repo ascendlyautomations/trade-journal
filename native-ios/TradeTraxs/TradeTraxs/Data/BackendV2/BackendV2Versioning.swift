@@ -22,6 +22,7 @@ nonisolated enum BackendV2Versioning {
         case conversation = "rpc_v1_conversation_bootstrap"
         case conversationThread = "rpc_v1_conversation_thread_bootstrap"
         case room = "rpc_v1_room_bootstrap"
+        case publicRoomGuest = "rpc_v1_public_room_guest_bootstrap"
         case activity = "rpc_v1_activity_bootstrap"
         case explore = "rpc_v1_explore_bootstrap"
         case tradeRoomDiscovery = "rpc_v1_trade_room_discovery"

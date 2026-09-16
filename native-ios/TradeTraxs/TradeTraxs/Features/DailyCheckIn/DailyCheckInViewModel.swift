@@ -8,14 +8,12 @@ final class DailyCheckInViewModel {
     private(set) var isSaving = false
     private(set) var errorMessage: String?
 
+    private static let sleepHoursInputStyle = NumericInputStyle.unsignedDecimal(maxFractionDigits: 1)
+
     var sleepHoursText: String {
         get {
             guard let hours = draft.sleepHours else { return "" }
-            let number = NSDecimalNumber(decimal: hours)
-            if number.doubleValue.truncatingRemainder(dividingBy: 1) == 0 {
-                return number.stringValue
-            }
-            return NumberDisplay.decimal(number.doubleValue, minimumFractionDigits: 1, maximumFractionDigits: 1)
+            return NumericInputFieldSupport.seedEditingText(from: hours, style: Self.sleepHoursInputStyle)
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -23,10 +21,7 @@ final class DailyCheckInViewModel {
                 draft.sleepHours = nil
                 return
             }
-            let normalized = trimmed.replacingOccurrences(of: ",", with: ".")
-            if let value = Double(normalized) {
-                draft.sleepHours = Decimal(value)
-            }
+            draft.sleepHours = NumericInputFieldSupport.parse(trimmed, style: Self.sleepHoursInputStyle)
         }
     }
 

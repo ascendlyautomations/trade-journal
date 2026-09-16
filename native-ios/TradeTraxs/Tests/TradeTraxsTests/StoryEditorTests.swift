@@ -10,7 +10,7 @@ final class StoryEditorTests: XCTestCase {
             StoryTextOverlay(
                 text: "TEST",
                 normalizedCenter: CGPoint(x: 0.5, y: 0.5),
-                color: .white
+                textFill: .fromPreset(.white)
             ),
         ]
         let canvasSize = CGSize(width: 360, height: 640)

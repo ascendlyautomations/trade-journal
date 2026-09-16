@@ -13,6 +13,8 @@ const integrationDb = supabaseServiceRole as SupabaseClient
 
 type Body = {
   mappingIds?: string[]
+  /** Transient Rithmic password for manual import (never stored). */
+  rithmicPassword?: string
 }
 
 export async function POST(req: Request) {
@@ -45,7 +47,14 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid account selection." }, { status: 400 })
   }
 
-  const batch = await runBrokerManualImportBatch(integrationDb, user.id, targets)
+  const rithmicPassword =
+    typeof body.rithmicPassword === "string" && body.rithmicPassword
+      ? body.rithmicPassword
+      : null
+
+  const batch = await runBrokerManualImportBatch(integrationDb, user.id, targets, {
+    rithmicPassword,
+  })
 
   return Response.json({
     ok: batch.ok,

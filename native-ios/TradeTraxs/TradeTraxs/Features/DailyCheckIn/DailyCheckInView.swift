@@ -94,7 +94,7 @@ struct DailyCheckInView: View {
                     .font(ExperienceTypography.subheadline.weight(.semibold))
                     .foregroundStyle(colors.primaryText)
                 HStack(spacing: ExperienceSpacing.sm) {
-                    TextField("7.5", text: sleepHoursBinding)
+                    TextField("7.5", text: sleepHoursBinding.numericInput(.unsignedDecimal(maxFractionDigits: 1)))
                         .keyboardType(.decimalPad)
                         .textFieldStyle(.roundedBorder)
                         .accessibilityIdentifier("dailyCheckIn.sleepHours")

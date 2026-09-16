@@ -37,6 +37,16 @@ nonisolated enum BrokerIntegrationDebugLog {
         log.info("[BrokerIntegration] ui.connections count=\(count, privacy: .public)")
     }
 
+    static func uiActiveConnections(count active: Int, connected: Int) {
+        log.info(
+            "[BrokerIntegration] ui.connections active=\(active, privacy: .public) connected=\(connected, privacy: .public)"
+        )
+    }
+
+    static func tradovateLoadFailed(category: String) {
+        log.error("[BrokerIntegration] tradovate.loadFailed category=\(category, privacy: .public)")
+    }
+
     static func decodeFailure(context: String, detail: String) {
         log.error("[BrokerIntegration] decode.failure context=\(context, privacy: .public) detail=\(detail, privacy: .public)")
     }
@@ -51,6 +61,8 @@ nonisolated enum BrokerIntegrationDebugLog {
     static func accountsResponse(status: Int, bytes: Int) {}
     static func accountsDecoded(count: Int) {}
     static func uiConnections(count: Int) {}
+    static func uiActiveConnections(count active: Int, connected: Int) {}
+    static func tradovateLoadFailed(category: String) {}
     static func decodeFailure(context: String, detail: String) {}
 }
 #endif

@@ -5,52 +5,57 @@ struct StoryEditorView: View {
     @State private var viewModel: StoryEditorViewModel
     @FocusState private var textFieldFocused: Bool
 
+    private let isPosting: Bool
     private let onCancel: () -> Void
-    private let onNext: (UIImage) -> Void
+    private let onPostStory: (UIImage) -> Void
 
     @State private var imageDragStart: CGSize = .zero
     @State private var imagePinchStart: CGFloat?
 
+    @Environment(\.themeColors) private var colors
+
     init(
         sourceImage: UIImage,
+        isPosting: Bool = false,
         onCancel: @escaping () -> Void,
-        onNext: @escaping (UIImage) -> Void
+        onPostStory: @escaping (UIImage) -> Void
     ) {
         _viewModel = State(initialValue: StoryEditorViewModel(sourceImage: sourceImage))
+        self.isPosting = isPosting
         self.onCancel = onCancel
-        self.onNext = onNext
+        self.onPostStory = onPostStory
     }
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        VStack(spacing: 0) {
+            topBar
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.top, ExperienceSpacing.sm)
 
-            VStack(spacing: 0) {
-                topBar
-                    .padding(.horizontal, ExperienceSpacing.md)
-                    .padding(.top, ExperienceSpacing.sm)
+            Spacer(minLength: ExperienceSpacing.sm)
 
-                Spacer(minLength: ExperienceSpacing.sm)
+            storyCanvas
+                .padding(.horizontal, ExperienceSpacing.md)
 
-                storyCanvas
-                    .padding(.horizontal, ExperienceSpacing.md)
+            Spacer(minLength: ExperienceSpacing.sm)
 
-                Spacer(minLength: ExperienceSpacing.sm)
-
-                if viewModel.isEditingText {
-                    textEditingChrome
-                } else {
-                    bottomBar
-                }
+            if viewModel.isEditingText {
+                textEditingChrome
+            } else {
+                bottomBar
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .experienceScreenBackground()
+        .experienceFormFocusSync($textFieldFocused)
         .accessibilityIdentifier("storyEditor.root")
     }
 
     private var topBar: some View {
         HStack {
             Button("Cancel", action: onCancel)
-                .foregroundStyle(.white)
+                .font(.body.weight(.regular))
+                .foregroundStyle(colors.primaryText)
                 .accessibilityIdentifier("storyEditor.cancel")
 
             Spacer()
@@ -61,7 +66,7 @@ struct StoryEditorView: View {
             } label: {
                 Text("Aa")
                     .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.accent)
                     .frame(width: 44, height: 44)
             }
             .accessibilityIdentifier("storyEditor.addText")
@@ -69,17 +74,15 @@ struct StoryEditorView: View {
     }
 
     private var bottomBar: some View {
-        HStack {
-            Spacer()
-            Button("Next") {
-                guard let rendered = viewModel.renderFinalImage() else { return }
-                onNext(rendered)
-            }
-            .font(.body.weight(.semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, ExperienceSpacing.lg)
-            .padding(.vertical, ExperienceSpacing.sm)
-            .accessibilityIdentifier("storyEditor.next")
+        ExperienceButton(
+            title: "Post Story",
+            kind: .primary,
+            isEnabled: !isPosting,
+            isLoading: isPosting,
+            accessibilityIdentifier: "storyEditor.postStory"
+        ) {
+            guard let rendered = viewModel.renderFinalImage() else { return }
+            onPostStory(rendered)
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.md)
@@ -120,10 +123,14 @@ struct StoryEditorView: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
-            .overlay(
+            .overlay {
                 RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
-            )
+                    .stroke(
+                        colors.border.opacity(ExperienceOpacity.subtle),
+                        lineWidth: ExperienceBorder.hairline
+                    )
+            }
+            .experienceElevation(.low)
             .contentShape(Rectangle())
             .onTapGesture {
                 if !viewModel.isEditingText {
@@ -198,10 +205,40 @@ struct StoryEditorView: View {
                         .frame(width: 28, height: 28)
                         .overlay(
                             Circle()
-                                .stroke(Color.white, lineWidth: viewModel.selectedColor == color ? 2 : 0)
+                                .stroke(
+                                    colors.accent,
+                                    lineWidth: viewModel.selectedTextFill.matchesPreset(color) ? 2 : 0
+                                )
                         )
                         .onTapGesture { viewModel.setSelectedColor(color) }
                 }
+
+                ColorPicker(
+                    selection: Binding(
+                        get: { viewModel.selectedTextFill.swiftUIColor },
+                        set: { viewModel.setCustomTextColor($0) }
+                    ),
+                    supportsOpacity: true
+                ) {
+                    ZStack {
+                        Circle()
+                            .fill(viewModel.selectedTextFill.swiftUIColor)
+                            .frame(width: 28, height: 28)
+                        Image(systemName: "paintpalette.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(colors.textInverse)
+                    }
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                colors.accent,
+                                lineWidth: viewModel.selectedTextFill.isCustomColor ? 2 : 0
+                            )
+                    )
+                }
+                .labelsHidden()
+                .accessibilityLabel("Custom text color")
+                .accessibilityIdentifier("storyEditor.customTextColor")
             }
 
             HStack(spacing: ExperienceSpacing.md) {
@@ -216,7 +253,7 @@ struct StoryEditorView: View {
                     Image(systemName: "square.fill.on.square.fill")
                 }
                 .toggleStyle(.button)
-                .tint(.white)
+                .tint(colors.accent)
 
                 Button(role: .destructive) {
                     viewModel.deleteSelectedText()
@@ -224,7 +261,7 @@ struct StoryEditorView: View {
                     Image(systemName: "trash")
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(colors.primaryText)
 
             TextField("Type something…", text: Binding(
                 get: { viewModel.draftText },
@@ -239,11 +276,14 @@ struct StoryEditorView: View {
                 textFieldFocused = false
             }
             .font(.body.weight(.semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(colors.accent)
             .padding(.bottom, ExperienceSpacing.md)
         }
         .padding(.top, ExperienceSpacing.sm)
-        .background(Color.black.opacity(0.85))
+        .background(colors.backgroundElevated.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) {
+            ExperienceDivider()
+        }
     }
 
     private func alignmentButton(_ alignment: TextAlignment, symbol: String) -> some View {
@@ -252,6 +292,9 @@ struct StoryEditorView: View {
         } label: {
             Image(systemName: symbol)
                 .font(.body.weight(viewModel.selectedAlignment == alignment ? .bold : .regular))
+                .foregroundStyle(
+                    viewModel.selectedAlignment == alignment ? colors.accent : colors.secondaryText
+                )
         }
     }
 }
@@ -277,6 +320,8 @@ private struct StoryTextOverlayView: View {
     @State private var rotationStart: CGFloat?
     @State private var measuredTextSize: CGSize = .zero
 
+    @Environment(\.themeColors) private var colors
+
     var body: some View {
         let center = CGPoint(
             x: overlay.normalizedCenter.x * canvasSize.width,
@@ -288,7 +333,7 @@ private struct StoryTextOverlayView: View {
         ZStack {
             Text(overlay.text.isEmpty ? " " : overlay.text)
                 .font(.system(size: baseFontSize, weight: .semibold))
-                .foregroundStyle(overlay.color.swiftUIColor)
+                .foregroundStyle(overlay.textFill.swiftUIColor)
                 .multilineTextAlignment(overlay.alignment)
                 .padding(overlay.showsBackground ? 8 : 0)
                 .background {
@@ -318,16 +363,19 @@ private struct StoryTextOverlayView: View {
         .overlay {
             if isSelected, transformsEnabled {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.white.opacity(0.85), lineWidth: 1)
+                    .stroke(colors.accent, lineWidth: ExperienceBorder.thin)
             }
         }
         .rotationEffect(.radians(Double(overlay.rotationRadians)))
         .position(center)
-        .onTapGesture(count: 2, perform: onEdit)
-        .onTapGesture(count: 1, perform: onSelect)
-        .gesture(transformsEnabled ? dragGesture : nil)
-        .highPriorityGesture(transformsEnabled && isSelected ? pinchGesture : nil)
+        .highPriorityGesture(transformsEnabled ? dragGesture : nil)
+        .simultaneousGesture(transformsEnabled && isSelected ? pinchGesture : nil)
         .simultaneousGesture(transformsEnabled && isSelected ? rotationGesture : nil)
+        .simultaneousGesture(
+            transformsEnabled
+                ? TapGesture(count: 2).onEnded { onEdit() }
+                : nil
+        )
     }
 
     private var manipulationHitSize: CGSize {
@@ -342,23 +390,44 @@ private struct StoryTextOverlayView: View {
     }
 
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 2)
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
                 onSelect()
                 if dragStartCenter == nil {
                     dragStartCenter = overlay.normalizedCenter
                 }
                 guard let start = dragStartCenter else { return }
-                onMove(
-                    CGPoint(
-                        x: start.x + value.translation.width / canvasSize.width,
-                        y: start.y + value.translation.height / canvasSize.height
-                    )
+                let proposed = CGPoint(
+                    x: start.x + value.translation.width / canvasSize.width,
+                    y: start.y + value.translation.height / canvasSize.height
                 )
+                onMove(clampedNormalizedCenter(proposed))
             }
-            .onEnded { _ in
+            .onEnded { value in
+                if dragStartCenter == nil {
+                    onSelect()
+                } else if hypot(value.translation.width, value.translation.height) < 4 {
+                    onSelect()
+                }
                 dragStartCenter = nil
             }
+    }
+
+    /// Keeps a usable portion of the element on canvas without locking the center away from edges.
+    private func clampedNormalizedCenter(_ center: CGPoint) -> CGPoint {
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return center }
+        let bounds = manipulationHitSize
+        let halfWidthNorm = bounds.width / CGFloat(2) / CGFloat(canvasSize.width)
+        let halfHeightNorm = bounds.height / CGFloat(2) / CGFloat(canvasSize.height)
+        let offscreenAllowance: CGFloat = 0.88
+        let minX = -halfWidthNorm * offscreenAllowance
+        let maxX = CGFloat(1) + halfWidthNorm * offscreenAllowance
+        let minY = -halfHeightNorm * offscreenAllowance
+        let maxY = CGFloat(1) + halfHeightNorm * offscreenAllowance
+        return CGPoint(
+            x: min(max(center.x, minX), maxX),
+            y: min(max(center.y, minY), maxY)
+        )
     }
 
     private var pinchGesture: some Gesture {

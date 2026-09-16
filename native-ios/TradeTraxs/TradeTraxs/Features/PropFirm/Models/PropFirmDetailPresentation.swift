@@ -1,7 +1,7 @@
 import Foundation
 
 /// Detail-only formatting and glance lines derived from ``PropFirmStatusSnapshot``.
-enum PropFirmDetailPresentation {
+nonisolated enum PropFirmDetailPresentation {
     enum GlanceTone: Hashable, Sendable {
         case positive
         case warning
@@ -9,9 +9,10 @@ enum PropFirmDetailPresentation {
     }
 
     struct GlanceLine: Hashable, Sendable, Identifiable {
-        var id: String { text }
+        var topic: PropFirmDetailRuleTopic
         var tone: GlanceTone
         var text: String
+        var id: String { String(describing: topic) }
     }
 
     static func percentOfAccount(amount: Decimal, accountSize: Decimal) -> Double? {
@@ -38,6 +39,25 @@ enum PropFirmDetailPresentation {
         }
     }
 
+    static func drawdownTypeLabel(_ type: PropFirmDrawdownType?) -> String {
+        type?.displayName ?? "Unspecified"
+    }
+
+    static func drawdownTypeFootnote(_ type: PropFirmDrawdownType?) -> String? {
+        type?.conciseFootnote
+    }
+
+    static func drawdownBreachMessage(type: PropFirmDrawdownType?) -> String {
+        switch type {
+        case .intradayTrailing, .endOfDayTrailing:
+            return "Trailing drawdown rule breached."
+        case .staticThreshold:
+            return "Maximum drawdown rule breached."
+        case nil:
+            return "Maximum drawdown rule breached."
+        }
+    }
+
     static func payoutDrawdownBehaviorDetail(_ raw: String?) -> String? {
         guard let raw, !raw.isEmpty else { return nil }
         switch raw {
@@ -51,131 +71,19 @@ enum PropFirmDetailPresentation {
     }
 
     static func glanceLines(for snapshot: PropFirmStatusSnapshot) -> [GlanceLine] {
-        var lines: [GlanceLine] = []
-
-        if snapshot.isFailed {
-            lines.append(GlanceLine(tone: .warning, text: "Trailing drawdown breached"))
-        } else if snapshot.distanceDanger {
-            lines.append(GlanceLine(tone: .warning, text: "Close to drawdown floor"))
-        }
-
-        if snapshot.dailyDrawdownBreached {
-            lines.append(GlanceLine(tone: .warning, text: "Daily loss limit breached"))
-        } else if let daily = snapshot.dailyLossLimit, daily > 0 {
-            lines.append(GlanceLine(tone: .neutral, text: "Daily loss limit \(NumberDisplay.money(daily))"))
-        }
-
-        if snapshot.consistencyRequired {
-            if snapshot.consistencyMet {
-                lines.append(GlanceLine(tone: .positive, text: "Consistency rule passing"))
-            } else {
-                if let pct = snapshot.consistencyPercent {
-                    lines.append(
-                        GlanceLine(
-                            tone: .warning,
-                            text: "\(NumberDisplay.decimal(pct, maximumFractionDigits: 0))% consistency rule active"
-                        )
-                    )
-                } else {
-                    lines.append(GlanceLine(tone: .warning, text: "Consistency rule failing"))
-                }
-            }
-        } else {
-            lines.append(GlanceLine(tone: .positive, text: "No consistency rule"))
-        }
-
-        if let required = snapshot.winningDaysRequired, required > 0 {
-            let met = snapshot.winningDaysTargetMet
-            lines.append(
-                GlanceLine(
-                    tone: met ? .positive : .neutral,
-                    text: "Winning days \(snapshot.winningDays)/\(required)"
-                )
-            )
-        }
-
-        if snapshot.isFunded {
-            if snapshot.payoutReady {
-                lines.append(GlanceLine(tone: .positive, text: "Eligible to record payout"))
-            }
-        } else if snapshot.isPassed {
-            lines.append(GlanceLine(tone: .positive, text: "Profit target reached"))
-        }
-
-        if let maxDD = snapshot.maxDrawdownLimit, maxDD > 0 {
-            lines.append(
-                GlanceLine(
-                    tone: .neutral,
-                    text: "Trailing max drawdown \(NumberDisplay.money(maxDD))"
-                )
-            )
-        }
-
-        return lines
+        PropFirmDetailContentPlan(snapshot: snapshot).glanceLines()
     }
 
     struct PayoutRequirementRow: Hashable, Sendable, Identifiable {
-        var id: String { title }
+        var topic: PropFirmDetailRuleTopic
         var title: String
         var met: Bool
         var detail: String?
+        var id: String { String(describing: topic) }
     }
 
     static func payoutRequirements(for snapshot: PropFirmStatusSnapshot) -> [PayoutRequirementRow] {
-        guard snapshot.isFunded else { return [] }
-        var rows: [PayoutRequirementRow] = []
-
-        if snapshot.profitTargetConfigured {
-            rows.append(
-                PayoutRequirementRow(
-                    title: "Profit target",
-                    met: snapshot.isPassed,
-                    detail: snapshot.profitTarget.map { NumberDisplay.money($0) }
-                )
-            )
-        }
-
-        if let required = snapshot.winningDaysRequired, required > 0 {
-            rows.append(
-                PayoutRequirementRow(
-                    title: "Winning days",
-                    met: snapshot.winningDaysTargetMet,
-                    detail: "\(snapshot.winningDays) of \(required)"
-                )
-            )
-        }
-
-        if snapshot.consistencyRequired {
-            rows.append(
-                PayoutRequirementRow(
-                    title: "Consistency",
-                    met: snapshot.consistencyMet,
-                    detail: snapshot.consistencyPercent.map {
-                        "Max \(NumberDisplay.decimal($0, maximumFractionDigits: 0))% of win profits"
-                    }
-                )
-            )
-        }
-
-        if let daily = snapshot.dailyLossLimit, daily > 0 {
-            rows.append(
-                PayoutRequirementRow(
-                    title: "Daily loss limit",
-                    met: !snapshot.dailyDrawdownBreached,
-                    detail: NumberDisplay.money(daily)
-                )
-            )
-        }
-
-        rows.append(
-            PayoutRequirementRow(
-                title: "Trailing drawdown",
-                met: !snapshot.isFailed,
-                detail: snapshot.maxDrawdownLimit.map { NumberDisplay.money($0) }
-            )
-        )
-
-        return rows
+        PropFirmDetailContentPlan(snapshot: snapshot).payoutRequirementRows()
     }
 
     struct JourneyStep: Hashable, Sendable, Identifiable {
@@ -279,55 +187,13 @@ enum PropFirmDetailPresentation {
     }
 
     struct ExpandableRule: Hashable, Sendable, Identifiable {
-        var id: String { title }
+        var topic: PropFirmDetailRuleTopic
         var title: String
         var body: String
+        var id: String { String(describing: topic) }
     }
 
     static func expandableRules(for snapshot: PropFirmStatusSnapshot) -> [ExpandableRule] {
-        var rules: [ExpandableRule] = []
-
-        if let title = payoutDrawdownBehaviorTitle(snapshot.payoutDrawdownBehaviorRaw),
-           let detail = payoutDrawdownBehaviorDetail(snapshot.payoutDrawdownBehaviorRaw) {
-            rules.append(ExpandableRule(title: "Payout drawdown behavior", body: "\(title). \(detail)"))
-        }
-
-        if let threshold = snapshot.winningDayThreshold, threshold > 0 {
-            rules.append(
-                ExpandableRule(
-                    title: "Winning day threshold",
-                    body: "A futures day counts as a winning day when net P&L is at least \(NumberDisplay.money(threshold))."
-                )
-            )
-        } else if (snapshot.winningDaysRequired ?? 0) > 0 {
-            rules.append(
-                ExpandableRule(
-                    title: "Winning day threshold",
-                    body: "A futures day counts as a winning day when net P&L is positive."
-                )
-            )
-        }
-
-        if snapshot.consistencyRequired, let pct = snapshot.consistencyPercent {
-            rules.append(
-                ExpandableRule(
-                    title: "Consistency rule",
-                    body: "Your largest winning trade must stay at or below \(NumberDisplay.decimal(pct, maximumFractionDigits: 0))% of total profit from winning trades this cycle."
-                )
-            )
-        }
-
-        if let note = snapshot.accountNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
-            rules.append(ExpandableRule(title: "Account note", body: note))
-        }
-
-        rules.append(
-            ExpandableRule(
-                title: "Trailing drawdown",
-                body: "Drawdown is tracked from the peak balance in this cycle. If balance falls below the floor (peak minus max drawdown), the account fails the trailing rule."
-            )
-        )
-
-        return rules
+        PropFirmDetailContentPlan(snapshot: snapshot).expandableRules()
     }
 }

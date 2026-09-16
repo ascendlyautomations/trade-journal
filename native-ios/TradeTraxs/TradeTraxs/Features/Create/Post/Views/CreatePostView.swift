@@ -94,6 +94,7 @@ struct CreatePostView: View {
             },
             onCancel: { photoItem = nil }
         )
+        .experienceFormKeyboard(isFocused: $isComposerFocused)
         .accessibilityIdentifier("createPost.root")
     }
 

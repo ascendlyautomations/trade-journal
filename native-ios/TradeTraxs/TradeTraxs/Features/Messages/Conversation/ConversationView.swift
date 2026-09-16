@@ -73,6 +73,9 @@ struct ConversationView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let roomID = linkedDemoTradeRoomID {
+                demoTradeRoomBanner(roomID: roomID)
+            }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             if let deleteErrorMessage = viewModel.deleteErrorMessage {
@@ -525,6 +528,26 @@ struct ConversationView: View {
         .buttonStyle(.plain)
         .padding(.bottom, ExperienceSpacing.sm)
         .accessibilityIdentifier("conversation.newMessagesIndicator")
+    }
+
+    private var linkedDemoTradeRoomID: RoomID? {
+        guard ExploreModeSupport.isActive else { return nil }
+        return DemoExploreInboxFixtures.linkedTradeRoomID(for: viewModel.conversationID)
+    }
+
+    private func demoTradeRoomBanner(roomID: RoomID) -> some View {
+        ProfileTradeRoomDestinationRow {
+            openDemoTradeRoom(roomID)
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.vertical, ExperienceSpacing.sm)
+        .background(colors.navigationBackground.opacity(0.98))
+    }
+
+    private func openDemoTradeRoom(_ roomID: RoomID) {
+        guard DemoExploreTradeRoom.isLocalRoom(roomID) else { return }
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator?.pushRoom(roomID)
     }
 
     private var conversationHeaderTitle: some View {

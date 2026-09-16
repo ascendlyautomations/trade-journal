@@ -79,13 +79,30 @@ struct WithdrawalFlowView: View {
         )
     }
 
+    private var payoutHistoryLink: some View {
+        NavigationLink {
+            PayoutsScreenView(
+                data: data,
+                navigationCoordinator: navigationCoordinator
+            )
+        } label: {
+            Text("Payout History")
+                .experienceStyle(.subheadline, color: colors.accent)
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(TapGesture().onEnded { ExperienceHaptics.play(.selection) })
+        .accessibilityIdentifier("withdrawal.payoutHistory")
+    }
+
     private var accountPicker: some View {
         List {
             Section {
                 Text(
-                    "Record money taken out of a Live account or received as a prop-firm payout. Entries appear in Payouts history."
+                    "Record money taken out of a Live account or a funded prop-firm payout."
                 )
                 .experienceStyle(.footnote, color: colors.secondaryText)
+                payoutHistoryLink
+                    .padding(.top, ExperienceSpacing.xxs)
             }
 
             if viewModel.isLoading, withdrawalAccounts.isEmpty {
@@ -128,6 +145,7 @@ struct WithdrawalFlowView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(ExperienceSpacing.xs)
     }
 
     private func liveLedgerForm(accountID: TradingAccountID) -> some View {
@@ -140,7 +158,7 @@ struct WithdrawalFlowView: View {
             }
             Section {
                 SettingsLabeledField(title: "Withdrawal amount", helper: "USD") {
-                    TextField("0", text: $draft.amountDigits)
+                    TextField("0", text: $draft.amountDigits.numericInput(.unsignedCurrency))
                         .keyboardType(.decimalPad)
                 }
                 DatePicker("Date", selection: $draft.payoutDate, in: ...Date(), displayedComponents: .date)
@@ -150,9 +168,10 @@ struct WithdrawalFlowView: View {
                 }
             } header: {
                 Text("Withdrawal")
-            } footer: {
-                Text("Saved to your payout history.")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+
+            Section {
+                payoutHistoryLink
             }
 
             if let error = viewModel.payoutError {
@@ -162,6 +181,8 @@ struct WithdrawalFlowView: View {
                 }
             }
         }
+        .listSectionSpacing(ExperienceSpacing.xs)
+        .scrollDismissesKeyboard(.interactively)
         .experienceArrowBackToolbarButton {
             selectedAccountID = nil
         }
@@ -183,20 +204,18 @@ struct WithdrawalFlowView: View {
     }
 
     private var successContent: some View {
-        VStack(spacing: ExperienceSpacing.lg) {
-            Spacer(minLength: 0)
+        VStack(spacing: ExperienceSpacing.md) {
             ExperienceIcon(icon: .checkmark, size: .xl, color: colors.accent)
+                .padding(.top, ExperienceSpacing.xl)
             Text("Withdrawal recorded")
                 .experienceStyle(.title3, color: colors.primaryText)
-            Text("Your withdrawal history was updated. Open Withdrawals on the Dashboard or Settings to review.")
-                .experienceStyle(.subheadline, color: colors.secondaryText)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, ExperienceSpacing.lg)
-            Spacer(minLength: 0)
+            payoutHistoryLink
+            Spacer(minLength: ExperienceSpacing.md)
             ExperienceButton(title: "Done", kind: .primary, action: onDismiss)
-                .padding(.horizontal, ExperienceSpacing.lg)
-                .padding(.bottom, ExperienceSpacing.lg)
+                .padding(.bottom, ExperienceSpacing.md)
         }
+        .padding(.horizontal, ExperienceSpacing.lg)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func accountSubtitle(for account: TradingAccount) -> String {

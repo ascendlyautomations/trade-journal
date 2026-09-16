@@ -24,6 +24,7 @@ nonisolated struct TradovateConnectionSummary: Codable, Sendable, Hashable, Iden
     var providerDisplayName: String?
     var connectionLabel: String?
     var apiEnvironment: String?
+    var brokerLoginUsername: String?
 
     /// Matches BFF ``ACTIVE_STATUSES`` — list accounts even when OAuth token needs refresh.
     var isActiveForBrokerUI: Bool {
@@ -47,6 +48,7 @@ nonisolated struct TradovateConnectionSummary: Codable, Sendable, Hashable, Iden
         case providerDisplayName = "provider_display_name"
         case connectionLabel = "connection_label"
         case apiEnvironment = "api_environment"
+        case brokerLoginUsername = "broker_login_username"
     }
 
     init(from decoder: Decoder) throws {
@@ -68,6 +70,7 @@ nonisolated struct TradovateConnectionSummary: Codable, Sendable, Hashable, Iden
         providerDisplayName = try container.decodeIfPresent(String.self, forKey: .providerDisplayName)
         connectionLabel = try container.decodeIfPresent(String.self, forKey: .connectionLabel)
         apiEnvironment = try container.decodeIfPresent(String.self, forKey: .apiEnvironment)
+        brokerLoginUsername = try container.decodeIfPresent(String.self, forKey: .brokerLoginUsername)
     }
 }
 
@@ -374,6 +377,30 @@ nonisolated struct TradovateSyncSummaryPayload: Codable, Sendable {
     var newTradeIds: [String]
     var updatedTradeIds: [String]
     var error: String?
+    var errorCode: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case status
+        case tradesCreated
+        case tradesUpdated
+        case newTradeIds
+        case updatedTradeIds
+        case error
+        case errorCode
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try container.decodeIfPresent(Bool.self, forKey: .ok) ?? false
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? "error"
+        tradesCreated = try container.decodeIfPresent(Int.self, forKey: .tradesCreated) ?? 0
+        tradesUpdated = try container.decodeIfPresent(Int.self, forKey: .tradesUpdated) ?? 0
+        newTradeIds = try container.decodeIfPresent([String].self, forKey: .newTradeIds) ?? []
+        updatedTradeIds = try container.decodeIfPresent([String].self, forKey: .updatedTradeIds) ?? []
+        error = try container.decodeIfPresent(String.self, forKey: .error)
+        errorCode = try container.decodeIfPresent(String.self, forKey: .errorCode)
+    }
 }
 
 nonisolated struct TradovateAccountSyncResponse: Codable, Sendable {
@@ -391,12 +418,22 @@ nonisolated struct BrokerManualImportResponse: Codable, Sendable {
     var totalTradesUpdated: Int
 }
 
+nonisolated struct BrokerImportEligibilityConnectedProviders: Codable, Sendable, Hashable {
+    var tradovate: Bool
+    var rithmic: Bool
+}
+
 nonisolated struct BrokerImportEligibilityResponse: Codable, Sendable {
     var eligible: Bool
     var optOut: Bool
     var connectionCount: Int
     var linkedAccountCount: Int
     var linkedAccounts: [BrokerImportEligibilityTarget]
+    var hasSupportedConnection: Bool?
+    var hasLinkedAccount: Bool?
+    var canImportImmediately: Bool?
+    var needsAccountLinking: Bool?
+    var connectedProviders: BrokerImportEligibilityConnectedProviders?
 
     enum CodingKeys: String, CodingKey {
         case eligible
@@ -408,6 +445,16 @@ nonisolated struct BrokerImportEligibilityResponse: Codable, Sendable {
         case linked_account_count
         case linkedAccounts
         case linked_accounts
+        case hasSupportedConnection
+        case has_supported_connection
+        case hasLinkedAccount
+        case has_linked_account
+        case canImportImmediately
+        case can_import_immediately
+        case needsAccountLinking
+        case needs_account_linking
+        case connectedProviders
+        case connected_providers
     }
 
     init(
@@ -415,13 +462,40 @@ nonisolated struct BrokerImportEligibilityResponse: Codable, Sendable {
         optOut: Bool,
         connectionCount: Int,
         linkedAccountCount: Int,
-        linkedAccounts: [BrokerImportEligibilityTarget]
+        linkedAccounts: [BrokerImportEligibilityTarget],
+        hasSupportedConnection: Bool? = nil,
+        hasLinkedAccount: Bool? = nil,
+        canImportImmediately: Bool? = nil,
+        needsAccountLinking: Bool? = nil,
+        connectedProviders: BrokerImportEligibilityConnectedProviders? = nil
     ) {
         self.eligible = eligible
         self.optOut = optOut
         self.connectionCount = connectionCount
         self.linkedAccountCount = linkedAccountCount
         self.linkedAccounts = linkedAccounts
+        self.hasSupportedConnection = hasSupportedConnection
+        self.hasLinkedAccount = hasLinkedAccount
+        self.canImportImmediately = canImportImmediately
+        self.needsAccountLinking = needsAccountLinking
+        self.connectedProviders = connectedProviders
+    }
+
+    var resolvedHasSupportedConnection: Bool {
+        hasSupportedConnection ?? (connectionCount > 0)
+    }
+
+    var resolvedHasLinkedAccount: Bool {
+        hasLinkedAccount ?? (linkedAccountCount > 0 || !linkedAccounts.isEmpty)
+    }
+
+    var resolvedCanImportImmediately: Bool {
+        canImportImmediately ?? resolvedHasLinkedAccount
+    }
+
+    var resolvedNeedsAccountLinking: Bool {
+        if let needsAccountLinking { return needsAccountLinking }
+        return resolvedHasSupportedConnection && !resolvedHasLinkedAccount
     }
 
     init(from decoder: Decoder) throws {
@@ -443,6 +517,21 @@ nonisolated struct BrokerImportEligibilityResponse: Codable, Sendable {
             try container.decodeIfPresent([BrokerImportEligibilityTarget].self, forKey: .linkedAccounts)
             ?? container.decodeIfPresent([BrokerImportEligibilityTarget].self, forKey: .linked_accounts)
             ?? []
+        hasSupportedConnection =
+            try container.decodeIfPresent(Bool.self, forKey: .hasSupportedConnection)
+            ?? container.decodeIfPresent(Bool.self, forKey: .has_supported_connection)
+        hasLinkedAccount =
+            try container.decodeIfPresent(Bool.self, forKey: .hasLinkedAccount)
+            ?? container.decodeIfPresent(Bool.self, forKey: .has_linked_account)
+        canImportImmediately =
+            try container.decodeIfPresent(Bool.self, forKey: .canImportImmediately)
+            ?? container.decodeIfPresent(Bool.self, forKey: .can_import_immediately)
+        needsAccountLinking =
+            try container.decodeIfPresent(Bool.self, forKey: .needsAccountLinking)
+            ?? container.decodeIfPresent(Bool.self, forKey: .needs_account_linking)
+        connectedProviders =
+            try container.decodeIfPresent(BrokerImportEligibilityConnectedProviders.self, forKey: .connectedProviders)
+            ?? container.decodeIfPresent(BrokerImportEligibilityConnectedProviders.self, forKey: .connected_providers)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -452,6 +541,11 @@ nonisolated struct BrokerImportEligibilityResponse: Codable, Sendable {
         try container.encode(connectionCount, forKey: .connectionCount)
         try container.encode(linkedAccountCount, forKey: .linkedAccountCount)
         try container.encode(linkedAccounts, forKey: .linkedAccounts)
+        try container.encodeIfPresent(hasSupportedConnection, forKey: .hasSupportedConnection)
+        try container.encodeIfPresent(hasLinkedAccount, forKey: .hasLinkedAccount)
+        try container.encodeIfPresent(canImportImmediately, forKey: .canImportImmediately)
+        try container.encodeIfPresent(needsAccountLinking, forKey: .needsAccountLinking)
+        try container.encodeIfPresent(connectedProviders, forKey: .connectedProviders)
     }
 }
 

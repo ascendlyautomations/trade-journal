@@ -107,6 +107,13 @@ final class FeedExperienceTests: XCTestCase {
         XCTAssertEqual(FeedContentFilter.trades.rpcValue, "trades")
     }
 
+    func testFeedDefaultScopeFromFollowingCount() {
+        XCTAssertEqual(FeedScope.defaultForFollowingCount(0), .global)
+        XCTAssertEqual(FeedScope.defaultForFollowingCount(4), .global)
+        XCTAssertEqual(FeedScope.defaultForFollowingCount(5), .following)
+        XCTAssertEqual(FeedScope.defaultForFollowingCount(20), .following)
+    }
+
     func testFeedRowsSplitMediaVersusTextLayouts() {
         let entries = FeedFixtures.timeline()
         XCTAssertTrue(entries.contains { $0.hasDisplayMedia })
@@ -139,7 +146,7 @@ final class FeedExperienceTests: XCTestCase {
 
         XCTAssertFalse(viewModel.entries.isEmpty)
         XCTAssertFalse(viewModel.visibleEntries.isEmpty)
-        XCTAssertFalse(viewModel.stories.isEmpty)
+        XCTAssertEqual(viewModel.scope, .global)
 
         viewModel.setContentFilter(.clips)
         XCTAssertTrue(viewModel.visibleEntries.allSatisfy {
@@ -448,7 +455,7 @@ final class FeedExperienceTests: XCTestCase {
 
         XCTAssertTrue(viewModel.state.didBootstrap)
         XCTAssertEqual(viewModel.entries.count, viewModel.state.entries.count)
-        XCTAssertFalse(viewModel.stories.isEmpty)
+        XCTAssertEqual(viewModel.scope, .global)
 
         let entryCount = viewModel.entries.count
         viewModel.loadIfNeeded()
@@ -470,7 +477,10 @@ final class FeedExperienceTests: XCTestCase {
         )
 
         viewModel.loadIfNeeded()
-        await waitFor { viewModel.state.didBootstrap && !viewModel.stories.isEmpty }
+        await waitFor { viewModel.state.didBootstrap && viewModel.phase == .loaded }
+
+        viewModel.setScope(.following)
+        await waitFor { viewModel.scope == .following && !viewModel.stories.isEmpty }
 
         viewModel.setScope(.global)
         await waitFor {

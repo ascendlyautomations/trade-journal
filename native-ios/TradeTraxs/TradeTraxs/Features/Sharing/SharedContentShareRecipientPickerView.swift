@@ -55,6 +55,7 @@ struct SharedContentShareRecipientPickerView: View {
             }
         }
         .experienceSheetChrome()
+        .experienceFormKeyboard(isFocused: $messageFieldFocused)
     }
 
     @ViewBuilder

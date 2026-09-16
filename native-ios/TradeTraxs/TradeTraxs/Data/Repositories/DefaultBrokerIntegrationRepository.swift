@@ -11,31 +11,59 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
     }
 
     func listTradovateConnections() async throws -> TradovateConnectionsResponse {
-        let response = try await transport.send(
-            host: .bff,
-            path: "/api/integrations/tradovate/connections",
-            method: .get,
-            requiresAuthentication: true
-        )
-        BrokerIntegrationDebugLog.connectionsResponse(status: response.statusCode, bytes: response.data.count)
-        guard (200 ... 299).contains(response.statusCode) else {
-            throw brokerError(from: response, fallback: "Could not load Tradovate connections.")
-        }
-        let decoded: TradovateConnectionsResponse
+        let started = ContinuousClock.now
+        TradovateConnectionDiagnostics.requestStarted()
         do {
-            decoded = try transport.decoder.decode(TradovateConnectionsResponse.self, from: response)
+            let response = try await transport.send(
+                host: .bff,
+                path: "/api/integrations/tradovate/connections",
+                method: .get,
+                requiresAuthentication: true
+            )
+            let durationMs = Self.durationMilliseconds(since: started)
+            BrokerIntegrationDebugLog.connectionsResponse(status: response.statusCode, bytes: response.data.count)
+            guard (200 ... 299).contains(response.statusCode) else {
+                TradovateConnectionDiagnostics.requestFailed(
+                    category: "http\(response.statusCode)",
+                    durationMs: durationMs
+                )
+                throw brokerError(from: response, fallback: "Could not load Tradovate connections.")
+            }
+            let decoded: TradovateConnectionsResponse
+            do {
+                decoded = try transport.decoder.decode(TradovateConnectionsResponse.self, from: response)
+            } catch {
+                BrokerIntegrationDebugLog.decodeFailure(context: "connections", detail: String(describing: error))
+                TradovateConnectionDiagnostics.requestFailed(category: "decode", durationMs: durationMs)
+                throw AppError.unknown(message: brokerDecodeUserMessage)
+            }
+            BrokerIntegrationDebugLog.connectionsDecoded(count: decoded.connections.count)
+            let active = decoded.connections.filter(\.isActiveForBrokerUI).count
+            BrokerIntegrationDebugLog.connectionsActive(count: active)
+            TradovateConnectionDiagnostics.requestSucceeded(
+                httpStatus: response.statusCode,
+                connectionCount: decoded.connections.count,
+                activeConnectionCount: active,
+                durationMs: durationMs
+            )
+            for connection in decoded.connections {
+                let idPresent = !connection.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                BrokerIntegrationDebugLog.connectionRow(idPresent: idPresent, status: connection.status.rawValue)
+            }
+            return decoded
         } catch {
-            BrokerIntegrationDebugLog.decodeFailure(context: "connections", detail: String(describing: error))
-            throw AppError.unknown(message: brokerDecodeUserMessage)
+            TradovateConnectionDiagnostics.requestFailed(
+                category: TradovateConnectionDiagnostics.safeFailureCategory(for: error),
+                durationMs: Self.durationMilliseconds(since: started)
+            )
+            throw error
         }
-        BrokerIntegrationDebugLog.connectionsDecoded(count: decoded.connections.count)
-        let active = decoded.connections.filter(\.isActiveForBrokerUI).count
-        BrokerIntegrationDebugLog.connectionsActive(count: active)
-        for connection in decoded.connections {
-            let idPresent = !connection.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            BrokerIntegrationDebugLog.connectionRow(idPresent: idPresent, status: connection.status.rawValue)
-        }
-        return decoded
+    }
+
+    private static func durationMilliseconds(since start: ContinuousClock.Instant) -> Double {
+        let elapsed = ContinuousClock.now - start
+        return Double(elapsed.components.seconds) * 1000
+            + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000
     }
 
     func beginTradovateNativeOAuth(reconnectConnectionId: String?) async throws -> URL {
@@ -149,7 +177,7 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
         }
         let payload = CreatePayload(
             name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
-            size: draft.sizeDigits.trimmingCharacters(in: .whitespacesAndNewlines),
+            size: NumericInputFieldSupport.plainNumericString(from: draft.sizeDigits),
             accountNumber: draft.accountNumber.trimmingCharacters(in: .whitespacesAndNewlines),
             category: BrokerIntegrationAccountDraftEncoding.webCategory(draft.category),
             mode: BrokerIntegrationAccountDraftEncoding.webMode(draft.mode, category: draft.category)
@@ -303,7 +331,7 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
         }
         let payload = CreatePayload(
             name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
-            size: draft.sizeDigits.trimmingCharacters(in: .whitespacesAndNewlines),
+            size: NumericInputFieldSupport.plainNumericString(from: draft.sizeDigits),
             accountNumber: draft.accountNumber.trimmingCharacters(in: .whitespacesAndNewlines),
             category: BrokerIntegrationAccountDraftEncoding.webCategory(draft.category),
             mode: BrokerIntegrationAccountDraftEncoding.webMode(draft.mode, category: draft.category)
@@ -314,12 +342,25 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
         return try await post("/api/integrations/rithmic/connections/\(connectionId)/accounts/link", body: body)
     }
 
-    func syncRithmicAccount(connectionId: String, mappingId: String) async throws -> TradovateAccountSyncResponse {
+    func syncRithmicAccount(
+        connectionId: String,
+        mappingId: String,
+        password: String? = nil
+    ) async throws -> TradovateAccountSyncResponse {
+        struct Body: Encodable {
+            var password: String
+        }
+        let body: Data
+        if let password, !password.isEmpty {
+            body = try transport.encodeJSON(Body(password: password))
+        } else {
+            body = Data()
+        }
         let response = try await transport.send(
             host: .bff,
             path: "/api/integrations/rithmic/connections/\(connectionId)/accounts/\(mappingId)/sync",
             method: .post,
-            body: Data(),
+            body: body,
             requiresAuthentication: true
         )
         if response.statusCode == 409 {

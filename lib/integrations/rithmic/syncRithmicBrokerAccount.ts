@@ -13,7 +13,7 @@ import {
   reconstructAllCompletedTrades,
   type ReconstructionFill,
 } from "@/lib/integrations/tradovate/tradeReconstruction"
-import { loadRithmicSessionConfigForConnection } from "@/lib/integrations/rithmic/loadRithmicConnectionSessionConfig"
+import { resolveRithmicSessionConfigForOperation } from "@/lib/integrations/rithmic/loadRithmicConnectionSessionConfig"
 import { withRithmicOrderPlantSession } from "@/lib/integrations/rithmic/rithmicImportSession"
 import { markBrokerConnectionReconnectRequired } from "@/lib/integrations/brokerIntegrationConnection"
 import {
@@ -43,6 +43,7 @@ export type RithmicSyncSummary = {
   openPositions: number
   durationMs?: number
   error?: string
+  errorCode?: string
 }
 
 type MappingRow = {
@@ -131,6 +132,7 @@ export async function syncRithmicBrokerAccount(
     connectionId: string
     brokerIntegrationAccountId: string
     trigger?: RithmicSyncTrigger
+    transientPassword?: string | null
   }
 ): Promise<RithmicSyncSummary> {
   const started = Date.now()
@@ -175,20 +177,23 @@ export async function syncRithmicBrokerAccount(
   const finishIndex = Math.floor(Date.now() / 1000)
   const startIndex = checkpoint ? Math.max(0, checkpoint.lastSsboe - 1) : 0
 
-  const sessionConfig = await loadRithmicSessionConfigForConnection(supabase, {
+  const sessionResolved = await resolveRithmicSessionConfigForOperation(supabase, {
     userId,
     connectionId,
+    transientPassword: params.transientPassword,
   })
-  if (!sessionConfig) {
+  if (!sessionResolved.ok) {
     await releaseBrokerSyncLock(supabase, brokerIntegrationAccountId, {
       lastSyncStatus: "error",
-      lastSyncErrorCode: "rithmic_reconnect_required",
-      lastSyncErrorMessage: "Rithmic connection is not available. Reconnect in Settings.",
+      lastSyncErrorCode: sessionResolved.code,
+      lastSyncErrorMessage: sessionResolved.userMessage,
     })
     return emptySummary({
-      error: "Rithmic connection is not available. Reconnect in Settings.",
+      error: sessionResolved.userMessage,
+      errorCode: sessionResolved.code,
     })
   }
+  const sessionConfig = sessionResolved.config
 
   try {
     const { fills, rpCode } = await withRithmicOrderPlantSession(async (client) => {

@@ -11,6 +11,7 @@ import {
 import { verifyRithmicRuntimeAssets } from "@/lib/integrations/rithmic/rithmicPaths"
 import { RithmicProtoEncodeError } from "@/lib/integrations/rithmic/rithmicProtoLoader"
 import { logRithmicDiagnostic } from "@/lib/integrations/rithmic/rithmicSyncLogger"
+import { markRithmicConnectPhase } from "@/lib/integrations/rithmic/rithmicConnectTiming"
 
 export type RithmicConnectionVerificationResult = {
   ok: boolean
@@ -76,34 +77,55 @@ export async function runRithmicConnectionVerification(params: {
     }
   }
 
+  const requestedSystem =
+    params.systemName?.trim() || config.systemNameOverride?.trim() || null
+
   let systemNames: string[] = []
-  const probe = new RithmicProtocolClient(config)
-  try {
-    await probe.connect("rithmic_socket_connecting")
-    const info = await probe.requestSystemInfo()
-    if (info.rpCode[0] !== "0") {
+
+  if (!requestedSystem) {
+    markRithmicConnectPhase("system_discovery_started")
+    const probe = new RithmicProtocolClient(config)
+    try {
+      await probe.connect("rithmic_socket_connecting")
+      markRithmicConnectPhase("system_discovery_socket_open")
+      const info = await probe.requestSystemInfo()
+      markRithmicConnectPhase("system_discovery_complete")
+      if (info.rpCode[0] !== "0") {
+        return {
+          ok: false,
+          code: "system_discovery_failed",
+          userMessage: "Could not discover Rithmic systems for this environment.",
+          systemNames: info.systemNames,
+          selectedSystemName: null,
+          loginRpCode: [],
+          agreementRequired: false,
+          uniqueUserId: null,
+          accounts: [],
+          accountCount: 0,
+        }
+      }
+      systemNames = info.systemNames
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown_error"
+      logRithmicDiagnostic("rithmic_error", { message: msg.slice(0, 120) })
+      if (err instanceof RithmicProtoEncodeError) {
+        return {
+          ok: false,
+          code: "error",
+          userMessage: "Rithmic protocol encoding failed.",
+          systemNames: [],
+          selectedSystemName: null,
+          loginRpCode: [],
+          agreementRequired: false,
+          uniqueUserId: null,
+          accounts: [],
+          accountCount: 0,
+        }
+      }
       return {
         ok: false,
         code: "system_discovery_failed",
-        userMessage: "Could not discover Rithmic systems for this environment.",
-        systemNames: info.systemNames,
-        selectedSystemName: null,
-        loginRpCode: [],
-        agreementRequired: false,
-        uniqueUserId: null,
-        accounts: [],
-        accountCount: 0,
-      }
-    }
-    systemNames = info.systemNames
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "unknown_error"
-    logRithmicDiagnostic("rithmic_error", { message: msg.slice(0, 120) })
-    if (err instanceof RithmicProtoEncodeError) {
-      return {
-        ok: false,
-        code: "error",
-        userMessage: "Rithmic protocol encoding failed.",
+        userMessage: "Could not connect to Rithmic.",
         systemNames: [],
         selectedSystemName: null,
         loginRpCode: [],
@@ -112,21 +134,12 @@ export async function runRithmicConnectionVerification(params: {
         accounts: [],
         accountCount: 0,
       }
+    } finally {
+      void probe.close().catch(() => undefined)
     }
-    return {
-      ok: false,
-      code: "system_discovery_failed",
-      userMessage: "Could not connect to Rithmic.",
-      systemNames: [],
-      selectedSystemName: null,
-      loginRpCode: [],
-      agreementRequired: false,
-      uniqueUserId: null,
-      accounts: [],
-      accountCount: 0,
-    }
-  } finally {
-    await probe.close().catch(() => undefined)
+  } else {
+    systemNames = [requestedSystem]
+    markRithmicConnectPhase("system_discovery_skipped")
   }
 
   if (systemNames.length === 0 && !config.systemNameOverride && !params.systemName?.trim()) {
@@ -181,15 +194,18 @@ export async function runRithmicConnectionVerification(params: {
 
   const session = new RithmicProtocolClient(config)
   try {
+    markRithmicConnectPhase("login_socket_connecting")
     await session.connect("login_socket_connecting")
+    markRithmicConnectPhase("login_socket_open")
     const login = await session.loginOrderPlant(selected)
+    markRithmicConnectPhase("login_response_received")
     if (!isLoginSuccess(login.rpCode)) {
       if (login.agreementLikely) {
         return {
           ok: false,
           code: "agreement_required",
           userMessage:
-            "Sign the required Rithmic agreements in your Rithmic trading client, then try again.",
+            "Open R | Trader Pro and make sure any required Rithmic agreements have been accepted, then try again.",
           systemNames,
           selectedSystemName: selected,
           loginRpCode: login.rpCode,
@@ -202,7 +218,8 @@ export async function runRithmicConnectionVerification(params: {
       return {
         ok: false,
         code: "login_failed",
-        userMessage: "Rithmic login was not accepted. Check your username and password.",
+        userMessage:
+          "Rithmic did not accept this login. Check your username and password, and confirm any required agreements in R | Trader Pro, then try again.",
         systemNames,
         selectedSystemName: selected,
         loginRpCode: login.rpCode,
@@ -214,6 +231,7 @@ export async function runRithmicConnectionVerification(params: {
     }
 
     const loginInfo = await session.requestLoginInfo()
+    markRithmicConnectPhase("login_info_received")
     if (!isLoginSuccess(loginInfo.rpCode)) {
       return {
         ok: false,
@@ -249,11 +267,13 @@ export async function runRithmicConnectionVerification(params: {
       }
     }
 
+    markRithmicConnectPhase("account_discovery_started")
     const list = await session.requestAccountList({
       fcmId: loginInfo.fcmId,
       ibId: loginInfo.ibId,
       userType: loginInfo.userType,
     })
+    markRithmicConnectPhase("account_discovery_complete")
 
     const normalized: RithmicDiscoveredAccount[] = []
     for (const row of list.accounts) {
@@ -304,7 +324,8 @@ export async function runRithmicConnectionVerification(params: {
       accountCount: 0,
     }
   } finally {
-    await session.logout().catch(() => undefined)
-    await session.close().catch(() => undefined)
+    void session.logout().catch(() => undefined)
+    void session.close().catch(() => undefined)
+    markRithmicConnectPhase("session_cleanup_scheduled")
   }
 }

@@ -859,7 +859,7 @@ export default function LoginPageClient({
               type="button"
               onClick={handleReset}
               disabled={loadingReset}
-              className="mt-2 w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded disabled:opacity-50"
+              className="mt-2 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 md:py-2.5"
             >
               {loadingReset ? "Sending..." : "Send Reset Link"}
             </button>

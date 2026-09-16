@@ -176,7 +176,31 @@ actor NetworkConcurrencyCoordinator {
             return .background
         }
 
+        if path.hasPrefix("/auth/v1/"), method == .post {
+            return .visible
+        }
+
+        if method == .get,
+           BrokerIntegrationsLoadPriorityGate.prefersVisibleBrokerConnectionLoad,
+           Self.isBrokerIntegrationsVisibleBFFPath(path)
+        {
+            return .visible
+        }
+
         return .background
+    }
+
+    /// Connection list + account discovery while Broker Integrations is on screen — not background prefetch.
+    private static func isBrokerIntegrationsVisibleBFFPath(_ path: String) -> Bool {
+        if path == "/api/integrations/tradovate/connections" { return true }
+        if path == "/api/integrations/rithmic/connections" { return true }
+        if path.hasPrefix("/api/integrations/tradovate/connections/"), path.hasSuffix("/accounts") {
+            return true
+        }
+        if path.hasPrefix("/api/integrations/rithmic/connections/"), path.hasSuffix("/accounts") {
+            return true
+        }
+        return false
     }
 
     /// User-facing screen bootstraps and blocking detail loads — not capped by background budget.
@@ -187,6 +211,11 @@ actor NetworkConcurrencyCoordinator {
         BackendV2Versioning.RPCName.tradeDetail.rawValue,
         BackendV2Versioning.RPCName.postDetail.rawValue,
         BackendV2Versioning.RPCName.profile.rawValue,
+        BackendV2Versioning.RPCName.profileTabTrades.rawValue,
+        BackendV2Versioning.RPCName.profileTabPosts.rawValue,
+        BackendV2Versioning.RPCName.profileTabReels.rawValue,
+        BackendV2Versioning.RPCName.profileTabAchievements.rawValue,
+        BackendV2Versioning.RPCName.profileStatisticsBootstrap.rawValue,
         BackendV2Versioning.RPCName.room.rawValue,
         BackendV2Versioning.RPCName.calendar.rawValue,
     ]

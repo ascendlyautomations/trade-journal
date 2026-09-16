@@ -6,15 +6,30 @@ import Observation
 final class BrokerIntegrationsViewModel {
     enum Phase: Equatable {
         case idle
+        case loaded
+    }
+
+    enum BrokerProviderLoadPhase: Equatable {
+        case idle
         case loading
         case loaded
         case failed(String)
     }
 
     private(set) var phase: Phase = .idle
+    private(set) var tradovateLoadPhase: BrokerProviderLoadPhase = .idle
+    private(set) var rithmicConnectionsLoadPhase: BrokerProviderLoadPhase = .idle
+    private var refreshTask: Task<Void, Never>?
     private(set) var tradovateConnections: [TradovateConnectionSummary] = []
     private(set) var rithmicConnections: [TradovateConnectionSummary] = []
+    enum RithmicConnectCapabilitiesPhase: Equatable {
+        case loading
+        case loaded
+        case failed
+    }
+
     private(set) var rithmicConnectCapabilities: RithmicConnectCapabilitiesResponse?
+    private(set) var rithmicConnectCapabilitiesPhase: RithmicConnectCapabilitiesPhase = .loading
     private(set) var accountsByConnection: [String: [BrokerIntegrationAccount]] = [:]
     private(set) var isConnecting = false
     private(set) var isConnectingRithmic = false
@@ -24,6 +39,31 @@ final class BrokerIntegrationsViewModel {
     var showsRithmicConnectSheet = false
     private(set) var rithmicSystemChoices: [String] = []
     var rithmicReconnectConnectionId: String?
+    private(set) var rithmicImportReauthConnectionId: String?
+    private(set) var rithmicImportReauthMappingId: String?
+
+    var rithmicConnectSheetMode: RithmicConnectSheetMode {
+        rithmicImportReauthMappingId == nil ? .connect : .importTrades
+    }
+
+    var rithmicSheetPrefilledUsername: String? {
+        if let connectionId = rithmicImportReauthConnectionId ?? rithmicReconnectConnectionId {
+            return rithmicConnections.first(where: { $0.id == connectionId })?.brokerLoginUsername
+        }
+        return nil
+    }
+
+    var rithmicSheetPrefilledSystemName: String? {
+        if let connectionId = rithmicImportReauthConnectionId ?? rithmicReconnectConnectionId {
+            return rithmicConnections.first(where: { $0.id == connectionId })?.providerDisplayName
+        }
+        return nil
+    }
+
+    var rithmicSheetLocksUsername: Bool {
+        rithmicImportReauthMappingId != nil
+            || (rithmicReconnectConnectionId != nil && rithmicSheetPrefilledUsername != nil)
+    }
 
     var isBrokerConnectionMutationActive: Bool {
         isConnecting || isConnectingRithmic || isDisconnecting
@@ -38,7 +78,55 @@ final class BrokerIntegrationsViewModel {
     var showsReviewImportedTrades = false
 
     var isRithmicConnectUIAvailable: Bool {
-        rithmicConnectCapabilities?.showConnectUi == true
+        rithmicConnectCapabilitiesPhase == .loaded
+            && rithmicConnectCapabilities?.showConnectUi == true
+    }
+
+    /// Broker onboarding lists Rithmic while availability is still resolving (settings always shows the provider).
+    var showsRithmicBrokerOnboardingOption: Bool {
+        if !rithmicConnections.isEmpty { return true }
+        switch rithmicConnectCapabilitiesPhase {
+        case .loading:
+            return true
+        case .loaded:
+            return rithmicConnectCapabilities?.showConnectUi == true
+        case .failed:
+            return false
+        }
+    }
+
+    var hasActiveConnectedBroker: Bool {
+        activeConnectedConnections().isEmpty == false
+    }
+
+    var unlinkedBrokerAccountsCount: Int {
+        activeConnectedConnections().reduce(into: 0) { partial, connection in
+            partial += accounts(for: connection.id).filter { !$0.hasTradetraxsMapping }.count
+        }
+    }
+
+    /// Connected broker with every discovered account linked (or none discovered yet).
+    var brokerOnboardingReadyToContinue: Bool {
+        guard hasActiveConnectedBroker else { return false }
+        return unlinkedBrokerAccountsCount == 0
+    }
+
+    func firstUnlinkedBrokerAccount() -> (provider: BrokerIntegrationProvider, connectionId: String, account: BrokerIntegrationAccount)? {
+        for connection in tradovateConnections.filter({ $0.isActiveForBrokerUI && $0.connected }) {
+            if let account = accounts(for: connection.id).first(where: { !$0.hasTradetraxsMapping }) {
+                return (.tradovate, connection.id, account)
+            }
+        }
+        for connection in rithmicConnections.filter({ $0.isActiveForBrokerUI && $0.connected }) {
+            if let account = accounts(for: connection.id).first(where: { !$0.hasTradetraxsMapping }) {
+                return (.rithmic, connection.id, account)
+            }
+        }
+        return nil
+    }
+
+    private func activeConnectedConnections() -> [TradovateConnectionSummary] {
+        (tradovateConnections + rithmicConnections).filter { $0.isActiveForBrokerUI && $0.connected }
     }
 
     private let broker: any BrokerIntegrationRepository
@@ -59,59 +147,115 @@ final class BrokerIntegrationsViewModel {
     }
 
     func loadIfNeeded() {
-        switch phase {
-        case .idle, .failed:
-            Task { await refreshAll() }
-        case .loading, .loaded:
-            break
-        }
+        guard phase == .idle else { return }
+        Task { await refreshAll() }
     }
 
     func refreshAll() async {
-        let hadConnections = !tradovateConnections.isEmpty || !rithmicConnections.isEmpty
-        if !hadConnections {
-            phase = .loading
+        if let refreshTask {
+            await refreshTask.value
+            return
         }
-        var loadError: String?
+        let task = Task { await performRefreshAll() }
+        refreshTask = task
+        defer { refreshTask = nil }
+        await task.value
+    }
 
+    private func performRefreshAll() async {
+        phase = .loaded
+
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.refreshTradovateConnections() }
+            group.addTask { await self.refreshRithmicConnections() }
+            group.addTask { await self.refreshRithmicCapabilities() }
+        }
+
+        noteBrokerIntegrationChanged()
+    }
+
+    private func refreshTradovateConnections() async {
+        if tradovateConnections.isEmpty {
+            tradovateLoadPhase = .loading
+        }
         do {
             let response = try await broker.listTradovateConnections()
             tradovateConnections = response.connections
             BrokerIntegrationDebugLog.uiConnections(count: tradovateConnections.count)
-            for connection in tradovateConnections where connection.isActiveForBrokerUI {
-                await loadAccounts(provider: .tradovate, connectionId: connection.id, forceRefresh: false)
-            }
+            let active = tradovateConnections.filter(\.isActiveForBrokerUI).count
+            BrokerIntegrationDebugLog.uiActiveConnections(count: active, connected: tradovateConnections.filter(\.connected).count)
+            tradovateLoadPhase = .loaded
+            await loadAccountsInParallel(
+                provider: .tradovate,
+                connections: tradovateConnections.filter(\.isActiveForBrokerUI),
+                forceRefresh: false
+            )
         } catch {
-            loadError = UserFacingError.message(for: error)
+            let category = TradovateConnectionDiagnostics.safeFailureCategory(for: error)
+            BrokerIntegrationDebugLog.tradovateLoadFailed(category: category)
+            let message = UserFacingError.message(for: error)
+            if tradovateConnections.isEmpty {
+                tradovateLoadPhase = .failed(message)
+            } else {
+                tradovateLoadPhase = .loaded
+                presentMessage(message, error: true)
+            }
         }
+    }
 
+    private func refreshRithmicConnections() async {
+        if rithmicConnections.isEmpty {
+            rithmicConnectionsLoadPhase = .loading
+        }
         do {
             let response = try await broker.listRithmicConnections()
             rithmicConnections = response.connections
-            for connection in rithmicConnections where connection.isActiveForBrokerUI {
-                await loadAccounts(provider: .rithmic, connectionId: connection.id, forceRefresh: false)
-            }
+            rithmicConnectionsLoadPhase = .loaded
+            await loadAccountsInParallel(
+                provider: .rithmic,
+                connections: rithmicConnections.filter(\.isActiveForBrokerUI),
+                forceRefresh: false
+            )
         } catch {
-            if loadError == nil {
-                loadError = UserFacingError.message(for: error)
+            let message = UserFacingError.message(for: error)
+            if rithmicConnections.isEmpty {
+                rithmicConnectionsLoadPhase = .failed(message)
+            } else {
+                rithmicConnectionsLoadPhase = .loaded
+                presentMessage(message, error: true)
             }
         }
+    }
 
+    private func refreshRithmicCapabilities() async {
+        if rithmicConnectCapabilitiesPhase != .loaded {
+            rithmicConnectCapabilitiesPhase = .loading
+        }
         do {
             rithmicConnectCapabilities = try await broker.fetchRithmicConnectCapabilities()
+            rithmicConnectCapabilitiesPhase = .loaded
         } catch {
             rithmicConnectCapabilities = nil
+            rithmicConnectCapabilitiesPhase = .failed
         }
+    }
 
-        if tradovateConnections.isEmpty, rithmicConnections.isEmpty, let loadError {
-            phase = .failed(loadError)
-        } else {
-            phase = .loaded
-            if let loadError {
-                presentMessage(loadError, error: true)
+    private func loadAccountsInParallel(
+        provider: BrokerIntegrationProvider,
+        connections: [TradovateConnectionSummary],
+        forceRefresh: Bool
+    ) async {
+        await withTaskGroup(of: Void.self) { group in
+            for connection in connections {
+                group.addTask {
+                    await self.loadAccounts(
+                        provider: provider,
+                        connectionId: connection.id,
+                        forceRefresh: forceRefresh
+                    )
+                }
             }
         }
-        BrokerImportEligibilityStore.shared.refresh()
     }
 
     func connectTradovate(reconnectConnectionId: String? = nil) {
@@ -149,6 +293,8 @@ final class BrokerIntegrationsViewModel {
 
     func presentRithmicConnect(reconnectConnectionId: String? = nil) {
         guard isRithmicConnectUIAvailable, !isBrokerConnectionMutationActive else { return }
+        rithmicImportReauthConnectionId = nil
+        rithmicImportReauthMappingId = nil
         rithmicReconnectConnectionId = reconnectConnectionId
         if reconnectConnectionId == nil {
             rithmicSystemChoices = []
@@ -156,8 +302,27 @@ final class BrokerIntegrationsViewModel {
         showsRithmicConnectSheet = true
     }
 
+    func presentRithmicImportReauth(connectionId: String, mappingId: String) {
+        guard !isBrokerConnectionMutationActive else { return }
+        rithmicImportReauthConnectionId = connectionId
+        rithmicImportReauthMappingId = mappingId
+        rithmicReconnectConnectionId = nil
+        rithmicSystemChoices = []
+        showsRithmicConnectSheet = true
+    }
+
     func submitRithmicConnect(username: String, password: String, systemName: String?) async {
         guard !isBrokerConnectionMutationActive else { return }
+        if let connectionId = rithmicImportReauthConnectionId,
+           let mappingId = rithmicImportReauthMappingId
+        {
+            await submitRithmicImportReauth(
+                connectionId: connectionId,
+                mappingId: mappingId,
+                password: password
+            )
+            return
+        }
         isConnectingRithmic = true
         defer { isConnectingRithmic = false }
         do {
@@ -181,6 +346,55 @@ final class BrokerIntegrationsViewModel {
         } catch {
             presentMessage(UserFacingError.message(for: error), error: true)
         }
+    }
+
+    private func submitRithmicImportReauth(
+        connectionId: String,
+        mappingId: String,
+        password: String
+    ) async {
+        isConnectingRithmic = true
+        defer { isConnectingRithmic = false }
+        do {
+            let response = try await broker.syncRithmicAccount(
+                connectionId: connectionId,
+                mappingId: mappingId,
+                password: password
+            )
+            accountsByConnection[connectionId] = response.accounts
+            let newIds = response.summary.newTradeIds
+            await refreshTradesAfterImport(newTradeIds: newIds)
+            if response.summary.ok {
+                rithmicImportReauthConnectionId = nil
+                rithmicImportReauthMappingId = nil
+                showsRithmicConnectSheet = false
+                noteBrokerIntegrationChanged()
+                presentMessage(BrokerIntegrationDisplay.importResultMessage(newTradeCount: newIds.count), error: false)
+                if !newIds.isEmpty {
+                    pendingReviewTradeIDs = newIds.map { TradeID($0) }
+                    showsReviewImportedTrades = true
+                }
+            } else if response.summary.errorCode == "rithmic_password_required" {
+                presentMessage(
+                    response.summary.error ?? "Enter your Rithmic password to import.",
+                    error: true
+                )
+            } else {
+                presentMessage(
+                    BrokerIntegrationDisplay.importFailureMessage(serverSummary: response.summary.error),
+                    error: true
+                )
+            }
+        } catch {
+            presentMessage(BrokerIntegrationDisplay.importFailureMessage(for: error), error: true)
+        }
+    }
+
+    func clearRithmicSheetStateOnDismiss() {
+        rithmicImportReauthConnectionId = nil
+        rithmicImportReauthMappingId = nil
+        rithmicReconnectConnectionId = nil
+        rithmicSystemChoices = []
     }
 
     func disconnect(provider: BrokerIntegrationProvider, connectionId: String) async {
@@ -248,7 +462,7 @@ final class BrokerIntegrationsViewModel {
             }
             accountsByConnection[connectionId] = response.accounts
             await refreshCanonicalAccounts()
-            BrokerImportEligibilityStore.shared.refresh(fromUserAction: false)
+            noteBrokerIntegrationChanged()
             presentMessage("Account linked.", error: false)
             return true
         } catch {
@@ -281,7 +495,7 @@ final class BrokerIntegrationsViewModel {
             }
             accountsByConnection[connectionId] = response.accounts
             await refreshCanonicalAccounts()
-            BrokerImportEligibilityStore.shared.refresh(fromUserAction: false)
+            noteBrokerIntegrationChanged()
             presentMessage("Trading account created and linked.", error: false)
             return true
         } catch {
@@ -299,17 +513,26 @@ final class BrokerIntegrationsViewModel {
             case .tradovate:
                 response = try await broker.syncTradovateAccount(connectionId: connectionId, mappingId: mappingId)
             case .rithmic:
-                response = try await broker.syncRithmicAccount(connectionId: connectionId, mappingId: mappingId)
+                response = try await broker.syncRithmicAccount(
+                    connectionId: connectionId,
+                    mappingId: mappingId,
+                    password: nil
+                )
             }
             accountsByConnection[connectionId] = response.accounts
             let newIds = response.summary.newTradeIds
             await refreshTradesAfterImport(newTradeIds: newIds)
             if response.summary.ok {
+                noteBrokerIntegrationChanged()
                 presentMessage(BrokerIntegrationDisplay.importResultMessage(newTradeCount: newIds.count), error: false)
                 if !newIds.isEmpty {
                     pendingReviewTradeIDs = newIds.map { TradeID($0) }
                     showsReviewImportedTrades = true
                 }
+            } else if provider == .rithmic,
+                      response.summary.errorCode == "rithmic_password_required"
+            {
+                presentRithmicImportReauth(connectionId: connectionId, mappingId: mappingId)
             } else {
                 presentMessage(
                     BrokerIntegrationDisplay.importFailureMessage(serverSummary: response.summary.error),
@@ -333,6 +556,59 @@ final class BrokerIntegrationsViewModel {
         } else if status == "error" {
             oauthErrorMessage = reason ?? "Tradovate connection failed."
         }
+    }
+
+    func collapsedSummary(for provider: BrokerIntegrationProvider) -> String {
+        switch provider {
+        case .tradovate:
+            switch tradovateLoadPhase {
+            case .loading where tradovateConnections.isEmpty:
+                return "Loading…"
+            case .failed where tradovateConnections.isEmpty:
+                return "Couldn’t load"
+            default:
+                return summaryForConnections(tradovateConnections)
+            }
+        case .rithmic:
+            if case .loading = rithmicConnectionsLoadPhase, rithmicConnections.isEmpty {
+                return "Loading…"
+            }
+            if case .failed = rithmicConnectionsLoadPhase, rithmicConnections.isEmpty {
+                return "Couldn’t load connections"
+            }
+            switch rithmicConnectCapabilitiesPhase {
+            case .loading where rithmicConnections.isEmpty:
+                return "Checking availability…"
+            case .failed where rithmicConnections.isEmpty:
+                return "Couldn’t load availability"
+            case .loaded:
+                if rithmicConnectCapabilities?.showConnectUi != true, rithmicConnections.isEmpty {
+                    return "Not available on this server"
+                }
+                if rithmicConnections.isEmpty {
+                    return "Not connected"
+                }
+                return summaryForConnections(rithmicConnections)
+            default:
+                return summaryForConnections(rithmicConnections)
+            }
+        }
+    }
+
+    private func summaryForConnections(_ connections: [TradovateConnectionSummary]) -> String {
+        let active = connections.filter(\.isActiveForBrokerUI)
+        guard !active.isEmpty else { return "Not connected" }
+        let accountCount = active.reduce(0) { partial, connection in
+            partial + accounts(for: connection.id).count
+        }
+        let accountsPhrase = accountCount == 1 ? "1 account" : "\(accountCount) accounts"
+        if active.contains(where: \.connected) {
+            return "Connected · \(accountsPhrase)"
+        }
+        if active.contains(where: { $0.status == .reconnectRequired }) {
+            return "Reconnect needed · \(accountsPhrase)"
+        }
+        return "\(accountsPhrase)"
     }
 
     func draftForCreate(from account: BrokerIntegrationAccount) -> TradingAccountDraft {
@@ -376,5 +652,10 @@ final class BrokerIntegrationsViewModel {
     private func presentMessage(_ message: String, error: Bool) {
         actionMessage = message
         actionIsError = error
+    }
+
+    private func noteBrokerIntegrationChanged() {
+        BrokerIntegrationMutationStore.shared.noteBrokerIntegrationChanged()
+        BrokerImportEligibilityStore.shared.refresh(fromUserAction: false)
     }
 }

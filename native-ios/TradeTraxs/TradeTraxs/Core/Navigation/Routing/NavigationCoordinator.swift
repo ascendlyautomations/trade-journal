@@ -59,6 +59,20 @@ final class NavigationCoordinator {
         }
     }
 
+    /// Explore Mode main tabs — remains ``SessionPhase/unauthenticated`` (no authenticated services).
+    func markExploreExperience() {
+        dismissPresentation()
+        store.sessionPhase = .unauthenticated
+        store.paths.resetAuth(to: .login)
+        store.selectedTab = .home
+        store.previousContentTab = .home
+        store.paths.home = []
+        store.paths.feed = []
+        store.paths.messages = []
+        store.paths.profile = []
+        store.pendingAfterAuth = nil
+    }
+
     /// Marks the session authenticated and applies any pending deep link.
     func markAuthenticated(applyingDeferred snapshot: NavigationState? = nil) {
         if let snapshot {
@@ -110,11 +124,13 @@ final class NavigationCoordinator {
 
     /// Create tab is an action — presents chooser and keeps content tab selected.
     func invokeCreateAction() {
+        if DemoProtectedNavigation.interceptComposeIfNeeded(.chooser) { return }
         emit(.createActionInvoked)
         present(sheet: .composeChooser)
     }
 
     func openCompose(_ kind: ComposeKind) {
+        if DemoProtectedNavigation.interceptComposeIfNeeded(kind) { return }
         switch kind {
         case .chooser:
             present(sheet: .composeChooser)

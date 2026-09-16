@@ -10,11 +10,13 @@ final class LoginViewModel {
         case signUp
     }
 
-    var mode: Mode = .signIn
+    var mode: Mode
     var email: String = ""
     var password: String = ""
     var isSecurePasswordVisible: Bool = false
     var isSubmitting: Bool = false
+    /// True from Apple/Google interaction start through token exchange (covers system UI latency).
+    private(set) var isOAuthInteractionInFlight: Bool = false
     var errorMessage: String?
     var informationalMessage: String?
     var pendingConfirmationEmail: String?
@@ -23,14 +25,17 @@ final class LoginViewModel {
 
     private let authenticationCoordinator: AuthenticationCoordinator
     private let allowsDevelopmentBypass: Bool
+    private let validator = AuthenticationValidator()
     private var activeSignInTask: Task<Void, Never>?
 
     init(
         authenticationCoordinator: AuthenticationCoordinator,
-        allowsDevelopmentBypass: Bool
+        allowsDevelopmentBypass: Bool,
+        initialMode: Mode? = nil
     ) {
         self.authenticationCoordinator = authenticationCoordinator
         self.allowsDevelopmentBypass = allowsDevelopmentBypass
+        self.mode = initialMode ?? AuthLandingInstallState.shared.initialLoginMode
     }
 
     var primaryButtonTitle: String {
@@ -55,38 +60,63 @@ final class LoginViewModel {
     }
 
     func submit() async {
+        guard !isOAuthInteractionInFlight else { return }
+        if let message = validationMessage() {
+            ExperienceHaptics.play(.warning)
+            errorMessage = message
+            return
+        }
         guard canSubmit else { return }
         await runSignIn(label: "login.tap") { [self] in
             let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
             switch mode {
             case .signIn:
-                try await authenticationCoordinator.signIn(email: trimmedEmail, password: password)
+                try await authenticationCoordinator.signIn(
+                    email: trimmedEmail,
+                    password: password,
+                    smartSignUpIfNewEmail: true
+                )
             case .signUp:
                 try await authenticationCoordinator.signUp(email: trimmedEmail, password: password)
             }
         }
     }
 
+    func beginOAuthProviderInteraction() {
+        isOAuthInteractionInFlight = true
+    }
+
+    func endOAuthProviderInteraction() {
+        isOAuthInteractionInFlight = false
+    }
+
+    /// Apple / Google — same pipeline regardless of email Sign In vs Create Account mode.
     func signInWithApple(credential: AppleIDCredentialPayload) async {
+        guard !isSubmitting else { return }
         await runSignIn(label: "login.tap.apple") { [self] in
             try await authenticationCoordinator.signInWithApple(credential: credential)
         }
+        endOAuthProviderInteraction()
     }
 
     func handleAppleSignInCancelled() {
         errorMessage = nil
         isSubmitting = false
+        endOAuthProviderInteraction()
     }
 
     func handleAppleSignInFailure(_ error: Error) {
         isSubmitting = false
+        endOAuthProviderInteraction()
         present(error)
     }
 
     func signInWithGoogle() async {
+        guard !isSubmitting else { return }
         await runSignIn(label: "login.tap.google") { [self] in
             try await authenticationCoordinator.signInWithGoogle()
         }
+        endOAuthProviderInteraction()
     }
 
     func continueAsDevelopment() async {
@@ -149,6 +179,23 @@ final class LoginViewModel {
         }
     }
 
+    private func validationMessage() -> String? {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedEmail.isEmpty {
+            return "Enter your email address."
+        }
+        if validator.validateEmail(email) != nil {
+            return "Enter a valid email address."
+        }
+        if password.isEmpty {
+            return "Enter your password."
+        }
+        if mode == .signUp, validator.validatePassword(password) != nil {
+            return "Password must be at least 8 characters."
+        }
+        return nil
+    }
+
     private func present(_ error: Error) {
         ExperienceHaptics.play(.warning)
         if let auth = error as? AuthenticationError {
@@ -161,6 +208,11 @@ final class LoginViewModel {
                 pendingConfirmationEmail = email
                 informationalMessage =
                     "We sent a confirmation link to \(email). Confirm your email, then sign in."
+                mode = .signIn
+                return
+            }
+            if case .emailAlreadyRegistered = auth {
+                errorMessage = "An account with this email already exists. Sign in with your password."
                 mode = .signIn
                 return
             }

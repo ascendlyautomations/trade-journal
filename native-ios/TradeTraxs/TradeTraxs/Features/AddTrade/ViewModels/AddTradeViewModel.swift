@@ -40,13 +40,13 @@ final class AddTradeViewModel {
     var side: TradeSide = .long
     var entryPriceText = ""
     var exitPriceText = ""
-    var contractsText = "1"
+    var contractsText = ""
     var pnlText = ""
     var pointsText = ""
     var rrText = ""
     var entryAt: Date = .now
     var exitAt: Date = .now
-    var includeExitTime = true
+    var includeExitTime = false
     var strategyText = ""
     var notesText = ""
     var timeframeSelection = ""
@@ -254,7 +254,7 @@ final class AddTradeViewModel {
             || screenshotData != nil
             || reelDraft != nil
             || linkedReel != nil
-            || contractsText != "1"
+            || !contractsText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || shareToProfile
             || tradeAwaitingClip != nil
     }
@@ -303,7 +303,7 @@ final class AddTradeViewModel {
 
     /// Web stores `trades.rr` as a decimal ratio (e.g. `2.35`); UI shows `1 : 2.35`.
     var riskRewardDisplay: String {
-        guard let value = Self.parseDecimal(rrText) else {
+        guard let value = Self.parseDecimal(rrText, style: .riskReward) else {
             return rrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "—" : rrText
         }
         return Self.formatRiskReward(value)
@@ -328,9 +328,9 @@ final class AddTradeViewModel {
         if let colon = trimmed.firstIndex(of: ":") {
             let reward = trimmed[trimmed.index(after: colon)...]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            return parseDecimal(reward)
+            return parseDecimal(reward, style: .riskReward)
         }
-        return parseDecimal(trimmed)
+        return parseDecimal(trimmed, style: .riskReward)
     }
 
     static func formatRiskReward(_ value: Decimal) -> String {
@@ -359,6 +359,31 @@ final class AddTradeViewModel {
         selectedAccountID = id
         Self.lastAccountID = id
         formError = nil
+    }
+
+    func clearAccountSelection() {
+        selectedAccountID = nil
+        formError = nil
+    }
+
+    func addExitTime() {
+        includeExitTime = true
+        if exitAt < entryAt {
+            exitAt = entryAt
+        }
+    }
+
+    func removeExitTime() {
+        includeExitTime = false
+    }
+
+    var hasTradeReviewContent: Bool {
+        !strategyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !timeframeSelection.isEmpty
+            || !customTimeframeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || newsEvent
+            || hasPsychologyDetails
     }
 
     func applySymbol(_ ticker: String) {
@@ -540,7 +565,6 @@ final class AddTradeViewModel {
         if let viewerID, viewerID.rawValue.hasPrefix("dev.") {
             accounts = AddTradeFixtures.accounts(owner: viewerID)
             detailCache.seed(accounts: accounts, for: viewerID)
-            selectDefaultAccount()
             guard await hydrateEditTradeIfNeeded() else { return }
             phase = .ready
             #if DEBUG
@@ -560,7 +584,6 @@ final class AddTradeViewModel {
            !cached.isEmpty
         {
             accounts = cached
-            selectDefaultAccount()
             guard await hydrateEditTradeIfNeeded() else { return }
             phase = .ready
             #if DEBUG
@@ -594,9 +617,6 @@ final class AddTradeViewModel {
                 requiresFullOwnerSnapshot: true
             )
             accounts = loaded
-            if editingTrade == nil {
-                selectDefaultAccount()
-            }
             phase = .ready
         } catch {
             if accounts.isEmpty {
@@ -605,17 +625,6 @@ final class AddTradeViewModel {
                 phase = .ready
             }
         }
-    }
-
-    private func selectDefaultAccount() {
-        if case .edit = mode, selectedAccountID != nil { return }
-        if let last = Self.lastAccountID,
-           eligibleAccounts.contains(where: { $0.id == last })
-        {
-            selectedAccountID = last
-            return
-        }
-        selectedAccountID = eligibleAccounts.first?.id
     }
 
     @discardableResult
@@ -646,12 +655,12 @@ final class AddTradeViewModel {
         selectedAccountID = trade.accountID
         symbolText = trade.symbol.ticker
         side = trade.side
-        entryPriceText = Self.decimalFieldText(trade.entryPrice)
-        exitPriceText = Self.decimalFieldText(trade.exitPrice)
-        contractsText = Self.decimalFieldText(trade.quantity).isEmpty ? "1" : Self.decimalFieldText(trade.quantity)
-        pnlText = Self.decimalFieldText(trade.realizedPnL?.amount)
-        pointsText = Self.decimalFieldText(trade.points)
-        rrText = Self.decimalFieldText(trade.riskReward)
+        entryPriceText = Self.decimalFieldText(trade.entryPrice, style: .tradePrice)
+        exitPriceText = Self.decimalFieldText(trade.exitPrice, style: .tradePrice)
+        contractsText = Self.decimalFieldText(trade.quantity, style: .tradeQuantity)
+        pnlText = Self.decimalFieldText(trade.realizedPnL?.amount, style: .signedPnL)
+        pointsText = Self.decimalFieldText(trade.points, style: .tradeQuantity)
+        rrText = Self.decimalFieldText(trade.riskReward, style: .riskReward)
         entryAt = trade.entryAt
         if let exit = trade.exitAt {
             exitAt = exit
@@ -734,9 +743,13 @@ final class AddTradeViewModel {
         ].joined(separator: "|")
     }
 
-    private static func decimalFieldText(_ value: Decimal?) -> String {
+    private static func decimalFieldText(_ value: Decimal?, style: NumericInputStyle) -> String {
         guard let value else { return "" }
-        return NSDecimalNumber(decimal: value).stringValue
+        return decimalFieldText(value, style: style)
+    }
+
+    private static func decimalFieldText(_ value: Decimal, style: NumericInputStyle) -> String {
+        NumericInputFieldSupport.seedEditingText(from: value, style: style)
     }
 
     private func enqueueSave() async {
@@ -749,14 +762,14 @@ final class AddTradeViewModel {
             return
         }
         guard let account = selectedAccount else {
-            formError = "Choose an account that can accept trades."
+            formError = "Choose Account."
             phase = .ready
             saveTask = nil
             return
         }
         let keepOriginalAccount = isEditing && account.id == editingOriginalAccountID
         guard account.canAddTrades || keepOriginalAccount else {
-            formError = "Choose an account that can accept trades."
+            formError = "Choose Account."
             phase = .ready
             saveTask = nil
             return
@@ -821,8 +834,8 @@ final class AddTradeViewModel {
         account: TradingAccount
     ) -> TradeSaveUploadSpec? {
         let ticker = symbolText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let quantity = Self.parseDecimal(contractsText) ?? 1
-        let pnl = Self.parseDecimal(pnlText) ?? 0
+        guard let quantity = Self.parseDecimal(contractsText, style: .tradeQuantity) else { return nil }
+        let pnl = Self.parseDecimal(pnlText, style: .signedPnL) ?? 0
         let sessionLabel = TradingSessionLabel.session(from: entryAt) ?? "NY"
         let resolvedTimeframe = TradeReviewCatalog.resolvedTimeframe(
             selection: timeframeSelection,
@@ -844,13 +857,13 @@ final class AddTradeViewModel {
             side: side,
             mode: mapTradeMode(from: account),
             quantity: quantity,
-            entryPrice: Self.parseDecimal(entryPriceText),
-            exitPrice: Self.parseDecimal(exitPriceText),
+            entryPrice: Self.parseDecimal(entryPriceText, style: .tradePrice),
+            exitPrice: Self.parseDecimal(exitPriceText, style: .tradePrice),
             entryAt: entryAt,
             exitAt: includeExitTime ? exitAt : nil,
             realizedPnL: Money(amount: pnl),
             riskReward: Self.parseOptionalRiskReward(rrText),
-            points: Self.parseDecimal(pointsText) ?? 0,
+            points: Self.parseDecimal(pointsText, style: .tradeQuantity) ?? 0,
             sessionLabel: sessionLabel,
             strategy: Self.nilIfEmpty(strategyText),
             visibility: shareToProfile ? .public : .private,
@@ -1038,13 +1051,13 @@ final class AddTradeViewModel {
         if selectedAccountID == nil
             || (selectedAccount?.canAddTrades != true && !keepOriginalAccount)
         {
-            formError = "Choose an eligible trading account."
+            formError = "Choose Account."
         }
-        if Self.parseDecimal(contractsText) == nil {
+        if Self.parseDecimal(contractsText, style: .tradeQuantity) == nil {
             errors[.contracts] = "Enter a valid contract count"
         }
         if !pnlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           Self.parseDecimal(pnlText) == nil
+           Self.parseDecimal(pnlText, style: .signedPnL) == nil
         {
             errors[.pnl] = "Enter a valid P&L"
         }
@@ -1053,10 +1066,10 @@ final class AddTradeViewModel {
         {
             errors[.rr] = "Enter a valid R:R"
         }
-        if !entryPriceText.isEmpty, Self.parseDecimal(entryPriceText) == nil {
+        if !entryPriceText.isEmpty, Self.parseDecimal(entryPriceText, style: .tradePrice) == nil {
             errors[.entry] = "Invalid entry price"
         }
-        if !exitPriceText.isEmpty, Self.parseDecimal(exitPriceText) == nil {
+        if !exitPriceText.isEmpty, Self.parseDecimal(exitPriceText, style: .tradePrice) == nil {
             errors[.exit] = "Invalid exit price"
         }
         if includeExitTime, exitAt < entryAt {
@@ -1142,14 +1155,8 @@ final class AddTradeViewModel {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func parseDecimal(_ raw: String) -> Decimal? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let cleaned = trimmed
-            .replacingOccurrences(of: "$", with: "")
-            .replacingOccurrences(of: ",", with: "")
-            .replacingOccurrences(of: "+", with: "")
-        return DecimalParser.parse(cleaned)
+    private static func parseDecimal(_ raw: String, style: NumericInputStyle = .signedPnL) -> Decimal? {
+        NumericInputFieldSupport.parse(raw, style: style)
     }
 
     private static func prepareScreenshotJPEG(_ image: UIImage, logUpload: Bool = false) -> Data? {

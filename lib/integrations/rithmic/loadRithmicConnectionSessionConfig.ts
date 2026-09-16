@@ -1,15 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import {
-  decryptIntegrationCredentials,
-  isRithmicIntegrationCredentials,
-} from "@/lib/integrations/credentialEncryption"
-import { buildRithmicServerConfigFromUserCredentials } from "@/lib/integrations/rithmic/rithmicConnectionConfig"
 import type { RithmicServerConfig } from "@/lib/integrations/rithmic/rithmicEnv"
-import { loadRithmicServerConfigFromEnv } from "@/lib/integrations/rithmic/rithmicEnv"
+import {
+  buildRithmicSessionConfigWithTransientPassword,
+  loadRithmicConnectionIdentity,
+  loadRithmicPhase1EnvSessionConfig,
+} from "@/lib/integrations/rithmic/loadRithmicConnectionIdentity"
 
 /**
- * Session config for a broker connection: user-stored credentials when present,
- * otherwise server Test env (legacy Phase 1 saved connections without ciphertext).
+ * @deprecated Rithmic passwords are transient. Use identity + transient password or Phase 1 env fallback.
  */
 export async function loadRithmicSessionConfigForConnection(
   supabase: SupabaseClient,
@@ -18,33 +16,58 @@ export async function loadRithmicSessionConfigForConnection(
     connectionId: string
   }
 ): Promise<RithmicServerConfig | null> {
-  const { data, error } = await supabase
-    .from("broker_integration_connections")
-    .select("status, credentials_ciphertext, api_environment")
-    .eq("id", params.connectionId)
-    .eq("user_id", params.userId)
-    .eq("provider", "rithmic")
-    .maybeSingle()
+  return loadRithmicPhase1EnvSessionConfig(supabase, params)
+}
 
-  if (error || !data) return null
-  if (data.status !== "connected") return null
+export async function resolveRithmicSessionConfigForOperation(
+  supabase: SupabaseClient,
+  params: {
+    userId: string
+    connectionId: string
+    transientPassword?: string | null
+  }
+): Promise<
+  | { ok: true; config: RithmicServerConfig }
+  | { ok: false; code: "rithmic_password_required"; userMessage: string }
+> {
+  const trimmedPassword =
+    typeof params.transientPassword === "string"
+      ? params.transientPassword
+      : ""
 
-  const ciphertext = data.credentials_ciphertext
-  if (ciphertext && typeof ciphertext === "string") {
-    const payload = decryptIntegrationCredentials(ciphertext)
-    if (!isRithmicIntegrationCredentials(payload)) {
-      throw new Error("rithmic_connection_credentials_invalid")
+  if (trimmedPassword) {
+    const identity = await loadRithmicConnectionIdentity(supabase, {
+      userId: params.userId,
+      connectionId: params.connectionId,
+    })
+    if (!identity) {
+      return {
+        ok: false,
+        code: "rithmic_password_required",
+        userMessage: "Rithmic connection is not available. Connect again in Settings.",
+      }
     }
-    return buildRithmicServerConfigFromUserCredentials(payload)
+    return {
+      ok: true,
+      config: buildRithmicSessionConfigWithTransientPassword(
+        identity,
+        trimmedPassword
+      ),
+    }
   }
 
-  if (data.api_environment === "test") {
-    try {
-      return loadRithmicServerConfigFromEnv()
-    } catch {
-      return null
-    }
+  const legacyEnv = await loadRithmicPhase1EnvSessionConfig(supabase, {
+    userId: params.userId,
+    connectionId: params.connectionId,
+  })
+  if (legacyEnv) {
+    return { ok: true, config: legacyEnv }
   }
 
-  return null
+  return {
+    ok: false,
+    code: "rithmic_password_required",
+    userMessage:
+      "Enter your Rithmic password to continue. TradeTraxs does not save your Rithmic password.",
+  }
 }

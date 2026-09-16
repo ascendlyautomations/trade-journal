@@ -10,7 +10,7 @@ enum ProfileSectionInitialLoad {
         localItemsEmpty: Bool
     ) -> Bool {
         guard isScreenOwned, localItemsEmpty, !didLoadSection, sectionItemsEmpty else { return false }
-        return snapshot.phase == .loading || snapshot.didBootstrap
+        return snapshot.phase == .loading
     }
 }
 

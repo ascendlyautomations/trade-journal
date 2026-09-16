@@ -324,13 +324,7 @@ final class CreateAchievementViewModel {
     }
 
     private static func parsePayout(_ raw: String) -> Decimal? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let cleaned = trimmed
-            .replacingOccurrences(of: "$", with: "")
-            .replacingOccurrences(of: ",", with: "")
-            .replacingOccurrences(of: "+", with: "")
-        return DecimalParser.parse(cleaned)
+        NumericInputFieldSupport.parse(raw, style: .unsignedCurrency)
     }
 
     private static func formatPayoutText(_ amount: Decimal) -> String {

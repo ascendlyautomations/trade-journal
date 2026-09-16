@@ -80,6 +80,8 @@ final class RoomConversationViewModel {
     private var outboundSharedContentObserver: NSObjectProtocol?
     private var sharedContentHydrationTask: Task<Void, Never>?
     private var sharedContentHydrationBacklog: [Message] = []
+    private let messagesRepo: (any MessageRepository)?
+    @ObservationIgnored private nonisolated(unsafe) var blockObserver: NSObjectProtocol?
 
     init(
         roomID: RoomID,
@@ -97,7 +99,8 @@ final class RoomConversationViewModel {
         navigationCoordinator: NavigationCoordinator? = nil,
         navigationHost: TradeRoomNavigationHost = .messages,
         realtimeHub: RealtimeHub? = nil,
-        inboxStore: MessagesInboxStore? = nil
+        inboxStore: MessagesInboxStore? = nil,
+        messages: (any MessageRepository)? = nil
     ) {
         self.roomID = roomID
         self.rooms = rooms
@@ -115,7 +118,24 @@ final class RoomConversationViewModel {
         self.navigationHost = navigationHost
         self.realtimeHub = realtimeHub
         self.inboxStore = inboxStore ?? .shared
+        self.messagesRepo = messages
         self.pendingDeepLinkFocus = RoomNavigationFocusStore.shared.consume(for: roomID)
+        blockObserver = NotificationCenter.default.addObserver(
+            forName: .userBlockListDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                self.applyBlockedAuthorsToRoomThreads()
+            }
+        }
+    }
+
+    deinit {
+        if let blockObserver {
+            NotificationCenter.default.removeObserver(blockObserver)
+        }
     }
 
     func clearHighlightedMessage() {
@@ -431,6 +451,7 @@ final class RoomConversationViewModel {
     }
 
     func startRealtime() {
+        guard !ExploreModeSupport.isActive else { return }
         inboxStore.setActiveRoom(roomID)
         realtimeTask?.cancel()
         realtimeTask = Task { [weak self] in
@@ -676,6 +697,10 @@ final class RoomConversationViewModel {
 
     func toggleMembership() async {
         guard let viewerID, !isOwner, !isJoining else { return }
+        if ExploreModeSupport.isActive {
+            DemoModeAuthGatePresenter.shared.requireAuthentication()
+            return
+        }
         isJoining = true
         defer { isJoining = false }
         ExperienceHaptics.play(.selection)
@@ -798,6 +823,10 @@ final class RoomConversationViewModel {
         let viewer = current.map { ProfileID($0.rawValue) }
         viewerID = viewer
 
+        if let messagesRepo, viewer != nil, shouldApplyBlockedAuthorFilter {
+            await FeedBlockedAuthorsFilter.shared.syncFromServer(messages: messagesRepo, force: false)
+        }
+
         var hydratedFromDisk = false
         if let viewer,
            !MessagesInboxSupport.isLocalDevelopmentProfile(viewer),
@@ -810,11 +839,18 @@ final class RoomConversationViewModel {
         }
 
         do {
-            if let viewer,
-               MessagesInboxSupport.isLocalDevelopmentProfile(viewer)
-                || roomID.rawValue.hasPrefix("dev-")
+            if let viewer, DemoExploreTradeRoom.isLocalRoom(roomID) {
+                await loadDemoExploreTradeRoomFixtures(viewerID: viewer)
+            } else if let viewer,
+                      DemoExperienceSupport.usesLocalBundledSocialData(viewer)
+                      || roomID.rawValue.hasPrefix("dev-")
             {
                 await loadLocalFixtures(viewerID: viewer)
+            } else if ExploreModeSupport.isActive, let viewer, let rpc {
+                let bootstrapped = await loadFromPublicGuestBootstrap(rpc: rpc, viewerID: viewer)
+                if !bootstrapped, !hydratedFromDisk {
+                    try await loadFromRepository()
+                }
             } else if let viewer, let rpc {
                 let bootstrapped = await loadFromRoomBootstrap(rpc: rpc, viewerID: viewer)
                 if bootstrapped {
@@ -882,6 +918,51 @@ final class RoomConversationViewModel {
             )
         } catch {
             // Activity reconciles on next bootstrap.
+        }
+    }
+
+    private func loadDemoExploreTradeRoomFixtures(viewerID: ProfileID) async {
+        let fixtureRoom = DemoExploreTradeRoom.room()
+        room = fixtureRoom
+        membership = nil
+        joinRequestState = nil
+        ownerProfile = DemoExploreTradeRoom.hostProfile()
+        detailCache.seed(DemoExploreTradeRoom.hostProfile())
+        mergeSenderProfiles(DemoExploreTradeRoom.memberProfiles(viewerID: viewerID), source: "demoExploreRoom")
+
+        channels = DemoExploreTradeRoom.channels(roomID: roomID)
+        channelMetadataCached = true
+        applyPendingDeepLinkFocusSelectingChannel()
+        if selectedChannelID == nil {
+            selectedChannelID = channels.first?.id
+        }
+
+        for channel in channels {
+            let roomMessages = DemoExploreTradeRoom.messages(
+                roomID: roomID,
+                viewerID: viewerID,
+                channelID: channel.id
+            )
+            let mapped = roomMessages.map(RoomMessageMapping.displayMessage)
+            channelCaches[channel.id] = ChannelThreadCache(
+                messages: mapped.sorted { $0.createdAt < $1.createdAt },
+                nextOlderCursor: nil,
+                hasMoreOlder: false,
+                scrollAnchorMessageID: mapped.last?.id,
+                isLoaded: true
+            )
+        }
+
+        if let selectedChannelID, let cache = channelCaches[selectedChannelID] {
+            apply(cache: cache)
+            await hydrateSenders(for: cache.messages)
+        }
+        applyPendingDeepLinkFocusHighlight()
+        phase = .loaded
+        if let tradeID = DemoCanonicalDataset.trades().first?.id,
+           let trade = try? await tradesRepo?.trade(id: tradeID)
+        {
+            sharedTrades[trade.id] = trade
         }
     }
 
@@ -966,6 +1047,46 @@ final class RoomConversationViewModel {
             selectChannel(trades.id)
         }
         #endif
+    }
+
+    private func loadFromPublicGuestBootstrap(rpc: any RPCClient, viewerID: ProfileID) async -> Bool {
+        do {
+            let applied = try await PublicRoomGuestBootstrapLoader.load(
+                roomID: roomID,
+                viewerID: viewerID,
+                rpc: rpc,
+                detailCache: detailCache
+            )
+            room = applied.room
+            membership = nil
+            channels = applied.channels
+            channelMetadataCached = true
+            selectedChannelID = applied.selectedChannelID
+            applyPendingDeepLinkFocusSelectingChannel()
+            let cache = ChannelThreadCache(
+                messages: applied.channelCache.messages,
+                nextOlderCursor: applied.channelCache.nextOlderCursor,
+                hasMoreOlder: applied.channelCache.hasMoreOlder,
+                scrollAnchorMessageID: applied.channelCache.scrollAnchorMessageID,
+                isLoaded: applied.channelCache.isLoaded
+            )
+            channelCaches[applied.selectedChannelID] = cache
+            apply(cache: cache)
+            await hydrateSenders(for: cache.messages)
+            await hydrateSharedContent(from: cache.messages)
+            applyPendingDeepLinkFocusHighlight()
+            if let last = cache.messages.last {
+                patchInboxPreview(with: last)
+            }
+            persistRoomSnapshotToDisk()
+            return true
+        } catch PublicRoomGuestBootstrapLoader.LoaderError.flagOff,
+                PublicRoomGuestBootstrapLoader.LoaderError.rpcUnavailable,
+                PublicRoomGuestBootstrapLoader.LoaderError.roomNotPublic {
+            return false
+        } catch {
+            return false
+        }
     }
 
     private func loadFromRoomBootstrap(rpc: any RPCClient, viewerID: ProfileID) async -> Bool {
@@ -1454,9 +1575,10 @@ final class RoomConversationViewModel {
                 .map(\.id)
                 .filter(ConversationMessageMerge.isOptimisticMessageID)
         )
+        let filteredIncoming = filterMessagesForBlockedAuthors(incoming)
         messages = ConversationMessageMerge.mergeMessages(
             existing: messages,
-            incoming: incoming,
+            incoming: filteredIncoming,
             viewerID: viewerID
         )
         let remainingIDs = Set(messages.map(\.id))
@@ -1468,9 +1590,28 @@ final class RoomConversationViewModel {
     private func replaceMessages(_ incoming: [Message]) {
         messages = ConversationMessageMerge.mergeMessages(
             existing: [],
-            incoming: incoming,
+            incoming: filterMessagesForBlockedAuthors(incoming),
             viewerID: viewerID
         )
+    }
+
+    private var shouldApplyBlockedAuthorFilter: Bool {
+        !ExploreModeSupport.skipsAuthenticatedViewerServices
+    }
+
+    private func filterMessagesForBlockedAuthors(_ incoming: [Message]) -> [Message] {
+        guard shouldApplyBlockedAuthorFilter else { return incoming }
+        return FeedBlockedAuthorsFilter.shared.filterConversationMessages(incoming, viewerID: viewerID)
+    }
+
+    private func applyBlockedAuthorsToRoomThreads() {
+        guard shouldApplyBlockedAuthorFilter else { return }
+        replaceMessages(messages)
+        for (channelID, cache) in channelCaches {
+            var updated = cache
+            updated.messages = filterMessagesForBlockedAuthors(cache.messages)
+            channelCaches[channelID] = updated
+        }
     }
 
     private func removeMessage(id: MessageID) {

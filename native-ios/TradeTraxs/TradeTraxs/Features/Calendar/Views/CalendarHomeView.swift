@@ -245,11 +245,20 @@ struct CalendarHomeView: View {
                     .experienceStyle(.footnote, color: colors.accent)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .frame(maxWidth: compactAccountSelectorWidth, alignment: .trailing)
                 ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.accent)
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
         .accessibilityLabel("Account")
         .accessibilityValue(viewModel.accountFilterTitle)
+    }
+
+    /// Width budget for truncated account label (footnote, up to ``CalendarPresentation`` limit).
+    private var compactAccountSelectorWidth: CGFloat {
+        let sample = String(repeating: "M", count: CalendarPresentation.compactAccountSelectorMaxLength)
+        let font = UIFont.preferredFont(forTextStyle: .footnote)
+        return (sample as NSString).size(withAttributes: [.font: font]).width + 2
     }
 
     @ToolbarContentBuilder

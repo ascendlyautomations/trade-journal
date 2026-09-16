@@ -762,6 +762,13 @@ final class ProfileScreenViewModel {
         }
 
         if isReconcilingFromDisk, existingForReconcile.profile != nil {
+            if next.profile == nil || next.phase == .failed {
+                var preserved = existingForReconcile
+                preserved.errorMessage = next.errorMessage
+                publish(preserved, source: .disk)
+                bootstrapTask = nil
+                return
+            }
             let reconcileStart = Date()
             let merged = ProfilePersistentReconcile.reconcileProfileState(
                 existing: existingForReconcile,

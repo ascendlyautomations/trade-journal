@@ -16,6 +16,7 @@ struct ManageAccountEditorView: View {
     @State private var editingPayoutID: AccountPayoutEntryID?
     @State private var showsPayoutSheet = false
     @State private var showsRecordPayout = false
+    @State private var propFirmFieldText: [String: String] = [:]
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColors) private var colors
 
@@ -89,7 +90,7 @@ struct ManageAccountEditorView: View {
                 }
 
                 SettingsLabeledField(title: "Account Value", helper: "Starting or current account size") {
-                    TextField("0", text: $draft.sizeDigits)
+                    TextField("0", text: $draft.sizeDigits.numericInput(.accountSize))
                         .keyboardType(.numberPad)
                         .accessibilityIdentifier("manageAccounts.size")
                 }
@@ -124,6 +125,12 @@ struct ManageAccountEditorView: View {
                     SettingsLabeledField(title: "Max Drawdown", helper: "Dollars") {
                         TextField("0", text: bindingDecimal(\.maxDrawdown))
                             .keyboardType(.decimalPad)
+                    }
+                    Picker("Drawdown Type", selection: bindingDrawdownType()) {
+                        Text("Unspecified").tag(Optional<PropFirmDrawdownType>.none)
+                        ForEach(PropFirmDrawdownType.allCases, id: \.self) { kind in
+                            Text(kind.displayName).tag(Optional(kind))
+                        }
                     }
                     SettingsLabeledField(title: "Daily Drawdown", helper: "Dollars") {
                         TextField("0", text: bindingDecimal(\.dailyDrawdown))
@@ -195,7 +202,10 @@ struct ManageAccountEditorView: View {
                             onEdit: { entry in
                                 editingPayoutID = entry.id
                                 payoutDraft = AccountPayoutEntryDraft(
-                                    amountDigits: NSDecimalNumber(decimal: entry.amount.amount).stringValue,
+                                    amountDigits: NumericInputFieldSupport.seedEditingText(
+                                        from: entry.amount.amount,
+                                        style: .unsignedCurrency
+                                    ),
                                     payoutDate: entry.payoutDate,
                                     note: entry.note ?? ""
                                 )
@@ -228,7 +238,6 @@ struct ManageAccountEditorView: View {
         }
         .experienceNavigationTitle(title)
         .scrollDismissesKeyboard(.interactively)
-        .experienceKeyboardDoneToolbar()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
@@ -320,30 +329,47 @@ struct ManageAccountEditorView: View {
     }
 
     private func bindingDecimal(_ keyPath: WritableKeyPath<PropFirmAccountRules, Decimal?>) -> Binding<String> {
-        Binding(
+        let cacheKey = String(describing: keyPath)
+        return Binding(
             get: {
+                if let cached = propFirmFieldText[cacheKey] { return cached }
                 guard let rules = draft.propFirmRules, let value = rules[keyPath: keyPath] else { return "" }
-                return NSDecimalNumber(decimal: value).stringValue
+                return NumericInputFieldSupport.seedEditingText(from: value, style: .propFirmAmount)
             },
             set: { raw in
+                let formatted = NumericInputFieldSupport.formatWhileEditing(raw, style: .propFirmAmount)
+                propFirmFieldText[cacheKey] = formatted
                 var rules = draft.propFirmRules ?? PropFirmAccountRules()
-                let digits = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                rules[keyPath: keyPath] = digits.isEmpty ? nil : Decimal(string: digits)
+                rules[keyPath: keyPath] = NumericInputFieldSupport.parse(formatted, style: .propFirmAmount)
                 draft.propFirmRules = rules
             }
         )
     }
 
     private func bindingInt(_ keyPath: WritableKeyPath<PropFirmAccountRules, Int?>) -> Binding<String> {
-        Binding(
+        let cacheKey = String(describing: keyPath)
+        return Binding(
             get: {
+                if let cached = propFirmFieldText[cacheKey] { return cached }
                 guard let rules = draft.propFirmRules, let value = rules[keyPath: keyPath] else { return "" }
-                return String(value)
+                return NumericInputFieldSupport.seedEditingText(from: value, style: .winningDays)
             },
             set: { raw in
+                let formatted = NumericInputFieldSupport.formatWhileEditing(raw, style: .winningDays)
+                propFirmFieldText[cacheKey] = formatted
                 var rules = draft.propFirmRules ?? PropFirmAccountRules()
-                let digits = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                rules[keyPath: keyPath] = digits.isEmpty ? nil : Int(digits)
+                rules[keyPath: keyPath] = NumericInputFieldSupport.parseInt(formatted, style: .winningDays)
+                draft.propFirmRules = rules
+            }
+        )
+    }
+
+    private func bindingDrawdownType() -> Binding<PropFirmDrawdownType?> {
+        Binding(
+            get: { draft.propFirmRules?.drawdownType },
+            set: { newValue in
+                var rules = draft.propFirmRules ?? PropFirmAccountRules()
+                rules.drawdownType = newValue
                 draft.propFirmRules = rules
             }
         )

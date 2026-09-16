@@ -37,7 +37,8 @@ struct RoomConversationView: View {
                 rpc: data.rpc,
                 navigationCoordinator: navigationCoordinator,
                 navigationHost: navigationHost,
-                realtimeHub: data.realtimeHub
+                realtimeHub: data.realtimeHub,
+                messages: data.messages
             )
         )
         self.imagePipeline = data.imagePipeline

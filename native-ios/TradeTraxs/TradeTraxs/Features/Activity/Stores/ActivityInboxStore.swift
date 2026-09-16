@@ -500,6 +500,7 @@ final class ActivityInboxStore {
         detailCache: DetailPresentationCache? = nil,
         rpc: (any RPCClient)? = nil
     ) async {
+        if DemoExperienceSupport.skipsAuthenticatedViewerServices { return }
         guard let userID = await session.currentUserID?.rawValue else { return }
         if startedForUserID == userID, hasBootstrappedUnread {
             if realtimeTask == nil {

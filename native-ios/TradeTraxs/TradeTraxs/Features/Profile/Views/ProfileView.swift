@@ -273,7 +273,6 @@ struct ProfileView: View {
                     viewModel: viewModel,
                     detailCache: appEnvironment.data.detailCache,
                     imagePipeline: appEnvironment.data.imagePipeline,
-                    objectStorage: appEnvironment.data.objectStorage,
                     engagementStore: appEnvironment.data.engagementStore,
                     vaultStore: appEnvironment.data.vaultStore
                 )

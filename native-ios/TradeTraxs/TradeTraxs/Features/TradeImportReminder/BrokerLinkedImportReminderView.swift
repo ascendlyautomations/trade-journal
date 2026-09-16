@@ -12,6 +12,10 @@ struct BrokerLinkedImportReminderView: View {
     @State private var reviewTradeIDs: [TradeID] = []
     @State private var showsReview = false
     @State private var tradingAccounts: [TradingAccount] = []
+    @State private var rithmicReauthTarget: BrokerImportEligibilityTarget?
+    @State private var showsRithmicReauth = false
+    @State private var isRithmicReauthBusy = false
+    @State private var rithmicReauthUsername: String?
 
     @Environment(\.themeColors) private var colors
 
@@ -61,6 +65,23 @@ struct BrokerLinkedImportReminderView: View {
             BrokerImportedTradesReviewView(tradeIDs: reviewTradeIDs, data: data) {
                 reviewTradeIDs = []
             }
+        }
+        .sheet(isPresented: $showsRithmicReauth, onDismiss: {
+            rithmicReauthTarget = nil
+            rithmicReauthUsername = nil
+        }) {
+            RithmicConnectSheet(
+                mode: .importTrades,
+                isBusy: isRithmicReauthBusy,
+                systemChoices: [],
+                prefilledUsername: rithmicReauthUsername,
+                prefilledSystemName: nil,
+                locksUsername: rithmicReauthUsername != nil,
+                onSubmit: { _, password, _ in
+                    guard let target = rithmicReauthTarget else { return }
+                    await importTrades(for: target, rithmicPassword: password)
+                }
+            )
         }
         .accessibilityIdentifier("tradeImportReminder.brokerImport")
     }
@@ -134,9 +155,19 @@ struct BrokerLinkedImportReminderView: View {
         }
     }
 
-    private func importTrades(for target: BrokerImportEligibilityTarget) async {
-        importingIDs.insert(target.mappingId)
-        defer { importingIDs.remove(target.mappingId) }
+    private func importTrades(
+        for target: BrokerImportEligibilityTarget,
+        rithmicPassword: String? = nil
+    ) async {
+        if rithmicPassword != nil {
+            isRithmicReauthBusy = true
+        } else {
+            importingIDs.insert(target.mappingId)
+        }
+        defer {
+            importingIDs.remove(target.mappingId)
+            isRithmicReauthBusy = false
+        }
         do {
             let response: TradovateAccountSyncResponse
             switch target.provider {
@@ -148,7 +179,8 @@ struct BrokerLinkedImportReminderView: View {
             case .rithmic:
                 response = try await data.brokerIntegrations.syncRithmicAccount(
                     connectionId: target.connectionId,
-                    mappingId: target.mappingId
+                    mappingId: target.mappingId,
+                    password: rithmicPassword
                 )
             }
             let newIds = response.summary.newTradeIds
@@ -156,6 +188,8 @@ struct BrokerLinkedImportReminderView: View {
                 TradeJournalMutationStore.shared.noteBulkImport(owner: ProfileID(userID.rawValue))
             }
             if response.summary.ok {
+                showsRithmicReauth = false
+                rithmicReauthTarget = nil
                 if newIds.isEmpty {
                     present("Import finished — no new trades.", error: false)
                 } else {
@@ -163,6 +197,15 @@ struct BrokerLinkedImportReminderView: View {
                     showsReview = true
                     present("Imported \(newIds.count) trade(s).", error: false)
                 }
+            } else if target.provider == .rithmic,
+                      response.summary.errorCode == "rithmic_password_required",
+                      rithmicPassword == nil
+            {
+                rithmicReauthTarget = target
+                if rithmicReauthUsername == nil {
+                    await loadRithmicUsername(for: target.connectionId)
+                }
+                showsRithmicReauth = true
             } else {
                 present(response.summary.error ?? "Import did not complete.", error: true)
             }
@@ -174,5 +217,16 @@ struct BrokerLinkedImportReminderView: View {
     private func present(_ text: String, error: Bool) {
         message = text
         messageIsError = error
+    }
+
+    private func loadRithmicUsername(for connectionId: String) async {
+        do {
+            let response = try await data.brokerIntegrations.listRithmicConnections()
+            rithmicReauthUsername = response.connections
+                .first(where: { $0.id == connectionId })?
+                .brokerLoginUsername
+        } catch {
+            rithmicReauthUsername = nil
+        }
     }
 }

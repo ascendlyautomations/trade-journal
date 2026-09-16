@@ -207,7 +207,12 @@ final class ProfileContentStore {
         }
         ExperienceHaptics.play(.selection)
 
-        if profileID.rawValue.hasPrefix("dev.") {
+        if DemoExperienceSupport.usesLocalBundledData(profileID)
+            || AppLaunchController.shared.isDemoExperienceActive
+        {
+            if AppLaunchController.shared.isDemoExperienceActive {
+                DemoModeAuthGatePresenter.shared.requireAuthentication()
+            }
             return
         }
 
@@ -440,6 +445,11 @@ final class ProfileContentStore {
             return
         }
         if !force, loadedAvatarKey == reference.id, avatarImage != nil {
+            return
+        }
+        if let uiImage = DemoExploreBundledAvatar.uiImage(for: reference) {
+            avatarImage = Image(uiImage: uiImage)
+            loadedAvatarKey = reference.id
             return
         }
         do {

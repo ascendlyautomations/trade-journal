@@ -70,7 +70,7 @@ final class StatsContainerViewModel {
         awaitingScreenBootstrap = isScreenOwned
             && metrics == nil
             && !hasLoadedAnalytics
-            && (snapshot.phase == .loading || snapshot.didBootstrap)
+            && snapshot.phase == .loading
 
         if let updated = snapshot.lastUpdated,
            let fetchedAt = analyticsFetchedAt,

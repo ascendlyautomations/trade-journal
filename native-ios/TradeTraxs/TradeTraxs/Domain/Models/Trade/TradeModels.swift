@@ -64,8 +64,10 @@ nonisolated enum TradingAccountMode: String, Hashable, Codable, Sendable {
 nonisolated struct PropFirmAccountRules: Hashable, Codable, Sendable {
     /// DB `consistency` — max single winning trade as % of total winning-trade profit.
     var consistencyPercent: Decimal?
-    /// DB `max_drawdown` — trailing max loss limit ($).
+    /// DB `max_drawdown` — max loss limit ($).
     var maxDrawdown: Decimal?
+    /// DB `drawdown_type`: `static` | `intraday_trailing` | `end_of_day_trailing`.
+    var drawdownType: PropFirmDrawdownType?
     /// DB `daily_drawdown` — worst single futures-day loss cap ($).
     var dailyDrawdown: Decimal?
     /// DB `profit_target`.
@@ -80,6 +82,7 @@ nonisolated struct PropFirmAccountRules: Hashable, Codable, Sendable {
     init(
         consistencyPercent: Decimal? = nil,
         maxDrawdown: Decimal? = nil,
+        drawdownType: PropFirmDrawdownType? = nil,
         dailyDrawdown: Decimal? = nil,
         profitTarget: Decimal? = nil,
         winningDaysRequired: Int? = nil,
@@ -88,6 +91,7 @@ nonisolated struct PropFirmAccountRules: Hashable, Codable, Sendable {
     ) {
         self.consistencyPercent = consistencyPercent
         self.maxDrawdown = maxDrawdown
+        self.drawdownType = drawdownType
         self.dailyDrawdown = dailyDrawdown
         self.profitTarget = profitTarget
         self.winningDaysRequired = winningDaysRequired

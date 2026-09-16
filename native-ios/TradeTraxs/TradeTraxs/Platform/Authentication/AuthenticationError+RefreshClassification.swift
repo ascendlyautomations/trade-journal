@@ -6,7 +6,7 @@ extension AuthenticationError {
         switch self {
         case .invalidCredentials, .refreshFailed, .sessionExpired, .sessionMissing:
             return true
-        case .notConfigured, .invalidEmail, .invalidPassword, .emailConfirmationRequired,
+        case .notConfigured, .invalidEmail, .invalidPassword, .emailAlreadyRegistered, .emailConfirmationRequired,
              .providerUnavailable, .providerMisconfigured, .providerTokenInvalid,
              .cancelled, .biometricUnavailable, .biometricFailed, .keychain,
              .validation, .unknown:

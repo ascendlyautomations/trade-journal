@@ -4,6 +4,7 @@ import { loadOwnedBrokerConnection } from "@/lib/integrations/brokerConnectionAc
 import { listSafeBrokerIntegrationAccounts } from "@/lib/integrations/brokerIntegrationAccounts"
 import { attachSyncViewsToBrokerAccounts } from "@/lib/integrations/tradovate/runTradovateAccountTradeSync"
 import { syncRithmicBrokerAccount } from "@/lib/integrations/rithmic/syncRithmicBrokerAccount"
+import { sanitizeRithmicSyncRequestBody } from "@/lib/integrations/rithmic/rithmicConnectSafeResponse"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -15,10 +16,18 @@ type RouteContext = {
   params: Promise<{ connectionId: string; mappingId: string }>
 }
 
-export async function POST(_req: Request, context: RouteContext) {
-  const user = await getRouteUser(_req)
+export async function POST(req: Request, context: RouteContext) {
+  const user = await getRouteUser(req)
   if (!user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  let transientPassword: string | null = null
+  try {
+    const raw = await req.json()
+    transientPassword = sanitizeRithmicSyncRequestBody(raw)?.password ?? null
+  } catch {
+    transientPassword = null
   }
 
   const { connectionId, mappingId } = await context.params
@@ -36,6 +45,7 @@ export async function POST(_req: Request, context: RouteContext) {
     connectionId,
     brokerIntegrationAccountId: mappingId,
     trigger: "manual",
+    transientPassword,
   })
 
   const accounts = await listSafeBrokerIntegrationAccounts(integrationDb, {

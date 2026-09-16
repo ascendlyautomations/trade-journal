@@ -86,8 +86,8 @@ final class NetworkingEnvironment {
         let requestInterceptor = CompositeRequestInterceptor(
             interceptors: [
                 LoggingRequestInterceptor(),
-                AuthenticationRequestInterceptor(accessTokenProvider: accessTokenProvider),
                 SupabaseHeadersInterceptor(anonKey: environment.supabaseAnonKey),
+                AuthenticationRequestInterceptor(accessTokenProvider: accessTokenProvider),
             ]
         )
         let responseInterceptor = CompositeResponseInterceptor(

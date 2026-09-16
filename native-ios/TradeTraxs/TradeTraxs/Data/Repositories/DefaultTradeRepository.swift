@@ -539,7 +539,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
 
     /// Mirror web `ACCOUNTS_SELECT` column order/meanings + owner insight columns + `user_id`.
     private static let accountsSelect =
-        "id,account_number,name,account_size,mode,category,is_active,can_add_trades,note,consistency,max_drawdown,daily_drawdown,profit_target,winning_days,winning_day_threshold,show_in_account_dropdowns,custom_public_status,payout_drawdown_behavior,user_id"
+        "id,account_number,name,account_size,mode,category,is_active,can_add_trades,note,consistency,max_drawdown,drawdown_type,daily_drawdown,profit_target,winning_days,winning_day_threshold,show_in_account_dropdowns,custom_public_status,payout_drawdown_behavior,user_id"
 
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
         // Mirror web `loadTradingAccounts` / `ACCOUNTS_SELECT` — `trades.account_id` → `accounts.id`.
@@ -573,7 +573,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     func createAccount(ownerID: ProfileID, draft: TradingAccountDraft) async throws -> TradingAccount {
-        let size = draft.sizeDigits.trimmingCharacters(in: .whitespacesAndNewlines)
+        let size = NumericInputFieldSupport.plainNumericString(from: draft.sizeDigits)
         guard !size.isEmpty else {
             throw AppError.unknown(message: "Account Value is required.")
         }
@@ -630,7 +630,10 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             _ = try? await supabase.database.update(
                 TradeLabels(
                     account_name: account.name,
-                    account_size: draft.sizeDigits.isEmpty ? nil : draft.sizeDigits
+                    account_size: {
+                        let plain = NumericInputFieldSupport.plainNumericString(from: draft.sizeDigits)
+                        return plain.isEmpty ? nil : plain
+                    }()
                 ),
                 table: "trades",
                 query: [SupabaseQuery.eq("account_id", id.rawValue)],

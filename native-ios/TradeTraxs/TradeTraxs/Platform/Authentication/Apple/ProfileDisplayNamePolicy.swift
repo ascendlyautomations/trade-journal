@@ -23,4 +23,11 @@ nonisolated enum ProfileDisplayNamePolicy {
         }
         return trimmed
     }
+
+    static func validateRequired(_ raw: String) -> String? {
+        guard normalized(raw) != nil else {
+            return "Enter your name."
+        }
+        return nil
+    }
 }

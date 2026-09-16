@@ -89,12 +89,13 @@ struct CreateStoryView: View {
         if showsEditor, let source = viewModel.sourceImage {
             StoryEditorView(
                 sourceImage: source,
+                isPosting: viewModel.isPostingStory,
                 onCancel: {
                     viewModel.clearImage()
                     photoItem = nil
                 },
-                onNext: { rendered in
-                    viewModel.submitRenderedStory(rendered)
+                onPostStory: { rendered in
+                    viewModel.postRenderedStory(rendered)
                 }
             )
         } else if viewModel.imagePreview == nil && viewModel.phase != .publishing {
@@ -153,6 +154,14 @@ struct CreateStoryView: View {
                     .aspectRatio(StoryCanvasState.canvasAspectRatio, contentMode: .fit)
                     .frame(maxWidth: 280)
                     .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+                            .stroke(
+                                colors.border.opacity(ExperienceOpacity.subtle),
+                                lineWidth: ExperienceBorder.hairline
+                            )
+                    }
+                    .experienceElevation(.low)
                     .accessibilityIdentifier("createStory.preview")
             }
 

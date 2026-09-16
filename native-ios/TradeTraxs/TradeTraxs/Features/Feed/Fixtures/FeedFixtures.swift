@@ -1,7 +1,7 @@
 import Foundation
 
 /// Mixed Home Feed samples for development / screenshots — reuses Profile section fixtures.
-enum FeedFixtures {
+nonisolated enum FeedFixtures {
     static let viewerID = ProfileID("dev.viewer")
 
     private static let avatarBase =
@@ -196,37 +196,6 @@ enum FeedFixtures {
         }
     }
 
-    static func seedDetailCache(_ cache: DetailPresentationCache, viewerID: ProfileID = viewerID) {
-        let peer = ProfileID("dev.follower.ada")
-        for trade in ProfileTradeFixtures.samples(owner: peer) {
-            cache.seed(trade)
-        }
-        for clip in ProfileClipFixtures.samples(owner: peer) {
-            cache.seed(clip)
-        }
-
-        let entries = timeline(viewerID: viewerID)
-        for entry in entries {
-            switch entry {
-            case .trade(_, let trade):
-                cache.seed(trade)
-            case .post(_, let post):
-                cache.seed(post)
-            case .clip(_, let reel):
-                cache.seed(reel)
-            case .achievement(_, let achievement):
-                cache.seed(achievement)
-            }
-        }
-
-        for profile in authorProfiles(including: viewerID) {
-            cache.seed(profile)
-        }
-
-        let storyItems = stories(viewerID: viewerID)
-        cache.seed(stories: storyItems)
-    }
-
     /// Fixture authors with avatars — seeded once into DetailPresentationCache (no N+1).
     static func authorProfiles(including viewerID: ProfileID) -> [Profile] {
         let owner = ProfileID("dev.fixture-owner")
@@ -261,5 +230,39 @@ enum FeedFixtures {
             }
             return copy
         }
+    }
+}
+
+extension FeedFixtures {
+    @MainActor
+    static func seedDetailCache(_ cache: DetailPresentationCache, viewerID: ProfileID = viewerID) {
+        let peer = ProfileID("dev.follower.ada")
+        for trade in ProfileTradeFixtures.samples(owner: peer) {
+            cache.seed(trade)
+        }
+        for clip in ProfileClipFixtures.samples(owner: peer) {
+            cache.seed(clip)
+        }
+
+        let entries = timeline(viewerID: viewerID)
+        for entry in entries {
+            switch entry {
+            case .trade(_, let trade):
+                cache.seed(trade)
+            case .post(_, let post):
+                cache.seed(post)
+            case .clip(_, let reel):
+                cache.seed(reel)
+            case .achievement(_, let achievement):
+                cache.seed(achievement)
+            }
+        }
+
+        for profile in authorProfiles(including: viewerID) {
+            cache.seed(profile)
+        }
+
+        let storyItems = stories(viewerID: viewerID)
+        cache.seed(stories: storyItems)
     }
 }

@@ -13,6 +13,7 @@ nonisolated struct PropFirmStatusSnapshot: Hashable, Sendable, Identifiable {
     var distanceToDD: Decimal
     var drawdownFloor: Decimal
     var maxDrawdownLimit: Decimal?
+    var drawdownType: PropFirmDrawdownType?
     var dailyLossUsed: Decimal
     var dailyLossLimit: Decimal?
     var profitTarget: Decimal?
@@ -112,6 +113,7 @@ nonisolated struct PropFirmStatusSnapshot: Hashable, Sendable, Identifiable {
             distanceToDD: metrics.cycleTrailing.distanceToDD,
             drawdownFloor: metrics.cycleTrailing.drawdownFloor,
             maxDrawdownLimit: rules.maxDrawdown,
+            drawdownType: rules.drawdownType,
             dailyLossUsed: metrics.cycleDaily.worstDailyLossUsed,
             dailyLossLimit: rules.dailyDrawdown,
             profitTarget: profitTarget,

@@ -6,6 +6,11 @@ struct TradeHistoryFilterSheet: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.dismiss) private var dismiss
 
+    @State private var pnlMinText = ""
+    @State private var pnlMaxText = ""
+    @State private var rrMinText = ""
+    @State private var rrMaxText = ""
+
     var body: some View {
         NavigationStack {
             Form {
@@ -28,14 +33,26 @@ struct TradeHistoryFilterSheet: View {
                     .pickerStyle(.segmented)
 
                     if pnlPresetBinding.wrappedValue == .minimum {
-                        TextField("Minimum P&L", text: pnlMinBinding)
+                        TextField("Minimum P&L", text: $pnlMinText.numericInput(.signedPnL))
                             .keyboardType(.numbersAndPunctuation)
                             .accessibilityLabel("Minimum P and L")
+                            .onChange(of: pnlMinText) { _, newValue in
+                                viewModel.draftFilters.pnlMin = NumericInputFieldSupport.parse(
+                                    newValue,
+                                    style: .signedPnL
+                                )
+                            }
                     }
                     if pnlPresetBinding.wrappedValue == .maximum {
-                        TextField("Maximum P&L", text: pnlMaxBinding)
+                        TextField("Maximum P&L", text: $pnlMaxText.numericInput(.signedPnL))
                             .keyboardType(.numbersAndPunctuation)
                             .accessibilityLabel("Maximum P and L")
+                            .onChange(of: pnlMaxText) { _, newValue in
+                                viewModel.draftFilters.pnlMax = NumericInputFieldSupport.parse(
+                                    newValue,
+                                    style: .signedPnL
+                                )
+                            }
                     }
                 }
 
@@ -48,14 +65,26 @@ struct TradeHistoryFilterSheet: View {
                     .pickerStyle(.segmented)
 
                     if rrPresetBinding.wrappedValue == .minimum {
-                        TextField("Minimum RR", text: rrMinBinding)
+                        TextField("Minimum RR", text: $rrMinText.numericInput(.riskReward))
                             .keyboardType(.numbersAndPunctuation)
                             .accessibilityLabel("Minimum risk reward")
+                            .onChange(of: rrMinText) { _, newValue in
+                                viewModel.draftFilters.rrMin = NumericInputFieldSupport.parse(
+                                    newValue,
+                                    style: .riskReward
+                                )
+                            }
                     }
                     if rrPresetBinding.wrappedValue == .maximum {
-                        TextField("Maximum RR", text: rrMaxBinding)
+                        TextField("Maximum RR", text: $rrMaxText.numericInput(.riskReward))
                             .keyboardType(.numbersAndPunctuation)
                             .accessibilityLabel("Maximum risk reward")
+                            .onChange(of: rrMaxText) { _, newValue in
+                                viewModel.draftFilters.rrMax = NumericInputFieldSupport.parse(
+                                    newValue,
+                                    style: .riskReward
+                                )
+                            }
                     }
                 }
 
@@ -123,6 +152,7 @@ struct TradeHistoryFilterSheet: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .scrollContentBackground(.hidden)
             .background(colors.groupedBackground.ignoresSafeArea())
             .experienceNavigationTitle("Filters")
@@ -136,11 +166,13 @@ struct TradeHistoryFilterSheet: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Reset") {
                         viewModel.resetDraftFilters()
+                        syncFilterNumericTextsFromDraft()
                     }
                     .accessibilityIdentifier("trades.filters.reset")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Apply") {
+                        applyNumericFiltersFromText()
                         viewModel.applyDraftFilters()
                         dismiss()
                     }
@@ -153,6 +185,7 @@ struct TradeHistoryFilterSheet: View {
                     kind: .primary,
                     accessibilityIdentifier: "trades.filters.applyBottom"
                 ) {
+                    applyNumericFiltersFromText()
                     viewModel.applyDraftFilters()
                     dismiss()
                 }
@@ -160,6 +193,9 @@ struct TradeHistoryFilterSheet: View {
             }
         }
         .accessibilityIdentifier("trades.filterSheet")
+        .onAppear {
+            syncFilterNumericTextsFromDraft()
+        }
     }
 
     private enum PnLPreset: Hashable {
@@ -191,6 +227,7 @@ struct TradeHistoryFilterSheet: View {
                 case .maximum:
                     viewModel.draftFilters.pnlMin = nil
                 }
+                syncFilterNumericTextsFromDraft()
             }
         )
     }
@@ -212,6 +249,7 @@ struct TradeHistoryFilterSheet: View {
                 case .maximum:
                     viewModel.draftFilters.rrMin = nil
                 }
+                syncFilterNumericTextsFromDraft()
             }
         )
     }
@@ -230,63 +268,25 @@ struct TradeHistoryFilterSheet: View {
         )
     }
 
-    private var pnlMinBinding: Binding<String> {
-        Binding(
-            get: {
-                guard let value = viewModel.draftFilters.pnlMin else { return "" }
-                return NSDecimalNumber(decimal: value).stringValue
-            },
-            set: { raw in
-                viewModel.draftFilters.pnlMin = Self.parseDecimal(raw)
-            }
-        )
+    private func syncFilterNumericTextsFromDraft() {
+        pnlMinText = viewModel.draftFilters.pnlMin.map {
+            NumericInputFieldSupport.seedEditingText(from: $0, style: .signedPnL)
+        } ?? ""
+        pnlMaxText = viewModel.draftFilters.pnlMax.map {
+            NumericInputFieldSupport.seedEditingText(from: $0, style: .signedPnL)
+        } ?? ""
+        rrMinText = viewModel.draftFilters.rrMin.map {
+            NumericInputFieldSupport.seedEditingText(from: $0, style: .riskReward)
+        } ?? ""
+        rrMaxText = viewModel.draftFilters.rrMax.map {
+            NumericInputFieldSupport.seedEditingText(from: $0, style: .riskReward)
+        } ?? ""
     }
 
-    private var pnlMaxBinding: Binding<String> {
-        Binding(
-            get: {
-                guard let value = viewModel.draftFilters.pnlMax else { return "" }
-                return NSDecimalNumber(decimal: value).stringValue
-            },
-            set: { raw in
-                viewModel.draftFilters.pnlMax = Self.parseDecimal(raw)
-            }
-        )
-    }
-
-    private var rrMinBinding: Binding<String> {
-        Binding(
-            get: {
-                guard let value = viewModel.draftFilters.rrMin else { return "" }
-                return NSDecimalNumber(decimal: value).stringValue
-            },
-            set: { raw in
-                viewModel.draftFilters.rrMin = Self.parseDecimal(raw)
-            }
-        )
-    }
-
-    private var rrMaxBinding: Binding<String> {
-        Binding(
-            get: {
-                guard let value = viewModel.draftFilters.rrMax else { return "" }
-                return NSDecimalNumber(decimal: value).stringValue
-            },
-            set: { raw in
-                viewModel.draftFilters.rrMax = Self.parseDecimal(raw)
-            }
-        )
-    }
-
-    private static func parseDecimal(_ raw: String) -> Decimal? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return Decimal(
-            string: trimmed
-                .replacingOccurrences(of: "$", with: "")
-                .replacingOccurrences(of: ",", with: "")
-                .replacingOccurrences(of: "R", with: "")
-                .replacingOccurrences(of: "r", with: "")
-        )
+    private func applyNumericFiltersFromText() {
+        viewModel.draftFilters.pnlMin = NumericInputFieldSupport.parse(pnlMinText, style: .signedPnL)
+        viewModel.draftFilters.pnlMax = NumericInputFieldSupport.parse(pnlMaxText, style: .signedPnL)
+        viewModel.draftFilters.rrMin = NumericInputFieldSupport.parse(rrMinText, style: .riskReward)
+        viewModel.draftFilters.rrMax = NumericInputFieldSupport.parse(rrMaxText, style: .riskReward)
     }
 }

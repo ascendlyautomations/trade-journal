@@ -4,6 +4,8 @@ import Foundation
 nonisolated enum AuthenticationError: Error, Sendable, Equatable {
     case notConfigured
     case invalidCredentials
+    /// Sign-up rejected because the email is already registered (GoTrue — not a password sign-in failure).
+    case emailAlreadyRegistered
     case invalidEmail
     case invalidPassword
     case sessionExpired

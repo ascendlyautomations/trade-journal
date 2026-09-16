@@ -223,7 +223,7 @@ nonisolated enum TradeRoomDiscoveryMode: String, CaseIterable, Hashable, Sendabl
 
     var emptyMessage: String {
         switch self {
-        case .yourRooms: return "Your rooms will appear here once you join one."
+        case .yourRooms: return "You haven't joined any rooms yet."
         case .suggested: return "No suggested rooms yet."
         case .popular: return "No public Trade Rooms to discover yet."
         }

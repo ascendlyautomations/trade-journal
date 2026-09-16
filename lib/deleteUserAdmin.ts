@@ -1,5 +1,6 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
 import Stripe from "stripe"
+import { revokeAppleSignInBeforeUserDelete } from "@/lib/appleSignInRevocation"
 import { deleteUserStorageFiles } from "@/lib/deleteUserStorage"
 
 export class AdminUserDeletionError extends Error {
@@ -1166,6 +1167,15 @@ export async function deleteUserAdmin(
   }
 
   if (authUser?.id) {
+    await runLoggedStep(targetUserId, "Apple Sign in revocation", async () => {
+      logStep({
+        targetUserId,
+        step: "Apple Sign in revocation",
+        table: "apple_sign_in_credentials",
+      })
+      await revokeAppleSignInBeforeUserDelete(supabase, targetUserId)
+    })
+
     await runLoggedStep(targetUserId, "Auth session revoke", async () => {
       logStep({
         targetUserId,

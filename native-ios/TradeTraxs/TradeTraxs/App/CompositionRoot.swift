@@ -249,6 +249,82 @@ enum CompositionRoot {
         )
     }
 
+    /// Explore Mode shell — local demo journal + guest public repository injection.
+    static func buildExploreDemoEnvironment(
+        configuration: AppConfiguration,
+        featureFlags: FeatureFlags,
+        lifecycle: AppLifecycleHandler,
+        themeManager: ThemeManager,
+        navigation: NavigationEnvironment,
+        authentication: AuthenticationEnvironment
+    ) -> AppEnvironment {
+        let networking = NetworkingEnvironment.make(
+            appConfiguration: configuration,
+            accessTokenProvider: { nil },
+            startReachabilityMonitoring: true
+        )
+        let data = DataEnvironment.make(
+            appConfiguration: configuration,
+            networking: networking,
+            session: DemoSessionProvider(),
+            authenticationManager: authentication.manager,
+            launchMode: .demoExplore
+        )
+        let dependencies = DependencyContainer.make(
+            configuration: configuration,
+            navigation: navigation,
+            networking: networking,
+            data: data,
+            authentication: authentication
+        )
+        let currentUserProfile = CurrentUserProfileStore(
+            profiles: data.profiles,
+            session: data.session,
+            imagePipeline: data.imagePipeline,
+            detailCache: data.detailCache,
+            rpc: data.rpc
+        )
+        let appBootstrapState = AppBootstrapState()
+        let profileOnboardingGate = ProfileOnboardingGateStore(
+            profiles: data.profiles,
+            session: data.session,
+            rpc: data.rpc,
+            detailCache: data.detailCache,
+            realtimeHub: data.realtimeHub,
+            profileStore: currentUserProfile
+        )
+        profileOnboardingGate.markCompleteForDemoExperience()
+        currentUserProfile.applyBootstrapResult(
+            profile: DemoCanonicalDataset.profile(),
+            stats: DemoCanonicalDataset.profileStats()
+        )
+        appBootstrapState.markReady()
+        let contentReportPresenter = MainActor.assumeIsolated {
+            ContentReportPresenter()
+        }
+        let pushNotifications = MainActor.assumeIsolated {
+            PushNotificationCenter(
+                tokenClient: LoginShellDevicePushTokenClient(),
+                navigation: navigation,
+                activityInbox: .shared,
+                badgeController: .shared,
+                routerFacade: NotificationRouterFacade(router: NotificationRouter())
+            )
+        }
+        return AppEnvironment(
+            configuration: configuration,
+            featureFlags: featureFlags,
+            dependencies: dependencies,
+            lifecycle: lifecycle,
+            themeManager: themeManager,
+            currentUserProfile: currentUserProfile,
+            appBootstrapState: appBootstrapState,
+            profileOnboardingGate: profileOnboardingGate,
+            pushNotifications: pushNotifications,
+            contentReportPresenter: contentReportPresenter
+        )
+    }
+
     // MARK: - Full production stack
 
     private static func buildProductionEnvironment(
@@ -335,6 +411,10 @@ enum CompositionRoot {
             profiles: data.profiles,
             backend: authBackend
         )
+        let appleRevocationClient = AppleSignInRevocationCredentialClient(transport: transport)
+        authentication.manager.appleRevocationCredentialHandler = { code in
+            await appleRevocationClient.register(authorizationCode: code)
+        }
         InboxMarkReadCoordinator.shared.configure(
             messages: data.messages,
             rooms: data.rooms,

@@ -1,8 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import {
-  encryptIntegrationCredentials,
-  type RithmicIntegrationCredentials,
-} from "@/lib/integrations/credentialEncryption"
 import { maskBrokerIdentifier } from "@/lib/integrations/rithmic/rithmicSyncLogger"
 import { upsertDiscoveredRithmicAccounts } from "@/lib/integrations/rithmic/upsertDiscoveredRithmicAccounts"
 import type { RithmicDiscoveredAccount } from "@/lib/integrations/rithmic/rithmicAccountModels"
@@ -15,7 +11,6 @@ export async function persistVerifiedRithmicUserConnection(
   params: {
     userId: string
     username: string
-    password: string
     systemName: string
     apiEnvironment: RithmicApiEnvironment
     uniqueUserId: string | null
@@ -24,16 +19,9 @@ export async function persistVerifiedRithmicUserConnection(
   }
 ): Promise<{ connectionId: string }> {
   const now = new Date().toISOString()
-  const credentials: RithmicIntegrationCredentials = {
-    kind: "rithmic",
-    username: params.username.trim(),
-    password: params.password,
-    systemName: params.systemName.trim(),
-    apiEnvironment: "test",
-  }
-  const ciphertext = encryptIntegrationCredentials(credentials)
+  const loginUsername = params.username.trim()
 
-  const maskedLogin = maskBrokerIdentifier(params.username.trim())
+  const maskedLogin = maskBrokerIdentifier(loginUsername)
   const providerUserId =
     params.uniqueUserId?.trim() ||
     `rithmic:${params.username.trim().toLowerCase()}`
@@ -46,7 +34,8 @@ export async function persistVerifiedRithmicUserConnection(
     provider_display_name: displayName,
     connection_label: connectionLabel,
     api_environment: params.apiEnvironment,
-    credentials_ciphertext: ciphertext,
+    credentials_ciphertext: null,
+    broker_login_username: loginUsername,
     access_token_expires_at: null,
     refresh_token_expires_at: null,
     connected_at: now,

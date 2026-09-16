@@ -272,6 +272,13 @@ final class MessagingDomain {
                let userID = await session.currentUserID
             {
                 let viewer = ProfileID(userID.rawValue)
+                if DemoExperienceSupport.usesExploreDemoInbox(viewer) {
+                    let result = try await MessagingBootstrap.loadHome(context)
+                    guard generation == loadGeneration else { return }
+                    apply(result)
+                    markLoaded(generation: generation)
+                    return
+                }
                 inboxStore.setPersistedViewerID(viewer)
 
                 if hydratedFromDisk, !forceNetwork {
@@ -527,6 +534,7 @@ final class MessagingDomain {
     // MARK: - Realtime
 
     private func startRealtimeIfNeeded() async {
+        guard !ExploreModeSupport.isActive else { return }
         guard let realtimeHub, let session, let viewerID = state.viewerID else { return }
         guard !MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) else { return }
 

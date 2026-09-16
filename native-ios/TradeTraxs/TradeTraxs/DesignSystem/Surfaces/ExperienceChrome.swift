@@ -16,6 +16,7 @@ struct ExperienceAppChromeModifier: ViewModifier {
             .toolbarBackground(colors.tabBarBackground, for: .tabBar)
             .toolbarBackgroundVisibility(.visible, for: .navigationBar, .tabBar)
             .modifier(ExperienceScrollEdgeChromeModifier())
+            .experienceKeyboardDismissOnTapOutside()
     }
 }
 

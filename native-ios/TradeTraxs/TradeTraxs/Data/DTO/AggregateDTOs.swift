@@ -114,6 +114,7 @@ nonisolated enum TradeDTO {
         /// Prop Firm Mode rule columns (web propfirm page select).
         var consistency: FlexibleNumber?
         var max_drawdown: FlexibleNumber?
+        var drawdown_type: String?
         var daily_drawdown: FlexibleNumber?
         var profit_target: FlexibleNumber?
         var winning_days: FlexibleNumber?
@@ -133,6 +134,7 @@ nonisolated enum TradeDTO {
         var note: String?
         var consistency: Double?
         var max_drawdown: Double?
+        var drawdown_type: String?
         var daily_drawdown: Double?
         var profit_target: Double?
         var winning_days: Double?

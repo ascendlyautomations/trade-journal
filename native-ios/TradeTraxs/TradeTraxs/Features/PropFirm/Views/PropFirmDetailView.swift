@@ -40,26 +40,29 @@ struct PropFirmDetailView: View {
     var body: some View {
         Group {
             if let snapshot = viewModel.snapshot {
+                let contentPlan = PropFirmDetailContentPlan(snapshot: snapshot)
                 ScrollView {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-                        PropFirmDetailHeroView(snapshot: snapshot)
+                        PropFirmDetailHeroView(snapshot: snapshot, contentPlan: contentPlan)
 
-                        let glance = PropFirmDetailPresentation.glanceLines(for: snapshot)
+                        let glance = contentPlan.glanceLines()
                         if !glance.isEmpty {
                             PropFirmAtAGlanceView(lines: glance)
                         }
 
-                        accountSizeChip(snapshot)
+                        if contentPlan.showsAccountSizeSection {
+                            accountSizeChip(snapshot)
+                        }
 
                         PropFirmEvaluationMetricsView(snapshot: snapshot)
 
-                        if snapshot.maxDrawdownLimit != nil || snapshot.drawdownFloor > 0 {
+                        if contentPlan.showsDrawdownSection {
                             PropFirmDrawdownVisualView(snapshot: snapshot)
                         }
 
                         PropFirmConsistencyVisualView(snapshot: snapshot)
 
-                        PropFirmTradingRulesView(snapshot: snapshot)
+                        PropFirmTradingRulesView(snapshot: snapshot, contentPlan: contentPlan)
 
                         if snapshot.isFunded {
                             PropFirmFundedLiveView(snapshot: snapshot)
@@ -72,11 +75,12 @@ struct PropFirmDetailView: View {
 
                         PropFirmDetailPayoutsView(
                             snapshot: snapshot,
+                            contentPlan: contentPlan,
                             onRecordPayout: { showsRecordPayout = true },
                             recordPayoutEnabled: recordPayoutData != nil
                         )
 
-                        let expandable = PropFirmDetailPresentation.expandableRules(for: snapshot)
+                        let expandable = contentPlan.expandableRules()
                         if !expandable.isEmpty {
                             PropFirmExpandableRulesView(rules: expandable)
                         }

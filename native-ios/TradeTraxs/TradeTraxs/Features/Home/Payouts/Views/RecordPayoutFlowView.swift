@@ -118,7 +118,7 @@ struct RecordPayoutFlowView: View {
                 .disabled(!viewModel.canAdvanceFromSetup || viewModel.phase == .recording)
             }
         }
-        .experienceKeyboardDoneToolbar()
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private var confirmStep: some View {
@@ -185,6 +185,7 @@ private struct RecordPayoutCurrencyField: View {
         TextField(isFocused ? "0" : "$0.00", text: fieldBinding)
             .keyboardType(.decimalPad)
             .focused($isFocused)
+            .experienceFormFocusSync($isFocused)
     }
 
     private var fieldBinding: Binding<String> {

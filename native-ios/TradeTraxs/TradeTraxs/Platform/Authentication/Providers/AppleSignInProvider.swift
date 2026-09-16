@@ -1,5 +1,6 @@
 @preconcurrency import AuthenticationServices
 import Foundation
+import OSLog
 import Synchronization
 import UIKit
 
@@ -27,18 +28,38 @@ nonisolated struct AppleSignInProvider: OAuthProviding {
     }
 
     func signIn(credential: AppleIDCredentialPayload) async throws -> AppleSignInResult {
-        let session = try await backend.signInWithIDToken(
-            provider: .apple,
-            idToken: credential.idToken,
-            nonce: credential.nonce
+#if DEBUG
+        AppLog.authentication.debug(
+            "[AppleAuth] credential.received identityToken.present=\(!credential.idToken.isEmpty, privacy: .public) nonce.present=\(credential.nonce != nil, privacy: .public) backend.type=\(String(describing: type(of: backend)), privacy: .public)"
         )
+        AppLog.authentication.debug("[AppleAuth] idTokenExchange.started provider=apple")
+#endif
+        let session: AuthenticationSession
+        do {
+            session = try await backend.signInWithIDToken(
+                provider: .apple,
+                idToken: credential.idToken,
+                nonce: credential.nonce
+            )
+        } catch {
+#if DEBUG
+            AppLog.authentication.debug(
+                "[AppleAuth] idTokenExchange.failed errorType=\(String(describing: type(of: error)), privacy: .public) error=\(String(describing: error), privacy: .public)"
+            )
+#endif
+            throw error
+        }
+#if DEBUG
+        AppLog.authentication.debug("[AppleAuth] session.established provider=\(session.provider.rawValue, privacy: .public)")
+#endif
         let hint = OAuthFirstLoginHint.normalized(
             fullName: credential.fullName,
             email: credential.email
         )
         return AppleSignInResult(
             session: session,
-            firstLoginHint: hint.hasContent ? hint : nil
+            firstLoginHint: hint.hasContent ? hint : nil,
+            authorizationCode: credential.authorizationCode
         )
     }
 
@@ -50,11 +71,14 @@ nonisolated struct AppleSignInProvider: OAuthProviding {
 nonisolated struct AppleSignInResult: Sendable {
     var session: AuthenticationSession
     var firstLoginHint: OAuthFirstLoginHint?
+    var authorizationCode: String?
 }
 
 nonisolated struct AppleIDCredentialPayload: Sendable, Equatable {
     var idToken: String
     var nonce: String?
+    /// Single-use code for server-side Apple token exchange (never persisted on device).
+    var authorizationCode: String?
     /// Only present on the user's first Apple authorization for this app.
     var fullName: String?
     /// Only present on the user's first Apple authorization when Apple shares it.
@@ -138,10 +162,14 @@ nonisolated final class SystemAppleCredentialSource: NSObject, AppleCredentialPr
             resumeState.0?.resume(throwing: AuthenticationError.providerTokenInvalid(.apple))
             return
         }
+        let authorizationCode = credential.authorizationCode.flatMap {
+            String(data: $0, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         resumeState.0?.resume(
             returning: AppleIDCredentialPayload(
                 idToken: idToken,
                 nonce: resumeState.1,
+                authorizationCode: authorizationCode?.isEmpty == false ? authorizationCode : nil,
                 fullName: credential.fullName?.formattedDisplayName(),
                 email: ProfileDisplayNamePolicy.normalized(credential.email)
             )

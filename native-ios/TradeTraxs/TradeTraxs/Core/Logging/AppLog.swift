@@ -17,4 +17,5 @@ nonisolated enum AppLog {
     static let realtime = Logger(subsystem: subsystem, category: "Realtime")
     static let notifications = Logger(subsystem: subsystem, category: "Notifications")
     static let general = Logger(subsystem: subsystem, category: "General")
+    static let profilePhoto = Logger(subsystem: subsystem, category: "ProfilePhoto")
 }

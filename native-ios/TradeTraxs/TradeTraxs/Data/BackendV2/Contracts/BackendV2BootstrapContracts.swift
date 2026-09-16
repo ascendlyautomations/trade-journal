@@ -132,6 +132,7 @@ nonisolated struct DashboardAccountV1: Codable, Sendable, Equatable {
     var note: String?
     var consistency: PostgresFlexibleDouble?
     var max_drawdown: PostgresFlexibleDouble?
+    var drawdown_type: String?
     var daily_drawdown: PostgresFlexibleDouble?
     var profit_target: PostgresFlexibleDouble?
     var winning_days: PostgresFlexibleDouble?
@@ -428,6 +429,7 @@ nonisolated struct PropFirmAccountWireV1: Codable, Sendable, Equatable {
     var mode: String?
     var consistency: PostgresFlexibleDouble?
     var max_drawdown: PostgresFlexibleDouble?
+    var drawdown_type: String?
     var daily_drawdown: PostgresFlexibleDouble?
     var profit_target: PostgresFlexibleDouble?
     var winning_days: PostgresFlexibleDouble?
@@ -454,6 +456,7 @@ nonisolated struct PropFirmAccountWireV1: Codable, Sendable, Equatable {
             custom_public_status: nil,
             consistency: consistency.map { FlexibleNumber($0.decimal) },
             max_drawdown: max_drawdown.map { FlexibleNumber($0.decimal) },
+            drawdown_type: drawdown_type,
             daily_drawdown: daily_drawdown.map { FlexibleNumber($0.decimal) },
             profit_target: profit_target.map { FlexibleNumber($0.decimal) },
             winning_days: winning_days.map { FlexibleNumber($0.decimal) },

@@ -12,7 +12,7 @@ struct ExploreTraderListRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: ExperienceSpacing.md) {
-            ExploreProfileAvatarView(profile: profile, imagePipeline: imagePipeline, size: 40)
+            ExploreProfileAvatarView(profile: profile, imagePipeline: imagePipeline, diameter: 40)
             VStack(alignment: .leading, spacing: 2) {
                 Text(profile.displayName)
                     .experienceStyle(.subheadline, color: colors.primaryText)

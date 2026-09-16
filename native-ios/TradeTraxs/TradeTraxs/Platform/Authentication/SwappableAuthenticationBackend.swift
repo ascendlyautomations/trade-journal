@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import os
 
 /// Allows installing the live Supabase backend after logged-out shell bootstrap.
@@ -13,7 +14,13 @@ final class SwappableAuthenticationBackend: AuthenticationBackend, @unchecked Se
     func install(_ backend: any AuthenticationBackend) {
         lock.lock()
         self.backend = backend
+        let installedType = String(describing: type(of: backend))
         lock.unlock()
+#if DEBUG
+        AppLog.authentication.debug(
+            "[AppleAuth] swappable.install backend=\(installedType, privacy: .public) swappable=\(ObjectIdentifier(self).debugDescription, privacy: .public)"
+        )
+#endif
     }
 
     private func current() -> any AuthenticationBackend {
@@ -48,6 +55,37 @@ final class SwappableAuthenticationBackend: AuthenticationBackend, @unchecked Se
 
     func updateUserMetadata(accessToken: String, metadata: [String: String]) async throws {
         try await current().updateUserMetadata(accessToken: accessToken, metadata: metadata)
+    }
+
+    func signInWithIDToken(
+        provider: AuthenticationProviderKind,
+        idToken: String,
+        nonce: String?
+    ) async throws -> AuthenticationSession {
+        let active = current()
+#if DEBUG
+        AppLog.authentication.debug(
+            "[AppleAuth] idTokenExchange.forward provider=\(provider.rawValue, privacy: .public) activeBackend=\(String(describing: type(of: active)), privacy: .public) swappable=\(ObjectIdentifier(self).debugDescription, privacy: .public)"
+        )
+#endif
+        do {
+            let session = try await active.signInWithIDToken(
+                provider: provider,
+                idToken: idToken,
+                nonce: nonce
+            )
+#if DEBUG
+            AppLog.authentication.debug("[AppleAuth] idTokenExchange.succeeded provider=\(provider.rawValue, privacy: .public)")
+#endif
+            return session
+        } catch {
+#if DEBUG
+            AppLog.authentication.debug(
+                "[AppleAuth] idTokenExchange.failed errorType=\(String(describing: type(of: error)), privacy: .public) error=\(String(describing: error), privacy: .public)"
+            )
+#endif
+            throw error
+        }
     }
 }
 

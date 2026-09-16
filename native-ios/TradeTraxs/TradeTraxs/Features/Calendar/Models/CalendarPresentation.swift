@@ -12,6 +12,18 @@ enum CalendarDisplayScope: String, CaseIterable, Sendable {
     case year
 }
 
+nonisolated enum CalendarPresentation {
+    /// Max visible characters for the Calendar toolbar account trigger.
+    static let compactAccountSelectorMaxLength = 10
+
+    /// Truncates long account labels so the centered Calendar title is not crowded.
+    static func compactAccountSelectorDisplay(_ title: String) -> String {
+        let limit = compactAccountSelectorMaxLength
+        guard title.count > limit else { return title }
+        return String(title.prefix(limit - 1)) + "…"
+    }
+}
+
 nonisolated enum CalendarFormatting {
     /// Compact day-cell P&L (`+$842`, `-$1.2K`).
     static func compactPnL(_ value: Decimal) -> String {

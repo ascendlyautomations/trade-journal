@@ -34,6 +34,8 @@ struct TradeImportReminderDestinationView: View {
                     accounts: accounts,
                     onClose: onClose
                 )
+            case .needsAccountLinking:
+                brokerLinkingPrompt
             case .noBroker:
                 tradeEntryFallback
             case .failed(let message):
@@ -55,10 +57,36 @@ struct TradeImportReminderDestinationView: View {
             guard shouldOpen else { return }
             viewModel.shouldOpenTradeEntryHub = false
             onClose()
-            TradeEntryLaunchIntent.prepare(hubTab: .importTrades)
+            TradeEntryLaunchIntent.prepare(hubTab: .csv)
             navigation.present(fullScreen: .addTrade)
         }
         .accessibilityIdentifier("tradeImportReminder.destination")
+    }
+
+    private var brokerLinkingPrompt: some View {
+        List {
+            Section {
+                Text(
+                    "Your broker is connected. Link a discovered broker account to a TradeTraxs trading account to import trades."
+                )
+                .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+            Section {
+                Button {
+                    onClose()
+                    navigation.open(.settingsStack([.home, .tradingAccounts, .brokerIntegrations]))
+                } label: {
+                    Label("Continue in Broker Integrations", systemImage: "link")
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .experienceNavigationTitle("Import Trades")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close", action: onClose)
+            }
+        }
     }
 
     private var tradeEntryFallback: some View {
@@ -98,6 +126,7 @@ final class TradeImportReminderDestinationViewModel {
     enum Phase: Equatable {
         case loading
         case broker([BrokerImportEligibilityTarget])
+        case needsAccountLinking
         case noBroker
         case failed(String)
     }
@@ -115,18 +144,25 @@ final class TradeImportReminderDestinationViewModel {
         self.session = session
         self.eligibilityStore = eligibilityStore
         if eligibilityStore.isReady {
-            let accounts = eligibilityStore.linkedAccounts
-            if accounts.isEmpty {
-                phase = .noBroker
-            } else {
-                phase = .broker(accounts)
-            }
+            applyCachedPhase(from: eligibilityStore)
+        }
+    }
+
+    private func applyCachedPhase(from store: BrokerImportEligibilityStore) {
+        if store.canImportImmediately, !store.linkedAccounts.isEmpty {
+            phase = .broker(store.linkedAccounts)
+        } else if store.needsAccountLinking || store.hasSupportedConnection {
+            phase = .needsAccountLinking
+        } else {
+            phase = .noBroker
         }
     }
 
     func resolve() async {
         if case .broker = phase {
             // Show cached accounts immediately; refresh in background below.
+        } else if case .needsAccountLinking = phase {
+            // Keep linking prompt while refreshing.
         } else {
             phase = .loading
         }
@@ -136,15 +172,18 @@ final class TradeImportReminderDestinationViewModel {
         }
         do {
             let eligibility = try await eligibilityStore.fetchEligibility()
-            if eligibility.linkedAccounts.isEmpty {
-                phase = .noBroker
-            } else {
+            if eligibility.resolvedCanImportImmediately, !eligibility.linkedAccounts.isEmpty {
                 phase = .broker(eligibility.linkedAccounts)
+            } else if eligibility.resolvedNeedsAccountLinking {
+                phase = .needsAccountLinking
+            } else if eligibility.resolvedHasSupportedConnection {
+                phase = .needsAccountLinking
+            } else {
+                phase = .noBroker
             }
         } catch {
-            if case .broker = phase {
-                return
-            }
+            if case .broker = phase { return }
+            if case .needsAccountLinking = phase { return }
             phase = .failed(UserFacingError.message(for: error))
         }
     }

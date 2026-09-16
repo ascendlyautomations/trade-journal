@@ -153,6 +153,13 @@ struct DashboardHomeView: View {
             viewModel.handleAccountMutation()
             brokerImportEligibilityStore.refresh(fromUserAction: false)
         }
+        .onChange(of: BrokerIntegrationMutationStore.shared.revision) { _, _ in
+            brokerImportEligibilityStore.refresh(fromUserAction: false)
+        }
+        .onChange(of: tabIsActive) { _, isActive in
+            guard isActive, brokerImportEligibilityStore.isReady else { return }
+            brokerImportEligibilityStore.refresh(fromUserAction: false)
+        }
         .onChange(of: viewModel.summary?.tradeCount) { _, _ in
             revealContentIfNeeded()
         }
@@ -415,7 +422,7 @@ struct DashboardHomeView: View {
             gettingStartedStore.loadIfNeeded()
             dailyCheckInStore.loadIfNeeded()
             brokerImportEligibilityStore.loadIfNeeded()
-            if let data {
+            if let data, !DemoExperienceSupport.skipsAuthenticatedViewerServices {
                 activityStore.ensureUnreadBootstrap(
                     notifications: data.notifications,
                     session: data.session,

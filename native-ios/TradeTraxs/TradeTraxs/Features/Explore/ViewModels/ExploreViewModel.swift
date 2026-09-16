@@ -184,6 +184,10 @@ final class ExploreViewModel {
 
     func toggleFollow(_ trader: ExploreTraderSuggestion) {
         guard let viewerID, viewerID != trader.id else { return }
+        if AppLaunchController.shared.isDemoExperienceActive {
+            DemoModeAuthGatePresenter.shared.requireAuthentication()
+            return
+        }
         guard !inFlightFollow.contains(trader.id) else { return }
         if isFollowing(trader) {
             ExperienceHaptics.play(.warning)
@@ -716,6 +720,6 @@ final class ExploreViewModel {
     }
 
     private func isLocalDevelopment(_ id: ProfileID) -> Bool {
-        id.rawValue.hasPrefix("dev.")
+        DemoExperienceSupport.usesLocalBundledSocialData(id)
     }
 }

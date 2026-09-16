@@ -116,6 +116,7 @@ struct CreateComposerMultilineField: View {
                 .applyOptionalAccessibilityIdentifier(accessibilityIdentifier)
                 .applyOptionalAccessibilityLabel(accessibilityLabel)
         }
+        .experienceFormFocusSync($isFocused)
     }
 }
 

@@ -104,12 +104,33 @@ nonisolated struct UserFacingError: Sendable, Equatable {
                 message: "Check your inbox for a confirmation link, then sign in.",
                 action: .dismiss
             )
-        case .notConfigured, .providerUnavailable:
+        case .notConfigured:
             return UserFacingError(
                 title: "Unavailable",
                 message: "This sign-in method is not available yet.",
                 action: .dismiss
             )
+        case .providerUnavailable(let provider):
+            switch provider {
+            case .apple:
+                return UserFacingError(
+                    title: "Sign in failed",
+                    message: "We couldn't complete Apple sign-in. Please try again.",
+                    action: .retry
+                )
+            case .google:
+                return UserFacingError(
+                    title: "Sign in failed",
+                    message: "We couldn't complete Google sign-in. Please try again.",
+                    action: .retry
+                )
+            default:
+                return UserFacingError(
+                    title: "Unavailable",
+                    message: "This sign-in method is not available yet.",
+                    action: .dismiss
+                )
+            }
         case .providerMisconfigured(_):
             return UserFacingError(
                 title: "Sign in unavailable",

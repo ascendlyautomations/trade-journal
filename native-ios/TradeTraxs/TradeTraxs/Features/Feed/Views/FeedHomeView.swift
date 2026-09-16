@@ -22,7 +22,8 @@ struct FeedHomeView: View {
 
     init(
         data: DataEnvironment,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        currentUserProfile: CurrentUserProfileStore? = nil
     ) {
         _playbackCoordinator = State(
             initialValue: FeedVideoPlaybackCoordinator(storage: data.objectStorage)
@@ -40,7 +41,8 @@ struct FeedHomeView: View {
                 navigationCoordinator: navigationCoordinator,
                 realtimeHub: data.realtimeHub,
                 rpc: data.rpc,
-                messages: data.messages
+                messages: data.messages,
+                currentUserProfile: currentUserProfile
             )
         )
         self.imagePipeline = data.imagePipeline

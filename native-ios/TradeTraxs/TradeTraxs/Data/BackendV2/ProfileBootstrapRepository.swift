@@ -87,13 +87,15 @@ enum ProfileBootstrapLoader {
         let flightKey = BackendV2FlightKeys.profile(profileID: profileID.rawValue)
         let bootstrap: ProfileBootstrapV1
         do {
-            let data = try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
-                let repo = ProfileRpcBootstrapRepository(rpc: rpc)
-                let value = try await repo.loadProfileBootstrap(
-                    profileID: profileID.rawValue,
-                    username: username
-                )
-                return try JSONEncoder().encode(value)
+            let data = try await BootstrapTransportTimeout.run {
+                try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
+                    let repo = ProfileRpcBootstrapRepository(rpc: rpc)
+                    let value = try await repo.loadProfileBootstrap(
+                        profileID: profileID.rawValue,
+                        username: username
+                    )
+                    return try JSONEncoder().encode(value)
+                }
             }
             bootstrap = try JSONDecoder().decode(ProfileBootstrapV1.self, from: data)
             try bootstrap.validateContractVersion()

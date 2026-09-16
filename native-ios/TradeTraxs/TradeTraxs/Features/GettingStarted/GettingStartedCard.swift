@@ -46,15 +46,18 @@ struct GettingStartedCard: View {
             }
             .accessibilityLabel(store.isCollapsed ? "Expand Getting Started" : "Collapse Getting Started")
 
-            Button {
-                store.dismissForSession()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(colors.secondaryText)
-                    .frame(width: 28, height: 28)
+            if store.canPermanentlyDismiss {
+                Button {
+                    store.dismissForSession()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(colors.secondaryText)
+                        .frame(width: 28, height: 28)
+                }
+                .accessibilityLabel("Dismiss Getting Started")
+                .accessibilityIdentifier("gettingStarted.dismiss")
             }
-            .accessibilityLabel("Dismiss Getting Started for this session")
         }
     }
 

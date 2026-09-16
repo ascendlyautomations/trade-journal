@@ -101,6 +101,38 @@ final class GettingStartedChecklistTests: XCTestCase {
         )
     }
 
+    func testDashboardShowsCompletedChecklistUntilDismissed() {
+        let signals = GettingStartedSignals(
+            onboardingCompleted: true,
+            hasSeenGettingStartedIntro: true,
+            hasSeenOnboardingCompletePopup: true,
+            tradeCount: 5,
+            profilePostCount: 1,
+            followCount: 2,
+            hasEverJoinedOtherRoom: true,
+            hasPublicTrade: true,
+            firstPrivateTradeID: TradeID("trade-1")
+        )
+        let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
+        XCTAssertTrue(progress.allComplete)
+        XCTAssertTrue(
+            GettingStartedChecklistPolicy.shouldShowDashboardCard(
+                userID: "user-1",
+                signals: signals,
+                progress: progress,
+                sessionDismissed: false
+            )
+        )
+        XCTAssertFalse(
+            GettingStartedChecklistPolicy.shouldShowDashboardCard(
+                userID: "user-1",
+                signals: signals,
+                progress: progress,
+                sessionDismissed: true
+            )
+        )
+    }
+
     func testIntroPopupDisabled() {
         XCTAssertFalse(
             GettingStartedChecklistPolicy.shouldShowIntroPopup(

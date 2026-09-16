@@ -110,6 +110,14 @@ final class TradeRoomsHomeViewModel {
         Set(items.map(\.id))
     }
 
+    var suggestedDiscoverableRooms: [ExploreRoomSuggestion] {
+        filteredDiscoverable(from: suggestedItems, section: "suggested")
+    }
+
+    var popularDiscoverableRooms: [ExploreRoomSuggestion] {
+        filteredDiscoverable(from: popularItems, section: "popular")
+    }
+
     var discoverableRooms: [ExploreRoomSuggestion] {
         let source = discoveryMode == .popular ? popularItems : suggestedItems
         let filtered = source.filter { !joinedRoomIDs.contains($0.id) }
@@ -143,7 +151,10 @@ final class TradeRoomsHomeViewModel {
     }
 
     var hasDiscoverableRooms: Bool {
-        !displayedDiscoveryRooms.isEmpty
+        !items.isEmpty
+            || !yourRoomsItems.isEmpty
+            || !suggestedDiscoverableRooms.isEmpty
+            || !popularDiscoverableRooms.isEmpty
     }
 
     var showsYourRoomsEmptyState: Bool {
@@ -419,10 +430,30 @@ final class TradeRoomsHomeViewModel {
     private func applyInitialDiscoveryModeIfNeeded() {
         guard !didApplyInitialDiscoveryMode else { return }
         didApplyInitialDiscoveryMode = true
-        discoveryMode = .yourRooms
+        if items.isEmpty, yourRoomsItems.isEmpty {
+            discoveryMode = .suggested
+        } else {
+            discoveryMode = .yourRooms
+        }
         #if DEBUG
         TradeRoomsHomeBootstrapProbe.initialCategory(discoveryMode)
         #endif
+    }
+
+    private func filteredDiscoverable(
+        from source: [ExploreRoomSuggestion],
+        section: String
+    ) -> [ExploreRoomSuggestion] {
+        let filtered = source.filter { !joinedRoomIDs.contains($0.id) }
+        #if DEBUG
+        RoomDiscoveryProbe.logClientFilter(
+            section: section,
+            before: source.count,
+            after: filtered.count,
+            reason: "alreadyJoinedInInbox"
+        )
+        #endif
+        return filtered
     }
 
     private func loadHomeBootstrap(forceNetwork: Bool) async {
@@ -440,7 +471,7 @@ final class TradeRoomsHomeViewModel {
             return
         }
 
-        if MessagesInboxSupport.isLocalDevelopmentProfile(sessionViewer) {
+        if DemoExperienceSupport.usesLocalBundledSocialData(sessionViewer) {
             let bootstrap: TradeRoomsHomeBootstrap
             if inboxStore.rooms.isEmpty {
                 bootstrap = TradeRoomsHomeBootstrap(

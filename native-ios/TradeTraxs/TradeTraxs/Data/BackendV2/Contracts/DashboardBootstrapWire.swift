@@ -170,6 +170,7 @@ nonisolated extension DashboardAccountWireV1 {
         if let rules = account.propFirmRules {
             consistency = rules.consistencyPercent.map { PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue) }
             max_drawdown = rules.maxDrawdown.map { PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue) }
+            drawdown_type = rules.drawdownType?.rawValue
             daily_drawdown = rules.dailyDrawdown.map { PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue) }
             profit_target = rules.profitTarget.map { PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue) }
             winning_days = rules.winningDaysRequired.map { PostgresFlexibleDouble(Double($0)) }
@@ -201,6 +202,7 @@ nonisolated struct DashboardAccountWireV1: Codable, Sendable, Equatable {
     var note: String?
     var consistency: PostgresFlexibleDouble?
     var max_drawdown: PostgresFlexibleDouble?
+    var drawdown_type: String?
     var daily_drawdown: PostgresFlexibleDouble?
     var profit_target: PostgresFlexibleDouble?
     var winning_days: PostgresFlexibleDouble?
@@ -231,6 +233,7 @@ nonisolated struct DashboardAccountWireV1: Codable, Sendable, Equatable {
             custom_public_status: custom_public_status,
             consistency: consistency.map { FlexibleNumber($0.decimal) },
             max_drawdown: max_drawdown.map { FlexibleNumber($0.decimal) },
+            drawdown_type: drawdown_type,
             daily_drawdown: daily_drawdown.map { FlexibleNumber($0.decimal) },
             profit_target: profit_target.map { FlexibleNumber($0.decimal) },
             winning_days: winning_days.map { FlexibleNumber($0.decimal) },

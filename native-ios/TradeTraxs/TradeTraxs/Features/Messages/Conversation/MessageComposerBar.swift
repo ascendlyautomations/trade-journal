@@ -41,6 +41,7 @@ struct MessageComposerBar: View {
             guard let completed = voiceRecorder.completedRecording else { return }
             onSendVoice?(completed.url, completed.duration)
         }
+        .experienceFormFocusSync($focused)
     }
 
     private var composerBar: some View {

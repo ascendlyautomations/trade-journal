@@ -227,6 +227,14 @@ final class CurrentUserProfileStore {
             return
         }
 
+        if let uiImage = DemoExploreBundledAvatar.uiImage(for: reference) {
+            avatarUIImage = uiImage
+            avatarImage = Image(uiImage: uiImage)
+            tabBarAvatarUIImage = Self.makeTabBarAvatar(from: uiImage)
+            loadedAvatarKey = reference.id
+            return
+        }
+
         do {
             let data = try await imagePipeline.data(
                 for: ImageRequest(
@@ -333,6 +341,26 @@ enum ProfileDisplay {
 
         guard !parts.isEmpty else { return nil }
         return parts.joined(separator: " · ")
+    }
+
+    /// Suggested Traders card — `Futures · 2y 2m` (type + compact started-trading duration).
+    static func suggestedTraderExperienceLine(for profile: Profile, now: Date = Date()) -> String? {
+        let typeLabel = profile.traderType?.rawValue
+        let duration = tradingExperience(from: profile.startedTradingAt, now: now)
+            .flatMap { compact in
+                compact == "0y 0m" ? nil : compact
+            }
+
+        switch (typeLabel, duration) {
+        case let (type?, phrase?):
+            return "\(type) · \(phrase)"
+        case let (type?, nil):
+            return type
+        case let (nil, phrase?):
+            return phrase
+        case (nil, nil):
+            return nil
+        }
     }
 
     /// Web `getExperience` — `"3y 2m"` from `started_trading`.

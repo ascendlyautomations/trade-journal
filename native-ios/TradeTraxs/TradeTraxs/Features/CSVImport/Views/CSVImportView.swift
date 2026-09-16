@@ -80,30 +80,36 @@ struct CSVImportView: View {
     }
 
     private var chooseFile: some View {
-        VStack(spacing: ExperienceSpacing.lg) {
-            Spacer()
-            Image(systemName: "doc.text")
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(colors.accent)
-            Text("Import broker CSV trades")
-                .experienceStyle(.title, color: colors.primaryText)
-                .multilineTextAlignment(.center)
-            Text("Choose a Tradovate, TradeZella, NinjaTrader-style, or generic CSV. TradeTraxs detects the format and fills in as much as possible.")
-                .experienceStyle(.body, color: colors.secondaryText)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, ExperienceSpacing.lg)
-
-            ExperienceButton(
-                title: "Choose CSV File",
-                kind: .primary,
-                accessibilityIdentifier: "csvImport.chooseFile"
-            ) {
-                showsFileImporter = true
+        Form {
+            Section {
+                Text("Import trades from a supported CSV file.")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            } header: {
+                Text("Import CSV")
             }
-            .padding(.horizontal, ExperienceSpacing.lg)
 
-            Spacer()
+            Section {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    showsFileImporter = true
+                } label: {
+                    SettingsNavigationRow(
+                        title: "Choose CSV File",
+                        systemImage: "doc.text"
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("csvImport.chooseFile")
+            }
+
+            Section {
+                Text("Tradovate, TradeZella, NinjaTrader-style, and generic CSV exports are supported.")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
         }
+        .listSectionSpacing(ExperienceSpacing.xs)
+        .scrollDismissesKeyboard(.interactively)
+        .scrollContentBackground(.hidden)
     }
 }
 
@@ -116,7 +122,7 @@ private struct CSVImportChromeModifier: ViewModifier {
             content
         } else {
             content
-                .experienceNavigationTitle("Import Trades")
+                .experienceNavigationTitle("Import CSV")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Close", action: onClose)

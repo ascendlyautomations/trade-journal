@@ -3,6 +3,21 @@ import XCTest
 
 @MainActor
 final class AuthenticationExperienceTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        AuthLandingInstallState.shared.recordLoggedOutAuthLandingPresented()
+    }
+
+    func testFreshInstallDefaultsToCreateAccountMode() {
+        let suiteName = "AuthLandingInstallStateTests"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let installState = AuthLandingInstallState(defaults: defaults)
+        XCTAssertEqual(installState.initialLoginMode, .signUp)
+        installState.recordLoggedOutAuthLandingPresented()
+        XCTAssertEqual(installState.initialLoginMode, .signIn)
+    }
+
     func testLoginViewModelRejectsEmptySubmit() async {
         let auth = CompositionRoot.bootstrapAuthenticationForTests()
         let viewModel = LoginViewModel(
@@ -11,6 +26,7 @@ final class AuthenticationExperienceTests: XCTestCase {
         )
         XCTAssertFalse(viewModel.canSubmit)
         await viewModel.submit()
+        XCTAssertEqual(viewModel.errorMessage, "Enter your email address.")
         XCTAssertFalse(auth.manager.state.isAuthenticated)
     }
 
@@ -96,7 +112,6 @@ final class AuthenticationExperienceTests: XCTestCase {
             authenticationCoordinator: auth.coordinator,
             allowsDevelopmentBypass: false
         )
-        XCTAssertFalse(viewModel.showsDevelopmentContinue)
         await viewModel.continueAsDevelopment()
         XCTAssertFalse(auth.manager.state.isAuthenticated)
     }

@@ -231,7 +231,9 @@ struct TradeDetailView: View {
             },
             onAddToVault: isTradeVaulted ? nil : { openVaultSheet() },
             onManageInVault: isTradeVaulted ? { openVaultSheet() } : nil,
+            editTitle: "Edit Trade",
             deleteTitle: "Delete Trade",
+            onEdit: { viewModel.editTrade() },
             onDelete: {
                 ExperienceHaptics.play(.warning)
                 showsDeleteConfirm = true
@@ -257,9 +259,7 @@ struct TradeDetailView: View {
     private func journalTradeContent(_ trade: Trade) -> some View {
         TradeDetailCompactHeader(
             trade: trade,
-            accountLine: viewModel.accountSummaryLine,
-            showsEdit: viewModel.isOwner,
-            onEdit: viewModel.isOwner ? { viewModel.editTrade() } : nil
+            accountLine: viewModel.accountSummaryLine
         )
         .accessibilityIdentifier("detail.trade.headline")
 

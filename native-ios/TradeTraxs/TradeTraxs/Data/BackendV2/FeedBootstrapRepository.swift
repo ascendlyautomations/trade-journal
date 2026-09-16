@@ -83,7 +83,8 @@ enum FeedBootstrapLoader {
         achievements: any AchievementRepository,
         detailCache: DetailPresentationCache,
         forceNetwork: Bool,
-        allowNetwork: Bool = true
+        allowNetwork: Bool = true,
+        guestPublicMode: Bool = false
     ) async throws -> (
         entries: [FeedTimelineEntry],
         nextCursor: String?,
@@ -112,7 +113,9 @@ enum FeedBootstrapLoader {
                 knownEmpty: cached.entries.isEmpty
             )
             #endif
-            await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
+            if !guestPublicMode {
+                await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
+            }
             return (cached.entries, cached.nextCursor, cached.stories, [:], [], [])
         }
 
@@ -154,8 +157,9 @@ enum FeedBootstrapLoader {
             let data = try await BootstrapTransportTimeout.run {
                 try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
                     let repo = FeedRpcBootstrapRepository(rpc: rpc)
+                    let rpcScope = guestPublicMode ? FeedScope.global.rawValue : scope.rawValue
                     let value = try await repo.loadFeedBootstrap(
-                        scope: scope.rawValue,
+                        scope: rpcScope,
                         contentFilter: contentFilter.rpcValue,
                         cursor: cursor,
                         limit: limit
@@ -164,11 +168,23 @@ enum FeedBootstrapLoader {
                 }
             }
             bootstrap = try JSONDecoder().decode(FeedBootstrapV1.self, from: data)
+            #if DEBUG
+            if guestPublicMode {
+                ExploreGuestFeedDiagnostics.logSuccess(rpc: rpcName)
+            }
+            #endif
         } catch {
+            #if DEBUG
+            if guestPublicMode {
+                ExploreGuestFeedDiagnostics.logFailure(rpc: rpcName, error: error)
+            }
+            #endif
             if cursor == nil,
                let cached = FeedSessionStore.shared.restore(key: cacheKey)
             {
-                await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
+                if !guestPublicMode {
+                    await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
+                }
                 return (cached.entries, cached.nextCursor, cached.stories, [:], [], [])
             }
             if BackendV2RpcCompat.isRpcUnavailable(error, rpcName: rpcName) {
@@ -186,10 +202,12 @@ enum FeedBootstrapLoader {
                 .filter { !$0.isEmpty }
                 .map { ProfileID($0) }
         )
-        FollowMutationCoordinator.shared.seedViewerFollowingRelationships(
-            ids: followingIDs,
-            viewer: viewerID
-        )
+        if !guestPublicMode {
+            FollowMutationCoordinator.shared.seedViewerFollowingRelationships(
+                ids: followingIDs,
+                viewer: viewerID
+            )
+        }
         #if DEBUG
         FeedProgressiveRenderProbe.recordBootstrapDecoded(count: applied.items.count)
         #endif
@@ -223,11 +241,13 @@ enum FeedBootstrapLoader {
             #endif
         }
 
+        let engagement = guestPublicMode ? [:] : applied.engagementByTarget
+
         return (
             entries,
             applied.nextCursor,
             applied.stories,
-            applied.engagementByTarget,
+            engagement,
             pendingHydrationItems,
             feedItemOrder
         )

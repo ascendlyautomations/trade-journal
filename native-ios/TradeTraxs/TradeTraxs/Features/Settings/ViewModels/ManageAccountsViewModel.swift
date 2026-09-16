@@ -177,7 +177,9 @@ final class ManageAccountsViewModel {
     func draft(from account: TradingAccount) -> TradingAccountDraft {
         TradingAccountDraft(
             name: account.name,
-            sizeDigits: account.size.map { NSDecimalNumber(decimal: $0.amount).stringValue } ?? "",
+            sizeDigits: account.size.map {
+                NumericInputFieldSupport.seedEditingText(from: $0.amount, style: .accountSize)
+            } ?? "",
             accountNumber: account.accountNumber ?? "",
             category: account.category,
             mode: account.mode,

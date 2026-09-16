@@ -11,8 +11,6 @@ private enum TradeDetailLayout {
 struct TradeDetailCompactHeader: View {
     let trade: Trade
     var accountLine: String?
-    var showsEdit: Bool = false
-    var onEdit: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
@@ -22,9 +20,9 @@ struct TradeDetailCompactHeader: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                     Text(TradeDisplay.tickerText(trade.symbol))
                         .font(.system(.title3, design: .default).weight(.bold))
                         .foregroundStyle(colors.primaryText)
@@ -40,11 +38,7 @@ struct TradeDetailCompactHeader: View {
 
                 Spacer(minLength: ExperienceSpacing.xs)
 
-                VStack(alignment: .trailing, spacing: 2) {
-                    if showsEdit, let onEdit {
-                        TradeDetailCompactEditButton(action: onEdit)
-                    }
-
+                VStack(alignment: .trailing, spacing: ExperienceSpacing.xxs) {
                     Text(TradeDisplay.pnlText(trade.realizedPnL))
                         .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
                         .foregroundStyle(theme.metricColor(for: pnlAmount))
@@ -67,32 +61,6 @@ struct TradeDetailCompactHeader: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
-    }
-}
-
-struct TradeDetailCompactEditButton: View {
-    let action: () -> Void
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: "pencil")
-                    .font(.system(size: 11, weight: .semibold))
-                Text("Edit")
-                    .font(.system(.caption, design: .default).weight(.semibold))
-            }
-            .foregroundStyle(colors.accent)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                colors.accent.opacity(0.12),
-                in: Capsule()
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("detail.trade.editButton")
     }
 }
 

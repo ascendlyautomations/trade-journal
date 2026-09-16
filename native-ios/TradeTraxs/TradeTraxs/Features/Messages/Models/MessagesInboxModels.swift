@@ -35,7 +35,7 @@ struct TradeRoomInboxItem: Identifiable, Hashable, Sendable {
 
 nonisolated enum MessagesInboxSupport {
     static func isLocalDevelopmentProfile(_ id: ProfileID) -> Bool {
-        id.rawValue.hasPrefix("dev.")
+        DemoExperienceSupport.usesLocalBundledData(id)
     }
 
     static func message(for error: Error) -> String {

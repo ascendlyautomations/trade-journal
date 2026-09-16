@@ -137,7 +137,7 @@ nonisolated enum FeedTimelineEntry: Identifiable, Hashable, Sendable, Codable {
 
 nonisolated enum FeedSupport {
     static func isLocalDevelopmentProfile(_ id: ProfileID) -> Bool {
-        id.rawValue.hasPrefix("dev.")
+        DemoExperienceSupport.usesLocalBundledData(id)
     }
 
     static func message(for error: Error) -> String {

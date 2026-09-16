@@ -54,7 +54,7 @@ final class SettingsAccountViewModel {
         }
         if usesAppleSignIn {
             parts.append(
-                "Your Sign in with Apple connection to TradeTraxs will be removed when deletion completes."
+                "For Sign in with Apple, TradeTraxs removes your account data and revokes Sign in with Apple when Apple confirms it. If automatic revocation is not available for your account, you can also remove TradeTraxs under Settings → Apple ID → Sign in with Apple on your device after deletion."
             )
         }
         return parts.joined(separator: "\n\n")

@@ -14,6 +14,8 @@ struct ExperienceSheetChrome: ViewModifier {
             .presentationDragIndicator(dragIndicator)
             .presentationCornerRadius(ExperienceRadius.sheet)
             .interactiveDismissDisabled(!interactiveDismiss)
+            .experienceKeyboardDismissOnTapOutside()
+            .experienceKeyboardDoneToolbar()
     }
 }
 

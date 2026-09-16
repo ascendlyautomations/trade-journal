@@ -393,6 +393,7 @@ enum SessionBootstrapLoader {
         profiles: any ProfileRepository,
         detailCache: DetailPresentationCache?
     ) {
+        guard !BackendV2FeatureFlags.isEnabled(.profile) else { return }
         Task { @MainActor in
             guard let loaded = try? await profiles.stats(for: profileID) else { return }
             detailCache?.seed(stats: loaded)
@@ -412,6 +413,10 @@ enum SessionBootstrapLoader {
         }
         if let cached = detailCache?.stats(for: profileID), cached.hasLoadedHeaderMetrics {
             return cached
+        }
+        if BackendV2FeatureFlags.isEnabled(.profile) {
+            detailCache?.seed(stats: partial)
+            return partial
         }
         let loaded = try await profiles.stats(for: profileID)
         detailCache?.seed(stats: loaded)

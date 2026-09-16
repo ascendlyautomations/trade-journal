@@ -71,7 +71,14 @@ enum ProfileBootstrap: ScreenBootstrap {
                 ).message
                 return state
             } catch {
-                // Decode / transport errors — REST fallback preserves first paint.
+                if BackendV2FeatureFlags.isEnabled(.profile) {
+                    state.phase = .failed
+                    state.errorMessage = UserFacingError.map(
+                        error as? AppError ?? AppError.unknown(message: error.localizedDescription)
+                    ).message
+                    return state
+                }
+                // Legacy path — REST fallback when V2 profile flag is off.
             }
         }
 
@@ -214,36 +221,59 @@ enum ProfileBootstrap: ScreenBootstrap {
                 isCreator: true,
                 createdAt: Date(timeIntervalSince1970: 1_700_000_000)
             )
-        let achievements = ProfileAchievementFixtures.samples(owner: profileID)
+        let isDemoTrader = profileID == DemoExperienceSupport.profileID
+        let achievements = isDemoTrader
+            ? DemoCanonicalDataset.achievements()
+            : ProfileAchievementFixtures.samples(owner: profileID)
         let payoutTotal = ProfilePayoutTotals.sum(from: achievements)
-        let stats = ProfileStats(
-            profileID: profileID,
-            followerCount: 128,
-            followingCount: 42,
-            postCount: 18,
-            tradeCount: 31,
-            publicTradeCount: 31,
-            winRate: Decimal(string: "0.58"),
-            profitFactor: Decimal(string: "1.85"),
-            netPnL: Decimal(string: "12450"),
-            averageRR: Decimal(string: "2.1"),
-            payoutTotal: payoutTotal,
-            expectancy: nil
-        )
+        let stats = isDemoTrader
+            ? DemoCanonicalDataset.profileStats()
+            : ProfileStats(
+                profileID: profileID,
+                followerCount: 128,
+                followingCount: 42,
+                postCount: 18,
+                tradeCount: 31,
+                publicTradeCount: 31,
+                winRate: Decimal(string: "0.58"),
+                profitFactor: Decimal(string: "1.85"),
+                netPnL: Decimal(string: "12450"),
+                averageRR: Decimal(string: "2.1"),
+                payoutTotal: payoutTotal,
+                expectancy: nil
+            )
 
         var state = ProfileState()
         state.phase = .loaded
         state.profileID = profileID
-        state.profile = profile
+        state.profile = isDemoTrader ? DemoCanonicalDataset.profile() : profile
         state.stats = stats
         state.isOwner = isOwner
-        state.trades = ProfileTradeFixtures.samples(owner: profileID)
-        state.accountNames = ProfileTradeFixtures.accountNames()
-        state.accountNumbers = [:]
-        state.accountModes = ProfileTradeFixtures.accountModes()
-        state.accountSizes = ProfileTradeFixtures.accountSizes()
-        state.posts = ProfilePostFixtures.samples(owner: profileID)
-        state.clips = ProfileClipFixtures.samples(owner: profileID)
+        state.trades = isDemoTrader
+            ? DemoCanonicalDataset.trades()
+            : ProfileTradeFixtures.samples(owner: profileID)
+        if isDemoTrader {
+            state.accountNames = Dictionary(
+                uniqueKeysWithValues: DemoCanonicalDataset.accounts().map { ($0.id, $0.name) }
+            )
+            state.accountModes = DemoCanonicalDataset.accountModes()
+            state.accountSizes = Dictionary(
+                uniqueKeysWithValues: DemoCanonicalDataset.accounts().compactMap { account in
+                    account.size.map { (account.id, $0.amount) }
+                }
+            )
+        } else {
+            state.accountNames = ProfileTradeFixtures.accountNames()
+            state.accountNumbers = [:]
+            state.accountModes = ProfileTradeFixtures.accountModes()
+            state.accountSizes = ProfileTradeFixtures.accountSizes()
+        }
+        state.posts = isDemoTrader
+            ? DemoCanonicalDataset.posts()
+            : ProfilePostFixtures.samples(owner: profileID)
+        state.clips = isDemoTrader
+            ? DemoCanonicalDataset.clips()
+            : ProfileClipFixtures.samples(owner: profileID)
         state.achievements = achievements
         state.ownedTradeRoom = developmentTradeRoom(for: profileID)
         state.didResolveTradeRoom = true

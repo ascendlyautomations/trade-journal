@@ -23,6 +23,11 @@ final class GettingStartedStore {
 
     var isCollapsed = false
 
+    /// Permanent dismiss (X) is allowed only when every checklist task is complete.
+    var canPermanentlyDismiss: Bool {
+        signalsReady && progress.allComplete
+    }
+
     private init() {}
 
     func configure(
@@ -84,7 +89,7 @@ final class GettingStartedStore {
     }
 
     func dismissForSession() {
-        guard let viewerID else { return }
+        guard canPermanentlyDismiss, let viewerID else { return }
         GettingStartedPreferences.markSessionDismissed(userID: viewerID.rawValue)
     }
 

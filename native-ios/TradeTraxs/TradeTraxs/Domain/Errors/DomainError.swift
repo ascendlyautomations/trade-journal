@@ -59,7 +59,7 @@ nonisolated enum SubscriptionError: Error, Sendable, Equatable {
 
 extension AppError {
     /// Maps domain failures into the app error surface (no networking leakage).
-    static func domain(_ error: DomainError) -> AppError {
+    nonisolated static func domain(_ error: DomainError) -> AppError {
         switch error {
         case .cancelled:
             return .cancelled

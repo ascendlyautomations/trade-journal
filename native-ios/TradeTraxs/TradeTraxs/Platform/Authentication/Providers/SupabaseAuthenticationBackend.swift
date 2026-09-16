@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Production GoTrue backend. Implements ``AuthenticationBackend`` over Networking.
 nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
@@ -42,7 +43,7 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
                 provider: .email
             )
         } catch let error as AppError {
-            throw mapTokenRequestError(error, provider: .email)
+            throw mapSignupRequestError(error)
         } catch let error as AuthenticationError {
             throw error
         } catch {
@@ -180,8 +181,20 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
         provider: AuthenticationProviderKind,
         requiresAuthentication: Bool
     ) async throws -> AuthenticationSession {
-        guard transport.isConfigured else { throw AuthenticationError.notConfigured }
+        guard transport.isConfigured else {
+#if DEBUG
+            if provider == .apple {
+                AppLog.authentication.debug("[AppleAuth] supabase.tokenRequest.skipped reason=notConfigured")
+            }
+#endif
+            throw AuthenticationError.notConfigured
+        }
         do {
+#if DEBUG
+            if provider == .apple {
+                AppLog.authentication.debug("[AppleAuth] supabase.tokenRequest.started grant=id_token")
+            }
+#endif
             let response = try await transport.send(
                 host: .supabase,
                 path: path,
@@ -212,6 +225,9 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
             case .cancelled:
                 return .cancelled
             case .server(let code, let message):
+                if provider != .email, (502...504).contains(code) {
+                    return .unknown("serverUnavailable")
+                }
                 return mapProviderServerFailure(
                     statusCode: code,
                     message: message,
@@ -248,6 +264,13 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
         throw AuthenticationError.sessionMissing
     }
 
+    private func mapSignupRequestError(_ error: AppError) -> AuthenticationError {
+        if GoTrueAuthErrorParsing.isEmailAlreadyRegistered(error) {
+            return .emailAlreadyRegistered
+        }
+        return mapTokenRequestError(error, provider: .email)
+    }
+
     private func mapProviderServerFailure(
         statusCode: Int,
         message: String?,
@@ -255,6 +278,9 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
     ) -> AuthenticationError {
         let body = message?.lowercased() ?? ""
         if provider == .email {
+            if GoTrueAuthErrorParsing.isEmailAlreadyRegisteredMessage(body) {
+                return .emailAlreadyRegistered
+            }
             if statusCode == 400 || statusCode == 401 {
                 return .invalidCredentials
             }
@@ -337,31 +363,58 @@ private nonisolated struct GoTrueTokenResponse: Decodable {
     }
 }
 
+private nonisolated struct GoTrueUserMetadata: Decodable {
+    var full_name: String?
+    var name: String?
+    var given_name: String?
+    var family_name: String?
+}
+
 private nonisolated struct GoTrueUser: Decodable {
     var id: String?
     var email: String?
+    var user_metadata: GoTrueUserMetadata?
 }
 
-extension AuthenticationBackend {
-    func signInWithIDToken(
-        provider: AuthenticationProviderKind,
-        idToken: String,
-        nonce: String?
-    ) async throws -> AuthenticationSession {
-        if let supabase = self as? SupabaseAuthenticationBackend {
-            return try await supabase.signInWithIDToken(
-                provider: provider,
-                idToken: idToken,
-                nonce: nonce
-            )
+/// Parses GoTrue JSON/text errors without exposing a public email lookup.
+private nonisolated enum GoTrueAuthErrorParsing {
+    static func isEmailAlreadyRegistered(_ error: AppError) -> Bool {
+        guard case .transport(let network) = error else { return false }
+        switch network {
+        case .validation(_, let message):
+            return isEmailAlreadyRegisteredMessage(message.lowercased())
+        case .server(_, let message):
+            return isEmailAlreadyRegisteredMessage(message?.lowercased() ?? "")
+        default:
+            return false
         }
-        if let memory = self as? InMemoryAuthenticationBackend {
-            return try await memory.signInWithIDToken(
-                provider: provider,
-                idToken: idToken,
-                nonce: nonce
-            )
+    }
+
+    static func isEmailAlreadyRegisteredMessage(_ loweredBody: String) -> Bool {
+        guard !loweredBody.isEmpty else { return false }
+        if loweredBody.contains("user_already_exists") { return true }
+        if loweredBody.contains("email address is already registered") { return true }
+        if loweredBody.contains("already registered") { return true }
+        if loweredBody.contains("identity already exists") { return true }
+        if let parsed = parseJSON(loweredBody) {
+            if parsed.error_code?.lowercased() == "user_already_exists" { return true }
+            let combined = [parsed.msg, parsed.message, parsed.error]
+                .compactMap { $0?.lowercased() }
+                .joined(separator: " ")
+            if combined.contains("already registered") { return true }
         }
-        throw AuthenticationError.providerUnavailable(provider)
+        return false
+    }
+
+    private static func parseJSON(_ text: String) -> GoTrueErrorWire? {
+        guard let data = text.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(GoTrueErrorWire.self, from: data)
+    }
+
+    private struct GoTrueErrorWire: Decodable {
+        var error: String?
+        var error_code: String?
+        var msg: String?
+        var message: String?
     }
 }

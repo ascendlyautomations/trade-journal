@@ -24,6 +24,7 @@ final class FeedScreenViewModel {
     private let realtimeHub: RealtimeHub?
     private let rpc: (any RPCClient)?
     private let messages: (any MessageRepository)?
+    private weak var currentUserProfile: CurrentUserProfileStore?
 
     private var bootstrapTask: Task<Void, Never>?
     private var paginationTask: Task<Void, Never>?
@@ -44,7 +45,8 @@ final class FeedScreenViewModel {
         navigationCoordinator: NavigationCoordinator,
         realtimeHub: RealtimeHub? = nil,
         rpc: (any RPCClient)? = nil,
-        messages: (any MessageRepository)? = nil
+        messages: (any MessageRepository)? = nil,
+        currentUserProfile: CurrentUserProfileStore? = nil
     ) {
         self.feed = feed
         self.trades = trades
@@ -58,6 +60,7 @@ final class FeedScreenViewModel {
         self.realtimeHub = realtimeHub
         self.rpc = rpc
         self.messages = messages
+        self.currentUserProfile = currentUserProfile
         blockObserver = NotificationCenter.default.addObserver(
             forName: .userBlockListDidChange,
             object: nil,
@@ -112,6 +115,7 @@ final class FeedScreenViewModel {
         bootstrapGeneration &+= 1
         let generation = bootstrapGeneration
         bootstrapTask = Task {
+            await resolveInitialFeedScopeBeforeBootstrap()
             await performBootstrap(forceNetwork: false, resetting: true, generation: generation, trigger: .initial)
             bootstrapTask = nil
             if pendingNetworkReconcile {
@@ -268,6 +272,11 @@ final class FeedScreenViewModel {
         guard state.scope != next else { return }
         ExperienceHaptics.play(.selection)
         state.scope = next
+        Task {
+            if let userID = await session.currentUserID {
+                FeedScopePreferenceStore.save(next, for: userID)
+            }
+        }
         if next == .global {
             state.stories = []
         }
@@ -517,6 +526,21 @@ final class FeedScreenViewModel {
 
     // MARK: - Bootstrap
 
+    private func resolveInitialFeedScopeBeforeBootstrap() async {
+        if ExploreModeSupport.usesLiveCommunityFeed {
+            state.scope = ExploreModeSupport.feedScope
+            return
+        }
+        guard let userID = await session.currentUserID else {
+            state.scope = .global
+            return
+        }
+        state.scope = await FeedInitialScopeResolver.resolvedInitialScope(
+            userID: userID,
+            profileStore: currentUserProfile
+        )
+    }
+
     private func cancelInFlightLoads() {
         bootstrapTask?.cancel()
         bootstrapTask = nil
@@ -694,9 +718,12 @@ final class FeedScreenViewModel {
         }
         #endif
 
+        let guestPublicFeed = ExploreModeSupport.skipsAuthenticatedViewerServices
         let blockPeerSync: Task<Void, Never>?
         if resetting {
-            if forceNetwork || !FeedBlockedAuthorsFilter.shared.hasSyncedFromServer {
+            if guestPublicFeed {
+                blockPeerSync = nil
+            } else if forceNetwork || !FeedBlockedAuthorsFilter.shared.hasSyncedFromServer {
                 blockPeerSync = Task {
                     await syncBlockedAuthorsFromServer(force: forceNetwork)
                 }
@@ -715,8 +742,17 @@ final class FeedScreenViewModel {
         }
 
         if BackendV2FeatureFlags.isEnabled(.feed), let rpc {
-            if let userID = await session.currentUserID {
-                let viewerID = ProfileID(userID.rawValue)
+            let sessionUserID = await session.currentUserID
+            if guestPublicFeed || sessionUserID != nil {
+                let viewerID: ProfileID
+                if guestPublicFeed {
+                    viewerID = ExploreModeSupport.guestFeedViewerID
+                } else if let userID = sessionUserID {
+                    viewerID = ProfileID(userID.rawValue)
+                } else {
+                    viewerID = ExploreModeSupport.guestFeedViewerID
+                }
+                let feedScope = guestPublicFeed ? FeedScope.global : resolvedScope
                 if hadCachedFirstRender && !forceNetwork && resolvedCursor == nil {
                     state.viewerID = viewerID
                     state.phase = .loaded
@@ -735,7 +771,7 @@ final class FeedScreenViewModel {
                 do {
                     let loaded = try await FeedBootstrapLoader.loadTimeline(
                         viewerID: viewerID,
-                        scope: resolvedScope,
+                        scope: feedScope,
                         contentFilter: resolvedFilter,
                         cursor: resolvedCursor,
                         limit: 20,
@@ -746,7 +782,8 @@ final class FeedScreenViewModel {
                         achievements: achievements,
                         detailCache: detailCache,
                         forceNetwork: forceNetwork,
-                        allowNetwork: forceNetwork || !hadCachedFirstRender
+                        allowNetwork: forceNetwork || !hadCachedFirstRender,
+                        guestPublicMode: guestPublicFeed
                     )
                     guard shouldApplyBootstrapResult(
                         generation: activeGeneration,
@@ -1058,6 +1095,7 @@ final class FeedScreenViewModel {
 
     private func startRealtimeIfNeeded() async {
         guard let realtimeHub else { return }
+        guard !ExploreModeSupport.skipsAuthenticatedViewerServices else { return }
         guard let viewerID = state.viewerID,
               !FeedSupport.isLocalDevelopmentProfile(viewerID) else { return }
         guard realtimeTask == nil else { return }

@@ -150,6 +150,8 @@ final class DataEnvironment {
         case production
         /// Logged-out shell — no realtime boot, no session store wiring, unconfigured Supabase seam.
         case loginShell
+        /// Explore Mode — local demo journal + guest public community repositories.
+        case demoExplore
     }
 
     static func make(
@@ -163,6 +165,16 @@ final class DataEnvironment {
             return makeLoginShell(
                 appConfiguration: appConfiguration,
                 session: session,
+                authenticationManager: authenticationManager
+            )
+        }
+        if launchMode == .demoExplore {
+            guard let networking else {
+                fatalError("DataEnvironment demoExplore requires NetworkingEnvironment for guest community reads")
+            }
+            return makeDemoExploreShell(
+                appConfiguration: appConfiguration,
+                networking: networking,
                 authenticationManager: authenticationManager
             )
         }
@@ -481,6 +493,138 @@ final class DataEnvironment {
             brokerIntegrations: LoginShellBrokerIntegrationRepository()
         )
     }
+
+    /// Logged-out Explore Mode — ``ExploreGuestRepositories`` + local demo journal repositories.
+    private static func makeDemoExploreShell(
+        appConfiguration: AppConfiguration,
+        networking: NetworkingEnvironment,
+        authenticationManager: AuthenticationManager
+    ) -> DataEnvironment {
+        let configuration = DataConfiguration.make(for: appConfiguration)
+        let session: any SessionProviding = DemoSessionProvider()
+        let supabase = SupabaseInfrastructure.make(
+            appConfiguration: appConfiguration,
+            networking: networking,
+            session: session
+        )
+        let imageCache = TieredImageCache()
+        let cache = CacheStack(
+            memory: PlaceholderMemoryCache(),
+            disk: PlaceholderDiskCache(),
+            images: imageCache,
+            queries: PlaceholderQueryCache()
+        )
+        let persistence = PlaceholderPersistenceProvider()
+        let realtimeHub = RealtimeHub(realtime: supabase.realtime)
+        let storage = SupabaseObjectStorageProvider(storage: supabase.storage)
+        let uploadService = DefaultUploadService(storage: storage)
+        let downloadService = DefaultDownloadService(storage: storage)
+        let imagePipeline: any ImagePipeline = DefaultImagePipeline(
+            cache: imageCache,
+            storage: storage,
+            downloadService: downloadService
+        )
+        let edgeFunctions = DefaultEdgeFunctionClient(provider: supabase.edgeFunctions)
+        let rpc = DefaultRPCClient(provider: supabase.rpc, database: supabase.database)
+        let detailCache = DetailPresentationCache()
+        MainActor.assumeIsolated {
+            DemoCanonicalDataset.seedDetailCache(detailCache)
+        }
+
+        let tradesRepository: any TradeRepository = GuestPublicTradeAccessRepository(
+            supabase: supabase,
+            cache: cache,
+            session: session
+        )
+        let profiles: any ProfileRepository = DemoProfileRepository()
+        let achievements: any AchievementRepository = DemoAchievementRepository()
+        let interactions: any InteractionRepository = DemoInteractionRepository()
+        let feedRepository: any FeedRepository = GuestPublicFeedRepository(
+            supabase: supabase,
+            cache: cache,
+            session: session
+        )
+        let exploreRepository: any ExploreRepository = GuestPublicExploreRepository(supabase: supabase)
+        let roomsRepository: any RoomRepository = DemoExploreRoomsRepository(supabase: supabase, cache: cache)
+        let messagesRepository: any MessageRepository = DemoExploreMessageRepository()
+        let storeKitSubscriptions: any StoreKitSubscriptionServicing = StoreKitSubscriptionService(
+            syncClient: LoginShellAppleSubscriptionSyncClient()
+        )
+
+        let psychologyReports: any PsychologyReportRepository = DefaultPsychologyReportRepository(
+            trades: DemoTradeRepository(),
+            dailyCheckIns: DefaultTraderDailyCheckInRepository(supabase: supabase, cache: cache),
+            session: session,
+            detailCache: detailCache
+        )
+        let tradingReports: any TradingReportRepository = DefaultTradingReportRepository(
+            trades: DemoTradeRepository(),
+            session: session,
+            detailCache: detailCache,
+            supabase: supabase
+        )
+
+        AppLog.application.info(
+            "DataEnvironment ready — explore (local journal + guest Feed/Explore/Rooms; configured=\(supabase.client.isConfigured, privacy: .public))"
+        )
+
+        return DataEnvironment(
+            configuration: configuration,
+            supabase: supabase,
+            session: session,
+            cache: cache,
+            persistence: persistence,
+            realtimeHub: realtimeHub,
+            imagePipeline: imagePipeline,
+            uploadService: uploadService,
+            downloadService: downloadService,
+            objectStorage: storage,
+            edgeFunctions: edgeFunctions,
+            rpc: rpc,
+            detailCache: detailCache,
+            trades: tradesRepository,
+            profiles: profiles,
+            feed: feedRepository,
+            messages: messagesRepository,
+            rooms: roomsRepository,
+            notifications: DefaultNotificationRepository(
+                supabase: supabase,
+                cache: cache,
+                session: session
+            ),
+            followRequests: DefaultFollowRequestRepository(supabase: supabase, session: session),
+            calendar: DefaultCalendarRepository(supabase: supabase, cache: cache),
+            leaderboard: DefaultLeaderboardRepository(),
+            explore: exploreRepository,
+            search: DefaultSearchRepository(supabase: supabase, cache: cache),
+            billing: DefaultBillingRepository(
+                supabase: supabase,
+                cache: cache,
+                storeKitSync: storeKitSubscriptions
+            ),
+            storeKitSubscriptions: storeKitSubscriptions,
+            account: DefaultAccountRepository(supabase: supabase),
+            analytics: DefaultAnalyticsRepository(supabase: supabase),
+            achievements: achievements,
+            referrals: DefaultReferralRepository(supabase: supabase, cache: cache),
+            notificationPreferences: DefaultNotificationPreferencesRepository(
+                supabase: supabase,
+                cache: cache
+            ),
+            authentication: DefaultAuthenticationRepository(manager: authenticationManager),
+            home: DefaultHomeRepository(supabase: supabase, cache: cache, session: session),
+            interactions: interactions,
+            engagementStore: EngagementStore(repository: interactions),
+            ai: DefaultAIRepository(supabase: supabase, session: session),
+            tradingReports: tradingReports,
+            psychologyReports: psychologyReports,
+            dailyCheckIns: DefaultTraderDailyCheckInRepository(supabase: supabase, cache: cache),
+            contentReports: LoginShellContentReportRepository(),
+            vault: DefaultVaultRepository(supabase: supabase, session: session),
+            vaultStore: VaultStore(repository: DemoVaultRepository()),
+            brokerIntegrations: LoginShellBrokerIntegrationRepository()
+        )
+    }
 }
 
 private struct LoginShellBrokerIntegrationRepository: BrokerIntegrationRepository {
@@ -517,7 +661,11 @@ private struct LoginShellBrokerIntegrationRepository: BrokerIntegrationRepositor
     func createAndLinkRithmicAccount(connectionId: String, brokerIntegrationAccountId: String, draft: TradingAccountDraft) async throws -> BrokerLinkAccountsResponse {
         throw unavailable()
     }
-    func syncRithmicAccount(connectionId: String, mappingId: String) async throws -> TradovateAccountSyncResponse { throw unavailable() }
+    func syncRithmicAccount(
+        connectionId: String,
+        mappingId: String,
+        password: String?
+    ) async throws -> TradovateAccountSyncResponse { throw unavailable() }
     func disconnectRithmic(connectionId: String) async throws { throw unavailable() }
 }
 

@@ -131,7 +131,7 @@ struct AccountPayoutEditorSheet: View {
         NavigationStack {
             Form {
                 SettingsLabeledField(title: copy.amountLabel, helper: "USD") {
-                    TextField("0", text: $draft.amountDigits)
+                    TextField("0", text: $draft.amountDigits.numericInput(.unsignedCurrency))
                         .keyboardType(.decimalPad)
                 }
                 DatePicker(copy.dateLabel, selection: $draft.payoutDate, displayedComponents: .date)

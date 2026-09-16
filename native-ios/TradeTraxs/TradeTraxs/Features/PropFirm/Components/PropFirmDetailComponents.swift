@@ -80,6 +80,7 @@ struct PropFirmDetailMetricTile: View {
 
 struct PropFirmDetailHeroView: View {
     let snapshot: PropFirmStatusSnapshot
+    let contentPlan: PropFirmDetailContentPlan
 
     @Environment(\.themeColors) private var colors
 
@@ -132,22 +133,7 @@ struct PropFirmDetailHeroView: View {
     }
 
     private var summaryTags: [(String, BannerTone)] {
-        var tags: [(String, BannerTone)] = [
-            (snapshot.phaseLabel, .info),
-        ]
-        if snapshot.configuredAccountSize > 0 {
-            tags.append((DashboardViewModel.money(snapshot.configuredAccountSize), .info))
-        }
-        if let target = snapshot.profitTarget, target > 0 {
-            tags.append(("Target \(DashboardViewModel.money(target))", .info))
-        }
-        if let maxDD = snapshot.maxDrawdownLimit, maxDD > 0 {
-            tags.append(("DD \(DashboardViewModel.money(maxDD))", .warning))
-        }
-        if let status = snapshot.publicStatusLabel, !status.isEmpty {
-            tags.append((status, .success))
-        }
-        return tags
+        contentPlan.heroSummaryTags()
     }
 
     private func liveMetric(_ label: String, _ value: String, tone: DashboardMetricTone = .neutral) -> some View {
@@ -274,12 +260,17 @@ struct PropFirmDrawdownVisualView: View {
         PropFirmDetailSection(title: "Drawdown") {
             PropFirmDetailCard {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                    HStack {
-                        labelValue("Type", "Trailing")
-                        Spacer()
-                        if let limit = snapshot.maxDrawdownLimit, limit > 0 {
-                            labelValue("Max", DashboardViewModel.money(limit))
-                        }
+                    if let limit = snapshot.maxDrawdownLimit, limit > 0 {
+                        labelValue("Maximum Drawdown", DashboardViewModel.money(limit))
+                    }
+                    labelValue(
+                        "Drawdown Type",
+                        PropFirmDetailPresentation.drawdownTypeLabel(snapshot.drawdownType)
+                    )
+
+                    if let footnote = PropFirmDetailPresentation.drawdownTypeFootnote(snapshot.drawdownType) {
+                        Text(footnote)
+                            .experienceStyle(.footnote, color: colors.secondaryText)
                     }
 
                     drawdownBar
@@ -291,11 +282,13 @@ struct PropFirmDrawdownVisualView: View {
                         balanceRow("Current balance", snapshot.currentBalance)
                     }
 
-                    Text("The floor rises when balance makes a new peak, staying max drawdown below the peak.")
-                        .experienceStyle(.footnote, color: colors.secondaryText)
+                    if snapshot.drawdownType?.usesTrailingCycleFloor == true {
+                        Text("The floor rises when balance makes a new peak, staying max drawdown below the peak.")
+                            .experienceStyle(.footnote, color: colors.secondaryText)
+                    }
 
                     if snapshot.isFailed {
-                        Text("Trailing drawdown rule breached.")
+                        Text(PropFirmDetailPresentation.drawdownBreachMessage(type: snapshot.drawdownType))
                             .experienceStyle(.footnote, color: colors.loss)
                     }
                 }
@@ -428,11 +421,12 @@ struct PropFirmConsistencyVisualView: View {
 
 struct PropFirmTradingRulesView: View {
     let snapshot: PropFirmStatusSnapshot
+    let contentPlan: PropFirmDetailContentPlan
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        let rows = tradingRows
+        let rows = contentPlan.tradingRuleRows()
         if !rows.isEmpty {
             PropFirmDetailSection(title: "Trading rules") {
                 PropFirmDetailCard {
@@ -449,58 +443,6 @@ struct PropFirmTradingRulesView: View {
         }
     }
 
-    private var tradingRows: [PropFirmRuleRow] {
-        var rows: [PropFirmRuleRow] = []
-        if let required = snapshot.winningDaysRequired, required > 0 {
-            rows.append(
-                PropFirmRuleRow(
-                    icon: "calendar",
-                    label: "Minimum winning days",
-                    value: "\(snapshot.winningDays) / \(required)",
-                    status: snapshot.winningDaysTargetMet ? .met : .pending
-                )
-            )
-        }
-        if let threshold = snapshot.winningDayThreshold, threshold > 0 {
-            rows.append(
-                PropFirmRuleRow(
-                    icon: "sun.max",
-                    label: "Winning day threshold",
-                    value: DashboardViewModel.money(threshold),
-                    status: .neutral
-                )
-            )
-        }
-        if let daily = snapshot.dailyLossLimit, daily > 0 {
-            rows.append(
-                PropFirmRuleRow(
-                    icon: "chart.line.downtrend.xyaxis",
-                    label: "Daily loss limit",
-                    value: DashboardViewModel.money(daily),
-                    status: snapshot.dailyDrawdownBreached ? .violation : .neutral
-                )
-            )
-            rows.append(
-                PropFirmRuleRow(
-                    icon: "gauge.with.dots.needle.50percent",
-                    label: "Worst day loss (cycle)",
-                    value: DashboardViewModel.money(snapshot.dailyLossUsed),
-                    status: snapshot.dailyDrawdownBreached ? .violation : .neutral
-                )
-            )
-        }
-        if let maxDD = snapshot.maxDrawdownLimit, maxDD > 0 {
-            rows.append(
-                PropFirmRuleRow(
-                    icon: "arrow.down.to.line",
-                    label: "Max drawdown used",
-                    value: DashboardViewModel.money(snapshot.maxDrawdownUsed),
-                    status: snapshot.isFailed ? .violation : .neutral
-                )
-            )
-        }
-        return rows
-    }
 }
 
 struct PropFirmRuleRow: Hashable {
@@ -511,6 +453,7 @@ struct PropFirmRuleRow: Hashable {
         case neutral
     }
 
+    var topic: PropFirmDetailRuleTopic
     var icon: String
     var label: String
     var value: String
@@ -561,6 +504,7 @@ struct PropFirmRuleRowView: View {
 
 struct PropFirmDetailPayoutsView: View {
     let snapshot: PropFirmStatusSnapshot
+    let contentPlan: PropFirmDetailContentPlan
     var onRecordPayout: () -> Void
     var recordPayoutEnabled: Bool
 
@@ -572,7 +516,9 @@ struct PropFirmDetailPayoutsView: View {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                     if snapshot.isFunded {
                         eligibilityHeader
-                        requirementsGrid
+                        if !payoutRequirementRows.isEmpty {
+                            requirementsGrid
+                        }
                         if snapshot.supportsRecordPayout {
                             Button(action: onRecordPayout) {
                                 Label("Record Payout", systemImage: "dollarsign.circle")
@@ -607,10 +553,13 @@ struct PropFirmDetailPayoutsView: View {
         }
     }
 
+    private var payoutRequirementRows: [PropFirmDetailPresentation.PayoutRequirementRow] {
+        contentPlan.payoutRequirementRows()
+    }
+
     private var requirementsGrid: some View {
-        let rows = PropFirmDetailPresentation.payoutRequirements(for: snapshot)
-        return VStack(spacing: ExperienceSpacing.xs) {
-            ForEach(rows) { row in
+        VStack(spacing: ExperienceSpacing.xs) {
+            ForEach(payoutRequirementRows) { row in
                 HStack {
                     Image(systemName: row.met ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(row.met ? colors.profit : colors.secondaryText)

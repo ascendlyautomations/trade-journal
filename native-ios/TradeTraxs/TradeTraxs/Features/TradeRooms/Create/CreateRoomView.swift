@@ -72,6 +72,7 @@ struct CreateRoomView: View {
                 Button("Keep Editing", role: .cancel) {}
             }
             .experienceProtectedFormDismiss()
+            .experienceFormKeyboard(focus: $focusedField)
             .task { viewModel.loadIfNeeded() }
             .onChange(of: photoItem) { _, item in
                 Task { await presentRoomImageCrop(for: item) }

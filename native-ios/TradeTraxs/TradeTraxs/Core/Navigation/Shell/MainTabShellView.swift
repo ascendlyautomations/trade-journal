@@ -9,8 +9,10 @@ struct MainTabShellView: View {
     let coordinator: NavigationCoordinator
     let authenticationCoordinator: AuthenticationCoordinator
     @Bindable var currentUserProfile: CurrentUserProfileStore
+    var showsDemoExperienceChrome: Bool = false
     @Bindable private var viewerStoryStore = ViewerActiveStoryStore.shared
     @Bindable private var postTradeReflectionGate = PostTradeReflectionGate.shared
+    @Bindable private var globalUploadCoordinator = GlobalUploadCoordinator.shared
     @Environment(\.appEnvironment) private var appEnvironment
     @State private var reflectionError: String?
 
@@ -27,7 +29,21 @@ struct MainTabShellView: View {
         }
         .tabViewStyle(.tabBarOnly)
         .experienceAppChrome()
-        .globalUploadChrome()
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if showsDemoExperienceChrome {
+                HStack(spacing: 0) {
+                    Spacer()
+                        .frame(width: ExperienceSpacing.huge + ExperienceSpacing.sm)
+                        .allowsHitTesting(false)
+                    DemoExperienceLeaveButton()
+                    Spacer(minLength: 0)
+                        .allowsHitTesting(false)
+                }
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.top, ExperienceSpacing.xxs)
+            }
+        }
+        .globalUploadQueueSheet(coordinator: globalUploadCoordinator)
         .sheet(isPresented: Binding(
             get: { postTradeReflectionGate.pendingTrade != nil },
             set: { isPresented in
@@ -173,6 +189,7 @@ struct HomeNavigationStack: View {
             }
         }
         .environment(\.stackNavigation, StackNavigation.home(store: store))
+        .mainTabGlobalUploadNavigationChrome()
     }
 
     private var homePath: Binding<[HomeRoute]> {
@@ -402,7 +419,8 @@ struct FeedNavigationStack: View {
         NavigationStack(path: feedPath) {
             FeedHomeView(
                 data: appEnvironment.data,
-                navigationCoordinator: coordinator
+                navigationCoordinator: coordinator,
+                currentUserProfile: appEnvironment.currentUserProfile
             )
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -422,6 +440,7 @@ struct FeedNavigationStack: View {
             }
         }
         .environment(\.stackNavigation, StackNavigation.feed(store: store))
+        .mainTabGlobalUploadNavigationChrome()
     }
 
     private var feedPath: Binding<[FeedRoute]> {
@@ -573,6 +592,7 @@ struct MessagesNavigationStack: View {
             }
         }
         .environment(\.stackNavigation, StackNavigation.messages(store: store))
+        .mainTabGlobalUploadNavigationChrome()
     }
 
     private var messagesPath: Binding<[MessagesRoute]> {
@@ -700,6 +720,7 @@ struct ProfileNavigationStack: View {
             }
         }
         .environment(\.stackNavigation, StackNavigation.profile(store: store))
+        .mainTabGlobalUploadNavigationChrome()
     }
 
     private var profilePath: Binding<[ProfileRoute]> {
@@ -899,5 +920,14 @@ private struct ProfileTabBarIcon: View {
             }
         }
         .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Global upload layout (tab navigation stacks only)
+
+private extension View {
+    /// Banner sits below the navigation bar; page content shifts down via layout (not overlay).
+    func mainTabGlobalUploadNavigationChrome() -> some View {
+        globalUploadNavigationInset(coordinator: GlobalUploadCoordinator.shared)
     }
 }

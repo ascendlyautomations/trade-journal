@@ -9,6 +9,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         case idle
         case resolving
         case required(ProfileOnboardingSnapshot)
+        case brokerOnboarding
         case complete
         case failed(String)
     }
@@ -47,8 +48,12 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     }
 
     var needsOnboarding: Bool {
-        if case .required = phase { return true }
-        return false
+        switch phase {
+        case .required, .brokerOnboarding:
+            return true
+        default:
+            return false
+        }
     }
 
     func reset() {
@@ -60,6 +65,18 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         snapshot = nil
         loadGeneration &+= 1
         requiresAuthoritativeResolve = true
+        OAuthProfileOnboardingNameStore.resetAll()
+    }
+
+    /// Explore / Demo Mode — skip onboarding gates without touching Supabase auth.
+    func markCompleteForDemoExperience() {
+        resolveTask?.cancel()
+        realtimeTask?.cancel()
+        resolveTask = nil
+        realtimeTask = nil
+        phase = .complete
+        snapshot = nil
+        requiresAuthoritativeResolve = false
     }
 
     func resolveIfNeeded(forceNetwork: Bool = false) {
@@ -77,7 +94,6 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
 
     func markCompleted(with profile: Profile, snapshot: ProfileOnboardingSnapshot) {
         self.snapshot = snapshot
-        phase = .complete
         stopRealtime()
         profileStore.applyBootstrapResult(profile: profile, stats: profileStore.stats)
         SessionBootstrapStore.shared.applyOnboardingCompletion(
@@ -85,6 +101,15 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
             snapshot: snapshot
         )
         GettingStartedRefreshCenter.noteEligibleUserAction()
+        BrokerOnboardingPersistence.markPending(snapshot.profileID)
+        phase = .brokerOnboarding
+    }
+
+    func markBrokerOnboardingFinished() {
+        if let profileID = snapshot?.profileID {
+            BrokerOnboardingPersistence.markFinished(profileID)
+        }
+        phase = .complete
     }
 
     private func performResolve(forceNetwork: Bool, generation: UInt64) async {
@@ -176,7 +201,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
                 phase = .required(onboardingSnapshot)
                 startRealtime(viewerID: userID.rawValue)
             } else {
-                phase = .complete
+                phase = brokerOnboardingPhase(for: profileID)
                 stopRealtime()
             }
             _ = profile
@@ -198,8 +223,24 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
                 }
             }
         } else if case .required = phase {
-            phase = .complete
+            if let profileID = snapshot?.profileID {
+                phase = brokerOnboardingPhase(for: profileID)
+            } else {
+                phase = .complete
+            }
             stopRealtime()
+        }
+    }
+
+    private func brokerOnboardingPhase(for profileID: ProfileID) -> Phase {
+        switch BrokerOnboardingPersistence.status(for: profileID) {
+        case .pending:
+            return .brokerOnboarding
+        case .finished:
+            return .complete
+        case .unknown:
+            BrokerOnboardingPersistence.grandfatherExistingProfileIfNeeded(profileID)
+            return .complete
         }
     }
 

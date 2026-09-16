@@ -28,7 +28,10 @@ struct ImageCropSelectionModifier: ViewModifier {
                         cropSourceImage = nil
                         onCancel()
                     },
-                    onConfirmFeed: onConfirm
+                    onConfirmFeed: { result in
+                        onConfirm(result)
+                        cropSourceImage = nil
+                    }
                 )
             }
     }
@@ -60,7 +63,10 @@ struct ImageCropSelectionBakedModifier: ViewModifier {
                         cropSourceImage = nil
                         onCancel()
                     },
-                    onConfirmBaked: onConfirm
+                    onConfirmBaked: { image in
+                        onConfirm(image)
+                        cropSourceImage = nil
+                    }
                 )
             }
     }
@@ -105,12 +111,3 @@ extension View {
     }
 }
 
-enum ImageCropSelectionSupport {
-    static func loadUIImage(from item: PhotosPickerItem?) async -> UIImage? {
-        guard let item,
-              let data = try? await item.loadTransferable(type: Data.self)
-        else { return nil }
-        guard let image = UIImage(data: data) else { return nil }
-        return MediaImageOrientation.normalized(image)
-    }
-}

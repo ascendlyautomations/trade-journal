@@ -183,6 +183,18 @@ final class AuthSessionRestorationTests: XCTestCase {
         XCTAssertEqual(navigation.store.sessionPhase, .unauthenticated)
     }
 
+    func testLogoutPublishesUnauthenticatedBeforeSlowRemoteSignOut() async throws {
+        var backend = InMemoryAuthenticationBackend()
+        backend.signOutDelayNanoseconds = 500_000_000
+        let (auth, navigation, _) = makeAuth(backend: backend)
+        try await auth.coordinator.signIn(email: "a@b.com", password: "password1")
+        let logout = Task { await auth.coordinator.logout() }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(auth.manager.state, .unauthenticated)
+        XCTAssertEqual(navigation.store.sessionPhase, .unauthenticated)
+        await logout.value
+    }
+
     func testRetryAfterTransientFailureSucceeds() async throws {
         var backend = InMemoryAuthenticationBackend()
         backend.refreshError = .unknown("networkUnavailable")

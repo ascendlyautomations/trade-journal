@@ -8,6 +8,65 @@ final class ExploreExperienceTests: XCTestCase {
         super.tearDown()
     }
 
+    func testSuggestedTraderExperienceLineCopy() {
+        let start = Calendar.current.date(byAdding: .month, value: -26, to: Date())!
+        let profile = Profile(
+            id: ProfileID("t1"),
+            userID: UserID("t1"),
+            username: "appletest",
+            displayName: "Apple",
+            bio: nil,
+            avatar: nil,
+            traderType: .futures,
+            tradingStyle: "Hey",
+            primaryMarket: nil,
+            startedTradingAt: start,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        )
+        XCTAssertEqual(
+            ProfileDisplay.suggestedTraderExperienceLine(for: profile),
+            "Futures · 2y 2m"
+        )
+        let threeMonths = Calendar.current.date(byAdding: .month, value: -3, to: Date())!
+        let recent = Profile(
+            id: ProfileID("t3"),
+            userID: UserID("t3"),
+            username: "newbie",
+            displayName: "New",
+            bio: nil,
+            avatar: nil,
+            traderType: .options,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: threeMonths,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        )
+        XCTAssertEqual(
+            ProfileDisplay.suggestedTraderExperienceLine(for: recent),
+            "Options · 0y 3m"
+        )
+        let typeOnly = Profile(
+            id: ProfileID("t2"),
+            userID: UserID("t2"),
+            username: "futuresonly",
+            displayName: "F",
+            bio: nil,
+            avatar: nil,
+            traderType: .futures,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        )
+        XCTAssertEqual(ProfileDisplay.suggestedTraderExperienceLine(for: typeOnly), "Futures")
+    }
+
     func testTraderRankingScoresCompletenessAndActivity() {
         let rich = ExploreFixtures.traders()[0].profile
         let bare = Profile(

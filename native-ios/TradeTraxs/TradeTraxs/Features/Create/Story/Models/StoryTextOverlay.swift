@@ -25,6 +25,74 @@ enum StoryTextColor: String, CaseIterable, Identifiable, Equatable {
     var swiftUIColor: Color { Color(uiColor) }
 }
 
+/// Canonical RGBA for a Story text element — presets and custom picker colors.
+struct StoryTextFill: Equatable, Sendable {
+    var red: Double
+    var green: Double
+    var blue: Double
+    var alpha: Double
+
+    init(red: Double, green: Double, blue: Double, alpha: Double = 1) {
+        self.red = Self.clamp(red)
+        self.green = Self.clamp(green)
+        self.blue = Self.clamp(blue)
+        self.alpha = Self.clamp(alpha)
+    }
+
+    static func fromPreset(_ preset: StoryTextColor) -> StoryTextFill {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        preset.uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return StoryTextFill(
+            red: Double(red),
+            green: Double(green),
+            blue: Double(blue),
+            alpha: Double(alpha)
+        )
+    }
+
+    static func fromSwiftUIColor(_ color: Color) -> StoryTextFill {
+        let uiColor = UIColor(color)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return StoryTextFill(
+            red: Double(red),
+            green: Double(green),
+            blue: Double(blue),
+            alpha: Double(alpha)
+        )
+    }
+
+    var uiColor: UIColor {
+        UIColor(red: red, green: green, blue: blue, alpha: alpha)
+    }
+
+    var swiftUIColor: Color {
+        Color(red: red, green: green, blue: blue, opacity: alpha)
+    }
+
+    func matchesPreset(_ preset: StoryTextColor, tolerance: Double = 0.02) -> Bool {
+        let reference = Self.fromPreset(preset)
+        return abs(red - reference.red) <= tolerance
+            && abs(green - reference.green) <= tolerance
+            && abs(blue - reference.blue) <= tolerance
+            && abs(alpha - reference.alpha) <= tolerance
+    }
+
+    var isCustomColor: Bool {
+        !StoryTextColor.allCases.contains { matchesPreset($0) }
+    }
+
+    private static func clamp(_ value: Double) -> Double {
+        min(max(value, 0), 1)
+    }
+}
+
 struct StoryTextOverlay: Identifiable, Equatable {
     var id: UUID
     var text: String
@@ -32,7 +100,7 @@ struct StoryTextOverlay: Identifiable, Equatable {
     var normalizedCenter: CGPoint
     var scale: CGFloat
     var rotationRadians: CGFloat
-    var color: StoryTextColor
+    var textFill: StoryTextFill
     var alignment: TextAlignment
     var showsBackground: Bool
 
@@ -42,7 +110,7 @@ struct StoryTextOverlay: Identifiable, Equatable {
         normalizedCenter: CGPoint = CGPoint(x: 0.5, y: 0.5),
         scale: CGFloat = 1,
         rotationRadians: CGFloat = 0,
-        color: StoryTextColor = .white,
+        textFill: StoryTextFill = .fromPreset(.white),
         alignment: TextAlignment = .center,
         showsBackground: Bool = false
     ) {
@@ -51,7 +119,7 @@ struct StoryTextOverlay: Identifiable, Equatable {
         self.normalizedCenter = normalizedCenter
         self.scale = scale
         self.rotationRadians = rotationRadians
-        self.color = color
+        self.textFill = textFill
         self.alignment = alignment
         self.showsBackground = showsBackground
     }

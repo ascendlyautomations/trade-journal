@@ -27,6 +27,11 @@ nonisolated protocol AuthenticationBackend: Sendable {
     func requestPasswordReset(email: String) async throws
     func resendSignupConfirmation(email: String) async throws
     func updateUserMetadata(accessToken: String, metadata: [String: String]) async throws
+    func signInWithIDToken(
+        provider: AuthenticationProviderKind,
+        idToken: String,
+        nonce: String?
+    ) async throws -> AuthenticationSession
 }
 
 nonisolated struct PlaceholderAuthenticationBackend: AuthenticationBackend {
@@ -63,12 +68,22 @@ nonisolated struct PlaceholderAuthenticationBackend: AuthenticationBackend {
         _ = (accessToken, metadata)
         throw AuthenticationError.notConfigured
     }
+
+    func signInWithIDToken(
+        provider: AuthenticationProviderKind,
+        idToken: String,
+        nonce: String?
+    ) async throws -> AuthenticationSession {
+        _ = (provider, idToken, nonce)
+        throw AuthenticationError.notConfigured
+    }
 }
 
 /// Test-only backend that issues real in-memory sessions (no network).
 nonisolated final class InMemoryAuthenticationBackend: AuthenticationBackend, @unchecked Sendable {
     var defaultExpiresIn: TimeInterval = 3600
     var refreshDelayNanoseconds: UInt64 = 0
+    var signOutDelayNanoseconds: UInt64 = 0
     var refreshError: AuthenticationError?
 
     private let refreshCount = Mutex(0)
@@ -93,6 +108,9 @@ nonisolated final class InMemoryAuthenticationBackend: AuthenticationBackend, @u
 
     func signOut(accessToken: String) async throws {
         _ = accessToken
+        if signOutDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: signOutDelayNanoseconds)
+        }
     }
 
     func refresh(refreshToken: String) async throws -> AuthenticationSession {

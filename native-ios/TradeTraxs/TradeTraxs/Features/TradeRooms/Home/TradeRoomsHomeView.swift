@@ -230,27 +230,21 @@ struct TradeRoomsHomeView: View {
 
     @ViewBuilder
     private var discoverySection: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            TradeRoomDiscoveryModeToggle(
-                mode: viewModel.discoveryMode,
-                onSelect: { viewModel.selectDiscoveryMode($0) }
-            )
-
+        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             TradeRoomDiscoveryScopeToggle(
                 scope: viewModel.discoveryScope,
                 onSelect: { viewModel.selectDiscoveryScope($0) }
             )
 
-            if viewModel.discoveryMode != .yourRooms {
-                Text("Discover rooms")
-                    .experienceStyle(.subheadline, color: colors.secondaryText)
-            }
-
-            if viewModel.discoveryPhase == .loading, viewModel.displayedDiscoveryRooms.isEmpty {
+            if viewModel.discoveryPhase == .loading,
+               viewModel.suggestedDiscoverableRooms.isEmpty,
+               viewModel.popularDiscoverableRooms.isEmpty,
+               viewModel.yourRooms.isEmpty
+            {
                 discoverySkeleton
             } else if let message = viewModel.discoveryErrorMessage,
-                      viewModel.displayedDiscoveryRooms.isEmpty,
-                      viewModel.discoveryMode != .yourRooms
+                      viewModel.suggestedDiscoverableRooms.isEmpty,
+                      viewModel.popularDiscoverableRooms.isEmpty
             {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                     Text(message)
@@ -261,33 +255,83 @@ struct TradeRoomsHomeView: View {
                     .font(.footnote.weight(.semibold))
                 }
                 .padding(.vertical, ExperienceSpacing.xs)
-            } else if viewModel.showsYourRoomsEmptyState {
-                ExperienceEmptyState(
-                    icon: .rooms,
-                    title: "No rooms yet",
-                    message: viewModel.discoveryMode.emptyMessage
-                )
-                .padding(.vertical, ExperienceSpacing.sm)
-            } else if viewModel.displayedDiscoveryRooms.isEmpty {
-                Text(viewModel.discoveryMode.emptyMessage)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                    .padding(.vertical, ExperienceSpacing.xs)
             } else {
-                ForEach(viewModel.displayedDiscoveryRooms) { room in
-                    TradeRoomDiscoveryRow(
-                        room: room,
-                        joinState: viewModel.joinState(for: room.id),
-                        isYourRoomsContext: viewModel.discoveryMode == .yourRooms,
-                        isOwner: viewModel.isViewerOwner(of: room),
-                        imagePipeline: imagePipeline,
-                        onOpen: { viewModel.openDiscoveryRoom(room) },
-                        onJoin: { Task { await viewModel.joinDiscoveryRoom(room) } }
-                    )
+                discoveryRoomSection(
+                    title: TradeRoomDiscoveryMode.suggested.title,
+                    rooms: viewModel.suggestedDiscoverableRooms,
+                    emptyMessage: TradeRoomDiscoveryMode.suggested.emptyMessage
+                )
+
+                discoveryRoomSection(
+                    title: TradeRoomDiscoveryMode.popular.title,
+                    rooms: viewModel.popularDiscoverableRooms,
+                    emptyMessage: TradeRoomDiscoveryMode.popular.emptyMessage
+                )
+
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    discoverySectionHeader(TradeRoomDiscoveryMode.yourRooms.title)
+
+                    if viewModel.yourRooms.isEmpty, viewModel.discoveryPhase == .loaded {
+                        ExperienceEmptyState(
+                            icon: .rooms,
+                            title: "No rooms yet",
+                            message: TradeRoomDiscoveryMode.yourRooms.emptyMessage,
+                            actionTitle: viewModel.viewerOwnedRoom == nil ? "Create Trade Room" : nil,
+                            action: viewModel.viewerOwnedRoom == nil ? { viewModel.presentCreateRoom() } : nil
+                        )
+                        .padding(.vertical, ExperienceSpacing.xs)
+                    } else if viewModel.yourRooms.isEmpty {
+                        Text(TradeRoomDiscoveryMode.yourRooms.emptyMessage)
+                            .experienceStyle(.footnote, color: colors.secondaryText)
+                    } else {
+                        ForEach(viewModel.yourRooms) { room in
+                            discoveryRow(for: room, isYourRoomsContext: true)
+                        }
+                    }
                 }
             }
         }
         .padding(.bottom, ExperienceSpacing.sm)
         .accessibilityIdentifier("tradeRooms.discovery.section")
+    }
+
+    private func discoverySectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(.caption2, design: .default).weight(.semibold))
+            .foregroundStyle(colors.secondaryText)
+            .textCase(.uppercase)
+            .tracking(0.35)
+    }
+
+    @ViewBuilder
+    private func discoveryRoomSection(
+        title: String,
+        rooms: [ExploreRoomSuggestion],
+        emptyMessage: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            discoverySectionHeader(title)
+            if rooms.isEmpty, viewModel.discoveryPhase == .loaded {
+                Text(emptyMessage)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            } else {
+                ForEach(rooms) { room in
+                    discoveryRow(for: room, isYourRoomsContext: false)
+                }
+            }
+        }
+    }
+
+    private func discoveryRow(for room: ExploreRoomSuggestion, isYourRoomsContext: Bool) -> some View {
+        TradeRoomDiscoveryRow(
+            room: room,
+            joinState: viewModel.joinState(for: room.id),
+            isYourRoomsContext: isYourRoomsContext,
+            isOwner: viewModel.isViewerOwner(of: room),
+            imagePipeline: imagePipeline,
+            onOpen: { viewModel.openDiscoveryRoom(room) },
+            onJoin: { Task { await viewModel.joinDiscoveryRoom(room) } }
+        )
     }
 
     private var discoverySkeleton: some View {

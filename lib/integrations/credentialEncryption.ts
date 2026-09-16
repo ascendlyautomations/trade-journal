@@ -31,9 +31,15 @@ export type RithmicIntegrationCredentials = {
   apiEnvironment: "test"
 }
 
+export type AppleSignInRefreshCredentials = {
+  kind: "apple_sign_in_refresh"
+  refresh_token: string
+}
+
 export type IntegrationCredentialPayload =
   | TradovateIntegrationCredentials
   | RithmicIntegrationCredentials
+  | AppleSignInRefreshCredentials
 
 /** @deprecated Prefer IntegrationCredentialPayload with `kind`. */
 export type LegacyTradovateCredentialPayload = {
@@ -56,6 +62,12 @@ function normalizeEncryptPayload(
   }
   if ("kind" in payload && payload.kind === "tradovate") {
     if (!payload.access_token || typeof payload.access_token !== "string") {
+      throw new Error("integration_credentials_payload_invalid")
+    }
+    return payload
+  }
+  if ("kind" in payload && payload.kind === "apple_sign_in_refresh") {
+    if (!payload.refresh_token || typeof payload.refresh_token !== "string") {
       throw new Error("integration_credentials_payload_invalid")
     }
     return payload
@@ -91,6 +103,15 @@ function parseDecryptedPayload(parsed: unknown): IntegrationCredentialPayload {
       password: o.password,
       systemName: o.systemName,
       apiEnvironment: o.apiEnvironment === "test" ? "test" : "test",
+    }
+  }
+  if (o.kind === "apple_sign_in_refresh") {
+    if (typeof o.refresh_token !== "string" || !o.refresh_token.trim()) {
+      throw new Error("integration_credentials_payload_invalid")
+    }
+    return {
+      kind: "apple_sign_in_refresh",
+      refresh_token: o.refresh_token,
     }
   }
   if (o.kind === "tradovate") {

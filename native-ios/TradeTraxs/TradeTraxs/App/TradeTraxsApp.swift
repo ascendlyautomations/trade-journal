@@ -71,6 +71,9 @@ struct TradeTraxsApp: App {
             .onChange(of: launchController.bootstrapGeneration) { _, _ in
                 bindAppDelegate(with: launchController.environment)
             }
+            .onChange(of: launchController.isDemoExperienceActive) { _, _ in
+                bindAppDelegate(with: launchController.environment)
+            }
             .onChange(of: scenePhase) { _, newPhase in
                 launchController.environment.lifecycle.handle(scenePhase: newPhase)
                 if newPhase == .background {

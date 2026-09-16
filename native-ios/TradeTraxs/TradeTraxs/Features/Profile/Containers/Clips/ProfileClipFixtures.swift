@@ -1,7 +1,7 @@
 import Foundation
 
 /// Deterministic sample clips for DEBUG development sessions / screenshots.
-enum ProfileClipFixtures {
+nonisolated enum ProfileClipFixtures {
     /// Public sample MP4 so AVPlayer works offline-of-Supabase in development.
     private static let sampleVideoURL =
         "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4"

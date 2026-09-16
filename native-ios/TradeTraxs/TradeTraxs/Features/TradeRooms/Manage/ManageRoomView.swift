@@ -172,13 +172,24 @@ struct ManageRoomView: View {
 
     private var detailsScreen: some View {
         Form {
-            Section("Basic Info") {
-                TextField("Room name", text: $viewModel.editConfiguration.name)
-                TextField("Description", text: Binding(
-                    get: { viewModel.editConfiguration.description ?? "" },
-                    set: { viewModel.editConfiguration.description = $0.isEmpty ? nil : $0 }
-                ), axis: .vertical)
-                .lineLimit(3...6)
+            Section {
+                SettingsLabeledField(title: "Room Name") {
+                    TextField("", text: $viewModel.editConfiguration.name)
+                        .textInputAutocapitalization(.words)
+                        .accessibilityIdentifier("tradeRooms.manage.details.name")
+                }
+                SettingsLabeledField(title: "Description") {
+                    TextField(
+                        "",
+                        text: Binding(
+                            get: { viewModel.editConfiguration.description ?? "" },
+                            set: { viewModel.editConfiguration.description = $0.isEmpty ? nil : $0 }
+                        ),
+                        axis: .vertical
+                    )
+                    .lineLimit(3...6)
+                    .accessibilityIdentifier("tradeRooms.manage.details.description")
+                }
                 EditRoomDetailsImageSection(
                     pendingPreview: viewModel.pendingImagePreview,
                     savedReference: viewModel.savedImageReference,
@@ -227,12 +238,19 @@ struct ManageRoomView: View {
                 Toggle("Show on my profile", isOn: $viewModel.editConfiguration.showsOnProfile)
             }
 
-            Section("Room Rules") {
-                TextField("Optional guidelines", text: Binding(
-                    get: { viewModel.editConfiguration.rules ?? "" },
-                    set: { viewModel.editConfiguration.rules = $0.isEmpty ? nil : $0 }
-                ), axis: .vertical)
-                .lineLimit(4...8)
+            Section {
+                SettingsLabeledField(title: "Room Rules") {
+                    TextField(
+                        "",
+                        text: Binding(
+                            get: { viewModel.editConfiguration.rules ?? "" },
+                            set: { viewModel.editConfiguration.rules = $0.isEmpty ? nil : $0 }
+                        ),
+                        axis: .vertical
+                    )
+                    .lineLimit(4...8)
+                    .accessibilityIdentifier("tradeRooms.manage.details.rules")
+                }
             }
 
             Section("Member Permissions") {
@@ -242,6 +260,8 @@ struct ManageRoomView: View {
             }
 
         }
+        .listSectionSpacing(ExperienceSpacing.xs)
+        .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
         .experienceNavigationTitle("Edit Room Details")
         .toolbar {
@@ -640,9 +660,9 @@ private struct EditRoomDetailsImageSection: View {
             .frame(width: 56, height: 56)
             .clipShape(Circle())
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                 Text("Room Photo")
-                    .experienceStyle(.subheadline, color: colors.primaryText)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
                 Text(savedReference != nil && !marksForRemoval && pendingPreview == nil
                     ? "Current room image"
                     : pendingPreview != nil

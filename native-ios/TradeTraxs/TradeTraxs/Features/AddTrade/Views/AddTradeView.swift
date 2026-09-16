@@ -19,6 +19,7 @@ struct AddTradeView: View {
     @State private var showsPsychologySheet = false
     @State private var didApplyScreenshotPrefill = false
     @State private var screenshotPickerShowsPreview = false
+    @State private var isTradeReviewExpanded = false
     @FocusState private var focusedField: AddTradeViewModel.Field?
 
     @Environment(\.themeColors) private var colors
@@ -103,6 +104,7 @@ struct AddTradeView: View {
                 )
             }
             .experienceSheetChrome()
+            .presentationDetents([.fraction(0.75)])
         }
         .confirmationDialog(
             "Add Clip",
@@ -221,7 +223,7 @@ struct AddTradeView: View {
         .onChange(of: clipVideoItem) { _, item in
             Task { await loadClipVideo(item) }
         }
-        .experienceKeyboardDoneToolbar()
+        .experienceFormKeyboard(focus: $focusedField)
         .accessibilityIdentifier("addTrade.root")
     }
 
@@ -265,7 +267,7 @@ struct AddTradeView: View {
                     Text("Short").tag(TradeSide.short)
                 }
                 .pickerStyle(.segmented)
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowInsets(EdgeInsets(top: ExperienceSpacing.xxs, leading: ExperienceSpacing.md, bottom: ExperienceSpacing.xxs, trailing: ExperienceSpacing.md))
                 .accessibilityLabel("Trade direction")
             } header: {
                 Text("Trade")
@@ -277,10 +279,10 @@ struct AddTradeView: View {
 
             Section("Risk & Result") {
                 HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                         Text("P&L")
                             .experienceStyle(.caption, color: colors.secondaryText)
-                        TextField("+$660.00", text: $viewModel.pnlText)
+                        TextField("-660", text: $viewModel.pnlText.numericInput(.signedPnL))
                             .keyboardType(.numbersAndPunctuation)
                             .focused($focusedField, equals: .pnl)
                             .font(.headline.weight(.semibold))
@@ -293,13 +295,13 @@ struct AddTradeView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                         Text("Risk / Reward")
                             .experienceStyle(.caption, color: colors.secondaryText)
                         HStack(spacing: ExperienceSpacing.xs) {
                             Text("1 :")
                                 .experienceStyle(.body, color: colors.secondaryText)
-                            TextField("2.35", text: $viewModel.rrText)
+                            TextField("2.35", text: $viewModel.rrText.numericInput(.riskReward))
                                 .keyboardType(.decimalPad)
                                 .focused($focusedField, equals: .rr)
                                 .accessibilityLabel("Risk reward ratio")
@@ -311,7 +313,7 @@ struct AddTradeView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                .listRowInsets(EdgeInsets(top: ExperienceSpacing.xxs, leading: ExperienceSpacing.md, bottom: ExperienceSpacing.xxs, trailing: ExperienceSpacing.md))
             }
 
             Section("Execution") {
@@ -320,39 +322,46 @@ struct AddTradeView: View {
                         "Entry Price",
                         text: $viewModel.entryPriceText,
                         field: .entry,
-                        error: viewModel.fieldErrors[.entry]
+                        error: viewModel.fieldErrors[.entry],
+                        style: .tradePrice
                     )
                     compactNumericField(
                         "Exit Price",
                         text: $viewModel.exitPriceText,
                         field: .exit,
-                        error: viewModel.fieldErrors[.exit]
+                        error: viewModel.fieldErrors[.exit],
+                        style: .tradePrice
                     )
                 }
-                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                .listRowInsets(EdgeInsets(top: ExperienceSpacing.xxs, leading: ExperienceSpacing.md, bottom: ExperienceSpacing.xxs, trailing: ExperienceSpacing.md))
 
                 HStack(alignment: .top, spacing: ExperienceSpacing.md) {
                     compactNumericField(
                         "Contracts",
                         text: $viewModel.contractsText,
                         field: .contracts,
-                        error: viewModel.fieldErrors[.contracts]
+                        error: viewModel.fieldErrors[.contracts],
+                        style: .tradeQuantity
                     )
                     compactNumericField(
                         "Points",
                         text: $viewModel.pointsText,
                         field: .points,
-                        error: viewModel.fieldErrors[.points]
+                        error: viewModel.fieldErrors[.points],
+                        style: .tradeQuantity
                     )
                 }
-                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                .listRowInsets(EdgeInsets(top: ExperienceSpacing.xxs, leading: ExperienceSpacing.md, bottom: ExperienceSpacing.xxs, trailing: ExperienceSpacing.md))
             }
 
             Section("Timing") {
                 DatePicker("Entry", selection: $viewModel.entryAt)
-                Toggle("Include exit time", isOn: $viewModel.includeExitTime)
                 if viewModel.includeExitTime {
                     DatePicker("Exit", selection: $viewModel.exitAt)
+                    Button("Remove exit time", role: .destructive) {
+                        viewModel.removeExitTime()
+                    }
+                    .font(ExperienceTypography.subheadline)
                     if let duration = viewModel.computedHoldDurationLabel {
                         HStack {
                             Text("Duration")
@@ -363,6 +372,13 @@ struct AddTradeView: View {
                                 .accessibilityIdentifier("addTrade.duration")
                         }
                     }
+                } else {
+                    Button("Add exit time") {
+                        viewModel.addExitTime()
+                    }
+                    .font(ExperienceTypography.subheadline.weight(.semibold))
+                    .foregroundStyle(colors.accent)
+                    .accessibilityIdentifier("addTrade.addExitTime")
                 }
             }
 
@@ -407,40 +423,51 @@ struct AddTradeView: View {
         .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
         .disabled(viewModel.phase == .saving)
-        .listSectionSpacing(ExperienceSpacing.sm)
+        .listSectionSpacing(ExperienceSpacing.xs)
+        .onAppear {
+            if viewModel.isEditing, viewModel.hasTradeReviewContent {
+                isTradeReviewExpanded = true
+            }
+        }
     }
 
     private var tradeReviewSection: some View {
-        Section("Trade Review") {
-            TextField("Strategy / setup", text: $viewModel.strategyText)
-                .textInputAutocapitalization(.sentences)
-                .accessibilityIdentifier("addTrade.strategy")
+        Section {
+            DisclosureGroup(isExpanded: $isTradeReviewExpanded) {
+                TextField("Strategy / setup", text: $viewModel.strategyText)
+                    .textInputAutocapitalization(.sentences)
+                    .accessibilityIdentifier("addTrade.strategy")
 
-            inlineNotesEditor(
-                text: $viewModel.notesText,
-                placeholder: "Top confluences, context, what you saw…",
-                minHeight: 72,
-                accessibilityIdentifier: "addTrade.notes"
-            )
+                inlineNotesEditor(
+                    text: $viewModel.notesText,
+                    placeholder: "Top confluences, context, what you saw…",
+                    minHeight: 64,
+                    accessibilityIdentifier: "addTrade.notes"
+                )
 
-            Picker("Timeframe", selection: $viewModel.timeframeSelection) {
-                Text("Not set").tag("")
-                ForEach(TradeReviewCatalog.timeframeOptions, id: \.self) { option in
-                    Text(option).tag(option)
+                Picker("Timeframe", selection: $viewModel.timeframeSelection) {
+                    Text("Not set").tag("")
+                    ForEach(TradeReviewCatalog.timeframeOptions, id: \.self) { option in
+                        Text(option).tag(option)
+                    }
                 }
+                .accessibilityIdentifier("addTrade.timeframe")
+
+                if viewModel.timeframeSelection == TradeReviewCatalog.customTimeframeToken {
+                    TextField("Custom timeframe", text: $viewModel.customTimeframeText)
+                        .textInputAutocapitalization(.never)
+                        .accessibilityIdentifier("addTrade.timeframe.custom")
+                }
+
+                Toggle("News event", isOn: $viewModel.newsEvent)
+                    .accessibilityIdentifier("addTrade.newsEvent")
+
+                psychologyRow
+            } label: {
+                Text("Trade Review")
+                    .experienceStyle(.headline, color: colors.primaryText)
             }
-            .accessibilityIdentifier("addTrade.timeframe")
-
-            if viewModel.timeframeSelection == TradeReviewCatalog.customTimeframeToken {
-                TextField("Custom timeframe", text: $viewModel.customTimeframeText)
-                    .textInputAutocapitalization(.never)
-                    .accessibilityIdentifier("addTrade.timeframe.custom")
-            }
-
-            Toggle("News event", isOn: $viewModel.newsEvent)
-                .accessibilityIdentifier("addTrade.newsEvent")
-
-            psychologyRow
+            .accessibilityIdentifier("addTrade.tradeReview")
         }
     }
 
@@ -467,7 +494,6 @@ struct AddTradeView: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(colors.tertiaryText)
             }
-            .padding(.vertical, ExperienceSpacing.xxs)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -501,7 +527,7 @@ struct AddTradeView: View {
     private var pnlFieldColor: Color {
         let trimmed = viewModel.pnlText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
-              let value = Decimal(string: trimmed.replacingOccurrences(of: ",", with: ""))
+              let value = NumericInputFieldSupport.parse(trimmed, style: .signedPnL)
         else { return colors.primaryText }
         if value > 0 { return colors.profit }
         if value < 0 { return colors.loss }
@@ -509,15 +535,15 @@ struct AddTradeView: View {
     }
 
     private var instrumentRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             Button {
                 showsInstrumentPicker = true
             } label: {
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                         Text("Instrument")
                             .experienceStyle(.caption, color: colors.secondaryText)
-                        Text(viewModel.symbolText.isEmpty ? "Select or custom" : viewModel.symbolText)
+                        Text(viewModel.symbolText.isEmpty ? "Choose Instrument" : viewModel.symbolText)
                             .experienceStyle(
                                 .body,
                                 color: viewModel.symbolText.isEmpty ? colors.tertiaryText : colors.primaryText
@@ -691,8 +717,17 @@ struct AddTradeView: View {
     private var accountPicker: some View {
         Picker("Account", selection: Binding(
             get: { viewModel.selectedAccountID?.rawValue ?? "" },
-            set: { viewModel.selectAccount(TradingAccountID($0)) }
+            set: { newValue in
+                if newValue.isEmpty {
+                    viewModel.clearAccountSelection()
+                } else {
+                    viewModel.selectAccount(TradingAccountID(newValue))
+                }
+            }
         )) {
+            Text("Choose Account")
+                .foregroundStyle(colors.tertiaryText)
+                .tag("")
             ForEach(viewModel.accountsForPicker) { account in
                 OwnerAccountDropdownPickerLabel(account: account)
                     .tag(account.id.rawValue)
@@ -713,12 +748,13 @@ struct AddTradeView: View {
         text: Binding<String>,
         field: AddTradeViewModel.Field,
         error: String?,
+        style: NumericInputStyle,
         keyboard: UIKeyboardType = .decimalPad
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             Text(title)
                 .experienceStyle(.caption, color: colors.secondaryText)
-            TextField(title, text: text)
+            TextField(title == "Contracts" ? "0" : title, text: text.numericInput(style))
                 .keyboardType(keyboard)
                 .focused($focusedField, equals: field)
             if let error {

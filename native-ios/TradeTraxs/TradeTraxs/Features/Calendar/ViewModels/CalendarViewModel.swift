@@ -68,11 +68,9 @@ final class CalendarViewModel {
         }
     }
 
-    /// Compact label for the top-right toolbar (same filter semantics).
+    /// Compact label for the Calendar toolbar account trigger (display only).
     var accountFilterToolbarTitle: String {
-        let full = accountFilterTitle
-        guard full.count > 18 else { return full }
-        return String(full.prefix(17)) + "…"
+        CalendarPresentation.compactAccountSelectorDisplay(accountFilterTitle)
     }
 
     func accountMenuTitle(for account: TradingAccount) -> String {

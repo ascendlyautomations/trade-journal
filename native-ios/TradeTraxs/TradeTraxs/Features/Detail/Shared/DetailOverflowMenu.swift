@@ -29,6 +29,10 @@ struct DetailOverflowMenu: View {
     var body: some View {
         if showsMenu {
             Menu {
+                if isOwner, let onEdit {
+                    Button(editTitle, systemImage: "pencil", action: onEdit)
+                }
+
                 if let onManageInVault {
                     Button("Manage in Vault", systemImage: "hexagon.fill") {
                         ExperienceHaptics.play(.selection)
@@ -60,14 +64,8 @@ struct DetailOverflowMenu: View {
                     }
                 }
 
-                if isOwner, onEdit != nil || onDelete != nil {
-                    Divider()
-                    if let onEdit {
-                        Button(editTitle, systemImage: "pencil", action: onEdit)
-                    }
-                    if let onDelete {
-                        Button(deleteTitle, systemImage: "trash", role: .destructive, action: onDelete)
-                    }
+                if isOwner, let onDelete {
+                    Button(deleteTitle, systemImage: "trash", role: .destructive, action: onDelete)
                 }
             } label: {
             Image(systemName: "ellipsis")

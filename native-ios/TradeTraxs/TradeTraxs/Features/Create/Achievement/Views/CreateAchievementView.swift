@@ -107,7 +107,7 @@ struct CreateAchievementView: View {
 
     private var composerContent: some View {
         Form {
-            Section {
+            Section("Achievement Details") {
                 accountField
                     .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
                 kindField
@@ -118,19 +118,17 @@ struct CreateAchievementView: View {
                     .accessibilityIdentifier("createAchievement.title")
                     .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
                 TextField("Optional description", text: $viewModel.descriptionText, axis: .vertical)
-                    .lineLimit(3...6)
+                    .lineLimit(2...5)
                     .textInputAutocapitalization(.sentences)
                     .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
-            } header: {
-                sectionHeader("Achievement Details")
             }
 
-            Section {
+            Section("Achievement Value") {
                 if viewModel.isPayoutKind {
-                    HStack(spacing: ExperienceSpacing.xs) {
+                    HStack(spacing: ExperienceSpacing.xxs) {
                         Text("$")
                             .experienceStyle(.body, color: colors.secondaryText)
-                        TextField("0.00", text: $viewModel.payoutAmountText)
+                        TextField("0.00", text: $viewModel.payoutAmountText.numericInput(.unsignedCurrency))
                             .keyboardType(.decimalPad)
                             .focused($focusedField, equals: .payout)
                             .accessibilityIdentifier("createAchievement.payout")
@@ -145,8 +143,6 @@ struct CreateAchievementView: View {
                     displayedComponents: [.date]
                 )
                 .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
-            } header: {
-                sectionHeader("Achievement Value")
             }
 
             Section {
@@ -156,7 +152,7 @@ struct CreateAchievementView: View {
                         .accessibilityLabel("Achievement image preview")
                         .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
 
-                    HStack(spacing: ExperienceSpacing.md) {
+                    HStack(spacing: ExperienceSpacing.sm) {
                         PhotosPicker(selection: $photoItem, matching: .images) {
                             Text("Replace")
                                 .font(ExperienceTypography.subheadline.weight(.semibold))
@@ -181,23 +177,25 @@ struct CreateAchievementView: View {
                     .accessibilityIdentifier("createAchievement.media.picker")
                     .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
                 }
+
+                Toggle("Share to Profile", isOn: $viewModel.isPublic)
+                    .accessibilityIdentifier("createAchievement.shareToProfile")
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: ExperienceSpacing.xxs,
+                            leading: ExperienceSpacing.md,
+                            bottom: ExperienceSpacing.xxs,
+                            trailing: ExperienceSpacing.md
+                        )
+                    )
+                    .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
             } header: {
-                sectionHeader("Media")
+                Text("Media")
             } footer: {
                 if viewModel.finalImage == nil {
-                    sectionFooter("Screenshot or proof image required.")
+                    Text("Screenshot or proof image required.")
+                        .foregroundStyle(colors.tertiaryText)
                 }
-            }
-
-            Section {
-                SettingsToggleRow(
-                    title: "Public",
-                    subtitle: "Show on your profile and feed when published.",
-                    isOn: $viewModel.isPublic
-                )
-                .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
-            } header: {
-                sectionHeader("Visibility")
             }
 
             if let formError = viewModel.formError {
@@ -220,37 +218,23 @@ struct CreateAchievementView: View {
                 ) {
                     viewModel.publish()
                 }
-                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 12, trailing: 0))
+                .listRowInsets(
+                    EdgeInsets(
+                        top: ExperienceSpacing.xxs,
+                        leading: 0,
+                        bottom: ExperienceSpacing.xs,
+                        trailing: 0
+                    )
+                )
                 .listRowBackground(Color.clear)
             }
         }
         .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
-        .listSectionSpacing(ExperienceSpacing.sm)
+        .listSectionSpacing(ExperienceSpacing.xs)
         .disabled(viewModel.phase == .publishing)
-        .experienceKeyboardDoneToolbar()
+        .experienceFormKeyboard(focus: $focusedField)
         .onAppear { viewModel.loadAccountsIfNeeded() }
-    }
-
-    @ViewBuilder
-    private func sectionHeader(_ title: String) -> some View {
-        if usesTradeTraxsFormSurfaces {
-            Text(title.uppercased())
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(colors.secondaryText)
-        } else {
-            Text(title)
-        }
-    }
-
-    @ViewBuilder
-    private func sectionFooter(_ text: String) -> some View {
-        if usesTradeTraxsFormSurfaces {
-            Text(text)
-                .foregroundStyle(colors.tertiaryText)
-        } else {
-            Text(text)
-        }
     }
 
     private var submitButtonTitle: String {

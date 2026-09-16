@@ -54,7 +54,9 @@ nonisolated enum GettingStartedChecklistPolicy {
     ) -> Bool {
         guard let userID, !userID.isEmpty else { return false }
         guard signals.onboardingCompleted else { return false }
-        guard !progress.allComplete else { return false }
+        if progress.allComplete {
+            return !sessionDismissed
+        }
         guard signals.tradeCount <= 0 else { return false }
         guard !sessionDismissed else { return false }
         return true

@@ -68,6 +68,7 @@ struct CommentComposerView: View {
         .onChange(of: viewModel.composerFocusToken) { _, _ in
             focused = true
         }
+        .experienceFormFocusSync($focused)
     }
 
     @ViewBuilder

@@ -138,6 +138,7 @@ final class ProfileOnboardingTests: XCTestCase {
         )
 
         let vm = makeOnboardingViewModel(snapshot: repo.storedSnapshot!, profiles: repo, gateStore: gate)
+        vm.displayName = "Jamie"
         vm.username = "jamie_t"
         vm.tradingStyle = "Swing"
         vm.traderType = .options
@@ -145,11 +146,23 @@ final class ProfileOnboardingTests: XCTestCase {
 
         await vm.submit()
 
-        if case .complete = gate.phase {
+        if case .brokerOnboarding = gate.phase {
             XCTAssertTrue(true)
         } else {
-            XCTFail("Expected gate complete, got \(gate.phase)")
+            XCTFail("Expected broker onboarding phase, got \(gate.phase)")
         }
+        XCTAssertEqual(BrokerOnboardingPersistence.status(for: profileID), .pending)
+    }
+
+    func testBrokerOnboardingPersistenceGrandfathersUnknownProfiles() {
+        let profileID = ProfileID("existing-user")
+        BrokerOnboardingPersistence.markFinished(profileID)
+        XCTAssertEqual(BrokerOnboardingPersistence.status(for: profileID), .finished)
+
+        let freshID = ProfileID("brand-new")
+        XCTAssertEqual(BrokerOnboardingPersistence.status(for: freshID), .unknown)
+        BrokerOnboardingPersistence.grandfatherExistingProfileIfNeeded(freshID)
+        XCTAssertEqual(BrokerOnboardingPersistence.status(for: freshID), .finished)
     }
 
     @MainActor
@@ -175,6 +188,7 @@ final class ProfileOnboardingTests: XCTestCase {
         )
 
         let vm = makeOnboardingViewModel(snapshot: repo.storedSnapshot!, profiles: repo, gateStore: gate)
+        vm.displayName = "Jamie"
         vm.username = "jamie_t"
         vm.tradingStyle = "Swing"
         vm.traderType = .options
@@ -182,9 +196,10 @@ final class ProfileOnboardingTests: XCTestCase {
 
         await vm.submit()
 
-        if case .complete = gate.phase {
+        switch gate.phase {
+        case .complete, .brokerOnboarding:
             XCTFail("Gate should remain incomplete after failed submit")
-        } else {
+        default:
             XCTAssertNotNil(vm.errorMessage)
         }
     }
@@ -212,6 +227,7 @@ final class ProfileOnboardingTests: XCTestCase {
         )
 
         let vm = makeOnboardingViewModel(snapshot: repo.storedSnapshot!, profiles: repo, gateStore: gate)
+        vm.displayName = "Jamie"
         vm.username = "taken_name"
         vm.tradingStyle = "Swing"
         vm.traderType = .options
@@ -220,8 +236,11 @@ final class ProfileOnboardingTests: XCTestCase {
 
         await vm.submit()
 
-        if case .complete = gate.phase {
+        switch gate.phase {
+        case .complete, .brokerOnboarding:
             XCTFail("Gate should remain incomplete after username conflict")
+        default:
+            break
         }
         XCTAssertEqual(vm.usernameError, ProfileOnboardingErrorMapping.usernameConflictMessage)
         XCTAssertNil(vm.errorMessage)
@@ -236,6 +255,7 @@ final class ProfileOnboardingTests: XCTestCase {
         let snapshot = ProfileOnboardingSnapshot(
             profileID: ProfileID(UUID().uuidString),
             username: "web_user",
+            displayName: "Web User",
             onboardingCompleted: true,
             traderType: "Futures",
             tradingStyle: "Scalping",
@@ -302,6 +322,7 @@ final class ProfileOnboardingTests: XCTestCase {
             objectStorage: OnboardingStubObjectStorage(),
             appConfiguration: AppConfiguration.make(for: .debug)
         )
+        vm.displayName = "Alex"
         vm.username = "alex_m"
         vm.tradingStyle = "Scalping"
         vm.traderType = .futures

@@ -32,10 +32,14 @@ final class AuthenticationManager {
     /// Post-auth profile ensure + OAuth first-login metadata (bound after ``DataEnvironment`` exists).
     var sessionBootstrap: AuthenticatedSessionBootstrap?
 
+    /// Best-effort Apple authorization code registration (BFF stores refresh token for deletion revoke).
+    @ObservationIgnored var appleRevocationCredentialHandler: (@Sendable (String) async -> Void)?
+
     private(set) var lastSessionValidationError: AuthenticationError?
 
     private var restoreInFlight = false
     private var isRetryingValidation = false
+    private var logoutInFlight = false
 
     init(
         configuration: AuthenticationConfiguration,
@@ -286,11 +290,33 @@ final class AuthenticationManager {
 
     // MARK: - Sign in / up
 
-    func signIn(email: String, password: String) async throws {
+    func signIn(email: String, password: String, smartSignUpIfNewEmail: Bool = false) async throws {
+        if smartSignUpIfNewEmail {
+            try await signInOfferingSignUpForUnknownAccount(email: email, password: password)
+            return
+        }
         try await authenticate(provider: .email) {
             AuthCompletion(
                 session: try await emailProvider.signIn(email: email, password: password)
             )
+        }
+    }
+
+    /// Sign-in first; on authoritative invalid-credentials only, attempt existing sign-up flow.
+    /// Wrong password for an existing account is resolved when sign-up returns ``emailAlreadyRegistered``.
+    private func signInOfferingSignUpForUnknownAccount(email: String, password: String) async throws {
+        do {
+            try await authenticate(provider: .email) {
+                AuthCompletion(
+                    session: try await emailProvider.signIn(email: email, password: password)
+                )
+            }
+        } catch AuthenticationError.invalidCredentials {
+            do {
+                try await signUp(email: email, password: password)
+            } catch AuthenticationError.emailAlreadyRegistered {
+                throw AuthenticationError.invalidCredentials
+            }
         }
     }
 
@@ -303,29 +329,64 @@ final class AuthenticationManager {
     }
 
     func signInWithApple() async throws {
-        guard let apple = appleProvider as? AppleSignInProvider else {
-            throw AuthenticationError.providerUnavailable(.apple)
-        }
-        try await authenticate(provider: .apple) {
-            let result = try await apple.signInWithResult()
-            return AuthCompletion(session: result.session, firstLoginHint: result.firstLoginHint)
+        try await performOAuthSignIn(provider: .apple) {
+            guard let apple = appleProvider as? AppleSignInProvider else {
+                throw AuthenticationError.providerUnavailable(.apple)
+            }
+            try await authenticate(provider: .apple) {
+                let result = try await apple.signInWithResult()
+                return AuthCompletion(
+                    session: result.session,
+                    firstLoginHint: result.firstLoginHint,
+                    appleAuthorizationCode: result.authorizationCode
+                )
+            }
         }
     }
 
     func signInWithApple(credential: AppleIDCredentialPayload) async throws {
-        guard let apple = appleProvider as? AppleSignInProvider else {
-            throw AuthenticationError.providerUnavailable(.apple)
-        }
-        try await authenticate(provider: .apple) {
-            let result = try await apple.signIn(credential: credential)
-            return AuthCompletion(session: result.session, firstLoginHint: result.firstLoginHint)
+        try await performOAuthSignIn(provider: .apple) {
+            guard let apple = appleProvider as? AppleSignInProvider else {
+#if DEBUG
+                AppLog.authentication.debug(
+                    "[AppleAuth] manager.rejected providerType=\(String(describing: type(of: self.appleProvider)), privacy: .public)"
+                )
+#endif
+                throw AuthenticationError.providerUnavailable(.apple)
+            }
+            try await authenticate(provider: .apple) {
+                let result = try await apple.signIn(credential: credential)
+                return AuthCompletion(
+                    session: result.session,
+                    firstLoginHint: result.firstLoginHint,
+                    appleAuthorizationCode: credential.authorizationCode
+                )
+            }
         }
     }
 
     func signInWithGoogle() async throws {
-        try await authenticate(provider: .google) {
-            AuthCompletion(session: try await googleProvider.signIn())
+        try await performOAuthSignIn(provider: .google) {
+            try await authenticate(provider: .google) {
+                AuthCompletion(session: try await googleProvider.signIn())
+            }
         }
+    }
+
+    private func performOAuthSignIn(
+        provider: AuthenticationProviderKind,
+        operation: () async throws -> Void
+    ) async throws {
+        guard await OAuthSignInSingleFlight.shared.tryBegin(provider) else {
+            throw AuthenticationError.cancelled
+        }
+        do {
+            try await operation()
+        } catch {
+            await OAuthSignInSingleFlight.shared.end(provider)
+            throw error
+        }
+        await OAuthSignInSingleFlight.shared.end(provider)
     }
 
     /// Debug-only path that still uses Keychain + state machine (not a navigation hack).
@@ -359,16 +420,29 @@ final class AuthenticationManager {
     // MARK: - Logout / lock
 
     func logout() async {
+        guard !logoutInFlight else { return }
+        logoutInFlight = true
+        defer { logoutInFlight = false }
+
         emit(.logoutStarted)
         restorationGeneration &+= 1
         refreshCoordinator.cancel()
         await AuthRefreshSingleFlight.shared.bumpSessionGeneration()
         await AuthRefreshSingleFlight.shared.cancelAll()
         await SessionNetworkGate.shared.markUnauthenticated()
-        await logoutCoordinator.logout()
+        lastSessionValidationError = nil
+
+        let remoteSession = logoutCoordinator.performLocalTeardown()
+
         state = .unauthenticated
-        emit(.logoutCompleted)
         AuthFlowTracer.trace("auth.session.cleared", phase: .unauthenticated, generation: restorationGeneration)
+        emit(.logoutCompleted)
+
+        if let remoteSession {
+            Task {
+                await self.logoutCoordinator.signOutRemotely(session: remoteSession)
+            }
+        }
     }
 
     func unlockWithBiometrics(reason: String = "Unlock TradeTraxs") async throws {
@@ -397,10 +471,16 @@ final class AuthenticationManager {
     private struct AuthCompletion: Sendable {
         var session: AuthenticationSession
         var firstLoginHint: OAuthFirstLoginHint?
+        var appleAuthorizationCode: String?
 
-        init(session: AuthenticationSession, firstLoginHint: OAuthFirstLoginHint? = nil) {
+        init(
+            session: AuthenticationSession,
+            firstLoginHint: OAuthFirstLoginHint? = nil,
+            appleAuthorizationCode: String? = nil
+        ) {
             self.session = session
             self.firstLoginHint = firstLoginHint
+            self.appleAuthorizationCode = appleAuthorizationCode
         }
     }
 
@@ -421,6 +501,12 @@ final class AuthenticationManager {
                 session: completion.session,
                 firstLoginHint: completion.firstLoginHint
             )
+            if provider == .apple, let code = completion.appleAuthorizationCode {
+                let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty, let handler = appleRevocationCredentialHandler {
+                    Task { await handler(trimmed) }
+                }
+            }
         } catch is CancellationError {
             if case .authenticating = state {
                 state = .unauthenticated
@@ -432,6 +518,13 @@ final class AuthenticationManager {
                 state = .unauthenticated
                 throw error
             }
+#if DEBUG
+            if provider == .apple {
+                AppLog.authentication.debug(
+                    "[AppleAuth] authenticate.failed errorType=AuthenticationError error=\(String(describing: error), privacy: .public)"
+                )
+            }
+#endif
             state = .failure(error)
             emit(.signInFailed(error))
             throw error
@@ -450,11 +543,15 @@ final class AuthenticationManager {
         restorationGeneration &+= 1
         await AuthRefreshSingleFlight.shared.cancelAll()
         try sessionManager.install(session)
+        let mergedHint = OAuthFirstLoginHint.merged(explicit: firstLoginHint, session: session)
         if let sessionBootstrap {
             try await sessionBootstrap.finalize(
                 session: session,
-                firstLoginHint: firstLoginHint
+                firstLoginHint: mergedHint?.hasContent == true ? mergedHint : nil
             )
+        }
+        await MainActor.run {
+            OAuthProfileOnboardingNameStore.stage(fullName: mergedHint?.fullName, for: session.userID)
         }
         applyAuthenticated(
             session,

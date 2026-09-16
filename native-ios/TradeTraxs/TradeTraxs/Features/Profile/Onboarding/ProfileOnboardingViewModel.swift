@@ -12,11 +12,12 @@ final class ProfileOnboardingViewModel {
     var bio = ""
     var isSubmitting = false
     var errorMessage: String?
+    var displayNameError: String?
     var usernameError: String?
     var avatarPreview: UIImage?
     var avatarUploadError: String?
 
-    private(set) var displayName: String = ""
+    var displayName: String = ""
     private(set) var prefilledAvatarReference: MediaReference?
 
     private var pendingAvatarData: Data?
@@ -43,7 +44,10 @@ final class ProfileOnboardingViewModel {
         self.uploadService = uploadService
         self.objectStorage = objectStorage
         self.appConfiguration = appConfiguration
-        self.displayName = ProfileDisplayNamePolicy.normalized(snapshot.displayName) ?? ""
+        self.displayName = ProfileOnboardingNamePrefill.editableName(
+            snapshot: snapshot,
+            userID: UserID(snapshot.profileID.rawValue)
+        )
         self.username = ProfileUsernamePolicy.onboardingPrefillUsername(
             current: snapshot.username,
             profileID: snapshot.profileID
@@ -66,6 +70,7 @@ final class ProfileOnboardingViewModel {
 
     var canSubmit: Bool {
         !isSubmitting
+            && ProfileDisplayNamePolicy.validateRequired(displayName) == nil
             && ProfileUsernamePolicy.validateNotEmpty(username) == nil
             && !tradingStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && traderType != nil
@@ -115,11 +120,16 @@ final class ProfileOnboardingViewModel {
         guard canSubmit else { return }
 
         errorMessage = nil
+        displayNameError = nil
         usernameError = nil
         if !skipPendingAvatar {
             avatarUploadError = nil
         }
 
+        if let nameValidationError = ProfileDisplayNamePolicy.validateRequired(displayName) {
+            displayNameError = nameValidationError
+            return
+        }
         if let usernameValidationError = ProfileUsernamePolicy.validateNotEmpty(username) {
             usernameError = usernameValidationError
             return
@@ -158,7 +168,7 @@ final class ProfileOnboardingViewModel {
             let submission = ProfileOnboardingSubmission(
                 profileID: snapshot.profileID,
                 username: normalizedUsername,
-                displayName: displayName.nonEmptyOrNil,
+                displayName: ProfileDisplayNamePolicy.normalized(displayName),
                 bio: bio.nonEmptyOrNil,
                 tradingStyle: tradingStyle.trimmingCharacters(in: .whitespacesAndNewlines),
                 traderType: traderType,

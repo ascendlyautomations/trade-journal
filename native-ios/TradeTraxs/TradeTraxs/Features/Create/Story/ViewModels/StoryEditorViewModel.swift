@@ -11,7 +11,7 @@ final class StoryEditorViewModel {
     private(set) var canvasSize: CGSize = .zero
     private(set) var isEditingText = false
     private(set) var draftText = ""
-    private(set) var selectedColor: StoryTextColor = .white
+    private(set) var selectedTextFill: StoryTextFill = .fromPreset(.white)
     private(set) var selectedAlignment: TextAlignment = .center
     private(set) var showsTextBackground = false
 
@@ -32,7 +32,7 @@ final class StoryEditorViewModel {
         canvas.selectedTextID = id
         if let id, let overlay = canvas.textOverlays.first(where: { $0.id == id }) {
             draftText = overlay.text
-            selectedColor = overlay.color
+            selectedTextFill = overlay.textFill
             selectedAlignment = overlay.alignment
             showsTextBackground = overlay.showsBackground
         }
@@ -43,7 +43,7 @@ final class StoryEditorViewModel {
         canvas.textOverlays.append(overlay)
         canvas.selectedTextID = overlay.id
         draftText = ""
-        selectedColor = .white
+        selectedTextFill = .fromPreset(.white)
         selectedAlignment = .center
         showsTextBackground = false
         isEditingText = true
@@ -60,7 +60,12 @@ final class StoryEditorViewModel {
     }
 
     func setSelectedColor(_ color: StoryTextColor) {
-        selectedColor = color
+        selectedTextFill = .fromPreset(color)
+        applyDraftToSelectedOverlay()
+    }
+
+    func setCustomTextColor(_ color: Color) {
+        selectedTextFill = StoryTextFill.fromSwiftUIColor(color)
         applyDraftToSelectedOverlay()
     }
 
@@ -129,7 +134,7 @@ final class StoryEditorViewModel {
               let index = canvas.textOverlays.firstIndex(where: { $0.id == id })
         else { return }
         canvas.textOverlays[index].text = draftText
-        canvas.textOverlays[index].color = selectedColor
+        canvas.textOverlays[index].textFill = selectedTextFill
         canvas.textOverlays[index].alignment = selectedAlignment
         canvas.textOverlays[index].showsBackground = showsTextBackground
     }

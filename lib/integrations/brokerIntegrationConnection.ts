@@ -29,6 +29,7 @@ export type SafeBrokerConnectionView = {
   provider_display_name: string | null
   connection_label: string | null
   api_environment: BrokerApiEnvironment | null
+  broker_login_username: string | null
 }
 
 type ConnectionRow = {
@@ -46,6 +47,7 @@ type ConnectionRow = {
   connected_at: string | null
   disconnected_at: string | null
   last_sync_at: string | null
+  broker_login_username: string | null
 }
 
 const ACTIVE_STATUSES = ["connected", "reconnect_required", "error"] as const
@@ -80,6 +82,10 @@ function toSafeConnectionView(
         row.api_environment === "test")
         ? (row.api_environment as BrokerApiEnvironment)
         : null,
+    broker_login_username:
+      connected && row.broker_login_username?.trim()
+        ? row.broker_login_username.trim()
+        : null,
   }
 }
 
@@ -101,7 +107,7 @@ export async function listSafeBrokerConnections(
   let query = supabase
     .from("broker_integration_connections")
     .select(
-      "id, user_id, provider, status, provider_user_id, provider_display_name, connection_label, credentials_ciphertext, access_token_expires_at, refresh_token_expires_at, api_environment, connected_at, disconnected_at, last_sync_at"
+      "id, user_id, provider, status, provider_user_id, provider_display_name, connection_label, broker_login_username, credentials_ciphertext, access_token_expires_at, refresh_token_expires_at, api_environment, connected_at, disconnected_at, last_sync_at"
     )
     .eq("user_id", params.userId)
     .eq("provider", params.provider)

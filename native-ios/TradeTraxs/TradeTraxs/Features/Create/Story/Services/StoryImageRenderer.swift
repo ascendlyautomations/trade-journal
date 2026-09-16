@@ -63,7 +63,7 @@ enum StoryImageRenderer {
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: overlay.color.uiColor,
+            .foregroundColor: overlay.textFill.uiColor,
             .paragraphStyle: paragraph,
         ]
         let attributed = NSAttributedString(string: trimmed, attributes: attributes)

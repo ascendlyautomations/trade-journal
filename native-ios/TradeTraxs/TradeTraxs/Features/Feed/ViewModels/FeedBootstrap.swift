@@ -37,7 +37,9 @@ enum FeedBootstrap: ScreenBootstrap {
     static func loadInitial(_ context: Context) async throws -> PageResult {
         let viewer = await context.session.currentUserID.map { ProfileID($0.rawValue) }
 
-        if let viewer, FeedSupport.isLocalDevelopmentProfile(viewer) {
+        if let viewer,
+           DemoExperienceSupport.usesLocalBundledSocialData(viewer)
+        {
             FeedFixtures.seedDetailCache(context.detailCache, viewerID: viewer)
             if context.scope == .following {
             FeedStoriesCatalogStore.shared.replace(

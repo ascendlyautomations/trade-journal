@@ -38,6 +38,10 @@ nonisolated protocol BrokerIntegrationRepository: Sendable {
         brokerIntegrationAccountId: String,
         draft: TradingAccountDraft
     ) async throws -> BrokerLinkAccountsResponse
-    func syncRithmicAccount(connectionId: String, mappingId: String) async throws -> TradovateAccountSyncResponse
+    func syncRithmicAccount(
+        connectionId: String,
+        mappingId: String,
+        password: String?
+    ) async throws -> TradovateAccountSyncResponse
     func disconnectRithmic(connectionId: String) async throws
 }

@@ -18,7 +18,7 @@ struct FeedState: Equatable {
     var cachedVisibleEntries: [FeedTimelineEntry] = []
     var cachedVisibleEntryIDs: [String] = []
     var stories: [Story] = []
-    var scope: FeedScope = .following
+    var scope: FeedScope = .global
     var contentFilter: FeedContentFilter = .all
     var viewerID: ProfileID?
 

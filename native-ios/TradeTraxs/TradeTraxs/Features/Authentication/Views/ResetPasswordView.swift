@@ -42,7 +42,7 @@ struct ResetPasswordView: View {
                     ExperienceButton(
                         title: "Send Reset Link",
                         kind: .primary,
-                        isEnabled: viewModel.canSubmit,
+                        isEnabled: true,
                         isLoading: viewModel.isSubmitting,
                         accessibilityIdentifier: "auth.reset.submit"
                     ) {
@@ -58,7 +58,7 @@ struct ResetPasswordView: View {
         .experienceScreenBackground()
         .experienceNavigationTitle("Reset Password")
         .onDisappear {
-            ExperienceKeyboard.dismiss()
+            ExperienceKeyboard.dismissFormKeyboard()
         }
     }
 

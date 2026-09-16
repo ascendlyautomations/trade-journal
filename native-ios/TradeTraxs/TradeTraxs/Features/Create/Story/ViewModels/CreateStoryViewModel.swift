@@ -39,6 +39,7 @@ final class CreateStoryViewModel {
     private var viewerID: ProfileID?
     private var publishTask: Task<Void, Never>?
     private var hasPrepared = false
+    private(set) var isPostingStory = false
 
     init(
         feed: any FeedRepository,
@@ -125,6 +126,16 @@ final class CreateStoryViewModel {
         imagePreview = rendered
         imageData = prepared
         contentType = "image/jpeg"
+    }
+
+    /// Renders story from the editor and enqueues publish via ``GlobalUploadCoordinator``.
+    func postRenderedStory(_ rendered: UIImage) {
+        guard canChangeMedia, !isPostingStory else { return }
+        isPostingStory = true
+        defer { isPostingStory = false }
+        submitRenderedStory(rendered)
+        guard imageData != nil else { return }
+        publish()
     }
 
     func setImage(_ image: UIImage, fileName: String = "story.jpg") {

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Deterministic follow-list rows for DEBUG development sessions / screenshots.
-enum FollowListFixtures {
+nonisolated enum FollowListFixtures {
     /// Lookup a fixture row by ID (Followers / Following → unified Profile).
     static func profile(id: ProfileID) -> Profile? {
         let owner = ProfileID("dev.fixture-owner")

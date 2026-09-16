@@ -1,6 +1,6 @@
 import Foundation
 
-enum ConversationThreadFixtures {
+nonisolated enum ConversationThreadFixtures {
     static func messages(
         conversationID: ConversationID,
         viewerID: ProfileID,
