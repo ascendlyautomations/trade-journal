@@ -318,7 +318,7 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
             path: "/rest/v1/rpc/\(functionName)",
             method: .post,
             body: parametersJSON ?? Data("{}".utf8),
-            requiresAuthentication: false
+            requiresAuthentication: true
         )
         let responseReceivedAt = ContinuousClock.now
         BackendV2RpcStageTracer.trace(

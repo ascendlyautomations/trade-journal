@@ -45,6 +45,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
     }
 
     func startTransactionListenerIfNeeded() async {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return }
         guard !listenerStarted else { return }
         listenerStarted = true
         updatesTask = Task { [syncClient] in
@@ -55,6 +56,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
     }
 
     func loadProducts() async throws -> [StoreKitTraxProProduct] {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return [] }
         let ids = TraxProProductConfiguration.allProductIDs
         let products = try await Product.products(for: ids)
         return products
@@ -65,6 +67,9 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
     }
 
     func purchase(productID: String) async -> StoreKitPurchaseOutcome {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else {
+            return .failed("In-app subscriptions aren't available in this version of TradeTraxs.")
+        }
         do {
             let products = try await Product.products(for: [productID])
             guard let product = products.first else {
@@ -103,6 +108,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
     }
 
     func restorePurchases() async throws -> Bool {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return false }
         var syncedAny = false
         for await entitlement in Transaction.currentEntitlements {
             let transaction = try Self.checkVerified(entitlement)
@@ -113,6 +119,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
     }
 
     func syncVerifiedTransactionsToServer() async throws {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return }
         var syncedAny = false
         for await entitlement in Transaction.currentEntitlements {
             let transaction = try Self.checkVerified(entitlement)

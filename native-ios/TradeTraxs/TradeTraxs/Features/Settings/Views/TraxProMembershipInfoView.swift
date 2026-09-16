@@ -7,18 +7,31 @@ struct TraxProMembershipInfoView: View {
 
     @Environment(\.themeColors) private var colors
 
+    private var isPaidCommerceEnabled: Bool {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled
+    }
+
     var body: some View {
         List {
             Section {
-                SettingsIntroBlock(
-                    title: TraxProFeatureMessaging.featureTitle,
-                    message: TraxProFeatureMessaging.featureRequired
-                )
+                if isPaidCommerceEnabled {
+                    SettingsIntroBlock(
+                        title: TraxProFeatureMessaging.featureTitle,
+                        message: TraxProFeatureMessaging.featureRequired
+                    )
+                } else {
+                    SettingsIntroBlock(
+                        title: "Included with TradeTraxs",
+                        message: "This version of TradeTraxs includes the full journal experience at no additional cost."
+                    )
+                }
             } footer: {
-                Text("TraxPro unlocks Trade AI, higher limits, and advanced analytics.")
+                if isPaidCommerceEnabled {
+                    Text("TraxPro unlocks Trade AI, higher limits, and advanced analytics.")
+                }
             }
 
-            if let onViewSubscription {
+            if isPaidCommerceEnabled, let onViewSubscription {
                 Section {
                     Button(action: onViewSubscription) {
                         SettingsPrimaryActionLabel(

@@ -43,6 +43,10 @@ struct SettingsSubscriptionView: View {
                 activeMembershipSection
             }
 
+            if viewModel.showsReleaseIncludedPlanDetails {
+                releaseIncludedSection
+            }
+
             if viewModel.showsFreePlanDetails, let status = viewModel.status {
                 freeLimitsSection(status: status)
                 traxProHighlightsSection
@@ -100,6 +104,15 @@ struct SettingsSubscriptionView: View {
                 }
                 Text(viewModel.membershipSummaryFooter)
             }
+        }
+    }
+
+    private var releaseIncludedSection: some View {
+        Section {
+            SettingsIntroBlock(
+                title: "Included with TradeTraxs",
+                message: "This release includes Trade AI, analytics, and journal features at no additional cost. No subscription is required to keep using the app."
+            )
         }
     }
 

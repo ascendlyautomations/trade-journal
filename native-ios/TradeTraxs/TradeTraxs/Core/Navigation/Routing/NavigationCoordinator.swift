@@ -521,6 +521,11 @@ final class NavigationCoordinator {
     }
 
     func present(fullScreen: FullScreenDestination) {
+        if case .upgrade = fullScreen,
+           !IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled
+        {
+            return
+        }
         if store.presentedFullScreen != fullScreen {
             ExperienceHaptics.play(.selection)
         }

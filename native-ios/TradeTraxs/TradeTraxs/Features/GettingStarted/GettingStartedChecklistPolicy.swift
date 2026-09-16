@@ -54,12 +54,25 @@ nonisolated enum GettingStartedChecklistPolicy {
     ) -> Bool {
         guard let userID, !userID.isEmpty else { return false }
         guard signals.onboardingCompleted else { return false }
+        // Web parity: never embed the checklist on the dashboard once every task is done.
         if progress.allComplete {
-            return !sessionDismissed
+            return false
+        }
+        // Server-authoritative completion/dismiss marker (`profiles.has_seen_onboarding_complete_popup`).
+        if signals.hasSeenOnboardingCompletePopup {
+            return false
         }
         guard signals.tradeCount <= 0 else { return false }
         guard !sessionDismissed else { return false }
         return true
+    }
+
+    /// True when checklist item data proves full completion but the profile flag is stale.
+    static func needsServerCompletionReconciliation(
+        signals: GettingStartedSignals,
+        progress: GettingStartedProgress
+    ) -> Bool {
+        progress.allComplete && !signals.hasSeenOnboardingCompletePopup
     }
 
     /// Intro popup is disabled on web — keep native aligned.

@@ -3,7 +3,13 @@ import XCTest
 
 @MainActor
 final class SettingsSubscriptionViewModelTests: XCTestCase {
+    override func tearDown() {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = false
+        super.tearDown()
+    }
+
     func testFreeUserLoadsStoreKitProducts() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         let products = [
             StoreKitTraxProProduct(
                 id: "com.tradetraxs.traxpro.monthly",
@@ -32,6 +38,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
     }
 
     func testVerifiedPurchaseSyncsAndUnlocksPro() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         let storeKit = StubStoreKit(
             products: [sampleProduct()],
             purchaseOutcome: .success
@@ -52,6 +59,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
     }
 
     func testCancelledPurchaseStaysFree() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         let viewModel = makeViewModel(
             billing: StubBilling(status: freeStatus()),
             storeKit: StubStoreKit(products: [sampleProduct()], purchaseOutcome: .userCancelled)
@@ -65,6 +73,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
     }
 
     func testUnverifiedPurchaseNeverUnlocks() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         let billing = MutableBillingRepository(initial: freeStatus())
         let viewModel = makeViewModel(
             billing: billing,
@@ -94,6 +103,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
     }
 
     func testAppleProShowsManageSubscription() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         var status = SettingsFixtures.billingStatus()
         status.entitlementSource = .apple
         status.appleSubscriptionStatus = "active"
@@ -125,6 +135,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
     }
 
     func testRestoreWithVerifiedEntitlementUnlocksPro() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         let billing = MutableBillingRepository(initial: freeStatus())
         let viewModel = makeViewModel(
             billing: billing,
@@ -140,6 +151,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
     }
 
     func testFreeTierDisplayMatchesPolicy() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         let viewModel = makeViewModel(
             billing: StubBilling(status: freeStatus()),
             storeKit: StubStoreKit()

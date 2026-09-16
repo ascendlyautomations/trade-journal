@@ -21,6 +21,30 @@ nonisolated struct GettingStartedRpcRepository {
     }
 }
 
+/// Persists Getting Started completion using existing Supabase RPC (user-scoped, idempotent).
+enum GettingStartedCompletionMarker {
+    private static let rpcName = "mark_onboarding_complete_popup_seen"
+
+    static func markSeenIfNeeded(rpc: any RPCClient) async -> Bool {
+        do {
+            let data = try await rpc.call(
+                functionName: rpcName,
+                jsonBody: Data("{}".utf8)
+            )
+            if data.isEmpty { return true }
+            if let decoded = try? JSONDecoder().decode(Bool.self, from: data) {
+                return decoded
+            }
+            if let object = try? JSONSerialization.jsonObject(with: data) as? Bool {
+                return object
+            }
+            return true
+        } catch {
+            return false
+        }
+    }
+}
+
 enum GettingStartedLoader {
     enum LoaderError: Error, Sendable {
         case flagOff

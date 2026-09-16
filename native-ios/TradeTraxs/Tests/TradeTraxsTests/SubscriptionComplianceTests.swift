@@ -44,10 +44,11 @@ final class SubscriptionComplianceTests: XCTestCase {
         viewModel.loadIfNeeded()
         await waitFor { viewModel.status != nil }
 
-        XCTAssertTrue(viewModel.showsFreePlanDetails)
+        XCTAssertFalse(viewModel.showsFreePlanDetails)
         XCTAssertFalse(viewModel.showsProMembership)
-        XCTAssertEqual(viewModel.planTitle, "Free")
-        XCTAssertTrue(viewModel.membershipSummaryFooter.contains("Free plan"))
+        XCTAssertEqual(viewModel.planTitle, "TradeTraxs")
+        XCTAssertTrue(viewModel.showsReleaseIncludedPlanDetails)
+        XCTAssertTrue(viewModel.membershipSummaryFooter.localizedCaseInsensitiveContains("no additional cost"))
         XCTAssertFalse(viewModel.membershipSummaryFooter.localizedCaseInsensitiveContains("pricing"))
         XCTAssertFalse(viewModel.membershipSummaryFooter.localizedCaseInsensitiveContains("website"))
     }

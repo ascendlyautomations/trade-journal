@@ -41,7 +41,7 @@ final class GettingStartedStore {
     }
 
     var shouldShowDashboardCard: Bool {
-        guard let viewerID else { return false }
+        guard signalsReady, let viewerID else { return false }
         return GettingStartedChecklistPolicy.shouldShowDashboardCard(
             userID: viewerID.rawValue,
             signals: signals,
@@ -91,6 +91,17 @@ final class GettingStartedStore {
     func dismissForSession() {
         guard canPermanentlyDismiss, let viewerID else { return }
         GettingStartedPreferences.markSessionDismissed(userID: viewerID.rawValue)
+        guard let rpc else { return }
+        Task {
+            let ok = await GettingStartedCompletionMarker.markSeenIfNeeded(rpc: rpc)
+            guard ok else { return }
+            await MainActor.run {
+                guard self.viewerID?.rawValue == viewerID.rawValue else { return }
+                var updated = self.signals
+                updated.hasSeenOnboardingCompletePopup = true
+                self.signals = updated
+            }
+        }
     }
 
     func toggleCollapsed() {
@@ -143,6 +154,27 @@ final class GettingStartedStore {
         self.signals = signals
         progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
         signalsReady = true
+        reconcileServerCompletionIfNeeded()
+    }
+
+    private func reconcileServerCompletionIfNeeded() {
+        guard GettingStartedChecklistPolicy.needsServerCompletionReconciliation(
+            signals: signals,
+            progress: progress
+        ), let rpc else { return }
+        Task {
+            let ok = await GettingStartedCompletionMarker.markSeenIfNeeded(rpc: rpc)
+            guard ok else { return }
+            await MainActor.run {
+                guard GettingStartedChecklistPolicy.needsServerCompletionReconciliation(
+                    signals: self.signals,
+                    progress: self.progress
+                ) else { return }
+                var updated = self.signals
+                updated.hasSeenOnboardingCompletePopup = true
+                self.signals = updated
+            }
+        }
     }
 
     private func startRealtimeIfNeeded(viewerID: String) {

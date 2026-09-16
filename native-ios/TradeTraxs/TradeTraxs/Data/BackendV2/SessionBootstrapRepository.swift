@@ -25,16 +25,36 @@ nonisolated struct SessionRpcBootstrapRepository: SessionBootstrapProviding {
     }
 
     func loadSessionBootstrap() async throws -> SessionBootstrapV1 {
-        let value = try await client.call(
-            .session,
-            as: SessionBootstrapV1.self,
-            options: BackendV2RPCCallOptions(
-                cacheMiss: true,
-                flagName: BackendV2FeatureFlag.session.dottedName
+        await MainActor.run {
+            SessionBootstrapAuthDebug.requestStarted(authRequired: true)
+        }
+        do {
+            let value = try await client.call(
+                .session,
+                as: SessionBootstrapV1.self,
+                options: BackendV2RPCCallOptions(
+                    cacheMiss: true,
+                    flagName: BackendV2FeatureFlag.session.dottedName
+                )
             )
-        )
-        try value.validateContractVersion()
-        return value
+            try value.validateContractVersion()
+            await MainActor.run {
+                SessionBootstrapAuthDebug.requestCompleted(
+                    responseStatus: 200,
+                    classification: "success"
+                )
+            }
+            return value
+        } catch {
+            let diagnostic = MessagesBootstrapFailureDiagnostic.make(error: error)
+            await MainActor.run {
+                SessionBootstrapAuthDebug.requestCompleted(
+                    responseStatus: diagnostic.httpStatus,
+                    classification: diagnostic.summary
+                )
+            }
+            throw error
+        }
     }
 }
 

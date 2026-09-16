@@ -55,7 +55,7 @@ nonisolated struct DefaultBillingRepository: BillingRepository {
     }
 
     func refreshEntitlements(for profileID: ProfileID) async throws -> BillingStatus {
-        if let storeKitSync {
+        if IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled, let storeKitSync {
             try? await storeKitSync.syncVerifiedTransactionsToServer()
         }
         return try await status(for: profileID)
@@ -100,7 +100,7 @@ nonisolated struct DefaultBillingRepository: BillingRepository {
 
         let resolution = TraxProEntitlementResolver.resolve(status)
         status.entitlementSource = resolution.source
-        if !resolution.isActive {
+        if IosSubscriptionReleaseConfiguration.appliesFreeTierUsageCaps, !resolution.isActive {
             status.dailyTradeLimit = FreeTierPolicy.dailyTradeLimit
             status.dailyPostLimit = FreeTierPolicy.dailyPostLimit
             status.dailyMessageLimit = FreeTierPolicy.dailyDirectMessageLimit

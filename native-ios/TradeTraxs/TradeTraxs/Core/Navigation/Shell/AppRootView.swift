@@ -478,10 +478,12 @@ struct AppRootView: View {
                 case .upgrade:
                     TraxProMembershipInfoView(
                         onClose: { navigation.coordinator.dismissFullScreen() },
-                        onViewSubscription: {
-                            navigation.coordinator.dismissFullScreen()
-                            navigation.coordinator.open(.settingsStack([.home, .subscription]))
-                        }
+                        onViewSubscription: IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled
+                            ? {
+                                navigation.coordinator.dismissFullScreen()
+                                navigation.coordinator.open(.settingsStack([.home, .subscription]))
+                            }
+                            : nil
                     )
                 default:
                     NavigationInfrastructurePlaceholder(

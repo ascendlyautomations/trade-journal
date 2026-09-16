@@ -209,6 +209,9 @@ final class AuthenticationManager {
         if case .sessionValidationFailed = state {
             return .transientFailure
         }
+        if case .authenticated = state, sessionManager.accessToken?.isEmpty != false {
+            return .transientFailure
+        }
         if restoreInFlight {
             await waitForRestoreCompletion()
             if state.isSessionReady {
@@ -244,8 +247,8 @@ final class AuthenticationManager {
                 return .transientFailure
             }
             try sessionManager.install(refreshed)
-            applyAuthenticated(refreshed, event: .tokenRefreshSucceeded)
             await SessionNetworkGate.shared.markReady()
+            applyAuthenticated(refreshed, event: .tokenRefreshSucceeded)
             refreshCoordinator.schedule(for: refreshed)
             return .refreshed
         } catch let error as AuthenticationError {
@@ -557,11 +560,11 @@ final class AuthenticationManager {
         await MainActor.run {
             OAuthProfileOnboardingNameStore.stage(fullName: mergedHint?.fullName, for: session.userID)
         }
+        await SessionNetworkGate.shared.markReady()
         applyAuthenticated(
             session,
             event: .signInSucceeded(userID: session.userID, provider: session.provider)
         )
-        await SessionNetworkGate.shared.markReady()
         refreshCoordinator.schedule(for: session)
     }
 
@@ -596,10 +599,10 @@ final class AuthenticationManager {
             let durationMs = Int((CFAbsoluteTimeGetCurrent() - refreshStartedAt) * 1_000)
             try sessionManager.install(refreshed)
             AuthRefreshTiming.sessionPersisted(generation: generation)
+            await SessionNetworkGate.shared.markReady()
             applyAuthenticated(refreshed, event: .tokenRefreshSucceeded)
             AuthRestoreDebug.refreshSucceeded(durationMs: durationMs, generation: generation)
             AuthRestoreDebug.routeAuthenticated(generation: generation)
-            await SessionNetworkGate.shared.markReady()
             refreshCoordinator.schedule(for: refreshed)
             emit(.restorationSucceeded(userID: refreshed.userID))
             AuthFlowTracer.traceRefreshCompleted(.success, generation: generation)

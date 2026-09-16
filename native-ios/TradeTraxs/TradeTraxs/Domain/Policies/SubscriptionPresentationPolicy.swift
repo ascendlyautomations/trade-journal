@@ -11,6 +11,9 @@ nonisolated enum SubscriptionPresentationPolicy {
         case .creator, .earlyAccess, .manual:
             return "Your account has access to TraxPro features."
         case .none:
+            if !IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
+                return "TradeTraxs includes all features at no additional cost in this release."
+            }
             return status.hasTraxProAccess
                 ? "Your account has access to TraxPro features."
                 : "Your account is currently on the Free plan."
@@ -75,12 +78,14 @@ nonisolated enum SubscriptionPresentationPolicy {
     }
 
     static func showsApplePurchaseOptions(for status: BillingStatus?) -> Bool {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return false }
         guard let status else { return false }
         return !status.hasTraxProAccess
     }
 
     static func showsAppleManageSubscription(for status: BillingStatus?) -> Bool {
-        status?.entitlementSource == .apple && status?.hasTraxProAccess == true
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return false }
+        return status?.entitlementSource == .apple && status?.hasTraxProAccess == true
     }
 
     static func autoRenewDisclosure(selectedProduct: StoreKitTraxProProduct?) -> String {

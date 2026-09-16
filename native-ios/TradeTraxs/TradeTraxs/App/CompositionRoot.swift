@@ -427,6 +427,12 @@ enum CompositionRoot {
                 && authentication.manager.state.isSessionReady
                 && navigation.store.sessionPhase == .authenticated
         }
+        SessionBootstrapAuthDebug.snapshotProvider = {
+            let phase = navigation.store.sessionPhase
+            let tokenPresent = sessionManager.accessToken?.isEmpty == false
+            let generation = authentication.manager.restorationGeneration
+            return (String(describing: phase), tokenPresent, generation)
+        }
         AppIconBadgeSync.configure(
             client: AppIconBadgeClient(transport: transport),
             canFetchAuthenticatedBadge: {
@@ -539,8 +545,10 @@ enum CompositionRoot {
                 await DailyCheckInReminderCoordinator.shared.sync()
                 await TradeImportReminderCoordinator.shared.sync()
                 BrokerImportEligibilityStore.shared.loadIfNeeded()
-                await data.storeKitSubscriptions.startTransactionListenerIfNeeded()
-                try? await data.storeKitSubscriptions.syncVerifiedTransactionsToServer()
+                if IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
+                    await data.storeKitSubscriptions.startTransactionListenerIfNeeded()
+                    try? await data.storeKitSubscriptions.syncVerifiedTransactionsToServer()
+                }
             }
         }
 

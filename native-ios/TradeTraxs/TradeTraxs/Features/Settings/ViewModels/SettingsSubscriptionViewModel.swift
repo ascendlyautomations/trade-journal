@@ -52,7 +52,15 @@ final class SettingsSubscriptionViewModel {
 
     var planTitle: String {
         guard let status else { return "—" }
+        if !IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
+            return status.hasTraxProAccess ? "TraxPro" : "TradeTraxs"
+        }
         return status.hasTraxProAccess ? "TraxPro" : "Free"
+    }
+
+    var showsReleaseIncludedPlanDetails: Bool {
+        !IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled
+            && status?.hasTraxProAccess != true
     }
 
     var showsProMembership: Bool {
@@ -68,7 +76,8 @@ final class SettingsSubscriptionViewModel {
     }
 
     var showsRestorePurchases: Bool {
-        showsFreePlanDetails || status?.entitlementSource == .apple
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return false }
+        return showsFreePlanDetails || status?.entitlementSource == .apple
     }
 
     var showsManageSubscription: Bool {
@@ -152,6 +161,7 @@ final class SettingsSubscriptionViewModel {
     }
 
     func purchaseSelectedPlan() async {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return }
         guard !purchaseInFlight else { return }
         guard let product = selectedProduct else {
             errorMessage = "Choose a TraxPro plan to continue."
@@ -191,6 +201,7 @@ final class SettingsSubscriptionViewModel {
     }
 
     func restorePurchases() async {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return }
         guard actionState == .idle else { return }
         actionState = .restoring
         actionMessage = "Restoring purchases…"
@@ -254,7 +265,9 @@ final class SettingsSubscriptionViewModel {
         }
 
         await reconcileEntitlements(profileID: ProfileID(userID.rawValue))
-        if reloadProducts, showsFreePlanDetails {
+        if IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled,
+           reloadProducts, showsFreePlanDetails
+        {
             await loadProductsIfNeeded(force: false)
         }
     }
@@ -264,7 +277,9 @@ final class SettingsSubscriptionViewModel {
         let profile = profileID ?? ProfileID(userID.rawValue)
 
         do {
-            try? await storeKit.syncVerifiedTransactionsToServer()
+            if IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
+                try? await storeKit.syncVerifiedTransactionsToServer()
+            }
             let refreshed = try await billing.refreshEntitlements(for: profile)
             status = refreshed
             SessionBillingEntitlementStore.shared.apply(refreshed)
@@ -289,6 +304,10 @@ final class SettingsSubscriptionViewModel {
     }
 
     private func loadProductsIfNeeded(force: Bool) async {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else {
+            productsState = .idle
+            return
+        }
         if !force, case .loaded = productsState { return }
         productsState = .loading
         do {

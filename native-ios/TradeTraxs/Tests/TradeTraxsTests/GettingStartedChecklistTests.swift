@@ -101,11 +101,11 @@ final class GettingStartedChecklistTests: XCTestCase {
         )
     }
 
-    func testDashboardShowsCompletedChecklistUntilDismissed() {
+    func testDashboardHidesWhenAllTasksComplete() {
         let signals = GettingStartedSignals(
             onboardingCompleted: true,
             hasSeenGettingStartedIntro: true,
-            hasSeenOnboardingCompletePopup: true,
+            hasSeenOnboardingCompletePopup: false,
             tradeCount: 5,
             profilePostCount: 1,
             followCount: 2,
@@ -115,6 +115,39 @@ final class GettingStartedChecklistTests: XCTestCase {
         )
         let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
         XCTAssertTrue(progress.allComplete)
+        XCTAssertFalse(
+            GettingStartedChecklistPolicy.shouldShowDashboardCard(
+                userID: "user-1",
+                signals: signals,
+                progress: progress,
+                sessionDismissed: false
+            )
+        )
+    }
+
+    func testDashboardHidesWhenServerMarkedCompletionPopupSeen() {
+        var signals = GettingStartedSignals(
+            onboardingCompleted: true,
+            hasSeenGettingStartedIntro: true,
+            hasSeenOnboardingCompletePopup: true,
+            tradeCount: 0,
+            profilePostCount: 0,
+            followCount: 0,
+            hasEverJoinedOtherRoom: false,
+            hasPublicTrade: false,
+            firstPrivateTradeID: nil
+        )
+        let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
+        XCTAssertFalse(progress.allComplete)
+        XCTAssertFalse(
+            GettingStartedChecklistPolicy.shouldShowDashboardCard(
+                userID: "user-1",
+                signals: signals,
+                progress: progress,
+                sessionDismissed: false
+            )
+        )
+        signals.hasSeenOnboardingCompletePopup = false
         XCTAssertTrue(
             GettingStartedChecklistPolicy.shouldShowDashboardCard(
                 userID: "user-1",
@@ -123,12 +156,25 @@ final class GettingStartedChecklistTests: XCTestCase {
                 sessionDismissed: false
             )
         )
-        XCTAssertFalse(
-            GettingStartedChecklistPolicy.shouldShowDashboardCard(
-                userID: "user-1",
+    }
+
+    func testNeedsServerCompletionReconciliationWhenAllCompleteWithoutFlag() {
+        let signals = GettingStartedSignals(
+            onboardingCompleted: true,
+            hasSeenGettingStartedIntro: true,
+            hasSeenOnboardingCompletePopup: false,
+            tradeCount: 1,
+            profilePostCount: 1,
+            followCount: 1,
+            hasEverJoinedOtherRoom: true,
+            hasPublicTrade: true,
+            firstPrivateTradeID: nil
+        )
+        let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
+        XCTAssertTrue(
+            GettingStartedChecklistPolicy.needsServerCompletionReconciliation(
                 signals: signals,
-                progress: progress,
-                sessionDismissed: true
+                progress: progress
             )
         )
     }
