@@ -78,6 +78,11 @@ actor URLSessionNetworkClient: NetworkClient {
                 let priority = current.schedulingPriority
                 let path = current.url.path
                 let host = current.endpoint.host.rawValue
+                let isAuthTokenRefresh = Self.isAuthTokenRefreshRequest(path: path, method: current.method)
+                if isAuthTokenRefresh {
+                    AuthRefreshTiming.operationStarted(path: path, generation: nil)
+                    AuthRefreshTiming.concurrencyAcquireRequested(path: path, priority: priority)
+                }
                 let inFlightAtStart = await NetworkConcurrencyCoordinator.shared.snapshot().total
                 let transportStarted = CFAbsoluteTimeGetCurrent()
                 let urlRequest = current.urlRequest
@@ -86,7 +91,26 @@ actor URLSessionNetworkClient: NetworkClient {
                     path: path,
                     host: host
                 ) {
-                    try await session.dataWithTaskMetrics(for: urlRequest)
+                    if isAuthTokenRefresh {
+                        AuthRefreshTiming.concurrencyAcquired(path: path, priority: priority)
+                        AuthRefreshTiming.urlTaskCreated(path: path)
+                        AuthRefreshTiming.urlTaskResumed(path: path)
+                    }
+                    let result = try await session.dataWithTaskMetrics(for: urlRequest)
+                    if isAuthTokenRefresh,
+                       let http = result.1 as? HTTPURLResponse
+                    {
+                        AuthRefreshTiming.responseReceived(path: path, statusCode: http.statusCode)
+                    }
+                    return result
+                }
+                if isAuthTokenRefresh {
+                    let totalMs = Int((CFAbsoluteTimeGetCurrent() - transportStarted) * 1_000)
+                    AuthRefreshTiming.operationCompleted(
+                        path: path,
+                        outcome: "transport",
+                        durationMs: totalMs
+                    )
                 }
                 #if DEBUG
                 NetworkTaskMetricsProbe.logRPCIfPresent(
@@ -257,6 +281,10 @@ actor URLSessionNetworkClient: NetworkClient {
     private func sleep(_ seconds: TimeInterval) async throws {
         guard seconds > 0 else { return }
         try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+    }
+
+    private static func isAuthTokenRefreshRequest(path: String, method: HTTPMethod) -> Bool {
+        path.hasPrefix("/auth/v1/token") && method == .post
     }
 }
 

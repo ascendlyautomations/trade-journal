@@ -421,10 +421,20 @@ enum CompositionRoot {
             session: data.session
         )
         let sessionManager = authentication.sessionManager
+        let authLifecycle = authentication.lifecycle
+        AuthBootstrapReadiness.allowsAuthenticatedBackgroundWork = {
+            authLifecycle.initialRestoreCompleted
+                && authentication.manager.state.isSessionReady
+                && navigation.store.sessionPhase == .authenticated
+        }
         AppIconBadgeSync.configure(
             client: AppIconBadgeClient(transport: transport),
             canFetchAuthenticatedBadge: {
                 await SessionNetworkGate.shared.awaitReady()
+                let allowed = await MainActor.run {
+                    AuthBootstrapReadiness.allowsAuthenticatedBackgroundWork()
+                }
+                guard allowed else { return false }
                 guard let token = sessionManager.accessToken, !token.isEmpty else { return false }
                 return true
             }
@@ -490,7 +500,6 @@ enum CompositionRoot {
             appBootstrapState.reset()
             profileOnboardingGate.reset()
         }
-        let authLifecycle = authentication.lifecycle
         Task {
             await NetworkUnauthorizedRecovery.shared.configure { @Sendable in
                 await Task { @MainActor in
@@ -523,6 +532,7 @@ enum CompositionRoot {
                     if Task.isCancelled { return }
                 }
                 await authentication.manager.awaitNetworkReady()
+                guard AuthBootstrapReadiness.allowsAuthenticatedBackgroundWork() else { return }
                 guard sessionManager.accessToken?.isEmpty == false else { return }
                 pushNotifications.syncRegistrationForAuthenticatedSession()
                 pushNotifications.syncBadgeFromActivity()

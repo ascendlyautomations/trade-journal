@@ -85,6 +85,9 @@ struct AppRootView: View {
         }
         .onChange(of: authenticationManager.state) { _, newState in
             authenticationCoordinator.syncNavigation(with: newState)
+            if case .sessionValidationFailed = newState {
+                isLaunchBootstrapping = false
+            }
         }
         .onChange(of: authenticationLifecycle.initialRestoreCompleted) { _, completed in
             if completed {
@@ -306,6 +309,8 @@ struct AppRootView: View {
             switch error {
             case .unknown(let reason) where reason == "networkUnavailable":
                 return "You're offline. Connect to the internet and try again."
+            case .unknown(let reason) where reason == "refreshTimeout":
+                return "Restoring your session is taking too long. Try again or sign out to continue."
             case .unknown(let reason) where reason == "serverUnavailable":
                 return "Our servers are temporarily unavailable. Try again shortly."
             default:

@@ -27,7 +27,9 @@ final class AppLifecycleHandler {
         #endif
         Task { @MainActor in
             await pushNotifications?.refreshAuthorizationStatus()
-            pushNotifications?.syncBadgeFromActivity()
+            if AuthBootstrapReadiness.allowsAuthenticatedBackgroundWork() {
+                pushNotifications?.syncBadgeFromActivity()
+            }
             await DailyCheckInReminderCoordinator.shared.sync()
             await TradeImportReminderCoordinator.shared.sync()
         }

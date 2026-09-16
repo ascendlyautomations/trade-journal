@@ -7,6 +7,8 @@ nonisolated struct AuthenticationConfiguration: Sendable, Equatable {
     var refreshTokenAccount: String
     var sessionAccount: String
     var refreshLeeway: TimeInterval
+    /// Max wait for `/auth/v1/token` during cold-launch session restore (seconds).
+    var coldLaunchRefreshTimeout: TimeInterval
     var allowsDevelopmentSessionBypass: Bool
     var biometricUnlockEnabled: Bool
 
@@ -17,6 +19,7 @@ nonisolated struct AuthenticationConfiguration: Sendable, Equatable {
             refreshTokenAccount: "auth.refreshToken",
             sessionAccount: "auth.session",
             refreshLeeway: 60,
+            coldLaunchRefreshTimeout: 45,
             allowsDevelopmentSessionBypass: build == .debug,
             biometricUnlockEnabled: false
         )

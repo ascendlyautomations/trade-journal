@@ -114,6 +114,7 @@ final class AuthenticationManager {
             let expired = expiration.isExpired(session) || expiration.needsRefresh(session)
             traceRestoreSessionFound(expired: expired, present: true)
             if expiration.needsRefresh(session) {
+                // Keychain-only: mark refresh required — ``restoreSession()`` performs the single network refresh.
                 state = .refreshing(session)
                 Task { await SessionNetworkGate.shared.beginRefresh() }
                 return state
@@ -205,6 +206,9 @@ final class AuthenticationManager {
 
     /// Invoked when an authenticated API returns 401 — refresh once, then terminal logout if needed.
     func attemptRefreshAfterUnauthorized() async -> UnauthorizedRefreshResult {
+        if case .sessionValidationFailed = state {
+            return .transientFailure
+        }
         if restoreInFlight {
             await waitForRestoreCompletion()
             if state.isSessionReady {
@@ -574,63 +578,143 @@ final class AuthenticationManager {
         AuthFlowTracer.trace("session.validation.started", phase: .restoring, generation: restorationGeneration)
         await SessionNetworkGate.shared.beginRefresh()
         let generation = restorationGeneration
+        AuthRestoreDebug.refreshStarted(generation: generation)
+        let refreshStartedAt = CFAbsoluteTimeGetCurrent()
         do {
-            let refreshed = try await AuthRefreshSingleFlight.shared.refresh(
-                fingerprint: SessionFingerprint.make(session),
-                generation: generation
-            ) {
-                try await self.emailProvider.refresh(session: session)
+            let refreshed = try await AuthSessionRefreshTimeout.run(configuration: configuration) {
+                try await AuthRefreshSingleFlight.shared.refresh(
+                    fingerprint: SessionFingerprint.make(session),
+                    generation: generation
+                ) {
+                    try await self.emailProvider.refresh(session: session)
+                }
             }
             guard generation == restorationGeneration else {
                 traceRefreshCancelled(reason: "supersededGeneration")
                 return
             }
+            let durationMs = Int((CFAbsoluteTimeGetCurrent() - refreshStartedAt) * 1_000)
             try sessionManager.install(refreshed)
+            AuthRefreshTiming.sessionPersisted(generation: generation)
             applyAuthenticated(refreshed, event: .tokenRefreshSucceeded)
+            AuthRestoreDebug.refreshSucceeded(durationMs: durationMs, generation: generation)
+            AuthRestoreDebug.routeAuthenticated(generation: generation)
             await SessionNetworkGate.shared.markReady()
             refreshCoordinator.schedule(for: refreshed)
             emit(.restorationSucceeded(userID: refreshed.userID))
             AuthFlowTracer.traceRefreshCompleted(.success, generation: generation)
             AuthFlowTracer.trace("session.validation.completed", phase: .authenticated, generation: generation)
         } catch let error as AuthenticationError {
-            await handleRefreshFailure(error, session: session, generation: generation)
+            await handleRefreshFailure(
+                error,
+                session: session,
+                generation: generation,
+                durationMs: Int((CFAbsoluteTimeGetCurrent() - refreshStartedAt) * 1_000)
+            )
         } catch AuthBootstrapError.staleSessionResult {
             traceRefreshCancelled(reason: "staleSessionResult")
         } catch is CancellationError {
-            traceRefreshCancelled(reason: "cancelled")
+            await handleRefreshInterrupted(
+                session: session,
+                generation: generation,
+                reason: "cancelled",
+                durationMs: Int((CFAbsoluteTimeGetCurrent() - refreshStartedAt) * 1_000)
+            )
         } catch {
             let mapped = AuthenticationError.fromRefreshFailure(error)
-            await handleRefreshFailure(mapped, session: session, generation: generation)
+            await handleRefreshFailure(
+                mapped,
+                session: session,
+                generation: generation,
+                durationMs: Int((CFAbsoluteTimeGetCurrent() - refreshStartedAt) * 1_000)
+            )
         }
     }
 
     private func handleRefreshFailure(
         _ error: AuthenticationError,
         session: AuthenticationSession,
-        generation: UInt64
+        generation: UInt64,
+        durationMs: Int
     ) async {
         guard generation == restorationGeneration else {
             traceRefreshCancelled(reason: "supersededGeneration")
             return
         }
         emit(.tokenRefreshFailed)
+        if isRefreshTimeout(error) {
+            AuthRestoreDebug.refreshTimedOut(durationMs: durationMs, generation: generation)
+        }
         if error.isTerminalRefreshFailure {
+            AuthRestoreDebug.refreshFailed(
+                classification: "terminal",
+                durationMs: durationMs,
+                generation: generation
+            )
+            AuthRestoreDebug.routeUnauthenticated(generation: generation)
             AuthFlowTracer.traceRefreshCompleted(.terminalFailure, generation: generation)
             emit(.restorationFailed)
             AuthFlowTracer.trace("session.validation.completed", phase: .unauthenticated, generation: generation)
             AuthFlowTracer.traceRootTransition(to: .unauthenticated, generation: generation)
             await handleExpiredSession()
         } else if error.isTransientRefreshFailure {
+            await invalidateStaleRefreshAttempt(activeGeneration: generation)
+            AuthRestoreDebug.refreshFailed(
+                classification: "transient",
+                durationMs: durationMs,
+                generation: generation
+            )
+            AuthRestoreDebug.routeRecoverableFailure(generation: generation)
             AuthFlowTracer.traceRefreshCompleted(.transientFailure, generation: generation)
             lastSessionValidationError = error
             state = .sessionValidationFailed(session, error)
             await SessionNetworkGate.shared.markUnauthenticated()
             AuthFlowTracer.trace("session.validation.completed", phase: .restoring, generation: generation)
         } else {
+            AuthRestoreDebug.refreshFailed(
+                classification: "terminal",
+                durationMs: durationMs,
+                generation: generation
+            )
+            AuthRestoreDebug.routeUnauthenticated(generation: generation)
             AuthFlowTracer.traceRefreshCompleted(.terminalFailure, generation: generation)
             emit(.restorationFailed)
             await handleExpiredSession()
         }
+    }
+
+    private func handleRefreshInterrupted(
+        session: AuthenticationSession,
+        generation: UInt64,
+        reason: String,
+        durationMs: Int
+    ) async {
+        traceRefreshCancelled(reason: reason)
+        guard generation == restorationGeneration else { return }
+        guard case .refreshing = state else { return }
+        let transient = AuthenticationError.unknown("refreshTimeout")
+        await handleRefreshFailure(
+            transient,
+            session: session,
+            generation: generation,
+            durationMs: durationMs
+        )
+    }
+
+    private func isRefreshTimeout(_ error: AuthenticationError) -> Bool {
+        if case .unknown(let reason) = error, reason == "refreshTimeout" {
+            return true
+        }
+        return false
+    }
+
+    /// Cancels in-flight refresh work and bumps generation so late HTTP completion cannot publish auth state.
+    private func invalidateStaleRefreshAttempt(activeGeneration: UInt64) async {
+        guard activeGeneration == restorationGeneration else { return }
+        restorationGeneration &+= 1
+        refreshCoordinator.cancel()
+        await AuthRefreshSingleFlight.shared.bumpSessionGeneration()
+        await AuthRefreshSingleFlight.shared.cancelAll()
     }
 
     private func handleProactiveRefreshFailure(_ error: AuthenticationError) async {
@@ -670,6 +754,9 @@ final class AuthenticationManager {
             phase: expired ? .restoring : .authenticated,
             generation: restorationGeneration
         )
+        if present {
+            AuthRestoreDebug.persistedSessionLoaded(expired: expired, generation: restorationGeneration)
+        }
     }
 
     private func traceRefreshCancelled(reason: String) {

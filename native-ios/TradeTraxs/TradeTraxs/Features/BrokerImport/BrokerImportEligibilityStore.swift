@@ -40,7 +40,6 @@ final class BrokerImportEligibilityStore {
     ) {
         self.broker = broker
         self.session = session
-        refresh(fromUserAction: false)
     }
 
     func loadIfNeeded() {
@@ -105,6 +104,7 @@ final class BrokerImportEligibilityStore {
 
     private func performRefresh(fromUserAction: Bool) async {
         guard let session, broker != nil else { return }
+        guard AuthBootstrapReadiness.allowsAuthenticatedBackgroundWork() else { return }
         let generation = loadGeneration
         if fromUserAction || !isReady {
             isRefreshing = true

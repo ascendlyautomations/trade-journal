@@ -30,6 +30,11 @@ nonisolated struct AuthenticationRequestInterceptor: RequestInterceptor {
     var accessTokenProvider: @Sendable () async -> String? = { nil }
 
     func intercept(_ request: HTTPRequest) async throws -> HTTPRequest {
+        guard request.endpoint.requiresAuthentication else {
+            // GoTrue token grants must not await ``SessionNetworkGate`` — the active refresh holds that gate.
+            return request
+        }
+
         let userToken = await accessTokenProvider()
         let hasUserToken = userToken.map { !$0.isEmpty } ?? false
 
@@ -37,11 +42,6 @@ nonisolated struct AuthenticationRequestInterceptor: RequestInterceptor {
             var copy = request
             copy.headers["Authorization"] = "Bearer \(userToken)"
             return copy
-        }
-
-        guard request.endpoint.requiresAuthentication else {
-            // Anonymous public Supabase (apikey + anon Bearer) applied by ``SupabaseHeadersInterceptor``.
-            return request
         }
 
         // Do not send an unauthenticated BFF/Supabase call and then surface a cryptic 401.

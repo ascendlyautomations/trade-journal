@@ -37,7 +37,10 @@ actor AuthRefreshSingleFlight {
 
         let slotID = UUID()
         let task = Task<AuthenticationSession, Error> {
-            try await operation()
+            try Task.checkCancellation()
+            let value = try await operation()
+            try Task.checkCancellation()
+            return value
         }
         slot = Slot(id: slotID, generation: generation, fingerprint: fingerprint, task: task)
 

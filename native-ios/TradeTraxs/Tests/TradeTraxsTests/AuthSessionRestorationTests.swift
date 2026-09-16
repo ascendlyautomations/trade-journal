@@ -195,6 +195,28 @@ final class AuthSessionRestorationTests: XCTestCase {
         await logout.value
     }
 
+    func testRefreshTimeoutShowsRecoverableUIWithoutClearingSession() async throws {
+        try await AuthSessionRefreshTimeout.withTestTimeout(50_000_000) {
+            var backend = InMemoryAuthenticationBackend()
+            backend.refreshDelayNanoseconds = 500_000_000
+            let (auth, navigation, _) = makeAuth(backend: backend)
+            try auth.sessionManager.install(expiredSession())
+            _ = auth.manager.prepareColdLaunch()
+            await auth.coordinator.bootstrapSession()
+            if case .sessionValidationFailed(_, let error) = auth.manager.state {
+                if case .unknown(let reason) = error {
+                    XCTAssertEqual(reason, "refreshTimeout")
+                } else {
+                    XCTFail("Expected refreshTimeout, got \(error)")
+                }
+            } else {
+                XCTFail("Expected sessionValidationFailed, got \(auth.manager.state)")
+            }
+            XCTAssertNotNil(auth.sessionManager.currentSession)
+            XCTAssertEqual(navigation.store.sessionPhase, .unauthenticated)
+        }
+    }
+
     func testRetryAfterTransientFailureSucceeds() async throws {
         var backend = InMemoryAuthenticationBackend()
         backend.refreshError = .unknown("networkUnavailable")
