@@ -101,15 +101,24 @@ export async function exchangeTradovateAuthorizationCode(
       refresh_token:
         typeof record.refresh_token === "string" ? record.refresh_token : null,
       token_type: typeof record.token_type === "string" ? record.token_type : null,
-      expires_in:
-        typeof record.expires_in === "number" ? record.expires_in : null,
-      refresh_token_expires_in:
-        typeof record.refresh_token_expires_in === "number"
-          ? record.refresh_token_expires_in
-          : null,
+      expires_in: coercePositiveSeconds(record.expires_in),
+      refresh_token_expires_in: coercePositiveSeconds(
+        record.refresh_token_expires_in
+      ),
       id_token: typeof record.id_token === "string" ? record.id_token : null,
     },
   }
+}
+
+function coercePositiveSeconds(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return null
 }
 
 export function parseTradovateIdTokenSubject(idToken: string | null | undefined): string | null {

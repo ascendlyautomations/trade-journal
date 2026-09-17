@@ -32,7 +32,10 @@ export async function runTradovateAccountDiscovery(
     provider: "tradovate",
   })
 
-  if (!owned || owned.status !== "connected") {
+  if (
+    !owned ||
+    (owned.status !== "connected" && owned.status !== "reconnect_required")
+  ) {
     return { ok: false, reason: "not_connected" }
   }
 
@@ -95,10 +98,7 @@ export async function loadTradovateConnectionAccounts(
 
   const connectionStatus = owned?.status ?? "disconnected"
 
-  if (
-    connectionStatus === "reconnect_required" ||
-    connectionStatus === "error"
-  ) {
+  if (connectionStatus === "error") {
     const accounts = await listSafeBrokerIntegrationAccounts(supabase, {
       userId,
       provider: "tradovate",
@@ -112,7 +112,7 @@ export async function loadTradovateConnectionAccounts(
     }
   }
 
-  if (connectionStatus !== "connected") {
+  if (connectionStatus !== "connected" && connectionStatus !== "reconnect_required") {
     return {
       connectionStatus,
       discovery: null,

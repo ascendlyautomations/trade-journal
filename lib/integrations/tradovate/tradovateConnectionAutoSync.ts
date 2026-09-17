@@ -253,11 +253,13 @@ export class TradovateConnectionAutoSyncSession {
     }
     const refreshed = await refreshTradovateAccessToken(credentials.refresh_token)
     if (!refreshed.ok) {
-      await markBrokerConnectionReconnectRequired(
-        this.supabase,
-        this.connection.id,
-        this.connection.user_id
-      )
+      if (refreshed.reason === "no_refresh_token" || refreshed.reason === "oauth_error") {
+        await markBrokerConnectionReconnectRequired(
+          this.supabase,
+          this.connection.id,
+          this.connection.user_id
+        )
+      }
       return null
     }
     const next = credentialsFromRefreshTokens(refreshed.tokens)

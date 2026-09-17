@@ -53,6 +53,9 @@ export async function refreshTradovateAccessToken(
     typeof record.access_token === "string" ? record.access_token.trim() : ""
   if (!accessToken) return { ok: false, reason: "malformed" }
 
+  const expiresIn = coercePositiveSeconds(record.expires_in)
+  const refreshExpiresIn = coercePositiveSeconds(record.refresh_token_expires_in)
+
   return {
     ok: true,
     tokens: {
@@ -60,14 +63,21 @@ export async function refreshTradovateAccessToken(
       refresh_token:
         typeof record.refresh_token === "string" ? record.refresh_token : trimmed,
       token_type: typeof record.token_type === "string" ? record.token_type : null,
-      expires_in:
-        typeof record.expires_in === "number" ? record.expires_in : null,
-      refresh_token_expires_in:
-        typeof record.refresh_token_expires_in === "number"
-          ? record.refresh_token_expires_in
-          : null,
+      expires_in: expiresIn,
+      refresh_token_expires_in: refreshExpiresIn,
     },
   }
+}
+
+function coercePositiveSeconds(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return null
 }
 
 export function credentialsFromRefreshTokens(
