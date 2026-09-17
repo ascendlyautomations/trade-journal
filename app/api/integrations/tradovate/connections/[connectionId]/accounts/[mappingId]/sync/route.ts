@@ -9,6 +9,10 @@ import {
   type TradovateSyncSummary,
 } from "@/lib/integrations/tradovate/syncTradovateBrokerAccount"
 import { logTradovateSync } from "@/lib/integrations/tradovate/tradovateSyncLogger"
+import type {
+  TradovateSyncFailureCategory,
+  TradovateSyncFailureStage,
+} from "@/lib/integrations/tradovate/tradovateSyncLogger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -32,9 +36,9 @@ function logSyncHttpResult(params: {
   mappingId: string
   httpStatus: number
   ok: boolean
-  failureStage?: string
+  failureStage?: TradovateSyncFailureStage
   errorCode?: string
-  failureCategory?: string
+  failureCategory?: TradovateSyncFailureCategory
   providerHttpStatus?: number
   detail?: string
   durationMs?: number
