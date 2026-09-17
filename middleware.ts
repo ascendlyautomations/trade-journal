@@ -101,6 +101,14 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    /*
+     * Skip /api so BFF POSTs reach Node route handlers without edge request
+     * rewriting. Cloning headers via NextResponse.next({ request }) on API
+     * POSTs can drop the edge→serverless handoff (Vercel logs show only
+     * source:"edge-middleware", no serverless / route logs) — seen on iOS
+     * Tradovate sync while GETs on the same tree still invoked serverless.
+     * Pages still get host canonicalization, native `/` → `/native`, x-pathname.
+     */
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }
