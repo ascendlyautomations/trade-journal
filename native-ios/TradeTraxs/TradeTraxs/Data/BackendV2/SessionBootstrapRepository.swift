@@ -71,6 +71,20 @@ final class SessionBootstrapStore {
         self.source = source
     }
 
+    func applyUsernameChange(profileID: ProfileID, username: String) {
+        guard var bootstrap = last else { return }
+        guard bootstrap.data.session_profile.id == profileID.rawValue
+            || bootstrap.data.viewer.id == profileID.rawValue
+        else { return }
+        bootstrap.data.session_profile.username = username
+        bootstrap.data.viewer.username = username
+        last = bootstrap
+        if let viewerID = bootstrap.meta.viewer_id ?? Optional(bootstrap.data.viewer.id) {
+            BackendV2BootstrapDiskCache.saveSession(bootstrap, viewerID: viewerID)
+            ViewerSyncStateRuntime.noteLocalMutation(viewerID: profileID)
+        }
+    }
+
     func applyOnboardingCompletion(profile: Profile, snapshot: ProfileOnboardingSnapshot) {
         guard var bootstrap = last else { return }
         bootstrap.data.session_profile.username = profile.username

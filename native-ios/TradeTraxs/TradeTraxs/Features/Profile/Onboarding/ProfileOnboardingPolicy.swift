@@ -36,9 +36,11 @@ nonisolated struct ProfileOnboardingSnapshot: Sendable, Equatable {
 }
 
 nonisolated enum ProfileOnboardingPolicy {
-    static func profileNeedsUsername(_ username: String?) -> Bool {
+    static func profileNeedsUsername(_ username: String?, profileID: ProfileID) -> Bool {
         guard let username else { return true }
-        return username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return true }
+        return ProfileUsernamePolicy.isGeneratedShellUsername(trimmed, profileID: profileID)
     }
 
     static func profileFieldMissing(_ value: String?) -> Bool {
@@ -54,7 +56,7 @@ nonisolated enum ProfileOnboardingPolicy {
     static func profileNeedsOnboarding(_ snapshot: ProfileOnboardingSnapshot) -> Bool {
         if snapshot.onboardingCompleted { return false }
         return profileNeedsDisplayName(snapshot.displayName)
-            || profileNeedsUsername(snapshot.username)
+            || profileNeedsUsername(snapshot.username, profileID: snapshot.profileID)
             || profileFieldMissing(snapshot.traderType)
             || profileFieldMissing(snapshot.tradingStyle)
             || profileFieldMissing(snapshot.startedTrading)

@@ -47,6 +47,8 @@ nonisolated struct Profile: Hashable, Codable, Sendable, Identifiable {
     var isPrivate: Bool
     var isCreator: Bool
     var createdAt: Date
+    /// Owner-only — from `profiles.username_change_count` (Settings username edits).
+    var usernameChangeCount: Int = 0
 }
 
 extension Profile {
@@ -55,9 +57,11 @@ extension Profile {
         guard id == incoming.id else { return incoming }
         var merged = self
         merged.avatar = incoming.avatar ?? merged.avatar
-        if !incoming.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            merged.username = incoming.username
-        }
+        merged.username = ProfileUsernamePolicy.resolvedPublicUsername(
+            primary: incoming.username,
+            profileID: incoming.id,
+            fallback: merged.username
+        )
         if !incoming.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             merged.displayName = incoming.displayName
         }

@@ -202,6 +202,17 @@ final class AuthenticationCoordinator {
             generation: restoreGeneration
         )
 
+        if useAccountDeletionTeardown {
+#if DEBUG
+            AccountDeletionDebugLog.localTeardownStarted()
+#endif
+            if let prepareAccountDeletion {
+                await prepareAccountDeletion()
+            }
+        } else if let prepareSessionTeardown {
+            await prepareSessionTeardown()
+        }
+
         await authenticationManager.logout()
         await invalidateCachesForSessionChange()
         boundUserID = nil
@@ -215,12 +226,6 @@ final class AuthenticationCoordinator {
             correlation: correlation,
             generation: restoreGeneration
         )
-
-        if useAccountDeletionTeardown, let prepareAccountDeletion {
-            Task { await prepareAccountDeletion() }
-        } else if let prepareSessionTeardown {
-            Task { await prepareSessionTeardown() }
-        }
     }
 
     /// Authenticated session email when present (nil for development bypass).

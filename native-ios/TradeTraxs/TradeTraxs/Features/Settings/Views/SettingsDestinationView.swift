@@ -21,7 +21,8 @@ struct SettingsDestinationView: View {
                 SettingsAccountView(
                     data: data,
                     authenticationCoordinator: authenticationCoordinator,
-                    navigationCoordinator: navigationCoordinator
+                    navigationCoordinator: navigationCoordinator,
+                    profileStore: currentUserProfile
                 )
             case .security:
                 SettingsSecurityView(

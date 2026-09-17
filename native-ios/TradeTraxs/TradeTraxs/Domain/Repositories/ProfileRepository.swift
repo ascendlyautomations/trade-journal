@@ -11,6 +11,9 @@ nonisolated protocol ProfileRepository: Sendable {
     func isUsernameTaken(_ username: String, excluding profileID: ProfileID) async throws -> Bool
     func completeProfileOnboarding(_ submission: ProfileOnboardingSubmission) async throws -> Profile
     func updateProfile(_ profile: Profile) async throws -> Profile
+    /// Owner Settings profile tab — includes `username_change_count`.
+    func ownerProfileForSettings(id: ProfileID) async throws -> Profile
+    func updateProfileSettings(_ update: ProfileSettingsUpdate) async throws -> Profile
     func stats(for profileID: ProfileID) async throws -> ProfileStats
     /// Web Profile wall — `profile_posts` (not feed `posts`).
     func wallPosts(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post>
@@ -88,6 +91,14 @@ extension ProfileRepository {
 
     func completeProfileOnboarding(_ submission: ProfileOnboardingSubmission) async throws -> Profile {
         throw AppError.notImplemented(feature: "completeProfileOnboarding")
+    }
+
+    func ownerProfileForSettings(id: ProfileID) async throws -> Profile {
+        try await profile(id: id)
+    }
+
+    func updateProfileSettings(_ update: ProfileSettingsUpdate) async throws -> Profile {
+        throw AppError.notImplemented(feature: "updateProfileSettings")
     }
 
     /// Default: sequential singles (tests / incomplete backends). Production overrides with `in.()`.

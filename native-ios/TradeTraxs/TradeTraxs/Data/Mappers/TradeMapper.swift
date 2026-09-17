@@ -377,7 +377,8 @@ nonisolated enum ProfileMapper: DTOMapper {
             isPrivate: dto.is_private ?? false,
             // Web Profile does not select `is_creator` (column absent in production).
             isCreator: false,
-            createdAt: ISO8601.date(from: dto.created_at) ?? Date(timeIntervalSince1970: 0)
+            createdAt: ISO8601.date(from: dto.created_at) ?? Date(timeIntervalSince1970: 0),
+            usernameChangeCount: dto.username_change_count ?? 0
         )
     }
 

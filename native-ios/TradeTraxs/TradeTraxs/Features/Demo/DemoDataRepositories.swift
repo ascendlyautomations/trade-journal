@@ -313,6 +313,12 @@ nonisolated struct DemoProfileRepository: ProfileRepository {
 
     func updateProfile(_ profile: Profile) async throws -> Profile { throw DemoAuthRequired.error }
 
+    func ownerProfileForSettings(id: ProfileID) async throws -> Profile { throw DemoAuthRequired.error }
+
+    func updateProfileSettings(_ update: ProfileSettingsUpdate) async throws -> Profile {
+        throw DemoAuthRequired.error
+    }
+
     func stats(for profileID: ProfileID) async throws -> ProfileStats {
         guard profileID == ownerID else {
             throw AppError.domain(.notFound(entity: "profile", id: profileID.rawValue))

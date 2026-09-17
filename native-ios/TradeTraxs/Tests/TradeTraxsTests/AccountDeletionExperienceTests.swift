@@ -70,6 +70,16 @@ final class AccountDeletionExperienceTests: XCTestCase {
         XCTAssertTrue(viewModel.deleteAccountExplainerMessage.contains("Sign in with Apple"))
     }
 
+    func testProceedToDeleteConfirmationKeepsFinalStepAvailable() async {
+        let context = await makeContext(billing: freeBillingStatus())
+        let viewModel = context.viewModel
+        viewModel.requestDeleteAccount()
+        XCTAssertTrue(viewModel.showsDeleteAccountExplainer)
+        viewModel.proceedToDeleteConfirmation()
+        XCTAssertFalse(viewModel.showsDeleteAccountExplainer)
+        XCTAssertTrue(viewModel.showsDeleteAccountConfirmation)
+    }
+
     func testConfirmDeleteAccountSignsOutAfterServerSuccess() async {
         let context = await makeContext(billing: freeBillingStatus())
         let viewModel = context.viewModel

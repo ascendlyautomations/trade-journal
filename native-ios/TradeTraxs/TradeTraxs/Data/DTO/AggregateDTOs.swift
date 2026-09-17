@@ -362,6 +362,7 @@ nonisolated enum ProfileDTO {
         var subscription_status: String?
         var created_at: String?
         var referral_code: String?
+        var username_change_count: Int?
     }
 
     struct UpdateBody: Encodable, Sendable {
@@ -374,6 +375,7 @@ nonisolated enum ProfileDTO {
         var primary_market: String?
         var started_trading: String?
         var is_private: Bool?
+        var username_change_count: Int?
     }
 
     struct DmPrivacyRow: Codable, Sendable {
@@ -411,6 +413,11 @@ nonisolated enum ProfileDTO {
     struct AccountSettingsOnboardingMirrorBody: Codable, Sendable {
         var id: String
         var onboarding_completed: Bool
+    }
+
+    struct AccountSettingsUsernameChangeMirrorBody: Codable, Sendable {
+        var id: String
+        var username_change_count: Int
     }
 
     struct UsernameAvailabilityParams: Encodable, Sendable {

@@ -30,9 +30,7 @@ struct SettingsProfileView: View {
             }
 
             Section {
-                if let username = viewModel.profile?.username {
-                    SettingsInfoRow(title: "Username", value: "@\(username)")
-                }
+                usernameField
                 SettingsLabeledField(title: "Display Name") {
                     TextField("Your name", text: $viewModel.draftDisplayName)
                         .textInputAutocapitalization(.words)
@@ -44,7 +42,18 @@ struct SettingsProfileView: View {
             } header: {
                 Text("Public Identity")
             } footer: {
-                Text("This is how other traders see you on TradeTraxs.")
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                    Text("This is how other traders see you on TradeTraxs.")
+                    Text("You may change your username up to 2 times.")
+                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                    if viewModel.atUsernameChangeLimit {
+                        Text("Maximum username changes reached.")
+                            .experienceStyle(.caption2, color: colors.warning)
+                    } else {
+                        Text("Remaining changes: \(viewModel.remainingUsernameChanges)")
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                    }
+                }
             }
 
             Section {
@@ -108,5 +117,43 @@ struct SettingsProfileView: View {
         }
         .onAppear { viewModel.loadIfNeeded() }
         .accessibilityIdentifier("settings.profile")
+    }
+
+    private var usernameField: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            Text("Username")
+                .experienceStyle(.caption, color: colors.secondaryText)
+
+            HStack(spacing: ExperienceSpacing.xxs) {
+                Text("@")
+                    .experienceStyle(.body, color: colors.secondaryText)
+                    .accessibilityHidden(true)
+
+                TextField("username", text: $viewModel.draftUsername)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.asciiCapable)
+                    .textContentType(.username)
+                    .disabled(viewModel.atUsernameChangeLimit)
+                    .onChange(of: viewModel.draftUsername) { _, newValue in
+                        let sanitized = ProfileUsernamePolicy.sanitizeForTyping(newValue)
+                        if sanitized != newValue {
+                            viewModel.draftUsername = sanitized
+                        }
+                        viewModel.clearUsernameError()
+                    }
+            }
+            .padding(.vertical, ExperienceSpacing.xxs)
+
+            if let usernameError = viewModel.usernameError {
+                Text(usernameError)
+                    .experienceStyle(.caption, color: colors.error)
+            } else {
+                Text(ProfileUsernamePolicy.formatHint)
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+            }
+        }
+        .padding(.vertical, ExperienceSpacing.xxs)
+        .accessibilityIdentifier("settings.profile.username")
     }
 }

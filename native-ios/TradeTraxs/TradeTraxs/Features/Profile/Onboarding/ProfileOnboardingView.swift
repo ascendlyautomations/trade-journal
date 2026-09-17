@@ -176,7 +176,11 @@ struct ProfileOnboardingView: View {
                     let avatarButtonTitle = viewModel.avatarPreview == nil
                         ? "Add profile photo"
                         : "Change photo"
-                    PhotosPicker(selection: $photoItem, matching: .images) {
+                    PhotosPicker(
+                        selection: $photoItem,
+                        matching: ProfilePhotoPickerFilter.matching,
+                        preferredItemEncoding: .compatible
+                    ) {
                         Text(avatarButtonTitle)
                             .experienceStyle(.body, color: colors.accent)
                     }
@@ -414,7 +418,7 @@ struct ProfileOnboardingView: View {
         guard let item else { return }
         guard loadID == photoPickerLoadID else { return }
 
-        switch await ImageCropSelectionSupport.loadUIImageOutcome(from: item) {
+        switch await ImageCropSelectionSupport.loadProfileAvatarUIImageOutcome(from: item) {
         case .success(let image):
             guard loadID == photoPickerLoadID, !Task.isCancelled else { return }
             viewModel.avatarUploadError = nil

@@ -17,7 +17,11 @@ final class SettingsProfileViewModel {
     var draftTradingStyle = ""
     var draftPrimaryMarket = ""
     var draftIsPrivate = false
-    private var hasLoaded = false
+    var draftUsername = ""
+    var usernameError: String?
+
+    private(set) var usernameChangeCount = 0
+    private var persistedUsername = ""
 
     init(
         profiles: any ProfileRepository,
@@ -29,13 +33,25 @@ final class SettingsProfileViewModel {
         self.profileStore = profileStore
     }
 
+    var remainingUsernameChanges: Int {
+        ProfileUsernameChangePolicy.changesRemaining(changeCount: usernameChangeCount)
+    }
+
+    var atUsernameChangeLimit: Bool {
+        !ProfileUsernameChangePolicy.canChangeProfileUsername(changeCount: usernameChangeCount)
+    }
+
     func loadIfNeeded() {
-        guard !hasLoaded else { return }
-        hasLoaded = true
+        if let cached = profileStore?.profile {
+            apply(cached)
+        }
         Task { await refresh() }
     }
 
     func refresh() async {
+        if profile == nil, let cached = profileStore?.profile {
+            apply(cached)
+        }
         isLoading = profile == nil
         do {
             guard let userID = await session.currentUserID else {
@@ -43,7 +59,7 @@ final class SettingsProfileViewModel {
                 isLoading = false
                 return
             }
-            let loaded = try await profiles.profile(id: ProfileID(userID.rawValue))
+            let loaded = try await profiles.ownerProfileForSettings(id: ProfileID(userID.rawValue))
             apply(loaded)
             errorMessage = nil
         } catch {
@@ -52,23 +68,57 @@ final class SettingsProfileViewModel {
         isLoading = false
     }
 
+    func clearUsernameError() {
+        usernameError = nil
+    }
+
     func save() {
-        guard var current = profile else { return }
-        current.displayName = draftDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        current.bio = draftBio.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        current.tradingStyle = draftTradingStyle.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        current.primaryMarket = draftPrimaryMarket.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        current.isPrivate = draftIsPrivate
+        guard let profile else { return }
+        errorMessage = nil
+        usernameError = nil
+        saveMessage = nil
+
+        let normalizedUsername = ProfileUsernamePolicy.normalize(draftUsername)
+        if let validationError = ProfileUsernamePolicy.validateNotEmpty(normalizedUsername) {
+            usernameError = validationError
+            return
+        }
+
+        let usernameChanged = !ProfileUsernamePolicy.profileUsernamesEqual(
+            persistedUsername,
+            normalizedUsername
+        )
+        if usernameChanged, atUsernameChangeLimit {
+            usernameError = "Maximum username changes reached."
+            return
+        }
+
+        let update = ProfileSettingsUpdate(
+            profileID: profile.id,
+            displayName: draftDisplayName.trimmingCharacters(in: .whitespacesAndNewlines),
+            bio: draftBio.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            tradingStyle: draftTradingStyle.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            primaryMarket: draftPrimaryMarket.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            isPrivate: draftIsPrivate,
+            username: normalizedUsername,
+            persistedUsername: persistedUsername,
+            usernameChangeCount: usernameChangeCount
+        )
 
         Task {
             do {
-                let updated = try await profiles.updateProfile(current)
+                let updated = try await profiles.updateProfileSettings(update)
                 apply(updated)
                 profileStore?.refresh()
                 saveMessage = "Profile saved"
                 ExperienceHaptics.play(.success)
             } catch {
-                errorMessage = UserFacingError.message(for: error)
+                let message = UserFacingError.message(for: error)
+                if usernameChanged || message.localizedCaseInsensitiveContains("username") {
+                    usernameError = message
+                } else {
+                    errorMessage = message
+                }
                 ExperienceHaptics.play(.warning)
             }
         }
@@ -102,6 +152,9 @@ final class SettingsProfileViewModel {
         draftTradingStyle = profile.tradingStyle ?? ""
         draftPrimaryMarket = profile.primaryMarket ?? ""
         draftIsPrivate = profile.isPrivate
+        usernameChangeCount = profile.usernameChangeCount
+        persistedUsername = profile.username
+        draftUsername = ProfileUsernamePolicy.sanitizeForTyping(profile.username)
     }
 }
 

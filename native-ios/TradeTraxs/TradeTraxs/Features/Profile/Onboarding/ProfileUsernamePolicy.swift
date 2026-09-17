@@ -73,4 +73,38 @@ nonisolated enum ProfileUsernamePolicy {
         if isGeneratedShellUsername(current, profileID: profileID) { return "" }
         return sanitizeForTyping(current)
     }
+
+    /// Web `profileUsernamesEqual` — normalized comparison for Settings saves.
+    static func profileUsernamesEqual(_ a: String, _ b: String) -> Bool {
+        normalize(a) == normalize(b)
+    }
+
+    /// Prefer a user-chosen handle over the auto `user_*` shell (Settings Account, bootstrap merge).
+    static func resolvedPublicUsername(
+        primary: String,
+        profileID: ProfileID,
+        fallback: String?
+    ) -> String {
+        if !isGeneratedShellUsername(primary, profileID: profileID) {
+            return primary
+        }
+        if let fallback, !isGeneratedShellUsername(fallback, profileID: profileID) {
+            return fallback
+        }
+        return primary
+    }
+}
+
+/// Web-parity username change limits from `lib/profileUsername.ts`.
+nonisolated enum ProfileUsernameChangePolicy {
+    /// Settings edits allowed after the initial onboarding username (2 → 3 handles total).
+    static let maxProfileUsernameChanges = 2
+
+    static func changesRemaining(changeCount: Int) -> Int {
+        max(0, maxProfileUsernameChanges - max(0, changeCount))
+    }
+
+    static func canChangeProfileUsername(changeCount: Int) -> Bool {
+        changesRemaining(changeCount: changeCount) > 0
+    }
 }

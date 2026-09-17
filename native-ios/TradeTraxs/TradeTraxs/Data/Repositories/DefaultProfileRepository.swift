@@ -11,6 +11,9 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
     private static let publicProfileSelect =
         "id,username,name,bio,avatar_url,trading_style,trader_type,primary_market,started_trading,is_private,created_at"
 
+    private static let ownerSettingsProfileSelect =
+        "\(publicProfileSelect),username_change_count"
+
     private static let onboardingFieldsSelect =
         "id,username,name,onboarding_completed,trader_type,trading_style,started_trading,bio,avatar_url"
 
@@ -210,8 +213,18 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             throw error
         }
 
-        let profile = try await profile(id: submission.profileID)
-        cache.memory.set(profile, forKey: "profile:\(profile.id.rawValue)")
+        let profileKey = "profile:\(submission.profileID.rawValue)"
+        cache.memory.remove(forKey: profileKey)
+        let dto: ProfileDTO.Profile = try await supabase.database.selectOne(
+            ProfileDTO.Profile.self,
+            from: "profiles",
+            query: [
+                SupabaseQuery.select(Self.publicProfileSelect),
+                SupabaseQuery.eq("id", submission.profileID.rawValue),
+            ]
+        )
+        let profile = try ProfileMapper.mapToDomain(dto)
+        cache.memory.set(profile, forKey: profileKey)
         cache.memory.remove(forKey: "profile-stats:\(profile.id.rawValue)")
         Task {
             await mirrorAccountSettingsOnboardingCompleted(
@@ -220,6 +233,87 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             )
         }
         return profile
+    }
+
+    func ownerProfileForSettings(id: ProfileID) async throws -> Profile {
+        let dto: ProfileDTO.Profile = try await supabase.database.selectOne(
+            ProfileDTO.Profile.self,
+            from: "profiles",
+            query: [
+                SupabaseQuery.select(Self.ownerSettingsProfileSelect),
+                SupabaseQuery.eq("id", id.rawValue),
+            ]
+        )
+        let profile = try ProfileMapper.mapToDomain(dto)
+        cache.memory.set(profile, forKey: "profile:\(profile.id.rawValue)")
+        return profile
+    }
+
+    func updateProfileSettings(_ update: ProfileSettingsUpdate) async throws -> Profile {
+        let normalizedUsername = ProfileUsernamePolicy.normalize(update.username)
+        guard !normalizedUsername.isEmpty else {
+            throw AppError.domain(.conflict(message: "Please choose a username."))
+        }
+
+        let normalizedPersisted = ProfileUsernamePolicy.normalize(update.persistedUsername)
+        let usernameChanged = !ProfileUsernamePolicy.profileUsernamesEqual(
+            normalizedPersisted,
+            normalizedUsername
+        )
+
+        if usernameChanged {
+            guard ProfileUsernameChangePolicy.canChangeProfileUsername(
+                changeCount: update.usernameChangeCount
+            ) else {
+                throw AppError.domain(.conflict(message: "Maximum username changes reached."))
+            }
+            if try await isUsernameTaken(normalizedUsername, excluding: update.profileID) {
+                throw AppError.domain(.conflict(message: "Username already in use"))
+            }
+        }
+
+        var body = ProfileDTO.UpdateBody(
+            username: usernameChanged ? normalizedUsername : nil,
+            name: ProfileDisplayNamePolicy.normalized(update.displayName),
+            bio: update.bio,
+            avatar_url: nil,
+            trader_type: nil,
+            trading_style: update.tradingStyle,
+            primary_market: update.primaryMarket,
+            is_private: update.isPrivate,
+            username_change_count: usernameChanged ? update.usernameChangeCount + 1 : nil
+        )
+        if !usernameChanged, normalizedUsername != update.persistedUsername {
+            body.username = normalizedUsername
+        }
+
+        _ = try await supabase.database.update(
+            body,
+            table: "profiles",
+            query: [SupabaseQuery.eq("id", update.profileID.rawValue)],
+            returning: ProfileDTO.Profile.self
+        )
+
+        if usernameChanged {
+            await mirrorAccountSettingsUsernameChangeCount(
+                profileID: update.profileID,
+                count: update.usernameChangeCount + 1
+            )
+        }
+
+        let updated = try await ownerProfileForSettings(id: update.profileID)
+        cache.memory.remove(forKey: "profile-stats:\(updated.id.rawValue)")
+
+        if usernameChanged {
+            await MainActor.run {
+                SessionBootstrapStore.shared.applyUsernameChange(
+                    profileID: update.profileID,
+                    username: updated.username
+                )
+            }
+        }
+
+        return updated
     }
 
     func updateProfile(_ profile: Profile) async throws -> Profile {
@@ -702,6 +796,23 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             .replacingOccurrences(of: "-", with: "")
             .prefix(8)
         return "user_\(prefix)".lowercased()
+    }
+
+    private func mirrorAccountSettingsUsernameChangeCount(
+        profileID: ProfileID,
+        count: Int
+    ) async {
+        let body = ProfileDTO.AccountSettingsUsernameChangeMirrorBody(
+            id: profileID.rawValue,
+            username_change_count: count
+        )
+        _ = try? await supabase.database.upsert(
+            body,
+            into: "account_settings",
+            onConflict: "id",
+            returning: ProfileDTO.AccountSettingsUsernameChangeMirrorBody.self,
+            select: "id"
+        )
     }
 
     private func mirrorAccountSettingsOnboardingCompleted(

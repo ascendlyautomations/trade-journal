@@ -77,6 +77,23 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
         return try await base.updateProfile(profile)
     }
 
+    func ownerProfileForSettings(id: ProfileID) async throws -> Profile {
+        if Self.isDevelopmentID(id) {
+            return Self.fixtureProfile(id: id)
+        }
+        return try await base.ownerProfileForSettings(id: id)
+    }
+
+    func updateProfileSettings(_ update: ProfileSettingsUpdate) async throws -> Profile {
+        if Self.isDevelopmentID(update.profileID) {
+            var profile = Self.fixtureProfile(id: update.profileID)
+            profile.username = ProfileUsernamePolicy.normalize(update.username)
+            profile.displayName = update.displayName
+            return profile
+        }
+        return try await base.updateProfileSettings(update)
+    }
+
     func stats(for profileID: ProfileID) async throws -> ProfileStats {
         if Self.isDevelopmentID(profileID) {
             // Mirrors web overview formulas against a fixed public non-backtest set.

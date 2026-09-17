@@ -9,7 +9,8 @@ struct SettingsAccountView: View {
     init(
         data: DataEnvironment,
         authenticationCoordinator: AuthenticationCoordinator,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        profileStore: CurrentUserProfileStore? = nil
     ) {
         _viewModel = State(
             initialValue: SettingsAccountViewModel(
@@ -18,7 +19,8 @@ struct SettingsAccountView: View {
                 account: data.account,
                 session: data.session,
                 authenticationCoordinator: authenticationCoordinator,
-                navigationCoordinator: navigationCoordinator
+                navigationCoordinator: navigationCoordinator,
+                profileStore: profileStore
             )
         )
     }
@@ -134,7 +136,11 @@ struct SettingsAccountView: View {
             "Delete your account?",
             isPresented: Binding(
                 get: { viewModel.showsDeleteAccountExplainer },
-                set: { if !$0 { viewModel.cancelDeleteAccountFlow() } }
+                set: { isPresented in
+                    if !isPresented, !viewModel.showsDeleteAccountConfirmation {
+                        viewModel.cancelDeleteAccountFlow()
+                    }
+                }
             ),
             titleVisibility: .visible
         ) {
@@ -151,7 +157,11 @@ struct SettingsAccountView: View {
             "Delete Account",
             isPresented: Binding(
                 get: { viewModel.showsDeleteAccountConfirmation },
-                set: { if !$0 { viewModel.cancelDeleteAccountFlow() } }
+                set: { isPresented in
+                    if !isPresented, !viewModel.isDeletingAccount {
+                        viewModel.cancelDeleteAccountFlow()
+                    }
+                }
             ),
             titleVisibility: .visible
         ) {

@@ -10,6 +10,7 @@ final class SettingsAccountViewModel {
     private let session: any SessionProviding
     private let authenticationCoordinator: AuthenticationCoordinator
     private let navigationCoordinator: NavigationCoordinator
+    private let profileStore: CurrentUserProfileStore?
 
     private(set) var email: String?
     private(set) var username: String?
@@ -23,15 +24,14 @@ final class SettingsAccountViewModel {
     var confirmsLogout = false
     var showsDeleteAccountExplainer = false
     var showsDeleteAccountConfirmation = false
-    private var hasLoaded = false
-
     init(
         profiles: any ProfileRepository,
         billing: any BillingRepository,
         account: any AccountRepository,
         session: any SessionProviding,
         authenticationCoordinator: AuthenticationCoordinator,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        profileStore: CurrentUserProfileStore? = nil
     ) {
         self.profiles = profiles
         self.billing = billing
@@ -39,6 +39,7 @@ final class SettingsAccountViewModel {
         self.session = session
         self.authenticationCoordinator = authenticationCoordinator
         self.navigationCoordinator = navigationCoordinator
+        self.profileStore = profileStore
     }
 
     var usesAppleSignIn: Bool {
@@ -65,12 +66,12 @@ final class SettingsAccountViewModel {
     }
 
     func loadIfNeeded() {
-        guard !hasLoaded else { return }
-        hasLoaded = true
+        applyCachedProfileIfAvailable()
         Task { await refresh() }
     }
 
     func refresh() async {
+        applyCachedProfileIfAvailable()
         isLoading = email == nil && username == nil
         email = authenticationCoordinator.sessionEmail
         do {
@@ -81,11 +82,16 @@ final class SettingsAccountViewModel {
                 return
             }
             let profileID = ProfileID(userID.rawValue)
-            async let profileTask = profiles.profile(id: profileID)
+            async let profileTask = profiles.ownerProfileForSettings(id: profileID)
             async let billingTask = billing.status(for: profileID)
             let profile = try await profileTask
-            username = profile.username
+            username = ProfileUsernamePolicy.resolvedPublicUsername(
+                primary: profile.username,
+                profileID: profileID,
+                fallback: profileStore?.profile?.username
+            )
             createdAt = profile.createdAt
+            syncProfileStoreUsernameIfNeeded(profileID: profileID, username: username)
             billingStatus = try? await billingTask
             if email == nil {
                 email = try? await profiles.currentUser().email
@@ -95,6 +101,29 @@ final class SettingsAccountViewModel {
             errorMessage = UserFacingError.message(for: error)
         }
         isLoading = false
+    }
+
+    private func applyCachedProfileIfAvailable() {
+        guard let profile = profileStore?.profile else { return }
+        username = ProfileUsernamePolicy.resolvedPublicUsername(
+            primary: username ?? profile.username,
+            profileID: profile.id,
+            fallback: profile.username
+        )
+        if createdAt == nil {
+            createdAt = profile.createdAt
+        }
+    }
+
+    private func syncProfileStoreUsernameIfNeeded(profileID: ProfileID, username resolved: String?) {
+        guard let resolved, !resolved.isEmpty else { return }
+        guard let storeProfile = profileStore?.profile, storeProfile.id == profileID else { return }
+        guard ProfileUsernamePolicy.isGeneratedShellUsername(storeProfile.username, profileID: profileID) else {
+            return
+        }
+        var patched = storeProfile
+        patched.username = resolved
+        profileStore?.applyBootstrapResult(profile: patched, stats: profileStore?.stats)
     }
 
     func requestPasswordReset() {
@@ -117,11 +146,14 @@ final class SettingsAccountViewModel {
     func requestDeleteAccount() {
         deleteErrorMessage = nil
         showsDeleteAccountExplainer = true
+#if DEBUG
+        AccountDeletionDebugLog.confirmationPresented()
+#endif
     }
 
     func proceedToDeleteConfirmation() {
-        showsDeleteAccountExplainer = false
         showsDeleteAccountConfirmation = true
+        showsDeleteAccountExplainer = false
     }
 
     func cancelDeleteAccountFlow() {
@@ -136,23 +168,40 @@ final class SettingsAccountViewModel {
 
     func confirmDeleteAccount() {
         guard !isDeletingAccount else { return }
-        showsDeleteAccountConfirmation = false
+#if DEBUG
+        AccountDeletionDebugLog.confirmed()
+#endif
         isDeletingAccount = true
         deleteErrorMessage = nil
+        showsDeleteAccountConfirmation = false
         Task {
             defer { isDeletingAccount = false }
             do {
                 try await authenticationCoordinator.deleteAccount(using: account)
                 ExperienceHaptics.play(.success)
+#if DEBUG
+                AccountDeletionDebugLog.completed()
+#endif
             } catch AccountDeletionError.notAuthenticated {
-                deleteErrorMessage = "Your session expired. Sign in again and retry."
+                let message = "Your session expired. Sign in again and retry."
+                deleteErrorMessage = message
                 ExperienceHaptics.play(.error)
+#if DEBUG
+                AccountDeletionDebugLog.failed(reason: message)
+#endif
             } catch AccountDeletionError.serverMessage(let message) {
                 deleteErrorMessage = message
                 ExperienceHaptics.play(.error)
+#if DEBUG
+                AccountDeletionDebugLog.failed(reason: message)
+#endif
             } catch {
-                deleteErrorMessage = UserFacingError.message(for: error)
+                let message = UserFacingError.message(for: error)
+                deleteErrorMessage = message
                 ExperienceHaptics.play(.error)
+#if DEBUG
+                AccountDeletionDebugLog.failed(reason: message)
+#endif
             }
         }
     }

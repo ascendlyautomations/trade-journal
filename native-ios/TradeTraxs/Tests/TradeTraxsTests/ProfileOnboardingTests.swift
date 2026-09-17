@@ -53,6 +53,16 @@ final class ProfileOnboardingTests: XCTestCase {
         XCTAssertTrue(ProfileUsernamePolicy.isGeneratedShellUsername("user_ab12cd34", profileID: ProfileID("ab12cd34-0000-0000-0000-000000000000")))
     }
 
+    func testUsernameChangePolicyMatchesWeb() {
+        XCTAssertEqual(ProfileUsernameChangePolicy.maxProfileUsernameChanges, 2)
+        XCTAssertEqual(ProfileUsernameChangePolicy.changesRemaining(changeCount: 0), 2)
+        XCTAssertEqual(ProfileUsernameChangePolicy.changesRemaining(changeCount: 1), 1)
+        XCTAssertEqual(ProfileUsernameChangePolicy.changesRemaining(changeCount: 2), 0)
+        XCTAssertTrue(ProfileUsernameChangePolicy.canChangeProfileUsername(changeCount: 0))
+        XCTAssertTrue(ProfileUsernameChangePolicy.canChangeProfileUsername(changeCount: 1))
+        XCTAssertFalse(ProfileUsernameChangePolicy.canChangeProfileUsername(changeCount: 2))
+    }
+
     func testGeneratedUsernameNotUsedAsPrefill() {
         let profileID = ProfileID("ab12cd34-0000-0000-0000-000000000000")
         let prefill = ProfileUsernamePolicy.onboardingPrefillUsername(
@@ -60,6 +70,27 @@ final class ProfileOnboardingTests: XCTestCase {
             profileID: profileID
         )
         XCTAssertEqual(prefill, "")
+    }
+
+    func testResolvedPublicUsernamePrefersChosenHandleOverShell() {
+        let profileID = ProfileID("ab12cd34-0000-0000-0000-000000000000")
+        let shell = ProfileUsernamePolicy.generatedShellUsername(for: profileID)
+        XCTAssertEqual(
+            ProfileUsernamePolicy.resolvedPublicUsername(
+                primary: shell,
+                profileID: profileID,
+                fallback: "my_handle"
+            ),
+            "my_handle"
+        )
+        XCTAssertEqual(
+            ProfileUsernamePolicy.resolvedPublicUsername(
+                primary: "my_handle",
+                profileID: profileID,
+                fallback: shell
+            ),
+            "my_handle"
+        )
     }
 
     func testFutureStartedTradingDateRejected() {

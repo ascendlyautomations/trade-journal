@@ -203,12 +203,13 @@ final class ProfileOnboardingViewModel {
     }
 
     private func uploadAvatar(_ data: Data) async throws -> String {
+        let jpegPayload = try Self.jpegUploadPayload(from: data)
         let path = "\(snapshot.profileID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
         let reference = try await uploadService.upload(
             UploadRequest(
                 bucket: StorageBucket.avatars.rawValue,
                 path: path,
-                data: data,
+                data: jpegPayload,
                 contentType: "image/jpeg",
                 purpose: .profileAvatar
             )
@@ -223,6 +224,20 @@ final class ProfileOnboardingViewModel {
             return "\(base)/storage/v1/object/public/avatars/\(reference.id)"
         }
         return reference.id
+    }
+
+    /// Avatars are always stored as JPEG — never upload Live Photo video/HEIC payloads as-is.
+    private static func jpegUploadPayload(from data: Data) throws -> Data {
+        if data.starts(with: [0xFF, 0xD8]) {
+            return data
+        }
+        guard let image = UIImage(data: data),
+              let jpeg = MediaImagePreparation.jpegData(from: image, maxDimension: 1200, quality: 0.92)
+        else {
+            struct InvalidAvatarPayload: Error {}
+            throw InvalidAvatarPayload()
+        }
+        return jpeg
     }
 }
 

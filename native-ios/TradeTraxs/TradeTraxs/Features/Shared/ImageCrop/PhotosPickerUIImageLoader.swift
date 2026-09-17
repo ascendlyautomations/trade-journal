@@ -1,6 +1,7 @@
 import CoreTransferable
 import ImageIO
 import OSLog
+import Photos
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -42,6 +43,11 @@ nonisolated enum ProfilePhotoDebugLog {
 }
 #endif
 
+/// Profile avatars — still images only (no Live Photo motion components in the picker).
+enum ProfilePhotoPickerFilter {
+    static let matching: PHPickerFilter = .any(of: [.images, .not(.livePhotos)])
+}
+
 /// PhotosPicker → UIImage for crop flows (HEIC/HEIF/JPEG/PNG, ImageIO fallback).
 private struct PickedPhotoTransferable: Transferable {
     let uiImage: UIImage
@@ -81,6 +87,9 @@ private nonisolated enum PhotosPickerImageDecoder {
         guard !data.isEmpty else {
             throw PhotosPickerImageDecodeError.emptyData
         }
+        if looksLikeVideoContainer(data) {
+            throw PhotosPickerImageDecodeError.unsupportedFormat
+        }
 #if DEBUG
         ProfilePhotoDebugLog.decodeStarted()
 #endif
@@ -97,15 +106,14 @@ private nonisolated enum PhotosPickerImageDecoder {
         throw PhotosPickerImageDecodeError.unsupportedFormat
     }
 
+    /// Live Photo paired videos and other ISO-BMFF containers must not decode as profile stills.
+    private static func looksLikeVideoContainer(_ data: Data) -> Bool {
+        guard data.count >= 12 else { return false }
+        return data[4] == 0x66 && data[5] == 0x74 && data[6] == 0x79 && data[7] == 0x70
+    }
+
     private static func decodeViaImageIO(_ data: Data) -> UIImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-
-        let loadOptions: [CFString: Any] = [
-            kCGImageSourceShouldCacheImmediately: true,
-        ]
-        if let cgImage = CGImageSourceCreateImageAtIndex(source, 0, loadOptions as CFDictionary) {
-            return UIImage(cgImage: cgImage)
-        }
 
         let thumbOptions: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -113,10 +121,91 @@ private nonisolated enum PhotosPickerImageDecoder {
             kCGImageSourceThumbnailMaxPixelSize: 12_000,
             kCGImageSourceShouldCacheImmediately: true,
         ]
-        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions as CFDictionary) else {
+        if let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions as CFDictionary) {
+            return UIImage(cgImage: thumbnail)
+        }
+
+        let loadOptions: [CFString: Any] = [
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        guard let cgImage = CGImageSourceCreateImageAtIndex(source, 0, loadOptions as CFDictionary) else {
             return nil
         }
-        return UIImage(cgImage: thumbnail)
+        let orientation = exifImageOrientation(from: source, index: 0)
+        return UIImage(cgImage: cgImage, scale: 1, orientation: orientation)
+    }
+
+    private static func exifImageOrientation(from source: CGImageSource, index: Int) -> UIImage.Orientation {
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any],
+              let raw = properties[kCGImagePropertyOrientation] as? UInt32 else {
+            return .up
+        }
+        switch raw {
+        case 2: return .upMirrored
+        case 3: return .down
+        case 4: return .downMirrored
+        case 5: return .leftMirrored
+        case 6: return .right
+        case 7: return .rightMirrored
+        case 8: return .left
+        default: return .up
+        }
+    }
+}
+
+/// Key still for Live Photos and library assets — never the paired video.
+private nonisolated enum ProfilePhotoAssetLoader {
+    static func loadStillImage(from item: PhotosPickerItem) async -> UIImage? {
+        guard let identifier = item.itemIdentifier else { return nil }
+        let assets = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
+        guard let asset = assets.firstObject, asset.mediaType == .image else { return nil }
+
+        return await withCheckedContinuation { continuation in
+            let resumeOnce = ResumeOnce<UIImage?>(continuation)
+
+            let options = PHImageRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.deliveryMode = .highQualityFormat
+            options.resizeMode = .none
+            options.version = .current
+
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: PHImageManagerMaximumSize,
+                contentMode: .aspectFit,
+                options: options
+            ) { image, info in
+                if info?[PHImageCancelledKey] as? Bool == true {
+                    resumeOnce.resume(returning: nil)
+                    return
+                }
+                if info?[PHImageErrorKey] != nil {
+                    resumeOnce.resume(returning: nil)
+                    return
+                }
+                let isDegraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
+                guard let image, !isDegraded else { return }
+                resumeOnce.resume(returning: image)
+            }
+        }
+    }
+}
+
+private nonisolated final class ResumeOnce<T: Sendable>: @unchecked Sendable {
+    private let continuation: CheckedContinuation<T, Never>
+    private var didResume = false
+    private let lock = NSLock()
+
+    init(_ continuation: CheckedContinuation<T, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(returning value: T) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !didResume else { return }
+        didResume = true
+        continuation.resume(returning: value)
     }
 }
 
@@ -139,6 +228,33 @@ enum ImageCropSelectionSupport {
         case .cancelled, .failed:
             return nil
         }
+    }
+
+    /// Profile onboarding avatar — PhotoKit key still first, then transferable decode.
+    static func loadProfileAvatarUIImageOutcome(from item: PhotosPickerItem?) async -> PhotoLoadOutcome {
+        guard let item else {
+#if DEBUG
+            ProfilePhotoDebugLog.loadFailed(stage: "missingItem", errorType: "nilSelection")
+#endif
+            return .failed(stage: "missingItem")
+        }
+
+        if Task.isCancelled {
+            return .cancelled
+        }
+
+#if DEBUG
+        ProfilePhotoDebugLog.transferableLoadStarted()
+#endif
+
+        if let assetImage = await ProfilePhotoAssetLoader.loadStillImage(from: item) {
+#if DEBUG
+            ProfilePhotoDebugLog.transferableLoadCompleted()
+#endif
+            return finish(assetImage)
+        }
+
+        return await loadUIImageOutcome(from: item)
     }
 
     static func loadUIImageOutcome(from item: PhotosPickerItem?) async -> PhotoLoadOutcome {
