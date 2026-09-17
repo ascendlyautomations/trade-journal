@@ -1,47 +1,114 @@
 import SwiftUI
 
-/// Compact floating emoji bar for press-and-hold message reactions.
-struct MessageReactionFloatingPicker: View {
+/// Compact reaction + actions card for long-press on message bubbles.
+struct MessageBubbleActionMenu: View {
     let supportedEmojis: [String]
-    let onSelect: (String) -> Void
+    var selectedEmoji: String? = nil
+    let onSelectEmoji: (String) -> Void
+    var onCopy: (() -> Void)?
+    var onRetry: (() -> Void)?
+    var onDelete: (() -> Void)?
+    var deleteTitle: String = "Delete"
+    var onReport: (() -> Void)?
     let onDismiss: () -> Void
 
     @Environment(\.themeColors) private var colors
 
+    private let emojiSlot: CGFloat = 28
+
     var body: some View {
-        HStack(spacing: ExperienceSpacing.xs) {
-            ForEach(supportedEmojis, id: \.self) { emoji in
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    onSelect(emoji)
-                } label: {
-                    Text(emoji)
-                        .font(.title2)
-                        .frame(width: 40, height: 40)
-                        .background(colors.fillSecondary.opacity(0.95), in: Circle())
+        VStack(spacing: 0) {
+            if !supportedEmojis.isEmpty {
+                HStack(spacing: 0) {
+                    ForEach(supportedEmojis, id: \.self) { emoji in
+                        Button {
+                            ExperienceHaptics.play(.selection)
+                            onSelectEmoji(emoji)
+                            onDismiss()
+                        } label: {
+                            Text(emoji)
+                                .font(.system(size: 15))
+                                .frame(width: emojiSlot, height: emojiSlot)
+                                .background(
+                                    selectedEmoji == emoji
+                                        ? colors.fillSecondary.opacity(0.55)
+                                        : Color.clear,
+                                    in: Circle()
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("React with \(emoji)")
+                        .accessibilityIdentifier("message.reaction.menu.\(emoji)")
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("message.reaction.picker.\(emoji)")
+                .padding(.horizontal, 4)
+                .padding(.vertical, 3)
+                .frame(width: emojiRowWidth)
+            }
+
+            if showsActionRows {
+                if !supportedEmojis.isEmpty {
+                    Divider().opacity(0.35)
+                }
+                VStack(spacing: 0) {
+                    if let onCopy {
+                        actionRow(title: "Copy", systemImage: "doc.on.doc", role: nil, action: onCopy)
+                    }
+                    if let onRetry {
+                        actionRow(title: "Retry", systemImage: "arrow.clockwise", role: nil, action: onRetry)
+                    }
+                    if let onDelete {
+                        actionRow(title: deleteTitle, systemImage: "trash", role: .destructive, action: onDelete)
+                    }
+                    if let onReport {
+                        actionRow(title: "Report", systemImage: "flag", role: nil, action: onReport)
+                    }
+                }
             }
         }
-        .padding(.horizontal, ExperienceSpacing.sm)
-        .padding(.vertical, ExperienceSpacing.xs)
-        .background(.ultraThinMaterial, in: Capsule())
-        .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+        .fixedSize(horizontal: true, vertical: true)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(colors.separator.opacity(0.35), lineWidth: 0.5)
+        }
+        .shadow(color: .black.opacity(0.14), radius: 8, y: 3)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("message.reaction.picker")
+        .accessibilityIdentifier("message.actionMenu")
     }
-}
 
-/// Full-screen tap-catcher that dismisses the floating picker without blocking scroll.
-struct MessageReactionPickerDismissOverlay: View {
-    let onDismiss: () -> Void
+    private var emojiRowWidth: CGFloat {
+        CGFloat(supportedEmojis.count) * emojiSlot + 8
+    }
 
-    var body: some View {
-        Color.black.opacity(0.001)
-            .ignoresSafeArea()
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onDismiss)
-            .accessibilityHidden(true)
+    private var showsActionRows: Bool {
+        onCopy != nil || onRetry != nil || onDelete != nil || onReport != nil
+    }
+
+    private func actionRow(
+        title: String,
+        systemImage: String,
+        role: ButtonRole?,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role) {
+            ExperienceHaptics.play(role == .destructive ? .warning : .selection)
+            action()
+            onDismiss()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 18)
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(role == .destructive ? Color.red : colors.primaryText)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(minWidth: emojiRowWidth, alignment: .leading)
+        }
+        .buttonStyle(.plain)
     }
 }

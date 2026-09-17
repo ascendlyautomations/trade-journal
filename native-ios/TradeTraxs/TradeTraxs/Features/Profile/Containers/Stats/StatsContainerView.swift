@@ -134,7 +134,7 @@ struct StatsContainerView: View {
                 ProfileStatsStreakCard(
                     title: "Best Win Streak",
                     count: metrics.maxWinStreak,
-                    symbol: "🔥",
+                    symbol: "",
                     tone: metrics.maxWinStreak > 0 ? colors.profit : colors.primaryText
                 )
                 ProfileStatsStreakCard(

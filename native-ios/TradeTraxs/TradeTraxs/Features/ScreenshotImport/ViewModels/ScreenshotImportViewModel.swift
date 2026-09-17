@@ -429,6 +429,9 @@ final class ScreenshotImportViewModel {
             } else {
                 phase = .preview
             }
+        } catch is ThirdPartyAIConsentError {
+            aiErrorMessage = nil
+            restoreAfterAIFailure()
         } catch {
             aiErrorMessage = UserFacingError.message(for: error)
             restoreAfterAIFailure()

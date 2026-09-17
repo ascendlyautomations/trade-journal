@@ -11,7 +11,7 @@ import {
   consumeDurableUserRateLimit,
   rateLimitExceededResponse,
 } from "@/lib/server/durableUserRateLimit"
-import { requireProEntitlement } from "@/lib/server/requireProEntitlement"
+import { requireAIFeatureEntitlement } from "@/lib/server/requireAIFeatureEntitlement"
 import type { Database, Json } from "@/lib/database.types"
 
 const openai = new OpenAI({
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     return rateLimitExceededResponse(rate.retryAfterSec)
   }
 
-  const entitlement = await requireProEntitlement(user.id, {
+  const entitlement = await requireAIFeatureEntitlement(user.id, {
     reply:
       "Psychology Coach AI is a TraxPro feature. Upgrade your plan on the web to unlock it.",
   })

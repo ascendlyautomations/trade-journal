@@ -196,6 +196,30 @@ final class FeedScreenViewModel {
         persistFeedFirstPage()
     }
 
+    func applyPostRemoval(postID: PostID) {
+        guard state.entries.contains(where: { matchesPost($0, postID: postID) }) else { return }
+        state.entries.removeAll { matchesPost($0, postID: postID) }
+        rebuildVisibleEntriesCache()
+        persistFeedFirstPage()
+    }
+
+    func applyReelRemoval(reelID: ReelID) {
+        guard state.entries.contains(where: { matchesReel($0, reelID: reelID) }) else { return }
+        state.entries.removeAll { matchesReel($0, reelID: reelID) }
+        rebuildVisibleEntriesCache()
+        persistFeedFirstPage()
+    }
+
+    private func matchesPost(_ entry: FeedTimelineEntry, postID: PostID) -> Bool {
+        if case .post(_, let post) = entry { return post.id == postID }
+        return entry.id == postID.rawValue
+    }
+
+    private func matchesReel(_ entry: FeedTimelineEntry, reelID: ReelID) -> Bool {
+        if case .clip(_, let reel) = entry { return reel.id == reelID }
+        return entry.id == reelID.rawValue
+    }
+
     /// Standard lifecycle — pages using the last visible entry when available.
     func loadMore() async {
         guard let currentID = state.cachedVisibleEntries.last?.id else { return }

@@ -182,11 +182,12 @@ nonisolated struct TradeRoomsHomeBootstrap: Hashable, Sendable {
     var popular: [ExploreRoomSuggestion]
 }
 
-/// All / Official / Community filter for Trade Rooms discovery.
+/// All / Official / Community / Your Rooms filter for Trade Rooms discovery.
 nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendable, Identifiable {
     case all
     case official
     case community
+    case yourRooms = "your_rooms"
 
     var id: String { rawValue }
 
@@ -195,10 +196,22 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
         case .all: return "All"
         case .official: return "Official"
         case .community: return "Community"
+        case .yourRooms: return "Your Rooms"
         }
     }
 
-    var rpcValue: String { rawValue }
+    /// Value sent to `rpc_v1_trade_rooms_home_bootstrap` (`all` | `official` | `community`).
+    var rpcValue: String {
+        switch self {
+        case .yourRooms: return "all"
+        default: return rawValue
+        }
+    }
+
+    /// When true, show Suggested + Popular discovery lists (not only membership rows).
+    var showsDiscoverableLists: Bool {
+        self != .yourRooms
+    }
 }
 
 /// Trade Rooms home discovery modes — all backed by `rpc_v1_trade_rooms_home_bootstrap` / discovery RPC.

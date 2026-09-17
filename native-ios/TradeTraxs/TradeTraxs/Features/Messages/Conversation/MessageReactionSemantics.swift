@@ -39,13 +39,11 @@ nonisolated enum MessageReactionSemantics {
     ) -> [RoomMessageReaction] {
         switch mode {
         case .insert:
-            if reactions.contains(where: {
-                $0.id == next.id
-                    || ($0.userID == next.userID && $0.reaction == next.reaction)
-            }) {
-                return reactions
+            let updated = reactions.filter { $0.userID != next.userID }
+            if updated.contains(where: { $0.id == next.id }) {
+                return updated
             }
-            return reactions + [next]
+            return updated + [next]
         case .delete:
             return reactions.filter { $0.id != next.id }
         }

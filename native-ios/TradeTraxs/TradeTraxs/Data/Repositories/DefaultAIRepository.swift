@@ -14,6 +14,7 @@ nonisolated struct DefaultAIRepository: AIRepository {
     }
 
     func analyzeTrade(_ request: TradeAIAnalyzeRequest) async throws -> TradeAIAnalyzeResponse {
+        try await ensureThirdPartyAIConsent()
         guard let transport = supabase.transport else {
             throw AppError.unknown(message: "Network transport unavailable")
         }
@@ -111,6 +112,7 @@ nonisolated struct DefaultAIRepository: AIRepository {
     }
 
     func explainPsychologyCoach(_ request: PsychologyCoachAIRequest) async throws -> PsychologyCoachAIResponse {
+        try await ensureThirdPartyAIConsent()
         guard let transport = supabase.transport else {
             throw AppError.unknown(message: "Network transport unavailable")
         }
@@ -162,6 +164,7 @@ nonisolated struct DefaultAIRepository: AIRepository {
     }
 
     func extractScreenshotTrades(_ request: ScreenshotAIExtractRequest) async throws -> ScreenshotAIExtractResponse {
+        try await ensureThirdPartyAIConsent()
         guard let transport = supabase.transport else {
             throw AppError.unknown(message: "Network transport unavailable")
         }
@@ -202,6 +205,13 @@ nonisolated struct DefaultAIRepository: AIRepository {
                     decoded?.error ?? "Screenshot extraction failed. Please try again."
                 )
             )
+        }
+    }
+
+    private func ensureThirdPartyAIConsent() async throws {
+        let allowed = await ThirdPartyAIConsentGate.ensureConsent(session: session)
+        guard allowed else {
+            throw ThirdPartyAIConsentError.userDeclined
         }
     }
 

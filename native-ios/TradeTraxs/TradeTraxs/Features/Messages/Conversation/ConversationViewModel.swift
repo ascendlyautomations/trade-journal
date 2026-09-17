@@ -138,6 +138,15 @@ final class ConversationViewModel {
         buildTimeline(from: messages)
     }
 
+    func bubbleItem(for messageID: MessageID) -> ConversationBubbleItem? {
+        for item in timeline {
+            if case .message(let bubble) = item, bubble.id == messageID {
+                return bubble
+            }
+        }
+        return nil
+    }
+
     var showsEmpty: Bool {
         phase == .loaded && messages.isEmpty
     }

@@ -38,6 +38,8 @@ nonisolated protocol RoomRepository: Sendable {
         page: PageRequest
     ) async throws -> CursorPage<RoomMessage>
     func send(_ message: RoomMessage) async throws -> RoomMessage
+    /// Author delete — `room_messages` row removed (RLS: message author).
+    func deleteMessage(roomID: RoomID, messageID: RoomMessageID) async throws
     func insertMessageReaction(
         roomID: RoomID,
         messageID: RoomMessageID,
@@ -83,5 +85,9 @@ extension RoomRepository {
 
     func viewerJoinRequest(roomID: RoomID) async throws -> TradeRoomJoinRequestState? {
         nil
+    }
+
+    func deleteMessage(roomID: RoomID, messageID: RoomMessageID) async throws {
+        throw AppError.notImplemented(feature: "deleteMessage")
     }
 }

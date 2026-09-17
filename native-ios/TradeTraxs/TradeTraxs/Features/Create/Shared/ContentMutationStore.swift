@@ -17,6 +17,8 @@ final class ContentMutationStore {
         case reelLinked(ReelID)
         case story(Story)
         case storyDeleted(StoryID)
+        case postDeleted(PostID)
+        case reelDeleted(ReelID)
     }
 
     private(set) var revision: Int = 0
@@ -63,6 +65,18 @@ final class ContentMutationStore {
     func noteStoryDeleted(_ id: StoryID) {
         latest = .storyDeleted(id)
         latestDeletedStoryID = id
+        revision += 1
+    }
+
+    func notePostDeleted(_ id: PostID) {
+        latest = .postDeleted(id)
+        latestPostID = id
+        revision += 1
+    }
+
+    func noteReelDeleted(_ id: ReelID) {
+        latest = .reelDeleted(id)
+        latestReelID = id
         revision += 1
     }
 

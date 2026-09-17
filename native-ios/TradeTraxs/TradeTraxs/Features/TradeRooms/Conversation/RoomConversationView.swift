@@ -5,7 +5,7 @@ struct RoomConversationView: View {
     @State private var viewModel: RoomConversationViewModel
     @State private var contentRevealed = false
     @State private var didApplyInitialScrollToLatest = false
-    @State private var reactionPickerMessageID: MessageID?
+    @State private var actionMenuMessageID: MessageID?
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
@@ -76,6 +76,12 @@ struct RoomConversationView: View {
             }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            if let deleteErrorMessage = viewModel.deleteErrorMessage {
+                Text(deleteErrorMessage)
+                    .experienceStyle(.caption, color: colors.error)
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.vertical, ExperienceSpacing.xs)
+            }
             if viewModel.showsRoomChrome, viewModel.canShowComposer {
                 MessageComposerBar(
                     draft: $viewModel.draft,
@@ -166,6 +172,16 @@ struct RoomConversationView: View {
                 },
                 onClose: { viewModel.closeActivePresence() }
             )
+        }
+        .alert("Delete Message?", isPresented: $viewModel.showsDeleteMessageConfirmation) {
+            Button("Delete", role: .destructive) {
+                Task { await viewModel.confirmDeleteMessage() }
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelDeleteMessage()
+            }
+        } message: {
+            Text("This message will be removed for everyone in this Trade Room.")
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {
@@ -308,11 +324,16 @@ struct RoomConversationView: View {
                                     .map { viewModel.authorProfile(for: $0.ownerProfileID) } ?? nil,
                                 isSharedContentUnavailable: viewModel.isSharedContentUnavailable(bubble.message),
                                 reactionConfiguration: viewModel.reactionConfiguration(for: bubble.message),
-                                onLongPressForReactions: {
-                                    reactionPickerMessageID = bubble.id
+                                onLongPressForActionMenu: {
+                                    actionMenuMessageID = bubble.id
                                 },
+                                canDelete: viewModel.canDeleteMessage(bubble),
+                                deleteMenuTitle: "Delete Message",
                                 onRetry: {
                                     Task { await viewModel.retry(bubble) }
+                                },
+                                onDelete: {
+                                    viewModel.requestDeleteMessage(bubble)
                                 },
                                 onSharedTradeTap: { tradeID in
                                     guard let navigationCoordinator, let data else { return }
@@ -339,7 +360,10 @@ struct RoomConversationView: View {
                                         coordinator: navigationCoordinator
                                     )
                                 },
-                                onReport: incomingRoomMessageReportAction(for: bubble)
+                                onReport: incomingRoomMessageReportAction(for: bubble),
+                                onSenderAvatarTap: { profileID in
+                                    viewModel.openProfile(profileID)
+                                }
                             )
                             .padding(
                                 .top,
@@ -360,9 +384,9 @@ struct RoomConversationView: View {
                                 ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
                                 value: viewModel.highlightedMessageID
                             )
-                            .messageReactionPickerAnchor(
+                            .messageBubbleActionMenuAnchor(
                                 messageID: bubble.id,
-                                isActive: reactionPickerMessageID == bubble.id
+                                isActive: actionMenuMessageID == bubble.id
                             )
                             .id(bubble.id.rawValue)
                             .onAppear {
@@ -378,11 +402,46 @@ struct RoomConversationView: View {
                         .frame(height: 1)
                         .id(RoomConversationScrollAnchor.bottom)
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.vertical, ExperienceSpacing.sm)
             }
             .scrollDismissesKeyboard(.interactively)
-            .messageReactionPickerOverlay(pickerMessageID: $reactionPickerMessageID) { messageID, emoji in
-                Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
+            .messageBubbleActionMenuOverlay(
+                activeMessageID: $actionMenuMessageID,
+                menuSize: { messageID in
+                    guard let bubble = viewModel.bubbleItem(for: messageID) else { return .zero }
+                    let reactions = viewModel.reactionConfiguration(for: bubble.message)
+                    return MessageBubbleActionMenuSupport.estimatedMenuSize(
+                        emojiCount: MessageBubbleActionMenuSupport.emojiCount(
+                            item: bubble,
+                            reactionConfiguration: reactions
+                        ),
+                        actionCount: MessageBubbleActionMenuSupport.actionCount(
+                            item: bubble,
+                            reactionConfiguration: reactions,
+                            canDelete: viewModel.canDeleteMessage(bubble),
+                            onRetry: { Task { await viewModel.retry(bubble) } },
+                            onReport: incomingRoomMessageReportAction(for: bubble)
+                        )
+                    )
+                }
+            ) { messageID in
+                if let bubble = viewModel.bubbleItem(for: messageID) {
+                    let reactions = viewModel.reactionConfiguration(for: bubble.message)
+                    MessageBubbleActionMenuSupport.menu(
+                        item: bubble,
+                        reactionConfiguration: reactions,
+                        canDelete: viewModel.canDeleteMessage(bubble),
+                        deleteMenuTitle: "Delete Message",
+                        onRetry: { Task { await viewModel.retry(bubble) } },
+                        onDelete: { viewModel.requestDeleteMessage(bubble) },
+                        onReport: incomingRoomMessageReportAction(for: bubble),
+                        onSelectEmoji: { emoji in
+                            Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
+                        },
+                        onDismiss: { actionMenuMessageID = nil }
+                    )
+                }
             }
             .onChange(of: viewModel.phase) { _, phase in
                 guard phase == .loaded, !didApplyInitialScrollToLatest else { return }

@@ -78,7 +78,9 @@ final class TradeRoomsExperienceTests: XCTestCase {
             createdAt: nil
         )
         let inserted = RoomMessageReactionSemantics.patch(reactions, next: optimistic, mode: .insert)
-        XCTAssertEqual(inserted.count, reactions.count + 1)
+        XCTAssertEqual(inserted.count, reactions.count)
+        XCTAssertEqual(inserted.filter { $0.userID == viewer }.count, 1)
+        XCTAssertEqual(inserted.first(where: { $0.userID == viewer })?.reaction, "😂")
 
         let duplicate = RoomMessageReactionSemantics.patch(
             inserted,
@@ -667,7 +669,7 @@ private struct TradeRoomsFilteringExploreRepository: ExploreRepository {
     ) async throws -> [ExploreRoomSuggestion] {
         let filtered: [ExploreRoomSuggestion]
         switch scope {
-        case .all: filtered = rooms
+        case .all, .yourRooms: filtered = rooms
         case .official: filtered = rooms.filter(\.isOfficial)
         case .community: filtered = rooms.filter { !$0.isOfficial }
         }

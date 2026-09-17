@@ -50,6 +50,9 @@ final class PsychologyCoachViewModel {
                 factsHash: facts.factsHash
             )
             phase = .ready
+        } catch is ThirdPartyAIConsentError {
+            aiReply = nil
+            phase = .idle
         } catch {
             aiReply = nil
             phase = .failed(error.localizedDescription)
@@ -73,6 +76,11 @@ final class PsychologyCoachViewModel {
             )
             messages.append(PsychologyCoachAIMessage(role: "assistant", content: response.reply))
             aiReply = response.reply
+            phase = .ready
+        } catch is ThirdPartyAIConsentError {
+            if messages.last?.role == "user", messages.last?.content == trimmed {
+                messages.removeLast()
+            }
             phase = .ready
         } catch {
             phase = .failed(error.localizedDescription)

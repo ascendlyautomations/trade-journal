@@ -134,8 +134,19 @@ final class TradesContainerViewModel {
         initialLoadFailureGrace.cancel()
 
         if hasLoaded {
-            guard !snapshot.trades.isEmpty else { return }
-            items = OwnerProfileOptimisticStore.merging(overlay: snapshot.trades, into: items)
+            if snapshot.trades.isEmpty {
+                if snapshot.didLoadTrades {
+                    items = []
+                    seedCachesFromItems()
+                    updateStateForVisibleItems()
+                    prefetchEngagement(for: [])
+                }
+                return
+            }
+            items = ProfileSectionSupport.reconcileLoadedSnapshot(
+                snapshot: snapshot.trades,
+                loaded: items
+            )
             nextCursor = snapshot.tradesNextCursor ?? nextCursor
             if !snapshot.accountNames.isEmpty { accountNames = snapshot.accountNames }
             if !snapshot.accountModes.isEmpty { accountModes = snapshot.accountModes }

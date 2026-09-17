@@ -583,6 +583,16 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         )
     }
 
+    func deleteMessage(roomID: RoomID, messageID: RoomMessageID) async throws {
+        try await supabase.database.delete(
+            from: "room_messages",
+            query: [
+                SupabaseQuery.eq("id", messageID.rawValue),
+                SupabaseQuery.eq("room_id", roomID.rawValue),
+            ]
+        )
+    }
+
     func moderate(
         roomID: RoomID,
         messageID: RoomMessageID?,

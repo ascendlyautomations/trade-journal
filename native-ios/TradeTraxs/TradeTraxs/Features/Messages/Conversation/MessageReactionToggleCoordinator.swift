@@ -15,9 +15,8 @@ enum MessageReactionToggleCoordinator {
     ) async {
         guard MessageReactionSemantics.supportedEmojis.contains(emoji) else { return }
 
-        let existing = reactions.first(where: { $0.userID == viewerID && $0.reaction == emoji })
-
-        if let existing {
+        let viewerRows = reactions.filter { $0.userID == viewerID }
+        if let existing = viewerRows.first(where: { $0.reaction == emoji }) {
             patch(messageID, existing, .delete)
             if skipNetwork {
                 ExperienceHaptics.play(.selection)
@@ -31,6 +30,11 @@ enum MessageReactionToggleCoordinator {
                 ExperienceHaptics.play(.error)
             }
             return
+        }
+
+        let priorViewerRows = viewerRows
+        for row in priorViewerRows {
+            patch(messageID, row, .delete)
         }
 
         let optimistic = RoomMessageReaction(
@@ -48,12 +52,18 @@ enum MessageReactionToggleCoordinator {
         }
 
         do {
+            for row in priorViewerRows where !row.id.hasPrefix("optimistic-") {
+                try await delete(row.id)
+            }
             let saved = try await insert(optimistic)
             patch(messageID, optimistic, .delete)
             patch(messageID, saved, .insert)
             ExperienceHaptics.play(.selection)
         } catch {
             patch(messageID, optimistic, .delete)
+            for row in priorViewerRows {
+                patch(messageID, row, .insert)
+            }
             ExperienceHaptics.play(.error)
         }
     }

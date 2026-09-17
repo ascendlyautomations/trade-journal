@@ -25,6 +25,7 @@ struct TradeTraxsApp: App {
                 appBootstrapState: appEnvironment.appBootstrapState,
                 profileOnboardingGate: appEnvironment.profileOnboardingGate,
                 contentReportPresenter: appEnvironment.contentReportPresenter,
+                thirdPartyAIConsentPresenter: appEnvironment.thirdPartyAIConsentPresenter,
                 allowsDevelopmentBypass: appEnvironment.authentication.configuration.allowsDevelopmentSessionBypass
             )
             .environment(\.appEnvironment, appEnvironment)

@@ -46,6 +46,9 @@ final class RoomConversationViewModel {
     private(set) var unavailableSharedContentKeys: Set<String> = []
     private(set) var activePresenceMembers: [RoomActivePresenceMember] = []
     var showsActivePresenceSheet = false
+    var pendingDeleteMessage: ConversationBubbleItem?
+    var showsDeleteMessageConfirmation = false
+    var deleteErrorMessage: String?
 
     /// Prefer resolved UUID after slug deep-link lookup.
     private var resolvedRoomID: RoomID { room?.id ?? roomID }
@@ -77,6 +80,7 @@ final class RoomConversationViewModel {
     private var didMarkReadThisOpen = false
     private var reactionBusyKeys: Set<String> = []
     private var retryingMessageIDs: Set<MessageID> = []
+    private var deletingMessageIDs: Set<MessageID> = []
     private var outboundSharedContentObserver: NSObjectProtocol?
     private var sharedContentHydrationTask: Task<Void, Never>?
     private var sharedContentHydrationBacklog: [Message] = []
@@ -152,6 +156,15 @@ final class RoomConversationViewModel {
 
     var timeline: [ConversationTimelineItem] {
         buildTimeline(from: messages)
+    }
+
+    func bubbleItem(for messageID: MessageID) -> ConversationBubbleItem? {
+        for item in timeline {
+            if case .message(let bubble) = item, bubble.id == messageID {
+                return bubble
+            }
+        }
+        return nil
     }
 
     var newestMessageID: MessageID? {
@@ -660,6 +673,78 @@ final class RoomConversationViewModel {
 
     func authorProfile(for profileID: ProfileID) -> Profile? {
         senderProfile(for: profileID)
+    }
+
+    func canDeleteMessage(_ item: ConversationBubbleItem) -> Bool {
+        guard item.isOutgoing else { return false }
+        guard item.message.kind != .system else { return false }
+        if item.sendState == .failed { return true }
+        guard item.sendState == .sent else { return false }
+        guard !ConversationMessageMerge.isOptimisticMessageID(item.message.id) else { return false }
+        guard !deletingMessageIDs.contains(item.id) else { return false }
+        return true
+    }
+
+    func requestDeleteMessage(_ item: ConversationBubbleItem) {
+        guard canDeleteMessage(item) else { return }
+        ExperienceHaptics.play(.warning)
+        pendingDeleteMessage = item
+        showsDeleteMessageConfirmation = true
+    }
+
+    func cancelDeleteMessage() {
+        pendingDeleteMessage = nil
+        showsDeleteMessageConfirmation = false
+    }
+
+    func confirmDeleteMessage() async {
+        showsDeleteMessageConfirmation = false
+        guard let item = pendingDeleteMessage else { return }
+        pendingDeleteMessage = nil
+        await deleteMessage(item)
+    }
+
+    private func deleteMessage(_ item: ConversationBubbleItem) async {
+        guard canDeleteMessage(item) else { return }
+        deleteErrorMessage = nil
+
+        if item.sendState == .failed {
+            removeMessage(id: item.id)
+            persistActiveChannelCache(scrollAnchor: messages.last?.id)
+            refreshInboxPreviewAfterDelete()
+            return
+        }
+
+        if let viewerID,
+           MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
+            || roomID.rawValue.hasPrefix("dev-")
+        {
+            removeMessage(id: item.id)
+            persistActiveChannelCache(scrollAnchor: messages.last?.id)
+            refreshInboxPreviewAfterDelete()
+            return
+        }
+
+        let snapshot = item.message
+        deletingMessageIDs.insert(item.id)
+        removeMessage(id: item.id)
+        persistActiveChannelCache(scrollAnchor: messages.last?.id)
+
+        defer { deletingMessageIDs.remove(item.id) }
+
+        do {
+            try await rooms.deleteMessage(
+                roomID: resolvedRoomID,
+                messageID: RoomMessageID(snapshot.id.rawValue)
+            )
+            ExperienceHaptics.play(.success)
+            refreshInboxPreviewAfterDelete()
+        } catch {
+            commitMessages([snapshot])
+            persistActiveChannelCache(scrollAnchor: messages.last?.id)
+            deleteErrorMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.warning)
+        }
     }
 
     func retry(_ item: ConversationBubbleItem) async {
@@ -1977,6 +2062,19 @@ final class RoomConversationViewModel {
         guard changed else { return }
         senderProfiles = merged
         senderProfileGeneration &+= 1
+    }
+
+    private func refreshInboxPreviewAfterDelete() {
+        if let last = messages.last {
+            patchInboxPreview(with: last)
+        } else {
+            inboxStore.replaceRooms(
+                inboxStore.rooms,
+                previews: [roomID: ""],
+                activityAt: [:],
+                unread: [roomID: 0]
+            )
+        }
     }
 
     private func patchInboxPreview(with message: Message) {

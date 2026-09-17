@@ -1,89 +1,119 @@
 import SwiftUI
 
 struct PsychologyInsightsSection: View {
+    let title: String
+    var subtitle: String? = nil
     let cards: [PsychologyInsightCard]
     var onSelect: (PsychologyInsightCard) -> Void
     var onViewAll: () -> Void
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isSectionExpanded = true
+    @State private var showsAllCards = false
+
+    private var visibleCards: [PsychologyInsightCard] {
+        guard cards.count > DashboardInsightPresentation.previewCount, !showsAllCards else {
+            return cards
+        }
+        return Array(cards.prefix(DashboardInsightPresentation.previewCount))
+    }
+
+    private var showsViewMore: Bool {
+        cards.count > DashboardInsightPresentation.previewCount
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            HStack {
-                Text("Psychology Insights")
-                    .experienceStyle(.headline, color: colors.primaryText)
-                Spacer()
-                if !cards.isEmpty {
-                    Button("See all", action: onViewAll)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(colors.accent)
-                }
-            }
-            .padding(.horizontal, ExperienceSpacing.md)
-            .accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            DashboardCollapsibleSectionHeader(
+                title: title,
+                subtitle: subtitle,
+                isExpanded: isSectionExpanded,
+                trailing: cards.isEmpty
+                    ? nil
+                    : AnyView(
+                        Button("See all", action: onViewAll)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(colors.accent)
+                    ),
+                onToggle: { isSectionExpanded.toggle() }
+            )
 
-            if cards.isEmpty {
-                emptyState
-            } else {
-                VStack(spacing: ExperienceSpacing.sm) {
-                    ForEach(cards) { card in
-                        Button {
-                            ExperienceHaptics.play(.selection)
-                            onSelect(card)
-                        } label: {
-                            psychologyCard(card)
+            if isSectionExpanded {
+                if cards.isEmpty {
+                    emptyState
+                } else {
+                    VStack(spacing: ExperienceSpacing.xs) {
+                        ForEach(visibleCards) { card in
+                            Button {
+                                ExperienceHaptics.play(.selection)
+                                onSelect(card)
+                            } label: {
+                                psychologyCard(card)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                        if showsViewMore {
+                            DashboardInsightViewMoreControl(isExpanded: showsAllCards) {
+                                ExperienceHaptics.play(.selection)
+                                withAnimation(
+                                    ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
+                                ) {
+                                    showsAllCards.toggle()
+                                }
+                            }
+                        }
                     }
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.bottom, ExperienceSpacing.xs)
                 }
-                .padding(.horizontal, ExperienceSpacing.md)
             }
         }
         .accessibilityIdentifier("dashboard.psychologyInsights")
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             Text("Not enough data yet")
-                .experienceStyle(.subheadline, color: colors.primaryText)
+                .experienceStyle(.footnote, color: colors.primaryText)
                 .fontWeight(.semibold)
             Text("Log daily check-ins and psychology on more trades to unlock personalized insights.")
-                .experienceStyle(.footnote, color: colors.secondaryText)
+                .experienceStyle(.caption, color: colors.secondaryText)
         }
-        .padding(ExperienceSpacing.md)
+        .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
         .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.bottom, ExperienceSpacing.xs)
     }
 
     private func psychologyCard(_ card: PsychologyInsightCard) -> some View {
-        HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-            ExperienceIcon(icon: icon(for: card.category), size: .md, color: colors.accent)
-                .frame(width: 40, height: 40)
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+            ExperienceIcon(icon: icon(for: card.category), size: .sm, color: colors.accent)
+                .frame(width: 32, height: 32)
                 .background(colors.accent.opacity(0.14), in: Circle())
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(card.sectionTitle.uppercased())
                     .experienceStyle(.caption2, color: colors.accent)
                     .fontWeight(.semibold)
-                    .tracking(0.5)
+                    .tracking(0.4)
                 Text(card.headline)
-                    .experienceStyle(.subheadline, color: colors.primaryText)
+                    .experienceStyle(.footnote, color: colors.primaryText)
                     .fontWeight(.semibold)
                     .multilineTextAlignment(.leading)
                 Text(card.detail)
-                    .experienceStyle(.callout, color: colors.secondaryText)
+                    .experienceStyle(.caption, color: colors.secondaryText)
                     .multilineTextAlignment(.leading)
                 Text("\(card.reliability.label) • \(card.sampleSize) trades")
                     .experienceStyle(.caption2, color: colors.tertiaryText)
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(colors.tertiaryText)
         }
-        .padding(ExperienceSpacing.md)
+        .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
         .overlay {

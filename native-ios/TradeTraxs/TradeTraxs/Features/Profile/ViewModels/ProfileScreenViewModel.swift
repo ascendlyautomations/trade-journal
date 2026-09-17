@@ -594,6 +594,8 @@ final class ProfileScreenViewModel {
                 ProfilePersistedCacheCoordinator.removePost(id: id, owner: owner, viewerID: viewerID)
             }
         } }
+        syncShellIfNeeded()
+        shellViewModel?.posts?.noteDeleteSucceeded(id: id)
         var next = state
         next.posts.removeAll { $0.id == id }
         next.pinnedContent = ProfilePinnedMutation.remove(
@@ -601,7 +603,10 @@ final class ProfileScreenViewModel {
             contentID: id.rawValue,
             from: next.pinnedContent
         )
-        applyLocalState(next)
+        applyLocalState(next, skipPostsBootstrap: true)
+        if let visible = shellViewModel?.posts?.items {
+            syncPostsFromSection(visible)
+        }
     }
 
     func applyOptimisticPinnedRemoval(
@@ -626,9 +631,32 @@ final class ProfileScreenViewModel {
                 ProfilePersistedCacheCoordinator.removeReel(id: id, owner: owner, viewerID: viewerID)
             }
         } }
+        syncShellIfNeeded()
+        shellViewModel?.clips?.noteDeleteSucceeded(id: id)
         var next = state
         next.clips.removeAll { $0.id == id }
-        applyLocalState(next)
+        applyLocalState(next, skipClipsBootstrap: true)
+        if let visible = shellViewModel?.clips?.items {
+            syncClipsFromSection(visible)
+        }
+    }
+
+    func applyJournalTradeDeletion(id: TradeID, owner: ProfileID) {
+        guard isOwnerTarget, matchesOwner(owner) else { return }
+        applyOptimisticPinnedRemoval(contentType: .trade, contentID: id.rawValue)
+        data.detailCache.removeTrade(id: id)
+        Task { await persistMutationPatch { viewerID in
+            ProfilePersistedCacheCoordinator.removeTrade(id: id, owner: owner, viewerID: viewerID)
+        } }
+        syncShellIfNeeded()
+        shellViewModel?.ensureTradesSection()
+        shellViewModel?.trades?.handleJournalMutation()
+        var next = state
+        next.trades.removeAll { $0.id == id }
+        applyLocalState(next, skipTradesBootstrap: true)
+        if let visible = shellViewModel?.trades?.items {
+            syncTradesFromSection(visible)
+        }
     }
 
     // MARK: - Bootstrap

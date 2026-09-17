@@ -250,10 +250,6 @@ struct DashboardHomeView: View {
                     )
                     .padding(.bottom, ExperienceSpacing.xxl)
 
-                    sectionHeader(
-                        "Psychology Insights",
-                        subtitle: "Patterns from your trades and daily check-ins"
-                    )
                     if !viewModel.psychologyGuardrailNotices.isEmpty {
                         VStack(spacing: ExperienceSpacing.sm) {
                             ForEach(viewModel.psychologyGuardrailNotices) { notice in
@@ -266,6 +262,8 @@ struct DashboardHomeView: View {
                         .padding(.bottom, ExperienceSpacing.sm)
                     }
                     PsychologyInsightsSection(
+                        title: "Psychology Insights",
+                        subtitle: "Patterns from your trades and daily check-ins",
                         cards: viewModel.psychologyReport?.dashboardCards ?? [],
                         onSelect: { card in
                             viewModel.openPsychologyAnalytics(
@@ -276,14 +274,14 @@ struct DashboardHomeView: View {
                             viewModel.openPsychologyAnalytics()
                         }
                     )
-                    .padding(.bottom, ExperienceSpacing.xl)
+                    .padding(.bottom, ExperienceSpacing.lg)
 
-                    sectionHeader(
-                        "Insights",
-                        subtitle: "Coaching from your recent activity"
+                    DashboardInsightsSection(
+                        title: "Insights",
+                        subtitle: "Coaching from your recent activity",
+                        insights: summary.insights
                     )
-                    DashboardInsightsSection(insights: summary.insights, showsTitle: false)
-                        .padding(.bottom, ExperienceSpacing.xxxl)
+                    .padding(.bottom, ExperienceSpacing.xxxl)
                 }
             }
             .opacity(contentRevealed || reduceMotion ? 1 : 0.001)

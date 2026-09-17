@@ -12,7 +12,7 @@ struct ConversationView: View {
     @State private var lastScrollSample: ScrollLayoutSample?
     @State private var userReleasedInitialPin = false
     @State private var showsConversationActions = false
-    @State private var reactionPickerMessageID: MessageID?
+    @State private var actionMenuMessageID: MessageID?
     private let imagePipeline: any ImagePipeline
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator?
@@ -334,8 +334,8 @@ struct ConversationView: View {
                                     .map { viewModel.authorProfile(for: $0.ownerProfileID) } ?? nil,
                                 isSharedContentUnavailable: viewModel.isSharedContentUnavailable(bubble.message),
                                 reactionConfiguration: viewModel.reactionConfiguration(for: bubble.message),
-                                onLongPressForReactions: {
-                                    reactionPickerMessageID = bubble.id
+                                onLongPressForActionMenu: {
+                                    actionMenuMessageID = bubble.id
                                 },
                                 canDelete: viewModel.canDeleteMessage(bubble),
                                 onRetry: {
@@ -368,9 +368,9 @@ struct ConversationView: View {
                                 },
                                 onReport: incomingMessageReportAction(for: bubble)
                             )
-                            .messageReactionPickerAnchor(
+                            .messageBubbleActionMenuAnchor(
                                 messageID: bubble.id,
-                                isActive: reactionPickerMessageID == bubble.id
+                                isActive: actionMenuMessageID == bubble.id
                             )
                             .id(bubble.id.rawValue)
                             .onAppear {
@@ -400,6 +400,43 @@ struct ConversationView: View {
                 .padding(.vertical, ExperienceSpacing.sm)
             }
             .scrollDismissesKeyboard(.interactively)
+            .messageBubbleActionMenuOverlay(
+                activeMessageID: $actionMenuMessageID,
+                menuSize: { messageID in
+                    guard let bubble = viewModel.bubbleItem(for: messageID) else { return .zero }
+                    let reactions = viewModel.reactionConfiguration(for: bubble.message)
+                    return MessageBubbleActionMenuSupport.estimatedMenuSize(
+                        emojiCount: MessageBubbleActionMenuSupport.emojiCount(
+                            item: bubble,
+                            reactionConfiguration: reactions
+                        ),
+                        actionCount: MessageBubbleActionMenuSupport.actionCount(
+                            item: bubble,
+                            reactionConfiguration: reactions,
+                            canDelete: viewModel.canDeleteMessage(bubble),
+                            onRetry: { Task { await viewModel.retry(bubble) } },
+                            onReport: incomingMessageReportAction(for: bubble)
+                        )
+                    )
+                }
+            ) { messageID in
+                if let bubble = viewModel.bubbleItem(for: messageID) {
+                    let reactions = viewModel.reactionConfiguration(for: bubble.message)
+                    MessageBubbleActionMenuSupport.menu(
+                        item: bubble,
+                        reactionConfiguration: reactions,
+                        canDelete: viewModel.canDeleteMessage(bubble),
+                        deleteMenuTitle: "Delete",
+                        onRetry: { Task { await viewModel.retry(bubble) } },
+                        onDelete: { Task { await viewModel.deleteMessage(bubble) } },
+                        onReport: incomingMessageReportAction(for: bubble),
+                        onSelectEmoji: { emoji in
+                            Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
+                        },
+                        onDismiss: { actionMenuMessageID = nil }
+                    )
+                }
+            }
             .simultaneousGesture(initialScrollReleaseGesture)
             .onScrollGeometryChange(for: ScrollLayoutSample.self) { geometry in
                 let distanceFromBottom = geometry.contentSize.height
@@ -445,9 +482,6 @@ struct ConversationView: View {
                     reason: "shared-trades-hydrated"
                 )
                 scheduleSettlingStabilityCheck(proxy: proxy)
-            }
-            .messageReactionPickerOverlay(pickerMessageID: $reactionPickerMessageID) { messageID, emoji in
-                Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
             }
             .overlay(alignment: .bottom) {
                 if viewModel.scrollCoordinator.showsNewMessagesIndicator {

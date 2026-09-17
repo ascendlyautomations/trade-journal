@@ -25,9 +25,9 @@ nonisolated enum ProfileSectionSupport {
         didLoadAuthoritative: Bool
     ) -> (items: [T], hasLoaded: Bool) where T.ID: Hashable {
         if didLoadAuthoritative {
-            if hasLoaded, !loadedItems.isEmpty, snapshotItems.count < loadedItems.count {
+            if hasLoaded, !loadedItems.isEmpty {
                 return (
-                    OwnerProfileOptimisticStore.merging(overlay: snapshotItems, into: loadedItems),
+                    reconcileLoadedSnapshot(snapshot: snapshotItems, loaded: loadedItems),
                     true
                 )
             }
@@ -38,7 +38,7 @@ nonisolated enum ProfileSectionSupport {
         }
         if hasLoaded, !loadedItems.isEmpty {
             return (
-                OwnerProfileOptimisticStore.merging(overlay: snapshotItems, into: loadedItems),
+                reconcileLoadedSnapshot(snapshot: snapshotItems, loaded: loadedItems),
                 true
             )
         }
@@ -46,5 +46,23 @@ nonisolated enum ProfileSectionSupport {
             OwnerProfileOptimisticStore.merging(overlay: snapshotItems, into: loadedItems),
             hasLoaded
         )
+    }
+
+    /// Keeps pagination tail while applying removals from a smaller profile snapshot.
+    nonisolated static func reconcileLoadedSnapshot<T: Identifiable>(
+        snapshot: [T],
+        loaded: [T]
+    ) -> [T] where T.ID: Hashable {
+        guard !loaded.isEmpty else { return snapshot }
+        let snapshotIDs = Set(snapshot.map(\.id))
+        let loadedIDs = Set(loaded.map(\.id))
+        let removedIDs = loadedIDs.subtracting(snapshotIDs)
+        if removedIDs.isEmpty {
+            return OwnerProfileOptimisticStore.merging(overlay: snapshot, into: loaded)
+        }
+        let paginationTail = loaded.filter {
+            !snapshotIDs.contains($0.id) && !removedIDs.contains($0.id)
+        }
+        return OwnerProfileOptimisticStore.merging(overlay: snapshot, into: paginationTail)
     }
 }

@@ -237,14 +237,22 @@ struct TradeRoomsHomeView: View {
             )
 
             if viewModel.discoveryPhase == .loading,
+               viewModel.yourRooms.isEmpty,
+               viewModel.discoveryScope.showsDiscoverableLists,
                viewModel.suggestedDiscoverableRooms.isEmpty,
-               viewModel.popularDiscoverableRooms.isEmpty,
-               viewModel.yourRooms.isEmpty
+               viewModel.popularDiscoverableRooms.isEmpty
+            {
+                discoverySkeleton
+            } else if viewModel.discoveryPhase == .loading,
+                      !viewModel.discoveryScope.showsDiscoverableLists,
+                      viewModel.yourRooms.isEmpty
             {
                 discoverySkeleton
             } else if let message = viewModel.discoveryErrorMessage,
+                      viewModel.discoveryScope.showsDiscoverableLists,
                       viewModel.suggestedDiscoverableRooms.isEmpty,
-                      viewModel.popularDiscoverableRooms.isEmpty
+                      viewModel.popularDiscoverableRooms.isEmpty,
+                      viewModel.yourRooms.isEmpty
             {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                     Text(message)
@@ -256,43 +264,54 @@ struct TradeRoomsHomeView: View {
                 }
                 .padding(.vertical, ExperienceSpacing.xs)
             } else {
-                discoveryRoomSection(
-                    title: TradeRoomDiscoveryMode.suggested.title,
-                    rooms: viewModel.suggestedDiscoverableRooms,
-                    emptyMessage: TradeRoomDiscoveryMode.suggested.emptyMessage
-                )
+                if viewModel.discoveryScope.showsDiscoverableLists {
+                    discoveryRoomSection(
+                        title: TradeRoomDiscoveryMode.suggested.title,
+                        rooms: viewModel.suggestedDiscoverableRooms,
+                        emptyMessage: TradeRoomDiscoveryMode.suggested.emptyMessage
+                    )
 
-                discoveryRoomSection(
-                    title: TradeRoomDiscoveryMode.popular.title,
-                    rooms: viewModel.popularDiscoverableRooms,
-                    emptyMessage: TradeRoomDiscoveryMode.popular.emptyMessage
-                )
-
-                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    discoverySectionHeader(TradeRoomDiscoveryMode.yourRooms.title)
-
-                    if viewModel.yourRooms.isEmpty, viewModel.discoveryPhase == .loaded {
-                        ExperienceEmptyState(
-                            icon: .rooms,
-                            title: "No rooms yet",
-                            message: TradeRoomDiscoveryMode.yourRooms.emptyMessage,
-                            actionTitle: viewModel.viewerOwnedRoom == nil ? "Create Trade Room" : nil,
-                            action: viewModel.viewerOwnedRoom == nil ? { viewModel.presentCreateRoom() } : nil
-                        )
-                        .padding(.vertical, ExperienceSpacing.xs)
-                    } else if viewModel.yourRooms.isEmpty {
-                        Text(TradeRoomDiscoveryMode.yourRooms.emptyMessage)
-                            .experienceStyle(.footnote, color: colors.secondaryText)
-                    } else {
-                        ForEach(viewModel.yourRooms) { room in
-                            discoveryRow(for: room, isYourRoomsContext: true)
-                        }
-                    }
+                    discoveryRoomSection(
+                        title: TradeRoomDiscoveryMode.popular.title,
+                        rooms: viewModel.popularDiscoverableRooms,
+                        emptyMessage: TradeRoomDiscoveryMode.popular.emptyMessage
+                    )
                 }
+
+                yourRoomsDiscoverySection(
+                    showsSectionHeader: viewModel.discoveryScope.showsDiscoverableLists
+                )
             }
         }
         .padding(.bottom, ExperienceSpacing.sm)
         .accessibilityIdentifier("tradeRooms.discovery.section")
+    }
+
+    @ViewBuilder
+    private func yourRoomsDiscoverySection(showsSectionHeader: Bool) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            if showsSectionHeader {
+                discoverySectionHeader(TradeRoomDiscoveryMode.yourRooms.title)
+            }
+
+            if viewModel.yourRooms.isEmpty, viewModel.discoveryPhase == .loaded {
+                ExperienceEmptyState(
+                    icon: .rooms,
+                    title: "No rooms yet",
+                    message: TradeRoomDiscoveryMode.yourRooms.emptyMessage,
+                    actionTitle: viewModel.viewerOwnedRoom == nil ? "Create Trade Room" : nil,
+                    action: viewModel.viewerOwnedRoom == nil ? { viewModel.presentCreateRoom() } : nil
+                )
+                .padding(.vertical, ExperienceSpacing.xs)
+            } else if viewModel.yourRooms.isEmpty {
+                Text(TradeRoomDiscoveryMode.yourRooms.emptyMessage)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            } else {
+                ForEach(viewModel.yourRooms) { room in
+                    discoveryRow(for: room, isYourRoomsContext: true)
+                }
+            }
+        }
     }
 
     private func discoverySectionHeader(_ title: String) -> some View {

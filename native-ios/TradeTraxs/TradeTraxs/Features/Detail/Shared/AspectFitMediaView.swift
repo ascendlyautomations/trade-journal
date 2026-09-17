@@ -258,6 +258,7 @@ private struct AspectFitFullImageViewer: View {
                 maxPixelSize: nil,
                 zoomScale: $zoomScale
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black.ignoresSafeArea())
             .experienceSwipeToDismiss(isEnabled: zoomScale <= 1.02) {
                 dismiss()

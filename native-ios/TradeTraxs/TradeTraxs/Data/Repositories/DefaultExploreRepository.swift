@@ -273,7 +273,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
         rooms.filter { room in
             guard room.slug.lowercased() != "tradetraxs-beta" else { return false }
             switch scope {
-            case .all: return true
+            case .all, .yourRooms: return true
             case .official: return room.isOfficial
             case .community: return !room.isOfficial
             }

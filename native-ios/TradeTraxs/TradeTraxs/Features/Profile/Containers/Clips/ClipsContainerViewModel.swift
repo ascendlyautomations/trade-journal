@@ -74,8 +74,19 @@ final class ClipsContainerViewModel {
         initialLoadFailureGrace.cancel()
 
         if hasLoaded {
-            guard !snapshot.clips.isEmpty else { return }
-            items = OwnerProfileOptimisticStore.merging(overlay: snapshot.clips, into: items)
+            if snapshot.clips.isEmpty {
+                if snapshot.didLoadClips {
+                    items = []
+                    detailCache.seed(reels: [])
+                    state = .empty
+                    prefetchEngagement(for: [])
+                }
+                return
+            }
+            items = ProfileSectionSupport.reconcileLoadedSnapshot(
+                snapshot: snapshot.clips,
+                loaded: items
+            )
             #if DEBUG
             ProfileClipsSync.logReconciled(
                 beforeCount: beforeCount,
@@ -109,6 +120,18 @@ final class ClipsContainerViewModel {
         detailCache.seed(reels: items)
         state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
         prefetchEngagement(for: items.map(\.id))
+    }
+
+    /// Owner delete — drop from grid immediately (detail overflow + context menus).
+    func noteDeleteSucceeded(id: ReelID) {
+        items.removeAll { $0.id == id }
+        detailCache.removeReel(id: id)
+        RepositoryRequestFlight.shared.invalidate(
+            prefix: "feed.profileReels:\(profileOwnerID.rawValue)"
+        )
+        state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+        prefetchEngagement(for: items.map(\.id))
+        OwnerProfileOptimisticStore.shared.syncOwnerClipsState(items)
     }
 
     /// Owner publish — upsert immediately, then refresh using the same path as manual reload.

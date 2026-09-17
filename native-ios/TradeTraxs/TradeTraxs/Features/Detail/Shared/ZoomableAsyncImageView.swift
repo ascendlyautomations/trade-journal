@@ -17,16 +17,18 @@ struct ZoomableAsyncImageView: View {
 
     var body: some View {
         ZStack {
-            colors.fillPrimary
+            Color.black
 
             if let uiImage {
                 ZoomableUIImageView(image: uiImage, zoomScale: zoomScale)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if didFail || reference == nil {
                 ExperienceIcon(icon: .chart, size: .xl, color: colors.tertiaryText)
             } else {
                 ExperienceLoadingSpinner()
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: "\(reference?.id ?? "")|\(displayScale)") {
             await load()
         }
@@ -50,7 +52,8 @@ struct ZoomableAsyncImageView: View {
             )
             let scale = displayScale
             let decoded = await Task.detached(priority: .userInitiated) {
-                UIImage(data: data, scale: scale)
+                guard let raw = UIImage(data: data, scale: scale) else { return nil as UIImage? }
+                return MediaImageOrientation.normalized(raw)
             }.value
             guard let decoded else {
                 didFail = true
@@ -65,12 +68,25 @@ struct ZoomableAsyncImageView: View {
     }
 }
 
+/// Fills SwiftUI layout bounds; scroll view tracks container size for aspect-fit centering.
+private final class ZoomableImageHostView: UIView {
+    var onBoundsChange: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onBoundsChange?()
+    }
+}
+
 /// Native pinch-to-zoom host.
 private struct ZoomableUIImageView: UIViewRepresentable {
     let image: UIImage
     var zoomScale: Binding<CGFloat>?
 
-    func makeUIView(context: Context) -> UIScrollView {
+    func makeUIView(context: Context) -> ZoomableImageHostView {
+        let host = ZoomableImageHostView()
+        host.backgroundColor = .clear
+
         let scrollView = UIScrollView()
         scrollView.delegate = context.coordinator
         scrollView.minimumZoomScale = 1
@@ -79,6 +95,15 @@ private struct ZoomableUIImageView: UIViewRepresentable {
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.backgroundColor = .clear
         scrollView.contentInsetAdjustmentBehavior = .never
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        host.addSubview(scrollView)
+
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: host.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+        ])
 
         let imageView = UIImageView(image: image)
         imageView.contentMode = .scaleAspectFit
@@ -93,22 +118,29 @@ private struct ZoomableUIImageView: UIViewRepresentable {
         doubleTap.numberOfTapsRequired = 2
         scrollView.addGestureRecognizer(doubleTap)
 
+        context.coordinator.hostView = host
         context.coordinator.scrollView = scrollView
         context.coordinator.imageView = imageView
         context.coordinator.zoomScale = zoomScale
-        return scrollView
+
+        host.onBoundsChange = { [weak coordinator = context.coordinator] in
+            coordinator?.layoutImageIfNeeded(force: false)
+        }
+
+        return host
     }
 
-    func updateUIView(_ scrollView: UIScrollView, context: Context) {
-        guard let imageView = context.coordinator.imageView else { return }
+    func updateUIView(_ host: ZoomableImageHostView, context: Context) {
+        guard let scrollView = context.coordinator.scrollView,
+              let imageView = context.coordinator.imageView
+        else { return }
         context.coordinator.zoomScale = zoomScale
         let imageChanged = imageView.image !== image
-        let boundsChanged = context.coordinator.lastBounds != scrollView.bounds.size
         imageView.image = image
-        // Avoid resetting user zoom when parent re-renders from zoomScale binding updates.
-        if imageChanged || boundsChanged || !context.coordinator.hasLaidOut {
-            context.coordinator.layoutImage()
+        if imageChanged {
+            context.coordinator.hasLaidOut = false
         }
+        context.coordinator.layoutImageIfNeeded(force: imageChanged || context.coordinator.lastBounds != scrollView.bounds.size)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -116,6 +148,7 @@ private struct ZoomableUIImageView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UIScrollViewDelegate {
+        weak var hostView: ZoomableImageHostView?
         weak var scrollView: UIScrollView?
         weak var imageView: UIImageView?
         var zoomScale: Binding<CGFloat>?
@@ -139,21 +172,33 @@ private struct ZoomableUIImageView: UIViewRepresentable {
             zoomScale?.wrappedValue = scale
         }
 
+        func layoutImageIfNeeded(force: Bool) {
+            guard force || !hasLaidOut else { return }
+            layoutImage()
+        }
+
         func layoutImage() {
             guard let scrollView, let imageView, let image = imageView.image else { return }
-            scrollView.zoomScale = 1
-            zoomScale?.wrappedValue = 1
             let size = scrollView.bounds.size
-            guard size.width > 0, size.height > 0 else { return }
+            guard size.width > 1, size.height > 1 else { return }
 
-            let imageSize = image.size
-            let widthRatio = size.width / imageSize.width
-            let heightRatio = size.height / imageSize.height
+            let wasZoomed = scrollView.zoomScale > 1.001
+            if !wasZoomed {
+                scrollView.zoomScale = 1
+                zoomScale?.wrappedValue = 1
+            }
+
+            let pixels = MediaImageOrientation.visualPixelSize(of: image)
+            guard pixels.width > 0, pixels.height > 0 else { return }
+
+            let widthRatio = size.width / pixels.width
+            let heightRatio = size.height / pixels.height
             let scale = min(widthRatio, heightRatio)
             let fitted = CGSize(
-                width: imageSize.width * scale,
-                height: imageSize.height * scale
+                width: pixels.width * scale,
+                height: pixels.height * scale
             )
+
             imageView.frame = CGRect(origin: .zero, size: fitted)
             scrollView.contentSize = fitted
             lastBounds = size
@@ -162,9 +207,9 @@ private struct ZoomableUIImageView: UIViewRepresentable {
         }
 
         private func centerImage() {
-            guard let scrollView, let imageView else { return }
+            guard let scrollView else { return }
             let bounds = scrollView.bounds.size
-            let content = imageView.frame.size
+            let content = scrollView.contentSize
             let insetX = max((bounds.width - content.width) * 0.5, 0)
             let insetY = max((bounds.height - content.height) * 0.5, 0)
             scrollView.contentInset = UIEdgeInsets(top: insetY, left: insetX, bottom: insetY, right: insetX)

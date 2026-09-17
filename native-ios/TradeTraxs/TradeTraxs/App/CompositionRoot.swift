@@ -220,6 +220,11 @@ enum CompositionRoot {
         let contentReportPresenter = MainActor.assumeIsolated {
             ContentReportPresenter()
         }
+        let thirdPartyAIConsentPresenter = MainActor.assumeIsolated {
+            let presenter = ThirdPartyAIConsentPresenter()
+            ThirdPartyAIConsentGate.configure(presenter: presenter)
+            return presenter
+        }
         let pushNotifications = MainActor.assumeIsolated {
             PushNotificationCenter(
                 tokenClient: LoginShellDevicePushTokenClient(),
@@ -245,7 +250,8 @@ enum CompositionRoot {
             appBootstrapState: appBootstrapState,
             profileOnboardingGate: profileOnboardingGate,
             pushNotifications: pushNotifications,
-            contentReportPresenter: contentReportPresenter
+            contentReportPresenter: contentReportPresenter,
+            thirdPartyAIConsentPresenter: thirdPartyAIConsentPresenter
         )
     }
 
@@ -302,6 +308,11 @@ enum CompositionRoot {
         let contentReportPresenter = MainActor.assumeIsolated {
             ContentReportPresenter()
         }
+        let thirdPartyAIConsentPresenter = MainActor.assumeIsolated {
+            let presenter = ThirdPartyAIConsentPresenter()
+            ThirdPartyAIConsentGate.configure(presenter: presenter)
+            return presenter
+        }
         let pushNotifications = MainActor.assumeIsolated {
             PushNotificationCenter(
                 tokenClient: LoginShellDevicePushTokenClient(),
@@ -321,7 +332,8 @@ enum CompositionRoot {
             appBootstrapState: appBootstrapState,
             profileOnboardingGate: profileOnboardingGate,
             pushNotifications: pushNotifications,
-            contentReportPresenter: contentReportPresenter
+            contentReportPresenter: contentReportPresenter,
+            thirdPartyAIConsentPresenter: thirdPartyAIConsentPresenter
         )
     }
 
@@ -555,6 +567,8 @@ enum CompositionRoot {
         }
 
         let contentReportPresenter = ContentReportPresenter()
+        let thirdPartyAIConsentPresenter = ThirdPartyAIConsentPresenter()
+        ThirdPartyAIConsentGate.configure(presenter: thirdPartyAIConsentPresenter)
 
         return AppEnvironment(
             configuration: configuration,
@@ -566,7 +580,8 @@ enum CompositionRoot {
             appBootstrapState: appBootstrapState,
             profileOnboardingGate: profileOnboardingGate,
             pushNotifications: pushNotifications,
-            contentReportPresenter: contentReportPresenter
+            contentReportPresenter: contentReportPresenter,
+            thirdPartyAIConsentPresenter: thirdPartyAIConsentPresenter
         )
     }
 

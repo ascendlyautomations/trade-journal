@@ -176,6 +176,10 @@ struct FeedHomeView: View {
                 viewModel.applyStoryCreated(story)
             case .storyDeleted(let storyID):
                 viewModel.applyStoryDeleted(storyID)
+            case .postDeleted(let postID):
+                viewModel.applyPostRemoval(postID: postID)
+            case .reelDeleted(let reelID):
+                viewModel.applyReelRemoval(reelID: reelID)
             default:
                 Task { await viewModel.refresh(trigger: .contentMutation) }
             }

@@ -50,16 +50,11 @@ export function patchRoomMessageReactions(
 ): RoomMessageReactionRow[] {
   const list = reactions ?? []
   if (mode === "insert") {
-    if (
-      list.some(
-        (row) =>
-          row.id === next.id ||
-          (row.user_id === next.user_id && row.reaction === next.reaction)
-      )
-    ) {
-      return list
+    const withoutViewer = list.filter((row) => row.user_id !== next.user_id)
+    if (withoutViewer.some((row) => row.id === next.id)) {
+      return withoutViewer
     }
-    return [...list, next]
+    return [...withoutViewer, next]
   }
 
   return list.filter((row) => row.id !== next.id)

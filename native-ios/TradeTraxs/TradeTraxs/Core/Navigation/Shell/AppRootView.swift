@@ -11,6 +11,7 @@ struct AppRootView: View {
     @Bindable var appBootstrapState: AppBootstrapState
     @Bindable var profileOnboardingGate: ProfileOnboardingGateStore
     @Bindable var contentReportPresenter: ContentReportPresenter
+    @Bindable var thirdPartyAIConsentPresenter: ThirdPartyAIConsentPresenter
     let allowsDevelopmentBypass: Bool
 
     @Environment(\.scenePhase) private var scenePhase
@@ -62,6 +63,15 @@ struct AppRootView: View {
                         )
                     }
                 }
+            )
+            .applyThemeEnvironment(themeManager.themeEnvironment)
+        }
+        .sheet(isPresented: $thirdPartyAIConsentPresenter.isPresented, onDismiss: {
+            thirdPartyAIConsentPresenter.handleSheetDismissed()
+        }) {
+            ThirdPartyAIConsentSheet(
+                onContinue: { thirdPartyAIConsentPresenter.confirmContinue() },
+                onNotNow: { thirdPartyAIConsentPresenter.decline() }
             )
             .applyThemeEnvironment(themeManager.themeEnvironment)
         }

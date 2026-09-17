@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// All / Official / Community filter for Trade Rooms discovery.
+/// All / Official / Community / Your Rooms filter for Trade Rooms discovery.
 struct TradeRoomDiscoveryScopeToggle: View {
     let scope: TradeRoomDiscoveryScope
     let onSelect: (TradeRoomDiscoveryScope) -> Void

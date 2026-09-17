@@ -1867,30 +1867,34 @@ function CommunityContent() {
       if (reactionBusyRef.current.has(busyKey)) return
       reactionBusyRef.current.add(busyKey)
 
-      const findExisting = () => {
+      const findViewerReactions = () => {
         const msg =
           messages.find((m) => m.id === messageId) ??
           pinnedMessages.find((m) => m.id === messageId)
-        return (msg?.room_message_reactions ?? []).find(
-          (row) => row.user_id === uid && row.reaction === reaction
-        )
+        return (msg?.room_message_reactions ?? []).filter((row) => row.user_id === uid)
       }
 
-      const existing = findExisting()
+      const viewerRows = findViewerReactions()
+      const existingSame = viewerRows.find((row) => row.reaction === reaction)
+      const priorViewerRows = viewerRows
 
       try {
-        if (existing) {
-          patchMessageReaction(messageId, existing, "delete")
+        if (existingSame) {
+          patchMessageReaction(messageId, existingSame, "delete")
           const { error } = await supabase
             .from("room_message_reactions")
             .delete()
-            .eq("id", existing.id)
+            .eq("id", existingSame.id)
           if (error) throw error
           return
         }
 
         const roomId = selectedRoomIdRef.current
         if (!roomId) return
+
+        for (const row of priorViewerRows) {
+          patchMessageReaction(messageId, row, "delete")
+        }
 
         const optimistic: RoomMessageReactionRow = {
           id: `optimistic-${messageId}-${reaction}`,
@@ -1899,6 +1903,15 @@ function CommunityContent() {
           reaction,
         }
         patchMessageReaction(messageId, optimistic, "insert")
+
+        for (const row of priorViewerRows) {
+          if (row.id.startsWith("optimistic-")) continue
+          const { error: deleteError } = await supabase
+            .from("room_message_reactions")
+            .delete()
+            .eq("id", row.id)
+          if (deleteError) throw deleteError
+        }
 
         const { data, error } = await supabase
           .from("room_message_reactions")
@@ -1919,8 +1932,8 @@ function CommunityContent() {
         }
       } catch (error) {
         console.error("toggleRoomMessageReaction:", error)
-        if (existing) {
-          patchMessageReaction(messageId, existing, "insert")
+        if (existingSame) {
+          patchMessageReaction(messageId, existingSame, "insert")
         } else {
           patchMessageReaction(messageId, {
             id: `optimistic-${messageId}-${reaction}`,
@@ -1928,6 +1941,9 @@ function CommunityContent() {
             user_id: uid,
             reaction,
           }, "delete")
+          for (const row of priorViewerRows) {
+            patchMessageReaction(messageId, row, "insert")
+          }
         }
         showPopup({
           type: "error",

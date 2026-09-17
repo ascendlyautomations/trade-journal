@@ -74,8 +74,19 @@ final class PostsContainerViewModel {
         initialLoadFailureGrace.cancel()
 
         if hasLoaded {
-            guard !snapshot.posts.isEmpty else { return }
-            items = OwnerProfileOptimisticStore.merging(overlay: snapshot.posts, into: items)
+            if snapshot.posts.isEmpty {
+                if snapshot.didLoadPosts {
+                    items = []
+                    detailCache.seed(posts: [])
+                    state = .empty
+                    prefetchEngagement(for: [])
+                }
+                return
+            }
+            items = ProfileSectionSupport.reconcileLoadedSnapshot(
+                snapshot: snapshot.posts,
+                loaded: items
+            )
             #if DEBUG
             ProfilePostsSync.logReconciled(
                 beforeCount: beforeCount,
@@ -109,6 +120,15 @@ final class PostsContainerViewModel {
         detailCache.seed(posts: items)
         state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
         prefetchEngagement(for: items.map(\.id))
+    }
+
+    /// Owner delete — drop from grid immediately.
+    func noteDeleteSucceeded(id: PostID) {
+        items.removeAll { $0.id == id }
+        detailCache.removePost(id: id)
+        state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+        prefetchEngagement(for: items.map(\.id))
+        OwnerProfileOptimisticStore.shared.syncOwnerPostsState(items)
     }
 
     /// Owner publish — upsert immediately, then refresh page 1 using the same path as manual reload.

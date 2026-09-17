@@ -129,6 +129,11 @@ final class TradeAISectionViewModel {
                 let assistant = TradeAIMessage(role: .assistant, content: response.reply)
                 messages.append(assistant)
                 await persistCompletedTurn(user: userMessage, assistant: assistant)
+            } catch is ThirdPartyAIConsentError {
+                guard !Task.isCancelled else { return }
+                if messages.last?.id == userMessage.id {
+                    messages.removeLast()
+                }
             } catch {
                 guard !Task.isCancelled else { return }
                 errorMessage = Self.userFacingMessage(for: error)

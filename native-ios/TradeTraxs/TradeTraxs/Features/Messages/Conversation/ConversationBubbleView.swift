@@ -15,8 +15,9 @@ struct ConversationBubbleView: View {
     var sharedAchievementAuthor: Profile? = nil
     var isSharedContentUnavailable: Bool = false
     var reactionConfiguration: MessageReactionConfiguration? = nil
-    var onLongPressForReactions: (() -> Void)? = nil
+    var onLongPressForActionMenu: (() -> Void)? = nil
     var canDelete: Bool = false
+    var deleteMenuTitle: String = "Delete"
     var onRetry: (() -> Void)?
     var onDelete: (() -> Void)?
     var onSharedTradeTap: ((TradeID) -> Void)? = nil
@@ -26,24 +27,29 @@ struct ConversationBubbleView: View {
     var isSelected: Bool = false
     var onToggleSelection: (() -> Void)? = nil
     var onReport: (() -> Void)? = nil
+    /// Trade Rooms — tap sender avatar to open public profile (uses message sender ID).
+    var onSenderAvatarTap: ((ProfileID) -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: ExperienceSpacing.xs) {
+        HStack(alignment: .bottom, spacing: ConversationBubbleLayout.avatarToContentSpacing) {
             if isSelectionMode {
                 selectionCheckbox
             }
             if item.isOutgoing {
-                Spacer(minLength: 48)
+                Spacer(minLength: ConversationBubbleLayout.oppositeGutterMin)
                 bubbleColumn(alignment: .trailing)
+                    .frame(maxWidth: contentColumnMaxWidth, alignment: .trailing)
             } else {
                 avatarSlot
                 bubbleColumn(alignment: .leading)
-                Spacer(minLength: 48)
+                    .frame(maxWidth: contentColumnMaxWidth, alignment: .leading)
+                Spacer(minLength: 0)
             }
         }
-        .padding(.horizontal, ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: item.isOutgoing ? .trailing : .leading)
+        .padding(.horizontal, ConversationBubbleLayout.rowHorizontalPadding)
         .contentShape(Rectangle())
         .onTapGesture {
             guard isSelectionMode else { return }
@@ -52,6 +58,24 @@ struct ConversationBubbleView: View {
         .accessibilityIdentifier(
             item.isOutgoing ? "conversation.bubble.outgoing" : "conversation.bubble.incoming"
         )
+        .onLongPressGesture(minimumDuration: 0.38, maximumDistance: 12) {
+            guard !isSelectionMode, showsActionMenu else { return }
+            ExperienceHaptics.play(.impactLight)
+            onLongPressForActionMenu?()
+        }
+    }
+
+    private var showsActionMenu: Bool {
+        reactionInteractionsEnabled
+            || canDelete
+            || onReport != nil
+            || (item.sendState == .failed && onRetry != nil)
+            || copyableText != nil
+    }
+
+    private var copyableText: String? {
+        guard let text = item.text, !text.isEmpty, item.message.kind != .tradeShare else { return nil }
+        return text
     }
 
     private var resolvedAuthor: Profile? {
@@ -60,15 +84,36 @@ struct ConversationBubbleView: View {
 
     @ViewBuilder
     private var avatarSlot: some View {
-        if item.showsAvatar {
-            ConversationPeerAvatarView(
-                profile: resolvedAuthor,
-                imagePipeline: imagePipeline,
-                size: 28
-            )
-        } else {
-            Color.clear.frame(width: 28, height: 28)
+        Group {
+            if item.showsAvatar {
+                if let onSenderAvatarTap {
+                    Button {
+                        onSenderAvatarTap(item.message.senderProfileID)
+                    } label: {
+                        ConversationPeerAvatarView(
+                            profile: resolvedAuthor,
+                            imagePipeline: imagePipeline,
+                            size: ConversationBubbleLayout.avatarColumnWidth
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("View profile")
+                    .accessibilityIdentifier("conversation.bubble.senderAvatar")
+                } else {
+                    ConversationPeerAvatarView(
+                        profile: resolvedAuthor,
+                        imagePipeline: imagePipeline,
+                        size: ConversationBubbleLayout.avatarColumnWidth
+                    )
+                }
+            } else {
+                Color.clear
+            }
         }
+        .frame(
+            width: ConversationBubbleLayout.avatarColumnWidth,
+            height: ConversationBubbleLayout.avatarColumnWidth
+        )
     }
 
     private func bubbleColumn(alignment: HorizontalAlignment) -> some View {
@@ -78,6 +123,7 @@ struct ConversationBubbleView: View {
                     Text(ConversationThreadSupport.senderDisplayName(for: resolvedAuthor))
                         .font(.system(.caption, design: .default).weight(.semibold))
                         .foregroundStyle(colors.secondaryText)
+                        .lineLimit(1)
                     if item.showsOwnerBadge || !item.authorTags.isEmpty {
                         RoomMemberTagChipsView(
                             tags: item.authorTags,
@@ -86,14 +132,20 @@ struct ConversationBubbleView: View {
                         )
                     }
                 }
-                .padding(.leading, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             bubbleContent
             if item.showsTimestamp || item.sendState != .sent {
                 timestampRow
             }
         }
-        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var contentColumnMaxWidth: CGFloat {
+        if item.isOutgoing {
+            return ConversationBubbleLayout.outgoingContentColumnMax(isSelectionMode: isSelectionMode)
+        }
+        return ConversationBubbleLayout.incomingContentColumnMax(isSelectionMode: isSelectionMode)
     }
 
     @ViewBuilder
@@ -155,49 +207,14 @@ struct ConversationBubbleView: View {
         .opacity(item.sendState == .sending ? 0.72 : 1)
         .messageReactionInteractions(
             isEnabled: reactionInteractionsEnabled,
-            onLongPress: { onLongPressForReactions?() },
             onDoubleTapLike: { reactionConfiguration?.onToggle(MessageReactionSemantics.doubleTapLikeEmoji) }
         )
-        .contextMenu {
-            if !isSelectionMode {
-                bubbleContextMenu
-            }
-        }
     }
 
     private var reactionInteractionsEnabled: Bool {
         !isSelectionMode
             && item.sendState == .sent
             && reactionConfiguration?.isEnabled == true
-    }
-
-    @ViewBuilder
-    private var bubbleContextMenu: some View {
-        if let text = item.text, !text.isEmpty, item.message.kind != .tradeShare {
-            Button {
-                UIPasteboard.general.string = text
-                ExperienceHaptics.play(.success)
-            } label: {
-                Label("Copy", systemImage: "doc.on.doc")
-            }
-        }
-        if item.sendState == .failed, let onRetry {
-            Button(action: onRetry) {
-                Label("Retry", systemImage: "arrow.clockwise")
-            }
-        }
-        if canDelete {
-            Button(role: .destructive) {
-                onDelete?()
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
-        if !item.isOutgoing, let onReport {
-            Button(action: onReport) {
-                Label("Report", systemImage: "flag")
-            }
-        }
     }
 
     private var showsInlineReactions: Bool {
@@ -220,7 +237,6 @@ struct ConversationBubbleView: View {
             }
             reactionChipsOnly(topPadding: 6)
         }
-        .fixedSize(horizontal: true, vertical: false)
         .padding(.horizontal, ExperienceSpacing.sm + 2)
         .padding(.top, ExperienceSpacing.sm)
         .padding(.bottom, reactionBottomPadding)
@@ -442,7 +458,7 @@ struct ConversationBubbleView: View {
                 isEnabled: reactionConfiguration.isEnabled,
                 onToggle: reactionConfiguration.onToggle
             )
-            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: bubbleMaxWidth, alignment: item.isOutgoing ? .trailing : .leading)
             .padding(.top, topPadding)
         }
     }
@@ -457,9 +473,12 @@ struct ConversationBubbleView: View {
 
     /// Maximum bubble width (~72% of screen). Short messages stay intrinsic; long text wraps at this cap.
     private var bubbleMaxWidth: CGFloat {
-        UIScreen.main.bounds.width * 0.72
+        min(ConversationBubbleLayout.viewportWidth * 0.72, contentColumnMaxWidth)
     }
-    private var tradeBubbleMaxWidth: CGFloat { min(280, UIScreen.main.bounds.width * 0.82) }
+
+    private var tradeBubbleMaxWidth: CGFloat {
+        min(280, contentColumnMaxWidth)
+    }
 
     private var selectionCheckbox: some View {
         Button {
@@ -473,6 +492,37 @@ struct ConversationBubbleView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(isSelected ? "Selected" : "Not selected")
         .accessibilityIdentifier("conversation.bubble.selection")
+    }
+}
+
+/// Stable incoming/outgoing row grid for DMs and Trade Rooms (avatar column + content column).
+private enum ConversationBubbleLayout {
+    static let avatarColumnWidth: CGFloat = 28
+    static let rowHorizontalPadding = ExperienceSpacing.md
+    static let avatarToContentSpacing = ExperienceSpacing.xs
+    static let oppositeGutterMin: CGFloat = 48
+    private static let selectionColumnWidth: CGFloat = 28
+
+    static var viewportWidth: CGFloat {
+        UIScreen.main.bounds.width
+    }
+
+    static func incomingContentColumnMax(isSelectionMode: Bool) -> CGFloat {
+        let selection = isSelectionMode ? selectionColumnWidth + avatarToContentSpacing : 0
+        return viewportWidth
+            - (2 * rowHorizontalPadding)
+            - selection
+            - avatarColumnWidth
+            - avatarToContentSpacing
+            - oppositeGutterMin
+    }
+
+    static func outgoingContentColumnMax(isSelectionMode: Bool) -> CGFloat {
+        let selection = isSelectionMode ? selectionColumnWidth + avatarToContentSpacing : 0
+        return viewportWidth
+            - (2 * rowHorizontalPadding)
+            - selection
+            - oppositeGutterMin
     }
 }
 

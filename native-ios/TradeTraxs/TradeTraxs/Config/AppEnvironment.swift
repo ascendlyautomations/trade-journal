@@ -21,6 +21,8 @@ struct AppEnvironment {
     let pushNotifications: PushNotificationCenter
     /// Shared in-app UGC report sheet presenter.
     let contentReportPresenter: ContentReportPresenter
+    /// First-use OpenAI data processing consent (Trade AI, Psychology Coach, screenshot AI).
+    let thirdPartyAIConsentPresenter: ThirdPartyAIConsentPresenter
 
     /// Convenience access: CompositionRoot → AppEnvironment → DependencyContainer → Navigation
     var navigation: NavigationEnvironment { dependencies.navigation }

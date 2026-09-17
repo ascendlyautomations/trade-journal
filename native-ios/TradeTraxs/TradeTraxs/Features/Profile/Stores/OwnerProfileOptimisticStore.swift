@@ -18,6 +18,8 @@ final class OwnerProfileOptimisticStore {
     private(set) var posts: [Post] = []
     private(set) var reels: [Reel] = []
     private(set) var achievements: [Achievement] = []
+    private(set) var deletedPostIDs: Set<PostID> = []
+    private(set) var deletedReelIDs: Set<ReelID> = []
 
     /// Weak so logout / tab teardown does not retain a dead screen.
     private weak var ownerScreen: ProfileScreenViewModel?
@@ -74,13 +76,17 @@ final class OwnerProfileOptimisticStore {
 
     func notePostDeleted(id: PostID) {
         posts.removeAll { $0.id == id }
+        deletedPostIDs.insert(id)
         ownerScreen?.applyOptimisticPostRemoval(id: id)
+        ContentMutationStore.shared.notePostDeleted(id)
         revision += 1
     }
 
     func noteReelDeleted(id: ReelID) {
         reels.removeAll { $0.id == id }
+        deletedReelIDs.insert(id)
         ownerScreen?.applyOptimisticReelRemoval(id: id)
+        ContentMutationStore.shared.noteReelDeleted(id)
         revision += 1
     }
 
@@ -89,7 +95,9 @@ final class OwnerProfileOptimisticStore {
         guard state.isOwner || ownerMatches(state.profileID) else { return state }
         var next = state
         next.posts = Self.merging(overlay: posts, into: next.posts)
+            .filter { !deletedPostIDs.contains($0.id) }
         next.clips = Self.merging(overlay: reels, into: next.clips)
+            .filter { !deletedReelIDs.contains($0.id) }
         next.achievements = Self.merging(overlay: achievements, into: next.achievements)
         return next
     }
@@ -98,6 +106,8 @@ final class OwnerProfileOptimisticStore {
         posts = []
         reels = []
         achievements = []
+        deletedPostIDs = []
+        deletedReelIDs = []
         ownerScreen = nil
         revision = 0
     }

@@ -187,8 +187,8 @@ struct ProfileView: View {
             switch TradeJournalMutationStore.shared.latest {
             case .created(let trade), .updated(let trade):
                 screen.applyJournalTradeMutation(trade)
-            case .deleted(let id, _):
-                screen.applyOptimisticPinnedRemoval(contentType: .trade, contentID: id.rawValue)
+            case .deleted(let id, let owner):
+                screen.applyJournalTradeDeletion(id: id, owner: owner)
             default:
                 break
             }

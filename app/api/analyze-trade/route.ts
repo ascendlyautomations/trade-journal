@@ -12,7 +12,7 @@ import {
   consumeDurableUserRateLimit,
   rateLimitExceededResponse,
 } from "@/lib/server/durableUserRateLimit"
-import { requireProEntitlement } from "@/lib/server/requireProEntitlement"
+import { requireAIFeatureEntitlement } from "@/lib/server/requireAIFeatureEntitlement"
 import type { Database } from "@/lib/database.types"
 
 const openai = new OpenAI({
@@ -145,7 +145,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing trade id" }, { status: 400 })
     }
 
-    const entitlement = await requireProEntitlement(user.id, {
+    const entitlement = await requireAIFeatureEntitlement(user.id, {
       reply: "AI Analyst is a Pro feature.",
     })
     if (!entitlement.ok) {

@@ -153,6 +153,9 @@ nonisolated struct GuestPublicRoomsRepository: RoomRepository, @unchecked Sendab
         try await live.messages(roomID: roomID, channel: channel, page: page)
     }
     func send(_ message: RoomMessage) async throws -> RoomMessage { throw DemoAuthRequired.error }
+    func deleteMessage(roomID: RoomID, messageID: RoomMessageID) async throws {
+        throw DemoAuthRequired.error
+    }
     func insertMessageReaction(
         roomID: RoomID,
         messageID: RoomMessageID,
@@ -280,6 +283,9 @@ nonisolated struct DemoExploreRoomsRepository: RoomRepository, @unchecked Sendab
     }
 
     func send(_ message: RoomMessage) async throws -> RoomMessage { throw DemoAuthRequired.error }
+    func deleteMessage(roomID: RoomID, messageID: RoomMessageID) async throws {
+        throw DemoAuthRequired.error
+    }
     func insertMessageReaction(
         roomID: RoomID,
         messageID: RoomMessageID,
