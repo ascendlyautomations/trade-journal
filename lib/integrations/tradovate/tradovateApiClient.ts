@@ -48,7 +48,8 @@ export type TradovateApiClientError =
 export class TradovateApiError extends Error {
   constructor(
     readonly code: TradovateApiClientError,
-    message?: string
+    message?: string,
+    readonly httpStatus?: number
   ) {
     super(message ?? code)
     this.name = "TradovateApiError"
@@ -230,8 +231,14 @@ export async function tradovateAuthedJsonRequest<T>(
   }
 
   if (!response.ok) {
-    if (response.status === 401) throw new TradovateApiError("unauthorized")
-    throw new TradovateApiError("provider_unavailable")
+    if (response.status === 401) {
+      throw new TradovateApiError("unauthorized", undefined, response.status)
+    }
+    throw new TradovateApiError(
+      "provider_unavailable",
+      undefined,
+      response.status
+    )
   }
 
   try {

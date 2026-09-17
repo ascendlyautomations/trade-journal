@@ -26,7 +26,10 @@ import {
   type ReconstructionFill,
 } from "@/lib/integrations/tradovate/tradeReconstruction"
 import { logTradovateSync } from "@/lib/integrations/tradovate/tradovateSyncLogger"
-import type { TradovateSyncFailureCategory } from "@/lib/integrations/tradovate/tradovateSyncLogger"
+import type {
+  TradovateSyncFailureCategory,
+  TradovateSyncFailureStage,
+} from "@/lib/integrations/tradovate/tradovateSyncLogger"
 
 export type TradovateSyncTrigger = "manual" | "auto" | "reconnect" | "startup"
 
@@ -44,6 +47,10 @@ export type TradovateSyncSummary = {
   openPositions: number
   durationMs?: number
   error?: string
+  /** Machine code for clients/logs (iOS already decodes optionally). */
+  errorCode?: string
+  failureCategory?: TradovateSyncFailureCategory
+  failureStage?: TradovateSyncFailureStage
 }
 
 type MappingRow = {
@@ -177,12 +184,16 @@ export async function syncTradovateBrokerAccount(
       mappingId: brokerIntegrationAccountId,
       trigger,
       failureCategory: "mapping_unavailable",
+      failureStage: "mapping",
       errorCode: "mapping_unavailable",
     })
     return emptySummary(trigger, {
       error: autoOnly
         ? "Automatic sync is disabled or account is not linked."
         : "Linked account not available.",
+      errorCode: "mapping_unavailable",
+      failureCategory: "mapping_unavailable",
+      failureStage: "mapping",
     })
   }
 
@@ -198,19 +209,26 @@ export async function syncTradovateBrokerAccount(
       trigger,
       coalesced: true,
       failureCategory: "sync_lock",
+      failureStage: "lock",
+      errorCode: "sync_in_progress",
     })
     return emptySummary(trigger, {
       status: "syncing",
       error: "Sync already in progress.",
+      errorCode: "sync_in_progress",
+      failureCategory: "sync_lock",
+      failureStage: "lock",
     })
   }
 
   const targetAccountId = String(mapping.external_account_id)
+  let failureStage: TradovateSyncFailureStage = "unknown"
 
   try {
     let fillsRaw: Awaited<ReturnType<typeof fetchTradovateFillList>>
     let ordersRaw: Awaited<ReturnType<typeof fetchTradovateOrderList>>
     try {
+      failureStage = "fill_list"
       fillsRaw = await fetchTradovateFillList(supabase, userId, connectionId)
     } catch (err) {
       const code =
@@ -224,11 +242,15 @@ export async function syncTradovateBrokerAccount(
           err instanceof TradovateApiError && err.code === "reconnect_required"
             ? "token_refresh_failure"
             : "fill_retrieval_failure",
+        failureStage: "fill_list",
         errorCode: code,
+        providerHttpStatus:
+          err instanceof TradovateApiError ? err.httpStatus : undefined,
       })
       throw err
     }
     try {
+      failureStage = "order_list"
       ordersRaw = await fetchTradovateOrderList(supabase, userId, connectionId)
     } catch (err) {
       const code =
@@ -242,7 +264,10 @@ export async function syncTradovateBrokerAccount(
           err instanceof TradovateApiError && err.code === "reconnect_required"
             ? "token_refresh_failure"
             : "order_retrieval_failure",
+        failureStage: "order_list",
         errorCode: code,
+        providerHttpStatus:
+          err instanceof TradovateApiError ? err.httpStatus : undefined,
       })
       throw err
     }
@@ -268,6 +293,7 @@ export async function syncTradovateBrokerAccount(
 
     const contractIdsForResolve = new Set<string>()
 
+    failureStage = "persist_executions"
     for (const fill of accountFills) {
       const fillId = tradovateFillStableId(fill)
       const fillIdNum = Number(fillId)
@@ -322,6 +348,7 @@ export async function syncTradovateBrokerAccount(
             mappingId: brokerIntegrationAccountId,
             trigger,
             failureCategory: "execution_persistence_failure",
+            failureStage: "persist_executions",
             errorCode: insertError.code ?? "execution_persist_failed",
             detail: "broker_integration_executions_insert",
           })
@@ -332,6 +359,7 @@ export async function syncTradovateBrokerAccount(
       }
     }
 
+    failureStage = "resolve_contracts"
     const contracts = await resolveTradovateContracts(
       supabase,
       userId,
@@ -362,6 +390,7 @@ export async function syncTradovateBrokerAccount(
       }
     )
 
+    failureStage = "reconstruct"
     const reconstructionFills: ReconstructionFill[] = storedExecutions.map((row) => ({
       fillId: String(row.external_fill_id),
       contractId: String(row.external_contract_id),
@@ -377,6 +406,7 @@ export async function syncTradovateBrokerAccount(
     )
 
     const feeFillIds = [...new Set(completed.flatMap((t) => t.fillIds))]
+    failureStage = "fetch_fees"
     const feesByFillId = await fetchTradovateFillFeesForFillIds(
       supabase,
       userId,
@@ -384,6 +414,7 @@ export async function syncTradovateBrokerAccount(
       feeFillIds
     )
 
+    failureStage = "persist_trades"
     const { tradesCreated, tradesUpdated, newTradeIds, updatedTradeIds } =
       await upsertReconstructedBrokerTrades(
       supabase,
@@ -404,6 +435,7 @@ export async function syncTradovateBrokerAccount(
         mappingId: brokerIntegrationAccountId,
         trigger,
         failureCategory: "supabase_write_failure",
+        failureStage: "persist_trades",
         errorCode: "trade_upsert_failed",
         detail: err instanceof Error ? err.message.slice(0, 120) : "unknown",
       })
@@ -461,14 +493,27 @@ export async function syncTradovateBrokerAccount(
     let code = "sync_failed"
     let message = "Could not sync trades."
     let failureCategory: TradovateSyncFailureCategory = "sync_failed"
+    let providerHttpStatus: number | undefined
     if (err instanceof TradovateApiError) {
       code = err.code
+      providerHttpStatus = err.httpStatus
       if (err.code === "reconnect_required") {
         message = "Tradovate authorization expired. Reconnect this connection."
         failureCategory = "token_refresh_failure"
       } else if (err.code === "provider_unavailable") {
         message = "Tradovate is temporarily unavailable."
-        failureCategory = "provider_api_failure"
+        failureCategory =
+          failureStage === "order_list"
+            ? "order_retrieval_failure"
+            : failureStage === "fill_list"
+              ? "fill_retrieval_failure"
+              : "provider_api_failure"
+      } else if (err.code === "unauthorized" || err.code === "not_connected") {
+        failureCategory = "token_refresh_failure"
+        message =
+          err.code === "not_connected"
+            ? "Tradovate connection is not available. Reconnect this connection."
+            : "Tradovate authorization expired. Reconnect this connection."
       } else {
         failureCategory = "provider_api_failure"
       }
@@ -477,17 +522,23 @@ export async function syncTradovateBrokerAccount(
       if (message === "execution_persist_failed") {
         failureCategory = "execution_persistence_failure"
         code = "execution_persist_failed"
+        failureStage = "persist_executions"
+      } else if (message === "trade_upsert_failed" || failureStage === "persist_trades") {
+        failureCategory = "supabase_write_failure"
+        code = code === "sync_failed" ? "trade_upsert_failed" : code
       } else if (
         message.includes("reconstruct") ||
         message.includes("lifecycle")
       ) {
         failureCategory = "reconstruction_failure"
+        failureStage = "reconstruct"
       }
     }
 
     await releaseBrokerSyncLock(supabase, brokerIntegrationAccountId, {
       lastSyncStatus:
-        err instanceof TradovateApiError && err.code === "reconnect_required"
+        err instanceof TradovateApiError &&
+        (err.code === "reconnect_required" || err.code === "unauthorized")
           ? "reconnect_required"
           : "error",
       lastSyncErrorCode: code,
@@ -502,14 +553,23 @@ export async function syncTradovateBrokerAccount(
       durationMs: Date.now() - started,
       errorCode: code,
       failureCategory,
+      failureStage,
+      providerHttpStatus,
+      detail: message.slice(0, 120),
     })
 
     return emptySummary(trigger, {
       status:
-        err instanceof TradovateApiError && err.code === "reconnect_required"
+        err instanceof TradovateApiError &&
+        (err.code === "reconnect_required" ||
+          err.code === "unauthorized" ||
+          err.code === "not_connected")
           ? "reconnect_required"
           : "error",
       error: message,
+      errorCode: code,
+      failureCategory,
+      failureStage,
       durationMs: Date.now() - started,
     })
   }

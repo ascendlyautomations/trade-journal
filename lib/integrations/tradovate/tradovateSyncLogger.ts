@@ -10,6 +10,18 @@ export type TradovateSyncFailureCategory =
   | "mapping_unavailable"
   | "sync_failed"
 
+export type TradovateSyncFailureStage =
+  | "mapping"
+  | "lock"
+  | "fill_list"
+  | "order_list"
+  | "persist_executions"
+  | "resolve_contracts"
+  | "reconstruct"
+  | "fetch_fees"
+  | "persist_trades"
+  | "unknown"
+
 export type TradovateSyncLogContext = {
   connectionId?: string
   mappingId?: string
@@ -18,6 +30,7 @@ export type TradovateSyncLogContext = {
   trigger?: string
   eventCategory?: string
   failureCategory?: TradovateSyncFailureCategory
+  failureStage?: TradovateSyncFailureStage
   durationMs?: number
   fetched?: number
   newExecutions?: number
@@ -26,6 +39,8 @@ export type TradovateSyncLogContext = {
   coalesced?: boolean
   reconnectCount?: number
   errorCode?: string
+  httpStatus?: number
+  providerHttpStatus?: number
   externalAccountId?: string
   providerUserId?: string
   /** Safe non-secret detail (never tokens/passwords). */

@@ -4,6 +4,7 @@ import { loadOwnedBrokerConnection } from "@/lib/integrations/brokerConnectionAc
 import { listSafeBrokerIntegrationAccounts } from "@/lib/integrations/brokerIntegrationAccounts"
 import { attachSyncViewsToBrokerAccounts } from "@/lib/integrations/tradovate/runTradovateAccountTradeSync"
 import { syncTradovateBrokerAccount } from "@/lib/integrations/tradovate/syncTradovateBrokerAccount"
+import { logTradovateSync } from "@/lib/integrations/tradovate/tradovateSyncLogger"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -49,6 +50,21 @@ export async function POST(_req: Request, context: RouteContext) {
   )
 
   const status = summary.ok ? 200 : summary.status === "syncing" ? 409 : 400
+
+  if (!summary.ok) {
+    logTradovateSync("sync_http_result", {
+      userId: user.id,
+      connectionId,
+      mappingId,
+      trigger: "manual",
+      httpStatus: status,
+      errorCode: summary.errorCode ?? "unknown",
+      failureCategory: summary.failureCategory ?? "sync_failed",
+      failureStage: summary.failureStage ?? "unknown",
+      detail: summary.error?.slice(0, 160),
+      durationMs: summary.durationMs,
+    })
+  }
 
   return Response.json(
     {
