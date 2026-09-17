@@ -129,54 +129,52 @@ async function healReconnectRequiredStatus(
     .eq("status", "reconnect_required")
 }
 
-async function markReconnectOnlyIfPermanentRefreshFailure(
+type AuthRecovery = "retry" | "reconnect_required" | "provider_unavailable"
+
+/**
+ * After a 401 (or forced refresh): reload canonical credentials, reuse a
+ * concurrent refresh if one already landed, otherwise refresh once.
+ * Never mark reconnect_required while an unexpired access token is still current.
+ */
+async function recoverAccessTokenAfterChallenge(
   supabase: SupabaseClient,
-  connectionId: string,
   userId: string,
-  reason: "no_refresh_token" | "oauth_error" | "network" | "malformed"
-): Promise<void> {
-  // Transient network/parse failures must not permanently lock the connection.
-  if (reason === "network" || reason === "malformed") return
-  await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
-}
-
-async function ensureValidAccessToken(
-  supabase: SupabaseClient,
-  connection: ConnectedTradovateConnection
-): Promise<string> {
-  let credentials = requireTradovateCredentials(
-    decryptIntegrationCredentials(connection.credentials_ciphertext)
-  )
-
-  if (!accessTokenExpired(connection.access_token_expires_at)) {
-    await healReconnectRequiredStatus(supabase, connection)
-    return credentials.access_token
-  }
-
-  const flightKey = connection.id
-  const refreshed = await runTradovateTokenRefreshSingleFlight(flightKey, async () => {
-    const latest = await loadConnectedConnection(supabase, connection.user_id, connection.id)
+  connectionId: string,
+  failedAccessToken: string
+): Promise<AuthRecovery> {
+  const recovered = await runTradovateTokenRefreshSingleFlight(connectionId, async () => {
+    const latest = await loadConnectedConnection(supabase, userId, connectionId)
     if (!latest) return false
-    if (!accessTokenExpired(latest.access_token_expires_at)) {
-      await healReconnectRequiredStatus(supabase, latest)
-      return true
-    }
+
     const current = requireTradovateCredentials(
       decryptIntegrationCredentials(latest.credentials_ciphertext)
     )
+
+    // Another request already persisted rotated credentials — reuse them.
+    if (current.access_token !== failedAccessToken) {
+      await healReconnectRequiredStatus(supabase, latest)
+      return true
+    }
+
+    const expired = accessTokenExpired(latest.access_token_expires_at)
+
     if (!current.refresh_token?.trim()) {
-      await markBrokerConnectionReconnectRequired(supabase, connection.id, connection.user_id)
+      if (expired) {
+        await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
+      }
       return false
     }
 
     const result = await refreshTradovateAccessToken(current.refresh_token)
     if (!result.ok) {
-      await markReconnectOnlyIfPermanentRefreshFailure(
-        supabase,
-        connection.id,
-        connection.user_id,
-        result.reason
-      )
+      // Only permanently lock when the access token is actually expired (or
+      // missing refresh) and Tradovate rejected refresh. A 401 on a still-valid
+      // access token (e.g. concurrent fillFee deps) must not burn the connection.
+      if (result.reason === "no_refresh_token") {
+        await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
+      } else if (result.reason === "oauth_error" && expired) {
+        await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
+      }
       return false
     }
 
@@ -192,11 +190,45 @@ async function ensureValidAccessToken(
     return true
   })
 
-  if (!refreshed) {
-    throw new TradovateApiError("reconnect_required")
+  if (recovered) return "retry"
+
+  const latest = await loadConnectedConnection(supabase, userId, connectionId)
+  if (!latest) return "reconnect_required"
+  if (latest.status === "reconnect_required") return "reconnect_required"
+  return "provider_unavailable"
+}
+
+async function ensureValidAccessToken(
+  supabase: SupabaseClient,
+  connection: ConnectedTradovateConnection
+): Promise<string> {
+  let credentials = requireTradovateCredentials(
+    decryptIntegrationCredentials(connection.credentials_ciphertext)
+  )
+
+  if (!accessTokenExpired(connection.access_token_expires_at)) {
+    await healReconnectRequiredStatus(supabase, connection)
+    return credentials.access_token
   }
 
-  const reloaded = await loadConnectedConnection(supabase, connection.user_id, connection.id)
+  const recovery = await recoverAccessTokenAfterChallenge(
+    supabase,
+    connection.user_id,
+    connection.id,
+    credentials.access_token
+  )
+  if (recovery === "reconnect_required") {
+    throw new TradovateApiError("reconnect_required")
+  }
+  if (recovery === "provider_unavailable") {
+    throw new TradovateApiError("provider_unavailable")
+  }
+
+  const reloaded = await loadConnectedConnection(
+    supabase,
+    connection.user_id,
+    connection.id
+  )
   if (!reloaded) throw new TradovateApiError("not_connected")
   credentials = requireTradovateCredentials(
     decryptIntegrationCredentials(reloaded.credentials_ciphertext)
@@ -245,40 +277,18 @@ export async function tradovateAuthedJsonRequest<T>(
   }
 
   if (response.status === 401 && !init?.retried) {
-    const refreshed = await runTradovateTokenRefreshSingleFlight(connectionId, async () => {
-      const latest = await loadConnectedConnection(supabase, userId, connectionId)
-      if (!latest) return false
-      const current = requireTradovateCredentials(
-        decryptIntegrationCredentials(latest.credentials_ciphertext)
-      )
-      if (!current.refresh_token?.trim()) {
-        await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
-        return false
-      }
-
-      const result = await refreshTradovateAccessToken(current.refresh_token)
-      if (!result.ok) {
-        await markReconnectOnlyIfPermanentRefreshFailure(
-          supabase,
-          connectionId,
-          userId,
-          result.reason
-        )
-        return false
-      }
-      const nextCredentials = credentialsFromRefreshTokens(result.tokens)
-      const expiries = tokenExpiryDates(result.tokens)
-      await persistRefreshedCredentials(
-        supabase,
-        latest,
-        nextCredentials,
-        expiries.accessTokenExpiresAt,
-        expiries.refreshTokenExpiresAt
-      )
-      return true
-    })
-
-    if (!refreshed) throw new TradovateApiError("reconnect_required")
+    const recovery = await recoverAccessTokenAfterChallenge(
+      supabase,
+      userId,
+      connectionId,
+      accessToken
+    )
+    if (recovery === "reconnect_required") {
+      throw new TradovateApiError("reconnect_required")
+    }
+    if (recovery === "provider_unavailable") {
+      throw new TradovateApiError("provider_unavailable")
+    }
     return tradovateAuthedJsonRequest(supabase, userId, connectionId, path, {
       ...init,
       retried: true,

@@ -129,32 +129,30 @@ export async function fetchTradovateFillFeesForFillIds(
   >()
   if (fillIds.length === 0) return result
 
+  // Sequential on purpose: concurrent fillFee requests share one Tradovate
+  // access token and previously stampeded 401→refresh, rotating/invalidating
+  // credentials mid-sync while fill_list still succeeded with the prior token.
   const unique = [...new Set(fillIds)]
-  for (let i = 0; i < unique.length; i += 8) {
-    const batch = unique.slice(i, i + 8)
-    await Promise.all(
-      batch.map(async (fillId) => {
-        const path = `/v1/fillFee/deps?masterid=${encodeURIComponent(fillId)}`
-        const rows = await tradovateAuthedJsonRequest<TradovateFillFeeRaw[]>(
-          supabase,
-          userId,
-          connectionId,
-          path
-        )
-        if (!Array.isArray(rows) || rows.length === 0) return
-        let clearingFee = 0
-        let exchangeFee = 0
-        let nfaFee = 0
-        let commission = 0
-        for (const fee of rows) {
-          clearingFee += Number(fee.clearingFee ?? 0) || 0
-          exchangeFee += Number(fee.exchangeFee ?? 0) || 0
-          nfaFee += Number(fee.nfaFee ?? 0) || 0
-          commission += Number(fee.commission ?? 0) || 0
-        }
-        result.set(fillId, { clearingFee, exchangeFee, nfaFee, commission })
-      })
+  for (const fillId of unique) {
+    const path = `/v1/fillFee/deps?masterid=${encodeURIComponent(fillId)}`
+    const rows = await tradovateAuthedJsonRequest<TradovateFillFeeRaw[]>(
+      supabase,
+      userId,
+      connectionId,
+      path
     )
+    if (!Array.isArray(rows) || rows.length === 0) continue
+    let clearingFee = 0
+    let exchangeFee = 0
+    let nfaFee = 0
+    let commission = 0
+    for (const fee of rows) {
+      clearingFee += Number(fee.clearingFee ?? 0) || 0
+      exchangeFee += Number(fee.exchangeFee ?? 0) || 0
+      nfaFee += Number(fee.nfaFee ?? 0) || 0
+      commission += Number(fee.commission ?? 0) || 0
+    }
+    result.set(fillId, { clearingFee, exchangeFee, nfaFee, commission })
   }
   return result
 }
