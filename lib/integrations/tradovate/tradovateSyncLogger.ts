@@ -41,6 +41,8 @@ export type TradovateSyncLogContext = {
   errorCode?: string
   httpStatus?: number
   providerHttpStatus?: number
+  /** Final route HTTP outcome (sync_http_result). */
+  ok?: boolean
   externalAccountId?: string
   providerUserId?: string
   /** Safe non-secret detail (never tokens/passwords). */
