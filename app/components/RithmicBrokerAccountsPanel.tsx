@@ -62,6 +62,11 @@ export default function RithmicBrokerAccountsPanel({
   const [error, setError] = useState<string | null>(null)
   const [syncingMappingId, setSyncingMappingId] = useState<string | null>(null)
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null)
+  const [importPasswordPrompt, setImportPasswordPrompt] = useState<{
+    connectionId: string
+    account: BrokerAccount
+  } | null>(null)
+  const [importPassword, setImportPassword] = useState("")
   const [linkTarget, setLinkTarget] = useState<{
     connectionId: string
     account: BrokerAccount
@@ -238,7 +243,11 @@ export default function RithmicBrokerAccountsPanel({
     }
   }
 
-  async function handleSyncTrades(connectionId: string, account: BrokerAccount) {
+  async function handleSyncTrades(
+    connectionId: string,
+    account: BrokerAccount,
+    transientPassword?: string | null
+  ) {
     if (!account.tradetraxsAccountId || !userId) return
     setSyncingMappingId(account.id)
     setSyncFeedback(null)
@@ -250,7 +259,15 @@ export default function RithmicBrokerAccountsPanel({
       }
       const res = await fetch(
         `/api/integrations/rithmic/connections/${connectionId}/accounts/${account.id}/sync`,
-        { method: "POST", headers }
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(
+            transientPassword
+              ? { password: transientPassword }
+              : {}
+          ),
+        }
       )
       const data = (await res.json()) as {
         error?: string
@@ -260,12 +277,27 @@ export default function RithmicBrokerAccountsPanel({
           duplicateExecutions: number
           newTradeIds?: string[]
           error?: string
+          errorCode?: string
         }
         accounts?: BrokerAccount[]
+      }
+      if (
+        !res.ok &&
+        data.summary?.errorCode === "rithmic_password_required"
+      ) {
+        setImportPasswordPrompt({ connectionId, account })
+        setImportPassword("")
+        setError(
+          data.summary.error ??
+            "Enter your Rithmic password to import. TradeTraxs does not save it."
+        )
+        return
       }
       if (!res.ok) {
         throw new Error(data.summary?.error ?? data.error ?? "Could not import trades.")
       }
+      setImportPasswordPrompt(null)
+      setImportPassword("")
       if (data.accounts) {
         setAccountsByConnection((prev) => ({
           ...prev,
@@ -319,6 +351,58 @@ export default function RithmicBrokerAccountsPanel({
 
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
       {syncFeedback ? <p className="text-sm text-emerald-200/90">{syncFeedback}</p> : null}
+
+      {importPasswordPrompt ? (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-950/20 p-4">
+          <h4 className="text-sm font-medium text-white">
+            Enter Rithmic password to import
+          </h4>
+          <p className="mt-1 text-xs text-white/60">
+            Password is sent once over HTTPS for this import and is not stored.
+          </p>
+          <label className="mt-3 block">
+            <span className="text-xs text-gray-400">Rithmic password</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              className="mt-1 w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white"
+              value={importPassword}
+              onChange={(e) => setImportPassword(e.target.value)}
+            />
+          </label>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              className="rounded-lg px-3 py-2 text-sm text-gray-400"
+              onClick={() => {
+                setImportPasswordPrompt(null)
+                setImportPassword("")
+              }}
+            >
+              Cancel
+            </button>
+            <ActionButton
+              type="button"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white"
+              disabled={
+                !importPassword ||
+                syncingMappingId === importPasswordPrompt.account.id
+              }
+              onClick={() =>
+                void handleSyncTrades(
+                  importPasswordPrompt.connectionId,
+                  importPasswordPrompt.account,
+                  importPassword
+                )
+              }
+            >
+              {syncingMappingId === importPasswordPrompt.account.id
+                ? "Importing…"
+                : "Import"}
+            </ActionButton>
+          </div>
+        </div>
+      ) : null}
 
       {connections.map((connection) => {
         const payload = accountsByConnection[connection.id]

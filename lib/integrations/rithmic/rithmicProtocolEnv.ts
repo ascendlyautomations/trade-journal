@@ -15,6 +15,9 @@ export type RithmicProtocolEnv = {
 
 export function loadRithmicProtocolEnv(): RithmicProtocolEnv {
   const apiEnvironment = (process.env.RITHMIC_API_ENV?.trim() || "test") as RithmicApiEnvironment
+  // Intentional: end-user connect is approved for Rithmic Test only until
+  // RITHMIC_PRODUCTION_USER_AUTH_CONFIRMED unlocks production UI separately.
+  // Do not relax this without vendor confirmation.
   if (apiEnvironment !== "test") {
     throw new Error("rithmic_api_env_must_be_test")
   }

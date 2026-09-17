@@ -1,3 +1,15 @@
+export type TradovateSyncFailureCategory =
+  | "token_refresh_failure"
+  | "provider_api_failure"
+  | "fill_retrieval_failure"
+  | "order_retrieval_failure"
+  | "execution_persistence_failure"
+  | "reconstruction_failure"
+  | "supabase_write_failure"
+  | "sync_lock"
+  | "mapping_unavailable"
+  | "sync_failed"
+
 export type TradovateSyncLogContext = {
   connectionId?: string
   mappingId?: string
@@ -5,6 +17,7 @@ export type TradovateSyncLogContext = {
   provider?: string
   trigger?: string
   eventCategory?: string
+  failureCategory?: TradovateSyncFailureCategory
   durationMs?: number
   fetched?: number
   newExecutions?: number
@@ -15,6 +28,8 @@ export type TradovateSyncLogContext = {
   errorCode?: string
   externalAccountId?: string
   providerUserId?: string
+  /** Safe non-secret detail (never tokens/passwords). */
+  detail?: string
 }
 
 export function logTradovateSync(

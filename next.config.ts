@@ -13,14 +13,26 @@ function supabaseStorageHostname(): string | undefined {
 
 const supabaseHost = supabaseStorageHostname()
 
+/** Proto + SSL assets required by every Rithmic WSS/protocol route on Vercel. */
+const RITHMIC_RUNTIME_ASSET_INCLUDES = [
+  "./third_party/rithmic/0.89.0.0/proto/**/*.proto",
+  "./third_party/rithmic/0.89.0.0/samples/samples.py/base.proto",
+  "./lib/integrations/rithmic/rithmic_ssl_cert_auth_params",
+] as const
+
 const nextConfig: NextConfig = {
   serverExternalPackages: ["ws", "protobufjs"],
   outputFileTracingIncludes: {
-    "/api/integrations/rithmic/phase1/discovery": [
-      "./third_party/rithmic/0.89.0.0/proto/**/*.proto",
-      "./third_party/rithmic/0.89.0.0/samples/samples.py/base.proto",
-      "./lib/integrations/rithmic/rithmic_ssl_cert_auth_params",
+    // Phase 1 lab discovery
+    "/api/integrations/rithmic/phase1/discovery": [...RITHMIC_RUNTIME_ASSET_INCLUDES],
+    // Production user connect + import (same asset set)
+    "/api/integrations/rithmic/connect": [...RITHMIC_RUNTIME_ASSET_INCLUDES],
+    "/api/integrations/rithmic/import/run": [...RITHMIC_RUNTIME_ASSET_INCLUDES],
+    "/api/integrations/rithmic/connections/[connectionId]/accounts/[mappingId]/sync": [
+      ...RITHMIC_RUNTIME_ASSET_INCLUDES,
     ],
+    // Shared broker batch import may invoke Rithmic sync
+    "/api/integrations/broker/import/run": [...RITHMIC_RUNTIME_ASSET_INCLUDES],
   },
   images: {
     qualities: [75, 85, 100],

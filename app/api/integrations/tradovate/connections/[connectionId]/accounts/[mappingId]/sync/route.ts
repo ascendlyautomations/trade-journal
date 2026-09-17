@@ -7,6 +7,7 @@ import { syncTradovateBrokerAccount } from "@/lib/integrations/tradovate/syncTra
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+export const maxDuration = 120
 
 const integrationDb = supabaseServiceRole as SupabaseClient
 

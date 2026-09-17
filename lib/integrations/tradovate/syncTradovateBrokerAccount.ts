@@ -26,6 +26,7 @@ import {
   type ReconstructionFill,
 } from "@/lib/integrations/tradovate/tradeReconstruction"
 import { logTradovateSync } from "@/lib/integrations/tradovate/tradovateSyncLogger"
+import type { TradovateSyncFailureCategory } from "@/lib/integrations/tradovate/tradovateSyncLogger"
 
 export type TradovateSyncTrigger = "manual" | "auto" | "reconnect" | "startup"
 
@@ -170,6 +171,14 @@ export async function syncTradovateBrokerAccount(
     { autoOnly }
   )
   if (!mapping) {
+    logTradovateSync("sync_error", {
+      userId,
+      connectionId,
+      mappingId: brokerIntegrationAccountId,
+      trigger,
+      failureCategory: "mapping_unavailable",
+      errorCode: "mapping_unavailable",
+    })
     return emptySummary(trigger, {
       error: autoOnly
         ? "Automatic sync is disabled or account is not linked."
@@ -188,6 +197,7 @@ export async function syncTradovateBrokerAccount(
       mappingId: brokerIntegrationAccountId,
       trigger,
       coalesced: true,
+      failureCategory: "sync_lock",
     })
     return emptySummary(trigger, {
       status: "syncing",
@@ -198,10 +208,44 @@ export async function syncTradovateBrokerAccount(
   const targetAccountId = String(mapping.external_account_id)
 
   try {
-    const [fillsRaw, ordersRaw] = await Promise.all([
-      fetchTradovateFillList(supabase, userId, connectionId),
-      fetchTradovateOrderList(supabase, userId, connectionId),
-    ])
+    let fillsRaw: Awaited<ReturnType<typeof fetchTradovateFillList>>
+    let ordersRaw: Awaited<ReturnType<typeof fetchTradovateOrderList>>
+    try {
+      fillsRaw = await fetchTradovateFillList(supabase, userId, connectionId)
+    } catch (err) {
+      const code =
+        err instanceof TradovateApiError ? err.code : "fill_retrieval_failed"
+      logTradovateSync("sync_error", {
+        userId,
+        connectionId,
+        mappingId: brokerIntegrationAccountId,
+        trigger,
+        failureCategory:
+          err instanceof TradovateApiError && err.code === "reconnect_required"
+            ? "token_refresh_failure"
+            : "fill_retrieval_failure",
+        errorCode: code,
+      })
+      throw err
+    }
+    try {
+      ordersRaw = await fetchTradovateOrderList(supabase, userId, connectionId)
+    } catch (err) {
+      const code =
+        err instanceof TradovateApiError ? err.code : "order_retrieval_failed"
+      logTradovateSync("sync_error", {
+        userId,
+        connectionId,
+        mappingId: brokerIntegrationAccountId,
+        trigger,
+        failureCategory:
+          err instanceof TradovateApiError && err.code === "reconnect_required"
+            ? "token_refresh_failure"
+            : "order_retrieval_failure",
+        errorCode: code,
+      })
+      throw err
+    }
 
     const orderAccountById = new Map<string, string>()
     for (const order of ordersRaw) {
@@ -271,7 +315,18 @@ export async function syncTradovateBrokerAccount(
             connectionId,
             brokerIntegrationAccountId,
           })
-        } else throw new Error("execution_persist_failed")
+        } else {
+          logTradovateSync("sync_error", {
+            userId,
+            connectionId,
+            mappingId: brokerIntegrationAccountId,
+            trigger,
+            failureCategory: "execution_persistence_failure",
+            errorCode: insertError.code ?? "execution_persist_failed",
+            detail: "broker_integration_executions_insert",
+          })
+          throw new Error("execution_persist_failed")
+        }
       } else {
         newExecutions += 1
       }
@@ -342,7 +397,18 @@ export async function syncTradovateBrokerAccount(
         contracts,
         feesByFillId,
       }
-    )
+    ).catch((err) => {
+      logTradovateSync("sync_error", {
+        userId,
+        connectionId,
+        mappingId: brokerIntegrationAccountId,
+        trigger,
+        failureCategory: "supabase_write_failure",
+        errorCode: "trade_upsert_failed",
+        detail: err instanceof Error ? err.message.slice(0, 120) : "unknown",
+      })
+      throw err
+    })
 
     const successAt = new Date().toISOString()
     const durationMs = Date.now() - started
@@ -394,15 +460,29 @@ export async function syncTradovateBrokerAccount(
   } catch (err) {
     let code = "sync_failed"
     let message = "Could not sync trades."
+    let failureCategory: TradovateSyncFailureCategory = "sync_failed"
     if (err instanceof TradovateApiError) {
       code = err.code
       if (err.code === "reconnect_required") {
         message = "Tradovate authorization expired. Reconnect this connection."
+        failureCategory = "token_refresh_failure"
       } else if (err.code === "provider_unavailable") {
         message = "Tradovate is temporarily unavailable."
+        failureCategory = "provider_api_failure"
+      } else {
+        failureCategory = "provider_api_failure"
       }
     } else if (err instanceof Error) {
       message = err.message
+      if (message === "execution_persist_failed") {
+        failureCategory = "execution_persistence_failure"
+        code = "execution_persist_failed"
+      } else if (
+        message.includes("reconstruct") ||
+        message.includes("lifecycle")
+      ) {
+        failureCategory = "reconstruction_failure"
+      }
     }
 
     await releaseBrokerSyncLock(supabase, brokerIntegrationAccountId, {
@@ -421,6 +501,7 @@ export async function syncTradovateBrokerAccount(
       trigger,
       durationMs: Date.now() - started,
       errorCode: code,
+      failureCategory,
     })
 
     return emptySummary(trigger, {
