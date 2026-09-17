@@ -1,13 +1,22 @@
 import type { IntegrationCredentialPayload } from "@/lib/integrations/credentialEncryption"
-import { getTradovateOAuthConfig } from "./tradovateOAuthEnv"
+import {
+  getTradovateOAuthConfig,
+  type TradovateApiEnvironment,
+} from "./tradovateOAuthEnv"
 import type { TradovateOAuthTokenSuccess } from "./tradovateTokenExchange"
+
+const TOKEN_URL_BY_ENV: Record<TradovateApiEnvironment, string> = {
+  demo: "https://demo.tradovateapi.com/v1/auth/oauthtoken",
+  live: "https://live.tradovateapi.com/v1/auth/oauthtoken",
+}
 
 export type TradovateRefreshResult =
   | { ok: true; tokens: TradovateOAuthTokenSuccess }
   | { ok: false; reason: "no_refresh_token" | "oauth_error" | "network" | "malformed" }
 
 export async function refreshTradovateAccessToken(
-  refreshToken: string
+  refreshToken: string,
+  apiEnvironment?: TradovateApiEnvironment
 ): Promise<TradovateRefreshResult> {
   const config = getTradovateOAuthConfig()
   const trimmed = refreshToken.trim()
@@ -20,9 +29,13 @@ export async function refreshTradovateAccessToken(
     refresh_token: trimmed,
   }
 
+  const tokenUrl =
+    (apiEnvironment ? TOKEN_URL_BY_ENV[apiEnvironment] : null) ||
+    config.tokenUrl
+
   let response: Response
   try {
-    response = await fetch(config.tokenUrl, {
+    response = await fetch(tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(body),

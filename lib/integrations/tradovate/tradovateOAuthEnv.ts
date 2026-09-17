@@ -36,8 +36,10 @@ export function getTradovateWebSocketUrl(
 }
 
 export function getTradovateRestBaseUrl(apiEnvironment: TradovateApiEnvironment): string {
-  const override = process.env.TRADOVATE_REST_BASE_URL?.trim()
-  if (override) return override.replace(/\/$/, "")
+  // Always honor the connection's demo/live environment. A global REST override
+  // previously ignored api_environment and could send demo OAuth tokens to live
+  // (or vice versa), producing 401s mid-sync after fill/list had already worked
+  // against the matching host via cached routing luck.
   return TRADOVATE_REST_BASE_BY_ENV[apiEnvironment]
 }
 

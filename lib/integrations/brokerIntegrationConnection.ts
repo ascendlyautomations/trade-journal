@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   decryptIntegrationCredentials,
   encryptIntegrationCredentials,
+  isTradovateIntegrationCredentials,
   type IntegrationCredentialPayload,
 } from "@/lib/integrations/credentialEncryption"
 import type { TradovateApiEnvironment } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
@@ -214,7 +215,52 @@ export async function persistTradovateConnectionAfterOAuth(
   }
 ): Promise<{ connectionId: string }> {
   const now = new Date().toISOString()
-  const ciphertext = encryptIntegrationCredentials(params.credentials)
+  let credentials = params.credentials
+  if (
+    isTradovateIntegrationCredentials(credentials) &&
+    !credentials.refresh_token?.trim()
+  ) {
+    // Tradovate sometimes omits refresh_token on reconnect token exchange.
+    // Preserve the prior refresh token for the same connection when present.
+    const priorConnectionId =
+      params.oauthIntent === "reconnect" && params.targetConnectionId
+        ? params.targetConnectionId
+        : params.providerUserId
+          ? (
+              await findActiveConnectionByProviderUserId(supabase, {
+                userId: params.userId,
+                provider: "tradovate",
+                providerUserId: params.providerUserId,
+              })
+            )?.id
+          : null
+    if (priorConnectionId) {
+      const { data: prior } = await supabase
+        .from("broker_integration_connections")
+        .select("credentials_ciphertext")
+        .eq("id", priorConnectionId)
+        .eq("user_id", params.userId)
+        .maybeSingle()
+      if (prior?.credentials_ciphertext) {
+        try {
+          const priorCreds = decryptIntegrationCredentials(prior.credentials_ciphertext)
+          if (
+            isTradovateIntegrationCredentials(priorCreds) &&
+            priorCreds.refresh_token?.trim()
+          ) {
+            credentials = {
+              ...credentials,
+              refresh_token: priorCreds.refresh_token,
+            }
+          }
+        } catch {
+          // Keep null refresh; renewAccessToken remains available while access lives.
+        }
+      }
+    }
+  }
+
+  const ciphertext = encryptIntegrationCredentials(credentials)
 
   const baseUpdate = {
     status: "connected" as const,

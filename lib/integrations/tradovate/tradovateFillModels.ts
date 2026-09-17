@@ -35,7 +35,10 @@ export type TradovateProductRaw = {
 }
 
 export type TradovateFillFeeRaw = {
+  /** Tradovate uses the same id as the related Fill. */
   id?: number | string
+  fillId?: number | string
+  masterid?: number | string
   clearingFee?: number
   exchangeFee?: number
   nfaFee?: number

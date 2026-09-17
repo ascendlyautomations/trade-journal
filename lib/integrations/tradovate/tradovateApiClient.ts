@@ -12,6 +12,7 @@ import {
 import { loadOwnedBrokerConnection } from "@/lib/integrations/brokerConnectionAccess"
 import type { TradovateApiEnvironment } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
 import { getTradovateRestBaseUrl } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
+import { renewTradovateAccessToken } from "@/lib/integrations/tradovate/tradovateAccessRenew"
 import {
   credentialsFromRefreshTokens,
   refreshTradovateAccessToken,
@@ -37,6 +38,7 @@ type ConnectedTradovateConnection = {
   status: string
   credentials_ciphertext: string
   access_token_expires_at: string | null
+  refresh_token_expires_at: string | null
   api_environment: TradovateApiEnvironment
 }
 
@@ -61,11 +63,6 @@ function isUsableConnectionStatus(status: string): boolean {
   return status === "connected" || status === "reconnect_required"
 }
 
-/**
- * Load a Tradovate connection that still has credentials we can try.
- * `reconnect_required` must not hard-block: production can leave valid
- * access/refresh tokens in place after a transient refresh failure.
- */
 async function loadConnectedConnection(
   supabase: SupabaseClient,
   userId: string,
@@ -74,7 +71,7 @@ async function loadConnectedConnection(
   const { data, error } = await supabase
     .from("broker_integration_connections")
     .select(
-      "id, user_id, provider_user_id, status, credentials_ciphertext, access_token_expires_at, api_environment"
+      "id, user_id, provider_user_id, status, credentials_ciphertext, access_token_expires_at, refresh_token_expires_at, api_environment"
     )
     .eq("id", connectionId)
     .eq("user_id", userId)
@@ -96,6 +93,14 @@ function accessTokenExpired(expiresAtIso: string | null): boolean {
   return expiresMs - ACCESS_TOKEN_SKEW_MS <= Date.now()
 }
 
+/** Fully past expiry — renewAccessToken will not work. */
+function accessTokenFullyExpired(expiresAtIso: string | null): boolean {
+  if (!expiresAtIso) return false
+  const expiresMs = new Date(expiresAtIso).getTime()
+  if (Number.isNaN(expiresMs)) return false
+  return expiresMs <= Date.now()
+}
+
 async function persistRefreshedCredentials(
   supabase: SupabaseClient,
   connection: ConnectedTradovateConnection,
@@ -112,7 +117,6 @@ async function persistRefreshedCredentials(
   })
 }
 
-/** Restore connected when we successfully use existing credentials after a false reconnect_required. */
 async function healReconnectRequiredStatus(
   supabase: SupabaseClient,
   connection: ConnectedTradovateConnection
@@ -132,9 +136,11 @@ async function healReconnectRequiredStatus(
 type AuthRecovery = "retry" | "reconnect_required" | "provider_unavailable"
 
 /**
- * After a 401 (or forced refresh): reload canonical credentials, reuse a
- * concurrent refresh if one already landed, otherwise refresh once.
- * Never mark reconnect_required while an unexpired access token is still current.
+ * Canonical post-401 / near-expiry recovery:
+ * 1. Reload latest ciphertext (honor concurrent rotation)
+ * 2. Prefer Tradovate renewAccessToken (no refresh_token rotation)
+ * 3. Only then OAuth refresh_token grant
+ * 4. Mark reconnect_required only when refresh token is genuinely unusable
  */
 async function recoverAccessTokenAfterChallenge(
   supabase: SupabaseClient,
@@ -150,42 +156,76 @@ async function recoverAccessTokenAfterChallenge(
       decryptIntegrationCredentials(latest.credentials_ciphertext)
     )
 
-    // Another request already persisted rotated credentials — reuse them.
     if (current.access_token !== failedAccessToken) {
       await healReconnectRequiredStatus(supabase, latest)
       return true
     }
 
-    const expired = accessTokenExpired(latest.access_token_expires_at)
+    const fullyExpired = accessTokenFullyExpired(latest.access_token_expires_at)
+
+    if (!fullyExpired) {
+      const renewed = await renewTradovateAccessToken(
+        current.access_token,
+        latest.api_environment
+      )
+      if (renewed.ok) {
+        await persistRefreshedCredentials(
+          supabase,
+          latest,
+          {
+            kind: "tradovate",
+            access_token: renewed.accessToken,
+            refresh_token: current.refresh_token ?? null,
+            token_type: current.token_type ?? null,
+          },
+          renewed.expiresAt,
+          latest.refresh_token_expires_at
+            ? new Date(latest.refresh_token_expires_at)
+            : null
+        )
+        return true
+      }
+    }
 
     if (!current.refresh_token?.trim()) {
-      if (expired) {
+      if (fullyExpired) {
         await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
       }
       return false
     }
 
-    const result = await refreshTradovateAccessToken(current.refresh_token)
+    const result = await refreshTradovateAccessToken(
+      current.refresh_token,
+      latest.api_environment
+    )
     if (!result.ok) {
-      // Only permanently lock when the access token is actually expired (or
-      // missing refresh) and Tradovate rejected refresh. A 401 on a still-valid
-      // access token (e.g. concurrent fillFee deps) must not burn the connection.
-      if (result.reason === "no_refresh_token") {
-        await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
-      } else if (result.reason === "oauth_error" && expired) {
+      if (
+        result.reason === "no_refresh_token" ||
+        (result.reason === "oauth_error" && fullyExpired)
+      ) {
         await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
       }
       return false
     }
 
     const nextCredentials = credentialsFromRefreshTokens(result.tokens)
+    if (
+      isTradovateIntegrationCredentials(nextCredentials) &&
+      !nextCredentials.refresh_token?.trim() &&
+      current.refresh_token?.trim()
+    ) {
+      nextCredentials.refresh_token = current.refresh_token
+    }
     const expiries = tokenExpiryDates(result.tokens)
     await persistRefreshedCredentials(
       supabase,
       latest,
       nextCredentials,
       expiries.accessTokenExpiresAt,
-      expiries.refreshTokenExpiresAt
+      expiries.refreshTokenExpiresAt ??
+        (latest.refresh_token_expires_at
+          ? new Date(latest.refresh_token_expires_at)
+          : null)
     )
     return true
   })
@@ -260,17 +300,21 @@ export async function tradovateAuthedJsonRequest<T>(
   const accessToken = await ensureValidAccessToken(supabase, connection)
   const base = getTradovateRestBaseUrl(connection.api_environment)
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}`
+  const method = init?.method ?? "GET"
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: "application/json",
+  }
+  if (method === "POST") {
+    headers["Content-Type"] = "application/json"
+  }
 
   let response: Response
   try {
     response = await fetch(url, {
-      method: init?.method ?? "GET",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: init?.method === "POST" ? "{}" : undefined,
+      method,
+      headers,
+      body: method === "POST" ? "{}" : undefined,
     })
   } catch {
     throw new TradovateApiError("provider_unavailable")

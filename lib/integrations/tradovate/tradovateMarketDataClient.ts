@@ -116,7 +116,7 @@ export async function fetchTradovateProductsByIds(
   )
 }
 
-/** Official Tradovate REST: GET /v1/fillFee/deps?masterid={fillId} */
+/** Official Tradovate REST: GET /v1/fillFee/ldeps?masterids=… */
 export async function fetchTradovateFillFeesForFillIds(
   supabase: SupabaseClient,
   userId: string,
@@ -129,12 +129,13 @@ export async function fetchTradovateFillFeesForFillIds(
   >()
   if (fillIds.length === 0) return result
 
-  // Sequential on purpose: concurrent fillFee requests share one Tradovate
-  // access token and previously stampeded 401→refresh, rotating/invalidating
-  // credentials mid-sync while fill_list still succeeded with the prior token.
+  // One (or few) batched ldeps calls — avoids N auth handshakes that were
+  // racing OAuth refresh against the same connection mid-sync.
   const unique = [...new Set(fillIds)]
-  for (const fillId of unique) {
-    const path = `/v1/fillFee/deps?masterid=${encodeURIComponent(fillId)}`
+  const BATCH = 40
+  for (let i = 0; i < unique.length; i += BATCH) {
+    const batch = unique.slice(i, i + BATCH)
+    const path = `/v1/fillFee/ldeps?masterids=${idsQuery(batch)}`
     const rows = await tradovateAuthedJsonRequest<TradovateFillFeeRaw[]>(
       supabase,
       userId,
@@ -142,17 +143,28 @@ export async function fetchTradovateFillFeesForFillIds(
       path
     )
     if (!Array.isArray(rows) || rows.length === 0) continue
-    let clearingFee = 0
-    let exchangeFee = 0
-    let nfaFee = 0
-    let commission = 0
     for (const fee of rows) {
-      clearingFee += Number(fee.clearingFee ?? 0) || 0
-      exchangeFee += Number(fee.exchangeFee ?? 0) || 0
-      nfaFee += Number(fee.nfaFee ?? 0) || 0
-      commission += Number(fee.commission ?? 0) || 0
+      const fillId =
+        fee.id != null
+          ? String(fee.id)
+          : fee.fillId != null
+            ? String(fee.fillId)
+            : fee.masterid != null
+              ? String(fee.masterid)
+              : null
+      if (!fillId) continue
+      const prev = result.get(fillId) ?? {
+        clearingFee: 0,
+        exchangeFee: 0,
+        nfaFee: 0,
+        commission: 0,
+      }
+      prev.clearingFee += Number(fee.clearingFee ?? 0) || 0
+      prev.exchangeFee += Number(fee.exchangeFee ?? 0) || 0
+      prev.nfaFee += Number(fee.nfaFee ?? 0) || 0
+      prev.commission += Number(fee.commission ?? 0) || 0
+      result.set(fillId, prev)
     }
-    result.set(fillId, { clearingFee, exchangeFee, nfaFee, commission })
   }
   return result
 }

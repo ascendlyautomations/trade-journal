@@ -420,12 +420,24 @@ export async function syncTradovateBrokerAccount(
 
     const feeFillIds = [...new Set(completed.flatMap((t) => t.fillIds))]
     failureStage = "fetch_fees"
-    const feesByFillId = await fetchTradovateFillFeesForFillIds(
-      supabase,
-      userId,
-      connectionId,
-      feeFillIds
-    )
+    let feesByFillId = new Map<
+      string,
+      { clearingFee: number; exchangeFee: number; nfaFee: number; commission: number }
+    >()
+    try {
+      feesByFillId = await fetchTradovateFillFeesForFillIds(
+        supabase,
+        userId,
+        connectionId,
+        feeFillIds
+      )
+    } catch (feeErr) {
+      // Fills/orders already succeeded with the same connection. Fee enrichment
+      // must not convert a mid-sync auth glitch into reconnect_required and
+      // abort the import — persist trades with zeroed fees instead.
+      if (!(feeErr instanceof TradovateApiError)) throw feeErr
+      feesByFillId = new Map()
+    }
 
     failureStage = "persist_trades"
     const { tradesCreated, tradesUpdated, newTradeIds, updatedTradeIds } =
