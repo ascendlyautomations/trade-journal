@@ -8,7 +8,6 @@ import {
   syncTradovateBrokerAccount,
   type TradovateSyncSummary,
 } from "@/lib/integrations/tradovate/syncTradovateBrokerAccount"
-import { logTradovateSync } from "@/lib/integrations/tradovate/tradovateSyncLogger"
 import type {
   TradovateSyncFailureCategory,
   TradovateSyncFailureStage,
@@ -30,33 +29,73 @@ function httpStatusForSummary(summary: TradovateSyncSummary): number {
   return 400
 }
 
-function logSyncHttpResult(params: {
-  userId: string
+function safeDetail(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  return trimmed.slice(0, 160)
+}
+
+function emptyFailureSummary(
+  patch: Partial<TradovateSyncSummary>
+): TradovateSyncSummary {
+  return {
+    ok: false,
+    status: "error",
+    trigger: "manual",
+    fetched: 0,
+    newExecutions: 0,
+    duplicateExecutions: 0,
+    tradesCreated: 0,
+    tradesUpdated: 0,
+    newTradeIds: [],
+    updatedTradeIds: [],
+    openPositions: 0,
+    ...patch,
+  }
+}
+
+/** Existing success/failure body + optional diagnostics on non-success only. */
+function syncResponseBody(params: {
   connectionId: string
   mappingId: string
-  httpStatus: number
-  ok: boolean
-  failureStage?: TradovateSyncFailureStage
-  errorCode?: string
-  failureCategory?: TradovateSyncFailureCategory
+  summary: TradovateSyncSummary
+  accounts: Awaited<ReturnType<typeof attachSyncViewsToBrokerAccounts>>
   providerHttpStatus?: number
-  detail?: string
-  durationMs?: number
-}): void {
-  logTradovateSync("sync_http_result", {
-    userId: params.userId,
-    connectionId: params.connectionId,
-    mappingId: params.mappingId,
-    trigger: "manual",
-    httpStatus: params.httpStatus,
-    ok: params.ok,
-    failureStage: params.failureStage ?? "unknown",
-    errorCode: params.errorCode ?? "unknown",
-    failureCategory: params.failureCategory ?? "sync_failed",
-    providerHttpStatus: params.providerHttpStatus,
-    detail: params.detail?.slice(0, 160),
-    durationMs: params.durationMs,
-  })
+}) {
+  const { connectionId, mappingId, summary, accounts, providerHttpStatus } =
+    params
+  const body: {
+    ok: boolean
+    connectionId: string
+    mappingId: string
+    summary: TradovateSyncSummary
+    accounts: typeof accounts
+    errorCode?: string
+    failureStage?: TradovateSyncFailureStage
+    failureCategory?: TradovateSyncFailureCategory
+    providerHttpStatus?: number
+    detail?: string
+  } = {
+    ok: summary.ok,
+    connectionId,
+    mappingId,
+    summary,
+    accounts,
+  }
+
+  if (!summary.ok) {
+    if (summary.errorCode != null) body.errorCode = summary.errorCode
+    if (summary.failureStage != null) body.failureStage = summary.failureStage
+    if (summary.failureCategory != null) {
+      body.failureCategory = summary.failureCategory
+    }
+    if (providerHttpStatus != null) body.providerHttpStatus = providerHttpStatus
+    const detail = safeDetail(summary.error)
+    if (detail != null) body.detail = detail
+  }
+
+  return body
 }
 
 export async function POST(_req: Request, context: RouteContext) {
@@ -76,6 +115,7 @@ export async function POST(_req: Request, context: RouteContext) {
   }
 
   let summary: TradovateSyncSummary
+  let providerHttpStatus: number | undefined
   try {
     summary = await syncTradovateBrokerAccount(integrationDb, {
       userId: user.id,
@@ -84,51 +124,41 @@ export async function POST(_req: Request, context: RouteContext) {
       trigger: "manual",
     })
   } catch (err) {
-    const providerHttpStatus =
-      err instanceof TradovateApiError ? err.httpStatus : undefined
     const errorCode =
       err instanceof TradovateApiError
         ? err.code
         : "route_unhandled_exception"
-    const detail =
-      err instanceof Error ? err.message.slice(0, 160) : "unknown_error"
+    const failureCategory: TradovateSyncFailureCategory =
+      err instanceof TradovateApiError && err.code === "reconnect_required"
+        ? "token_refresh_failure"
+        : "sync_failed"
+    const failureStage: TradovateSyncFailureStage = "unknown"
+    const detail = safeDetail(
+      err instanceof Error ? err.message : "unknown_error"
+    )
+    providerHttpStatus =
+      err instanceof TradovateApiError ? err.httpStatus : undefined
 
-    logSyncHttpResult({
-      userId: user.id,
-      connectionId,
-      mappingId,
-      httpStatus: 500,
-      ok: false,
-      failureStage: "unknown",
+    summary = emptyFailureSummary({
+      error: detail,
       errorCode,
-      failureCategory:
-        err instanceof TradovateApiError && err.code === "reconnect_required"
-          ? "token_refresh_failure"
-          : "sync_failed",
-      providerHttpStatus,
-      detail,
+      failureCategory,
+      failureStage,
     })
 
-    // Preserve prior unhandled-throw response behavior after logging.
-    throw err
+    return Response.json(
+      syncResponseBody({
+        connectionId,
+        mappingId,
+        summary,
+        accounts: [],
+        providerHttpStatus,
+      }),
+      { status: 400 }
+    )
   }
 
   const httpStatus = httpStatusForSummary(summary)
-
-  // Log before account listing / response serialization so a 400 cannot leave
-  // without sync_http_result even if later steps throw.
-  logSyncHttpResult({
-    userId: user.id,
-    connectionId,
-    mappingId,
-    httpStatus,
-    ok: summary.ok,
-    failureStage: summary.failureStage,
-    errorCode: summary.errorCode,
-    failureCategory: summary.failureCategory,
-    detail: summary.error,
-    durationMs: summary.durationMs,
-  })
 
   let accountsWithSync: Awaited<
     ReturnType<typeof attachSyncViewsToBrokerAccounts>
@@ -143,33 +173,18 @@ export async function POST(_req: Request, context: RouteContext) {
       integrationDb,
       accounts
     )
-  } catch (err) {
-    const detail =
-      err instanceof Error
-        ? err.message.slice(0, 160)
-        : "accounts_list_failed"
-    logSyncHttpResult({
-      userId: user.id,
-      connectionId,
-      mappingId,
-      httpStatus,
-      ok: summary.ok,
-      failureStage: summary.failureStage ?? "unknown",
-      errorCode: summary.errorCode ?? "accounts_enrichment_failed",
-      failureCategory: summary.failureCategory ?? "sync_failed",
-      detail: `post_sync_accounts: ${detail}`,
-      durationMs: summary.durationMs,
-    })
+  } catch {
+    // Keep sync outcome; accounts enrichment is best-effort for the response.
   }
 
   return Response.json(
-    {
-      ok: summary.ok,
+    syncResponseBody({
       connectionId,
       mappingId,
       summary,
       accounts: accountsWithSync,
-    },
+      providerHttpStatus,
+    }),
     { status: httpStatus }
   )
 }
