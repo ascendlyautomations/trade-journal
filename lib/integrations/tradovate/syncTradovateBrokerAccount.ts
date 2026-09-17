@@ -145,6 +145,19 @@ function emptySummary(
   }
 }
 
+function failureCategoryForProviderUnavailable(
+  stage: TradovateSyncFailureStage
+): TradovateSyncFailureCategory {
+  switch (stage) {
+    case "fill_list":
+      return "fill_retrieval_failure"
+    case "order_list":
+      return "order_retrieval_failure"
+    default:
+      return "provider_api_failure"
+  }
+}
+
 /**
  * Canonical Tradovate broker account reconciliation (Phase 4 engine).
  * Manual Sync and automatic worker both call this function.
