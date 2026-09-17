@@ -33,8 +33,8 @@ final class SwappableAuthenticationBackend: AuthenticationBackend, @unchecked Se
         try await current().signIn(email: email, password: password)
     }
 
-    func signUp(email: String, password: String) async throws -> AuthenticationSession {
-        try await current().signUp(email: email, password: password)
+    func signUp(email: String, password: String, fullName: String?) async throws -> AuthenticationSession {
+        try await current().signUp(email: email, password: password, fullName: fullName)
     }
 
     func signOut(accessToken: String) async throws {

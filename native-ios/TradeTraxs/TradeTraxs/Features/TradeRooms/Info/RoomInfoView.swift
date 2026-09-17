@@ -64,6 +64,18 @@ struct RoomInfoView: View {
         .task(id: viewModel.ownerProfile?.id) {
             await loadOwnerAvatar()
         }
+        .confirmationDialog(
+            "Leave this Trade Room?",
+            isPresented: $viewModel.showsLeaveConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Leave Room", role: .destructive) {
+                Task { await viewModel.leaveRoom() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You can rejoin later if the room is still available.")
+        }
         .accessibilityIdentifier("tradeRooms.info")
     }
 
@@ -87,9 +99,17 @@ struct RoomInfoView: View {
                 ownerRow
             }
 
-            Section {
-                Button("Trade Room Settings") {
-                    viewModel.openRoomSettings()
+            if viewModel.canManageRoom {
+                Section {
+                    Button("Trade Room Settings") {
+                        viewModel.openRoomSettings()
+                    }
+                }
+            } else if viewModel.isMember {
+                Section {
+                    Button("Leave Room", role: .destructive) {
+                        viewModel.showsLeaveConfirmation = true
+                    }
                 }
             }
 

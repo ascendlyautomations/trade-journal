@@ -45,6 +45,14 @@ final class OwnerProfileOptimisticStore {
         ownerScreen?.syncClipsFromSection(clips)
     }
 
+    func syncOwnerTradesState(_ trades: [Trade]) {
+        ownerScreen?.syncTradesFromSection(trades)
+    }
+
+    func syncOwnerAchievementsState(_ achievements: [Achievement]) {
+        ownerScreen?.syncAchievementsFromSection(achievements)
+    }
+
     func notePostCreated(_ post: Post) {
         posts = Self.upserting(post, into: posts)
         ownerScreen?.applyOptimisticPost(post)

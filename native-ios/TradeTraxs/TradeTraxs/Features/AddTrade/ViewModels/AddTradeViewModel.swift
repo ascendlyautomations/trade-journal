@@ -506,15 +506,36 @@ final class AddTradeViewModel {
     /// Reload accounts after Manage Accounts mutations (no polling).
     func reloadAccountsAfterMutation() {
         guard let viewerID else { return }
+        let createdID = AccountMutationStore.shared.latestAccountID
         Task {
             if let cached = SessionAccountsStore.shared.cached(for: viewerID)
-                ?? detailCache.accounts(for: viewerID),
-               !cached.isEmpty
+                ?? detailCache.accounts(for: viewerID)
             {
                 accounts = cached
-                return
+            } else {
+                await refreshAccountsFromNetwork(viewerID: viewerID, forceNetwork: true)
             }
-            await refreshAccountsFromNetwork(viewerID: viewerID, forceNetwork: false)
+            applyAccountSelectionAfterReload(preferredID: createdID)
+        }
+    }
+
+    /// Opens Settings → Trading Accounts (keeps Add Trade presentation open, same as CSV import).
+    func openManageAccounts() {
+        NavigationCoordinatorProxy.openManageAccounts?()
+    }
+
+    /// True when the user has no trading accounts at all (not merely ineligible for entry).
+    var hasNoTradingAccounts: Bool { accounts.isEmpty }
+
+    private func applyAccountSelectionAfterReload(preferredID: TradingAccountID?) {
+        if let preferredID,
+           eligibleAccounts.contains(where: { $0.id == preferredID })
+        {
+            selectAccount(preferredID)
+            return
+        }
+        if selectedAccountID == nil, let first = eligibleAccounts.first {
+            selectAccount(first.id)
         }
     }
 

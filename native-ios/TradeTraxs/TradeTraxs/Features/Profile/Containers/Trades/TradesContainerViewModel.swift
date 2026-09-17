@@ -124,9 +124,23 @@ final class TradesContainerViewModel {
             localItemsEmpty: items.isEmpty
         )
         guard snapshot.didLoadTrades || !snapshot.trades.isEmpty else {
-            if (snapshot.phase == .loading || snapshot.didBootstrap), items.isEmpty {
-                state = .loading
+            if hasLoaded {
+                updateStateForVisibleItems()
+                return
             }
+            let plan = ProfileSectionInitialLoad.planWhenBootstrapOmitsSectionPayload(
+                snapshot: snapshot,
+                hasLoaded: hasLoaded,
+                itemsEmpty: items.isEmpty,
+                itemCount: items.count,
+                currentState: state,
+                awaitingScreenBootstrap: awaitingScreenBootstrap
+            )
+            ProfileSectionInitialLoad.applyBootstrapMissingSectionPlan(
+                plan,
+                setState: { [self] next in state = next },
+                kickDeferredLoad: { [self] in loadIfNeeded() }
+            )
             return
         }
 
@@ -575,6 +589,9 @@ final class TradesContainerViewModel {
             initialLoadFailureGrace.cancel()
             updateStateForVisibleItems()
             prefetchEngagement(for: visibleItems.map(\.id))
+            if isOwner {
+                OwnerProfileOptimisticStore.shared.syncOwnerTradesState(items)
+            }
         } catch {
             guard !Task.isCancelled else { return }
             guard generation == syncGeneration else {

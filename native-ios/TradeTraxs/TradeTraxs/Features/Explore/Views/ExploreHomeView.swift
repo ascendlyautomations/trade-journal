@@ -90,14 +90,18 @@ struct ExploreHomeView: View {
     private var discoveryContent: some View {
         switch viewModel.phase {
         case .idle, .loading:
-            if viewModel.suggestedTraders.isEmpty && viewModel.popularRooms.isEmpty {
+            if viewModel.suggestedTraders.isEmpty
+                && viewModel.suggestedTradeRooms.isEmpty
+            {
                 ExperienceListSkeleton(style: .explore)
                     .accessibilityIdentifier("explore.loading")
             } else {
                 discoveryScroll
             }
         case .failed(let message):
-            if viewModel.suggestedTraders.isEmpty && viewModel.popularRooms.isEmpty {
+            if viewModel.suggestedTraders.isEmpty
+                && viewModel.suggestedTradeRooms.isEmpty
+            {
                 ExperienceErrorState(
                     title: "Couldn't load Explore",
                     message: message,
@@ -130,10 +134,10 @@ struct ExploreHomeView: View {
                     tradersSection
                 }
 
-                if let message = viewModel.roomsFailedMessage, viewModel.popularRooms.isEmpty {
+                if !viewModel.suggestedTradeRooms.isEmpty {
+                    suggestedRoomsSection
+                } else if let message = viewModel.roomsFailedMessage {
                     inlineSectionError(message)
-                } else if !viewModel.popularRooms.isEmpty {
-                    roomsSection
                 }
 
                 if viewModel.isLoadingMoreTraders {
@@ -192,11 +196,11 @@ struct ExploreHomeView: View {
         .padding(.bottom, ExperienceSpacing.sm)
     }
 
-    private var roomsSection: some View {
+    private var suggestedRoomsSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             ExploreSectionHeader(
-                title: "Popular Trade Rooms",
-                subtitle: "Communities ordered by membership",
+                title: "Suggested Trade Rooms",
+                subtitle: "Public rooms to explore",
                 trailingTitle: "View More",
                 onTrailing: { viewModel.openTradeRooms() }
             )
@@ -204,7 +208,7 @@ struct ExploreHomeView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: ExperienceSpacing.sm) {
-                    ForEach(viewModel.popularRooms) { room in
+                    ForEach(viewModel.suggestedTradeRooms) { room in
                         ExploreRoomCard(room: room, imagePipeline: imagePipeline) {
                             viewModel.openRoom(room)
                         }
@@ -212,7 +216,7 @@ struct ExploreHomeView: View {
                 }
                 .padding(.horizontal, ExperienceSpacing.md)
             }
-            .accessibilityIdentifier("explore.rooms.rail")
+            .accessibilityIdentifier("explore.suggestedRooms.rail")
         }
     }
 

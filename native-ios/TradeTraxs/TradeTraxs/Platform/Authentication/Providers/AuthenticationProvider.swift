@@ -5,7 +5,7 @@ import Synchronization
 nonisolated protocol AuthenticationProviding: Sendable {
     var kind: AuthenticationProviderKind { get }
     func signIn(email: String, password: String) async throws -> AuthenticationSession
-    func signUp(email: String, password: String) async throws -> AuthenticationSession
+    func signUp(email: String, password: String, fullName: String?) async throws -> AuthenticationSession
     func signOut(session: AuthenticationSession) async throws
     func refresh(session: AuthenticationSession) async throws -> AuthenticationSession
     func requestPasswordReset(email: String) async throws
@@ -21,7 +21,7 @@ nonisolated protocol OAuthProviding: Sendable {
 /// Future remote auth backend (Supabase Auth). Placeholder throws notConfigured.
 nonisolated protocol AuthenticationBackend: Sendable {
     func signIn(email: String, password: String) async throws -> AuthenticationSession
-    func signUp(email: String, password: String) async throws -> AuthenticationSession
+    func signUp(email: String, password: String, fullName: String?) async throws -> AuthenticationSession
     func signOut(accessToken: String) async throws
     func refresh(refreshToken: String) async throws -> AuthenticationSession
     func requestPasswordReset(email: String) async throws
@@ -40,7 +40,7 @@ nonisolated struct PlaceholderAuthenticationBackend: AuthenticationBackend {
         throw AuthenticationError.notConfigured
     }
 
-    func signUp(email: String, password: String) async throws -> AuthenticationSession {
+    func signUp(email: String, password: String, fullName: String?) async throws -> AuthenticationSession {
         _ = (email, password)
         throw AuthenticationError.notConfigured
     }
@@ -99,7 +99,7 @@ nonisolated final class InMemoryAuthenticationBackend: AuthenticationBackend, @u
 
     var signUpRequiresEmailConfirmation = false
 
-    func signUp(email: String, password: String) async throws -> AuthenticationSession {
+    func signUp(email: String, password: String, fullName: String?) async throws -> AuthenticationSession {
         if signUpRequiresEmailConfirmation {
             throw AuthenticationError.emailConfirmationRequired(email: email)
         }

@@ -98,7 +98,8 @@ struct ConversationView: View {
                 selectionActionBar
             }
         }
-        .experienceScreenBackground()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .experienceScreenBackground(fillsContentArea: false)
         .experienceNavigationTitle(viewModel.isSelectionMode ? viewModel.selectionToolbarTitle : viewModel.title)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {

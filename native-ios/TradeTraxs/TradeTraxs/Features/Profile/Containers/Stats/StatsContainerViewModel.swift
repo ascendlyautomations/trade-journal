@@ -72,24 +72,44 @@ final class StatsContainerViewModel {
             && !hasLoadedAnalytics
             && snapshot.phase == .loading
 
-        if let updated = snapshot.lastUpdated,
+        if !hasLoadedAnalytics,
+           let updated = snapshot.lastUpdated,
            let fetchedAt = analyticsFetchedAt,
            updated > fetchedAt
         {
-            hasLoadedAnalytics = false
             modeResults = [:]
         }
 
-        if (snapshot.phase == .loading || snapshot.didBootstrap), metrics == nil, !hasLoadedAnalytics {
-            state = .loading
+        if hasLoadedAnalytics {
+            if snapshot.phase == .loaded || metrics != nil {
+                awaitingScreenBootstrap = false
+                initialLoadFailureGrace.cancel()
+            }
+            recompute()
+            return
         }
 
-        if snapshot.phase == .loaded || hasLoadedAnalytics || metrics != nil {
+        var nextState: ProfileSectionLoadState?
+        if (snapshot.phase == .loading || snapshot.didBootstrap), metrics == nil {
+            nextState = .loading
+        }
+
+        let bootstrapSettled = snapshot.phase == .loaded || metrics != nil
+        if bootstrapSettled {
             awaitingScreenBootstrap = false
             initialLoadFailureGrace.cancel()
         }
 
-        scheduleAnalyticsLoadIfNeeded()
+        let kickDeferredLoad = canViewContent && !awaitingScreenBootstrap
+
+        ProfileSectionInitialLoad.applyBootstrapMissingSectionPlan(
+            ProfileSectionInitialLoad.BootstrapMissingSectionPlan(
+                nextState: nextState,
+                kickDeferredLoad: kickDeferredLoad
+            ),
+            setState: { [self] next in state = next },
+            kickDeferredLoad: { [self] in scheduleAnalyticsLoadIfNeeded() }
+        )
     }
 
     func loadIfNeeded() {

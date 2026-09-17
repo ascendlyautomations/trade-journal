@@ -64,9 +64,19 @@ final class ClipsContainerViewModel {
         )
         let beforeCount = items.count
         guard snapshot.didLoadClips || !snapshot.clips.isEmpty else {
-            if (snapshot.phase == .loading || snapshot.didBootstrap), items.isEmpty {
-                state = .loading
-            }
+            let plan = ProfileSectionInitialLoad.planWhenBootstrapOmitsSectionPayload(
+                snapshot: snapshot,
+                hasLoaded: hasLoaded,
+                itemsEmpty: items.isEmpty,
+                itemCount: items.count,
+                currentState: state,
+                awaitingScreenBootstrap: awaitingScreenBootstrap
+            )
+            ProfileSectionInitialLoad.applyBootstrapMissingSectionPlan(
+                plan,
+                setState: { [self] next in state = next },
+                kickDeferredLoad: { [self] in loadIfNeeded() }
+            )
             return
         }
 
@@ -217,6 +227,10 @@ final class ClipsContainerViewModel {
         ExperienceHaptics.play(.selection)
         detailCache.seed(reel)
         navigationCoordinator.open(.profile(.reel(reel.id)))
+    }
+
+    func addClip() {
+        navigationCoordinator.openCompose(.reel)
     }
 
     private func performLoad(generation: UInt64) async {

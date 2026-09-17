@@ -362,6 +362,10 @@ final class TradeRoomsHomeViewModel {
         inboxStore.toggleMute(roomID: roomID)
     }
 
+    func isRoomMuted(_ roomID: RoomID) -> Bool {
+        inboxStore.isRoomMuted(roomID)
+    }
+
     func requestLeaveRoom(id: RoomID) {
         ExperienceHaptics.play(.warning)
         pendingLeaveRoomID = id
@@ -482,8 +486,9 @@ final class TradeRoomsHomeViewModel {
                     popular: []
                 )
             } else {
-                bootstrap = (try? await explore.tradeRoomsHomeBootstrap(scope: discoveryScope, limit: 20))
-                    ?? TradeRoomsFixtures.homeBootstrap(viewerID: sessionViewer, scope: discoveryScope)
+                let bootstrapScope = discoveryScope.bootstrapCacheScope
+                bootstrap = (try? await explore.tradeRoomsHomeBootstrap(scope: bootstrapScope, limit: 20))
+                    ?? TradeRoomsFixtures.homeBootstrap(viewerID: sessionViewer, scope: bootstrapScope)
             }
             SessionTradeRoomsDiscoveryStore.shared.seed(bootstrap, for: sessionViewer)
             applyHomeBootstrap(bootstrap, viewerID: sessionViewer)
@@ -500,12 +505,13 @@ final class TradeRoomsHomeViewModel {
         discoveryErrorMessage = nil
 
         do {
+            let cacheScope = discoveryScope.bootstrapCacheScope
             let bootstrap = try await SessionTradeRoomsDiscoveryStore.shared.coalesce(
                 viewerID: sessionViewer,
-                scope: discoveryScope,
+                scope: cacheScope,
                 forceNetwork: forceNetwork
-            ) { [explore, discoveryScope] in
-                try await explore.tradeRoomsHomeBootstrap(scope: discoveryScope, limit: 20)
+            ) { [explore, cacheScope] in
+                try await explore.tradeRoomsHomeBootstrap(scope: cacheScope, limit: 20)
             }
             applyHomeBootstrap(bootstrap, viewerID: sessionViewer)
             discoveryPhase = .loaded

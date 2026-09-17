@@ -115,9 +115,16 @@ final class AuthenticationCoordinator {
         })
     }
 
-    func signUp(email: String, password: String) async throws {
+    func signUp(email: String, password: String, fullName: String? = nil) async throws {
+        let hint = ProfileDisplayNamePolicy.normalized(fullName).map {
+            OAuthFirstLoginHint(fullName: $0, email: nil)
+        }
         try await performSignIn(operation: {
-            try await self.authenticationManager.signUp(email: email, password: password)
+            try await self.authenticationManager.signUp(
+                email: email,
+                password: password,
+                firstLoginHint: hint
+            )
         })
     }
 

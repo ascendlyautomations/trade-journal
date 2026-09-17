@@ -221,29 +221,55 @@ struct ConversationBubbleView: View {
         reactionConfiguration?.showsStrip == true
     }
 
+    @ViewBuilder
     private func textBubble(text: String) -> some View {
         let alignment: HorizontalAlignment = item.isOutgoing ? .trailing : .leading
-        return VStack(alignment: alignment, spacing: 0) {
-            ConversationMessageTextLayout(
-                maxWidth: bubbleMaxWidth,
-                horizontalAlignment: alignment
-            ) {
-                Text(text)
-                    .experienceStyle(
-                        .body,
-                        color: item.isOutgoing ? colors.onAccent : colors.primaryText
-                    )
-                    .multilineTextAlignment(item.isOutgoing ? .trailing : .leading)
-            }
-            reactionChipsOnly(topPadding: 6)
-        }
-        .padding(.horizontal, ExperienceSpacing.sm + 2)
-        .padding(.top, ExperienceSpacing.sm)
-        .padding(.bottom, reactionBottomPadding)
-        .background(
-            item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
-            in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+        let textContentWidth = ConversationMessageTextLayout.referenceTextWidth(
+            text,
+            maxWidth: bubbleMaxWidth
         )
+        let extendsReactionsOffBubble = reactionSummaries.count > 1
+        let preserveTextWidth = extendsReactionsOffBubble
+            || text.trimmingCharacters(in: .whitespacesAndNewlines).count > 5
+
+        let messageText = ConversationMessageTextLayout(
+            maxWidth: bubbleMaxWidth,
+            horizontalAlignment: alignment
+        ) {
+            Text(text)
+                .experienceStyle(
+                    .body,
+                    color: item.isOutgoing ? colors.onAccent : colors.primaryText
+                )
+                .multilineTextAlignment(item.isOutgoing ? .trailing : .leading)
+        }
+
+        let bubbleFill = item.isOutgoing ? colors.accent : colors.incomingMessageBubble
+        let bubbleShape = RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+
+        if extendsReactionsOffBubble {
+            messageText
+                .padding(.horizontal, ExperienceSpacing.sm + 2)
+                .padding(.top, ExperienceSpacing.sm)
+                .padding(.bottom, ExperienceSpacing.sm)
+                .background(bubbleFill, in: bubbleShape)
+                .fixedSize(horizontal: preserveTextWidth, vertical: false)
+                .overlay(alignment: reactionStripCornerAlignment) {
+                    reactionChipsOnly(topPadding: 0, extendsOffBubble: true)
+                        .offset(y: ConversationBubbleLayout.reactionStripVerticalOffset)
+                }
+                .padding(.bottom, reactionStripOverflowPadding)
+        } else {
+            VStack(alignment: alignment, spacing: 0) {
+                messageText
+                reactionChipsOnly(topPadding: 6, wrapMaxWidth: textContentWidth)
+            }
+            .fixedSize(horizontal: preserveTextWidth, vertical: false)
+            .padding(.horizontal, ExperienceSpacing.sm + 2)
+            .padding(.top, ExperienceSpacing.sm)
+            .padding(.bottom, reactionBottomPadding)
+            .background(bubbleFill, in: bubbleShape)
+        }
     }
 
     private func voiceBubble(reference: MediaReference, duration: TimeInterval?) -> some View {
@@ -335,7 +361,7 @@ struct ConversationBubbleView: View {
                 isOutgoing: item.isOutgoing,
                 includesBackground: false
             )
-            reactionChipsOnly(topPadding: 6)
+            reactionChipsOnly(topPadding: 6, capWidth: tradeBubbleMaxWidth)
         }
         .padding(.horizontal, ExperienceSpacing.sm + 2)
         .padding(.top, ExperienceSpacing.sm)
@@ -426,7 +452,7 @@ struct ConversationBubbleView: View {
     private func sharedContentBubbleContent<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             content()
-            reactionChipsOnly(topPadding: 6)
+            reactionChipsOnly(topPadding: 6, capWidth: tradeBubbleMaxWidth)
         }
         .padding(.horizontal, ExperienceSpacing.sm + 2)
         .padding(.top, ExperienceSpacing.sm)
@@ -450,17 +476,47 @@ struct ConversationBubbleView: View {
     }
 
     @ViewBuilder
-    private func reactionChipsOnly(topPadding: CGFloat) -> some View {
+    private func reactionChipsOnly(
+        topPadding: CGFloat,
+        wrapMaxWidth: CGFloat? = nil,
+        capWidth: CGFloat? = nil,
+        extendsOffBubble: Bool = false
+    ) -> some View {
         if let reactionConfiguration, !reactionConfiguration.summaries.isEmpty {
-            MessageReactionStrip(
+            let strip = MessageReactionStrip(
                 summaries: reactionConfiguration.summaries,
                 isOutgoing: item.isOutgoing,
                 isEnabled: reactionConfiguration.isEnabled,
                 onToggle: reactionConfiguration.onToggle
             )
-            .frame(maxWidth: bubbleMaxWidth, alignment: item.isOutgoing ? .trailing : .leading)
+            Group {
+                if extendsOffBubble {
+                    strip.fixedSize(horizontal: true, vertical: false)
+                } else if let width = wrapMaxWidth ?? capWidth {
+                    strip
+                        .frame(
+                            maxWidth: width,
+                            alignment: item.isOutgoing ? .trailing : .leading
+                        )
+                } else {
+                    strip
+                }
+            }
             .padding(.top, topPadding)
         }
+    }
+
+    private var reactionSummaries: [MessageReactionSummary] {
+        reactionConfiguration?.summaries ?? []
+    }
+
+    private var reactionStripCornerAlignment: Alignment {
+        item.isOutgoing ? .bottomTrailing : .bottomLeading
+    }
+
+    /// Space below the text bubble for a corner-hung reaction strip (does not widen the bubble).
+    private var reactionStripOverflowPadding: CGFloat {
+        reactionSummaries.count > 1 ? ConversationBubbleLayout.reactionStripOverflowPadding : 0
     }
 
     private var reactionBottomPadding: CGFloat {
@@ -501,6 +557,9 @@ private enum ConversationBubbleLayout {
     static let rowHorizontalPadding = ExperienceSpacing.md
     static let avatarToContentSpacing = ExperienceSpacing.xs
     static let oppositeGutterMin: CGFloat = 48
+    /// Hangs multi-type reaction chips on the bubble corner without widening the text fill.
+    static let reactionStripVerticalOffset: CGFloat = 11
+    static let reactionStripOverflowPadding: CGFloat = 16
     private static let selectionColumnWidth: CGFloat = 28
 
     static var viewportWidth: CGFloat {

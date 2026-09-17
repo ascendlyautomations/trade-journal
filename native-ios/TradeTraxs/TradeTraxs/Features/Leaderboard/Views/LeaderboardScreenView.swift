@@ -81,26 +81,29 @@ struct LeaderboardScreenView: View {
 
     @ViewBuilder
     private var contentArea: some View {
-        switch viewModel.phase {
-        case .idle, .loading:
-            if viewModel.rows.isEmpty {
-                loadingContent
-            } else {
-                rankingsScroll
-            }
-        case .failed(let message):
-            if viewModel.rows.isEmpty {
-                errorContent(message: message)
-            } else {
-                rankingsScroll
-            }
-        case .loaded:
-            if viewModel.showsEmpty {
-                emptyContent
-            } else {
-                rankingsScroll
+        Group {
+            switch viewModel.phase {
+            case .idle, .loading:
+                if viewModel.rows.isEmpty {
+                    loadingContent
+                } else {
+                    rankingsScroll
+                }
+            case .failed(let message):
+                if viewModel.rows.isEmpty {
+                    errorContent(message: message)
+                } else {
+                    rankingsScroll
+                }
+            case .loaded:
+                if viewModel.showsEmpty {
+                    emptyContent
+                } else {
+                    rankingsScroll
+                }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var rankingsScroll: some View {

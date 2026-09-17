@@ -32,10 +32,12 @@ struct DashboardInsightsSection: View {
 
             if isSectionExpanded {
                 if insights.isEmpty {
-                    Text("Log a few more trades and we’ll surface coaching recommendations here.")
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .padding(.horizontal, ExperienceSpacing.md)
-                        .padding(.bottom, ExperienceSpacing.xs)
+                    ExperienceEmptyState(
+                        icon: .chart,
+                        title: "No insights yet",
+                        message: "Log more trades to surface coaching recommendations."
+                    )
+                    .padding(.bottom, ExperienceSpacing.xs)
                 } else {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                         ForEach(visibleInsights) { insight in

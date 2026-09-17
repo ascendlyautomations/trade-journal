@@ -100,14 +100,15 @@ struct SettingsTradingAccountsView: View {
                 }
             } else if viewModel.accounts.isEmpty, !viewModel.isLoading {
                 Section {
-                    SettingsIntroBlock(
+                    ExperienceEmptyState(
+                        icon: .payouts,
                         title: "No trading accounts yet",
-                        message: "Add an account to organize your trades by broker, prop firm, or backtest."
+                        message: "Add an account to organize trades by broker or prop firm."
                     )
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 } header: {
                     Text("Your Accounts")
-                } footer: {
-                    Text("Tap + to create your first account.")
                 }
             } else {
                 Section {

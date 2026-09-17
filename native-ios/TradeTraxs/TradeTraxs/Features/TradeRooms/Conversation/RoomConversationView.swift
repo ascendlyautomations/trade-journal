@@ -82,7 +82,7 @@ struct RoomConversationView: View {
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.vertical, ExperienceSpacing.xs)
             }
-            if viewModel.showsRoomChrome, viewModel.canShowComposer {
+            if viewModel.shouldShowMessageComposer {
                 MessageComposerBar(
                     draft: $viewModel.draft,
                     isSending: viewModel.isSending,
@@ -103,7 +103,8 @@ struct RoomConversationView: View {
                 )
             }
         }
-        .experienceScreenBackground()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .experienceScreenBackground(fillsContentArea: false)
         .experienceNavigationTitle(viewModel.title)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
@@ -132,10 +133,14 @@ struct RoomConversationView: View {
                     .experienceTouchTarget()
                     .accessibilityLabel("Manage Room")
                     .accessibilityIdentifier("tradeRooms.conversation.manage")
-                } else {
+                } else if viewModel.isMember {
                     Menu {
-                        Button("Trade Room Settings", systemImage: "gearshape") {
-                            viewModel.openRoomSettings()
+                        Button(
+                            "Leave Room",
+                            systemImage: "rectangle.portrait.and.arrow.right",
+                            role: .destructive
+                        ) {
+                            viewModel.requestLeaveRoom()
                         }
                         Button(
                             viewModel.isMuted ? "Unmute notifications" : "Mute notifications",
@@ -182,6 +187,20 @@ struct RoomConversationView: View {
             }
         } message: {
             Text("This message will be removed for everyone in this Trade Room.")
+        }
+        .confirmationDialog(
+            "Leave this Trade Room?",
+            isPresented: $viewModel.showsLeaveRoomConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Leave Room", role: .destructive) {
+                Task { await viewModel.confirmLeaveRoom() }
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelLeaveRoom()
+            }
+        } message: {
+            Text("You can rejoin later if the room is still available.")
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {

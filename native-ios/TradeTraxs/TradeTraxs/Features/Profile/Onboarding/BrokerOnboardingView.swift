@@ -53,6 +53,8 @@ struct BrokerOnboardingView: View {
                             .experienceStyle(.footnote, color: colors.error)
                     }
 
+                    optionalConnectLaterHint
+
                     if viewModel.hasActiveConnectedBroker {
                         continueButton
                     } else {
@@ -271,6 +273,19 @@ struct BrokerOnboardingView: View {
             finishBrokerOnboarding()
         }
         .padding(.top, ExperienceSpacing.sm)
+    }
+
+    private var optionalConnectLaterHint: some View {
+        (
+            Text("Not ready to connect? You can connect or manage your trading platforms anytime in ")
+            + Text("Settings → Manage Accounts").fontWeight(.semibold)
+            + Text(".")
+        )
+        .experienceStyle(.footnote, color: colors.secondaryText)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, ExperienceSpacing.xs)
+        .accessibilityIdentifier("onboarding.broker.optionalHint")
     }
 
     private var maybeLaterButton: some View {

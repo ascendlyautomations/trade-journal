@@ -327,10 +327,19 @@ final class AuthenticationManager {
         }
     }
 
-    func signUp(email: String, password: String) async throws {
+    func signUp(
+        email: String,
+        password: String,
+        firstLoginHint: OAuthFirstLoginHint? = nil
+    ) async throws {
         try await authenticate(provider: .email) {
             AuthCompletion(
-                session: try await emailProvider.signUp(email: email, password: password)
+                session: try await emailProvider.signUp(
+                    email: email,
+                    password: password,
+                    fullName: firstLoginHint?.fullName
+                ),
+                firstLoginHint: firstLoginHint
             )
         }
     }
@@ -558,7 +567,23 @@ final class AuthenticationManager {
             )
         }
         await MainActor.run {
-            OAuthProfileOnboardingNameStore.stage(fullName: mergedHint?.fullName, for: session.userID)
+            OAuthProfileOnboardingNameStore.bindEmailPendingToUserIfNeeded(
+                email: session.email,
+                userID: session.userID
+            )
+            if let manual = ProfileDisplayNamePolicy.normalized(firstLoginHint?.fullName),
+               session.provider == .email
+            {
+                OAuthProfileOnboardingNameStore.stageManualSignup(fullName: manual, for: session.userID)
+            } else if let manual = ProfileDisplayNamePolicy.normalized(firstLoginHint?.fullName) {
+                OAuthProfileOnboardingNameStore.stageProvider(fullName: manual, for: session.userID)
+            } else if let mergedName = ProfileDisplayNamePolicy.normalized(mergedHint?.fullName) {
+                if session.provider == .email {
+                    OAuthProfileOnboardingNameStore.stageManualSignup(fullName: mergedName, for: session.userID)
+                } else {
+                    OAuthProfileOnboardingNameStore.stageProvider(fullName: mergedName, for: session.userID)
+                }
+            }
         }
         await SessionNetworkGate.shared.markReady()
         applyAuthenticated(

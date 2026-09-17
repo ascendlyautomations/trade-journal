@@ -272,7 +272,7 @@ struct AddTradeView: View {
             } header: {
                 Text("Trade")
             } footer: {
-                if viewModel.eligibleAccounts.isEmpty {
+                if !viewModel.hasNoTradingAccounts, viewModel.eligibleAccounts.isEmpty {
                     Text("No accounts can accept new trades. Free plan allows up to \(FreeTierPolicy.maxTradeEntryAccounts) entry-enabled accounts.")
                 }
             }
@@ -714,32 +714,49 @@ struct AddTradeView: View {
         }
     }
 
+    @ViewBuilder
     private var accountPicker: some View {
-        Picker("Account", selection: Binding(
-            get: { viewModel.selectedAccountID?.rawValue ?? "" },
-            set: { newValue in
-                if newValue.isEmpty {
-                    viewModel.clearAccountSelection()
-                } else {
-                    viewModel.selectAccount(TradingAccountID(newValue))
+        if viewModel.hasNoTradingAccounts {
+            Button {
+                viewModel.openManageAccounts()
+            } label: {
+                HStack {
+                    Text("Account")
+                        .foregroundStyle(colors.primaryText)
+                    Spacer(minLength: ExperienceSpacing.sm)
+                    Text("Add Account")
+                        .foregroundStyle(colors.accent)
                 }
             }
-        )) {
-            Text("Choose Account")
-                .foregroundStyle(colors.tertiaryText)
-                .tag("")
-            ForEach(viewModel.accountsForPicker) { account in
-                OwnerAccountDropdownPickerLabel(account: account)
-                    .tag(account.id.rawValue)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("addTrade.account")
+        } else {
+            Picker("Account", selection: Binding(
+                get: { viewModel.selectedAccountID?.rawValue ?? "" },
+                set: { newValue in
+                    if newValue.isEmpty {
+                        viewModel.clearAccountSelection()
+                    } else {
+                        viewModel.selectAccount(TradingAccountID(newValue))
+                    }
+                }
+            )) {
+                Text("Choose Account")
+                    .foregroundStyle(colors.tertiaryText)
+                    .tag("")
+                ForEach(viewModel.accountsForPicker) { account in
+                    OwnerAccountDropdownPickerLabel(account: account)
+                        .tag(account.id.rawValue)
+                }
             }
-        }
-        .accessibilityIdentifier("addTrade.account")
-        .onAppear {
-            OwnerAccountDropdownSupport.logBoundary(
-                .addTrade,
-                accounts: viewModel.accountsForPicker,
-                profileID: viewModel.ownerAccountsProfileID
-            )
+            .accessibilityIdentifier("addTrade.account")
+            .onAppear {
+                OwnerAccountDropdownSupport.logBoundary(
+                    .addTrade,
+                    accounts: viewModel.accountsForPicker,
+                    profileID: viewModel.ownerAccountsProfileID
+                )
+            }
         }
     }
 

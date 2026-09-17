@@ -8,6 +8,8 @@ final class ExploreSessionStore {
     static let shared = ExploreSessionStore()
 
     private(set) var suggestedTraders: [ExploreTraderSuggestion] = []
+    /// Public rooms from `rpc_v1_trade_room_discovery` (suggested mode) — not membership rows.
+    private(set) var suggestedRooms: [ExploreRoomSuggestion] = []
     private(set) var popularRooms: [ExploreRoomSuggestion] = []
     private(set) var viewerFollowingIDs: Set<ProfileID> = []
     private(set) var hasBootstrapped = false
@@ -22,12 +24,16 @@ final class ExploreSessionStore {
     func applyBootstrap(
         traders: [ExploreTraderSuggestion],
         rooms: [ExploreRoomSuggestion],
+        suggestedRooms: [ExploreRoomSuggestion]? = nil,
         following: Set<ProfileID>,
         tradersNextCursor: String?,
         clearFailures: Bool = true
     ) {
         suggestedTraders = traders
         popularRooms = rooms
+        if let suggestedRooms {
+            self.suggestedRooms = suggestedRooms
+        }
         viewerFollowingIDs = following
         self.tradersNextCursor = tradersNextCursor
         if clearFailures {
@@ -56,9 +62,17 @@ final class ExploreSessionStore {
         popularRooms = rooms
     }
 
+    func replaceSuggestedRooms(_ rooms: [ExploreRoomSuggestion]) {
+        suggestedRooms = rooms
+    }
+
     func applyRoomMetadata(from room: TradeRoom) {
-        guard let index = popularRooms.firstIndex(where: { $0.id == room.id }) else { return }
-        popularRooms[index].applyMetadata(from: room)
+        if let index = popularRooms.firstIndex(where: { $0.id == room.id }) {
+            popularRooms[index].applyMetadata(from: room)
+        }
+        if let index = suggestedRooms.firstIndex(where: { $0.id == room.id }) {
+            suggestedRooms[index].applyMetadata(from: room)
+        }
     }
 
     func updateAvatarConfirmedAbsent(_ ids: Set<ProfileID>) {
@@ -101,6 +115,7 @@ final class ExploreSessionStore {
 
     func invalidate() {
         suggestedTraders = []
+        suggestedRooms = []
         popularRooms = []
         viewerFollowingIDs = []
         hasBootstrapped = false

@@ -79,6 +79,10 @@ final class RoomInfoViewModel {
         return room.ownerProfileID == viewerID
     }
 
+    var isMember: Bool {
+        membership != nil
+    }
+
     var canManageRoom: Bool {
         guard let room else { return false }
         return TradeRoomManagementPermission.canManage(room: room, viewerID: viewerID)

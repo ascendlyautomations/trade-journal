@@ -73,16 +73,11 @@ struct PsychologyInsightsSection: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text("Not enough data yet")
-                .experienceStyle(.footnote, color: colors.primaryText)
-                .fontWeight(.semibold)
-            Text("Log daily check-ins and psychology on more trades to unlock personalized insights.")
-                .experienceStyle(.caption, color: colors.secondaryText)
-        }
-        .padding(ExperienceSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        ExperienceEmptyState(
+            icon: .chart,
+            title: "Not enough data yet",
+            message: "Log check-ins and trade psychology to unlock insights."
+        )
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.xs)
     }

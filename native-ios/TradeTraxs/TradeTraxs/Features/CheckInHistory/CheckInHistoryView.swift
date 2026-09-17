@@ -46,7 +46,8 @@ struct CheckInHistoryView: View {
                         title: "No history yet",
                         message: "Log daily check-ins and trades to build your history."
                     )
-                    .padding(.top, ExperienceSpacing.xxl)
+                    .experienceScrollEmbeddedSectionFill(minHeight: 360)
+                    .padding(.top, ExperienceSpacing.lg)
                 } else {
                     ForEach(viewModel.summaries) { day in
                         Button { viewModel.openDay(day) } label: {

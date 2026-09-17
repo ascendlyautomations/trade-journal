@@ -72,7 +72,18 @@ final class ExploreViewModel {
     }
 
     var suggestedTraders: [ExploreTraderSuggestion] { store.suggestedTraders }
+    var suggestedRooms: [ExploreRoomSuggestion] { store.suggestedRooms }
     var popularRooms: [ExploreRoomSuggestion] { store.popularRooms }
+
+    /// Suggested discovery rows — excludes rooms the viewer already joined (inbox / RPC flags).
+    var suggestedTradeRooms: [ExploreRoomSuggestion] {
+        let joinedInbox = Set(MessagesInboxStore.shared.rooms.map(\.id))
+        return suggestedRooms.filter { room in
+            !joinedInbox.contains(room.id)
+                && room.isJoined != true
+                && room.isMember != true
+        }
+    }
     var viewerFollowingIDs: Set<ProfileID> { store.viewerFollowingIDs }
     var tradersFailedMessage: String? { store.tradersFailedMessage }
     var roomsFailedMessage: String? { store.roomsFailedMessage }
@@ -93,7 +104,7 @@ final class ExploreViewModel {
         phase == .loaded
             && !isSearching
             && suggestedTraders.isEmpty
-            && popularRooms.isEmpty
+            && suggestedTradeRooms.isEmpty
     }
 
     func loadIfNeeded() {
@@ -326,6 +337,7 @@ final class ExploreViewModel {
             store.applyBootstrap(
                 traders: traders,
                 rooms: rooms,
+                suggestedRooms: rooms,
                 following: [],
                 tradersNextCursor: nil
             )
@@ -348,6 +360,7 @@ final class ExploreViewModel {
             #if DEBUG
             ExploreLoadProbe.noteRequest("rpc_v1_explore_bootstrap", blocking: true)
             #endif
+            async let suggestedRoomsTask = loadSuggestedTradeRooms(viewerID: viewerID)
             var confirmedAbsent = store.avatarConfirmedAbsentIDs
             let (hydrated, _) = await ExploreProfileHydration.hydrateTraders(
                 applied.traders,
@@ -358,9 +371,11 @@ final class ExploreViewModel {
             )
             store.updateAvatarConfirmedAbsent(confirmedAbsent)
             for trader in hydrated { detailCache.seed(trader.profile) }
+            let suggestedRooms = await suggestedRoomsTask
             store.applyBootstrap(
                 traders: hydrated,
                 rooms: applied.rooms,
+                suggestedRooms: suggestedRooms,
                 following: applied.followingIDs,
                 tradersNextCursor: applied.tradersNextCursor
             )
@@ -377,16 +392,16 @@ final class ExploreViewModel {
             return
         }
 
-        // First useful paint: 2 parallel discovery calls. Following IDs hydrate after.
+        // First useful paint: parallel discovery calls. Following IDs hydrate after.
         async let profilesPage = fetchProfilesPage(cursor: nil)
-        async let roomsResult = fetchRooms()
+        async let suggestedRoomsTask = loadSuggestedTradeRoomsIfPossible()
 
         let page = await profilesPage
-        let rooms = await roomsResult
+        let suggestedRooms = await suggestedRoomsTask
 
         #if DEBUG
         ExploreLoadProbe.noteRequest("discoverableProfiles")
-        ExploreLoadProbe.noteRequest("popularRooms")
+        ExploreLoadProbe.noteRequest("tradeRoomDiscovery.suggested")
         #endif
 
         var exclude = Set<ProfileID>()
@@ -413,7 +428,7 @@ final class ExploreViewModel {
         store.updateAvatarConfirmedAbsent(confirmedAbsent)
         for trader in hydrated { detailCache.seed(trader.profile) }
 
-        if page == nil && rooms == nil {
+        if page == nil && hydrated.isEmpty && suggestedRooms.isEmpty {
             phase = .failed("Couldn't load Explore")
             bootstrapTask = nil
             return
@@ -421,15 +436,13 @@ final class ExploreViewModel {
 
         store.applyBootstrap(
             traders: hydrated,
-            rooms: rooms ?? [],
+            rooms: [],
+            suggestedRooms: suggestedRooms,
             following: detailCache.viewerFollowingIDs() ?? [],
             tradersNextCursor: page?.nextCursor
         )
         if page == nil {
             store.setTradersFailed("Couldn't load suggested traders")
-        }
-        if rooms == nil {
-            store.setRoomsFailed("Couldn't load Trade Rooms")
         }
 
         phase = .loaded
@@ -437,7 +450,7 @@ final class ExploreViewModel {
         lastProbe = ExploreLoadProbe.firstUsefulRender(
             sections: [
                 hydrated.isEmpty ? nil : "suggestedTraders",
-                (rooms?.isEmpty == false) ? "popularRooms" : nil,
+                suggestedRooms.isEmpty ? nil : "suggestedTradeRooms",
             ].compactMap { $0 }
         )
         #endif
@@ -490,6 +503,7 @@ final class ExploreViewModel {
         store.applyBootstrap(
             traders: hydrated,
             rooms: store.popularRooms,
+            suggestedRooms: store.suggestedRooms,
             following: store.viewerFollowingIDs,
             tradersNextCursor: store.tradersNextCursor,
             clearFailures: false
@@ -667,11 +681,21 @@ final class ExploreViewModel {
         }
     }
 
-    private func fetchRooms() async -> [ExploreRoomSuggestion]? {
+    private func loadSuggestedTradeRoomsIfPossible() async -> [ExploreRoomSuggestion] {
+        guard let viewerID else { return [] }
+        return await loadSuggestedTradeRooms(viewerID: viewerID)
+    }
+
+    private func loadSuggestedTradeRooms(viewerID: ProfileID) async -> [ExploreRoomSuggestion] {
+        if let cached = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewerID, scope: .all),
+           !cached.suggested.isEmpty
+        {
+            return cached.suggested
+        }
         do {
-            return try await explore.popularRooms(limit: 12)
+            return try await explore.discoverRooms(mode: .suggested, scope: .all, limit: 12)
         } catch {
-            return nil
+            return []
         }
     }
 

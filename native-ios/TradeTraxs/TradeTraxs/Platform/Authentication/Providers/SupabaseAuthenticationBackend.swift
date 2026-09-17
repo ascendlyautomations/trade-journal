@@ -23,18 +23,29 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
         )
     }
 
-    func signUp(email: String, password: String) async throws -> AuthenticationSession {
+    func signUp(email: String, password: String, fullName: String?) async throws -> AuthenticationSession {
+        struct SignUpMetadata: Encodable {
+            var full_name: String?
+        }
         struct Body: Encodable {
             var email: String
             var password: String
+            var data: SignUpMetadata?
         }
         guard transport.isConfigured else { throw AuthenticationError.notConfigured }
+        let normalizedName = ProfileDisplayNamePolicy.normalized(fullName)
         do {
             let response = try await transport.send(
                 host: .supabase,
                 path: "/auth/v1/signup",
                 method: .post,
-                body: try transport.encodeJSON(Body(email: email, password: password)),
+                body: try transport.encodeJSON(
+                    Body(
+                        email: email,
+                        password: password,
+                        data: normalizedName.map { SignUpMetadata(full_name: $0) }
+                    )
+                ),
                 requiresAuthentication: false
             )
             return try parseSignupResponse(

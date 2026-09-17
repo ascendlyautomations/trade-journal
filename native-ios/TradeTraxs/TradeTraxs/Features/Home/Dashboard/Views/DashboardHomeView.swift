@@ -205,7 +205,7 @@ struct DashboardHomeView: View {
                             navigationCoordinator: navigationCoordinator
                         )
                         .padding(.horizontal, ExperienceSpacing.md)
-                        .padding(.bottom, ExperienceSpacing.lg)
+                        .padding(.bottom, ExperienceSpacing.sm)
                     }
 
                     dashboardQuickActionsGroup(includeBrokerImport: true)

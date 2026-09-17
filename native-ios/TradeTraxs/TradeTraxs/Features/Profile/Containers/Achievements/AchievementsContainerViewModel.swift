@@ -64,9 +64,19 @@ final class AchievementsContainerViewModel {
             localItemsEmpty: items.isEmpty
         )
         guard snapshot.didLoadAchievements || !snapshot.achievements.isEmpty else {
-            if (snapshot.phase == .loading || snapshot.didBootstrap), items.isEmpty {
-                state = .loading
-            }
+            let plan = ProfileSectionInitialLoad.planWhenBootstrapOmitsSectionPayload(
+                snapshot: snapshot,
+                hasLoaded: hasLoaded,
+                itemsEmpty: items.isEmpty,
+                itemCount: items.count,
+                currentState: state,
+                awaitingScreenBootstrap: awaitingScreenBootstrap
+            )
+            ProfileSectionInitialLoad.applyBootstrapMissingSectionPlan(
+                plan,
+                setState: { [self] next in state = next },
+                kickDeferredLoad: { [self] in loadIfNeeded() }
+            )
             return
         }
 
@@ -83,6 +93,8 @@ final class AchievementsContainerViewModel {
         detailCache.seed(achievements: items)
         state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
         prefetchEngagement(for: items.map(\.id))
+        ProfileTabLoadProbe.cache(.achievements, count: items.count)
+        ProfileTabLoadProbe.state(.achievements, loaded: hasLoaded, loading: state.isLoading, count: items.count)
     }
 
     func loadIfNeeded() {
@@ -93,6 +105,7 @@ final class AchievementsContainerViewModel {
             }
             return
         }
+        ProfileTabLoadProbe.loadStarted(.achievements)
         loadTask = Task { await performLoad(reset: true) }
     }
 
@@ -127,6 +140,10 @@ final class AchievementsContainerViewModel {
         ExperienceHaptics.play(.selection)
         detailCache.seed(achievement)
         navigationCoordinator.open(.profile(.achievement(achievement.id)))
+    }
+
+    func addAchievement() {
+        navigationCoordinator.openCompose(.achievement)
     }
 
     private func cancelLoadMore(reason: String) {
@@ -187,6 +204,11 @@ final class AchievementsContainerViewModel {
             initialLoadFailureGrace.cancel()
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
             prefetchEngagement(for: items.map(\.id))
+            ProfileTabLoadProbe.loadCompleted(.achievements, count: items.count)
+            ProfileTabLoadProbe.state(.achievements, loaded: hasLoaded, loading: state.isLoading, count: items.count)
+            if viewerIsOwner {
+                OwnerProfileOptimisticStore.shared.syncOwnerAchievementsState(items)
+            }
         } catch {
             guard !Task.isCancelled else { return }
             if items.isEmpty {

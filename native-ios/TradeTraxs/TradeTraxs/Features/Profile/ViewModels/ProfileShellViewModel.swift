@@ -165,6 +165,11 @@ final class ProfileShellViewModel {
         achievements?.applyBootstrap(state)
     }
 
+    /// Keeps ``latestState`` aligned after tab-local authoritative loads (empty counts included).
+    func adoptLatestState(_ state: ProfileState) {
+        latestState = state
+    }
+
     /// Applies the screen bootstrap snapshot to every created section VM.
     func apply(state: ProfileState) {
         latestState = state
@@ -181,11 +186,17 @@ final class ProfileShellViewModel {
 
     func select(_ section: ProfileSection) {
         guard selectedSection != section else {
+            #if DEBUG
+            ProfileTabLoadProbe.selectedTab(section)
+            #endif
             activate(section)
             return
         }
         ExperienceHaptics.play(.selection)
         selectedSection = section
+        #if DEBUG
+        ProfileTabLoadProbe.selectedTab(section)
+        #endif
         activate(section)
     }
 

@@ -10,6 +10,9 @@ struct TradeRoomDiscoveryRow: View {
     let imagePipeline: any ImagePipeline
     let onOpen: () -> Void
     let onJoin: () -> Void
+    var isMuted: Bool = false
+    var onToggleMute: (() -> Void)? = nil
+    var onLeave: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
     @State private var logoImage: Image?
@@ -82,11 +85,38 @@ struct TradeRoomDiscoveryRow: View {
             colors.surfacePrimary,
             in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
         )
+        .contentShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+        .contextMenu {
+            membershipContextMenu
+        }
         .task(id: room.imageReference?.id) {
             await loadLogo()
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tradeRooms.discovery.row.\(room.id.rawValue)")
+    }
+
+    @ViewBuilder
+    private var membershipContextMenu: some View {
+        if onLeave != nil || onToggleMute != nil {
+            Button(action: onOpen) {
+                Label("Open", systemImage: "person.3")
+            }
+            if let onToggleMute {
+                Button(action: onToggleMute) {
+                    Label(
+                        isMuted ? "Unmute" : "Mute",
+                        systemImage: isMuted ? "bell.fill" : "bell.slash"
+                    )
+                }
+            }
+            if let onLeave {
+                Divider()
+                Button(role: .destructive, action: onLeave) {
+                    Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+            }
+        }
     }
 
     @ViewBuilder

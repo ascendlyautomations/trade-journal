@@ -669,7 +669,7 @@ private struct TradeRoomsFilteringExploreRepository: ExploreRepository {
     ) async throws -> [ExploreRoomSuggestion] {
         let filtered: [ExploreRoomSuggestion]
         switch scope {
-        case .all, .yourRooms: filtered = rooms
+        case .all, .yourRooms, .popular: filtered = rooms
         case .official: filtered = rooms.filter(\.isOfficial)
         case .community: filtered = rooms.filter { !$0.isOfficial }
         }

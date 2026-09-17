@@ -5,6 +5,8 @@ import SwiftUI
 struct CreateStoryView: View {
     @State private var viewModel: CreateStoryViewModel
     @State private var photoItem: PhotosPickerItem?
+    @State private var showsPhotoPicker = false
+    @State private var didAutoPresentPhotoPicker = false
     @State private var showsDiscardConfirm = false
 
     @Environment(\.themeColors) private var colors
@@ -74,8 +76,18 @@ struct CreateStoryView: View {
         }
         .experienceProtectedFormDismiss()
         .task { viewModel.loadIfNeeded() }
+        .photosPicker(
+            isPresented: $showsPhotoPicker,
+            selection: $photoItem,
+            matching: .images
+        )
         .onChange(of: photoItem) { _, item in
             Task { await loadPhoto(item) }
+        }
+        .onChange(of: viewModel.phase) { _, phase in
+            if phase == .ready {
+                autoPresentPhotoPickerIfNeeded()
+            }
         }
         .accessibilityIdentifier("createStory.root")
     }
@@ -123,12 +135,15 @@ struct CreateStoryView: View {
             .multilineTextAlignment(.center)
             .padding(.horizontal, ExperienceSpacing.lg)
 
-            PhotosPicker(selection: $photoItem, matching: .images) {
+            Button {
+                showsPhotoPicker = true
+            } label: {
                 CreateComposerAttachmentAction(
                     systemImage: "photo",
                     title: "Choose Photo"
                 )
             }
+            .buttonStyle(.plain)
             .disabled(viewModel.phase == .publishing)
             .accessibilityIdentifier("createStory.media.picker")
 
@@ -144,6 +159,9 @@ struct CreateStoryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, ExperienceSpacing.md)
+        .onAppear {
+            autoPresentPhotoPickerIfNeeded()
+        }
     }
 
     private var publishingContent: some View {
@@ -200,6 +218,14 @@ struct CreateStoryView: View {
                 viewModel.publish()
             }
         }
+    }
+
+    private func autoPresentPhotoPickerIfNeeded() {
+        guard !didAutoPresentPhotoPicker else { return }
+        guard viewModel.phase == .ready else { return }
+        guard viewModel.sourceImage == nil, viewModel.imagePreview == nil else { return }
+        didAutoPresentPhotoPicker = true
+        showsPhotoPicker = true
     }
 
     private func requestDismiss() {

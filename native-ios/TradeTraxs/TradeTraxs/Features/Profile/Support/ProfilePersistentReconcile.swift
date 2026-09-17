@@ -63,7 +63,35 @@ nonisolated enum ProfilePersistentReconcile {
                 incoming: incoming.achievements
             ).items
         }
-        return merged
+        return preservingAbsentSectionLoads(incoming: merged, existing: existing)
+    }
+
+    /// Incoming bootstrap omitted a section that was already resolved (including authoritative empty).
+    static func preservingAbsentSectionLoads(
+        incoming: ProfileState,
+        existing: ProfileState
+    ) -> ProfileState {
+        var next = incoming
+        if existing.didLoadPosts, !incoming.didLoadPosts, incoming.posts.isEmpty {
+            next.didLoadPosts = true
+            next.posts = existing.posts
+        }
+        if existing.didLoadClips, !incoming.didLoadClips, incoming.clips.isEmpty {
+            next.didLoadClips = true
+            next.clips = existing.clips
+        }
+        if existing.didLoadTrades, !incoming.didLoadTrades, incoming.trades.isEmpty {
+            next.didLoadTrades = true
+            next.trades = existing.trades
+            if incoming.tradesNextCursor == nil {
+                next.tradesNextCursor = existing.tradesNextCursor
+            }
+        }
+        if existing.didLoadAchievements, !incoming.didLoadAchievements, incoming.achievements.isEmpty {
+            next.didLoadAchievements = true
+            next.achievements = existing.achievements
+        }
+        return next
     }
 
     private static func reconcileByCreatedAt<T: Identifiable & Equatable>(

@@ -182,14 +182,19 @@ nonisolated struct TradeRoomsHomeBootstrap: Hashable, Sendable {
     var popular: [ExploreRoomSuggestion]
 }
 
-/// All / Official / Community / Your Rooms filter for Trade Rooms discovery.
+/// All / Your Rooms / Official (+ Community for RPC) filter for Trade Rooms discovery.
 nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendable, Identifiable {
     case all
     case official
     case community
     case yourRooms = "your_rooms"
+    /// Home tab — Popular discovery only (uses `all` RPC scope).
+    case popular
 
     var id: String { rawValue }
+
+    /// Trade Rooms home scope chips — fixed order; selection is always by enum case, not index.
+    static let homeToggleOrder: [TradeRoomDiscoveryScope] = [.all, .yourRooms, .official, .popular]
 
     var title: String {
         switch self {
@@ -197,20 +202,47 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
         case .official: return "Official"
         case .community: return "Community"
         case .yourRooms: return "Your Rooms"
+        case .popular: return "Popular"
         }
     }
 
     /// Value sent to `rpc_v1_trade_rooms_home_bootstrap` (`all` | `official` | `community`).
     var rpcValue: String {
         switch self {
-        case .yourRooms: return "all"
+        case .yourRooms, .popular: return "all"
         default: return rawValue
         }
     }
 
-    /// When true, show Suggested + Popular discovery lists (not only membership rows).
+    /// Scope key for bootstrap cache coalescing (Popular shares All network payload).
+    var bootstrapCacheScope: TradeRoomDiscoveryScope {
+        switch self {
+        case .popular: return .all
+        default: return self
+        }
+    }
+
+    var showsSuggestedDiscovery: Bool {
+        switch self {
+        case .all, .official: return true
+        case .yourRooms, .community, .popular: return false
+        }
+    }
+
+    var showsPopularDiscovery: Bool {
+        switch self {
+        case .all, .official, .popular: return true
+        case .yourRooms, .community: return false
+        }
+    }
+
+    var showsYourRoomsDiscovery: Bool {
+        self == .yourRooms
+    }
+
+    /// When true, show Suggested and/or Popular discovery lists (not membership rows).
     var showsDiscoverableLists: Bool {
-        self != .yourRooms
+        showsSuggestedDiscovery || showsPopularDiscovery
     }
 }
 

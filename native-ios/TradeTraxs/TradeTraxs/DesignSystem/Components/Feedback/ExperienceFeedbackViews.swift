@@ -108,35 +108,70 @@ struct ExperienceBanner: View {
     }
 }
 
+/// Compact centered copy — profile section tabs, Messages home, list empty rows.
+struct ExperienceCompactEmptyState: View {
+    var icon: AppIcon? = nil
+    let title: String
+    var message: String? = nil
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
+    var accessibilityIdentifier: String = "emptyState"
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        VStack(spacing: ExperienceSpacing.xs) {
+            if let icon {
+                ExperienceIcon(icon: icon, size: .md, color: colors.tertiaryText)
+            }
+
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.primaryText)
+                .multilineTextAlignment(.center)
+
+            if let message, !message.isEmpty {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(colors.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let actionTitle, let action {
+                Button(actionTitle) {
+                    ExperienceHaptics.play(.selection)
+                    action()
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.accent)
+                .padding(.top, ExperienceSpacing.xxs)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, ExperienceSpacing.md)
+        .accessibilityElement(children: .combine)
+        .experienceAccessibility(label: title, hint: message, identifier: accessibilityIdentifier)
+    }
+}
+
 struct ExperienceEmptyState: View {
     var icon: AppIcon = .empty
     let title: String
     var message: String? = nil
     var actionTitle: String? = nil
     var action: (() -> Void)? = nil
-
-    @Environment(\.themeColors) private var colors
+    var accessibilityIdentifier: String = "emptyState"
 
     var body: some View {
-        ContentUnavailableView {
-            Label {
-                Text(title)
-                    .experienceStyle(.title3, color: colors.primaryText)
-            } icon: {
-                ExperienceIcon(icon: icon, size: .hero, color: colors.tertiaryText)
-            }
-        } description: {
-            if let message {
-                Text(message)
-                    .experienceStyle(.body, color: colors.secondaryText)
-            }
-        } actions: {
-            if let actionTitle, let action {
-                ExperienceButton(title: actionTitle, kind: .primary, action: action)
-                    .frame(maxWidth: 280)
-            }
-        }
-        .experienceAccessibility(label: title, hint: message, identifier: "emptyState")
+        ExperienceCompactEmptyState(
+            icon: icon,
+            title: title,
+            message: message,
+            actionTitle: actionTitle,
+            action: action,
+            accessibilityIdentifier: accessibilityIdentifier
+        )
     }
 }
 

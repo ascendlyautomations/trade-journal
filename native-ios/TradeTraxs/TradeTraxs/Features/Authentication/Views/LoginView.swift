@@ -32,7 +32,7 @@ struct LoginView: View {
                             .onTapGesture { releaseLoginKeyboardFocus() }
 
                         modeSwitchRow
-                            .padding(.bottom, ExperienceSpacing.md)
+                            .padding(.bottom, viewModel.mode == .signUp ? ExperienceSpacing.sm : ExperienceSpacing.md)
 
                         social
                             .padding(.bottom, ExperienceSpacing.sm)
@@ -105,6 +105,8 @@ struct LoginView: View {
         }
         .onChange(of: focusedField) { _, newValue in
             switch newValue {
+            case .name:
+                LoginFocusProbe.focused(field: "name")
             case .email:
                 LoginFocusProbe.focused(field: "email")
             case .password:
@@ -178,6 +180,19 @@ struct LoginView: View {
 
     private var credentials: some View {
         VStack(spacing: ExperienceSpacing.sm) {
+            if viewModel.mode == .signUp {
+                AuthTextField(
+                    title: "Name",
+                    text: $viewModel.fullName,
+                    kind: .name,
+                    textContentType: .name,
+                    submitLabel: .next,
+                    onSubmit: { focusedField = .email },
+                    loginField: .name,
+                    loginFocusedField: $focusedField
+                )
+            }
+
             AuthTextField(
                 title: "Email",
                 text: $viewModel.email,
@@ -190,7 +205,7 @@ struct LoginView: View {
             )
 
             AuthTextField(
-                title: "Password",
+                title: viewModel.mode == .signUp ? "Create Password" : "Password",
                 text: $viewModel.password,
                 kind: viewModel.mode == .signUp ? .newPassword : .password,
                 isSecureVisible: $viewModel.isSecurePasswordVisible,
@@ -205,6 +220,7 @@ struct LoginView: View {
 
             authFeedback
         }
+        .padding(.top, viewModel.mode == .signUp ? ExperienceSpacing.xxs : 0)
     }
 
     @ViewBuilder

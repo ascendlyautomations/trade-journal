@@ -256,6 +256,8 @@ struct ProfileView: View {
                     vaultStore: appEnvironment.data.vaultStore,
                     profilePin: profilePin
                 )
+            } else {
+                sectionLoadingPlaceholder(shell: shell, section: .trades)
             }
         case .posts:
             if let viewModel = shell.posts {
@@ -266,6 +268,8 @@ struct ProfileView: View {
                     vaultStore: appEnvironment.data.vaultStore,
                     profilePin: profilePin
                 )
+            } else {
+                sectionLoadingPlaceholder(shell: shell, section: .posts)
             }
         case .clips:
             if let viewModel = shell.clips {
@@ -276,10 +280,14 @@ struct ProfileView: View {
                     engagementStore: appEnvironment.data.engagementStore,
                     vaultStore: appEnvironment.data.vaultStore
                 )
+            } else {
+                sectionLoadingPlaceholder(shell: shell, section: .clips)
             }
         case .stats:
             if let viewModel = shell.stats {
                 StatsContainerView(viewModel: viewModel)
+            } else {
+                sectionLoadingPlaceholder(shell: shell, section: .stats)
             }
         case .achievements:
             if let viewModel = shell.achievements {
@@ -290,7 +298,25 @@ struct ProfileView: View {
                     vaultStore: appEnvironment.data.vaultStore,
                     profilePin: profilePin
                 )
+            } else {
+                sectionLoadingPlaceholder(shell: shell, section: .achievements)
             }
+        }
+    }
+
+    private func sectionLoadingPlaceholder(
+        shell: ProfileShellViewModel,
+        section: ProfileSection
+    ) -> some View {
+        ProfileSectionContainerChrome(
+            section: section,
+            state: .loading,
+            onRetry: { Task { await screen.refresh() } }
+        ) {
+            EmptyView()
+        }
+        .onAppear {
+            shell.activateSelected()
         }
     }
 

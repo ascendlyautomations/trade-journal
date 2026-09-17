@@ -14,6 +14,9 @@ struct PostsContainerView: View {
         ProfileSectionContainerChrome(
             section: .posts,
             state: viewModel.state,
+            emptyMessage: viewModel.isOwner ? nil : ProfileSection.posts.emptyMessage,
+            emptyActionTitle: viewModel.isOwner ? "Add Post" : nil,
+            emptyAction: viewModel.isOwner ? { viewModel.addPost() } : nil,
             onRetry: { Task { await viewModel.refresh() } }
         ) {
             LazyVStack(spacing: ExperienceSpacing.sm) {

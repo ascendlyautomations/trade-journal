@@ -64,9 +64,19 @@ final class PostsContainerViewModel {
         )
         let beforeCount = items.count
         guard snapshot.didLoadPosts || !snapshot.posts.isEmpty else {
-            if (snapshot.phase == .loading || snapshot.didBootstrap), items.isEmpty {
-                state = .loading
-            }
+            let plan = ProfileSectionInitialLoad.planWhenBootstrapOmitsSectionPayload(
+                snapshot: snapshot,
+                hasLoaded: hasLoaded,
+                itemsEmpty: items.isEmpty,
+                itemCount: items.count,
+                currentState: state,
+                awaitingScreenBootstrap: awaitingScreenBootstrap
+            )
+            ProfileSectionInitialLoad.applyBootstrapMissingSectionPlan(
+                plan,
+                setState: { [self] next in state = next },
+                kickDeferredLoad: { [self] in loadIfNeeded() }
+            )
             return
         }
 
@@ -120,6 +130,8 @@ final class PostsContainerViewModel {
         detailCache.seed(posts: items)
         state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
         prefetchEngagement(for: items.map(\.id))
+        ProfileTabLoadProbe.cache(.posts, count: items.count)
+        ProfileTabLoadProbe.state(.posts, loaded: hasLoaded, loading: state.isLoading, count: items.count)
     }
 
     /// Owner delete — drop from grid immediately.
@@ -168,6 +180,7 @@ final class PostsContainerViewModel {
         }
         syncGeneration &+= 1
         let generation = syncGeneration
+        ProfileTabLoadProbe.loadStarted(.posts)
         loadTask = Task { await performLoad(generation: generation) }
     }
 
@@ -197,6 +210,10 @@ final class PostsContainerViewModel {
         ExperienceHaptics.play(.selection)
         detailCache.seed(post)
         navigationCoordinator.open(.profile(.post(post.id)))
+    }
+
+    func addPost() {
+        navigationCoordinator.openCompose(.post)
     }
 
     private func performLoad(generation: UInt64) async {
@@ -288,6 +305,8 @@ final class PostsContainerViewModel {
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
             prefetchEngagement(for: items.map(\.id))
             OwnerProfileOptimisticStore.shared.syncOwnerPostsState(items)
+            ProfileTabLoadProbe.loadCompleted(.posts, count: items.count)
+            ProfileTabLoadProbe.state(.posts, loaded: hasLoaded, loading: state.isLoading, count: items.count)
         } catch {
             guard !Task.isCancelled else { return }
             guard generation == syncGeneration else {

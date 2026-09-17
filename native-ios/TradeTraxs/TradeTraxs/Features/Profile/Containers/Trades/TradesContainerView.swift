@@ -16,7 +16,9 @@ struct TradesContainerView: View {
             section: .trades,
             state: viewModel.state,
             emptyTitle: viewModel.emptyTitle,
-            emptyMessage: viewModel.emptyMessage,
+            emptyMessage: viewModel.filter == .all && viewModel.showsOwnerActions
+                ? nil
+                : viewModel.emptyMessage,
             emptyActionTitle: viewModel.showsOwnerActions && viewModel.filter == .all
                 ? "Add Trade"
                 : nil,

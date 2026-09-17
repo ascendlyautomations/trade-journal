@@ -134,6 +134,7 @@ final class ProfileScreenViewModel {
             )
         }
         shellViewModel?.apply(state: state)
+        shellViewModel?.activateSelected()
     }
 
     func reconcileOwnershipIfNeeded() {
@@ -390,11 +391,13 @@ final class ProfileScreenViewModel {
     /// Keeps ``ProfileState.posts`` aligned with the section VM after authoritative refresh.
     func syncPostsFromSection(_ posts: [Post]) {
         guard isOwnerTarget else { return }
-        guard state.posts != posts else { return }
         var next = state
         next.posts = posts
+        next.didLoadPosts = true
         next.lastUpdated = Date()
+        guard next != state else { return }
         state = next
+        shellViewModel?.adoptLatestState(next)
     }
 
     private func preferredPostsBase() -> [Post] {
@@ -412,21 +415,36 @@ final class ProfileScreenViewModel {
     /// Keeps ``ProfileState.clips`` aligned with the section VM after authoritative refresh.
     func syncClipsFromSection(_ clips: [Reel]) {
         guard isOwnerTarget else { return }
-        guard state.clips != clips else { return }
         var next = state
         next.clips = clips
+        next.didLoadClips = true
         next.lastUpdated = Date()
+        guard next != state else { return }
         state = next
+        shellViewModel?.adoptLatestState(next)
     }
 
     /// Keeps ``ProfileState.trades`` aligned with the section VM after journal create/update.
     func syncTradesFromSection(_ trades: [Trade]) {
         guard isOwnerTarget else { return }
-        guard state.trades != trades else { return }
         var next = state
         next.trades = trades
+        next.didLoadTrades = true
         next.lastUpdated = Date()
+        guard next != state else { return }
         state = next
+        shellViewModel?.adoptLatestState(next)
+    }
+
+    func syncAchievementsFromSection(_ achievements: [Achievement]) {
+        guard isOwnerTarget else { return }
+        var next = state
+        next.achievements = achievements
+        next.didLoadAchievements = true
+        next.lastUpdated = Date()
+        guard next != state else { return }
+        state = next
+        shellViewModel?.adoptLatestState(next)
     }
 
     /// Authoritative journal trade — update Profile state + trades section without stale bootstrap overwrite.
@@ -498,11 +516,18 @@ final class ProfileScreenViewModel {
     }
 
     private func syncSectionSnapshotsIntoState() {
-        guard let postsVM = shellViewModel?.posts, postsVM.hasAuthoritativePayload else { return }
-        guard state.posts != postsVM.items else { return }
-        var next = state
-        next.posts = postsVM.items
-        state = next
+        if let postsVM = shellViewModel?.posts, postsVM.hasAuthoritativePayload {
+            syncPostsFromSection(postsVM.items)
+        }
+        if let clipsVM = shellViewModel?.clips, clipsVM.hasAuthoritativePayload {
+            syncClipsFromSection(clipsVM.items)
+        }
+        if let tradesVM = shellViewModel?.trades, tradesVM.hasAuthoritativePayload {
+            syncTradesFromSection(tradesVM.items)
+        }
+        if let achievementsVM = shellViewModel?.achievements, achievementsVM.hasAuthoritativePayload {
+            syncAchievementsFromSection(achievementsVM.items)
+        }
     }
 
     /// Re-merge owner overlays when returning to Profile without a full bootstrap republish.
@@ -826,7 +851,10 @@ final class ProfileScreenViewModel {
     }
 
     private func publish(_ next: ProfileState, source: PublishSource) {
-        var next = next
+        var next = ProfilePersistentReconcile.preservingAbsentSectionLoads(
+            incoming: next,
+            existing: state
+        )
         if isOwnerTarget {
             next = OwnerProfileOptimisticStore.shared.merging(into: next)
         }

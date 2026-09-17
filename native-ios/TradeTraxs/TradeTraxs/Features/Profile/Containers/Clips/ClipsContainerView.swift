@@ -14,6 +14,9 @@ struct ClipsContainerView: View {
         ProfileSectionContainerChrome(
             section: .clips,
             state: viewModel.state,
+            emptyMessage: viewModel.isOwner ? nil : ProfileSection.clips.emptyMessage,
+            emptyActionTitle: viewModel.isOwner ? "Add Clip" : nil,
+            emptyAction: viewModel.isOwner ? { viewModel.addClip() } : nil,
             onRetry: { Task { await viewModel.refresh() } }
         ) {
             LazyVStack(spacing: ExperienceSpacing.sm) {

@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Shared focus identity for Login email/password (single ``FocusState`` owner in ``LoginView``).
 enum AuthLoginField: Hashable {
+    case name
     case email
     case password
 }
@@ -9,6 +10,7 @@ enum AuthLoginField: Hashable {
 /// Native auth field with autofill + password-manager support.
 struct AuthTextField: View {
     enum Kind {
+        case name
         case email
         case password
         case newPassword
@@ -90,8 +92,8 @@ struct AuthTextField: View {
                 TextField("", text: $text)
                     .textContentType(resolvedContentType)
                     .keyboardType(kind == .email ? .emailAddress : .default)
-                    .textInputAutocapitalization(kind == .email ? .never : .sentences)
-                    .autocorrectionDisabled(kind == .email)
+                    .textInputAutocapitalization(kind == .email ? .never : .words)
+                    .autocorrectionDisabled(kind == .email || kind == .name)
             }
         }
         .id(inputFieldIdentity)
@@ -117,7 +119,7 @@ struct AuthTextField: View {
 
     private var showsSecureField: Bool {
         switch kind {
-        case .email:
+        case .name, .email:
             return false
         case .password, .newPassword:
             return !(isSecureVisible?.wrappedValue ?? false)
@@ -127,6 +129,7 @@ struct AuthTextField: View {
     private var resolvedContentType: UITextContentType? {
         if let textContentType { return textContentType }
         switch kind {
+        case .name: return .name
         case .email: return .username
         case .password: return .password
         case .newPassword: return .newPassword
@@ -137,6 +140,8 @@ struct AuthTextField: View {
     private var inputFieldIdentity: String {
         if let loginField {
             switch loginField {
+            case .name:
+                return "auth.login.name"
             case .email:
                 return "auth.login.email"
             case .password:
@@ -165,6 +170,7 @@ private struct AuthTextFieldFocusModifier: ViewModifier {
 extension AuthLoginField {
     fileprivate var probeName: String {
         switch self {
+        case .name: return "name"
         case .email: return "email"
         case .password: return "password"
         }

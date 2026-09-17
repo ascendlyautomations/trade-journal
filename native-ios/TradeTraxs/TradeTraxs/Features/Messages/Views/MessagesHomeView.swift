@@ -58,13 +58,15 @@ struct MessagesHomeView: View {
                     )
                 }
             case .loaded where viewModel.showsEmpty:
-                ExperienceEmptyState(
+                ExperienceCompactEmptyState(
                     icon: .messages,
                     title: "No conversations yet",
                     message: "Start a conversation with another trader.",
                     actionTitle: "Start a Conversation",
-                    action: { viewModel.presentNewChat() }
+                    action: { viewModel.presentNewChat() },
+                    accessibilityIdentifier: "messages.emptyState"
                 )
+                .experienceScreenContentAreaFill(alignment: .center)
             case .loaded:
                 inboxList
             }
@@ -282,6 +284,8 @@ struct MessagesHomeView: View {
             viewModel.openRoom(item)
         } label: {
             TradeRoomInboxRowView(item: item, imagePipeline: imagePipeline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .listRowBackground(colors.backgroundSecondary)

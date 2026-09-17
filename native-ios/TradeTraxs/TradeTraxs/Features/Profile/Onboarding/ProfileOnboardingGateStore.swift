@@ -94,6 +94,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
 
     func markCompleted(with profile: Profile, snapshot: ProfileOnboardingSnapshot) {
         self.snapshot = snapshot
+        OAuthProfileOnboardingNameStore.discard(for: UserID(snapshot.profileID.rawValue))
         stopRealtime()
         profileStore.applyBootstrapResult(profile: profile, stats: profileStore.stats)
         SessionBootstrapStore.shared.applyOnboardingCompletion(

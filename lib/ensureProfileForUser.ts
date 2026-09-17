@@ -157,7 +157,7 @@ export async function ensureProfileForUser(
     id: userId,
     username: null,
     name: displayName,
-    is_pro: false,
+    is_pro: true,
     subscription_status: "inactive",
     created_at: new Date().toISOString(),
     referral_code: generateProfileReferralCode(),

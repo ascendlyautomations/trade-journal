@@ -1,5 +1,19 @@
 import SwiftUI
 
+private struct ProfileSectionPlaceholderFillModifier: ViewModifier {
+    let state: ProfileSectionLoadState
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch state {
+        case .loaded:
+            content
+        case .idle, .loading, .empty, .failed:
+            content.experienceScrollEmbeddedSectionFill()
+        }
+    }
+}
+
 /// Shared chrome for section containers — loading / empty / error / content slot.
 struct ProfileSectionContainerChrome<Content: View>: View {
     let section: ProfileSection
@@ -19,15 +33,13 @@ struct ProfileSectionContainerChrome<Content: View>: View {
             case .idle, .loading:
                 loadingBody
             case .empty:
-                ExperienceEmptyState(
+                ProfileSectionEmptyState.profileSection(
                     icon: emptyIcon(for: section),
                     title: emptyTitle ?? section.emptyTitle,
                     message: emptyMessage ?? section.emptyMessage,
                     actionTitle: emptyActionTitle,
                     action: emptyAction
                 )
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, ExperienceSpacing.xl)
             case .failed(let message):
                 ExperienceErrorState(
                     title: "Couldn’t load \(section.title.lowercased())",
@@ -41,6 +53,7 @@ struct ProfileSectionContainerChrome<Content: View>: View {
                     .frame(maxWidth: .infinity, minHeight: 220, alignment: .top)
             }
         }
+        .modifier(ProfileSectionPlaceholderFillModifier(state: state))
         .frame(maxWidth: .infinity)
         .experiencePadding(.horizontal, .lg)
         .padding(.bottom, ExperienceSpacing.xxl)

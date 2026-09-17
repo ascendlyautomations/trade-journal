@@ -103,7 +103,7 @@ struct CSVImportView: View {
             }
 
             Section {
-                Text("Tradovate, TradeZella, NinjaTrader-style, and generic CSV exports are supported.")
+                Text("Supports CSV exports from Tradovate and TradeZella, plus NinjaTrader-style and generic CSV formats.")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
         }

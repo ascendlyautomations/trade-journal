@@ -18,10 +18,10 @@ nonisolated struct EmailAuthenticationProvider: AuthenticationProviding {
         return try await backend.signIn(email: email, password: password)
     }
 
-    func signUp(email: String, password: String) async throws -> AuthenticationSession {
+    func signUp(email: String, password: String, fullName: String?) async throws -> AuthenticationSession {
         if let error = validator.validateSignIn(email: email, password: password) { throw error }
         if let passwordError = validator.validatePassword(password) { throw passwordError }
-        return try await backend.signUp(email: email, password: password)
+        return try await backend.signUp(email: email, password: password, fullName: fullName)
     }
 
     func signOut(session: AuthenticationSession) async throws {

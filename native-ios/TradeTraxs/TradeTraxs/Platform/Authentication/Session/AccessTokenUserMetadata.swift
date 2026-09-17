@@ -57,7 +57,7 @@ extension OAuthFirstLoginHint {
         if let explicit, ProfileDisplayNamePolicy.normalized(explicit.fullName) != nil {
             return explicit
         }
-        if session.provider == .google || session.provider == .apple {
+        if session.provider == .google || session.provider == .apple || session.provider == .email {
             let fromToken = AccessTokenUserMetadata.displayName(from: session.accessToken)
             let hint = normalized(fullName: fromToken, email: session.email)
             if hint.hasContent { return hint }

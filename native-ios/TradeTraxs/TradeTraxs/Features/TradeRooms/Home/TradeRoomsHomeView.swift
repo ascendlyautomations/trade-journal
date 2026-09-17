@@ -190,6 +190,7 @@ struct TradeRoomsHomeView: View {
                         viewModel.openRoom(item)
                     } label: {
                         TradeRoomCardView(item: item, imagePipeline: imagePipeline)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
@@ -221,7 +222,8 @@ struct TradeRoomsHomeView: View {
                 }
             }
             .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.vertical, ExperienceSpacing.sm)
+            .padding(.top, ExperienceSpacing.xxs)
+            .padding(.bottom, ExperienceSpacing.sm)
             .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.searchText)
         }
         .scrollContentBackground(.hidden)
@@ -230,29 +232,28 @@ struct TradeRoomsHomeView: View {
 
     @ViewBuilder
     private var discoverySection: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             TradeRoomDiscoveryScopeToggle(
                 scope: viewModel.discoveryScope,
                 onSelect: { viewModel.selectDiscoveryScope($0) }
             )
+            .padding(.bottom, ExperienceSpacing.xxs)
 
             if viewModel.discoveryPhase == .loading,
-               viewModel.yourRooms.isEmpty,
                viewModel.discoveryScope.showsDiscoverableLists,
                viewModel.suggestedDiscoverableRooms.isEmpty,
                viewModel.popularDiscoverableRooms.isEmpty
             {
                 discoverySkeleton
             } else if viewModel.discoveryPhase == .loading,
-                      !viewModel.discoveryScope.showsDiscoverableLists,
+                      viewModel.discoveryScope.showsYourRoomsDiscovery,
                       viewModel.yourRooms.isEmpty
             {
                 discoverySkeleton
             } else if let message = viewModel.discoveryErrorMessage,
                       viewModel.discoveryScope.showsDiscoverableLists,
                       viewModel.suggestedDiscoverableRooms.isEmpty,
-                      viewModel.popularDiscoverableRooms.isEmpty,
-                      viewModel.yourRooms.isEmpty
+                      viewModel.popularDiscoverableRooms.isEmpty
             {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                     Text(message)
@@ -264,13 +265,15 @@ struct TradeRoomsHomeView: View {
                 }
                 .padding(.vertical, ExperienceSpacing.xs)
             } else {
-                if viewModel.discoveryScope.showsDiscoverableLists {
+                if viewModel.discoveryScope.showsSuggestedDiscovery {
                     discoveryRoomSection(
                         title: TradeRoomDiscoveryMode.suggested.title,
                         rooms: viewModel.suggestedDiscoverableRooms,
                         emptyMessage: TradeRoomDiscoveryMode.suggested.emptyMessage
                     )
+                }
 
+                if viewModel.discoveryScope.showsPopularDiscovery {
                     discoveryRoomSection(
                         title: TradeRoomDiscoveryMode.popular.title,
                         rooms: viewModel.popularDiscoverableRooms,
@@ -278,9 +281,9 @@ struct TradeRoomsHomeView: View {
                     )
                 }
 
-                yourRoomsDiscoverySection(
-                    showsSectionHeader: viewModel.discoveryScope.showsDiscoverableLists
-                )
+                if viewModel.discoveryScope.showsYourRoomsDiscovery {
+                    yourRoomsDiscoverySection(showsSectionHeader: false)
+                }
             }
         }
         .padding(.bottom, ExperienceSpacing.sm)
@@ -342,14 +345,24 @@ struct TradeRoomsHomeView: View {
     }
 
     private func discoveryRow(for room: ExploreRoomSuggestion, isYourRoomsContext: Bool) -> some View {
-        TradeRoomDiscoveryRow(
+        let showsMembershipActions = isYourRoomsContext
+            && room.viewerIsMember
+            && !room.viewerIsOwner
+        return TradeRoomDiscoveryRow(
             room: room,
             joinState: viewModel.joinState(for: room.id),
             isYourRoomsContext: isYourRoomsContext,
             isOwner: viewModel.isViewerOwner(of: room),
             imagePipeline: imagePipeline,
             onOpen: { viewModel.openDiscoveryRoom(room) },
-            onJoin: { Task { await viewModel.joinDiscoveryRoom(room) } }
+            onJoin: { Task { await viewModel.joinDiscoveryRoom(room) } },
+            isMuted: viewModel.isRoomMuted(room.id),
+            onToggleMute: showsMembershipActions
+                ? { viewModel.toggleMute(roomID: room.id) }
+                : nil,
+            onLeave: showsMembershipActions
+                ? { viewModel.requestLeaveRoom(id: room.id) }
+                : nil
         )
     }
 

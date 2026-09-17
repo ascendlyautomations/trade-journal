@@ -34,13 +34,33 @@ private struct ExperienceScrollEdgeChromeModifier: ViewModifier {
 
 /// Screen fill that reaches physical edges without moving interactive content.
 struct ExperienceScreenBackgroundModifier: ViewModifier {
+    var fillsContentArea: Bool
     @Environment(\.themeColors) private var colors
 
     func body(content: Content) -> some View {
-        content.background {
+        Group {
+            if fillsContentArea {
+                content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            } else {
+                content.frame(maxWidth: .infinity, alignment: .top)
+            }
+        }
+        .background {
             colors.primaryBackground
                 .ignoresSafeArea()
         }
+    }
+}
+
+/// Minimum body fill for compact empty/loading states embedded in a parent ``ScrollView`` (Profile tabs).
+struct ExperienceScrollEmbeddedSectionFillModifier: ViewModifier {
+    var minHeight: CGFloat
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .top)
+            .background(colors.primaryBackground)
     }
 }
 
@@ -52,8 +72,17 @@ extension View {
 
     /// Page fill behind NavigationStack content — background ignores safe areas;
     /// the content itself stays system-inset.
-    func experienceScreenBackground() -> some View {
-        modifier(ExperienceScreenBackgroundModifier())
+    func experienceScreenBackground(fillsContentArea: Bool = true) -> some View {
+        modifier(ExperienceScreenBackgroundModifier(fillsContentArea: fillsContentArea))
+    }
+
+    /// Expands placeholder content to the navigation content area (same treatment as Messages empty).
+    func experienceScreenContentAreaFill(alignment: Alignment = .top) -> some View {
+        frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+    }
+
+    func experienceScrollEmbeddedSectionFill(minHeight: CGFloat = 440) -> some View {
+        modifier(ExperienceScrollEmbeddedSectionFillModifier(minHeight: minHeight))
     }
 
     /// Opaque Feed navigation chrome while the vertical Clips pager scrolls.

@@ -14,6 +14,9 @@ struct AchievementsContainerView: View {
         ProfileSectionContainerChrome(
             section: .achievements,
             state: viewModel.state,
+            emptyMessage: viewModel.isOwner ? nil : ProfileSection.achievements.emptyMessage,
+            emptyActionTitle: viewModel.isOwner ? "Add Achievement" : nil,
+            emptyAction: viewModel.isOwner ? { viewModel.addAchievement() } : nil,
             onRetry: { Task { await viewModel.refresh() } }
         ) {
             LazyVStack(spacing: ExperienceSpacing.sm) {

@@ -49,6 +49,7 @@ final class RoomConversationViewModel {
     var pendingDeleteMessage: ConversationBubbleItem?
     var showsDeleteMessageConfirmation = false
     var deleteErrorMessage: String?
+    var showsLeaveRoomConfirmation = false
 
     /// Prefer resolved UUID after slug deep-link lookup.
     private var resolvedRoomID: RoomID { room?.id ?? roomID }
@@ -197,7 +198,8 @@ final class RoomConversationViewModel {
     }
 
     var isMember: Bool {
-        membership != nil
+        if membership != nil { return true }
+        return inboxStore.rooms.contains { $0.id == resolvedRoomID }
     }
 
     /// Approval-policy rooms hide member-only content until membership is granted.
@@ -237,6 +239,14 @@ final class RoomConversationViewModel {
     var canShowComposer: Bool {
         guard selectedChannel != nil else { return false }
         return isOwner || isMember
+    }
+
+    /// Composer stays visible for empty threads and while channel metadata is resolving — independent of header chrome.
+    var shouldShowMessageComposer: Bool {
+        guard canViewMessages, !showsJoinPreviewPlaceholder else { return false }
+        guard canShowComposer else { return false }
+        if phase == .loaded || showsEmpty || !messages.isEmpty { return true }
+        return room != nil && selectedChannel != nil
     }
 
     /// Web `canPostInRoom` — owner bypasses channel chat lock.
@@ -778,6 +788,50 @@ final class RoomConversationViewModel {
     func toggleMute() {
         ExperienceHaptics.play(.selection)
         inboxStore.toggleMute(roomID: roomID)
+    }
+
+    func requestLeaveRoom() {
+        guard isMember, !isOwner else { return }
+        ExperienceHaptics.play(.warning)
+        showsLeaveRoomConfirmation = true
+    }
+
+    func cancelLeaveRoom() {
+        showsLeaveRoomConfirmation = false
+    }
+
+    func confirmLeaveRoom() async {
+        showsLeaveRoomConfirmation = false
+        guard let viewerID, isMember, !isOwner else { return }
+        if ExploreModeSupport.isActive {
+            DemoModeAuthGatePresenter.shared.requireAuthentication()
+            return
+        }
+        isJoining = true
+        defer { isJoining = false }
+        ExperienceHaptics.play(.warning)
+        let targetID = resolvedRoomID
+        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || targetID.rawValue.hasPrefix("dev-") {
+            membership = nil
+            joinRequestState = nil
+            inboxStore.removeRoom(id: targetID)
+            ExperienceHaptics.play(.success)
+            navigationCoordinator?.pop()
+            return
+        }
+        do {
+            try await rooms.leave(roomID: targetID, profileID: viewerID)
+            membership = nil
+            joinRequestState = nil
+            inboxStore.removeRoom(id: targetID)
+            SessionMemberRoomsStore.shared.invalidate(viewerID: viewerID)
+            TradeRoomJoinActionCoordinator.shared.clearMutation(for: targetID)
+            await reconcileMemberCount(source: .mutation)
+            ExperienceHaptics.play(.success)
+            navigationCoordinator?.pop()
+        } catch {
+            ExperienceHaptics.play(.error)
+        }
     }
 
     func toggleMembership() async {

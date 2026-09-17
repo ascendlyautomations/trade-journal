@@ -11,6 +11,7 @@ final class LoginViewModel {
     }
 
     var mode: Mode
+    var fullName: String = ""
     var email: String = ""
     var password: String = ""
     var isSecurePasswordVisible: Bool = false
@@ -77,7 +78,12 @@ final class LoginViewModel {
                     smartSignUpIfNewEmail: true
                 )
             case .signUp:
-                try await authenticationCoordinator.signUp(email: trimmedEmail, password: password)
+                let normalizedName = ProfileDisplayNamePolicy.normalized(fullName)
+                try await authenticationCoordinator.signUp(
+                    email: trimmedEmail,
+                    password: password,
+                    fullName: normalizedName
+                )
             }
         }
     }
@@ -180,6 +186,9 @@ final class LoginViewModel {
     }
 
     private func validationMessage() -> String? {
+        if mode == .signUp, let nameMessage = ProfileDisplayNamePolicy.validateRequired(fullName) {
+            return nameMessage
+        }
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedEmail.isEmpty {
             return "Enter your email address."
@@ -206,6 +215,10 @@ final class LoginViewModel {
             if case .emailConfirmationRequired(let email) = auth {
                 errorMessage = nil
                 pendingConfirmationEmail = email
+                OAuthProfileOnboardingNameStore.stageManualSignupPendingEmail(
+                    fullName: fullName,
+                    email: email
+                )
                 informationalMessage =
                     "We sent a confirmation link to \(email). Confirm your email, then sign in."
                 mode = .signIn
