@@ -427,12 +427,14 @@ enum CompositionRoot {
                 && authentication.manager.state.isSessionReady
                 && navigation.store.sessionPhase == .authenticated
         }
+        #if DEBUG
         SessionBootstrapAuthDebug.snapshotProvider = {
             let phase = navigation.store.sessionPhase
             let tokenPresent = sessionManager.accessToken?.isEmpty == false
             let generation = authentication.manager.restorationGeneration
             return (String(describing: phase), tokenPresent, generation)
         }
+        #endif
         AppIconBadgeSync.configure(
             client: AppIconBadgeClient(transport: transport),
             canFetchAuthenticatedBadge: {
