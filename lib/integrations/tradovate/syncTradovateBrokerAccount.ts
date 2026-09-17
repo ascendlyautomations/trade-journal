@@ -515,12 +515,7 @@ export async function syncTradovateBrokerAccount(
         failureCategory = "token_refresh_failure"
       } else if (err.code === "provider_unavailable") {
         message = "Tradovate is temporarily unavailable."
-        failureCategory =
-          failureStage === "order_list"
-            ? "order_retrieval_failure"
-            : failureStage === "fill_list"
-              ? "fill_retrieval_failure"
-              : "provider_api_failure"
+        failureCategory = failureCategoryForProviderUnavailable(failureStage)
       } else if (err.code === "unauthorized" || err.code === "not_connected") {
         failureCategory = "token_refresh_failure"
         message =
