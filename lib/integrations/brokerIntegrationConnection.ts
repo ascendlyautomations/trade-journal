@@ -147,6 +147,7 @@ export async function loadSafeBrokerIntegration(
       provider_display_name: null,
       connection_label: null,
       api_environment: null,
+      broker_login_username: null,
     }
   }
   return first
