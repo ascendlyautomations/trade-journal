@@ -26,13 +26,13 @@ struct SharedContentShareTarget: Identifiable, Equatable, Sendable {
         } ?? "A trader"
 
         switch entry {
-        case .trade(let item, let trade):
+        case .trade(let item, let summary):
             return SharedContentShareTarget(
                 reference: .feedPost(PostID(item.id)),
                 contentLink: .post(PostID(item.id)),
                 shareTitle: "Share Trade",
                 externalShareText: "\(handle)'s trade on TradeTraxs",
-                roomTradeID: trade.id
+                roomTradeID: summary.id
             )
         case .post(let item, _):
             return SharedContentShareTarget(

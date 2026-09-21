@@ -15,11 +15,12 @@ final class TradeHistoryViewModel {
     private let trades: any TradeRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
+    private let tradeDetailRepository: any TradeDetailRepository
     private let navigationCoordinator: NavigationCoordinator
     private let rpc: (any RPCClient)?
 
     private(set) var phase: Phase = .idle
-    private(set) var items: [Trade] = []
+    private(set) var items: [TradeOwnerJournalSummary] = []
     private(set) var nextCursor: String?
     private(set) var accounts: [TradingAccount] = []
     private(set) var accountNames: [TradingAccountID: String] = [:]
@@ -30,7 +31,7 @@ final class TradeHistoryViewModel {
     var filters = TradeHistoryFilters()
     var draftFilters = TradeHistoryFilters()
     var showsFilterSheet = false
-    var pendingDelete: Trade?
+    var pendingDelete: TradeOwnerJournalSummary?
     var sharePayload: SharePayload?
 
     /// Local-only constraints seeded from Dashboard chart taps (not server filter fields).
@@ -60,18 +61,25 @@ final class TradeHistoryViewModel {
         trades: any TradeRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
+        tradeDetailRepository: any TradeDetailRepository,
         navigationCoordinator: NavigationCoordinator,
         rpc: (any RPCClient)? = nil
     ) {
         self.trades = trades
         self.session = session
         self.detailCache = detailCache
+        self.tradeDetailRepository = tradeDetailRepository
         self.navigationCoordinator = navigationCoordinator
         self.rpc = rpc
     }
 
     var summary: TradeHistorySummary {
-        TradeHistorySummary.from(trades: items)
+        TradeHistorySummary.from(summaries: items)
+    }
+
+    private var usesJournalSummaryV2: Bool {
+        BackendV2FeatureFlags.isEnabled(.tradeJournalSummaryV2)
+            && BackendV2FeatureFlags.isEnabled(.tradesList)
     }
 
     var activeChips: [TradeHistoryFilterChip] {
@@ -264,7 +272,8 @@ final class TradeHistoryViewModel {
         lastQueryKey = nil
     }
 
-    private func matchesLocalBrowseConstraints(_ trade: Trade) -> Bool {
+    private func matchesLocalBrowseConstraints(_ item: TradeOwnerJournalSummary) -> Bool {
+        let trade = TradeSummaryMapper.listMatchTrade(from: item)
         if let weekday = localWeekday {
             let value = Calendar.current.component(.weekday, from: trade.entryAt)
             if value != weekday { return false }
@@ -297,7 +306,8 @@ final class TradeHistoryViewModel {
             TradeHistoryLoadProbe.markRequest()
             #endif
 
-            if !hasLocalBrowseConstraints,
+            if !usesJournalSummaryV2,
+               !hasLocalBrowseConstraints,
                OwnerTradeCacheCompleteness.canPaginateFromOwnerCache(
                    metadata: SessionOwnerTradesStore.shared.snapshotMetadata(for: profileID)
                ),
@@ -309,7 +319,7 @@ final class TradeHistoryViewModel {
                     limit: items.count + 40,
                     context: matchContext
                 )
-                let newItems = Array(seeded.items.dropFirst(items.count))
+                let newItems = Array(seeded.items.dropFirst(items.count).map(TradeSummaryMapper.ownerJournal(fromListTrade:)))
                 if !newItems.isEmpty {
                     appendUnique(newItems)
                     nextCursor = seeded.nextCursor
@@ -332,11 +342,11 @@ final class TradeHistoryViewModel {
                    cursor: cursor
                )
             {
-                appendUnique(applied.trades.filter(matchesLocalBrowseConstraints))
+                appendUnique(applied.summaries.filter(matchesLocalBrowseConstraints))
                 nextCursor = applied.nextCursor
                 paginationErrorMessage = nil
                 #if DEBUG
-                TradeHistoryLoadProbe.markPageSize(applied.trades.count)
+                TradeHistoryLoadProbe.markPageSize(applied.summaries.count)
                 #endif
                 return
             }
@@ -346,7 +356,7 @@ final class TradeHistoryViewModel {
                 query: currentQuery,
                 page: PageRequest(cursor: cursor, limit: 40)
             )
-            appendUnique(page.items.filter(matchesLocalBrowseConstraints))
+            appendUnique(page.items.map(TradeSummaryMapper.ownerJournal(fromListTrade:)).filter(matchesLocalBrowseConstraints))
             nextCursor = page.nextCursor
             paginationErrorMessage = nil
             #if DEBUG
@@ -357,41 +367,55 @@ final class TradeHistoryViewModel {
         }
     }
 
-    func openTrade(_ trade: Trade) {
+    func openTrade(_ item: TradeOwnerJournalSummary) {
         ExperienceHaptics.play(.selection)
-        detailCache.seed(trade)
-        if let accountID = trade.accountID, let name = accountNames[accountID] {
+        detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(from: item))
+        if let accountID = item.accountID, let name = accountNames[accountID] {
             detailCache.seedAccountName(name, for: accountID)
         }
-        navigationCoordinator.open(.home(.tradeDetail(trade.id)))
+        navigationCoordinator.open(.home(.tradeDetail(item.id)))
     }
 
-    func editTrade(_ trade: Trade) {
+    func editTrade(_ item: TradeOwnerJournalSummary) {
         ExperienceHaptics.play(.selection)
-        detailCache.seed(trade)
-        navigationCoordinator.editTrade(trade.id)
+        Task {
+            do {
+                _ = try await tradeDetailRepository.load(tradeID: item.id, policy: .default)
+                navigationCoordinator.editTrade(item.id)
+            } catch {
+                paginationErrorMessage = ProfileSectionSupport.message(for: error)
+                ExperienceHaptics.play(.warning)
+            }
+        }
     }
 
-    func shareTrade(_ trade: Trade) {
+    func shareTrade(_ item: TradeOwnerJournalSummary) {
         ExperienceHaptics.play(.selection)
-        let pnl = TradeDisplay.pnlText(trade.realizedPnL)
-        let side = trade.side == .long ? "Long" : "Short"
-        sharePayload = SharePayload(text: "\(trade.symbol.ticker) \(side) \(pnl) on TradeTraxs")
+        let summary = item.summary
+        let pnl = TradeDisplay.pnlText(summary.realizedPnL)
+        let side = summary.side == .long ? "Long" : "Short"
+        sharePayload = SharePayload(text: "\(summary.symbol.ticker) \(side) \(pnl) on TradeTraxs")
     }
 
-    func requestDelete(_ trade: Trade) {
+    func requestDelete(_ item: TradeOwnerJournalSummary) {
         ExperienceHaptics.play(.warning)
-        pendingDelete = trade
+        pendingDelete = item
     }
 
     func confirmDelete() async {
-        guard let trade = pendingDelete else { return }
+        guard let item = pendingDelete else { return }
         pendingDelete = nil
         do {
-            try await trades.delete(id: trade.id)
-            items.removeAll { $0.id == trade.id }
-            detailCache.removeTrade(id: trade.id)
-            TradeJournalMutationStore.shared.noteDeleted(id: trade.id, owner: trade.ownerProfileID)
+            try await trades.delete(id: item.id)
+            items.removeAll { $0.id == item.id }
+            detailCache.removeTrade(id: item.id)
+            await tradeDetailRepository.evict(tradeID: item.id)
+            let previous = TradeSummaryMapper.listMatchTrade(from: item)
+            TradeJournalMutationStore.shared.noteDeleted(
+                id: item.id,
+                owner: item.summary.ownerProfileID,
+                previous: previous
+            )
             ExperienceHaptics.play(.success)
         } catch {
             paginationErrorMessage = ProfileSectionSupport.message(for: error)
@@ -418,14 +442,22 @@ final class TradeHistoryViewModel {
                 return
             }
             guard hasLoaded, trade.ownerProfileID == profileID else { return }
-            if TradeHistoryLocalMatch.matches(trade, query: currentQuery, context: matchContext) {
-                items.removeAll { $0.id == trade.id }
-                items.insert(trade, at: 0)
+            let summary = TradeSummaryMapper.ownerJournal(fromListTrade: trade)
+            if TradeHistoryLocalMatch.matches(summary, query: currentQuery, context: matchContext) {
+                items.removeAll { $0.id == summary.id }
+                items.insert(summary, at: 0)
                 items = TradeHistorySortSupport.sorted(items, sort: filters.sort)
+                detailCache.seed(journalSummaries: [summary])
                 persistSnapshot()
+                #if DEBUG
+                TradeSummaryJournalTelemetry.recordMutationPatch(tradeID: summary.id, action: "upsert")
+                #endif
             } else {
-                items.removeAll { $0.id == trade.id }
+                items.removeAll { $0.id == summary.id }
                 persistSnapshot()
+                #if DEBUG
+                TradeSummaryJournalTelemetry.recordMutationPatch(tradeID: summary.id, action: "remove")
+                #endif
             }
         case .deleted(let id, let owner):
             if owner == profileID {
@@ -536,7 +568,8 @@ final class TradeHistoryViewModel {
             detailCache: detailCache
         )
 
-        if Self.canUseOwnerTradeSeed(reason: reason),
+        if !usesJournalSummaryV2,
+           Self.canUseOwnerTradeSeed(reason: reason),
            TradeHistoryOwnerSeed.canSeed(
                query: query,
                hasLocalBrowseConstraints: hasLocalBrowse
@@ -571,9 +604,9 @@ final class TradeHistoryViewModel {
                 )
                 #endif
                 async let accountsTask = hydrateAccountsFromSession(for: profileID)
-                items = seeded.items.filter(matchesLocalBrowseConstraints)
+                items = seeded.items.map(TradeSummaryMapper.ownerJournal(fromListTrade:)).filter(matchesLocalBrowseConstraints)
                 nextCursor = seeded.nextCursor
-                detailCache.seed(trades: items)
+                detailCache.seed(journalSummaries: items)
                 hasLoaded = true
                 lastQueryKey = queryKey
                 phase = .loaded
@@ -638,7 +671,7 @@ final class TradeHistoryViewModel {
                )
             {
                 applyAccountList(applied.accounts)
-                items = applied.trades.filter(matchesLocalBrowseConstraints)
+                items = applied.summaries.filter(matchesLocalBrowseConstraints)
                 nextCursor = applied.nextCursor
                 hasLoaded = true
                 lastQueryKey = queryKey
@@ -648,7 +681,7 @@ final class TradeHistoryViewModel {
                 SessionNetworkProbe.record(
                     .networkFetch,
                     resource: "trades.history.rpc",
-                    detail: "reason=\(reason) count=\(applied.trades.count)"
+                    detail: "reason=\(reason) count=\(applied.summaries.count)"
                 )
                 #if DEBUG
                 TradeHistoryLoadProbe.markPageSize(items.count)
@@ -689,9 +722,9 @@ final class TradeHistoryViewModel {
                 await loadAccounts(for: profileID)
             }
 
-            items = page.items.filter(matchesLocalBrowseConstraints)
+            items = page.items.map(TradeSummaryMapper.ownerJournal(fromListTrade:)).filter(matchesLocalBrowseConstraints)
             nextCursor = page.nextCursor
-            detailCache.seed(trades: items)
+            detailCache.seed(journalSummaries: items)
             hasLoaded = true
             lastQueryKey = queryKey
             phase = .loaded
@@ -798,7 +831,9 @@ final class TradeHistoryViewModel {
         lastQueryKey = snap.queryKey
         hasLoaded = true
         phase = .loaded
+        detailCache.seed(journalSummaries: snap.items)
         #if DEBUG
+        TradeSummaryJournalTelemetry.recordCacheHit(tradeCount: snap.items.count, restoreMs: nil)
         TradeHistoryLoadProbe.markFirstUsefulRender()
         #endif
     }
@@ -812,6 +847,7 @@ final class TradeHistoryViewModel {
         )
         TradeHistorySessionStore.shared.save(
             TradeHistorySessionStore.Snapshot(
+                schemaVersion: TradeHistorySessionStore.snapshotSchemaVersion,
                 queryKey: key,
                 profileID: profileID,
                 items: items,
@@ -832,24 +868,25 @@ final class TradeHistoryViewModel {
         var filtered = all.filter {
             TradeHistoryLocalMatch.matches($0, query: query, context: matchContext)
         }
-        filtered = filtered.filter(matchesLocalBrowseConstraints)
         filtered = TradeHistorySortSupport.sorted(filtered, sort: filters.sort)
         items = filtered
+            .map(TradeSummaryMapper.ownerJournal(fromListTrade:))
+            .filter(matchesLocalBrowseConstraints)
         nextCursor = nil
-        detailCache.seed(trades: filtered)
+        detailCache.seed(journalSummaries: items)
         persistSnapshot()
         #if DEBUG
         TradeHistoryLoadProbe.markPageSize(filtered.count)
         #endif
     }
 
-    private func appendUnique(_ page: [Trade]) {
+    private func appendUnique(_ page: [TradeOwnerJournalSummary]) {
         var seen = Set(items.map(\.id))
-        for trade in page where !seen.contains(trade.id) {
-            items.append(trade)
-            seen.insert(trade.id)
+        for summary in page where !seen.contains(summary.id) {
+            items.append(summary)
+            seen.insert(summary.id)
         }
-        detailCache.seed(trades: page)
+        detailCache.seed(journalSummaries: page)
         persistSnapshot()
     }
 

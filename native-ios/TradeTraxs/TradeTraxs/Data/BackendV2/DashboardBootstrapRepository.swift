@@ -46,6 +46,7 @@ nonisolated enum BackendV2BootstrapPath: String, Sendable {
     case legacy_missing_rpc
     case cache_fresh
     case cache_stale_revalidate
+    case cache_display_only
     case error_preserved_cache
 }
 
@@ -69,6 +70,7 @@ enum DashboardBootstrapLoader {
         rpc: any RPCClient,
         detailCache: DetailPresentationCache,
         forceNetwork: Bool,
+        trigger: DashboardAuthoritativeRefreshTrigger = .cold,
         loadGeneration: UInt64,
         currentGeneration: @escaping () -> UInt64,
         skipSoftStaleReconcile: Bool = false
@@ -78,7 +80,6 @@ enum DashboardBootstrapLoader {
         }
 
         let uid = viewerID.rawValue
-        let accountScope = "all"
 
         if !forceNetwork, let cached = BackendV2BootstrapDiskCache.loadDashboard(viewerID: uid) {
             let applied = try await DashboardBootstrapApplier.apply(
@@ -86,7 +87,8 @@ enum DashboardBootstrapLoader {
                 expectedViewerID: uid,
                 detailCache: detailCache
             )
-            logPath(cached.freshness == .fresh ? .cache_fresh : .cache_stale_revalidate)
+            let path = bootstrapPath(for: cached.freshness)
+            logPath(path)
             if cached.freshness == .softStale, !forceNetwork, !skipSoftStaleReconcile {
                 scheduleSoftStaleReconcile(
                     viewerID: viewerID,
@@ -96,12 +98,51 @@ enum DashboardBootstrapLoader {
                     currentGeneration: currentGeneration
                 )
             }
+            if cached.freshness == .displayOnly, !forceNetwork {
+                DashboardAuthoritativeRefreshCoordinator.shared.scheduleAuthoritativeRefresh(
+                    viewerID: viewerID,
+                    rpc: rpc,
+                    detailCache: detailCache,
+                    trigger: .displayOnlyRevalidate,
+                    loadGeneration: loadGeneration,
+                    currentGeneration: currentGeneration
+                )
+            }
             return DashboardBootstrapLoadResult(
                 applied: applied,
-                path: cached.freshness == .fresh ? .cache_fresh : .cache_stale_revalidate,
+                path: path,
                 rpcRequestCount: 0
             )
         }
+
+        if await BackendV2RpcAvailability.shared.isUnavailable(rpcName: rpcName, viewerID: uid) {
+            throw DashboardBootstrapLoaderError.rpcUnavailable
+        }
+
+        return try await DashboardAuthoritativeRefreshCoordinator.shared.loadAuthoritative(
+            viewerID: viewerID,
+            rpc: rpc,
+            detailCache: detailCache,
+            forceNetwork: forceNetwork,
+            trigger: trigger,
+            loadGeneration: loadGeneration,
+            currentGeneration: currentGeneration,
+            skipSoftStaleReconcile: skipSoftStaleReconcile
+        )
+    }
+
+    /// Authoritative network fetch + apply — invoked only via ``DashboardAuthoritativeRefreshCoordinator``.
+    @MainActor
+    static func loadFromNetwork(
+        viewerID: ProfileID,
+        rpc: any RPCClient,
+        detailCache: DetailPresentationCache,
+        trigger: DashboardAuthoritativeRefreshTrigger,
+        loadGeneration: UInt64,
+        currentGeneration: @escaping () -> UInt64
+    ) async throws -> DashboardBootstrapLoadResult {
+        let uid = viewerID.rawValue
+        let accountScope = "all"
 
         if await BackendV2RpcAvailability.shared.isUnavailable(rpcName: rpcName, viewerID: uid) {
             throw DashboardBootstrapLoaderError.rpcUnavailable
@@ -112,7 +153,8 @@ enum DashboardBootstrapLoader {
             let bootstrap = try await fetchRPC(
                 viewerID: uid,
                 rpc: rpc,
-                flightKey: flightKey
+                flightKey: flightKey,
+                trigger: trigger
             )
             guard currentGeneration() == loadGeneration, !Task.isCancelled else {
                 throw CancellationError()
@@ -185,14 +227,43 @@ enum DashboardBootstrapLoader {
     private static func fetchRPC(
         viewerID: String,
         rpc: any RPCClient,
-        flightKey: String
+        flightKey: String,
+        trigger: DashboardAuthoritativeRefreshTrigger
     ) async throws -> DashboardBootstrapV1 {
+        let intentID = BootstrapRpcTrace.beginIntent(
+            rpc: rpcName,
+            trigger: trigger.rawValue,
+            forceNetwork: true
+        )
+        let joinedExisting = await BackendV2SingleFlight.shared.hasInFlight(key: flightKey)
+        let waiterCount = await BackendV2SingleFlight.shared.inFlightWaiterCount(key: flightKey)
+        BootstrapRpcTrace.recordSingleFlightJoin(
+            intentID: intentID,
+            rpc: rpcName,
+            joinedExisting: joinedExisting,
+            waiterCount: waiterCount + (joinedExisting ? 1 : 0)
+        )
+        let httpRequestID = UUID()
+        let httpStarted = CFAbsoluteTimeGetCurrent()
+        BootstrapRpcTrace.httpWillStart(intentID: intentID, requestID: httpRequestID, rpc: rpcName)
         let repo = DashboardRpcBootstrapRepository(rpc: rpc)
-        let data = try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
-            let bootstrap = try await repo.loadDashboardBootstrap(accountID: nil)
-            let encoded = try JSONEncoder().encode(bootstrap)
-            return encoded
+        let data = try await BootstrapRpcTrace.runWithIntent(
+            intentID: intentID,
+            trigger: trigger.rawValue,
+            rpc: rpcName
+        ) {
+            try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
+                let bootstrap = try await repo.loadDashboardBootstrap(accountID: nil)
+                let encoded = try JSONEncoder().encode(bootstrap)
+                return encoded
+            }
         }
+        BootstrapRpcTrace.httpCompleted(
+            intentID: intentID,
+            requestID: httpRequestID,
+            rpc: rpcName,
+            elapsedMs: (CFAbsoluteTimeGetCurrent() - httpStarted) * 1000
+        )
         let bootstrap = try JSONDecoder().decode(DashboardBootstrapV1.self, from: data)
         try bootstrap.validateContract()
         logStage("contract.validation.completed")
@@ -203,6 +274,19 @@ enum DashboardBootstrapLoader {
         #if DEBUG
         logger.debug("dashboard bootstrap \(stage, privacy: .public)\(detail.map { " \($0)" } ?? "", privacy: .public)")
         #endif
+    }
+
+    private static func bootstrapPath(for freshness: BackendV2BootstrapDiskCache.Freshness) -> BackendV2BootstrapPath {
+        switch freshness {
+        case .fresh:
+            return .cache_fresh
+        case .softStale:
+            return .cache_stale_revalidate
+        case .displayOnly:
+            return .cache_display_only
+        case .expired:
+            return .error_preserved_cache
+        }
     }
 
     private static func logPath(_ path: BackendV2BootstrapPath) {

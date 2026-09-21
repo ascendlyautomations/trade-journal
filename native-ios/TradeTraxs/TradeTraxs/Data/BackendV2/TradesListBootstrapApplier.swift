@@ -3,7 +3,7 @@ import Foundation
 nonisolated enum TradesListBootstrapApplier {
     struct Applied: Sendable {
         var accounts: [TradingAccount]
-        var trades: [Trade]
+        var summaries: [TradeOwnerJournalSummary]
         var nextCursor: String?
         var skippedTrades: Int
     }
@@ -23,11 +23,19 @@ nonisolated enum TradesListBootstrapApplier {
             detailCache: detailCache,
             kind: .rest
         )
-        detailCache.seed(trades: mapped.trades)
+        detailCache.seed(journalSummaries: mapped.summaries)
+
+        #if DEBUG
+        TradeSummaryJournalTelemetry.recordDecode(
+            path: "v1.rpc",
+            tradeCount: mapped.summaries.count,
+            skipped: mapped.skipped
+        )
+        #endif
 
         return Applied(
             accounts: accounts,
-            trades: mapped.trades,
+            summaries: mapped.summaries,
             nextCursor: bootstrap.data.page_meta.has_more ? bootstrap.data.next_cursor : nil,
             skippedTrades: mapped.skipped
         )
@@ -46,18 +54,19 @@ nonisolated enum TradesListBootstrapApplier {
     private static func mapTrades(
         _ rows: [DashboardTradeWireV1],
         ownerID: ProfileID
-    ) -> (trades: [Trade], skipped: Int) {
-        var trades: [Trade] = []
+    ) -> (summaries: [TradeOwnerJournalSummary], skipped: Int) {
+        var summaries: [TradeOwnerJournalSummary] = []
         var skipped = 0
         for row in rows {
             let dto = row.asTradeDTO(ownerID: ownerID.rawValue)
             do {
-                trades.append(try TradeMapper.mapToDomain(dto))
+                let trade = try TradeMapper.mapToDomain(dto)
+                summaries.append(TradeSummaryMapper.ownerJournal(fromListTrade: trade))
             } catch {
                 skipped += 1
                 TradeMappingTelemetry.recordSkippedTrade()
             }
         }
-        return (trades, skipped)
+        return (summaries, skipped)
     }
 }

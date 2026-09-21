@@ -8,7 +8,7 @@ enum ProfileStatisticsTradeLoader {
         rpc: (any RPCClient)?,
         accountModes: [TradingAccountID: TradingAccountMode]
     ) async throws -> [ProfileStatisticsMetrics.TradeInput] {
-        var collected: [Trade] = []
+        var collected: [TradeSummary] = []
         var seen = Set<TradeID>()
 
         if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
@@ -18,11 +18,12 @@ enum ProfileStatisticsTradeLoader {
                     tab: .trades,
                     profileID: profileID,
                     rpc: rpc,
+                    detailCache: nil,
                     cursor: cursor
                 )
-                let page = applied.trades ?? []
-                for trade in page where seen.insert(trade.id).inserted {
-                    collected.append(trade)
+                let page = applied.tradeSummaries ?? []
+                for summary in page where seen.insert(summary.id).inserted {
+                    collected.append(summary)
                 }
                 cursor = applied.nextCursor
             } while cursor != nil
@@ -36,14 +37,17 @@ enum ProfileStatisticsTradeLoader {
                     publicOnly: true
                 )
                 for trade in page.items where seen.insert(trade.id).inserted {
-                    collected.append(trade)
+                    collected.append(TradeSummaryMapper.summary(fromPartialListTrade: trade))
                 }
                 cursor = page.nextCursor
             } while cursor != nil
         }
 
         return collected.map {
-            ProfileStatisticsMetrics.tradeInput(from: $0, accountModes: accountModes)
+            ProfileStatisticsMetrics.tradeInput(
+                from: TradeSummaryMapper.previewTrade(from: $0),
+                accountModes: accountModes
+            )
         }
     }
 }

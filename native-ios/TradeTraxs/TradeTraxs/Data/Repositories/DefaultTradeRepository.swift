@@ -464,8 +464,6 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     func images(for tradeID: TradeID) async throws -> [TradeImage] {
-        let trade = try await trade(id: tradeID)
-        _ = trade
         let rows: [TradeDTO.Trade] = try await supabase.database.select(
             TradeDTO.Trade.self,
             from: "trades",

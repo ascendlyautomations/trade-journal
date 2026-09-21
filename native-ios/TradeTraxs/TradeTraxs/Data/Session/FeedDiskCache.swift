@@ -5,6 +5,7 @@ import Foundation
 /// Structured metadata only — no image/video blobs. Server + RLS remain authoritative.
 nonisolated enum FeedDiskCache {
     static let folderName = "FeedDiskCache"
+    static let schemaVersion = 2
 
     // MARK: - Bounds
 
@@ -15,6 +16,7 @@ nonisolated enum FeedDiskCache {
     // MARK: - Blobs
 
     struct PageBlob: Codable, Sendable {
+        var schemaVersion: Int = FeedDiskCache.schemaVersion
         var viewerID: String
         var scope: String
         var contentFilter: String
@@ -59,6 +61,16 @@ nonisolated enum FeedDiskCache {
                 filter: contentFilter.rpcValue
             )
         ) else { return nil }
+        guard blob.schemaVersion == schemaVersion else {
+            remove(
+                file: pageFile(
+                    viewerID: viewerID.rawValue,
+                    scope: scope.rawValue,
+                    filter: contentFilter.rpcValue
+                )
+            )
+            return nil
+        }
         guard blob.viewerID == viewerID.rawValue else { return nil }
         guard blob.scope == scope.rawValue else { return nil }
         guard blob.contentFilter == contentFilter.rpcValue else { return nil }
@@ -208,12 +220,7 @@ nonisolated enum FeedDiskCache {
     }
 
     private static func directoryURL() -> URL? {
-        guard let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        let dir = base.appendingPathComponent(folderName, isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        PersistentAppDataDiskCache.directoryURL(component: folderName)
     }
 
     private static func write<T: Encodable>(_ value: T, file: String) {

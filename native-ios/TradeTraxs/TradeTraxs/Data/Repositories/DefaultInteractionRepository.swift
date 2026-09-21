@@ -26,12 +26,52 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
         for target in targets {
             effectiveIDs[target] = try await effectiveContentID(for: target)
         }
-        let grouped = Dictionary(grouping: targets, by: \.kind)
+        let feedSurfaceKinds: Set<InteractionContentKind> = [.feedPost, .profilePost, .reel, .achievement]
+        let feedTargets = targets.filter { feedSurfaceKinds.contains($0.kind) }
+        let legacyTargets = targets.filter { !feedSurfaceKinds.contains($0.kind) }
 
-        // Parallelize per content-kind — same request count, lower wall-clock; each kind
-        // still uses compact `fk` (+ user_id for likes) rather than full comment bodies.
-        await withTaskGroup(of: (InteractionContentKind, [InteractionTarget: EngagementSnapshot]).self) {
-            group in
+        if !feedTargets.isEmpty {
+            if let aggregate = try? await Self.engagementViaFeedAggregate(
+                targets: feedTargets,
+                effectiveIDs: effectiveIDs,
+                database: supabase.database
+            ) {
+                for (target, snap) in aggregate {
+                    result[target] = snap
+                }
+            } else {
+                await Self.mergeRestEngagement(
+                    targets: feedTargets,
+                    effectiveIDs: effectiveIDs,
+                    viewerID: viewerID,
+                    database: supabase.database,
+                    into: &result
+                )
+            }
+        }
+
+        if !legacyTargets.isEmpty {
+            await Self.mergeRestEngagement(
+                targets: legacyTargets,
+                effectiveIDs: effectiveIDs,
+                viewerID: viewerID,
+                database: supabase.database,
+                into: &result
+            )
+        }
+
+        return result
+    }
+
+    private static func mergeRestEngagement(
+        targets: [InteractionTarget],
+        effectiveIDs: [InteractionTarget: String],
+        viewerID: String?,
+        database: any SupabaseDatabaseExecuting,
+        into result: inout [InteractionTarget: EngagementSnapshot]
+    ) async {
+        let grouped = Dictionary(grouping: targets, by: \.kind)
+        await withTaskGroup(of: (InteractionContentKind, [InteractionTarget: EngagementSnapshot]).self) { group in
             for (kind, groupTargets) in grouped {
                 let ids = groupTargets.map { effectiveIDs[$0] ?? $0.id }
                 guard !ids.isEmpty else { continue }
@@ -41,7 +81,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
                         targets: groupTargets,
                         ids: ids,
                         viewerID: viewerID,
-                        database: self.supabase.database
+                        database: database
                     )
                     return (kind, snap)
                 }
@@ -52,8 +92,79 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
                 }
             }
         }
+    }
 
-        return result
+    private struct FeedEngagementAggregateArgs: Encodable {
+        var p_post_ids: [String]
+        var p_profile_post_ids: [String]
+        var p_achievement_post_ids: [String]
+        var p_reel_ids: [String]
+    }
+
+    private struct FeedEngagementCountRow: Decodable {
+        var content_id: String
+        var like_count: Int64?
+        var comment_count: Int64?
+        var liked_by_me: Bool?
+    }
+
+    private static func engagementViaFeedAggregate(
+        targets: [InteractionTarget],
+        effectiveIDs: [InteractionTarget: String],
+        database: any SupabaseDatabaseExecuting
+    ) async throws -> [InteractionTarget: EngagementSnapshot] {
+        var postIDs: [String] = []
+        var profilePostIDs: [String] = []
+        var achievementPostIDs: [String] = []
+        var reelIDs: [String] = []
+        postIDs.reserveCapacity(targets.count)
+        profilePostIDs.reserveCapacity(targets.count)
+        achievementPostIDs.reserveCapacity(targets.count)
+        reelIDs.reserveCapacity(targets.count)
+
+        for target in targets {
+            let id = effectiveIDs[target] ?? target.id
+            switch target.kind {
+            case .feedPost:
+                postIDs.append(id)
+            case .profilePost:
+                profilePostIDs.append(id)
+            case .achievement:
+                achievementPostIDs.append(id)
+            case .reel:
+                reelIDs.append(id)
+            case .trade:
+                break
+            }
+        }
+
+        let args = FeedEngagementAggregateArgs(
+            p_post_ids: postIDs,
+            p_profile_post_ids: profilePostIDs,
+            p_achievement_post_ids: achievementPostIDs,
+            p_reel_ids: reelIDs
+        )
+        let data = try await database.rpcData(
+            functionName: "feed_engagement_counts",
+            parametersJSON: try JSONEncoder().encode(args)
+        )
+        let rows = try JSONDecoder().decode([FeedEngagementCountRow].self, from: data)
+
+        var byContentID: [String: EngagementSnapshot] = [:]
+        for row in rows {
+            byContentID[row.content_id] = EngagementSnapshot(
+                likeCount: Int(row.like_count ?? 0),
+                commentCount: Int(row.comment_count ?? 0),
+                viewerHasLiked: row.liked_by_me ?? false
+            )
+        }
+
+        var map: [InteractionTarget: EngagementSnapshot] = [:]
+        for target in targets {
+            let id = effectiveIDs[target] ?? target.id
+            map[target] = byContentID[id] ?? .empty
+        }
+        return map
     }
 
     private static func engagementForKind(

@@ -10,6 +10,11 @@ enum SessionScopedCaches {
         currentUserProfile: CurrentUserProfileStore,
         data: DataEnvironment
     ) {
+        if let viewerID = currentUserProfile.profile?.id {
+            Task {
+                await AnalyticsLocalStore().clearViewer(viewerID)
+            }
+        }
         currentUserProfile.clear()
         MessagesInboxStore.shared.invalidate()
         MessagingDomain.shared.invalidate()
@@ -28,12 +33,17 @@ enum SessionScopedCaches {
         DirectConversationPairIndex.shared.invalidate()
         ConversationCreationCoordinator.shared.invalidate()
         CalendarMonthSessionStore.shared.invalidate()
+        CalendarAnalyticsSessionStore.shared.invalidate()
+        CalendarAnalyticsMonthDiskCache.clearAll()
+        DashboardAnalyticsDiskCache.clearAll()
+        DashboardAnalyticsAccountChartsStore.shared.invalidate()
         SessionAccountsStore.shared.invalidate()
         SessionPayoutCyclesStore.shared.invalidateAll()
         SessionPayoutEntriesStore.shared.invalidate()
         WithdrawalsHistoryStore.shared.invalidate()
         SessionProfileStore.shared.invalidate()
         SessionTradeEntityStore.shared.invalidate()
+        Task { await TradeDetailSessionStore.shared.resetAll() }
         SessionOwnerTradesStore.shared.invalidate()
         SessionMemberRoomsStore.shared.invalidate()
         SessionTradeRoomsDiscoveryStore.shared.invalidate()
@@ -46,16 +56,24 @@ enum SessionScopedCaches {
         ViewerSyncStateDiskCache.clear()
         ViewerSyncReconciliationCoordinator.shared.reset()
         ViewerSyncStateRuntime.reset()
+        AnalyticsReconciliationRuntime.reset()
+        Task { await AnalyticsReconciliationCoordinator.shared.reset() }
+        AnalyticsRevisionRealtimeSession.shared.invalidate()
+        Task { await AnalyticsRevisionRepairCoordinator.shared.reset() }
         data.cache.memory.removeAll()
         Task {
             await BackendV2SingleFlight.shared.clear()
             await BackendV2RpcAvailability.shared.clear()
             await SessionBootstrapRefreshCommit.shared.reset()
+            await ProfileAnalyticsV2ShadowSession.shared.reset()
+            await ProfileAnalyticsGRDBSession.shared.reset()
         }
         SessionDiskCache.clearAll()
         SocialPersistedCacheCoordinator.clearAll()
         FeedPersistedCacheCoordinator.clearAll()
         ProfilePersistedCacheCoordinator.clearAll()
+        AuthenticatedLaunchPhasing.reset()
+        DashboardAuthoritativeRefreshCoordinator.shared.reset()
         TradeJournalMutationStore.shared.invalidate()
         AccountMutationStore.shared.invalidate()
         ContentMutationStore.shared.invalidate()
@@ -64,6 +82,7 @@ enum SessionScopedCaches {
         GettingStartedStore.shared.invalidate()
         TraderDailyCheckInStore.shared.invalidate()
         BrokerImportEligibilityStore.shared.invalidate()
+        AppIconBadgeSync.resetSessionMirror()
         Task {
             await DailyCheckInReminderCoordinator.shared.cancelAll()
             await TradeImportReminderCoordinator.shared.cancelAll()

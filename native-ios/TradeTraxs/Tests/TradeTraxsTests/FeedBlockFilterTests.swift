@@ -110,9 +110,9 @@ final class FeedBlockFilterTests: XCTestCase {
         for entry in entries {
             guard let request = entry.reportRequest(viewerID: viewer) else { continue }
             switch entry {
-            case .trade(_, let trade):
+            case .trade(_, let summary):
                 XCTAssertEqual(request.target.type, .trade)
-                XCTAssertEqual(request.target.targetID, trade.id.rawValue)
+                XCTAssertEqual(request.target.targetID, summary.id.rawValue)
             case .post(let item, _):
                 XCTAssertEqual(request.target.type, .post)
                 XCTAssertEqual(request.target.targetID, item.id)

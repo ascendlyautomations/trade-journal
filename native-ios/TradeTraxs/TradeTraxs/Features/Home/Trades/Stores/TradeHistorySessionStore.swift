@@ -7,10 +7,14 @@ import Observation
 final class TradeHistorySessionStore {
     static let shared = TradeHistorySessionStore()
 
+    /// Bump when Journal list row shape changes — incompatible snapshots are discarded.
+    static let snapshotSchemaVersion = 2
+
     struct Snapshot: Sendable {
+        var schemaVersion: Int = TradeHistorySessionStore.snapshotSchemaVersion
         var queryKey: String
         var profileID: ProfileID
-        var items: [Trade]
+        var items: [TradeOwnerJournalSummary]
         var nextCursor: String?
         var filters: TradeHistoryFilters
         var searchText: String
@@ -46,8 +50,13 @@ final class TradeHistorySessionStore {
         searchText: String
     ) -> Snapshot? {
         let key = Self.queryKey(profileID: profileID, filters: filters, searchText: searchText)
-        guard let snap = snapshots[key] else {
+        guard var snap = snapshots[key] else {
             SessionNetworkProbe.record(.cacheMiss, resource: "trades.history", detail: key)
+            return nil
+        }
+        guard snap.schemaVersion == Self.snapshotSchemaVersion else {
+            snapshots.removeValue(forKey: key)
+            SessionNetworkProbe.record(.cacheMiss, resource: "trades.history", detail: "schemaMismatch")
             return nil
         }
         lastActiveKey = key
@@ -65,15 +74,23 @@ final class TradeHistorySessionStore {
     }
 
     func noteUpserted(_ trade: Trade) {
-        SessionNetworkProbe.record(.localMutation, resource: "trades.history", detail: trade.id.rawValue)
+        noteUpserted(TradeSummaryMapper.ownerJournal(fromListTrade: trade))
+    }
+
+    func noteUpserted(_ summary: TradeOwnerJournalSummary) {
+        SessionNetworkProbe.record(.localMutation, resource: "trades.history", detail: summary.id.rawValue)
         for key in snapshots.keys {
             guard var snap = snapshots[key] else { continue }
-            guard snap.profileID == trade.ownerProfileID else { continue }
+            guard snap.schemaVersion == Self.snapshotSchemaVersion else { continue }
+            guard snap.profileID == summary.summary.ownerProfileID else { continue }
             let query = TradeHistoryQuery(filters: snap.filters, searchText: snap.searchText)
-            let matches = TradeHistoryLocalMatch.matches(trade, query: query)
-            snap.items.removeAll { $0.id == trade.id }
+            let matches = TradeHistoryLocalMatch.matches(summary, query: query)
+            snap.items.removeAll { $0.id == summary.id }
             if matches {
-                let sorted = TradeHistorySortSupport.sorted([trade] + snap.items.filter { $0.id != trade.id }, sort: snap.filters.sort)
+                let sorted = TradeHistorySortSupport.sorted(
+                    [summary] + snap.items.filter { $0.id != summary.id },
+                    sort: snap.filters.sort
+                )
                 snap.items = sorted
             }
             snap.loadedAt = Date()

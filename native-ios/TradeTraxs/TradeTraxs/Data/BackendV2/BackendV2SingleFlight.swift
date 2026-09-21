@@ -126,6 +126,14 @@ nonisolated enum BackendV2FlightKeys {
         "\(viewerID)|\(BackendV2Versioning.RPCName.viewerSyncState.rawValue)"
     }
 
+    static func analyticsRevision(viewerID: String) -> String {
+        "analytics.revision|\(viewerID)"
+    }
+
+    static func analyticsRevisionRepair(viewerID: String) -> String {
+        "analytics.revision.repair|\(viewerID)"
+    }
+
     static func dashboard(viewerID: String, accountID: String?) -> String {
         let account = accountID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             ? accountID!
@@ -190,6 +198,11 @@ nonisolated enum BackendV2FlightKeys {
         return "\(viewerID)|\(BackendV2Versioning.RPCName.tradesList.rawValue)|\(queryKey)|\(c)"
     }
 
+    static func tradesListV2(viewerID: String, queryKey: String, cursor: String?) -> String {
+        let c = cursor ?? "-"
+        return "\(viewerID)|\(BackendV2Versioning.RPCName.tradesListV2.rawValue)|\(queryKey)|\(c)"
+    }
+
     static func gettingStarted(viewerID: String) -> String {
         "\(viewerID)|\(BackendV2Versioning.RPCName.gettingStarted.rawValue)"
     }
@@ -217,5 +230,13 @@ nonisolated enum BackendV2FlightKeys {
 
     static func profileStatistics(profileID: String) -> String {
         "\(profileID)|\(BackendV2Versioning.RPCName.profileStatisticsBootstrap.rawValue)"
+    }
+
+    static func profileAnalyticsV2Bootstrap(viewerID: String, profileID: String) -> String {
+        "\(viewerID)|\(profileID)|\(BackendV2Versioning.RPCName.profileAnalyticsBootstrapV2.rawValue)"
+    }
+
+    static func profilePublicAnalyticsRevision(viewerID: String, profileID: String) -> String {
+        "\(viewerID)|\(profileID)|\(BackendV2Versioning.RPCName.profilePublicAnalyticsRevision.rawValue)"
     }
 }

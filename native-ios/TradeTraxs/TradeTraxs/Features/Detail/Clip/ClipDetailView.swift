@@ -214,7 +214,8 @@ struct ClipDetailView: View {
                     video: reel.video,
                     imagePipeline: data.imagePipeline,
                     objectStorage: data.objectStorage,
-                    contentMode: .fit
+                    contentMode: .fit,
+                    allowsVideoFrameExtraction: true
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .opacity(isDisplayingVideoFrame ? 0 : 1)

@@ -396,6 +396,19 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         await live.stopWatchingTraderDailyCheckIns(userID: userID)
     }
 
+    /// Phase 6D — shared analytical revision watch for the authenticated viewer.
+    func watchAnalyticsRevision(userID: String, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return AsyncStream { $0.finish() }
+        }
+        return live.watchUserAnalyticsRevision(userID: userID, accessToken: accessToken)
+    }
+
+    func stopWatchingAnalyticsRevision(userID: String) async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.stopWatchingUserAnalyticsRevision(userID: userID)
+    }
+
     /// Detail comments — `comment_likes` postgres_changes for visible ids.
     func watchCommentLikes(
         source: CommentLikeSource,

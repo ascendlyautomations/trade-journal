@@ -109,7 +109,8 @@ final class ProfileBootstrapV2Tests: XCTestCase {
             profileID: profileID,
             trades: environment.data.trades,
             navigationCoordinator: environment.navigation.coordinator,
-            detailCache: environment.data.detailCache
+            detailCache: environment.data.detailCache,
+            tradeDetailRepository: environment.data.tradeDetailRepository
         )
         trades.applyBootstrap(snapshot)
         let count = trades.items.count

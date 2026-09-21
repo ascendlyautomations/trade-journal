@@ -31,6 +31,7 @@ final class FeedScreenViewModel {
     private var realtimeTask: Task<Void, Never>?
     private var bootstrapGeneration: UInt64 = 0
     private var pendingNetworkReconcile = false
+    private var pendingFeedNetworkReconcile = false
     @ObservationIgnored private nonisolated(unsafe) var blockObserver: NSObjectProtocol?
 
     init(
@@ -120,16 +121,37 @@ final class FeedScreenViewModel {
             bootstrapTask = nil
             if pendingNetworkReconcile {
                 pendingNetworkReconcile = false
-                Task(priority: .utility) { @MainActor in
-                    await self.performBootstrap(
-                        forceNetwork: true,
-                        resetting: true,
-                        generation: generation,
-                        trigger: .initial
-                    )
-                }
+                scheduleDeferredFeedNetworkReconcile(generation: generation)
             }
         }
+    }
+
+    func noteTabBecameActive() {
+        guard pendingFeedNetworkReconcile else { return }
+        pendingFeedNetworkReconcile = false
+        let generation = bootstrapGeneration
+        scheduleDeferredFeedNetworkReconcile(generation: generation)
+    }
+
+    private func scheduleDeferredFeedNetworkReconcile(generation: UInt64) {
+        Task(priority: .utility) { @MainActor in
+            await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
+            guard AuthenticatedLaunchPhasing.activeTab == .feed else {
+                self.pendingFeedNetworkReconcile = true
+                return
+            }
+            await self.performBootstrap(
+                forceNetwork: true,
+                resetting: true,
+                generation: generation,
+                trigger: .initial
+            )
+        }
+    }
+
+    private func markFeedCriticalVisibleSurfaceReadyIfActive() {
+        guard AuthenticatedLaunchPhasing.activeTab == .feed else { return }
+        AuthenticatedLaunchPhasing.markCriticalVisibleSurfaceReady(tab: .feed)
     }
 
     /// Standard lifecycle alias for ``loadIfNeeded``.
@@ -341,12 +363,15 @@ final class FeedScreenViewModel {
     func open(_ entry: FeedTimelineEntry) {
         ExperienceHaptics.play(.selection)
         switch entry {
-        case .trade(_, let trade):
-            detailCache.seed(trade)
+        case .trade(_, let summary):
+            detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
             if let postID = entry.feedTradeEngagementPostID {
-                detailCache.seedFeedEngagementTarget(.feedPost(postID), forTrade: trade.id)
+                detailCache.seedFeedEngagementTarget(.feedPost(postID), forTrade: summary.id)
             }
-            navigationCoordinator.pushFeed(.trade(trade.id))
+            #if DEBUG
+            TradeSummaryFeedTelemetry.recordDetailBoundary(action: "open", tradeID: summary.id.rawValue)
+            #endif
+            navigationCoordinator.pushFeed(.trade(summary.id))
         case .post(_, let post):
             detailCache.seed(post)
             navigationCoordinator.pushFeed(.post(post.id))
@@ -468,6 +493,7 @@ final class FeedScreenViewModel {
 
     private func assignFeedEntries(_ entries: [FeedTimelineEntry]) {
         state.entries = entries
+        _ = FeedEngagementCacheRestore.seedEngagementStore(from: entries, into: engagementStore)
         rebuildVisibleEntriesCache()
     }
 
@@ -782,7 +808,8 @@ final class FeedScreenViewModel {
                     state.phase = .loaded
                     state.didBootstrap = true
                     pendingNetworkReconcile = true
-                    prefetchEngagement()
+                    markFeedCriticalVisibleSurfaceReadyIfActive()
+                    prefetchEngagement(source: .memory)
                     if blockPeerSync != nil {
                         Task(priority: .utility) { @MainActor in
                             await blockPeerSync?.value
@@ -807,7 +834,8 @@ final class FeedScreenViewModel {
                         detailCache: detailCache,
                         forceNetwork: forceNetwork,
                         allowNetwork: forceNetwork || !hadCachedFirstRender,
-                        guestPublicMode: guestPublicFeed
+                        guestPublicMode: guestPublicFeed,
+                        traceTrigger: forceNetwork ? "feed.reconcile" : "feed.initial"
                     )
                     guard shouldApplyBootstrapResult(
                         generation: activeGeneration,
@@ -875,6 +903,9 @@ final class FeedScreenViewModel {
                     state.phase = .loaded
                     state.didBootstrap = true
                     state.lastUpdated = Date()
+                    if resetting, resolvedCursor == nil {
+                        markFeedCriticalVisibleSurfaceReadyIfActive()
+                    }
                     if hadCachedFirstRender && !forceNetwork && resolvedCursor == nil {
                         pendingNetworkReconcile = true
                     }
@@ -1025,10 +1056,23 @@ final class FeedScreenViewModel {
         }
     }
 
-    private func prefetchEngagement() {
+    private func prefetchEngagement(source: FeedEngagementCacheProbe.FeedSource = .network) {
         let visible = state.cachedVisibleEntries
+        let summary = FeedEngagementCacheRestore.seedEngagementStore(from: visible, into: engagementStore)
         let targets = visible.map(\.interactionTarget)
-        engagementStore.prefetch(targets)
+        let missing = targets.filter { !engagementStore.hasLoaded($0) }
+        #if DEBUG
+        FeedEngagementCacheProbe.logRestore(
+            source: source,
+            summary: summary,
+            totalVisibleTargets: targets.count,
+            missingAfterRestore: missing.count,
+            networkFallbackScheduled: !missing.isEmpty
+        )
+        #endif
+        if !missing.isEmpty {
+            engagementStore.prefetch(missing)
+        }
         let vaultRefs = visible.compactMap { VaultContentRef.from($0.interactionTarget) }
         vaultStore.prefetch(vaultRefs)
     }

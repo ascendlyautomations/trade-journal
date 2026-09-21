@@ -109,6 +109,25 @@ final class AuthSessionRestorationTests: XCTestCase {
         XCTAssertEqual(sessionBoundCount, 1, "Push registration hook must run after cold-launch syncNavigation")
     }
 
+    func testNearExpiryAccessTokenEntersAuthenticatedShellWithoutRefreshState() throws {
+        let (auth, navigation, _) = makeAuth()
+        let session = AuthenticationSession(
+            userID: UserID("user-near-expiry"),
+            email: "near@tradetraxs.com",
+            accessToken: "valid-access",
+            refreshToken: "valid-refresh",
+            expiresAt: Date().addingTimeInterval(30),
+            provider: .email,
+            createdAt: Date(),
+            lastRefreshedAt: Date()
+        )
+        try auth.sessionManager.install(session)
+        _ = auth.manager.prepareColdLaunch()
+        auth.coordinator.syncNavigation(with: auth.manager.state)
+        XCTAssertTrue(auth.manager.state.isSessionReady)
+        XCTAssertEqual(navigation.store.sessionPhase, .authenticated)
+    }
+
     // MARK: - Expired token refresh
 
     func testExpiredAccessTokenTriggersRefreshState() throws {

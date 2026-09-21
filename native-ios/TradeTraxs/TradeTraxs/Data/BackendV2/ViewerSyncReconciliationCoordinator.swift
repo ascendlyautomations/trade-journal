@@ -83,7 +83,7 @@ final class ViewerSyncReconciliationCoordinator {
             return
         }
 
-        let hasSessionCache = BackendV2BootstrapDiskCache.loadSession(viewerID: uid) != nil
+        let hasSessionCache = BackendV2BootstrapDiskCache.hasRenderableSession(viewerID: uid)
         let hasDashboardCache = BackendV2BootstrapDiskCache.loadDashboard(viewerID: uid) != nil
         guard hasSessionCache || hasDashboardCache else {
             SyncStateProbe.logFallback("no_usable_cache")
@@ -144,15 +144,24 @@ final class ViewerSyncReconciliationCoordinator {
             let needsSession = changed.contains(.profile)
 
             if needsDashboard, let detailCache = context.detailCache {
-                _ = try await DashboardBootstrapLoader.load(
-                    viewerID: context.viewerID,
-                    rpc: context.rpc,
-                    detailCache: detailCache,
-                    forceNetwork: true,
-                    loadGeneration: context.loadGeneration,
-                    currentGeneration: context.currentGeneration,
-                    skipSoftStaleReconcile: true
-                )
+                if DashboardAuthoritativeRefreshCoordinator.shared.hasInFlight(viewerID: context.viewerID) {
+                    await DashboardAuthoritativeRefreshCoordinator.shared.awaitInFlightIfNeeded(
+                        viewerID: context.viewerID
+                    )
+                } else if !DashboardAuthoritativeRefreshCoordinator.shared.shouldSkipViewerSyncDashboardLoad(
+                    viewerID: context.viewerID
+                ) {
+                    _ = try await DashboardBootstrapLoader.load(
+                        viewerID: context.viewerID,
+                        rpc: context.rpc,
+                        detailCache: detailCache,
+                        forceNetwork: true,
+                        trigger: .viewerSync,
+                        loadGeneration: context.loadGeneration,
+                        currentGeneration: context.currentGeneration,
+                        skipSoftStaleReconcile: true
+                    )
+                }
             }
 
             if needsSession, let profiles = ViewerSyncStateRuntime.resolvedProfiles(fallback: context.profiles) {

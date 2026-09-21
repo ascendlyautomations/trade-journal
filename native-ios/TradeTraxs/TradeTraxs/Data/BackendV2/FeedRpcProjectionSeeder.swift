@@ -75,30 +75,12 @@ enum FeedRpcProjectionSeeder {
               !tradeID.isEmpty
         else { return false }
 
-        let nested = object(row.payload["trades"]) ?? [:]
-        var dto = TradeDTO.Trade()
-        dto.id = tradeID
-        dto.user_id = string(row.payload, keys: ["user_id"]) ?? row.author_id
-        dto.ticker = string(nested, keys: ["ticker"])
-        dto.direction = string(nested, keys: ["direction"])
-        dto.public_description = string(nested, keys: ["public_description"])
-        dto.pnl = flexibleNumber(row.payload["pnl"]) ?? flexibleNumber(nested["pnl"])
-        dto.rr = flexibleNumber(row.payload["rr"]) ?? flexibleNumber(nested["rr"])
-        dto.points = flexibleNumber(nested["points"])
-        dto.image_url = string(row.payload, keys: ["image_url"])
-        dto.image_crop = decodeImageCrop(row.payload["image_crop"])
-        dto.mode = string(nested, keys: ["mode", "trade_mode"])
-        dto.account_type = string(nested, keys: ["account_type"])
-        dto.entry_time = string(nested, keys: ["entry_time"]) ?? row.created_at
-        dto.exit_time = string(nested, keys: ["exit_time"])
-        dto.entry_price = flexibleNumber(nested["entry_price"])
-        dto.exit_price = flexibleNumber(nested["exit_price"])
-        dto.created_at = row.created_at
-        dto.is_public = boolValue(nested["is_public"]) ?? true
-
-        guard let trade = try? TradeMapper.mapToDomain(dto) else { return false }
-        detailCache.seed(trade)
-        seedAttachedReel(from: row.payload, tradeID: trade.id, authorID: row.author_id, detailCache: detailCache)
+        guard let summary = TradeSummaryFeedMapper.mapTradeRow(row) else { return false }
+        detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
+        seedAttachedReel(from: row.payload, tradeID: summary.id, authorID: row.author_id, detailCache: detailCache)
+        #if DEBUG
+        TradeSummaryFeedTelemetry.recordDecode(tradeCount: 1, skipped: 0)
+        #endif
         return true
     }
 
@@ -194,24 +176,13 @@ enum FeedRpcProjectionSeeder {
         authorID: String,
         detailCache: DetailPresentationCache
     ) {
-        guard detailCache.trade(id: tradeID) == nil else { return }
-        let nested = object(payload["trades"]) ?? payload
-        var dto = TradeDTO.Trade()
-        dto.id = tradeID.rawValue
-        dto.user_id = string(nested, keys: ["user_id"]) ?? authorID
-        dto.ticker = string(nested, keys: ["ticker"])
-        dto.direction = string(nested, keys: ["direction"])
-        dto.public_description = string(nested, keys: ["public_description"])
-        dto.pnl = flexibleNumber(nested["pnl"])
-        dto.rr = flexibleNumber(nested["rr"])
-        dto.image_url = string(payload, keys: ["image_url"])
-        dto.image_crop = decodeImageCrop(payload["image_crop"])
-        dto.mode = string(nested, keys: ["mode", "trade_mode"])
-        dto.account_type = string(nested, keys: ["account_type"])
-        dto.is_public = boolValue(nested["is_public"]) ?? true
-        dto.created_at = string(nested, keys: ["created_at"]) ?? string(payload, keys: ["created_at"])
-        guard let trade = try? TradeMapper.mapToDomain(dto) else { return }
-        detailCache.seed(trade)
+        guard detailCache.tradeSummary(id: tradeID) == nil else { return }
+        guard let summary = TradeSummaryFeedMapper.mapLinkedTradePayload(
+            payload: payload,
+            tradeID: tradeID,
+            authorID: authorID
+        ) else { return }
+        detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
     }
 
     private static func mapNestedReel(

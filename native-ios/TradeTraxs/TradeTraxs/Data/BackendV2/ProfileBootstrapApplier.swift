@@ -50,11 +50,11 @@ nonisolated enum ProfileBootstrapApplier {
         state.didResolveTradeRoom = true
 
         if let page = bootstrap.data.trades_page {
-            let mapped = mapTrades(page.items, ownerID: profileID)
-            state.trades = mapped.trades
+            let mapped = mapTradeSummaries(page.items, ownerID: profileID)
+            state.trades = mapped.summaries
             state.tradesNextCursor = page.page_meta.has_more ? page.page_meta.next_cursor : nil
             state.didLoadTrades = true
-            detailCache.seed(publicTrades: mapped.trades, for: profileID)
+            detailCache.seed(publicTradeSummaries: mapped.summaries, for: profileID)
             let metadata = mapAccountMetadata(from: page.items)
             state.accountNames = metadata.names
             state.accountModes = metadata.modes
@@ -152,21 +152,22 @@ nonisolated enum ProfileBootstrapApplier {
         )
     }
 
-    private static func mapTrades(
+    private static func mapTradeSummaries(
         _ rows: [DashboardTradeWireV1],
         ownerID: ProfileID
-    ) -> (trades: [Trade], skipped: Int) {
-        var trades: [Trade] = []
+    ) -> (summaries: [TradeSummary], skipped: Int) {
+        var summaries: [TradeSummary] = []
         var skipped = 0
         for row in rows {
             let dto = row.asTradeDTO(ownerID: ownerID.rawValue)
             do {
-                trades.append(try TradeMapper.mapToDomain(dto))
+                let trade = try TradeMapper.mapToDomain(dto)
+                summaries.append(TradeSummaryMapper.summary(fromPartialListTrade: trade))
             } catch {
                 skipped += 1
             }
         }
-        return (trades, skipped)
+        return (summaries, skipped)
     }
 
     private static func mapAccountMetadata(from rows: [DashboardTradeWireV1]) -> (

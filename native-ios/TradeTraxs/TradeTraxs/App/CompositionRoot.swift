@@ -495,6 +495,8 @@ enum CompositionRoot {
             currentUserProfile: currentUserProfile
         )
         ViewerSyncStateRuntime.configure(rpc: data.rpc, profiles: data.profiles)
+        AnalyticsReconciliationRuntime.configure(rpc: data.rpc, detailCache: data.detailCache)
+        Task { await AnalyticsReconciliationCoordinator.shared.installProductionExecutor() }
 
         let pushNotifications = PushNotificationCenter(
             tokenClient: DevicePushTokenClient(transport: transport),
@@ -546,6 +548,12 @@ enum CompositionRoot {
             }
         }
         authentication.coordinator.onAuthenticatedSessionBound = {
+            if let userID = sessionManager.currentSession?.userID {
+                let profileID = ProfileID(userID.rawValue)
+                Task { await AnalyticsReconciliationCoordinator.shared.bindViewer(profileID) }
+                AnalyticsRevisionRealtimeSession.shared.bindAuthenticatedViewer(profileID)
+                Task { await AnalyticsRevisionRepairCoordinator.shared.bindViewer(profileID) }
+            }
             Task {
                 while !authLifecycle.initialRestoreCompleted {
                     try? await Task.sleep(nanoseconds: 25_000_000)
@@ -554,11 +562,11 @@ enum CompositionRoot {
                 await authentication.manager.awaitNetworkReady()
                 guard AuthBootstrapReadiness.allowsAuthenticatedBackgroundWork() else { return }
                 guard sessionManager.accessToken?.isEmpty == false else { return }
+                await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
                 pushNotifications.syncRegistrationForAuthenticatedSession()
-                pushNotifications.syncBadgeFromActivity()
+                AppIconBadgeSync.refresh(animated: false)
                 await DailyCheckInReminderCoordinator.shared.sync()
                 await TradeImportReminderCoordinator.shared.sync()
-                BrokerImportEligibilityStore.shared.loadIfNeeded()
                 if IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
                     await data.storeKitSubscriptions.startTransactionListenerIfNeeded()
                     try? await data.storeKitSubscriptions.syncVerifiedTransactionsToServer()

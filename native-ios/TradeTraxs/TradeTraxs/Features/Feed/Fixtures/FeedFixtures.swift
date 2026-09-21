@@ -19,6 +19,7 @@ nonisolated enum FeedFixtures {
         var entries: [FeedTimelineEntry] = []
 
         if let trade = trades.first {
+            let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
             entries.append(
                 .trade(
                     feedItem(
@@ -30,7 +31,7 @@ nonisolated enum FeedFixtures {
                         caption: trade.publicCaption,
                         mediaURL: trade.thumbnail?.id
                     ),
-                    trade
+                    summary
                 )
             )
         }
@@ -114,6 +115,7 @@ nonisolated enum FeedFixtures {
         // Second trade + post for a longer Instagram-style scroll.
         if trades.count > 1 {
             let trade = trades[1]
+            let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
             entries.append(
                 .trade(
                     feedItem(
@@ -125,7 +127,7 @@ nonisolated enum FeedFixtures {
                         caption: trade.publicCaption,
                         mediaURL: trade.thumbnail?.id
                     ),
-                    trade
+                    summary
                 )
             )
         }
@@ -247,8 +249,8 @@ extension FeedFixtures {
         let entries = timeline(viewerID: viewerID)
         for entry in entries {
             switch entry {
-            case .trade(_, let trade):
-                cache.seed(trade)
+            case .trade(_, let summary):
+                cache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
             case .post(_, let post):
                 cache.seed(post)
             case .clip(_, let reel):

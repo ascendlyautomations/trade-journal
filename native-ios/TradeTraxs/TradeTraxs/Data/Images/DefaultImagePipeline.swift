@@ -31,7 +31,7 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
     }
 
     func data(for request: ImageRequest) async throws -> Data {
-        let key = cacheKey(for: request)
+        let key = ImageCacheKey.make(for: request)
         if let cached = await cache.imageData(forKey: key) {
             #if DEBUG
             logCacheHit(request: request, cacheKey: key, data: cached, source: .memoryOrDisk)
@@ -71,35 +71,69 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
                     )
                 )
             }
+            traceEvent(request, "disk.write.start")
             await cache.setImageData(data, forKey: key)
+            traceEvent(request, "disk.write.end")
             return data
         }
     }
 
     func cachedImageData(for request: ImageRequest) async -> Data? {
-        await cache.imageData(forKey: cacheKey(for: request))
+        await cache.imageData(forKey: ImageCacheKey.make(for: request))
     }
 
     /// Best available cached bytes at or below the requested delivery tier (feed thumb before detail).
     func bestCachedImageData(for request: ImageRequest) async -> (data: Data, quality: ImageDeliveryQuality)? {
-        let order: [ImageDeliveryQuality] = {
-            switch request.deliveryQuality {
-            case .fullResolution:
-                return [.fullResolution, .feedDetail, .feedDisplay]
-            case .feedDetail:
-                return [.feedDetail, .feedDisplay]
-            case .feedDisplay:
-                return [.feedDisplay]
-            }
-        }()
+        if let resolved = await bestCachedImageDataWithTier(for: request) {
+            return (resolved.data, resolved.quality)
+        }
+        return nil
+    }
+
+    func bestCachedImageDataWithTier(for request: ImageRequest) async -> ImageCachedLookupResult? {
+        let order = Self.cacheQualityOrder(for: request.deliveryQuality)
+        traceEvent(request, "memory.lookup.start")
         for quality in order {
             var candidate = request
             candidate.deliveryQuality = quality
-            if let data = await cachedImageData(for: candidate) {
-                return (data, quality)
+            let key = ImageCacheKey.make(for: candidate)
+            if let data = await tieredCache?.memoryImageData(forKey: key) {
+                traceEvent(request, "memory.lookup.end", detail: "hit \(quality.rawValue)")
+                traceEvent(request, "cache.hit.memory", detail: quality.rawValue)
+                return ImageCachedLookupResult(data: data, quality: quality, tier: .memory)
+            }
+            if tieredCache == nil, let data = await cache.imageData(forKey: key) {
+                traceEvent(request, "memory.lookup.end", detail: "hit \(quality.rawValue)")
+                traceEvent(request, "cache.hit.memory", detail: quality.rawValue)
+                return ImageCachedLookupResult(data: data, quality: quality, tier: .memory)
             }
         }
+        traceEvent(request, "memory.lookup.end", detail: "miss")
+
+        if tieredCache != nil {
+            traceEvent(request, "disk.lookup.start")
+            for quality in order {
+                var candidate = request
+                candidate.deliveryQuality = quality
+                let key = ImageCacheKey.make(for: candidate)
+                if let data = await tieredCache?.diskImageDataPromotingToMemory(forKey: key) {
+                    traceEvent(request, "disk.lookup.end", detail: "hit \(quality.rawValue)")
+                    traceEvent(request, "cache.hit.disk", detail: quality.rawValue)
+                    return ImageCachedLookupResult(data: data, quality: quality, tier: .disk)
+                }
+            }
+            traceEvent(request, "disk.lookup.end", detail: "miss")
+        }
+
+        traceEvent(request, "cache.miss")
         return nil
+    }
+
+    func warmCachedImages(for requests: [ImageRequest]) async {
+        for request in requests {
+            if Task.isCancelled { break }
+            _ = await bestCachedImageDataWithTier(for: request)
+        }
     }
 
     func prefetch(_ requests: [ImageRequest]) async {
@@ -112,7 +146,7 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
 
     func invalidate(reference: MediaReference) async {
         for purpose in ImagePurpose.allCases {
-            for quality in [ImageDeliveryQuality.feedDisplay, .feedDetail, .fullResolution] {
+            for quality in [ImageDeliveryQuality.feedDisplay, .profileGrid, .feedDetail, .fullResolution] {
                 let key = "\(reference.id)|\(purpose.rawValue)|\(quality.rawValue)|0"
                 await cache.removeImage(forKey: key)
                 let feedKey = key + "|feedRev=\(StorageImageTransform.feedDisplayCacheRevision)"
@@ -123,11 +157,37 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
 
     // MARK: - Private
 
-    private func cacheKey(for request: ImageRequest) -> String {
-        let feedRevision = request.deliveryQuality == .feedDisplay
-            ? "|feedRev=\(StorageImageTransform.feedDisplayCacheRevision)"
-            : ""
-        return "\(request.reference.id)|\(request.purpose.rawValue)|\(request.deliveryQuality.rawValue)|\(request.maxPixelSize ?? 0)\(feedRevision)"
+    private static func cacheQualityOrder(for deliveryQuality: ImageDeliveryQuality) -> [ImageDeliveryQuality] {
+        switch deliveryQuality {
+        case .fullResolution:
+            return [.fullResolution, .feedDetail, .feedDisplay]
+        case .feedDetail:
+            return [.feedDetail, .feedDisplay, .profileGrid]
+        case .feedDisplay:
+            return [.feedDisplay, .profileGrid]
+        case .profileGrid:
+            return [.profileGrid]
+        }
+    }
+
+    private func traceEvent(_ request: ImageRequest, _ name: String, detail: String? = nil) {
+        guard let id = request.imageTraceCorrelationID else { return }
+        FeedImageTimingTrace.event(id, name, detail: detail)
+    }
+
+    private func traceComplete(_ request: ImageRequest) {
+        guard let id = request.imageTraceCorrelationID else { return }
+        FeedImageTimingTrace.complete(id)
+    }
+
+    private func traceFailed(_ request: ImageRequest, message: String) {
+        guard let id = request.imageTraceCorrelationID else { return }
+        FeedImageTimingTrace.failed(id, message: message)
+    }
+
+    private func traceCancelled(_ request: ImageRequest) {
+        guard let id = request.imageTraceCorrelationID else { return }
+        FeedImageTimingTrace.cancelled(id)
     }
 
     private enum CacheHitSource {
@@ -291,17 +351,53 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
     private func fetchURLWithTransientRetry(_ url: URL, request: ImageRequest) async throws -> Data {
         let maximumAttempts = 3
         var lastError: Error?
+        let usesFeedVisibleCap = FeedVisibleImageFetchPolicy.requiresVisibleFetchSlot(for: request)
         for attempt in 1...maximumAttempts {
+            var holdsFeedVisibleSlot = false
             do {
+                if usesFeedVisibleCap {
+                    traceEvent(request, "coordinator.queued", detail: "feedVisibleFetchSlot")
+                    try await FeedVisibleImageFetchLimiter.shared.acquireFeedVisibleFetchSlot()
+                    holdsFeedVisibleSlot = true
+                    traceEvent(request, "coordinator.acquired", detail: "feedVisibleFetchSlot")
+                }
+
                 let host = url.host ?? "storage"
-                let (data, response) = try await NetworkConcurrencyCoordinator.shared.runWithSlot(
-                    priority: .visible,
+                let schedulingPriority: NetworkSchedulingPriority =
+                    request.isSpeculativePrefetch ? .background : .visible
+                traceEvent(request, "http.started", detail: url.path)
+                let httpStarted = CFAbsoluteTimeGetCurrent()
+                let (data, response, metrics) = try await NetworkConcurrencyCoordinator.shared.runWithSlot(
+                    priority: schedulingPriority,
                     path: url.path,
                     host: host
-                ) {
-                    try await urlSession.data(from: url)
+                ) { [self] in
+                    let urlRequest = URLRequest(url: url)
+                    return try await urlSession.dataWithTaskMetrics(for: urlRequest)
                 }
+                if holdsFeedVisibleSlot {
+                    await FeedVisibleImageFetchLimiter.shared.releaseFeedVisibleFetchSlot()
+                    holdsFeedVisibleSlot = false
+                }
+
                 let status = (response as? HTTPURLResponse)?.statusCode
+                if let transaction = metrics?.transactionMetrics.first,
+                   let fetchStart = transaction.fetchStartDate,
+                   let responseStart = transaction.responseStartDate
+                {
+                    let ms = responseStart.timeIntervalSince(fetchStart) * 1000
+                    traceEvent(request, "http.firstByte", detail: String(format: "%.1fms", ms))
+                }
+                if let http = response as? HTTPURLResponse {
+                    traceEvent(
+                        request,
+                        "http.headers",
+                        detail: "status=\(http.statusCode)"
+                    )
+                }
+                let elapsedMs = (CFAbsoluteTimeGetCurrent() - httpStarted) * 1000
+                traceEvent(request, "http.completed", detail: String(format: "%.1fms bytes=\(data.count)", elapsedMs))
+
                 if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                     let serverError = AppError.network(.server(statusCode: http.statusCode, message: nil))
                     if (500..<600).contains(http.statusCode), attempt < maximumAttempts {
@@ -333,16 +429,34 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
                 )
                 #endif
                 return data
+            } catch is CancellationError {
+                if holdsFeedVisibleSlot {
+                    await FeedVisibleImageFetchLimiter.shared.releaseFeedVisibleFetchSlot()
+                }
+                traceCancelled(request)
+                throw CancellationError()
             } catch let error as URLError where Self.isTransientURLError(error) {
+                if holdsFeedVisibleSlot {
+                    await FeedVisibleImageFetchLimiter.shared.releaseFeedVisibleFetchSlot()
+                    holdsFeedVisibleSlot = false
+                }
                 lastError = error
                 guard attempt < maximumAttempts else { break }
                 let delay = pow(2.0, Double(attempt - 1)) * 0.25
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            } catch {
+                if holdsFeedVisibleSlot {
+                    await FeedVisibleImageFetchLimiter.shared.releaseFeedVisibleFetchSlot()
+                }
+                traceFailed(request, message: String(describing: error))
+                throw error
             }
         }
         if let lastError {
+            traceFailed(request, message: String(describing: lastError))
             throw lastError
         }
+        traceFailed(request, message: "connectivity")
         throw AppError.network(.connectivity)
     }
 

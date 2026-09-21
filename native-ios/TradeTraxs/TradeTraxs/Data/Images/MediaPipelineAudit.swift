@@ -121,6 +121,8 @@ nonisolated enum MediaPipelineAudit {
             return ("avatar", "width=96 height=96 quality=80 resize=cover")
         case .feedThumb:
             return ("feedThumb", "width=640 quality=75 resize=contain")
+        case .profileCompact:
+            return ("profileCompact", "width=256 quality=70 resize=contain")
         case .feedDetail:
             return ("feedDetail", "width=1280 quality=82 resize=default")
         case .story:
@@ -136,10 +138,12 @@ nonisolated enum MediaPipelineAudit {
         deliveryQuality: ImageDeliveryQuality,
         maxPixelSize: Int?
     ) -> String {
-        let feedRevision = deliveryQuality == .feedDisplay
-            ? "|feedRev=\(StorageImageTransform.feedDisplayCacheRevision)"
-            : ""
-        return "\(referenceID)|\(purpose.rawValue)|\(deliveryQuality.rawValue)|\(maxPixelSize ?? 0)\(feedRevision)"
+        ImageCacheKey.make(
+            referenceID: referenceID,
+            purpose: purpose,
+            deliveryQuality: deliveryQuality,
+            maxPixelSize: maxPixelSize
+        )
     }
 
     nonisolated static func orientationLabel(_ orientation: UIImage.Orientation) -> String {
@@ -244,6 +248,13 @@ nonisolated enum MediaPipelineAudit {
         purpose: ImagePurpose,
         deliveryQuality: ImageDeliveryQuality,
         maxPixelSize: Int?
-    ) -> String { "" }
+    ) -> String {
+        ImageCacheKey.make(
+            referenceID: referenceID,
+            purpose: purpose,
+            deliveryQuality: deliveryQuality,
+            maxPixelSize: maxPixelSize
+        )
+    }
 }
 #endif

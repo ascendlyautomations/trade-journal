@@ -21,6 +21,19 @@ nonisolated enum ProfilePersistentReconcile {
         )
     }
 
+    static func reconcileTradeSummaries(
+        existing: [TradeSummary],
+        incoming: [TradeSummary],
+        preserveIDs: Set<TradeID> = []
+    ) -> (items: [TradeSummary], counts: Counts) {
+        reconcileByCreatedAt(
+            existing: existing,
+            incoming: incoming,
+            createdAt: \.createdAt,
+            preserveIDs: preserveIDs
+        )
+    }
+
     static func reconcilePosts(existing: [Post], incoming: [Post]) -> (items: [Post], counts: Counts) {
         reconcileByCreatedAt(existing: existing, incoming: incoming, createdAt: \.createdAt)
     }
@@ -43,7 +56,7 @@ nonisolated enum ProfilePersistentReconcile {
     ) -> ProfileState {
         var merged = incoming
         if incoming.didLoadTrades && !existing.trades.isEmpty {
-            let result = reconcileTrades(
+            let result = reconcileTradeSummaries(
                 existing: existing.trades,
                 incoming: incoming.trades,
                 preserveIDs: preservePublicTradeIDs

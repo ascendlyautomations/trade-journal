@@ -13,6 +13,8 @@ enum FeedPersistentCacheProbe {
     private(set) static var updated = 0
     private(set) static var removed = 0
     private(set) static var source: String = "none"
+    /// When true, feed disk writes complete before `persist` returns (unit tests only).
+    static var forceSynchronousDisk = false
 
     static func resetForTesting() {
         hit = false
@@ -24,6 +26,7 @@ enum FeedPersistentCacheProbe {
         updated = 0
         removed = 0
         source = "none"
+        forceSynchronousDisk = false
     }
 
     static func recordDiskHit(items: Int, ageMs value: Int, firstRenderMs renderMs: Int) {

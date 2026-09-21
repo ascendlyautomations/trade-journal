@@ -63,7 +63,8 @@ struct TradeImageView: View {
                 for: ImageRequest(
                     reference: reference,
                     purpose: purpose,
-                    maxPixelSize: pixelBudget
+                    maxPixelSize: pixelBudget,
+                    deliveryQuality: .profileGrid
                 )
             )
             let decoded = await Task.detached(priority: .utility) {

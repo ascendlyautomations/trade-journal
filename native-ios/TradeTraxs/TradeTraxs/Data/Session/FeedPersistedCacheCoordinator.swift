@@ -3,6 +3,9 @@ import Foundation
 /// Central write-through for viewer-scoped Feed disk snapshots.
 @MainActor
 enum FeedPersistedCacheCoordinator {
+    /// Serializes feed page disk writes — production stays async; tests can flush via probe flag.
+    private static let diskWriteQueue = DispatchQueue(label: "FeedPersistedCache.disk", qos: .utility)
+
     // MARK: - Hydrate
 
     /// Loads all persisted first-page snapshots for a viewer into ``FeedSessionStore``.
@@ -75,6 +78,9 @@ enum FeedPersistedCacheCoordinator {
             contentFilter: contentFilter,
             detailCache: detailCache
         )
+        #if DEBUG
+        TradeSummaryFeedTelemetry.recordCacheHit(entryCount: loaded.blob.entries.count)
+        #endif
         return (loaded.blob.entries.count, loaded.ageMs)
     }
 
@@ -151,9 +157,29 @@ enum FeedPersistedCacheCoordinator {
             nextCursor: snapshot.nextCursor
         )
         let pageBlob = blob
-        Task.detached(priority: .utility) {
+        if shouldPersistFeedDiskSynchronously {
+            diskWriteQueue.sync {
+                FeedDiskCache.savePage(pageBlob)
+            }
+            return
+        }
+        diskWriteQueue.async {
             FeedDiskCache.savePage(pageBlob)
         }
+    }
+
+    /// Waits for queued feed disk writes (unit tests).
+    static func flushPendingDiskWritesForTesting() {
+        diskWriteQueue.sync {}
+    }
+
+    private static var shouldPersistFeedDiskSynchronously: Bool {
+        if FeedPersistedCacheTestHooks.forceSynchronousDiskWrites { return true }
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return true }
+        #if DEBUG
+        if FeedPersistentCacheProbe.forceSynchronousDisk { return true }
+        #endif
+        return false
     }
 
     static func persistFirstPage(
@@ -231,7 +257,8 @@ enum FeedPersistedCacheCoordinator {
     }
 
     static func patchTrade(_ trade: Trade, viewerID: ProfileID) {
-        SocialEntityDiskCache.saveTrade(trade, viewerID: viewerID)
+        let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+        SocialEntityDiskCache.saveTradeSummary(summary, viewerID: viewerID)
         guard trade.visibility == .public else {
             removeEntry(viewerID: viewerID, entryID: trade.id.rawValue)
             return
@@ -242,7 +269,8 @@ enum FeedPersistedCacheCoordinator {
                 switch entry {
                 case .trade(let item, let existing) where existing.id == trade.id:
                     changed = true
-                    return .trade(item, trade)
+                    let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+                    return .trade(item, summary)
                 default:
                     return entry
                 }
@@ -268,8 +296,9 @@ enum FeedPersistedCacheCoordinator {
                     viewerHasLiked: false,
                     mediaURL: trade.thumbnail?.id
                 )
+                let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
                 updatedEntries = FeedPersistentReconcile.dedupe(
-                    [.trade(item, trade)] + updatedEntries
+                    [.trade(item, summary)] + updatedEntries
                 )
                 changed = true
             }
@@ -423,8 +452,8 @@ enum FeedPersistedCacheCoordinator {
         for entry in entries {
             FeedBootstrap.seedAuthor(from: entry.item, detailCache: detailCache)
             switch entry {
-            case .trade(_, let trade):
-                detailCache.seed(trade)
+            case .trade(_, let summary):
+                detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
             case .post(_, let post):
                 detailCache.seed(post)
             case .clip(_, let reel):
@@ -447,9 +476,10 @@ enum FeedPersistedCacheCoordinator {
             item.likeCount = snap.likeCount
             item.commentCount = snap.commentCount
             item.viewerHasLiked = snap.viewerHasLiked
+            FeedEngagementCacheRestore.markEngagementCached(on: &item)
             switch entry {
-            case .trade(_, let trade):
-                return .trade(item, trade)
+            case .trade(_, let summary):
+                return .trade(item, summary)
             case .post(_, let post):
                 return .post(item, post)
             case .clip(_, let reel):

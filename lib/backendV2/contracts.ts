@@ -285,6 +285,12 @@ export type ProfileTabBootstrapV1 = {
   }
 }
 
+/** Phase 8B — see lib/trade/tradeSummaryV2Contract.ts for TradeSummary wire + Profile tab V2. */
+export type {
+  ProfileTabBootstrapV2,
+  TradeSummaryWireV1,
+} from "../trade/tradeSummaryV2Contract.ts"
+
 // —— Messaging / Rooms ——
 
 export type MessagingParticipantV1 = {

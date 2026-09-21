@@ -37,7 +37,10 @@ final class RoomConversationViewModel {
     var draft = ""
     var isSending = false
     var showsTradePicker = false
-    private(set) var tradePickerTrades: [Trade] = []
+    private(set) var tradePickerSummaries: [TradeSummary] = []
+    var tradePickerTrades: [Trade] {
+        tradePickerSummaries.map { TradeSummaryMapper.previewTrade(from: $0) }
+    }
     private(set) var isLoadingTradePicker = false
     private(set) var sharedTrades: [TradeID: Trade] = [:]
     private(set) var sharedPosts: [PostID: Post] = [:]
@@ -546,12 +549,14 @@ final class RoomConversationViewModel {
     }
 
     func loadTradePickerIfNeeded() async {
-        guard tradePickerTrades.isEmpty, !isLoadingTradePicker else { return }
+        guard tradePickerSummaries.isEmpty, !isLoadingTradePicker else { return }
         guard let viewerID else { return }
         isLoadingTradePicker = true
         defer { isLoadingTradePicker = false }
         if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) {
-            tradePickerTrades = TradeShareFixtures.sampleTrades(ownerID: viewerID)
+            tradePickerSummaries = TradeShareFixtures.sampleTrades(ownerID: viewerID).map {
+                TradeSummaryMapper.summary(fromPartialListTrade: $0)
+            }
             return
         }
         guard let tradesRepo else { return }
@@ -562,16 +567,23 @@ final class RoomConversationViewModel {
                 page: PageRequest(limit: 40),
                 publicOnly: false
             )
-            tradePickerTrades = page.items
+            tradePickerSummaries = page.items.map { TradeSummaryMapper.summary(fromPartialListTrade: $0) }
         } catch {
-            tradePickerTrades = []
+            tradePickerSummaries = []
         }
     }
 
     func sendTrade(_ trade: Trade) async {
+        let summary =
+            tradePickerSummaries.first(where: { $0.id == trade.id })
+            ?? TradeSummaryMapper.summary(fromPartialListTrade: trade)
+        await sendTradeSummary(summary)
+    }
+
+    func sendTradeSummary(_ summary: TradeSummary) async {
         guard let viewerID, !isSending, canPostInSelectedChannel, let channelID = selectedChannelID else { return }
         showsTradePicker = false
-        sharedTrades[trade.id] = trade
+        sharedTrades[summary.id] = TradeSummaryMapper.previewTrade(from: summary)
         isSending = true
         defer { isSending = false }
 
@@ -584,9 +596,9 @@ final class RoomConversationViewModel {
             body: nil,
             attachments: [
                 MessageAttachment(
-                    id: trade.id.rawValue,
-                    media: MediaReference(id: trade.id.rawValue, kind: .file, altText: "Shared trade"),
-                    tradeID: trade.id
+                    id: summary.id.rawValue,
+                    media: MediaReference(id: summary.id.rawValue, kind: .file, altText: "Shared trade"),
+                    tradeID: summary.id
                 ),
             ],
             replyToMessageID: nil,
@@ -609,7 +621,7 @@ final class RoomConversationViewModel {
                 roomID: roomID,
                 senderProfileID: viewerID,
                 body: "Shared a trade",
-                attachedTradeID: trade.id,
+                attachedTradeID: summary.id,
                 media: [],
                 parentMessageID: nil,
                 channelID: channelID,
@@ -621,7 +633,7 @@ final class RoomConversationViewModel {
             commitMessages([saved])
             sendStates.removeValue(forKey: tempID)
             sendStates[saved.id] = .sent
-            sharedTrades[trade.id] = trade
+            sharedTrades[summary.id] = TradeSummaryMapper.previewTrade(from: summary)
             persistActiveChannelCache(scrollAnchor: saved.id)
             patchInboxPreview(with: saved)
             ExperienceHaptics.play(.messageSent)

@@ -18,6 +18,7 @@ final class StatsContainerViewModel {
     private let profileID: ProfileID
     private let trades: any TradeRepository
     private let rpc: (any RPCClient)?
+    private let session: any SessionProviding
     private let achievements: any AchievementRepository
     private let detailCache: DetailPresentationCache
 
@@ -33,17 +34,21 @@ final class StatsContainerViewModel {
     private var isScreenOwned = false
     private var awaitingScreenBootstrap = false
     private let initialLoadFailureGrace = ProfileSectionFailureGrace()
+    private var didScheduleLockedProfileShadow = false
+    private var visibilityIdentity = ProfileAnalyticsVisibilityIdentity(token: "")
 
     init(
         profileID: ProfileID,
         trades: any TradeRepository,
         rpc: (any RPCClient)? = nil,
+        session: any SessionProviding,
         achievements: any AchievementRepository,
         detailCache: DetailPresentationCache
     ) {
         self.profileID = profileID
         self.trades = trades
         self.rpc = rpc
+        self.session = session
         self.achievements = achievements
         self.detailCache = detailCache
     }
@@ -59,9 +64,20 @@ final class StatsContainerViewModel {
         if snapshot.didBootstrap || snapshot.phase == .loaded {
             isScreenOwned = true
         }
+        visibilityIdentity = ProfileAnalyticsVisibilityIdentity.from(
+            snapshot: snapshot,
+            subjectProfileID: profileID
+        )
         if snapshot.isContentLocked {
             canViewContent = false
             state = .empty
+            scheduleLockedProfileShadowIfNeeded()
+            Task {
+                await ProfileAnalyticsPresentationCoordinator.handleLockedProfile(
+                    subjectProfileID: profileID,
+                    session: session
+                )
+            }
             return
         }
         canViewContent = true
@@ -120,8 +136,14 @@ final class StatsContainerViewModel {
         if isScreenOwned {
             hasLoadedAnalytics = false
             modeResults = [:]
+            didScheduleLockedProfileShadow = false
             analyticsTask?.cancel()
             analyticsTask = nil
+            Task {
+                await ProfileAnalyticsV2ShadowSession.shared.clearShadowKeys(
+                    forSubjectProfile: profileID.rawValue
+                )
+            }
             scheduleAnalyticsLoadIfNeeded(force: true)
             return
         }
@@ -129,6 +151,12 @@ final class StatsContainerViewModel {
         isRefreshing = true
         hasLoadedAnalytics = false
         modeResults = [:]
+        didScheduleLockedProfileShadow = false
+        Task {
+            await ProfileAnalyticsV2ShadowSession.shared.clearShadowKeys(
+                forSubjectProfile: profileID.rawValue
+            )
+        }
         await performLoad(forceNetwork: true)
         isRefreshing = false
     }
@@ -169,6 +197,65 @@ final class StatsContainerViewModel {
         state = metrics == nil ? .loading : state
         initialLoadFailureGrace.cancel()
 
+        let loadGeneration = await ProfileAnalyticsGRDBSession.shared.currentGeneration()
+        await ProfileAnalyticsGRDBSession.shared.setActiveSubjectProfile(profileID.rawValue)
+
+        if ProfileAnalyticsPresentationCoordinator.usesProfileAnalyticsV2, let rpc {
+            do {
+                if ProfileAnalyticsPresentationCoordinator.usesProfileAnalyticsGRDB,
+                   !forceNetwork,
+                   canViewContent {
+                    let viewerScope = await ProfileAnalyticsV2ShadowCoordinator.viewerScopeID(session: session)
+                    let store = AnalyticsLocalStore()
+                    let cacheKey = store.profileAnalyticsCacheKey(
+                        viewerScopeID: viewerScope,
+                        subjectProfileID: profileID,
+                        visibility: visibilityIdentity
+                    )
+                    if let cached = try await store.readProfileAnalyticsSnapshot(key: cacheKey),
+                       !cached.modeResults.isEmpty {
+                        modeResults = cached.modeResults
+                        recompute()
+                    }
+                }
+
+                if let presentation = try await ProfileAnalyticsPresentationCoordinator.load(
+                    request: ProfileAnalyticsPresentationCoordinator.Request(
+                        subjectProfileID: profileID,
+                        visibility: visibilityIdentity,
+                        canViewStatistics: canViewContent,
+                        forceNetwork: forceNetwork,
+                        loadGeneration: loadGeneration
+                    ),
+                    session: session,
+                    rpc: rpc
+                ) {
+                    guard !Task.isCancelled else { return }
+                    guard await ProfileAnalyticsGRDBSession.shared.isActiveSubjectProfile(
+                        profileID.rawValue
+                    ) else { return }
+                    modeResults = presentation.modeResults
+                    hasLoadedAnalytics = true
+                    analyticsFetchedAt = Date()
+                    initialLoadFailureGrace.cancel()
+                    recompute()
+                    return
+                }
+                ProfileAnalyticsGRDBProbe.logFallback(
+                    viewer: profileID.rawValue,
+                    subject: profileID.rawValue,
+                    reason: "v2_unavailable_or_locked"
+                )
+            } catch {
+                guard !Task.isCancelled else { return }
+                ProfileAnalyticsGRDBProbe.logFallback(
+                    viewer: profileID.rawValue,
+                    subject: profileID.rawValue,
+                    reason: "v2_error"
+                )
+            }
+        }
+
         if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
             do {
                 let applied = try await ProfileStatisticsBootstrapLoader.load(
@@ -180,6 +267,7 @@ final class StatsContainerViewModel {
                 analyticsFetchedAt = Date()
                 initialLoadFailureGrace.cancel()
                 recompute()
+                scheduleProfileAnalyticsV2Shadow(v1ModeResults: applied.modeResults)
                 return
             } catch ProfileStatisticsBootstrapLoader.LoaderError.flagOff,
                     ProfileStatisticsBootstrapLoader.LoaderError.rpcUnavailable {
@@ -193,7 +281,11 @@ final class StatsContainerViewModel {
                 )
                 #endif
                 modeResults = [:]
-                // Fall through to legacy trade pagination when V2 fails.
+                ProfileAnalyticsGRDBProbe.logFallback(
+                    viewer: profileID.rawValue,
+                    subject: profileID.rawValue,
+                    reason: "v1_rpc_error"
+                )
             }
         }
 
@@ -208,6 +300,7 @@ final class StatsContainerViewModel {
             analyticsFetchedAt = Date()
             initialLoadFailureGrace.cancel()
             recompute()
+            scheduleProfileAnalyticsV2Shadow(v1ModeResults: v1ModeResultsForShadow())
         } catch {
             guard !Task.isCancelled else { return }
             if metrics == nil {
@@ -223,6 +316,49 @@ final class StatsContainerViewModel {
                     }
                 }
             }
+        }
+    }
+
+    private func v1ModeResultsForShadow() -> [ProfileStatisticsMetrics.Mode: ProfileStatisticsMetrics.Result] {
+        if !modeResults.isEmpty {
+            return modeResults
+        }
+        var computed: [ProfileStatisticsMetrics.Mode: ProfileStatisticsMetrics.Result] = [:]
+        for mode in ProfileStatisticsMetrics.Mode.allCases {
+            computed[mode] = ProfileStatisticsMetrics.compute(from: tradeInputs, selectedMode: mode)
+        }
+        return computed
+    }
+
+    private func scheduleLockedProfileShadowIfNeeded() {
+        guard !didScheduleLockedProfileShadow else { return }
+        didScheduleLockedProfileShadow = true
+        scheduleProfileAnalyticsV2Shadow(v1ModeResults: [:])
+    }
+
+    private func scheduleProfileAnalyticsV2Shadow(
+        v1ModeResults: [ProfileStatisticsMetrics.Mode: ProfileStatisticsMetrics.Result],
+        force: Bool = false
+    ) {
+        guard BackendV2FeatureFlags.isEnabled(.profileAnalyticsV2Shadow) else { return }
+        guard !ProfileAnalyticsPresentationCoordinator.usesProfileAnalyticsV2 else { return }
+        guard let rpc else { return }
+        let subjectID = profileID
+        Task {
+            let viewerScope = await ProfileAnalyticsV2ShadowCoordinator.viewerScopeID(session: session)
+            let generation = await ProfileAnalyticsV2ShadowSession.shared.currentGeneration()
+            ProfileAnalyticsV2ShadowCoordinator.schedule(
+                rpc: rpc,
+                session: session,
+                request: ProfileAnalyticsV2ShadowCoordinator.Request(
+                    subjectProfileID: subjectID,
+                    viewerScopeID: viewerScope,
+                    shadowGeneration: generation,
+                    v1CanViewStatistics: canViewContent,
+                    v1ModeResults: v1ModeResults,
+                    force: force
+                )
+            )
         }
     }
 

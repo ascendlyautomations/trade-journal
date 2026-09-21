@@ -65,9 +65,9 @@ final class StoryEditorTests: XCTestCase {
         viewModel.updateDraftText("Hi")
         viewModel.finishEditingText()
         viewModel.updateOverlayScale(id: id, scale: 10)
-        XCTAssertEqual(viewModel.canvas.textOverlays.first?.scale, 3, accuracy: 0.001)
+        XCTAssertEqual(Double(viewModel.canvas.textOverlays.first?.scale ?? 0), 3, accuracy: 0.001)
         viewModel.updateOverlayScale(id: id, scale: 0.01)
-        XCTAssertEqual(viewModel.canvas.textOverlays.first?.scale, 0.5, accuracy: 0.001)
+        XCTAssertEqual(Double(viewModel.canvas.textOverlays.first?.scale ?? 0), 0.5, accuracy: 0.001)
     }
 
     private func makeSolidImage(size: CGSize) -> UIImage {

@@ -209,6 +209,8 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         var emitsReactionEvents: Bool
         var emitsCommentLikeEvents: Bool = false
         var emitsCommentPinEvents: Bool = false
+        /// Postgres change event filter (`*`, `UPDATE`, …).
+        var postgresEvent: String = "*"
     }
 
     private struct CommentLikeWatchSpec: Sendable {
@@ -777,6 +779,30 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         await stopWatch(routeKey: "trader-daily-check-ins:\(userID)")
     }
 
+    /// Phase 6D — analytical revision signal (`user_analytics_state` UPDATE for viewer).
+    func watchUserAnalyticsRevision(userID: String, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
+        watch(
+            WatchSpec(
+                topic: "realtime:analytics-revision-\(userID)",
+                routeKey: "analytics-revision:\(userID)",
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "user_analytics_state",
+                        filter: "user_id=eq.\(userID)",
+                        routeColumn: "user_id",
+                        emitsReactionEvents: false,
+                        postgresEvent: "UPDATE"
+                    ),
+                ]
+            ),
+            accessToken: accessToken
+        )
+    }
+
+    func stopWatchingUserAnalyticsRevision(userID: String) async {
+        await stopWatch(routeKey: "analytics-revision:\(userID)")
+    }
+
     /// Web `useCommentLikes` — `comment_likes` postgres_changes for visible comment ids.
     func watchCommentLikes(
         source: CommentLikeSource,
@@ -1087,7 +1113,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         let ref = nextRef()
         let postgresChanges: [[String: Any]] = spec.bindings.map { binding in
             [
-                "event": "*",
+                "event": binding.postgresEvent,
                 "schema": "public",
                 "table": binding.table,
                 "filter": binding.filter,
@@ -1268,6 +1294,14 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                     activeRoutes: endSnapshot.activeRoutes,
                     joinedTopics: endSnapshot.joinedTopics
                 )
+                for spec in specs where spec.routeKey.hasPrefix("analytics-revision:") {
+                    let viewer = spec.routeKey.split(separator: ":", maxSplits: 1).dropFirst().first.map(String.init) ?? ""
+                    if !viewer.isEmpty {
+                        Task { @MainActor in
+                            AnalyticsRevisionRealtimeSession.shared.notifyReconnectIfBound()
+                        }
+                    }
+                }
                 return
             } catch {
                 let delay = policy.delay(forAttempt: attempt)
@@ -1301,14 +1335,23 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         guard let payload = object["payload"] as? [String: Any],
               let status = payload["status"] as? String,
               status == "ok",
-              let topic = object["topic"] as? String,
-              topic.hasPrefix("realtime:room-live-")
+              let topic = object["topic"] as? String
         else { return }
 
         let routeKey = withLocked {
             specsByRouteKey.first(where: { $0.value.topic == topic })?.key
         }
         guard let routeKey else { return }
+
+        if topic.hasPrefix("realtime:analytics-revision-") {
+            let viewer = routeKey.split(separator: ":", maxSplits: 1).dropFirst().first.map(String.init) ?? ""
+            if !viewer.isEmpty {
+                AnalyticsReconciliationProbe.subscribed(viewer: viewer)
+            }
+            return
+        }
+
+        guard topic.hasPrefix("realtime:room-live-") else { return }
         Task { await trackRoomPresenceIfNeeded(routeKey: routeKey, topic: topic) }
     }
 
@@ -1449,6 +1492,16 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         let allCommentLikeContinuations = snapshot.3
         let allCommentPinContinuations = snapshot.4
 
+        if table == "user_analytics_state" {
+            handleUserAnalyticsRevisionChanges(
+                type: type,
+                record: record,
+                specs: specs,
+                continuations: allContinuations
+            )
+            return
+        }
+
         if table == "comment_likes" {
             handleCommentLikeChanges(
                 type: type,
@@ -1518,6 +1571,47 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             for continuation in allContinuations[spec.routeKey] ?? [] {
                 continuation.yield(signal)
             }
+        }
+    }
+
+    private func handleUserAnalyticsRevisionChanges(
+        type: String,
+        record: [String: Any]?,
+        specs: [WatchSpec],
+        continuations: [String: [AsyncStream<MessageRealtimeSignal>.Continuation]]
+    ) {
+        guard type.uppercased() == "UPDATE", let record else { return }
+        guard let userID = record["user_id"] as? String,
+              let revision = Self.parseInt64Field(record["revision"]),
+              revision > 0
+        else { return }
+        let updatedAt = record["updated_at"] as? String
+        let signal = MessageRealtimeSignal(
+            kind: .update,
+            messageID: userID,
+            conversationID: userID,
+            analyticsRevision: revision,
+            analyticsUpdatedAt: updatedAt
+        )
+        let routeKey = "analytics-revision:\(userID)"
+        guard specs.contains(where: { $0.routeKey == routeKey }) else { return }
+        for continuation in continuations[routeKey] ?? [] {
+            continuation.yield(signal)
+        }
+    }
+
+    private static func parseInt64Field(_ value: Any?) -> Int64? {
+        switch value {
+        case let number as NSNumber:
+            return number.int64Value
+        case let string as String:
+            return Int64(string)
+        case let int as Int:
+            return Int64(int)
+        case let int64 as Int64:
+            return int64
+        default:
+            return nil
         }
     }
 
@@ -1622,6 +1716,9 @@ nonisolated struct MessageRealtimeSignal: Sendable {
     var deletedForEveryone: Bool = false
     /// Present when the event originated from `room_message_reactions` or `message_reactions`.
     var reactionEvent: ReactionEvent? = nil
+    /// Phase 6D — `user_analytics_state.revision` on UPDATE (signal only, not authoritative metrics).
+    var analyticsRevision: Int64? = nil
+    var analyticsUpdatedAt: String? = nil
 }
 
 typealias RoomRealtimeSignal = MessageRealtimeSignal

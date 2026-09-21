@@ -3,8 +3,37 @@ import Foundation
 /// JSON disk cache for successful Backend V2 bootstrap payloads (no GRDB).
 nonisolated enum BackendV2BootstrapDiskCache {
     private static let folderName = "BackendV2BootstrapCache"
+    /// Authoritative freshness — onboarding and mutation gating.
     private static let softStaleSeconds: TimeInterval = 10 * 60
-    private static let hardExpirySeconds: TimeInterval = 24 * 60 * 60
+    private static let authoritativeMaxSeconds: TimeInterval = 24 * 60 * 60
+    /// Render-only freshness — aligned with ``FeedDiskCache`` (7 days).
+    static let displayMaxSeconds: TimeInterval = 7 * 24 * 60 * 60
+
+    enum Freshness: Sendable {
+        case fresh
+        case softStale
+        /// Older than authoritative max but still renderable (display-only).
+        case displayOnly
+        case expired
+
+        var isAuthoritative: Bool {
+            switch self {
+            case .fresh, .softStale:
+                return true
+            case .displayOnly, .expired:
+                return false
+            }
+        }
+
+        var isRenderable: Bool {
+            switch self {
+            case .fresh, .softStale, .displayOnly:
+                return true
+            case .expired:
+                return false
+            }
+        }
+    }
 
     struct SessionBlob: Codable, Sendable {
         var viewerID: String
@@ -21,12 +50,6 @@ nonisolated enum BackendV2BootstrapDiskCache {
         var bootstrap: DashboardBootstrapV1
     }
 
-    enum Freshness: Sendable {
-        case fresh
-        case softStale
-        case expired
-    }
-
     // MARK: - Session
 
     static func saveSession(_ bootstrap: SessionBootstrapV1, viewerID: String) {
@@ -40,12 +63,19 @@ nonisolated enum BackendV2BootstrapDiskCache {
     }
 
     static func loadSession(viewerID: String) -> (bootstrap: SessionBootstrapV1, freshness: Freshness)? {
+        loadSessionBlob(viewerID: viewerID)
+    }
+
+    /// True when a renderable session bootstrap blob exists (includes display-only staleness).
+    static func hasRenderableSession(viewerID: String) -> Bool {
+        loadSession(viewerID: viewerID) != nil
+    }
+
+    private static func loadSessionBlob(viewerID: String) -> (bootstrap: SessionBootstrapV1, freshness: Freshness)? {
         guard let blob: SessionBlob = read(file: sessionFile(viewerID: viewerID)) else { return nil }
         guard blob.viewerID == viewerID else { return nil }
         guard blob.contractVersion == BackendV2Versioning.contractVersion else { return nil }
-        let age = Date().timeIntervalSince(blob.savedAt)
-        if age > hardExpirySeconds { return nil }
-        let freshness: Freshness = age <= softStaleSeconds ? .fresh : .softStale
+        guard let freshness = classifyAge(Date().timeIntervalSince(blob.savedAt)) else { return nil }
         return (blob.bootstrap, freshness)
     }
 
@@ -70,14 +100,27 @@ nonisolated enum BackendV2BootstrapDiskCache {
         viewerID: String,
         accountScope: String = "all"
     ) -> (bootstrap: DashboardBootstrapV1, freshness: Freshness)? {
+        loadDashboardBlob(viewerID: viewerID, accountScope: accountScope)
+            .map { ($0.bootstrap, $0.freshness) }
+    }
+
+    private static func loadDashboardBlob(
+        viewerID: String,
+        accountScope: String
+    ) -> (bootstrap: DashboardBootstrapV1, freshness: Freshness)? {
         guard let blob: DashboardBlob = read(file: dashboardFile(viewerID: viewerID, accountScope: accountScope))
         else { return nil }
         guard blob.viewerID == viewerID, blob.accountScope == accountScope else { return nil }
         guard blob.contractVersion == BackendV2Versioning.contractVersion else { return nil }
-        let age = Date().timeIntervalSince(blob.savedAt)
-        if age > hardExpirySeconds { return nil }
-        let freshness: Freshness = age <= softStaleSeconds ? .fresh : .softStale
+        guard let freshness = classifyAge(Date().timeIntervalSince(blob.savedAt)) else { return nil }
         return (blob.bootstrap, freshness)
+    }
+
+    private static func classifyAge(_ age: TimeInterval) -> Freshness? {
+        if age > displayMaxSeconds { return nil }
+        if age <= softStaleSeconds { return .fresh }
+        if age <= authoritativeMaxSeconds { return .softStale }
+        return .displayOnly
     }
 
     /// Promote soft-stale blobs to fresh without changing bootstrap payloads.
@@ -180,12 +223,7 @@ nonisolated enum BackendV2BootstrapDiskCache {
     }
 
     private static func directoryURL() -> URL? {
-        guard let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        let dir = base.appendingPathComponent(folderName, isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        PersistentAppDataDiskCache.directoryURL(component: folderName)
     }
 
     private static func write<T: Encodable>(_ value: T, file: String) {

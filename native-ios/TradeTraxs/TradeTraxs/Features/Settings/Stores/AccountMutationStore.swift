@@ -25,11 +25,27 @@ final class AccountMutationStore {
         revision += 1
     }
 
-    func noteAccountUpdated(_ account: TradingAccount, allAccounts: [TradingAccount]) {
+    func noteAccountUpdated(
+        _ account: TradingAccount,
+        allAccounts: [TradingAccount],
+        previous: TradingAccount? = nil
+    ) {
         latestKind = .generic
         latestAccountID = account.id
         AccountPersistedCacheCoordinator.noteAccountPatched(account, viewerID: account.ownerProfileID)
         revision += 1
+        if let previous, previous.mode != account.mode {
+            Task { @MainActor in
+                let visible = AnalyticsLocalMutationRouter.visibleMonthBoundsForBulk()
+                let scope = AnalyticsLocalMutationScopeBuilder.accountModeChanged(
+                    viewerID: account.ownerProfileID,
+                    accountID: account.id,
+                    visibleMonth: visible
+                )
+                AnalyticsLocalMutationRouter.submit(kind: .account, scope: scope)
+                ProfileAnalyticsOwnerInvalidation.invalidateOwnerSnapshot(viewerID: account.ownerProfileID)
+            }
+        }
     }
 
     func noteAccountsChanged(allAccounts: [TradingAccount], viewerID: ProfileID) {

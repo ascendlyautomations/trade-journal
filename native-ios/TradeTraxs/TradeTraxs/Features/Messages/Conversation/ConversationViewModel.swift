@@ -40,7 +40,10 @@ final class ConversationViewModel {
     private(set) var isUpdatingBlock = false
     var showsBlockConfirmation = false
     var pendingBlockAction: Bool?
-    private(set) var tradePickerTrades: [Trade] = []
+    private(set) var tradePickerSummaries: [TradeSummary] = []
+    var tradePickerTrades: [Trade] {
+        tradePickerSummaries.map { TradeSummaryMapper.previewTrade(from: $0) }
+    }
     private(set) var isLoadingTradePicker = false
     private(set) var sharedTrades: [TradeID: Trade] = [:]
     private(set) var sharedPosts: [PostID: Post] = [:]
@@ -422,12 +425,14 @@ final class ConversationViewModel {
     }
 
     func loadTradePickerIfNeeded() async {
-        guard tradePickerTrades.isEmpty, !isLoadingTradePicker else { return }
+        guard tradePickerSummaries.isEmpty, !isLoadingTradePicker else { return }
         guard let viewerID, let tradesRepo else { return }
         isLoadingTradePicker = true
         defer { isLoadingTradePicker = false }
         if ConversationThreadSupport.isLocalDevelopment(viewerID) {
-            tradePickerTrades = TradeShareFixtures.sampleTrades(ownerID: viewerID)
+            tradePickerSummaries = TradeShareFixtures.sampleTrades(ownerID: viewerID).map {
+                TradeSummaryMapper.summary(fromPartialListTrade: $0)
+            }
             return
         }
         do {
@@ -437,16 +442,24 @@ final class ConversationViewModel {
                 page: PageRequest(limit: 40),
                 publicOnly: false
             )
-            tradePickerTrades = page.items
+            tradePickerSummaries = page.items.map { TradeSummaryMapper.summary(fromPartialListTrade: $0) }
         } catch {
-            tradePickerTrades = []
+            tradePickerSummaries = []
         }
     }
 
     func sendTrade(_ trade: Trade) async {
         guard let viewerID, !isSending else { return }
+        let summary =
+            tradePickerSummaries.first(where: { $0.id == trade.id })
+            ?? TradeSummaryMapper.summary(fromPartialListTrade: trade)
+        await sendTradeSummary(summary)
+    }
+
+    func sendTradeSummary(_ summary: TradeSummary) async {
+        guard let viewerID, !isSending else { return }
         showsTradePicker = false
-        sharedTrades[trade.id] = trade
+        sharedTrades[summary.id] = TradeSummaryMapper.previewTrade(from: summary)
         isSending = true
         defer { isSending = false }
 
@@ -459,9 +472,9 @@ final class ConversationViewModel {
             body: nil,
             attachments: [
                 MessageAttachment(
-                    id: trade.id.rawValue,
-                    media: MediaReference(id: trade.id.rawValue, kind: .file, altText: "Shared trade"),
-                    tradeID: trade.id
+                    id: summary.id.rawValue,
+                    media: MediaReference(id: summary.id.rawValue, kind: .file, altText: "Shared trade"),
+                    tradeID: summary.id
                 ),
             ],
             replyToMessageID: nil,
@@ -492,7 +505,7 @@ final class ConversationViewModel {
             commitMessages([saved], recordScrollEvents: false)
             sendStates.removeValue(forKey: tempID)
             sendStates[saved.id] = .sent
-            sharedTrades[trade.id] = trade
+            sharedTrades[summary.id] = TradeSummaryMapper.previewTrade(from: summary)
             patchInbox(with: saved, source: "confirmedTradeSend")
             SafeInboxLog.sendCompleted(
                 conversationID: saved.conversationID,

@@ -114,7 +114,14 @@ final class AuthenticationManager {
             let expired = expiration.isExpired(session) || expiration.needsRefresh(session)
             traceRestoreSessionFound(expired: expired, present: true)
             if expiration.needsRefresh(session) {
-                // Keychain-only: mark refresh required — ``restoreSession()`` performs the single network refresh.
+                if expiration.isAccessTokenUsable(session) {
+                    // Near expiry — enter shell with the current token; refresh runs asynchronously.
+                    applyAuthenticated(session, event: .restorationSucceeded(userID: session.userID))
+                    Task { await SessionNetworkGate.shared.markReady() }
+                    refreshCoordinator.schedule(for: session)
+                    return state
+                }
+                // Access token unusable — block until refresh restores a usable session.
                 state = .refreshing(session)
                 Task { await SessionNetworkGate.shared.beginRefresh() }
                 return state
@@ -160,8 +167,16 @@ final class AuthenticationManager {
             case .unauthenticated, .failure:
                 await SessionNetworkGate.shared.markUnauthenticated()
                 return
-            case .authenticated, .locked:
-                await SessionNetworkGate.shared.markReady()
+            case .authenticated(let session), .locked(let session):
+                if expiration.needsRefresh(session) {
+                    await performRefresh(
+                        session: session,
+                        reason: "proactive",
+                        blocksNetworkGate: !expiration.isAccessTokenUsable(session)
+                    )
+                } else {
+                    await SessionNetworkGate.shared.markReady()
+                }
                 return
             case .sessionValidationFailed:
                 return
@@ -177,7 +192,11 @@ final class AuthenticationManager {
         }
 
         if case .refreshing(let session) = state {
-            await performRefresh(session: session, reason: "restore")
+            await performRefresh(
+                session: session,
+                reason: "restore",
+                blocksNetworkGate: true
+            )
             return
         }
 
@@ -192,7 +211,9 @@ final class AuthenticationManager {
         switch state {
         case .refreshing, .unknown:
             return false
-        case .unauthenticated, .failure, .authenticated, .locked, .sessionValidationFailed, .authenticating:
+        case .authenticated(let session), .locked(let session):
+            return !expiration.needsRefresh(session)
+        case .unauthenticated, .failure, .sessionValidationFailed, .authenticating:
             return true
         }
     }
@@ -600,11 +621,17 @@ final class AuthenticationManager {
         AuthFlowTracer.traceRootTransition(to: .authenticated, generation: restorationGeneration)
     }
 
-    private func performRefresh(session: AuthenticationSession, reason: String) async {
+    private func performRefresh(
+        session: AuthenticationSession,
+        reason: String,
+        blocksNetworkGate: Bool = true
+    ) async {
         emit(.tokenRefreshStarted)
         AuthFlowTracer.trace("auth.refresh.started", phase: .restoring, generation: restorationGeneration)
         AuthFlowTracer.trace("session.validation.started", phase: .restoring, generation: restorationGeneration)
-        await SessionNetworkGate.shared.beginRefresh()
+        if blocksNetworkGate {
+            await SessionNetworkGate.shared.beginRefresh()
+        }
         let generation = restorationGeneration
         AuthRestoreDebug.refreshStarted(generation: generation)
         let refreshStartedAt = CFAbsoluteTimeGetCurrent()
@@ -637,7 +664,8 @@ final class AuthenticationManager {
                 error,
                 session: session,
                 generation: generation,
-                durationMs: Int((CFAbsoluteTimeGetCurrent() - refreshStartedAt) * 1_000)
+                durationMs: Int((CFAbsoluteTimeGetCurrent() - refreshStartedAt) * 1_000),
+                blocksNetworkGate: blocksNetworkGate
             )
         } catch AuthBootstrapError.staleSessionResult {
             traceRefreshCancelled(reason: "staleSessionResult")
@@ -646,7 +674,8 @@ final class AuthenticationManager {
                 session: session,
                 generation: generation,
                 reason: "cancelled",
-                durationMs: Int((CFAbsoluteTimeGetCurrent() - refreshStartedAt) * 1_000)
+                durationMs: Int((CFAbsoluteTimeGetCurrent() - refreshStartedAt) * 1_000),
+                blocksNetworkGate: blocksNetworkGate
             )
         } catch {
             let mapped = AuthenticationError.fromRefreshFailure(error)
@@ -654,7 +683,8 @@ final class AuthenticationManager {
                 mapped,
                 session: session,
                 generation: generation,
-                durationMs: Int((CFAbsoluteTimeGetCurrent() - refreshStartedAt) * 1_000)
+                durationMs: Int((CFAbsoluteTimeGetCurrent() - refreshStartedAt) * 1_000),
+                blocksNetworkGate: blocksNetworkGate
             )
         }
     }
@@ -663,10 +693,17 @@ final class AuthenticationManager {
         _ error: AuthenticationError,
         session: AuthenticationSession,
         generation: UInt64,
-        durationMs: Int
+        durationMs: Int,
+        blocksNetworkGate: Bool
     ) async {
         guard generation == restorationGeneration else {
             traceRefreshCancelled(reason: "supersededGeneration")
+            return
+        }
+        if !blocksNetworkGate, expiration.isAccessTokenUsable(session) {
+            emit(.tokenRefreshFailed)
+            await SessionNetworkGate.shared.markReady()
+            AuthFlowTracer.traceRefreshCompleted(.transientFailure, generation: generation)
             return
         }
         emit(.tokenRefreshFailed)
@@ -715,17 +752,21 @@ final class AuthenticationManager {
         session: AuthenticationSession,
         generation: UInt64,
         reason: String,
-        durationMs: Int
+        durationMs: Int,
+        blocksNetworkGate: Bool
     ) async {
         traceRefreshCancelled(reason: reason)
         guard generation == restorationGeneration else { return }
-        guard case .refreshing = state else { return }
+        if blocksNetworkGate {
+            guard case .refreshing = state else { return }
+        }
         let transient = AuthenticationError.unknown("refreshTimeout")
         await handleRefreshFailure(
             transient,
             session: session,
             generation: generation,
-            durationMs: durationMs
+            durationMs: durationMs,
+            blocksNetworkGate: blocksNetworkGate
         )
     }
 

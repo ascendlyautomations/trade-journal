@@ -376,10 +376,10 @@ enum SharedContentHydrator {
             detailCache.seed(post)
             sharedPosts[id] = post
             if let tradeID = post.linkedTradeID,
-               let trade = SocialEntityDiskCache.loadTrade(id: tradeID, viewerID: viewerID)
+               let summary = SocialEntityDiskCache.loadTradeSummary(id: tradeID, viewerID: viewerID)
             {
-                detailCache.seed(trade)
-                sharedTrades[tradeID] = trade
+                detailCache.seedPresentationSeed(summary)
+                sharedTrades[tradeID] = TradeSummaryMapper.previewTrade(from: summary)
             }
             return true
         case .reel(let id):
@@ -387,10 +387,10 @@ enum SharedContentHydrator {
             detailCache.seed(reel)
             sharedReels[id] = reel
             if let tradeID = reel.linkedTradeID,
-               let trade = SocialEntityDiskCache.loadTrade(id: tradeID, viewerID: viewerID)
+               let summary = SocialEntityDiskCache.loadTradeSummary(id: tradeID, viewerID: viewerID)
             {
-                detailCache.seed(trade)
-                sharedTrades[tradeID] = trade
+                detailCache.seedPresentationSeed(summary)
+                sharedTrades[tradeID] = TradeSummaryMapper.previewTrade(from: summary)
             }
             return true
         case .achievementPost(let id):
@@ -401,9 +401,9 @@ enum SharedContentHydrator {
             sharedAchievements[achievementID] = achievement
             return true
         case .trade(let id):
-            guard let trade = SocialEntityDiskCache.loadTrade(id: id, viewerID: viewerID) else { return false }
-            detailCache.seed(trade)
-            sharedTrades[id] = trade
+            guard let summary = SocialEntityDiskCache.loadTradeSummary(id: id, viewerID: viewerID) else { return false }
+            detailCache.seedPresentationSeed(summary)
+            sharedTrades[id] = TradeSummaryMapper.previewTrade(from: summary)
             return true
         }
     }
@@ -420,15 +420,21 @@ enum SharedContentHydrator {
         case .feedPost(let id), .profilePost(let id):
             guard let post = detailCache.post(id: id) else { return false }
             sharedPosts[id] = post
-            if let tradeID = post.linkedTradeID, let trade = detailCache.trade(id: tradeID) {
-                sharedTrades[tradeID] = trade
+            if let tradeID = post.linkedTradeID,
+               let preview = detailCache.previewTrade(id: tradeID)
+                ?? detailCache.tradeSummary(id: tradeID).map({ TradeSummaryMapper.previewTrade(from: $0) })
+            {
+                sharedTrades[tradeID] = preview
             }
             return true
         case .reel(let id):
             guard let reel = detailCache.reel(id: id) else { return false }
             sharedReels[id] = reel
-            if let tradeID = reel.linkedTradeID, let trade = detailCache.trade(id: tradeID) {
-                sharedTrades[tradeID] = trade
+            if let tradeID = reel.linkedTradeID,
+               let preview = detailCache.previewTrade(id: tradeID)
+                ?? detailCache.tradeSummary(id: tradeID).map({ TradeSummaryMapper.previewTrade(from: $0) })
+            {
+                sharedTrades[tradeID] = preview
             }
             return true
         case .achievementPost(let id):
@@ -437,8 +443,10 @@ enum SharedContentHydrator {
             sharedAchievements[achievementID] = achievement
             return true
         case .trade(let id):
-            guard let trade = detailCache.trade(id: id) else { return false }
-            sharedTrades[id] = trade
+            guard let preview = detailCache.previewTrade(id: id)
+                ?? detailCache.tradeSummary(id: id).map({ TradeSummaryMapper.previewTrade(from: $0) })
+            else { return false }
+            sharedTrades[id] = preview
             return true
         }
     }
@@ -454,9 +462,9 @@ enum SharedContentHydrator {
     ) {
         FeedBootstrap.seedAuthor(from: seed.item, detailCache: detailCache)
 
-        if let trade = seed.trade {
-            detailCache.seed(trade)
-            sharedTrades[trade.id] = trade
+        if let summary = seed.tradeSummary {
+            detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
+            sharedTrades[summary.id] = TradeSummaryMapper.previewTrade(from: summary)
         }
         if let post = seed.post {
             detailCache.seed(post)
@@ -475,7 +483,7 @@ enum SharedContentHydrator {
         }
 
         switch reference {
-        case .feedPost(let id) where seed.post == nil && seed.trade != nil:
+        case .feedPost(let id) where seed.post == nil && seed.tradeSummary != nil:
             sharedPosts[id] = seed.syntheticFeedPost
         default:
             break
@@ -498,10 +506,10 @@ enum SharedContentHydrator {
                 continue
             }
             if let viewerID,
-               let seed = feedSessionStore.lookupTrade(id: tradeID, viewerID: viewerID)
+               let summary = feedSessionStore.lookupTradeSummary(id: tradeID, viewerID: viewerID)
             {
-                detailCache.seed(seed)
-                sharedTrades[tradeID] = seed
+                detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
+                sharedTrades[tradeID] = TradeSummaryMapper.previewTrade(from: summary)
             }
         }
     }

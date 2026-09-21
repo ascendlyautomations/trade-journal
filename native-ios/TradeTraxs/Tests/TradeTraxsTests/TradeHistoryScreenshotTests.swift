@@ -116,6 +116,7 @@ final class TradeHistoryScreenshotTests: XCTestCase {
             trades: TradeHistoryScreenshotTradeRepository(),
             session: TradeHistoryScreenshotSession(userID: "dev.trades.shots"),
             detailCache: DetailPresentationCache(),
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
     }

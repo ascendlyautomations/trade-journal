@@ -23,6 +23,40 @@ nonisolated struct ProfileTabRpcRepository {
         self.client = BackendV2RPCClient(transport: rpc)
     }
 
+    func loadProfileTradesV2(
+        profileID: ProfileID,
+        limit: Int,
+        cursor: String?
+    ) async throws -> ProfileTabBootstrapV2 {
+        let args = ProfileTabRpcArguments(
+            p_profile_id: profileID.rawValue,
+            p_limit: limit,
+            p_cursor: cursor
+        )
+        let body = try JSONEncoder().encode(args)
+        let value = try await client.call(
+            .profileTabTradesV2,
+            argumentsJSON: body,
+            as: ProfileTabBootstrapV2.self,
+            options: BackendV2RPCCallOptions(
+                cacheMiss: true,
+                flagName: BackendV2FeatureFlag.profileTradesSummaryV2.dottedName
+            )
+        )
+        try value.validateContractVersion()
+        #if DEBUG
+        if let bytes = try? JSONEncoder().encode(value) {
+            TradeSummaryProfileTelemetry.recordLoad(
+                path: "v2.rpc",
+                tradeCount: value.data.items.count,
+                responseBytes: bytes.count,
+                networkMs: nil
+            )
+        }
+        #endif
+        return value
+    }
+
     func load(
         tab: ProfileTabKind,
         profileID: ProfileID,
@@ -85,6 +119,7 @@ enum ProfileTabBootstrapLoader {
         tab: ProfileTabKind,
         profileID: ProfileID,
         rpc: any RPCClient,
+        detailCache: DetailPresentationCache?,
         cursor: String?,
         limit: Int = defaultPageSize
     ) async throws -> ProfileTabBootstrapApplier.Applied {
@@ -106,6 +141,51 @@ enum ProfileTabBootstrapLoader {
             cursor: cursor,
             limit: limit
         )
+
+        if tab == .trades, BackendV2FeatureFlags.isEnabled(.profileTradesSummaryV2) {
+            let rpcNameV2 = BackendV2Versioning.RPCName.profileTabTradesV2.rawValue
+            if await BackendV2RpcAvailability.shared.isUnavailable(
+                rpcName: rpcNameV2,
+                viewerID: profileID.rawValue
+            ) {
+                throw LoaderError.rpcUnavailable
+            }
+            let flightKeyV2 = BackendV2FlightKeys.profileTab(
+                tab: "trades_v2",
+                profileID: profileID.rawValue,
+                cursor: cursor,
+                limit: limit
+            )
+            do {
+                let data = try await BootstrapTransportTimeout.run {
+                    try await BackendV2SingleFlight.shared.coalesce(key: flightKeyV2) {
+                        let repo = ProfileTabRpcRepository(rpc: rpc)
+                        let value = try await repo.loadProfileTradesV2(
+                            profileID: profileID,
+                            limit: limit,
+                            cursor: cursor
+                        )
+                        return try JSONEncoder().encode(value)
+                    }
+                }
+                let bootstrap = try JSONDecoder().decode(ProfileTabBootstrapV2.self, from: data)
+                try bootstrap.validateContractVersion()
+                return ProfileTabBootstrapV2Applier.applyTradesTab(
+                    bootstrap,
+                    ownerID: profileID,
+                    detailCache: detailCache
+                )
+            } catch {
+                if BackendV2RpcCompat.isRpcUnavailable(error, rpcName: rpcNameV2) {
+                    await BackendV2RpcAvailability.shared.markUnavailable(
+                        rpcName: rpcNameV2,
+                        viewerID: profileID.rawValue
+                    )
+                    throw LoaderError.rpcUnavailable
+                }
+                throw error
+            }
+        }
 
         let bootstrap: ProfileTabBootstrapV1
         do {

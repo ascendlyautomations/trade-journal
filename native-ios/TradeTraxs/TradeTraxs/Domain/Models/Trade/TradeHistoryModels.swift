@@ -367,9 +367,13 @@ nonisolated struct TradeHistorySummary: Hashable, Sendable {
     var winRate: Decimal?
 
     static func from(trades: [Trade]) -> TradeHistorySummary {
-        let count = trades.count
-        let net = trades.reduce(Decimal(0)) { $0 + ($1.realizedPnL?.amount ?? 0) }
-        let wins = trades.filter { ($0.realizedPnL?.amount ?? 0) > 0 }.count
+        from(summaries: trades.map(TradeSummaryMapper.ownerJournal(fromListTrade:)))
+    }
+
+    static func from(summaries: [TradeOwnerJournalSummary]) -> TradeHistorySummary {
+        let count = summaries.count
+        let net = summaries.reduce(Decimal(0)) { $0 + ($1.summary.realizedPnL?.amount ?? 0) }
+        let wins = summaries.filter { ($0.summary.realizedPnL?.amount ?? 0) > 0 }.count
         let winRate: Decimal? = count > 0
             ? (Decimal(wins) / Decimal(count)) * 100
             : nil

@@ -44,6 +44,7 @@ final class ProfileShellViewModel {
                 rpc: data.rpc,
                 navigationCoordinator: navigationCoordinator,
                 detailCache: data.detailCache,
+                tradeDetailRepository: data.tradeDetailRepository,
                 engagementStore: data.engagementStore,
                 isOwner: isOwner
             )
@@ -227,6 +228,7 @@ final class ProfileShellViewModel {
                     rpc: data.rpc,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
+                    tradeDetailRepository: data.tradeDetailRepository,
                     engagementStore: data.engagementStore,
                     isOwner: isOwner
                 )
@@ -267,6 +269,7 @@ final class ProfileShellViewModel {
                     profileID: profileID,
                     trades: data.trades,
                     rpc: data.rpc,
+                    session: data.session,
                     achievements: data.achievements,
                     detailCache: data.detailCache
                 )

@@ -17,14 +17,17 @@ enum ProfileTradesFilter: String, CaseIterable, Identifiable, Sendable {
     }
 
     func matches(_ trade: Trade) -> Bool {
+        matches(TradeSummaryMapper.summary(fromPartialListTrade: trade))
+    }
+
+    func matches(_ summary: TradeSummary) -> Bool {
         switch self {
         case .all:
             return true
         case .wins:
-            // Web profile: pnl >= 0 (break-even counts as a win).
-            return (trade.realizedPnL?.amount ?? 0) >= 0
+            return (summary.realizedPnL?.amount ?? 0) >= 0
         case .losses:
-            return (trade.realizedPnL?.amount ?? 0) < 0
+            return (summary.realizedPnL?.amount ?? 0) < 0
         }
     }
 }
@@ -52,25 +55,31 @@ enum ProfileTradesSort: String, CaseIterable, Identifiable, Sendable {
     }
 
     func sorted(_ trades: [Trade]) -> [Trade] {
+        sorted(trades.map(TradeSummaryMapper.summary(fromPartialListTrade:))).map {
+            TradeSummaryMapper.previewTrade(from: $0)
+        }
+    }
+
+    func sorted(_ summaries: [TradeSummary]) -> [TradeSummary] {
         switch self {
         case .newest:
-            return trades.sorted { $0.createdAt > $1.createdAt }
+            return summaries.sorted { $0.createdAt > $1.createdAt }
         case .oldest:
-            return trades.sorted { $0.createdAt < $1.createdAt }
+            return summaries.sorted { $0.createdAt < $1.createdAt }
         case .highestProfit:
-            return trades.sorted { lhs, rhs in
+            return summaries.sorted { lhs, rhs in
                 (lhs.realizedPnL?.amount ?? 0) > (rhs.realizedPnL?.amount ?? 0)
             }
         case .lowestProfit:
-            return trades.sorted { lhs, rhs in
+            return summaries.sorted { lhs, rhs in
                 (lhs.realizedPnL?.amount ?? 0) < (rhs.realizedPnL?.amount ?? 0)
             }
         case .highestRR:
-            return trades.sorted { lhs, rhs in
+            return summaries.sorted { lhs, rhs in
                 compareRR(lhs.riskReward, rhs.riskReward, ascending: false)
             }
         case .lowestRR:
-            return trades.sorted { lhs, rhs in
+            return summaries.sorted { lhs, rhs in
                 compareRR(lhs.riskReward, rhs.riskReward, ascending: true)
             }
         }

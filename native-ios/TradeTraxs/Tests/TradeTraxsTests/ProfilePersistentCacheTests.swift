@@ -86,42 +86,31 @@ final class ProfilePersistentCacheTests: XCTestCase {
         XCTAssertNil(ProfileDiskCache.loadSnapshot(viewerID: viewerA, targetProfileID: target))
     }
 
-    func testTradeMutationPatchesProfileAndFeedEntityCaches() {
+    func testTradeMutationPatchesProfileSummaryCache() {
         let trade = makeTrade(id: "trade-1", owner: target)
         ProfilePersistedCacheCoordinator.persist(
             viewerID: viewerA,
             targetProfileID: target,
-            state: makeLoadedState(target: target, viewerIsOwner: false, trades: [trade])
-        )
-        FeedPersistedCacheCoordinator.persistFirstPage(
-            viewerID: viewerA,
-            scope: .following,
-            contentFilter: .all,
-            entries: [.trade(makeFeedItem(for: trade), trade)],
-            stories: [],
-            nextCursor: nil
+            state: makeLoadedState(target: target, viewerIsOwner: false, trades: [makeSummary(id: "trade-1", owner: target)])
         )
 
         var updated = trade
         updated.publicCaption = "updated caption"
+        updated.notePreview = "updated caption"
         ProfilePersistedCacheCoordinator.patchTrade(updated, viewerID: viewerA)
-        FeedPersistedCacheCoordinator.patchTrade(updated, viewerID: viewerA)
 
-        let profileBlob = ProfileDiskCache.loadSnapshot(viewerID: viewerA, targetProfileID: target)
-        XCTAssertEqual(profileBlob?.trades.first?.publicCaption, "updated caption")
-        let feedBlob = FeedDiskCache.loadPage(viewerID: viewerA, scope: .following, contentFilter: .all)
-        if case .trade(_, let cachedTrade) = feedBlob?.entries.first {
-            XCTAssertEqual(cachedTrade.publicCaption, "updated caption")
-        } else {
-            XCTFail("Expected feed trade row")
-        }
+        let restored = ProfileSessionStore.shared.restore(
+            viewerID: viewerA,
+            targetProfileID: target
+        )
+        XCTAssertEqual(restored?.trades.first?.publicCaption, "updated caption")
         XCTAssertNotNil(SocialEntityDiskCache.loadTrade(id: trade.id, viewerID: viewerA))
     }
 
     func testReconcileUpdatesTradesWithoutDuplicating() {
-        let existing = makeTrade(id: "trade-1", owner: target, caption: "old")
-        let incoming = makeTrade(id: "trade-1", owner: target, caption: "new")
-        let result = ProfilePersistentReconcile.reconcileTrades(
+        let existing = makeSummary(id: "trade-1", owner: target, caption: "old")
+        let incoming = makeSummary(id: "trade-1", owner: target, caption: "new")
+        let result = ProfilePersistentReconcile.reconcileTradeSummaries(
             existing: [existing],
             incoming: [incoming]
         )
@@ -170,7 +159,7 @@ final class ProfilePersistentCacheTests: XCTestCase {
     private func makeLoadedState(
         target: ProfileID,
         viewerIsOwner: Bool,
-        trades: [Trade]? = nil
+        trades: [TradeSummary]? = nil
     ) -> ProfileState {
         var state = ProfileState()
         state.phase = .loaded
@@ -208,8 +197,12 @@ final class ProfilePersistentCacheTests: XCTestCase {
         state.canViewTrades = true
         state.didBootstrap = true
         state.didLoadTrades = true
-        state.trades = trades ?? [makeTrade(id: "trade-1", owner: target)]
+        state.trades = trades ?? [makeSummary(id: "trade-1", owner: target)]
         return state
+    }
+
+    private func makeSummary(id: String, owner: ProfileID, caption: String = "caption") -> TradeSummary {
+        TradeSummaryMapper.summary(fromPartialListTrade: makeTrade(id: id, owner: owner, caption: caption))
     }
 
     private func makeTrade(id: String, owner: ProfileID, caption: String = "caption") -> Trade {

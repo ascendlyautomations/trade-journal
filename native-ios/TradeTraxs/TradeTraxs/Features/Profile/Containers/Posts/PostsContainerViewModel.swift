@@ -260,6 +260,7 @@ final class PostsContainerViewModel {
                     tab: .posts,
                     profileID: profileOwnerID,
                     rpc: rpc,
+                    detailCache: nil,
                     cursor: nil
                 )
                 pageItems = applied.posts ?? []
@@ -349,6 +350,7 @@ final class PostsContainerViewModel {
                     tab: .posts,
                     profileID: profileOwnerID,
                     rpc: rpc,
+                    detailCache: nil,
                     cursor: cursor
                 )
                 pageItems = applied.posts ?? []

@@ -38,6 +38,29 @@ nonisolated enum ProfileOnboardingErrorMapping {
         return nil
     }
 
+    /// Connectivity-only failures — not invalid credentials or onboarding validation errors.
+    static func isTransientConnectivityFailure(_ error: Error) -> Bool {
+        if let network = resolveNetworkError(error) {
+            switch network {
+            case .connectivity:
+                return true
+            case .server(let code, _) where (500..<600).contains(code):
+                return true
+            default:
+                return false
+            }
+        }
+        if let auth = error as? AuthenticationError, auth.isTransientRefreshFailure {
+            switch auth {
+            case .unknown(let reason) where reason == "networkUnavailable" || reason == "refreshTimeout":
+                return true
+            default:
+                return false
+            }
+        }
+        return false
+    }
+
     private static func networkMessage(_ error: NetworkError, context: String) -> String {
         switch error {
         case .connectivity:

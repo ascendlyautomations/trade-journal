@@ -23,8 +23,8 @@ enum FeedLinkedContentResolver {
         cache: DetailPresentationCache
     ) -> Reel? {
         switch entry {
-        case .trade(_, let trade):
-            return cache.reel(linkedTo: trade.id)
+        case .trade(_, let summary):
+            return cache.reel(linkedTo: summary.id)
         case .post, .clip, .achievement:
             return nil
         }
@@ -33,27 +33,43 @@ enum FeedLinkedContentResolver {
 
 /// Compact linked-trade preview — tap opens trade detail only.
 struct FeedLinkedTradeEmbed: View {
-    let trade: Trade
+    let summary: TradeSummary
     let imagePipeline: any ImagePipeline
     let onOpen: () -> Void
 
     @Environment(\.themeColors) private var colors
 
+    init(trade: Trade, imagePipeline: any ImagePipeline, onOpen: @escaping () -> Void) {
+        self.init(
+            summary: TradeSummaryMapper.summary(fromPartialListTrade: trade),
+            imagePipeline: imagePipeline,
+            onOpen: onOpen
+        )
+    }
+
+    init(summary: TradeSummary, imagePipeline: any ImagePipeline, onOpen: @escaping () -> Void) {
+        self.summary = summary
+        self.imagePipeline = imagePipeline
+        self.onOpen = onOpen
+    }
+
     var body: some View {
         Button(action: onOpen) {
             HStack(alignment: .center, spacing: ExperienceSpacing.md) {
-                TradePreviewThumbnail(
-                    trade: trade,
+                TradeImageView(
+                    reference: ProfileCardMediaPresence.tradeMedia(in: summary),
                     imagePipeline: imagePipeline,
-                    size: .compact
+                    purpose: .tradeScreenshot,
+                    contentMode: .fill,
+                    side: 60
                 )
 
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                     PublicTradeHeadlineRow(
-                        ticker: trade.symbol.ticker,
-                        realizedPnL: trade.realizedPnL
+                        ticker: summary.symbol.ticker,
+                        realizedPnL: summary.realizedPnL
                     )
-                    PublicTradeMetaChipRow(trade: trade)
+                    PublicTradeMetaChipRow(summary: summary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -66,8 +82,8 @@ struct FeedLinkedTradeEmbed: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Linked trade \(trade.symbol.ticker)")
-        .accessibilityIdentifier("feed.linked.trade.\(trade.id.rawValue)")
+        .accessibilityLabel("Linked trade \(summary.symbol.ticker)")
+        .accessibilityIdentifier("feed.linked.trade.\(summary.id.rawValue)")
     }
 }
 

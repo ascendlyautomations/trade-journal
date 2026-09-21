@@ -28,6 +28,43 @@ nonisolated struct TradesListRpcBootstrapRepository {
     }
 }
 
+nonisolated struct TradesListRpcBootstrapV2Repository {
+    private let client: BackendV2RPCClient
+
+    init(rpc: any RPCClient) {
+        self.client = BackendV2RPCClient(transport: rpc)
+    }
+
+    func load(
+        query: TradeHistoryQuery,
+        limit: Int,
+        cursor: String?
+    ) async throws -> TradesListBootstrapV2 {
+        let args = TradesListRpcArguments(query: query, limit: limit, cursor: cursor)
+        let body = try JSONEncoder().encode(args)
+        let value = try await client.call(
+            .tradesListV2,
+            argumentsJSON: body,
+            as: TradesListBootstrapV2.self,
+            options: BackendV2RPCCallOptions(
+                cacheMiss: true,
+                flagName: BackendV2FeatureFlag.tradeJournalSummaryV2.dottedName
+            )
+        )
+        try value.validateContractVersion()
+        #if DEBUG
+        let decodedBytes = (try? JSONEncoder().encode(value))?.count
+        TradeSummaryJournalTelemetry.recordLoad(
+            path: "v2.rpc",
+            tradeCount: value.data.trades.count,
+            responseBytes: decodedBytes,
+            networkMs: nil
+        )
+        #endif
+        return value
+    }
+}
+
 private nonisolated struct TradesListRpcArguments: Encodable, Sendable {
     var p_limit: Int
     var p_cursor: String?
@@ -193,6 +230,50 @@ enum TradesListBootstrapLoader {
             queryKey: queryKey,
             cursor: cursor
         )
+        if BackendV2FeatureFlags.isEnabled(.tradeJournalSummaryV2) {
+            let rpcNameV2 = BackendV2Versioning.RPCName.tradesListV2.rawValue
+            if await BackendV2RpcAvailability.shared.isUnavailable(rpcName: rpcNameV2, viewerID: viewerID.rawValue) {
+                throw LoaderError.rpcUnavailable
+            }
+            let flightKeyV2 = BackendV2FlightKeys.tradesListV2(
+                viewerID: viewerID.rawValue,
+                queryKey: queryKey,
+                cursor: cursor
+            )
+            do {
+                let data = try await BackendV2SingleFlight.shared.coalesce(key: flightKeyV2) {
+                    let repo = TradesListRpcBootstrapV2Repository(rpc: rpc)
+                    let value = try await repo.load(query: query, limit: limit, cursor: cursor)
+                    return try JSONEncoder().encode(value)
+                }
+                let bootstrap = try JSONDecoder().decode(TradesListBootstrapV2.self, from: data)
+                try bootstrap.validateContractVersion()
+                #if DEBUG
+                if !query.trimmedSearch.isEmpty {
+                    TradeSummaryJournalTelemetry.recordSearch(
+                        path: "v2.rpc",
+                        queryLength: query.trimmedSearch.count,
+                        resultCount: bootstrap.data.trades.count
+                    )
+                }
+                #endif
+                return TradesListBootstrapV2Applier.apply(
+                    bootstrap,
+                    ownerID: viewerID,
+                    detailCache: detailCache
+                )
+            } catch {
+                if BackendV2RpcCompat.isRpcUnavailable(error, rpcName: rpcNameV2) {
+                    await BackendV2RpcAvailability.shared.markUnavailable(
+                        rpcName: rpcNameV2,
+                        viewerID: viewerID.rawValue
+                    )
+                    throw LoaderError.rpcUnavailable
+                }
+                throw error
+            }
+        }
+
         let bootstrap: TradesListBootstrapV1
         do {
             let data = try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {

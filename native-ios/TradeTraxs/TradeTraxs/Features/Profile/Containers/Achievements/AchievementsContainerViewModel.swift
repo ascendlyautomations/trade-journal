@@ -180,6 +180,7 @@ final class AchievementsContainerViewModel {
                     tab: .achievements,
                     profileID: profileID,
                     rpc: rpc,
+                    detailCache: nil,
                     cursor: nil
                 )
                 pageItems = applied.achievements ?? []
@@ -238,6 +239,7 @@ final class AchievementsContainerViewModel {
                     tab: .achievements,
                     profileID: profileID,
                     rpc: rpc,
+                    detailCache: nil,
                     cursor: cursor
                 )
                 pageItems = applied.achievements ?? []

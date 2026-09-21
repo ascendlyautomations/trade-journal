@@ -26,8 +26,8 @@ extension FeedTimelineEntry {
     var feedCaptionText: String? {
         let raw: String?
         switch self {
-        case .trade(_, let trade):
-            raw = trade.publicCaption
+        case .trade(_, let summary):
+            raw = summary.publicCaption ?? summary.notePreview
         case .post(_, let post):
             raw = post.body
         case .clip(_, let reel):

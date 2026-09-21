@@ -18,7 +18,8 @@ struct TradingDayDetailView: View {
                 dayKey: dayKey,
                 trades: data.trades,
                 session: data.session,
-                detailCache: data.detailCache
+                detailCache: data.detailCache,
+                rpc: data.rpc
             )
         )
         self.imagePipeline = data.imagePipeline
@@ -54,7 +55,11 @@ struct TradingDayDetailView: View {
             .padding(.bottom, ExperienceSpacing.xl)
         }
         .background(colors.groupedBackground.ignoresSafeArea())
-        .experienceNavigationTitle(TradingCalendarDay.displayDate(from: dayKey))
+        .experienceNavigationTitle(
+            BackendV2FeatureFlags.isEnabled(.calendarAnalyticsV2)
+                ? AnalyticsCalendarDay.displayDate(from: dayKey)
+                : TradingCalendarDay.displayDate(from: dayKey)
+        )
         .overlay {
             if viewModel.isLoading && viewModel.summary == nil {
                 ProgressView()
@@ -136,15 +141,15 @@ struct TradingDayDetailView: View {
                         .experienceStyle(.body, color: colors.secondaryText)
                 }
             } else {
-                ForEach(viewModel.dayTrades) { trade in
+                ForEach(viewModel.dayTrades) { summary in
                     ProfileTradeCard(
-                        trade: trade,
+                        summary: summary,
                         imagePipeline: imagePipeline,
                         engagementStore: engagementStore,
                         vaultStore: vaultStore,
                         showsOwnerActions: false,
                         onOpen: {
-                            viewModel.openTrade(trade, navigation: navigationCoordinator)
+                            viewModel.openTrade(summary, navigation: navigationCoordinator)
                         },
                         onShare: {},
                         onEdit: {},
@@ -162,7 +167,7 @@ struct TradingDayDetailView: View {
 final class CalendarDayDetailLoader {
     let dayKey: String
     private(set) var summary: TradingDaySummary?
-    private(set) var dayTrades: [Trade] = []
+    private(set) var dayTrades: [TradeSummary] = []
     private(set) var accountNames: [TradingAccountID: String] = [:]
     private var accounts: [TradingAccount] = []
     private(set) var isLoading = false
@@ -171,18 +176,21 @@ final class CalendarDayDetailLoader {
     private let trades: any TradeRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
+    private let rpc: (any RPCClient)?
     private var hasLoaded = false
 
     init(
         dayKey: String,
         trades: any TradeRepository,
         session: any SessionProviding,
-        detailCache: DetailPresentationCache
+        detailCache: DetailPresentationCache,
+        rpc: (any RPCClient)? = nil
     ) {
         self.dayKey = dayKey
         self.trades = trades
         self.session = session
         self.detailCache = detailCache
+        self.rpc = rpc
     }
 
     func displayAccountTitle(for accountID: TradingAccountID?) -> String? {
@@ -228,7 +236,16 @@ final class CalendarDayDetailLoader {
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             let all = CalendarFixtures.trades(owner: profileID)
-            apply(all)
+            apply(all, source: "fixtures")
+            return
+        }
+
+        if BackendV2FeatureFlags.isEnabled(.calendarAnalyticsV2) {
+            guard let rpc else {
+                errorMessage = "Calendar day detail requires network (RPC unavailable)."
+                return
+            }
+            await refreshAnalyticsDay(profileID: profileID, rpc: rpc)
             return
         }
 
@@ -249,8 +266,6 @@ final class CalendarDayDetailLoader {
                 applyAccounts(loaded)
             }
 
-            // Day detail is a reader of the month session cache owned by Calendar home.
-            // Prefer any cached month window — do not require freshness (avoids a second SELECT).
             if let cachedMonth = CalendarMonthSessionStore.shared.trades(
                 year: comps.year,
                 month: comps.month
@@ -260,7 +275,7 @@ final class CalendarDayDetailLoader {
                     resource: "calendar.day.month",
                     detail: dayKey
                 )
-                apply(cachedMonth)
+                apply(cachedMonth, source: "legacyMonthCache")
                 return
             }
 
@@ -278,16 +293,79 @@ final class CalendarDayDetailLoader {
             )
             CalendarMonthSessionStore.shared.store(fetched, year: comps.year, month: comps.month)
             detailCache.seed(trades: fetched)
-            apply(fetched)
+            apply(fetched, source: "legacyNetwork")
         } catch {
-            // Fall back to any seeded trades in detail cache window.
             errorMessage = UserFacingError.message(for: error)
         }
     }
 
-    func openTrade(_ trade: Trade, navigation: NavigationCoordinator) {
-        detailCache.seed(trade)
-        navigation.open(.home(.tradeDetail(trade.id)))
+    private func refreshAnalyticsDay(profileID: ProfileID, rpc: any RPCClient) async {
+        do {
+            if accounts.isEmpty {
+                let loaded = try await SessionAccountsStore.shared.accounts(
+                    for: profileID,
+                    detailCache: detailCache,
+                    repository: trades
+                )
+                applyAccounts(loaded)
+            }
+
+            let accountFilter = CalendarAnalyticsSessionStore.shared.accountFilter
+            let accountID: String? = {
+                if case .account(let id) = accountFilter { return id.rawValue }
+                return nil
+            }()
+            let accountLabel = accountID ?? "all"
+
+            #if DEBUG
+            CalendarAnalyticsV2Probe.logDayFetchStarted(date: dayKey, account: accountLabel)
+            let started = Date()
+            #endif
+
+            let bootstrap = try await AnalyticsCalendarBootstrapLoader.loadDayTrades(
+                rpc: rpc,
+                calendarDay: dayKey,
+                accountID: accountID,
+                mode: nil
+            )
+            let mapped = AnalyticsCalendarBootstrapLoader.mapDayTradeSummaries(
+                bootstrap.trades,
+                ownerID: profileID
+            )
+            for summary in mapped {
+                detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
+            }
+            #if DEBUG
+            TradeSummaryCalendarTelemetry.recordDayDecode(
+                tradeCount: mapped.count,
+                payloadBytes: (try? JSONEncoder().encode(bootstrap))?.count,
+                elapsedMs: nil
+            )
+            #endif
+            #if DEBUG
+            let approxBytes = (try? JSONEncoder().encode(bootstrap))?.count
+            let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+            applyAnalytics(
+                summaries: mapped,
+                bootstrap: bootstrap,
+                source: "network",
+                payloadBytes: approxBytes,
+                elapsedMs: elapsed
+            )
+            #else
+            applyAnalytics(summaries: mapped, bootstrap: bootstrap, source: "network")
+            #endif
+        } catch {
+            errorMessage = UserFacingError.message(for: error)
+        }
+    }
+
+    func openTrade(_ summary: TradeSummary, navigation: NavigationCoordinator) {
+        detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
+        #if DEBUG
+        TradeSummaryCalendarTelemetry.recordDetailBoundary(action: "open", tradeID: summary.id.rawValue)
+        #endif
+        navigation.open(.home(.tradeDetail(summary.id)))
     }
 
     private func applyAccounts(_ loaded: [TradingAccount]) {
@@ -295,15 +373,62 @@ final class CalendarDayDetailLoader {
         accountNames = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0.name) })
     }
 
-    private func apply(_ trades: [Trade]) {
-        dayTrades = TradingCalendarAggregator.trades(
+    private func apply(_ trades: [Trade], source: String) {
+        let filter = CalendarAnalyticsSessionStore.shared.accountFilter
+        let filtered = TradingCalendarAggregator.trades(
             for: dayKey,
             from: trades,
-            accountFilter: .all
+            accountFilter: filter
         )
+        dayTrades = filtered.map(TradeSummaryMapper.summary(fromPartialListTrade:))
+        for summary in dayTrades {
+            detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
+        }
+        #if DEBUG
+        TradeSummaryCalendarTelemetry.recordDayCacheHit(tradeCount: dayTrades.count, dayKey: dayKey)
+        #endif
         summary = TradingCalendarAggregator.daySummaries(
             from: trades,
-            accountFilter: .all
+            accountFilter: filter
         )[dayKey]
+    }
+
+    private func applyAnalytics(
+        summaries: [TradeSummary],
+        bootstrap: AnalyticsCalendarDayTradesBootstrapV1,
+        source: String,
+        payloadBytes: Int? = nil,
+        elapsedMs: Int? = nil
+    ) {
+        dayTrades = summaries
+        let agg = bootstrap.aggregate
+        let net = Decimal(bootstrap.aggregate.net_pnl.value ?? 0)
+        summary = TradingDaySummary(
+            dayKey: dayKey,
+            netPnL: net,
+            tradeCount: agg.trade_count,
+            winCount: agg.win_count,
+            lossCount: agg.loss_count,
+            breakevenCount: agg.breakeven_count,
+            grossProfit: Decimal(agg.gross_profit.value ?? 0),
+            grossLoss: Decimal(agg.gross_loss.value ?? 0),
+            tradeIDs: summaries.map(\.id),
+            accountIDs: []
+        )
+        #if DEBUG
+        let listPnL = dayTrades.reduce(Decimal(0)) { $0 + ($1.realizedPnL?.amount ?? 0) }
+        let pnlParity = abs(NSDecimalNumber(decimal: listPnL - net).doubleValue) < 0.0001
+        CalendarAnalyticsV2Probe.logDay(
+            date: dayKey,
+            aggregateCount: agg.trade_count,
+            summaryCount: dayTrades.count,
+            aggregatePnL: net,
+            summaryPnL: listPnL,
+            parity: dayTrades.count == agg.trade_count && pnlParity,
+            source: source,
+            payloadBytes: payloadBytes,
+            elapsedMs: elapsedMs
+        )
+        #endif
     }
 }

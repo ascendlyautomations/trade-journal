@@ -32,10 +32,10 @@ enum SharedContentShareSeeder {
             if let post = SocialEntityDiskCache.loadPost(id: id, viewerID: viewerID) {
                 detailCache.seed(post)
                 if let tradeID = post.linkedTradeID,
-                   detailCache.trade(id: tradeID) == nil,
-                   let trade = SocialEntityDiskCache.loadTrade(id: tradeID, viewerID: viewerID)
+                   detailCache.tradeSummary(id: tradeID) == nil,
+                   let summary = SocialEntityDiskCache.loadTradeSummary(id: tradeID, viewerID: viewerID)
                 {
-                    detailCache.seed(trade)
+                    detailCache.seedPresentationSeed(summary)
                 }
             }
         case .reel(let id):
@@ -43,10 +43,10 @@ enum SharedContentShareSeeder {
             if let reel = SocialEntityDiskCache.loadReel(id: id, viewerID: viewerID) {
                 detailCache.seed(reel)
                 if let tradeID = reel.linkedTradeID,
-                   detailCache.trade(id: tradeID) == nil,
-                   let trade = SocialEntityDiskCache.loadTrade(id: tradeID, viewerID: viewerID)
+                   detailCache.tradeSummary(id: tradeID) == nil,
+                   let summary = SocialEntityDiskCache.loadTradeSummary(id: tradeID, viewerID: viewerID)
                 {
-                    detailCache.seed(trade)
+                    detailCache.seedPresentationSeed(summary)
                 }
             }
         case .achievementPost(let id):
@@ -66,13 +66,13 @@ enum SharedContentShareSeeder {
         feedSessionStore: FeedSessionStore,
         viewerID: ProfileID
     ) {
-        if detailCache.trade(id: tradeID) != nil { return }
-        if let trade = feedSessionStore.lookupTrade(id: tradeID, viewerID: viewerID) {
-            detailCache.seed(trade)
+        if detailCache.tradeSummary(id: tradeID) != nil { return }
+        if let summary = feedSessionStore.lookupTradeSummary(id: tradeID, viewerID: viewerID) {
+            detailCache.seedPresentationSeed(summary)
             return
         }
-        if let trade = SocialEntityDiskCache.loadTrade(id: tradeID, viewerID: viewerID) {
-            detailCache.seed(trade)
+        if let summary = SocialEntityDiskCache.loadTradeSummary(id: tradeID, viewerID: viewerID) {
+            detailCache.seedPresentationSeed(summary)
         }
     }
 
@@ -82,11 +82,13 @@ enum SharedContentShareSeeder {
         detailCache: DetailPresentationCache
     ) {
         FeedBootstrap.seedAuthor(from: seed.item, detailCache: detailCache)
-        if let trade = seed.trade { detailCache.seed(trade) }
+        if let summary = seed.tradeSummary {
+            detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
+        }
         if let post = seed.post { detailCache.seed(post) }
         if let reel = seed.reel { detailCache.seed(reel) }
         if let achievement = seed.achievement { detailCache.seed(achievement) }
-        if case .feedPost = reference, seed.post == nil, seed.trade != nil {
+        if case .feedPost = reference, seed.post == nil, seed.tradeSummary != nil {
             detailCache.seed(seed.syntheticFeedPost)
         }
     }

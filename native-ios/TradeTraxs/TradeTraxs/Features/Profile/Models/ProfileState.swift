@@ -27,7 +27,7 @@ struct ProfileState: Equatable {
     /// Active stories from profile bootstrap — seeds avatar ring + Story Viewer.
     var activeStories: [Story] = []
 
-    var trades: [Trade] = []
+    var trades: [TradeSummary] = []
     var tradesNextCursor: String?
     var accountNames: [TradingAccountID: String] = [:]
     /// Owner-only display — never render on public Profile surfaces.

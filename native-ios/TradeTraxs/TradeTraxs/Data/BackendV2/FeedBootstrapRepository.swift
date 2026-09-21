@@ -84,7 +84,8 @@ enum FeedBootstrapLoader {
         detailCache: DetailPresentationCache,
         forceNetwork: Bool,
         allowNetwork: Bool = true,
-        guestPublicMode: Bool = false
+        guestPublicMode: Bool = false,
+        traceTrigger: String = "feed.initial"
     ) async throws -> (
         entries: [FeedTimelineEntry],
         nextCursor: String?,
@@ -116,7 +117,10 @@ enum FeedBootstrapLoader {
             if !guestPublicMode {
                 await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
             }
-            return (cached.entries, cached.nextCursor, cached.stories, [:], [], [])
+            let engagement = guestPublicMode
+                ? [:]
+                : FeedEngagementCacheRestore.engagementMap(from: cached.entries)
+            return (cached.entries, cached.nextCursor, cached.stories, engagement, [], [])
         }
 
         #if DEBUG
@@ -154,19 +158,47 @@ enum FeedBootstrapLoader {
 
         let bootstrap: FeedBootstrapV1
         do {
+            let intentID = BootstrapRpcTrace.beginIntent(
+                rpc: rpcName,
+                trigger: traceTrigger,
+                forceNetwork: forceNetwork
+            )
+            let joinedExisting = await BackendV2SingleFlight.shared.hasInFlight(key: flightKey)
+            let waiterCount = await BackendV2SingleFlight.shared.inFlightWaiterCount(key: flightKey)
+            BootstrapRpcTrace.recordSingleFlightJoin(
+                intentID: intentID,
+                rpc: rpcName,
+                joinedExisting: joinedExisting,
+                waiterCount: waiterCount + (joinedExisting ? 1 : 0)
+            )
+            let httpRequestID = UUID()
+            let httpStarted = CFAbsoluteTimeGetCurrent()
+            BootstrapRpcTrace.httpWillStart(intentID: intentID, requestID: httpRequestID, rpc: rpcName)
             let data = try await BootstrapTransportTimeout.run {
-                try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
-                    let repo = FeedRpcBootstrapRepository(rpc: rpc)
-                    let rpcScope = guestPublicMode ? FeedScope.global.rawValue : scope.rawValue
-                    let value = try await repo.loadFeedBootstrap(
-                        scope: rpcScope,
-                        contentFilter: contentFilter.rpcValue,
-                        cursor: cursor,
-                        limit: limit
-                    )
-                    return try JSONEncoder().encode(value)
+                try await BootstrapRpcTrace.runWithIntent(
+                    intentID: intentID,
+                    trigger: traceTrigger,
+                    rpc: rpcName
+                ) {
+                    try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
+                        let repo = FeedRpcBootstrapRepository(rpc: rpc)
+                        let rpcScope = guestPublicMode ? FeedScope.global.rawValue : scope.rawValue
+                        let value = try await repo.loadFeedBootstrap(
+                            scope: rpcScope,
+                            contentFilter: contentFilter.rpcValue,
+                            cursor: cursor,
+                            limit: limit
+                        )
+                        return try JSONEncoder().encode(value)
+                    }
                 }
             }
+            BootstrapRpcTrace.httpCompleted(
+                intentID: intentID,
+                requestID: httpRequestID,
+                rpc: rpcName,
+                elapsedMs: (CFAbsoluteTimeGetCurrent() - httpStarted) * 1000
+            )
             bootstrap = try JSONDecoder().decode(FeedBootstrapV1.self, from: data)
             #if DEBUG
             if guestPublicMode {
@@ -185,7 +217,10 @@ enum FeedBootstrapLoader {
                 if !guestPublicMode {
                     await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
                 }
-                return (cached.entries, cached.nextCursor, cached.stories, [:], [], [])
+                let engagement = guestPublicMode
+                    ? [:]
+                    : FeedEngagementCacheRestore.engagementMap(from: cached.entries)
+                return (cached.entries, cached.nextCursor, cached.stories, engagement, [], [])
             }
             if BackendV2RpcCompat.isRpcUnavailable(error, rpcName: rpcName) {
                 await BackendV2RpcAvailability.shared.markUnavailable(rpcName: rpcName, viewerID: viewerID.rawValue)

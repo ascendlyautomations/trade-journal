@@ -30,6 +30,7 @@ struct TradeDetailView: View {
             initialValue: TradeDetailViewModel(
                 tradeID: tradeID,
                 trades: data.trades,
+                tradeDetailRepository: data.tradeDetailRepository,
                 profiles: data.profiles,
                 session: data.session,
                 imagePipeline: data.imagePipeline,

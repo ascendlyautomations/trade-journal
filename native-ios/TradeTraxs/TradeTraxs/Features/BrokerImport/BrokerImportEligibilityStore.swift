@@ -31,6 +31,8 @@ final class BrokerImportEligibilityStore {
     private var session: (any SessionProviding)?
     private var refreshTask: Task<Void, Never>?
     private var loadGeneration: UInt64 = 0
+    private var lastSuccessfulFetchAt: Date?
+    private var persistedViewerID: String?
 
     private init() {}
 
@@ -42,16 +44,47 @@ final class BrokerImportEligibilityStore {
         self.session = session
     }
 
+    /// Presentation-only hydrate — does not hit the network.
+    func hydrateFromDiskIfNeeded(viewerID: String) {
+        guard !isReady else { return }
+        guard let blob = BrokerImportEligibilityDiskCache.load(viewerID: viewerID) else { return }
+        persistedViewerID = viewerID
+        apply(blob.response)
+        lastSuccessfulFetchAt = blob.savedAt
+        #if DEBUG
+        AppLog.application.debug(
+            "dashboard.brokerImportEligibility.hydratedFromDisk ageSec=\(Int(Date().timeIntervalSince(blob.savedAt)), privacy: .public)"
+        )
+        #endif
+    }
+
+    /// Deferred startup — refresh only when disk cache is missing or stale.
     func loadIfNeeded() {
         guard refreshTask == nil else { return }
-        guard !isReady else { return }
-        refresh(fromUserAction: false)
+        refreshTask = Task { [weak self] in
+            guard let self else { return }
+            if let userID = await session?.currentUserID?.rawValue {
+                hydrateFromDiskIfNeeded(viewerID: userID)
+            }
+            await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
+            await performStaleAwareRefresh(fromUserAction: false)
+            refreshTask = nil
+        }
     }
 
     func refresh(fromUserAction: Bool = false) {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             await self?.performRefresh(fromUserAction: fromUserAction)
+            await MainActor.run { self?.refreshTask = nil }
+        }
+    }
+
+    /// Background refresh — skips network when last-known state is still fresh.
+    func refreshIfStale(fromUserAction: Bool = false) {
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
+            await self?.performStaleAwareRefresh(fromUserAction: fromUserAction)
             await MainActor.run { self?.refreshTask = nil }
         }
     }
@@ -86,25 +119,53 @@ final class BrokerImportEligibilityStore {
         optOut = false
         isReady = false
         isRefreshing = false
+        lastSuccessfulFetchAt = nil
         loadGeneration &+= 1
+        if let persistedViewerID {
+            BrokerImportEligibilityDiskCache.clear(viewerID: persistedViewerID)
+        }
+        persistedViewerID = nil
     }
 
     func fetchEligibility() async throws -> BrokerImportEligibilityResponse {
         guard let broker else {
             throw NetworkError.unknown(message: "Broker integrations unavailable.")
         }
-        guard await session?.currentUserID != nil else {
+        guard let userID = await session?.currentUserID?.rawValue else {
             throw NetworkError.unauthorized
         }
         await SessionNetworkGate.shared.awaitReady()
         let response = try await broker.importEligibility()
+        persistedViewerID = userID
         apply(response)
+        lastSuccessfulFetchAt = Date()
+        BrokerImportEligibilityDiskCache.save(response, viewerID: userID)
         return response
+    }
+
+    private func performStaleAwareRefresh(fromUserAction: Bool) async {
+        if fromUserAction {
+            await performRefresh(fromUserAction: true)
+            return
+        }
+        if let lastSuccessfulFetchAt,
+           Date().timeIntervalSince(lastSuccessfulFetchAt)
+            < BrokerImportEligibilityDiskCache.presentationSoftStaleSeconds
+        {
+            #if DEBUG
+            AppLog.application.debug("dashboard.brokerImportEligibility.skipNetwork reason=freshCache")
+            #endif
+            return
+        }
+        await performRefresh(fromUserAction: false)
     }
 
     private func performRefresh(fromUserAction: Bool) async {
         guard let session, broker != nil else { return }
         guard AuthBootstrapReadiness.allowsAuthenticatedBackgroundWork() else { return }
+        if !fromUserAction {
+            guard AuthenticatedLaunchPhasing.allowsDeferredStartupNetworking else { return }
+        }
         let generation = loadGeneration
         if fromUserAction || !isReady {
             isRefreshing = true

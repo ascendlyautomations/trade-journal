@@ -34,6 +34,29 @@ final class BackendV2ContractTests: XCTestCase {
             )
         }
         for flag in BackendV2FeatureFlag.allCases where !BackendV2FeatureFlags.productionShippedFlags.contains(flag) {
+            #if DEBUG
+            if flag == .calendarAnalyticsV2 {
+                XCTAssertTrue(
+                    BackendV2FeatureFlags.isEnabled(flag),
+                    "Debug builds default Calendar Analytics V2 ON for Phase 3 QA"
+                )
+                continue
+            }
+            if flag == .profileAnalyticsV2Shadow {
+                XCTAssertTrue(
+                    BackendV2FeatureFlags.isEnabled(flag),
+                    "Debug builds default Profile Analytics V2 shadow ON for Phase 7D QA"
+                )
+                continue
+            }
+            if flag == .profileAnalyticsV2 || flag == .profileAnalyticsGRDB {
+                XCTAssertTrue(
+                    BackendV2FeatureFlags.isEnabled(flag),
+                    "Debug builds default Profile Analytics V2 presentation ON for Phase 7E QA"
+                )
+                continue
+            }
+            #endif
             XCTAssertFalse(
                 BackendV2FeatureFlags.isEnabled(flag),
                 "Expected production default OFF for \(flag.rawValue)"
@@ -65,6 +88,26 @@ final class BackendV2ContractTests: XCTestCase {
         try value.validateContractVersion()
         XCTAssertEqual(value.data.items.count, 1)
         XCTAssertEqual(value.data.scope, "following")
+    }
+
+    func testProfileAnalyticsV2BootstrapJSONDecode() throws {
+        let value: ProfileAnalyticsBootstrapV2 = try decodeFixture(
+            BackendV2ContractFixtures.profileAnalyticsV2
+        )
+        try value.validateContractVersion()
+        XCTAssertTrue(value.meta.found)
+        XCTAssertEqual(value.publicRevisionInt, 2)
+        let applied = ProfileAnalyticsV2BootstrapApplier.apply(value)
+        XCTAssertEqual(applied.modeResults[.all]?.filteredTradeCount, 1)
+    }
+
+    func testProfilePublicAnalyticsRevisionJSONDecode() throws {
+        let value: ProfilePublicAnalyticsRevisionV1 = try decodeFixture(
+            BackendV2ContractFixtures.profilePublicAnalyticsRevision
+        )
+        try value.validateContractVersion()
+        XCTAssertTrue(value.meta.found)
+        XCTAssertEqual(value.revisionInt, 5)
     }
 
     func testDashboardBootstrapJSONDecode() throws {
@@ -167,6 +210,17 @@ final class BackendV2ContractTests: XCTestCase {
         let _: TradeDetailBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.tradeDetail)
         let _: SettingsBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.settings)
         let _: PropFirmBootstrapV1 = try decodeFixture(BackendV2ContractFixtures.propFirm)
+    }
+
+    func testProfileTabTradesV2JSONDecode() throws {
+        let value: ProfileTabBootstrapV2 = try decodeFixture(
+            BackendV2ContractFixtures.profileTabTradesV2
+        )
+        try value.validateContractVersion()
+        XCTAssertEqual(value.data.tab, "trades")
+        XCTAssertEqual(value.data.items.count, 1)
+        try value.data.items[0].validateSchema()
+        XCTAssertEqual(value.data.items[0].note_preview, "Held through the open drive.")
     }
 
     func testContractVersionMismatchThrows() {
@@ -321,5 +375,17 @@ enum BackendV2ContractFixtures {
 
     static let propFirm = """
     {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"accounts":[{"id":"33333333-3333-3333-3333-333333333333","name":"APEX 50K","account_size":50000,"account_number":"12345","mode":"Eval","consistency":40,"max_drawdown":2500,"daily_drawdown":1250,"profit_target":3000,"winning_days":5,"winning_day_threshold":100,"payout_drawdown_behavior":null,"remember_payout_drawdown_behavior":false}],"payout_cycles":[],"achievements":[],"trades":[{"id":"t1","account_id":"33333333-3333-3333-3333-333333333333","pnl":150,"date":"2026-08-01","trade_date":"2026-08-01","entry_time":"2026-08-01T14:00:00.000Z","exit_time":"2026-08-01T15:00:00.000Z","created_at":"2026-08-01T15:00:00.000Z"}]}}
+    """
+
+    static let profileAnalyticsV2 = """
+    {"meta":{"contract_version":"v2","found":true,"server_time":"2026-09-21T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111","public_revision":2,"public_updated_at":"2026-09-21T19:00:00.000Z"},"data":{"profile_id":"22222222-2222-2222-2222-222222222222","modes":{"all":{"filtered_trade_count":1,"win_rate":1,"profit_factor":null,"average_winner":100,"average_loser":null,"profit_per_trade":100,"biggest_win":100,"biggest_loss":null,"long_trades":1,"max_win_streak":1,"max_loss_streak":0,"session_total":1,"session_breakdown":[{"label":"NY","count":1,"pct":100}],"current_equity":100,"equity_data":[{"index":0,"equity":0},{"index":1,"equity":100}]}}}}
+    """
+
+    static let profilePublicAnalyticsRevision = """
+    {"meta":{"contract_version":"v1","found":true,"server_time":"2026-09-21T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"profile_id":"22222222-2222-2222-2222-222222222222","revision":5,"updated_at":"2026-09-21T19:00:00.000Z"}}
+    """
+
+    static let profileTabTradesV2 = """
+    {"meta":{"contract_version":"v2","found":true,"server_time":"2026-09-21T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"tab":"trades","items":[{"summary_schema":"trade_summary_v1","id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","user_id":"11111111-1111-1111-1111-111111111111","ticker":"MNQ","direction":"Long","pnl":120,"rr":2.5,"contracts":1,"created_at":"2026-08-11T14:45:00.000Z","is_public":true,"note_preview":"Held through the open drive.","image_url":"https://cdn.example/trade.png","mode":"live","account_type":"live"}],"engagement":{"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa":{"like_count":2,"liked_by_me":true,"comment_count":1}},"next_cursor":null}}
     """
 }

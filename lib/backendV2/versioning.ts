@@ -14,6 +14,10 @@ export const BackendV2RpcNames = {
   feed: "rpc_v1_feed_bootstrap",
   profile: "rpc_v1_profile_bootstrap",
   profileTabTrades: "rpc_v1_profile_tab_trades",
+  /** Phase 8B — TradeSummary items; native presentation still uses V1 until cutover. */
+  profileTabTradesV2: "rpc_v1_profile_tab_trades_v2",
+  profileTabTradesSummaryShadowCompare:
+    "rpc_v1_profile_tab_trades_summary_shadow_compare",
   profileTabPosts: "rpc_v1_profile_tab_posts",
   profileTabReels: "rpc_v1_profile_tab_reels",
   profileTabAchievements: "rpc_v1_profile_tab_achievements",

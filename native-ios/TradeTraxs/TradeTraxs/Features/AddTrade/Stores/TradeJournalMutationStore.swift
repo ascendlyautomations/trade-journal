@@ -46,19 +46,34 @@ final class TradeJournalMutationStore {
         latest = .created(trade)
         propagateUpsert(trade, resource: "journal.trade.created")
         revision += 1
+        AnalyticsLocalMutationRouter.submit(
+            kind: .create,
+            scope: AnalyticsLocalMutationScopeBuilder.create(trade: trade)
+        )
+        ProfileAnalyticsOwnerInvalidation.submitTradeMutation(old: nil, new: trade)
     }
 
-    func noteUpdated(_ trade: Trade) {
+    func noteUpdated(_ trade: Trade, previous: Trade? = nil) {
         latest = .updated(trade)
         propagateUpsert(trade, resource: "journal.trade.updated")
         revision += 1
+        let scope: AnalyticalMutationScope
+        if let previous {
+            scope = AnalyticsLocalMutationScopeBuilder.update(old: previous, new: trade)
+        } else {
+            scope = AnalyticsLocalMutationScopeBuilder.create(trade: trade)
+        }
+        AnalyticsLocalMutationRouter.submit(kind: .update, scope: scope)
+        ProfileAnalyticsOwnerInvalidation.submitTradeMutation(old: previous, new: trade)
     }
 
     private func propagateUpsert(_ trade: Trade, resource: String) {
         if let detailCache {
-            detailCache.seed(trade)
+            detailCache.seedAuthoritativeDetail(trade, authority: .authoritativeMutation)
+            let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+            SocialEntityDiskCache.saveTradeSummary(summary, viewerID: trade.ownerProfileID)
             SessionOwnerTradesStore.shared.upsert(trade, detailCache: detailCache)
-            SessionTradeEntityStore.shared.upsert(trade, detailCache: detailCache)
+            SessionTradeEntityStore.shared.upsert(trade, detailCache: detailCache, viewerID: trade.ownerProfileID)
         }
         TradeHistorySessionStore.shared.noteUpserted(trade)
         CalendarMonthSessionStore.shared.noteUpserted(trade)
@@ -66,7 +81,7 @@ final class TradeJournalMutationStore {
         SessionNetworkProbe.record(.localMutation, resource: resource, detail: trade.id.rawValue)
     }
 
-    func noteDeleted(id: TradeID, owner: ProfileID) {
+    func noteDeleted(id: TradeID, owner: ProfileID, previous: Trade? = nil) {
         latest = .deleted(id: id, owner: owner)
         detailCache?.removeTrade(id: id)
         SessionOwnerTradesStore.shared.remove(id: id, owner: owner)
@@ -76,10 +91,20 @@ final class TradeJournalMutationStore {
         TradePersistedCacheCoordinator.noteDeleted(id: id, owner: owner)
         SessionNetworkProbe.record(.localMutation, resource: "journal.trade.deleted", detail: id.rawValue)
         revision += 1
+        if let previous {
+            AnalyticsLocalMutationRouter.submit(
+                kind: .delete,
+                scope: AnalyticsLocalMutationScopeBuilder.delete(old: previous)
+            )
+            ProfileAnalyticsOwnerInvalidation.submitTradeMutation(old: previous, new: nil)
+        }
     }
 
     /// CSV / bulk import — bounded invalidation; authoritative reload via mounted observers.
-    func noteBulkImport(owner: ProfileID) {
+    func noteBulkImport(
+        owner: ProfileID,
+        source: AnalyticsBulkImportSource = .unknown
+    ) {
         latest = .bulkImport
         detailCache?.invalidateJournalLists()
         SessionOwnerTradesStore.shared.invalidate(profileID: owner)
@@ -89,6 +114,14 @@ final class TradeJournalMutationStore {
         ViewerSyncStateRuntime.noteLocalMutation(viewerID: owner)
         SessionNetworkProbe.record(.cacheInvalidated, resource: "journal.bulkImport")
         revision += 1
+        Task { @MainActor in
+            let visible = AnalyticsLocalMutationRouter.visibleMonthBoundsForBulk()
+            let scope = AnalyticsLocalMutationScopeBuilder.bulkImport(
+                viewerID: owner,
+                visibleMonth: visible
+            )
+            AnalyticsLocalMutationRouter.submit(kind: .bulk, scope: scope, bulkSource: source)
+        }
     }
 
     func invalidate() {

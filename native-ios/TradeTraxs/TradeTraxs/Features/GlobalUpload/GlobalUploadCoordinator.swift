@@ -1046,6 +1046,7 @@ final class GlobalUploadCoordinator {
             var draft = spec.draft
             draft.imageURL = imageURL
 
+            var editPreviousTrade: Trade?
             let trade: Trade
             if spec.authorID.rawValue.hasPrefix("dev.") {
                 switch spec.mode {
@@ -1092,6 +1093,7 @@ final class GlobalUploadCoordinator {
                     } else {
                         previous = try await trades.trade(id: tradeID)
                     }
+                    editPreviousTrade = previous
                     trade = try await trades.update(id: tradeID, draft: draft, previous: previous)
                     checkpoint.savedTradeID = trade.id
                     checkpoint.publicFeedPostCompleted = socialPostRequested
@@ -1134,7 +1136,7 @@ final class GlobalUploadCoordinator {
                 return
             }
 
-            reconcileTradeAfterSave(trade, mode: spec.mode)
+            reconcileTradeAfterSave(trade, mode: spec.mode, previous: editPreviousTrade)
             if let accountID = spec.lastAccountID {
                 AddTradeViewModel.rememberLastAccountID(accountID)
             }
@@ -1673,12 +1675,16 @@ final class GlobalUploadCoordinator {
         }
     }
 
-    private func reconcileTradeAfterSave(_ trade: Trade, mode: TradeSaveUploadMode) {
+    private func reconcileTradeAfterSave(
+        _ trade: Trade,
+        mode: TradeSaveUploadMode,
+        previous: Trade? = nil
+    ) {
         switch mode {
         case .create:
             TradeJournalMutationStore.shared.noteCreated(trade)
         case .edit:
-            TradeJournalMutationStore.shared.noteUpdated(trade)
+            TradeJournalMutationStore.shared.noteUpdated(trade, previous: previous)
         }
     }
 

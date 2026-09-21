@@ -148,7 +148,7 @@ actor NetworkConcurrencyCoordinator {
         }
 
         if path.hasPrefix("/storage/v1/object/") || path.contains("/storage/v1/render/") {
-            return method == .get ? .visible : .background
+            return .background
         }
 
         if path.hasPrefix("/rest/v1/") {
@@ -205,6 +205,9 @@ actor NetworkConcurrencyCoordinator {
 
     /// User-facing screen bootstraps and blocking detail loads — not capped by background budget.
     private static let visibleBlockingRPCs: Set<String> = [
+        BackendV2Versioning.RPCName.session.rawValue,
+        BackendV2Versioning.RPCName.dashboard.rawValue,
+        BackendV2Versioning.RPCName.viewerSyncState.rawValue,
         BackendV2Versioning.RPCName.conversationThread.rawValue,
         BackendV2Versioning.RPCName.feed.rawValue,
         BackendV2Versioning.RPCName.tradesList.rawValue,
@@ -216,8 +219,12 @@ actor NetworkConcurrencyCoordinator {
         BackendV2Versioning.RPCName.profileTabReels.rawValue,
         BackendV2Versioning.RPCName.profileTabAchievements.rawValue,
         BackendV2Versioning.RPCName.profileStatisticsBootstrap.rawValue,
+        BackendV2Versioning.RPCName.profileAnalyticsBootstrapV2.rawValue,
+        BackendV2Versioning.RPCName.profilePublicAnalyticsRevision.rawValue,
         BackendV2Versioning.RPCName.room.rawValue,
         BackendV2Versioning.RPCName.calendar.rawValue,
+        BackendV2Versioning.RPCName.analyticsDashboardBootstrapV3.rawValue,
+        BackendV2Versioning.RPCName.analyticsDashboardAccountChartsV3.rawValue,
     ]
 
     /// GET by primary key / id batch — trade detail, feed hydration, achievement fetch, etc.

@@ -105,6 +105,7 @@ final class SessionCacheArchitectureTests: XCTestCase {
             trades: repo,
             session: FixedSession(userID: profileID.rawValue),
             detailCache: cache,
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: coordinator
         )
         first.loadIfNeeded()
@@ -117,6 +118,7 @@ final class SessionCacheArchitectureTests: XCTestCase {
             trades: repo,
             session: FixedSession(userID: profileID.rawValue),
             detailCache: cache,
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: coordinator
         )
         SessionNetworkProbe.resetForTesting()
@@ -143,7 +145,7 @@ final class SessionCacheArchitectureTests: XCTestCase {
                     searchText: ""
                 ),
                 profileID: profileID,
-                items: [trade],
+                items: [TradeSummaryMapper.ownerJournal(fromListTrade: trade)],
                 nextCursor: nil,
                 filters: filtersA,
                 searchText: "",
@@ -261,7 +263,7 @@ final class SessionCacheArchitectureTests: XCTestCase {
             .init(
                 queryKey: historyKey,
                 profileID: profileID,
-                items: [makeTrade(id: "x", profileID: profileID)],
+                items: [TradeSummaryMapper.ownerJournal(fromListTrade: makeTrade(id: "x", profileID: profileID))],
                 nextCursor: nil,
                 filters: TradeHistoryFilters(),
                 searchText: "",
@@ -306,6 +308,7 @@ final class SessionCacheArchitectureTests: XCTestCase {
             trades: repo,
             session: FixedSession(userID: profileID.rawValue),
             detailCache: cache,
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: coordinator
         )
         tradesVM.loadIfNeeded()
@@ -329,6 +332,7 @@ final class SessionCacheArchitectureTests: XCTestCase {
             trades: repo,
             session: FixedSession(userID: profileID.rawValue),
             detailCache: cache,
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: coordinator
         )
         tradesReturn.loadIfNeeded()

@@ -113,6 +113,9 @@ struct DashboardHomeView: View {
         }
         .task(id: tabIsActive) {
             guard tabIsActive else { return }
+            if let data, let userID = await data.session.currentUserID?.rawValue {
+                brokerImportEligibilityStore.hydrateFromDiskIfNeeded(viewerID: userID)
+            }
             viewModel.loadIfNeeded()
             brokerImportEligibilityStore.loadIfNeeded()
             #if DEBUG
@@ -151,14 +154,14 @@ struct DashboardHomeView: View {
         }
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
             viewModel.handleAccountMutation()
-            brokerImportEligibilityStore.refresh(fromUserAction: false)
+            brokerImportEligibilityStore.refreshIfStale(fromUserAction: false)
         }
         .onChange(of: BrokerIntegrationMutationStore.shared.revision) { _, _ in
-            brokerImportEligibilityStore.refresh(fromUserAction: false)
+            brokerImportEligibilityStore.refresh(fromUserAction: true)
         }
         .onChange(of: tabIsActive) { _, isActive in
             guard isActive, brokerImportEligibilityStore.isReady else { return }
-            brokerImportEligibilityStore.refresh(fromUserAction: false)
+            brokerImportEligibilityStore.refreshIfStale(fromUserAction: false)
         }
         .onChange(of: viewModel.summary?.tradeCount) { _, _ in
             revealContentIfNeeded()
@@ -417,6 +420,7 @@ struct DashboardHomeView: View {
         guard !deferredDashboardBootstrapStarted else { return }
         deferredDashboardBootstrapStarted = true
         Task(priority: .utility) {
+            await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
             gettingStartedStore.loadIfNeeded()
             dailyCheckInStore.loadIfNeeded()
             brokerImportEligibilityStore.loadIfNeeded()

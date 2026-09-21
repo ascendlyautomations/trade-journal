@@ -249,9 +249,10 @@ enum ProfileBootstrap: ScreenBootstrap {
         state.profile = isDemoTrader ? DemoCanonicalDataset.profile() : profile
         state.stats = stats
         state.isOwner = isOwner
-        state.trades = isDemoTrader
+        state.trades = (isDemoTrader
             ? DemoCanonicalDataset.trades()
             : ProfileTradeFixtures.samples(owner: profileID)
+        ).map(TradeSummaryMapper.summary(fromPartialListTrade:))
         if isDemoTrader {
             state.accountNames = Dictionary(
                 uniqueKeysWithValues: DemoCanonicalDataset.accounts().map { ($0.id, $0.name) }

@@ -11,6 +11,8 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         case required(ProfileOnboardingSnapshot)
         case brokerOnboarding
         case complete
+        /// Transient connectivity while authoritative bootstrap is still pending (session preserved).
+        case connectivityBlocked(String)
         case failed(String)
     }
 
@@ -25,6 +27,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     private let profileStore: CurrentUserProfileStore
 
     private var resolveTask: Task<Void, Never>?
+    private var connectivityRetryTask: Task<Void, Never>?
     private var realtimeTask: Task<Void, Never>?
     private var loadGeneration: UInt64 = 0
     /// True until the first successful gate resolve for this authenticated session.
@@ -58,8 +61,10 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
 
     func reset() {
         resolveTask?.cancel()
+        connectivityRetryTask?.cancel()
         realtimeTask?.cancel()
         resolveTask = nil
+        connectivityRetryTask = nil
         realtimeTask = nil
         phase = .idle
         snapshot = nil
@@ -82,6 +87,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     func resolveIfNeeded(forceNetwork: Bool = false) {
         if resolveTask != nil { return }
         if case .complete = phase, !forceNetwork { return }
+        if case .connectivityBlocked = phase, !forceNetwork { return }
 
         let generation: UInt64
         loadGeneration += 1
@@ -113,14 +119,32 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         phase = .complete
     }
 
+    /// Re-attempt authoritative bootstrap when connectivity returns (returning users only).
+    func noteAppBecameActive() {
+        guard case .connectivityBlocked = phase else { return }
+        scheduleConnectivityRetry(after: 0.5)
+    }
+
+    private func scheduleConnectivityRetry(after delaySeconds: TimeInterval) {
+        connectivityRetryTask?.cancel()
+        connectivityRetryTask = Task { [weak self] in
+            let nanos = UInt64(max(0, delaySeconds) * 1_000_000_000)
+            if nanos > 0 {
+                try? await Task.sleep(nanoseconds: nanos)
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.resolveIfNeeded(forceNetwork: true)
+            }
+        }
+    }
+
     private func performResolve(forceNetwork: Bool, generation: UInt64) async {
         #if DEBUG
         if requiresAuthoritativeResolve {
             ColdLaunchSummaryProbe.markLaunchStarted()
         }
         #endif
-        await SessionNetworkGate.shared.awaitReady()
-
         guard let userID = await session.currentUserID else {
             phase = .failed("Sign in to continue.")
             return
@@ -135,20 +159,28 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         let profileID = ProfileID(userID.rawValue)
         let uid = userID.rawValue
         let cacheInspection = SessionWarmStartProbe.inspectSessionDiskCache(viewerID: uid)
-        let sessionDiskUsable = BackendV2BootstrapDiskCache.loadSession(viewerID: uid) != nil
+        let sessionDiskUsable = BackendV2BootstrapDiskCache.hasRenderableSession(viewerID: uid)
         let cacheWarmPath = !forceNetwork && sessionDiskUsable
         SessionWarmStartProbe.log(cacheInspection, userID: uid, forceNetwork: forceNetwork)
         if cacheWarmPath {
             SessionWarmStartProbe.warmStartTrace("cacheValidated")
+            _ = applyPhaseFromSessionDiskCache(profileID: profileID, uid: uid)
+        }
+
+        if forceNetwork, case .connectivityBlocked = phase {
+            phase = .resolving
         }
 
         if !cacheWarmPath {
+            await SessionNetworkGate.shared.awaitReady()
             phase = .resolving
         }
 
         do {
             let onboardingSnapshot: ProfileOnboardingSnapshot
             let profile: Profile
+            var sessionBootstrapPath: BackendV2BootstrapPath?
+            var sessionBootstrapRpcCount = 0
 
             if BackendV2FeatureFlags.isEnabled(.session), let rpc {
                 if cacheWarmPath {
@@ -165,6 +197,8 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
                 )
                 profile = result.profile
                 onboardingSnapshot = result.onboardingSnapshot
+                sessionBootstrapPath = result.path
+                sessionBootstrapRpcCount = result.rpcRequestCount
                 profileStore.applyBootstrapResult(profile: profile, stats: result.stats)
 
                 if result.rpcRequestCount == 0 {
@@ -197,7 +231,13 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
             }
 
             snapshot = onboardingSnapshot
-            requiresAuthoritativeResolve = false
+            if sessionBootstrapPath == .cache_display_only {
+                requiresAuthoritativeResolve = true
+            } else if sessionBootstrapRpcCount > 0 || forceNetwork {
+                requiresAuthoritativeResolve = false
+            } else {
+                requiresAuthoritativeResolve = false
+            }
             if ProfileOnboardingPolicy.profileNeedsOnboarding(onboardingSnapshot) {
                 phase = .required(onboardingSnapshot)
                 startRealtime(viewerID: userID.rawValue)
@@ -209,7 +249,46 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         } catch is CancellationError {
             if case .resolving = phase { phase = .idle }
         } catch {
-            phase = .failed(UserFacingError.message(for: error))
+            let message = UserFacingError.message(for: error)
+            if requiresAuthoritativeResolve,
+               ProfileOnboardingErrorMapping.isTransientConnectivityFailure(error)
+            {
+                switch phase {
+                case .complete, .required, .brokerOnboarding:
+                    scheduleConnectivityRetry(after: 8)
+                default:
+                    phase = .connectivityBlocked(message)
+                    scheduleConnectivityRetry(after: 8)
+                }
+            } else if case .complete = phase, sessionDiskUsable {
+                scheduleConnectivityRetry(after: 8)
+            } else {
+                phase = .failed(message)
+            }
+        }
+    }
+
+    @discardableResult
+    private func applyPhaseFromSessionDiskCache(profileID: ProfileID, uid: String) -> Bool {
+        guard let cached = BackendV2BootstrapDiskCache.loadSession(viewerID: uid) else { return false }
+        do {
+            let applied = try SessionBootstrapApplier.mapApplied(cached.bootstrap, expectedViewerID: uid)
+            snapshot = applied.onboardingSnapshot
+            let stats = profileStore.stats?.profileID == applied.profile.id
+                ? (profileStore.stats ?? applied.stats)
+                : applied.stats
+            profileStore.applyBootstrapResult(profile: applied.profile, stats: stats)
+            if ProfileOnboardingPolicy.profileNeedsOnboarding(applied.onboardingSnapshot) {
+                phase = .required(applied.onboardingSnapshot)
+            } else {
+                phase = brokerOnboardingPhase(for: profileID)
+                if cached.freshness == .displayOnly {
+                    requiresAuthoritativeResolve = true
+                }
+            }
+            return true
+        } catch {
+            return false
         }
     }
 

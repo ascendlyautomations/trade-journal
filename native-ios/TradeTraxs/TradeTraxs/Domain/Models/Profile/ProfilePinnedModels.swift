@@ -69,12 +69,16 @@ nonisolated struct ProfilePinRequest: Sendable {
 
 enum ProfilePinnedPreviewBuilder {
     static func from(trade: Trade) -> ProfilePinnedPreview {
+        from(summary: TradeSummaryMapper.summary(fromPartialListTrade: trade))
+    }
+
+    static func from(summary: TradeSummary) -> ProfilePinnedPreview {
         ProfilePinnedPreview(
             kindLabel: "Trade",
-            title: TradeDisplay.pnlText(trade.realizedPnL),
-            subtitle: "\(trade.symbol.ticker) · \(TradeDisplay.sideTitle(trade.side))",
-            imageURL: trade.thumbnail?.id,
-            body: trade.notePreview,
+            title: TradeDisplay.pnlText(summary.realizedPnL),
+            subtitle: "\(summary.symbol.ticker) · \(TradeDisplay.sideTitle(summary.side))",
+            imageURL: summary.thumbnail?.id,
+            body: summary.notePreview,
             valueText: nil
         )
     }

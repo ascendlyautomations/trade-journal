@@ -83,21 +83,38 @@ enum ProfilePersistedCacheCoordinator {
     // MARK: - Patch / prune
 
     static func patchTrade(_ trade: Trade, viewerID: ProfileID) {
-        SocialEntityDiskCache.saveTrade(trade, viewerID: viewerID)
-        for blob in ProfileDiskCache.allSnapshots(for: viewerID)
-            where blob.targetProfileID == trade.ownerProfileID.rawValue
-        {
-            var trades = blob.trades
-            if let index = trades.firstIndex(where: { $0.id == trade.id }) {
-                trades[index] = trade
-            } else if trade.visibility == .public {
-                trades.insert(trade, at: 0)
-            }
-            trades = Array(trades.prefix(ProfileDiskCache.maxTradesPerProfile))
-            var state = mapBlobToState(blob)
-            state.trades = trades
-            persist(viewerID: viewerID, targetProfileID: trade.ownerProfileID, state: state)
+        let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+        SocialEntityDiskCache.saveTradeSummary(summary, viewerID: viewerID)
+        let ownerID = trade.ownerProfileID
+
+        if var state = ProfileSessionStore.shared.restore(
+            viewerID: viewerID,
+            targetProfileID: ownerID
+        ) {
+            upsertTradeSummary(summary, trade: trade, into: &state.trades)
+            persist(viewerID: viewerID, targetProfileID: ownerID, state: state)
         }
+
+        for blob in ProfileDiskCache.allSnapshots(for: viewerID)
+            where blob.targetProfileID == ownerID.rawValue
+        {
+            var state = mapBlobToState(blob)
+            upsertTradeSummary(summary, trade: trade, into: &state.trades)
+            persist(viewerID: viewerID, targetProfileID: ownerID, state: state)
+        }
+    }
+
+    private static func upsertTradeSummary(
+        _ summary: TradeSummary,
+        trade: Trade,
+        into trades: inout [TradeSummary]
+    ) {
+        if let index = trades.firstIndex(where: { $0.id == trade.id }) {
+            trades[index] = summary
+        } else if trade.visibility == .public {
+            trades.insert(summary, at: 0)
+        }
+        trades = Array(trades.prefix(ProfileDiskCache.maxTradesPerProfile))
     }
 
     static func removeTrade(id: TradeID, owner: ProfileID, viewerID: ProfileID) {
@@ -328,7 +345,7 @@ enum ProfilePersistedCacheCoordinator {
         if !state.isOwner {
             detailCache.setViewerFollows(profileID, isFollowing: state.isFollowing)
         }
-        detailCache.seed(publicTrades: state.trades, for: profileID)
+        detailCache.seed(publicTradeSummaries: state.trades, for: profileID)
         detailCache.seedPublicAccountMetadata(
             names: state.accountNames,
             modes: state.accountModes,
@@ -343,9 +360,8 @@ enum ProfilePersistedCacheCoordinator {
         for story in state.activeStories {
             detailCache.seed(story)
         }
-        for trade in state.trades {
-            SocialEntityDiskCache.saveTrade(trade, viewerID: viewerID)
-            _ = engagementStore?.snapshot(for: .trade(trade.id))
+        for summary in state.trades {
+            _ = engagementStore?.snapshot(for: .trade(summary.id))
         }
         for post in state.posts {
             SocialEntityDiskCache.savePost(post, viewerID: viewerID)
@@ -359,9 +375,9 @@ enum ProfilePersistedCacheCoordinator {
     }
 
     private static func syncTradeEngagement(
-        into trades: [Trade],
+        into trades: [TradeSummary],
         engagementStore: EngagementStore
-    ) -> [Trade] {
+    ) -> [TradeSummary] {
         trades
     }
 

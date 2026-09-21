@@ -44,6 +44,8 @@ nonisolated struct FeedItem: Hashable, Codable, Sendable, Identifiable {
     var mediaURL: String? = nil
     /// Authoritative Feed/Profile crop metadata when present on the row.
     var imageCrop: ContentImagePresentation? = nil
+    /// True when like/comment counts were authoritative at persist/bootstrap time.
+    var engagementStateCached: Bool? = nil
 }
 
 nonisolated struct Post: Hashable, Codable, Sendable, Identifiable {

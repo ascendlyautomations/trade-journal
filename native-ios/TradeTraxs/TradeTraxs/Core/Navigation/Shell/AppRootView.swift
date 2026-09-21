@@ -118,10 +118,12 @@ struct AppRootView: View {
                 authenticationLifecycle.applicationDidEnterBackground()
             }
             if phase == .active {
+                profileOnboardingGate.noteAppBecameActive()
                 Task {
                     await authenticationLifecycle.applicationWillEnterForeground()
                     if !launchController.isDemoExperienceActive {
                         appEnvironment.data.realtimeHub.resumeIfNeeded()
+                        await AnalyticsRevisionRepairCoordinator.shared.requestRepair(.foreground)
                         GettingStartedStore.shared.onForeground()
                     }
                 }
@@ -234,10 +236,24 @@ struct AppRootView: View {
             case .complete:
                 mainAuthenticatedShell
 
+            case .connectivityBlocked(let message):
+                ProfileOnboardingResolveView(
+                    message: message,
+                    isRetrying: false,
+                    presentation: .connectivity,
+                    onRetry: {
+                        profileOnboardingGate.resolveIfNeeded(forceNetwork: true)
+                    },
+                    onSignOut: {
+                        Task { await authenticationCoordinator.logout() }
+                    }
+                )
+
             case .failed(let message):
                 ProfileOnboardingResolveView(
                     message: message,
                     isRetrying: false,
+                    presentation: .generic,
                     onRetry: {
                         profileOnboardingGate.resolveIfNeeded(forceNetwork: true)
                     },

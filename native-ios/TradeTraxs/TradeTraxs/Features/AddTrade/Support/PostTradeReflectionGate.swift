@@ -69,7 +69,7 @@ final class PostTradeReflectionGate {
         do {
             let updated = try await trades.update(id: trade.id, draft: draft, previous: trade)
             detailCache.seed(updated)
-            TradeJournalMutationStore.shared.noteUpdated(updated)
+            TradeJournalMutationStore.shared.noteUpdated(updated, previous: trade)
             clear()
             return nil
         } catch {

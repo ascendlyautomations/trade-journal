@@ -23,6 +23,10 @@ final class EngagementStore {
         snapshots[target] ?? .empty
     }
 
+    func hasLoaded(_ target: InteractionTarget) -> Bool {
+        loadedTargets.contains(target)
+    }
+
     /// Inject cached engagement (list → detail, fixtures, screenshots).
     func seed(_ snapshot: EngagementSnapshot, for target: InteractionTarget) {
         applyIncomingSnapshot(snapshot, for: target)

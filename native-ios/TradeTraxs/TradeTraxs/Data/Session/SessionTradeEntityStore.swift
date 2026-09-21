@@ -24,14 +24,14 @@ final class SessionTradeEntityStore {
         var hit: [Trade] = []
         var missing: [TradeID] = []
         for id in unique {
-            if !forceNetwork, let cached = detailCache.trade(id: id) {
-                hit.append(cached)
+            if !forceNetwork, let summary = detailCache.tradeSummary(id: id) {
+                hit.append(TradeSummaryMapper.previewTrade(from: summary))
             } else if !forceNetwork,
                       let viewerID,
-                      let disk = SocialEntityDiskCache.loadTrade(id: id, viewerID: viewerID)
+                      let summary = SocialEntityDiskCache.loadTradeSummary(id: id, viewerID: viewerID)
             {
-                detailCache.seed(disk)
-                hit.append(disk)
+                detailCache.seedPresentationSeed(summary)
+                hit.append(TradeSummaryMapper.previewTrade(from: summary))
             } else {
                 missing.append(id)
             }
@@ -67,7 +67,13 @@ final class SessionTradeEntityStore {
         let cache = detailCache
         let task = Task {
             let fetched = try await repository.trades(ids: missing)
-            cache.seed(trades: fetched)
+            cache.seedListPreviews(fetched)
+            if let viewerID {
+                for trade in fetched {
+                    let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+                    SocialEntityDiskCache.saveTradeSummary(summary, viewerID: viewerID)
+                }
+            }
             return fetched
         }
         inFlight[key] = task
@@ -79,9 +85,12 @@ final class SessionTradeEntityStore {
 
     func upsert(_ trade: Trade, detailCache: DetailPresentationCache, viewerID: ProfileID? = nil) {
         SessionNetworkProbe.record(.realtimeUpdate, resource: "trades.entity", detail: trade.id.rawValue)
-        detailCache.seed(trade)
+        detailCache.seedAuthoritativeDetail(trade, authority: .authoritativeMutation)
         if let viewerID {
-            SocialEntityDiskCache.saveTrade(trade, viewerID: viewerID)
+            SocialEntityDiskCache.saveTradeSummary(
+                TradeSummaryMapper.summary(fromPartialListTrade: trade),
+                viewerID: viewerID
+            )
         }
     }
 

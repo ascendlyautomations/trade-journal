@@ -45,7 +45,7 @@ nonisolated enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
 
 /// Hydrated feed row — wraps domain models already used by Profile cards / Detail.
 nonisolated enum FeedTimelineEntry: Identifiable, Hashable, Sendable, Codable {
-    case trade(FeedItem, Trade)
+    case trade(FeedItem, TradeSummary)
     case post(FeedItem, Post)
     case clip(FeedItem, Reel)
     case achievement(FeedItem, Achievement)
@@ -119,8 +119,8 @@ nonisolated enum FeedTimelineEntry: Identifiable, Hashable, Sendable, Codable {
     /// Whether the row should use Layout A (media). False → Layout B (text-first, no placeholder).
     var hasDisplayMedia: Bool {
         switch self {
-        case .trade(_, let trade):
-            return trade.thumbnail != nil
+        case .trade(_, let summary):
+            return summary.thumbnail != nil
         case .post(_, let post):
             return post.media.contains {
                 !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -159,9 +159,9 @@ extension FeedTimelineEntry {
         guard viewerID == nil || authorProfileID != viewerID else { return nil }
         let ownerID = authorProfileID
         switch self {
-        case .trade(_, let trade):
+        case .trade(_, let summary):
             return ContentReportRequest(
-                target: .trade(trade.id, ownerID: ownerID),
+                target: .trade(summary.id, ownerID: ownerID),
                 subjectTitle: "this trade",
                 blockUserOffer: ownerID
             )

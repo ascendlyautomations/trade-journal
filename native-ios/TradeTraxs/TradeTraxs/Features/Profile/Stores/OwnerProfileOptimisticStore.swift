@@ -45,7 +45,7 @@ final class OwnerProfileOptimisticStore {
         ownerScreen?.syncClipsFromSection(clips)
     }
 
-    func syncOwnerTradesState(_ trades: [Trade]) {
+    func syncOwnerTradesState(_ trades: [TradeSummary]) {
         ownerScreen?.syncTradesFromSection(trades)
     }
 

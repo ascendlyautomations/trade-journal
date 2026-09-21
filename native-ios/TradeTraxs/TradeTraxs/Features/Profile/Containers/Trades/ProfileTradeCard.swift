@@ -1,8 +1,38 @@
 import SwiftUI
 
 struct ProfileTradeCard: View {
-    let trade: Trade
+    let summary: TradeSummary
     let imagePipeline: any ImagePipeline
+
+    /// Non–Profile-tab surfaces (e.g. Calendar) that still hold full list trades.
+    init(
+        trade: Trade,
+        imagePipeline: any ImagePipeline,
+        engagementStore: EngagementStore,
+        vaultStore: VaultStore,
+        showsOwnerActions: Bool,
+        onOpen: @escaping () -> Void,
+        onShare: @escaping () -> Void,
+        onEdit: @escaping () -> Void,
+        onDelete: @escaping () -> Void,
+        onReport: (() -> Void)? = nil,
+        profilePin: ProfilePinCallbacks? = nil
+    ) {
+        self.init(
+            summary: TradeSummaryMapper.summary(fromPartialListTrade: trade),
+            imagePipeline: imagePipeline,
+            engagementStore: engagementStore,
+            vaultStore: vaultStore,
+            showsOwnerActions: showsOwnerActions,
+            onOpen: onOpen,
+            onShare: onShare,
+            onEdit: onEdit,
+            onDelete: onDelete,
+            onReport: onReport,
+            profilePin: profilePin
+        )
+    }
+
     let engagementStore: EngagementStore
     let vaultStore: VaultStore
     let showsOwnerActions: Bool
@@ -13,16 +43,42 @@ struct ProfileTradeCard: View {
     var onReport: (() -> Void)? = nil
     var profilePin: ProfilePinCallbacks? = nil
 
+    init(
+        summary: TradeSummary,
+        imagePipeline: any ImagePipeline,
+        engagementStore: EngagementStore,
+        vaultStore: VaultStore,
+        showsOwnerActions: Bool,
+        onOpen: @escaping () -> Void,
+        onShare: @escaping () -> Void,
+        onEdit: @escaping () -> Void,
+        onDelete: @escaping () -> Void,
+        onReport: (() -> Void)? = nil,
+        profilePin: ProfilePinCallbacks? = nil
+    ) {
+        self.summary = summary
+        self.imagePipeline = imagePipeline
+        self.engagementStore = engagementStore
+        self.vaultStore = vaultStore
+        self.showsOwnerActions = showsOwnerActions
+        self.onOpen = onOpen
+        self.onShare = onShare
+        self.onEdit = onEdit
+        self.onDelete = onDelete
+        self.onReport = onReport
+        self.profilePin = profilePin
+    }
+
     @Environment(\.themeColors) private var colors
 
     private var isPinnedToProfile: Bool {
-        profilePin?.isPinned(.trade, trade.id.rawValue) ?? false
+        profilePin?.isPinned(.trade, summary.id.rawValue) ?? false
     }
 
-    private var target: InteractionTarget { .trade(trade.id) }
+    private var target: InteractionTarget { .trade(summary.id) }
 
     private var mediaReference: MediaReference? {
-        ProfileCardMediaPresence.tradeMedia(in: trade)
+        ProfileCardMediaPresence.tradeMedia(in: summary)
     }
 
     var body: some View {
@@ -41,7 +97,7 @@ struct ProfileTradeCard: View {
                             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                                 tradeSummaryColumn
 
-                                if let note = trade.notePreview, !note.isEmpty {
+                                if let note = summary.notePreview, !note.isEmpty {
                                     Text(note)
                                         .experienceStyle(.footnote, color: colors.secondaryText)
                                         .lineLimit(2)
@@ -52,7 +108,7 @@ struct ProfileTradeCard: View {
                         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                             tradeSummaryColumn
 
-                            if let note = trade.notePreview, !note.isEmpty {
+                            if let note = summary.notePreview, !note.isEmpty {
                                 Text(note)
                                     .experienceStyle(.footnote, color: colors.secondaryText)
                                     .lineLimit(2)
@@ -89,8 +145,8 @@ struct ProfileTradeCard: View {
                     {
                         pin.requestPin(
                             .trade,
-                            trade.id.rawValue,
-                            ProfilePinnedPreviewBuilder.from(trade: trade)
+                            summary.id.rawValue,
+                            ProfilePinnedPreviewBuilder.from(summary: summary)
                         )
                     }
                 },
@@ -98,13 +154,13 @@ struct ProfileTradeCard: View {
                     {
                         pin.requestPin(
                             .trade,
-                            trade.id.rawValue,
-                            ProfilePinnedPreviewBuilder.from(trade: trade)
+                            summary.id.rawValue,
+                            ProfilePinnedPreviewBuilder.from(summary: summary)
                         )
                     }
                 },
                 isPinnedToProfile: isPinnedToProfile,
-                accessibilityIdentifier: "profile.trade.overflow.\(trade.id.rawValue)"
+                accessibilityIdentifier: "profile.trade.overflow.\(summary.id.rawValue)"
             )
             .padding(ExperienceSpacing.xxs)
         }
@@ -117,13 +173,13 @@ struct ProfileTradeCard: View {
             }
         } preview: {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text(trade.symbol.ticker)
+                Text(summary.symbol.ticker)
                     .experienceStyle(.headline, color: colors.primaryText)
-                Text(TradeDisplay.pnlText(trade.realizedPnL))
+                Text(TradeDisplay.pnlText(summary.realizedPnL))
                     .experienceStyle(.metric, color: colors.primaryText)
-                Text(TradeDisplay.sideTitle(trade.side))
+                Text(TradeDisplay.sideTitle(summary.side))
                     .experienceStyle(.caption, color: colors.secondaryText)
-                if let note = trade.notePreview, !note.isEmpty {
+                if let note = summary.notePreview, !note.isEmpty {
                     Text(note)
                         .experienceStyle(.footnote, color: colors.secondaryText)
                         .lineLimit(3)
@@ -135,31 +191,31 @@ struct ProfileTradeCard: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilitySummary)
-        .accessibilityIdentifier("profile.trades.card.\(trade.id.rawValue)")
+        .accessibilityIdentifier("profile.trades.card.\(summary.id.rawValue)")
     }
 
     private var tradeSummaryColumn: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             ProfileTradeHeadlineRow(
-                ticker: trade.symbol.ticker,
-                realizedPnL: trade.realizedPnL
+                ticker: summary.symbol.ticker,
+                realizedPnL: summary.realizedPnL
             )
             .accessibilityIdentifier("profile.trade.headline")
 
             HStack(spacing: ExperienceSpacing.xs) {
-                Text(TradeDisplay.dateText(trade.createdAt))
+                Text(TradeDisplay.dateText(summary.createdAt))
                     .experienceStyle(.caption, color: colors.secondaryText)
                 visibilityIcon
             }
 
-            PublicTradeMetaChipRow(trade: trade, showsSession: false, layout: .wrap)
+            PublicTradeMetaChipRow(summary: summary, showsSession: false, layout: .wrap)
                 .accessibilityIdentifier("profile.trade.badges")
         }
     }
 
     @ViewBuilder
     private var visibilityIcon: some View {
-        switch trade.visibility {
+        switch summary.visibility {
         case .public:
             Image(systemName: "globe")
                 .font(.caption2)
@@ -179,9 +235,9 @@ struct ProfileTradeCard: View {
     }
 
     private var accessibilitySummary: String {
-        let pnl = TradeDisplay.pnlText(trade.realizedPnL)
-        let side = TradeDisplay.sideTitle(trade.side)
-        return "\(pnl), \(trade.symbol.ticker), \(side)"
+        let pnl = TradeDisplay.pnlText(summary.realizedPnL)
+        let side = TradeDisplay.sideTitle(summary.side)
+        return "\(pnl), \(summary.symbol.ticker), \(side)"
     }
 }
 

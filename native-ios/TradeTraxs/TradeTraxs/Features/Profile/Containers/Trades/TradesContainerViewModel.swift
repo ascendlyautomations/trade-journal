@@ -5,7 +5,7 @@ import Observation
 @MainActor
 final class TradesContainerViewModel {
     private(set) var state: ProfileSectionLoadState = .idle
-    private(set) var items: [Trade] = []
+    private(set) var items: [TradeSummary] = []
     private(set) var nextCursor: String?
     private(set) var accountNames: [TradingAccountID: String] = [:]
     private(set) var accountNumbers: [TradingAccountID: String] = [:]
@@ -17,13 +17,14 @@ final class TradesContainerViewModel {
     var filter: ProfileTradesFilter = .all
     var sort: ProfileTradesSort = .newest
     var sharePayload: SharePayload?
-    var pendingDelete: Trade?
+    var pendingDelete: TradeSummary?
 
     private let profileID: ProfileID
     private let trades: any TradeRepository
     private let rpc: (any RPCClient)?
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
+    private let tradeDetailRepository: any TradeDetailRepository
     private let engagementStore: EngagementStore?
     private let isOwner: Bool
 
@@ -51,6 +52,7 @@ final class TradesContainerViewModel {
         rpc: (any RPCClient)? = nil,
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
+        tradeDetailRepository: any TradeDetailRepository,
         engagementStore: EngagementStore? = nil,
         isOwner: Bool = true
     ) {
@@ -59,6 +61,7 @@ final class TradesContainerViewModel {
         self.rpc = rpc
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
+        self.tradeDetailRepository = tradeDetailRepository
         self.engagementStore = engagementStore
         self.isOwner = isOwner
     }
@@ -69,7 +72,7 @@ final class TradesContainerViewModel {
         engagementStore?.prefetch(tradeIDs.map { .trade($0) })
     }
 
-    var visibleItems: [Trade] {
+    var visibleItems: [TradeSummary] {
         let filtered = items.filter { filter.matches($0) }
         return sort.sorted(filtered)
     }
@@ -191,7 +194,7 @@ final class TradesContainerViewModel {
     }
 
     /// Owner journal create/update — upsert immediately; optional page-1 reload uses generation guards.
-    func noteJournalMutationSucceeded(_ trade: Trade, preservingExisting existingItems: [Trade] = []) {
+    func noteJournalMutationSucceeded(_ trade: Trade, preservingExisting existingItems: [TradeSummary] = []) {
         guard trade.ownerProfileID == profileID else { return }
         guard trade.visibility == .public else {
             items.removeAll { $0.id == trade.id }
@@ -199,10 +202,11 @@ final class TradesContainerViewModel {
             updateStateForVisibleItems()
             return
         }
+        let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
         let baseline = items.isEmpty ? existingItems : items
-        items = OwnerProfileOptimisticStore.upserting(trade, into: baseline)
+        items = OwnerProfileOptimisticStore.upserting(summary, into: baseline)
         hasLoaded = true
-        detailCache.seed(trade)
+        detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: trade))
         updateStateForVisibleItems()
         prefetchEngagement(for: visibleItems.map(\.id))
     }
@@ -285,26 +289,10 @@ final class TradesContainerViewModel {
         Task { await loadMoreIfNeeded(currentTradeID: lastID) }
     }
 
-    func openTrade(_ trade: Trade) {
+    func openTrade(_ summary: TradeSummary) {
         ExperienceHaptics.play(.selection)
-        detailCache.seed(trade)
-        if let accountID = trade.accountID {
-            if let name = accountNames[accountID] {
-                detailCache.seedAccountName(
-                    PublicAccountPrivacy.publicSafeAccountName(
-                        rawName: name,
-                        accountNumber: nil,
-                        category: nil,
-                        mode: accountModes[accountID]
-                    ),
-                    for: accountID
-                )
-            }
-            if let mode = accountModes[accountID] {
-                detailCache.seed(accountModes: [accountID: mode])
-            }
-        }
-        navigationCoordinator.open(.profile(.trade(trade.id)))
+        detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
+        navigationCoordinator.open(.profile(.trade(summary.id)))
     }
 
     func addTrade() {
@@ -312,36 +300,48 @@ final class TradesContainerViewModel {
         navigationCoordinator.openCompose(.trade)
     }
 
-    func editTrade(_ trade: Trade) {
+    func editTrade(_ summary: TradeSummary) {
         guard isOwner else { return }
         ExperienceHaptics.play(.selection)
-        detailCache.seed(trade)
-        navigationCoordinator.editTrade(trade.id)
+        Task {
+            do {
+                _ = try await tradeDetailRepository.load(tradeID: summary.id, policy: .default)
+                navigationCoordinator.editTrade(summary.id)
+            } catch {
+                paginationErrorMessage = ProfileSectionSupport.message(for: error)
+                ExperienceHaptics.play(.warning)
+            }
+        }
     }
 
-    func shareTrade(_ trade: Trade) {
+    func shareTrade(_ summary: TradeSummary) {
         ExperienceHaptics.play(.selection)
-        let pnl = TradeDisplay.pnlText(trade.realizedPnL)
-        let side = trade.side == .long ? "Long" : "Short"
+        let pnl = TradeDisplay.pnlText(summary.realizedPnL)
+        let side = summary.side == .long ? "Long" : "Short"
         sharePayload = SharePayload(
-            text: "\(trade.symbol.ticker) \(side) \(pnl) on TradeTraxs"
+            text: "\(summary.symbol.ticker) \(side) \(pnl) on TradeTraxs"
         )
     }
 
-    func requestDelete(_ trade: Trade) {
+    func requestDelete(_ summary: TradeSummary) {
         guard isOwner else { return }
         ExperienceHaptics.play(.warning)
-        pendingDelete = trade
+        pendingDelete = summary
     }
 
     func confirmDelete() async {
-        guard let trade = pendingDelete else { return }
+        guard let summary = pendingDelete else { return }
         pendingDelete = nil
         do {
-            try await trades.delete(id: trade.id)
-            items.removeAll { $0.id == trade.id }
-            detailCache.removeTrade(id: trade.id)
-            TradeJournalMutationStore.shared.noteDeleted(id: trade.id, owner: trade.ownerProfileID)
+            try await trades.delete(id: summary.id)
+            items.removeAll { $0.id == summary.id }
+            detailCache.removeTrade(id: summary.id)
+            await tradeDetailRepository.evict(tradeID: summary.id)
+            TradeJournalMutationStore.shared.noteDeleted(
+                id: summary.id,
+                owner: summary.ownerProfileID,
+                previous: TradeSummaryMapper.previewTrade(from: summary)
+            )
             ExperienceHaptics.play(.success)
             updateStateForVisibleItems()
         } catch {
@@ -353,21 +353,23 @@ final class TradesContainerViewModel {
     func handleJournalMutation() {
         switch TradeJournalMutationStore.shared.latest {
         case .created(let trade) where trade.visibility == .public && trade.ownerProfileID == profileID:
-            items.removeAll { $0.id == trade.id }
-            items.insert(trade, at: 0)
-            detailCache.seed(trade)
+            let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+            items.removeAll { $0.id == summary.id }
+            items.insert(summary, at: 0)
+            detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: trade))
             updateStateForVisibleItems()
         case .updated(let trade) where trade.ownerProfileID == profileID:
+            let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
             if trade.visibility == .public {
-                if let index = items.firstIndex(where: { $0.id == trade.id }) {
-                    items[index] = trade
+                if let index = items.firstIndex(where: { $0.id == summary.id }) {
+                    items[index] = summary
                 } else {
-                    items.insert(trade, at: 0)
+                    items.insert(summary, at: 0)
                 }
-                detailCache.seed(trade)
+                detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: trade))
             } else {
-                items.removeAll { $0.id == trade.id }
-                detailCache.removeTrade(id: trade.id)
+                items.removeAll { $0.id == summary.id }
+                detailCache.removeTrade(id: summary.id)
             }
             updateStateForVisibleItems()
         case .deleted(let id, let owner) where owner == profileID:
@@ -379,22 +381,6 @@ final class TradesContainerViewModel {
         default:
             break
         }
-    }
-
-    func accountName(for trade: Trade) -> String? {
-        guard let accountID = trade.accountID else {
-            return PublicAccountPrivacy.publicTradeAccountLabel(mode: trade.mode)
-        }
-        if let name = accountNames[accountID] {
-            return TradingAccountDisplay.optionalTitle(
-                name: name,
-                accountNumber: nil,
-                audience: .public,
-                category: nil,
-                mode: accountModes[accountID]
-            )
-        }
-        return PublicAccountPrivacy.publicTradeAccountLabel(mode: trade.mode)
     }
 
     // MARK: - Private
@@ -430,16 +416,17 @@ final class TradesContainerViewModel {
         }
 
         do {
-            let pageItems: [Trade]
+            let pageItems: [TradeSummary]
             let newCursor: String?
             if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
                 let applied = try await ProfileTabBootstrapLoader.load(
                     tab: .trades,
                     profileID: profileID,
                     rpc: rpc,
+                    detailCache: detailCache,
                     cursor: cursor
                 )
-                pageItems = applied.trades ?? []
+                pageItems = applied.tradeSummaries ?? []
                 newCursor = applied.nextCursor
                 seedTradeEngagement(applied.tradeEngagement)
             } else {
@@ -449,7 +436,7 @@ final class TradesContainerViewModel {
                     page: PageRequest(cursor: cursor, limit: 30),
                     publicOnly: true
                 )
-                pageItems = page.items
+                pageItems = page.items.map(TradeSummaryMapper.summary(fromPartialListTrade:))
                 newCursor = page.nextCursor
             }
 
@@ -522,7 +509,9 @@ final class TradesContainerViewModel {
                 return
             }
             hasLoaded = true
-            items = ProfileTradeFixtures.samples(owner: profileID)
+            items = ProfileTradeFixtures.samples(owner: profileID).map(
+                TradeSummaryMapper.summary(fromPartialListTrade:)
+            )
             accountNames = ProfileTradeFixtures.accountNames()
             accountNumbers = [:]
             accountModes = ProfileTradeFixtures.accountModes()
@@ -541,16 +530,17 @@ final class TradesContainerViewModel {
         initialLoadFailureGrace.cancel()
 
         do {
-            let pageItems: [Trade]
+            let pageItems: [TradeSummary]
             let newCursor: String?
             if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
                 let applied = try await ProfileTabBootstrapLoader.load(
                     tab: .trades,
                     profileID: profileID,
                     rpc: rpc,
+                    detailCache: detailCache,
                     cursor: nil
                 )
-                pageItems = applied.trades ?? []
+                pageItems = applied.tradeSummaries ?? []
                 newCursor = applied.nextCursor
                 if let names = applied.accountNames { accountNames = names }
                 if let modes = applied.accountModes { accountModes = modes }
@@ -563,7 +553,7 @@ final class TradesContainerViewModel {
                     page: PageRequest(limit: 30),
                     publicOnly: true
                 )
-                pageItems = page.items
+                pageItems = page.items.map(TradeSummaryMapper.summary(fromPartialListTrade:))
                 newCursor = page.nextCursor
             }
 
@@ -574,7 +564,7 @@ final class TradesContainerViewModel {
 
             let preserveIDs = ownerPublicTradePreserveIDs()
             if reset, !items.isEmpty {
-                items = ProfilePersistentReconcile.reconcileTrades(
+                items = ProfilePersistentReconcile.reconcileTradeSummaries(
                     existing: items,
                     incoming: pageItems,
                     preserveIDs: preserveIDs
@@ -622,7 +612,7 @@ final class TradesContainerViewModel {
     }
 
     private func seedCachesFromItems() {
-        detailCache.seed(publicTrades: items, for: profileID)
+        detailCache.seed(publicTradeSummaries: items, for: profileID)
         detailCache.seedPublicAccountMetadata(
             names: sanitizedPublicAccountNames(from: accountNames),
             modes: accountModes,
@@ -669,12 +659,12 @@ final class TradesContainerViewModel {
         }
     }
 
-    private func appendUnique(_ pageItems: [Trade]) {
+    private func appendUnique(_ pageItems: [TradeSummary]) {
         let existing = Set(items.map(\.id))
         let fresh = pageItems.filter { !existing.contains($0.id) }
         items.append(contentsOf: fresh)
         if !fresh.isEmpty {
-            detailCache.seed(publicTrades: items, for: profileID)
+            detailCache.seed(publicTradeSummaries: items, for: profileID)
         }
     }
 
@@ -805,6 +795,18 @@ nonisolated enum TradeDisplay {
         cardDurationText(entryAt: trade.entryAt, exitAt: trade.exitAt)
     }
 
+    static func cardDurationText(for summary: TradeSummary) -> String? {
+        if let text = summary.durationText?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty
+        {
+            return text
+        }
+        if let seconds = summary.durationSeconds, seconds > 0 {
+            return cardDurationTextFromSeconds(seconds)
+        }
+        return cardDurationText(entryAt: summary.entryAt, exitAt: summary.exitAt)
+    }
+
     static func cardDurationText(entryAt: Date, exitAt: Date?) -> String? {
         guard let exitAt, exitAt >= entryAt else { return nil }
         let seconds = Int(exitAt.timeIntervalSince(entryAt))
@@ -822,6 +824,10 @@ nonisolated enum TradeDisplay {
             return durationTextFromSeconds(seconds)
         }
         return durationText(entryAt: trade.entryAt, exitAt: trade.exitAt)
+    }
+
+    static func holdDuration(for item: TradeOwnerJournalSummary) -> String? {
+        holdDuration(for: TradeSummaryMapper.listMatchTrade(from: item))
     }
 
     private static func durationTextFromSeconds(_ seconds: Int) -> String? {

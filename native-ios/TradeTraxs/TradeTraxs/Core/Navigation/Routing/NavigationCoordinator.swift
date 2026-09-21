@@ -260,9 +260,7 @@ final class NavigationCoordinator {
 
     func pushSocialTrade(_ tradeID: TradeID, cache: DetailPresentationCache? = nil) {
         ExperienceHaptics.play(.selection)
-        if let cache, let trade = cache.trade(id: tradeID) {
-            cache.seed(trade)
-        }
+        _ = cache
         switch store.selectedTab {
         case .home:
             pushHome(.socialTrade(tradeID))
@@ -379,9 +377,7 @@ final class NavigationCoordinator {
 
     func pushSharedTrade(_ tradeID: TradeID, host: TradeRoomNavigationHost, cache: DetailPresentationCache? = nil) {
         ExperienceHaptics.play(.selection)
-        if let cache, let trade = cache.trade(id: tradeID) {
-            cache.seed(trade)
-        }
+        _ = cache
         switch host {
         case .home:
             pushHome(.socialTrade(tradeID))

@@ -574,6 +574,7 @@ final class ProfileExperienceTests: XCTestCase {
         let viewModel = StatsContainerViewModel(
             profileID: profileID,
             trades: environment.data.trades,
+            session: environment.data.session,
             achievements: environment.data.achievements,
             detailCache: environment.data.detailCache
         )
@@ -641,14 +642,15 @@ final class ProfileExperienceTests: XCTestCase {
         let low = makeTrade(id: "l", pnl: -50, rr: 1, createdAtOffset: -50)
         let mid = makeTrade(id: "m", pnl: 100, rr: nil, createdAtOffset: 0)
 
-        let byProfit = ProfileTradesSort.highestProfit.sorted([low, mid, high])
+        let summaries = [low, mid, high].map(TradeSummaryMapper.summary(fromPartialListTrade:))
+        let byProfit = ProfileTradesSort.highestProfit.sorted(summaries)
         XCTAssertEqual(byProfit.map(\.id.rawValue), ["h", "m", "l"])
 
-        let byRR = ProfileTradesSort.highestRR.sorted([mid, low, high])
+        let byRR = ProfileTradesSort.highestRR.sorted(summaries)
         XCTAssertEqual(byRR.first?.id.rawValue, "h")
         XCTAssertEqual(byRR.last?.id.rawValue, "m") // null RR last
 
-        let newest = ProfileTradesSort.newest.sorted([high, low, mid])
+        let newest = ProfileTradesSort.newest.sorted(summaries)
         XCTAssertEqual(newest.first?.id.rawValue, "m")
     }
 
@@ -660,6 +662,7 @@ final class ProfileExperienceTests: XCTestCase {
             trades: environment.data.trades,
             navigationCoordinator: environment.navigation.coordinator,
             detailCache: environment.data.detailCache,
+            tradeDetailRepository: environment.data.tradeDetailRepository,
             isOwner: true
         )
         viewModel.loadIfNeeded()

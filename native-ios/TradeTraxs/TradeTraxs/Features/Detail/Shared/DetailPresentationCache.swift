@@ -9,6 +9,8 @@ import Observation
 @MainActor
 final class DetailPresentationCache {
     private var trades: [TradeID: Trade] = [:]
+    private var tradeAuthority: [TradeID: TradeDetailAuthority] = [:]
+    private var presentationSeeds: [TradeID: DetailPresentationSeed] = [:]
     private var posts: [PostID: Post] = [:]
     private var reels: [ReelID: Reel] = [:]
     private var reelIDByLinkedTradeID: [TradeID: ReelID] = [:]
@@ -26,6 +28,7 @@ final class DetailPresentationCache {
     private var accountsByProfile: [ProfileID: [TradingAccount]] = [:]
     /// Public trades list last seeded for a profile (Profile Trades / Stats share).
     private var publicTradesByProfile: [ProfileID: [Trade]] = [:]
+    private var publicTradeSummariesByProfile: [ProfileID: [TradeSummary]] = [:]
     /// Session Followers / Following lists (web `followListCache` parity).
     private var followersByProfile: [ProfileID: [Profile]] = [:]
     private var followingByProfile: [ProfileID: [Profile]] = [:]
@@ -77,13 +80,77 @@ final class DetailPresentationCache {
         ownedTradeRooms[profileID]
     }
 
+    /// List/card/bootstrap snapshot — not authoritative for detail or edit.
     func seed(_ trade: Trade) {
-        trades[trade.id] = trade
+        seedListPreview(trade)
+    }
+
+    func seedListPreview(_ trade: Trade) {
+        seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: trade))
+    }
+
+    func seedListPreviews(_ items: [Trade]) {
+        for trade in items {
+            seedListPreview(trade)
+        }
     }
 
     func seed(trades items: [Trade]) {
-        for trade in items {
-            trades[trade.id] = trade
+        seedListPreviews(items)
+    }
+
+    func seedPresentationSeed(_ summary: TradeSummary) {
+        seedPresentationSeed(DetailPresentationSeed(summary: summary))
+    }
+
+    /// Journal list summaries — presentation seeds only (not authoritative detail).
+    func seed(journalSummaries items: [TradeOwnerJournalSummary]) {
+        for item in items {
+            seedPresentationSeed(TradeSummaryMapper.presentationSeed(from: item))
+        }
+    }
+
+    func seedPresentationSeed(_ seed: DetailPresentationSeed) {
+        presentationSeeds[seed.summary.id] = seed
+        trades[seed.summary.id] = seed.previewTrade
+        tradeAuthority[seed.summary.id] = .listSeed
+    }
+
+    /// Complete detail from network or successful mutation — safe for edit/detail completeness.
+    func seedAuthoritativeDetail(_ detail: TradeDetail, authority: TradeDetailAuthority) {
+        trades[detail.id] = detail
+        tradeAuthority[detail.id] = authority
+        presentationSeeds[detail.id] = nil
+    }
+
+    func presentationSeed(id: TradeID) -> DetailPresentationSeed? {
+        presentationSeeds[id]
+    }
+
+    /// Feed / Calendar / Profile list card transport — never authoritative detail.
+    func tradeSummary(id: TradeID) -> TradeSummary? {
+        if let seed = presentationSeeds[id] {
+            return seed.summary
+        }
+        guard let trade = trades[id] else { return nil }
+        return TradeSummaryMapper.summary(fromPartialListTrade: trade)
+    }
+
+    func authoritativeDetail(id: TradeID) -> TradeDetail? {
+        guard let trade = trades[id],
+              TradeDetailCompleteness.isAuthoritative(tradeAuthority[id] ?? .listSeed)
+        else { return nil }
+        return trade
+    }
+
+    func tradeAuthority(for id: TradeID) -> TradeDetailAuthority? {
+        tradeAuthority[id]
+    }
+
+    func evictAuthoritativeDetail(tradeID: TradeID) {
+        if TradeDetailCompleteness.isAuthoritative(tradeAuthority[tradeID] ?? .listSeed) {
+            trades[tradeID] = nil
+            tradeAuthority[tradeID] = nil
         }
     }
 
@@ -268,8 +335,19 @@ final class DetailPresentationCache {
         seed(trades: items)
     }
 
+    func seed(publicTradeSummaries items: [TradeSummary], for profileID: ProfileID) {
+        publicTradeSummariesByProfile[profileID] = items
+        for item in items {
+            seedPresentationSeed(DetailPresentationSeed(summary: item))
+        }
+    }
+
     func publicTrades(for profileID: ProfileID) -> [Trade]? {
         publicTradesByProfile[profileID]
+    }
+
+    func publicTradeSummaries(for profileID: ProfileID) -> [TradeSummary]? {
+        publicTradeSummariesByProfile[profileID]
     }
 
     func seed(followers items: [Profile], for profileID: ProfileID) {
@@ -316,8 +394,28 @@ final class DetailPresentationCache {
         viewerFollowingIDSet = ids
     }
 
+    /// Card/list preview transport — not authoritative detail (prefer ``tradeSummary(id:)``).
+    func previewTrade(id: TradeID) -> Trade? {
+        if let seed = presentationSeeds[id] {
+            return seed.previewTrade
+        }
+        guard let trade = trades[id] else { return nil }
+        #if DEBUG
+        if !TradeDetailCompleteness.isAuthoritative(tradeAuthority[id] ?? .listSeed) {
+            TradeSummaryLegacyTelemetry.legacyFullTradePath(context: "previewTrade(id:)", tradeID: id)
+        }
+        #endif
+        return trade
+    }
+
     func trade(id: TradeID) -> Trade? {
-        trades[id]
+        guard let trade = trades[id] else { return nil }
+        #if DEBUG
+        if !TradeDetailCompleteness.isAuthoritative(tradeAuthority[id] ?? .listSeed) {
+            TradeSummaryLegacyTelemetry.legacyFullTradePath(context: "trade(id:)", tradeID: id)
+        }
+        #endif
+        return trade
     }
 
     func tradesOwnedBy(_ profileID: ProfileID) -> [Trade] {
@@ -384,14 +482,20 @@ final class DetailPresentationCache {
     func invalidateJournalLists() {
         trades = [:]
         publicTradesByProfile = [:]
+        publicTradeSummariesByProfile = [:]
         statsByProfile = [:]
     }
 
     /// Remove one trade from detail + public profile list seeds (delete path).
     func removeTrade(id: TradeID) {
         trades[id] = nil
+        tradeAuthority[id] = nil
+        presentationSeeds[id] = nil
         for key in publicTradesByProfile.keys {
             publicTradesByProfile[key]?.removeAll { $0.id == id }
+        }
+        for key in publicTradeSummariesByProfile.keys {
+            publicTradeSummariesByProfile[key]?.removeAll { $0.id == id }
         }
         statsByProfile = [:]
     }
@@ -414,6 +518,8 @@ final class DetailPresentationCache {
     /// Drop all session seeds when the authenticated user changes.
     func removeAll() {
         trades = [:]
+        tradeAuthority = [:]
+        presentationSeeds = [:]
         posts = [:]
         reels = [:]
         reelIDByLinkedTradeID = [:]
@@ -429,6 +535,7 @@ final class DetailPresentationCache {
         accountSizes = [:]
         accountsByProfile = [:]
         publicTradesByProfile = [:]
+        publicTradeSummariesByProfile = [:]
         followersByProfile = [:]
         followingByProfile = [:]
         viewerFollowingIDSet = nil

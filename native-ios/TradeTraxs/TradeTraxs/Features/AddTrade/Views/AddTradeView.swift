@@ -36,6 +36,7 @@ struct AddTradeView: View {
         _viewModel = State(
             initialValue: AddTradeViewModel(
                 trades: data.trades,
+                tradeDetailRepository: data.tradeDetailRepository,
                 feed: data.feed,
                 session: data.session,
                 detailCache: data.detailCache,

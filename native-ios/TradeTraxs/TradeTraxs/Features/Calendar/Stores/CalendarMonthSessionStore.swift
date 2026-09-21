@@ -1,7 +1,9 @@
 import Foundation
 import Observation
 
-/// Shared month-window trade cache for Calendar + Trading Day (session memory).
+/// Legacy month-scoped `[Trade]` window for Calendar V1 fallback and local mutation hints.
+///
+/// Day drilldown uses ``TradeSummary`` (Phase 8E′). Month/grid analytics use GRDB + aggregate RPCs (Phase 13 retirement for this store).
 @Observable
 @MainActor
 final class CalendarMonthSessionStore {

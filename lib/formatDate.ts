@@ -27,6 +27,12 @@ export function normalizeStoredUtcTimestamp(
     return trimmed
   }
 
+  // Short hour-only offset (+00, -05) — broker/import format
+  if (/[+-]\d{2}$/.test(trimmed)) {
+    const withT = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T")
+    return `${withT}:00`
+  }
+
   const withT = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T")
   return `${withT}Z`
 }

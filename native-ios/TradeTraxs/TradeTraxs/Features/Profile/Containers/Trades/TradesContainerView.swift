@@ -75,18 +75,18 @@ struct TradesContainerView: View {
                     .accessibilityIdentifier("profile.trades.filterEmpty")
             } else {
                 LazyVStack(spacing: ExperienceSpacing.sm) {
-                    ForEach(viewModel.visibleItems) { trade in
+                    ForEach(viewModel.visibleItems) { summary in
                         ProfileTradeCard(
-                            trade: trade,
+                            summary: summary,
                             imagePipeline: imagePipeline,
                             engagementStore: engagementStore,
                             vaultStore: vaultStore,
                             showsOwnerActions: viewModel.showsOwnerActions,
-                            onOpen: { viewModel.openTrade(trade) },
-                            onShare: { viewModel.shareTrade(trade) },
-                            onEdit: { viewModel.editTrade(trade) },
-                            onDelete: { viewModel.requestDelete(trade) },
-                            onReport: reportAction(for: trade),
+                            onOpen: { viewModel.openTrade(summary) },
+                            onShare: { viewModel.shareTrade(summary) },
+                            onEdit: { viewModel.editTrade(summary) },
+                            onDelete: { viewModel.requestDelete(summary) },
+                            onReport: reportAction(for: summary),
                             profilePin: profilePin
                         )
                         .transition(
@@ -95,7 +95,7 @@ struct TradesContainerView: View {
                                 : .opacity.combined(with: .move(edge: .bottom))
                         )
                         .task {
-                            await viewModel.loadMoreIfNeeded(currentTradeID: trade.id)
+                            await viewModel.loadMoreIfNeeded(currentTradeID: summary.id)
                         }
                     }
                 }
@@ -114,12 +114,12 @@ struct TradesContainerView: View {
         }
     }
 
-    private func reportAction(for trade: Trade) -> (() -> Void)? {
+    private func reportAction(for summary: TradeSummary) -> (() -> Void)? {
         guard !viewModel.showsOwnerActions else { return nil }
         return {
             ExperienceHaptics.play(.selection)
             ContentReportSupport.presentTrade(
-                trade.id,
+                summary.id,
                 ownerID: viewModel.profileOwnerID,
                 presenter: appEnvironment.contentReportPresenter
             )

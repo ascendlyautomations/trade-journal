@@ -115,7 +115,7 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
                     searchText: ""
                 ),
                 profileID: owner,
-                items: [trade],
+                items: [TradeSummaryMapper.ownerJournal(fromListTrade: trade)],
                 nextCursor: nil,
                 filters: filters,
                 searchText: "",
@@ -163,7 +163,7 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
         let owner = ProfileID("dev.detail-update")
         let trade = sampleTrade(id: "detail-upd-1", owner: owner.rawValue)
         let cache = environment.data.detailCache
-        cache.seed(trade)
+        cache.seedAuthoritativeDetail(trade, authority: .authoritativeNetwork)
 
         let viewModel = TradeDetailViewModel(
             tradeID: trade.id,

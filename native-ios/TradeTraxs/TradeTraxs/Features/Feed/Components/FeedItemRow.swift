@@ -26,8 +26,11 @@ struct FeedItemRow: View {
         return vaultStore.state(for: vaultRef).isVaulted
     }
 
-    private var linkedTrade: Trade? {
-        FeedLinkedContentResolver.linkedTrade(for: entry, cache: detailCache)
+    private var linkedTradeSummary: TradeSummary? {
+        guard let trade = FeedLinkedContentResolver.linkedTrade(for: entry, cache: detailCache) else {
+            return nil
+        }
+        return TradeSummaryMapper.summary(fromPartialListTrade: trade)
     }
 
     private var linkedReel: Reel? {
@@ -156,10 +159,10 @@ struct FeedItemRow: View {
     @ViewBuilder
     private var feedImageMedia: some View {
         switch entry {
-        case .trade(_, let trade):
+        case .trade(_, let summary):
             InteractiveImageView(
                 mediaID: entry.id,
-                reference: trade.thumbnail,
+                reference: summary.thumbnail,
                 purpose: .tradeScreenshot,
                 imagePipeline: imagePipeline,
                 emptyIcon: .chart,
@@ -229,11 +232,11 @@ struct FeedItemRow: View {
 
     @ViewBuilder
     private var linkedEmbeds: some View {
-        if let linkedTrade {
+        if let linkedTradeSummary {
             FeedLinkedTradeEmbed(
-                trade: linkedTrade,
+                summary: linkedTradeSummary,
                 imagePipeline: imagePipeline,
-                onOpen: { onOpenLinkedTrade(linkedTrade.id) }
+                onOpen: { onOpenLinkedTrade(linkedTradeSummary.id) }
             )
         }
         if let linkedReel {
@@ -278,8 +281,8 @@ struct FeedItemRow: View {
     @ViewBuilder
     private var summary: some View {
         switch entry {
-        case .trade(_, let trade):
-            tradeSummary(trade)
+        case .trade(_, let summary):
+            tradeSummary(summary)
         case .post:
             EmptyView()
         case .clip:
@@ -292,15 +295,15 @@ struct FeedItemRow: View {
         }
     }
 
-    private func tradeSummary(_ trade: Trade) -> some View {
+    private func tradeSummary(_ summary: TradeSummary) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             PublicTradeHeadlineRow(
-                ticker: trade.symbol.ticker,
-                realizedPnL: trade.realizedPnL
+                ticker: summary.symbol.ticker,
+                realizedPnL: summary.realizedPnL
             )
             .accessibilityIdentifier("feed.trade.headline")
 
-            PublicTradeMetaChipRow(trade: trade)
+            PublicTradeMetaChipRow(summary: summary)
                 .accessibilityIdentifier("feed.trade.badges")
         }
     }
@@ -351,8 +354,8 @@ private struct FeedItemRowPreview: View {
 
     private var summaryTitle: String {
         switch entry {
-        case .trade(_, let trade):
-            return "\(trade.symbol.ticker) · \(TradeDisplay.pnlText(trade.realizedPnL))"
+        case .trade(_, let summary):
+            return "\(summary.symbol.ticker) · \(TradeDisplay.pnlText(summary.realizedPnL))"
         case .post(_, let post):
             return post.body
         case .clip(_, let reel):

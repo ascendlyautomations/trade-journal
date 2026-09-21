@@ -4,6 +4,8 @@ import Foundation
 nonisolated enum ImageDeliveryQuality: String, Sendable {
     /// Supabase `/render/image/` transforms matching web feed presets.
     case feedDisplay
+    /// Compact profile grid thumbnails (~256px) — not full feed thumb width.
+    case profileGrid
     /// Higher-width render for detail surfaces (1280px) — not original object bytes.
     case feedDetail
     /// Original object bytes — deep zoom / explicit full fidelity only.
@@ -18,6 +20,17 @@ nonisolated enum ImagePurpose: String, Sendable {
     case reelThumbnail
 }
 
+nonisolated enum ImageCacheResolutionTier: Sendable {
+    case memory
+    case disk
+}
+
+nonisolated struct ImageCachedLookupResult: Sendable {
+    var data: Data
+    var quality: ImageDeliveryQuality
+    var tier: ImageCacheResolutionTier
+}
+
 nonisolated struct ImageRequest: Sendable {
     var reference: MediaReference
     var purpose: ImagePurpose
@@ -28,6 +41,10 @@ nonisolated struct ImageRequest: Sendable {
     var auditSurface: String
     /// DEBUG row/item id (may differ from ``reference.id``).
     var auditMediaID: String
+    /// Lookahead / prefetch — deprioritized vs auth and on-screen loads.
+    var isSpeculativePrefetch: Bool
+    /// DEBUG correlated timeline — ``FeedImageTimingTrace``.
+    var imageTraceCorrelationID: UUID?
 
     init(
         reference: MediaReference,
@@ -36,7 +53,9 @@ nonisolated struct ImageRequest: Sendable {
         allowsProgressiveLoading: Bool = true,
         deliveryQuality: ImageDeliveryQuality = .feedDisplay,
         auditSurface: String = "",
-        auditMediaID: String = ""
+        auditMediaID: String = "",
+        isSpeculativePrefetch: Bool = false,
+        imageTraceCorrelationID: UUID? = nil
     ) {
         self.reference = reference
         self.purpose = purpose
@@ -45,6 +64,8 @@ nonisolated struct ImageRequest: Sendable {
         self.deliveryQuality = deliveryQuality
         self.auditSurface = auditSurface
         self.auditMediaID = auditMediaID.isEmpty ? reference.id : auditMediaID
+        self.isSpeculativePrefetch = isSpeculativePrefetch
+        self.imageTraceCorrelationID = imageTraceCorrelationID
     }
 }
 
@@ -55,6 +76,10 @@ nonisolated protocol ImagePipeline: Sendable {
     func invalidate(reference: MediaReference) async
     func cachedImageData(for request: ImageRequest) async -> Data?
     func bestCachedImageData(for request: ImageRequest) async -> (data: Data, quality: ImageDeliveryQuality)?
+    /// Memory-first, then disk — reports which tier satisfied the lookup.
+    func bestCachedImageDataWithTier(for request: ImageRequest) async -> ImageCachedLookupResult?
+    /// Promotes disk hits to memory — never uses the network.
+    func warmCachedImages(for requests: [ImageRequest]) async
 }
 
 extension ImagePipeline {
@@ -65,6 +90,12 @@ extension ImagePipeline {
     func bestCachedImageData(for request: ImageRequest) async -> (data: Data, quality: ImageDeliveryQuality)? {
         nil
     }
+
+    func bestCachedImageDataWithTier(for request: ImageRequest) async -> ImageCachedLookupResult? {
+        nil
+    }
+
+    func warmCachedImages(for requests: [ImageRequest]) async {}
 }
 
 nonisolated struct PlaceholderImagePipeline: ImagePipeline {

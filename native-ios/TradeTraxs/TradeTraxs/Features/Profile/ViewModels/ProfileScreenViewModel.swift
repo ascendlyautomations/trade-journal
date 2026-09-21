@@ -425,7 +425,7 @@ final class ProfileScreenViewModel {
     }
 
     /// Keeps ``ProfileState.trades`` aligned with the section VM after journal create/update.
-    func syncTradesFromSection(_ trades: [Trade]) {
+    func syncTradesFromSection(_ trades: [TradeSummary]) {
         guard isOwnerTarget else { return }
         var next = state
         next.trades = trades
@@ -456,14 +456,17 @@ final class ProfileScreenViewModel {
         shellViewModel?.ensureTradesSection()
 
         if trade.visibility == .public {
-            data.detailCache.seed(trade)
+            data.detailCache.seedPresentationSeed(
+                TradeSummaryMapper.presentationSeed(fromListTrade: trade)
+            )
             shellViewModel?.trades?.noteJournalMutationSucceeded(
                 trade,
                 preservingExisting: preferredTradesBase()
             )
 
             var next = state
-            next.trades = OwnerProfileOptimisticStore.upserting(trade, into: preferredTradesBase())
+            let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+            next.trades = OwnerProfileOptimisticStore.upserting(summary, into: preferredTradesBase())
             if next.phase == .idle || next.phase == .loading {
                 applyLocalState(next, skipTradesBootstrap: true)
             } else {
@@ -483,7 +486,7 @@ final class ProfileScreenViewModel {
         }
     }
 
-    private func preferredTradesBase() -> [Trade] {
+    private func preferredTradesBase() -> [TradeSummary] {
         if let tradesVM = shellViewModel?.trades, !tradesVM.items.isEmpty {
             return tradesVM.items
         }
@@ -927,7 +930,9 @@ final class ProfileScreenViewModel {
             ownerID: viewerID,
             detailCache: data.detailCache
         ) {
-            prefetched.trades = trades.filter { $0.visibility == .public }
+            prefetched.trades = trades
+                .filter { $0.visibility == .public }
+                .map(TradeSummaryMapper.summary(fromPartialListTrade:))
             prefetched.didLoadTrades = !prefetched.trades.isEmpty
             prefetched.tradesNextCursor = prefetched.trades.count >= 30 ? "disk" : nil
         }

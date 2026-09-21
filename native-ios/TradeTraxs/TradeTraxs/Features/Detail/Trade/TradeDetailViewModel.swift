@@ -32,6 +32,7 @@ final class TradeDetailViewModel {
     let tradeID: TradeID
 
     private let trades: any TradeRepository
+    private let tradeDetailRepository: any TradeDetailRepository
     private let profiles: any ProfileRepository
     private let session: any SessionProviding
     private let imagePipeline: any ImagePipeline
@@ -43,7 +44,7 @@ final class TradeDetailViewModel {
     private let experience: TradeDetailExperience
     private var didResolveAccountMetadata = false
 
-    init(
+    convenience init(
         tradeID: TradeID,
         trades: any TradeRepository,
         profiles: any ProfileRepository,
@@ -54,8 +55,39 @@ final class TradeDetailViewModel {
         rpc: any RPCClient,
         experience: TradeDetailExperience = .social
     ) {
+        self.init(
+            tradeID: tradeID,
+            trades: trades,
+            tradeDetailRepository: DefaultTradeDetailRepository(
+                trades: trades,
+                session: session,
+                detailCache: cache
+            ),
+            profiles: profiles,
+            session: session,
+            imagePipeline: imagePipeline,
+            cache: cache,
+            navigationCoordinator: navigationCoordinator,
+            rpc: rpc,
+            experience: experience
+        )
+    }
+
+    init(
+        tradeID: TradeID,
+        trades: any TradeRepository,
+        tradeDetailRepository: any TradeDetailRepository,
+        profiles: any ProfileRepository,
+        session: any SessionProviding,
+        imagePipeline: any ImagePipeline,
+        cache: DetailPresentationCache,
+        navigationCoordinator: NavigationCoordinator,
+        rpc: any RPCClient,
+        experience: TradeDetailExperience = .social
+    ) {
         self.tradeID = tradeID
         self.trades = trades
+        self.tradeDetailRepository = tradeDetailRepository
         self.profiles = profiles
         self.session = session
         self.imagePipeline = imagePipeline
@@ -121,8 +153,8 @@ final class TradeDetailViewModel {
     func editTrade() {
         guard isOwner else { return }
         ExperienceHaptics.play(.selection)
-        if let trade {
-            cache.seed(trade)
+        if let trade, cache.authoritativeDetail(id: tradeID) != nil {
+            cache.seedAuthoritativeDetail(trade, authority: .authoritativeMutation)
         }
         navigationCoordinator.editTrade(tradeID)
     }
@@ -149,7 +181,8 @@ final class TradeDetailViewModel {
                 throw AppError.domain(.permission(.notAuthenticated))
             }
             cache.removeTrade(id: tradeID)
-            TradeJournalMutationStore.shared.noteDeleted(id: tradeID, owner: owner)
+            await tradeDetailRepository.evict(tradeID: tradeID)
+            TradeJournalMutationStore.shared.noteDeleted(id: tradeID, owner: owner, previous: trade)
             ExperienceHaptics.play(.success)
             navigationCoordinator.completeTradeDeletionNavigation()
             return true
@@ -163,7 +196,8 @@ final class TradeDetailViewModel {
     /// Apply an in-session edit without a full detail bootstrap.
     func applyUpdated(_ trade: Trade) {
         guard trade.id == tradeID else { return }
-        cache.seed(trade)
+        cache.seedAuthoritativeDetail(trade, authority: .authoritativeMutation)
+        Task { await tradeDetailRepository.replaceCachedDetail(trade, authority: .authoritativeMutation) }
         images = []
         notes = []
         applySeed(trade)
@@ -196,12 +230,16 @@ final class TradeDetailViewModel {
     // MARK: - Private
 
     private func performLoad(forceNetwork: Bool = false) async {
-        if !forceNetwork, let seed = cache.trade(id: tradeID) {
-            applySeed(seed)
+        if !forceNetwork, let authoritative = cache.authoritativeDetail(id: tradeID) {
+            applySeed(authoritative)
             phase = .loaded
-            await loadSupplementaries(for: seed)
+            await loadSupplementaries(for: authoritative)
             loadTask = nil
             return
+        }
+
+        if trade == nil, let shell = cache.presentationSeed(id: tradeID)?.previewTrade {
+            applySeed(shell)
         }
 
         if trade == nil {
@@ -209,9 +247,11 @@ final class TradeDetailViewModel {
         }
 
         do {
-            let loaded = try await trades.trade(id: tradeID)
+            let loaded = try await tradeDetailRepository.load(
+                tradeID: tradeID,
+                policy: TradeDetailLoadPolicy(forceNetwork: forceNetwork)
+            )
             guard !Task.isCancelled else { return }
-            cache.seed(loaded)
             applySeed(loaded)
             phase = .loaded
             await loadSupplementaries(for: loaded)
@@ -256,16 +296,20 @@ final class TradeDetailViewModel {
                 ),
             ]
         }
-        if notes.isEmpty, let preview = seed.notePreview, !preview.isEmpty {
-            notes = [
-                TradeNote(
-                    id: TradeNoteID(seed.id.rawValue),
-                    tradeID: seed.id,
-                    body: preview,
-                    createdAt: seed.createdAt,
-                    updatedAt: seed.updatedAt
-                ),
-            ]
+        if notes.isEmpty {
+            let body = seed.notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+                ?? seed.notePreview?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let body, !body.isEmpty {
+                notes = [
+                    TradeNote(
+                        id: TradeNoteID(seed.id.rawValue),
+                        tradeID: seed.id,
+                        body: body,
+                        createdAt: seed.createdAt,
+                        updatedAt: seed.updatedAt
+                    ),
+                ]
+            }
         }
     }
 
@@ -318,9 +362,10 @@ final class TradeDetailViewModel {
             return
         }
 
-        // List seed already carries thumbnail / notePreview — avoid redundant `trades` GETs.
-        let needsImages = images.isEmpty
-        let needsNotes = notes.isEmpty
+        // Authoritative detail row already includes notes + image_url — avoid redundant full-row GETs.
+        let hasAuthoritativeDetail = cache.authoritativeDetail(id: trade.id) != nil
+        let needsImages = images.isEmpty && !hasAuthoritativeDetail
+        let needsNotes = notes.isEmpty && !hasAuthoritativeDetail
         async let imagesTask: [TradeImage] = {
             guard needsImages else { return [] }
             return (try? await trades.images(for: trade.id)) ?? []
@@ -399,16 +444,7 @@ final class TradeDetailViewModel {
         }
 
         #if DEBUG
-        let debugHistory: [Trade]
-        if let cached = SessionOwnerTradesStore.shared.cached(for: profileID) {
-            debugHistory = cached
-        } else {
-            debugHistory = (try? await SessionOwnerTradesStore.shared.trades(
-                for: profileID,
-                detailCache: cache,
-                repository: trades
-            )) ?? []
-        }
+        let debugHistory = SessionOwnerTradesStore.shared.cached(for: profileID) ?? []
         TradeDetailTickerHistoryDiagnostics.log(
             TradeDetailTickerHistoryDiagnostics.Context(
                 trade: trade,

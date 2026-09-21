@@ -318,6 +318,14 @@ nonisolated enum TradeHistoryLocalMatch {
         return true
     }
 
+    static func matches(
+        _ item: TradeOwnerJournalSummary,
+        query: TradeHistoryQuery,
+        context: TradeHistoryMatchContext = TradeHistoryMatchContext()
+    ) -> Bool {
+        matches(TradeSummaryMapper.listMatchTrade(from: item), query: query, context: context)
+    }
+
     private static func matchesSearch(
         _ trade: Trade,
         search: String,
@@ -383,6 +391,13 @@ nonisolated enum TradeHistorySortSupport {
                 return lhs.createdAt > rhs.createdAt
             }
         }
+    }
+
+    static func sorted(_ rows: [TradeOwnerJournalSummary], sort: TradeHistorySort) -> [TradeOwnerJournalSummary] {
+        let trades = rows.map(TradeSummaryMapper.listMatchTrade(from:))
+        let sortedTrades = sorted(trades, sort: sort)
+        let byID = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
+        return sortedTrades.compactMap { byID[$0.id] }
     }
 
     static func cursor(for last: Trade, sort: TradeHistorySort) -> String? {

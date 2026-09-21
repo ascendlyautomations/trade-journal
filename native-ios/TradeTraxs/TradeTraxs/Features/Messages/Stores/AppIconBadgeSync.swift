@@ -10,6 +10,11 @@ enum AppIconBadgeSync {
     private static var client: (any AppIconBadgeClienting)?
     private static var canFetchAuthenticatedBadge: (@Sendable () async -> Bool)?
 
+    private static var lastFetchedAt: Date?
+    private static var lastMirroredBadge: Int?
+    /// Coalesce rapid refresh triggers (foreground push + auth + tap) within one interval.
+    private static let minRefreshInterval: TimeInterval = 45
+
     static func configure(
         client: any AppIconBadgeClienting,
         canFetchAuthenticatedBadge: (@Sendable () async -> Bool)? = nil
@@ -18,9 +23,23 @@ enum AppIconBadgeSync {
         self.canFetchAuthenticatedBadge = canFetchAuthenticatedBadge
     }
 
-    static func refresh(animated: Bool = true) {
+    static func refresh(animated: Bool = true, force: Bool = false) {
         guard client != nil else {
             AppLog.notifications.error("AppIconBadgeSync.refresh skipped — client not configured")
+            return
+        }
+
+        if !force,
+           let lastFetchedAt,
+           let lastMirroredBadge,
+           Date().timeIntervalSince(lastFetchedAt) < minRefreshInterval
+        {
+            AppIconBadgeController.shared.setBadge(lastMirroredBadge, animated: animated)
+            #if DEBUG
+            AppLog.notifications.debug(
+                "AppIconBadgeSync.refresh skipped — reused cached mirror value=\(lastMirroredBadge, privacy: .public)"
+            )
+            #endif
             return
         }
 
@@ -36,6 +55,8 @@ enum AppIconBadgeSync {
                     let badge = try await client!.fetchBadge()
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
+                        lastFetchedAt = Date()
+                        lastMirroredBadge = badge
                         AppIconBadgeController.shared.setBadge(badge, animated: animated)
                     }
                 } catch {
@@ -46,5 +67,10 @@ enum AppIconBadgeSync {
                 }
             }
         }
+    }
+
+    static func resetSessionMirror() {
+        lastFetchedAt = nil
+        lastMirroredBadge = nil
     }
 }

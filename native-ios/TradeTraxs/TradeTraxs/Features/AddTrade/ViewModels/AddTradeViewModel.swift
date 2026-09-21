@@ -88,6 +88,7 @@ final class AddTradeViewModel {
     var tradeAwaitingReelLink: TradeID? { tradeAwaitingClip }
 
     private let trades: any TradeRepository
+    private let tradeDetailRepository: any TradeDetailRepository
     private let feed: any FeedRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
@@ -115,6 +116,7 @@ final class AddTradeViewModel {
 
     init(
         trades: any TradeRepository,
+        tradeDetailRepository: any TradeDetailRepository,
         feed: any FeedRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
@@ -126,6 +128,7 @@ final class AddTradeViewModel {
         onDismiss: @escaping () -> Void
     ) {
         self.trades = trades
+        self.tradeDetailRepository = tradeDetailRepository
         self.feed = feed
         self.session = session
         self.detailCache = detailCache
@@ -137,6 +140,7 @@ final class AddTradeViewModel {
         self.onDismiss = onDismiss
     }
 
+    /// Tests and legacy call sites — constructs the default detail repository boundary.
     convenience init(
         trades: any TradeRepository,
         feed: any FeedRepository,
@@ -150,6 +154,11 @@ final class AddTradeViewModel {
     ) {
         self.init(
             trades: trades,
+            tradeDetailRepository: DefaultTradeDetailRepository(
+                trades: trades,
+                session: session,
+                detailCache: detailCache
+            ),
             feed: feed,
             session: session,
             detailCache: detailCache,
@@ -653,13 +662,19 @@ final class AddTradeViewModel {
         guard case .edit(let tradeID) = mode else { return true }
         do {
             let trade: Trade
-            if let cached = detailCache.trade(id: tradeID) {
+            if let cached = detailCache.authoritativeDetail(id: tradeID) {
                 trade = cached
             } else if let viewerID, viewerID.rawValue.hasPrefix("dev.") {
-                throw AppError.unknown(message: "Trade not found")
+                if let seeded = detailCache.trade(id: tradeID) {
+                    trade = seeded
+                } else {
+                    throw AppError.unknown(message: "Trade not found")
+                }
             } else {
-                trade = try await trades.trade(id: tradeID)
-                detailCache.seed(trade)
+                trade = try await tradeDetailRepository.load(
+                    tradeID: tradeID,
+                    policy: .default
+                )
             }
             apply(trade: trade)
             await loadExistingScreenshotPreviewIfNeeded()
@@ -945,7 +960,8 @@ final class AddTradeViewModel {
 
         do {
             let updated = try await trades.update(id: trade.id, draft: draft, previous: trade)
-            detailCache.seed(updated)
+            detailCache.seedAuthoritativeDetail(updated, authority: .authoritativeMutation)
+            Task { await tradeDetailRepository.replaceCachedDetail(updated, authority: .authoritativeMutation) }
             TradeJournalMutationStore.shared.noteUpdated(updated)
         } catch {
             formError = "Reflection didn't save. Your trade was still recorded."

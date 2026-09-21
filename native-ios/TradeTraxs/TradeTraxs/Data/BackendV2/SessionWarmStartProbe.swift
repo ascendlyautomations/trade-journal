@@ -79,13 +79,22 @@ nonisolated enum SessionWarmStartProbe {
         }
 
         let age = Date().timeIntervalSince(blob.savedAt)
-        if age > 24 * 60 * 60 {
+        if age > BackendV2BootstrapDiskCache.displayMaxSeconds {
             return Inspection(
                 diskCacheExists: true,
                 cacheAge: age,
                 decodeSuccess: true,
                 usable: false,
-                reasonRejected: "hardExpired"
+                reasonRejected: "displayExpired"
+            )
+        }
+        if age > 24 * 60 * 60 {
+            return Inspection(
+                diskCacheExists: true,
+                cacheAge: age,
+                decodeSuccess: true,
+                usable: true,
+                reasonRejected: "displayOnlyStale"
             )
         }
 
@@ -134,10 +143,7 @@ nonisolated enum SessionWarmStartProbe {
     }
 
     private static func cacheDirectoryURL() -> URL? {
-        guard let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        return base.appendingPathComponent("BackendV2BootstrapCache", isDirectory: true)
+        PersistentAppDataDiskCache.directoryURL(component: "BackendV2BootstrapCache")
     }
 }
 #else

@@ -69,6 +69,9 @@ final class SessionBootstrapStore {
     func seed(_ bootstrap: SessionBootstrapV1, source: String) {
         last = bootstrap
         self.source = source
+        if let viewerID = bootstrap.meta.viewer_id ?? Optional(bootstrap.data.viewer.id) {
+            BackendV2BootstrapDiskCache.saveSession(bootstrap, viewerID: viewerID)
+        }
     }
 
     func applyUsernameChange(profileID: ProfileID, username: String) {
@@ -182,17 +185,28 @@ enum SessionBootstrapLoader {
             #if DEBUG
             SessionWarmStartProbe.warmStartTrace("shellReleaseStarted")
             #endif
-            logPath(cached.freshness == .fresh ? .cache_fresh : .cache_stale_revalidate)
+            let path = bootstrapPath(for: cached.freshness)
+            logPath(path)
             scheduleBackgroundHeaderStatsHydration(
                 profileID: viewerID,
                 profiles: profiles,
                 detailCache: detailCache
             )
-            if cached.freshness == .softStale, !skipSoftStaleReconcile {
+            if shouldScheduleAuthoritativeSessionRefresh(cached.freshness), !skipSoftStaleReconcile {
                 #if DEBUG
                 SessionWarmStartProbe.warmStartTrace("revalidateScheduled")
                 #endif
                 scheduleSoftStaleReconcile(
+                    viewerID: viewerID,
+                    rpc: rpc,
+                    profiles: profiles,
+                    detailCache: detailCache,
+                    loadGeneration: loadGeneration,
+                    currentGeneration: currentGeneration
+                )
+            }
+            if cached.freshness == .displayOnly {
+                scheduleDisplayOnlyAuthoritativeSessionRefresh(
                     viewerID: viewerID,
                     rpc: rpc,
                     profiles: profiles,
@@ -208,7 +222,7 @@ enum SessionBootstrapLoader {
                 profile: applied.profile,
                 stats: stats,
                 onboardingSnapshot: applied.onboardingSnapshot,
-                path: cached.freshness == .fresh ? .cache_fresh : .cache_stale_revalidate,
+                path: path,
                 rpcRequestCount: 0,
                 usedLegacyREST: false
             )
@@ -483,6 +497,46 @@ enum SessionBootstrapLoader {
             rpcRequestCount: 0,
             usedLegacyREST: true
         )
+    }
+
+    private static func bootstrapPath(for freshness: BackendV2BootstrapDiskCache.Freshness) -> BackendV2BootstrapPath {
+        switch freshness {
+        case .fresh:
+            return .cache_fresh
+        case .softStale:
+            return .cache_stale_revalidate
+        case .displayOnly:
+            return .cache_display_only
+        case .expired:
+            return .error_preserved_cache
+        }
+    }
+
+    private static func shouldScheduleAuthoritativeSessionRefresh(_ freshness: BackendV2BootstrapDiskCache.Freshness) -> Bool {
+        freshness == .softStale
+    }
+
+    @MainActor
+    private static func scheduleDisplayOnlyAuthoritativeSessionRefresh(
+        viewerID: ProfileID,
+        rpc: any RPCClient,
+        profiles: any ProfileRepository,
+        detailCache: DetailPresentationCache?,
+        loadGeneration: UInt64,
+        currentGeneration: @escaping () -> UInt64
+    ) {
+        Task(priority: .userInitiated) { @MainActor in
+            _ = try? await load(
+                viewerID: viewerID,
+                rpc: rpc,
+                profiles: profiles,
+                detailCache: detailCache,
+                forceNetwork: true,
+                loadGeneration: loadGeneration,
+                currentGeneration: currentGeneration,
+                skipSoftStaleReconcile: true
+            )
+        }
     }
 
     private static func logPath(_ path: BackendV2BootstrapPath) {

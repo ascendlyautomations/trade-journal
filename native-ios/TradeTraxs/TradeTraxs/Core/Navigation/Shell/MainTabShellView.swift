@@ -78,6 +78,7 @@ struct MainTabShellView: View {
         .onChange(of: store.selectedTab) { _, tab in
             MainThreadOperationTracker.push("tab.select.\(tab.rawValue)")
             defer { MainThreadOperationTracker.pop("tab.select.\(tab.rawValue)") }
+            AuthenticatedLaunchPhasing.noteActiveTab(tab)
             OwnerAccountFilterDropdownController.shared.dismiss()
         }
         .onChange(of: ContentMutationStore.shared.revision) { _, _ in

@@ -3,12 +3,13 @@ import XCTest
 
 @MainActor
 final class DetailExperienceTests: XCTestCase {
-    func testDetailCacheSeedsAvoidRefetchPathForTrade() async {
+    func testAuthoritativeDetailCacheAvoidsRefetchPathForTrade() async {
         let environment = CompositionRoot.bootstrapAppEnvironment()
         let cache = environment.data.detailCache
         let profileID = ProfileID("dev.detail-trade")
         let trade = ProfileTradeFixtures.samples(owner: profileID)[0]
-        cache.seed(trade)
+        cache.seedAuthoritativeDetail(trade, authority: .authoritativeNetwork)
+        await environment.data.tradeDetailRepository.replaceCachedDetail(trade, authority: .authoritativeNetwork)
         cache.seed(accounts: PropFirmFixtures.accounts(owner: profileID), for: profileID)
 
         let viewModel = TradeDetailViewModel(
@@ -45,11 +46,12 @@ final class DetailExperienceTests: XCTestCase {
             trades: environment.data.trades,
             navigationCoordinator: environment.navigation.coordinator,
             detailCache: environment.data.detailCache,
+            tradeDetailRepository: environment.data.tradeDetailRepository,
             isOwner: true
         )
         viewModel.loadIfNeeded()
         let trade = ProfileTradeFixtures.samples(owner: profileID)[0]
-        viewModel.openTrade(trade)
+        viewModel.openTrade(TradeSummaryMapper.summary(fromPartialListTrade: trade))
 
         XCTAssertEqual(environment.navigation.store.selectedTab, .profile)
         XCTAssertEqual(

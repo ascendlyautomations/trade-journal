@@ -60,6 +60,31 @@ nonisolated enum DashboardDateRangeFallback {
     ]
 
     static func initialEffectiveRange(
+        analyticsBootstrap: AnalyticsDashboardBootstrapV3,
+        accountFilter: DashboardAccountFilter
+    ) -> DashboardDateRange {
+        for range in initialLoadOrder {
+            let tradeCount = DashboardAnalyticsMapper.tradeCount(
+                in: analyticsBootstrap,
+                accountFilter: accountFilter,
+                dateRange: range
+            )
+            if tradeCount >= minimumTradeCountForInitialRange {
+                return range
+            }
+        }
+        let allTimeCount = DashboardAnalyticsMapper.tradeCount(
+            in: analyticsBootstrap,
+            accountFilter: accountFilter,
+            dateRange: .all
+        )
+        if allTimeCount >= 1 {
+            return .all
+        }
+        return .thirtyDays
+    }
+
+    static func initialEffectiveRange(
         tradeInputs: [DashboardChartMetrics.Input],
         accountFilter: DashboardAccountFilter,
         now: Date = Date()

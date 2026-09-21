@@ -37,8 +37,14 @@ final class CalendarViewModel {
     private var loadTask: Task<Void, Never>?
     private var watchedChannel: RealtimeChannelID?
     private var hasLoadedAccounts = false
+    /// Calendar V2 — full-granularity month payloads (account buckets); filter client-side.
+    var analyticsV2Memory: [String: AnalyticsDailyRangeBootstrapV1] = [:]
+    var analyticsV2YearMemory: [Int: AnalyticsDailyRangeBootstrapV1] = [:]
+    var analyticsV2PayloadStorage: AnalyticsDailyRangeBootstrapV1?
+    var analyticsV2Stale: Set<String> = []
+    var grdbBackgroundReconcileScheduled: Set<String> = []
     #if DEBUG
-    private var monthProbeStart: Date?
+    var monthProbeStart: Date?
     #endif
 
     init(
@@ -135,7 +141,20 @@ final class CalendarViewModel {
             for: profileID,
             detailCache: detailCache
         )
-        if trySeedVisibleMonthFromOwnerCache(profileID: profileID) {
+        if usesCalendarAnalyticsV2 {
+            if usesCalendarAnalyticsGRDB {
+                Task {
+                    if await tryApplyGRDBVisibleMonth(profileID: profileID) {
+                        return
+                    }
+                    if trySeedVisibleMonthFromAnalyticsDisk(profileID: profileID) {
+                        phase = .loaded
+                    }
+                }
+            } else if trySeedVisibleMonthFromAnalyticsDisk(profileID: profileID) {
+                phase = .loaded
+            }
+        } else if trySeedVisibleMonthFromOwnerCache(profileID: profileID) {
             phase = .loaded
         }
     }
@@ -161,10 +180,60 @@ final class CalendarViewModel {
         monthTradeCache.removeAll()
         yearTradeCache.removeAll()
         CalendarMonthSessionStore.shared.invalidate()
+        if usesCalendarAnalyticsV2 {
+            refreshAnalyticsV2Caches()
+        }
         await performLoad(forceNetwork: true)
     }
 
+    private var analyticsReconciliationObserver: NSObjectProtocol?
+
+    private func ensureAnalyticsReconciliationObserver() {
+        guard analyticsReconciliationObserver == nil else { return }
+        analyticsReconciliationObserver = NotificationCenter.default.addObserver(
+            forName: AnalyticsReconciliationUIApply.calendarCommittedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            Task { await self?.applyCalendarAnalyticsReconciliationNotification(notification) }
+        }
+    }
+
+    private func applyCalendarAnalyticsReconciliationNotification(_ notification: Notification) async {
+        guard usesCalendarAnalyticsV2, AnalyticsReconciliationGate.isEnabled else { return }
+        guard let viewerRaw = notification.userInfo?["viewerID"] as? String,
+              viewerRaw == profileID?.rawValue
+        else { return }
+        guard let start = notification.userInfo?["startDate"] as? String,
+              let end = notification.userInfo?["endDate"] as? String
+        else { return }
+        guard let visible = AnalyticsCalendarDay.civilMonthDateBounds(
+            year: visibleMonth.year,
+            month: visibleMonth.month
+        ) else { return }
+        guard start <= visible.end, end >= visible.start else { return }
+        if let blob = CalendarAnalyticsMonthDiskCache.load(
+            viewerID: ProfileID(viewerRaw),
+            monthKey: visibleMonth.cacheKey,
+            modeFilter: analyticsV2ModeFilter
+        ) {
+            analyticsV2Memory[visibleMonth.cacheKey] = blob.payload
+            analyticsV2Payload = blob.payload
+            recomputeAnalyticsV2()
+        } else {
+            await reconcileAnalyticsMonth(force: true)
+        }
+    }
+
     func handleJournalMutation() {
+        if usesCalendarAnalyticsV2 {
+            if AnalyticsReconciliationGate.isEnabled {
+                return
+            }
+            invalidateAnalyticsV2VisibleMonth()
+            Task { await reconcileAnalyticsMonth(force: true) }
+            return
+        }
         switch TradeJournalMutationStore.shared.latest {
         case .created(let trade), .updated(let trade):
             applyRealtimeUpsert(trade)
@@ -185,8 +254,12 @@ final class CalendarViewModel {
             }
             accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
             hasLoadedAccounts = true
-            recompute()
-            recomputeYearOverview()
+            if usesCalendarAnalyticsV2 {
+                recomputeAnalyticsV2()
+            } else {
+                recompute()
+                recomputeYearOverview()
+            }
         }
     }
 
@@ -252,8 +325,21 @@ final class CalendarViewModel {
         guard accountFilter != filter else { return }
         ExperienceHaptics.play(.selection)
         accountFilter = filter
-        recompute()
-        recomputeYearOverview()
+        if usesCalendarAnalyticsV2 {
+            recomputeAnalyticsV2()
+            logGRDBAccountFilterLocalIfNeeded()
+            if let payload = analyticsV2YearMemory[visibleYear] {
+                yearOverview = CalendarAnalyticsAggregator.buildYearOverview(
+                    year: visibleYear,
+                    rows: payload.days,
+                    accountFilter: accountFilter,
+                    modeFilter: analyticsV2ModeFilter
+                )
+            }
+        } else {
+            recompute()
+            recomputeYearOverview()
+        }
     }
 
     func openManageAccounts() {
@@ -399,6 +485,10 @@ final class CalendarViewModel {
     }
 
     private func loadVisibleMonth(forceNetwork: Bool = false) async {
+        if usesCalendarAnalyticsV2 {
+            await loadVisibleMonthAnalyticsV2(forceNetwork: forceNetwork)
+            return
+        }
         let id = visibleMonth
         let cacheKey = id.cacheKey
         #if DEBUG
@@ -620,6 +710,10 @@ final class CalendarViewModel {
     }
 
     func loadVisibleYear(forceNetwork: Bool = false) async {
+        if usesCalendarAnalyticsV2 {
+            await loadVisibleYearAnalyticsV2(forceNetwork: forceNetwork)
+            return
+        }
         let year = visibleYear
         if !forceNetwork, yearTradeCache[year] != nil {
             recomputeYearOverview()
@@ -740,5 +834,581 @@ final class CalendarViewModel {
         }
         recompute()
         recomputeYearOverview()
+    }
+}
+
+// MARK: - Calendar Analytics V2
+
+extension CalendarViewModel {
+    var usesCalendarAnalyticsV2: Bool {
+        BackendV2FeatureFlags.isEnabled(.calendarAnalyticsV2)
+    }
+
+    func recomputeAnalyticsV2() {
+        guard let payload = analyticsV2Payload else { return }
+        let built = CalendarAnalyticsAggregator.buildMonth(
+            year: visibleMonth.year,
+            month: visibleMonth.month,
+            rows: payload.days,
+            accountFilter: accountFilter,
+            modeFilter: analyticsV2ModeFilter
+        )
+        month = built
+        CalendarAnalyticsSessionStore.shared.publishMonth(
+            days: built.days,
+            accountFilter: accountFilter,
+            modeFilter: analyticsV2ModeFilter,
+            revision: payload.revisionInt
+        )
+        #if DEBUG
+        if let profileID,
+           let bounds = AnalyticsCalendarDay.civilMonthDateBounds(
+               year: visibleMonth.year,
+               month: visibleMonth.month
+           )
+        {
+            Task(priority: .utility) {
+                await AnalyticsShadowReadParity.validateCalendarAgainstAuthoritative(
+                    viewerID: profileID,
+                    payload: payload,
+                    startDate: bounds.start,
+                    endDate: bounds.end,
+                    queryAccountID: nil,
+                    queryMode: analyticsV2ModeFilter,
+                    accountFilter: accountFilter,
+                    modeFilter: analyticsV2ModeFilter,
+                    year: visibleMonth.year,
+                    month: visibleMonth.month
+                )
+            }
+        }
+        #endif
+    }
+
+    func loadVisibleMonthAnalyticsV2(forceNetwork: Bool) async {
+        let id = visibleMonth
+        let cacheKey = id.cacheKey
+        if let bounds = AnalyticsCalendarDay.civilMonthDateBounds(
+            year: id.year,
+            month: id.month
+        ) {
+            AnalyticsCalendarReconciliationContext.shared.visibleMonthBounds = bounds
+        }
+        ensureAnalyticsReconciliationObserver()
+        #if DEBUG
+        monthProbeStart = Date()
+        #endif
+
+        if usesCalendarAnalyticsGRDB, let profileID, !forceNetwork {
+            if await tryApplyGRDBVisibleMonth(profileID: profileID) {
+                CalendarAnalyticsGRDBProbe.logNetworkAvoided(reason: "covered_local_range")
+                return
+            }
+        }
+
+        if !forceNetwork, let memory = analyticsV2Memory[cacheKey] {
+            if usesCalendarAnalyticsGRDB {
+                CalendarAnalyticsGRDBProbe.logNetworkAvoided(reason: "covered_local_range")
+            }
+            analyticsV2Payload = memory
+            recomputeAnalyticsV2()
+            #if DEBUG
+            logAnalyticsV2Month(
+                source: "memory",
+                payload: memory,
+                reconciled: false,
+                reason: .monthLoad
+            )
+            #endif
+            return
+        }
+
+        if !forceNetwork,
+           let profileID,
+           let disk = CalendarAnalyticsMonthDiskCache.load(
+               viewerID: profileID,
+               monthKey: cacheKey,
+               modeFilter: analyticsV2ModeFilter
+           )
+        {
+            analyticsV2Memory[cacheKey] = disk.payload
+            analyticsV2Payload = disk.payload
+            recomputeAnalyticsV2()
+            CalendarAnalyticsGRDBProbe.logRender(
+                source: "json",
+                range: {
+                    if let b = AnalyticsCalendarDay.civilMonthDateBounds(year: id.year, month: id.month) {
+                        return "\(b.start)...\(b.end)"
+                    }
+                    return cacheKey
+                }(),
+                account: grdbAccountLogLabel,
+                mode: grdbModeLogLabel,
+                localState: .available,
+                revision: disk.revision,
+                elapsedMs: 0
+            )
+            #if DEBUG
+            if let bounds = AnalyticsCalendarDay.civilMonthDateBounds(year: id.year, month: id.month) {
+                logAnalyticsV2Month(
+                    source: "disk",
+                    payload: disk.payload,
+                    reconciled: false,
+                    reason: .monthLoad,
+                    startDate: bounds.start,
+                    endDate: bounds.end
+                )
+            }
+            #endif
+            Task { await reconcileAnalyticsMonth(force: false, reason: .monthReconcile) }
+            return
+        }
+
+        await reconcileAnalyticsMonth(
+            force: forceNetwork || analyticsV2Memory[cacheKey] == nil,
+            reason: .monthLoad
+        )
+    }
+
+    func loadVisibleYearAnalyticsV2(forceNetwork: Bool) async {
+        let year = visibleYear
+        if usesCalendarAnalyticsGRDB, let profileID, !forceNetwork {
+            if await tryApplyGRDBVisibleYear(profileID: profileID) {
+                CalendarAnalyticsGRDBProbe.logNetworkAvoided(reason: "covered_local_year")
+                return
+            }
+        }
+        if !forceNetwork, let payload = analyticsV2YearMemory[year] {
+            yearOverview = CalendarAnalyticsAggregator.buildYearOverview(
+                year: year,
+                rows: payload.days,
+                accountFilter: accountFilter,
+                modeFilter: analyticsV2ModeFilter
+            )
+            return
+        }
+
+        guard let bounds = AnalyticsCalendarDay.civilYearDateBounds(year: year),
+              let rpc,
+              let profileID
+        else {
+            recomputeYearOverview()
+            return
+        }
+
+        isYearTransitioning = yearOverview != nil
+        defer { isYearTransitioning = false }
+
+        do {
+            #if DEBUG
+            let started = Date()
+            #endif
+            let payload = try await AnalyticsCalendarBootstrapLoader.loadDailyRange(
+                rpc: rpc,
+                start: bounds.start,
+                end: bounds.end,
+                accountID: nil,
+                mode: analyticsV2ModeFilter
+            )
+            analyticsV2YearMemory[year] = payload
+            yearOverview = CalendarAnalyticsAggregator.buildYearOverview(
+                year: year,
+                rows: payload.days,
+                accountFilter: accountFilter,
+                modeFilter: analyticsV2ModeFilter
+            )
+            AnalyticsShadowWriter.ingestCalendarDailyRangeIfNeeded(
+                viewerID: profileID,
+                payload: payload,
+                startDate: bounds.start,
+                endDate: bounds.end,
+                queryAccountID: nil,
+                queryMode: analyticsV2ModeFilter
+            )
+            #if DEBUG
+            let approxBytes = (try? JSONEncoder().encode(payload))?.count
+            let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+            logAnalyticsV2DailyRange(
+                reason: .yearOverview,
+                startDate: bounds.start,
+                endDate: bounds.end,
+                monthKey: nil,
+                source: "network",
+                payload: payload,
+                payloadBytes: approxBytes,
+                elapsedMs: elapsed
+            )
+            #endif
+        } catch {
+            if yearOverview == nil, month == nil {
+                phase = .failed(ProfileSectionSupport.message(for: error))
+            }
+        }
+    }
+
+    func invalidateAnalyticsV2VisibleMonth() {
+        analyticsV2Stale.insert(visibleMonth.cacheKey)
+    }
+
+    @discardableResult
+    func trySeedVisibleMonthFromAnalyticsDisk(profileID: ProfileID) -> Bool {
+        let cacheKey = visibleMonth.cacheKey
+        if let memory = analyticsV2Memory[cacheKey] {
+            analyticsV2Payload = memory
+            recomputeAnalyticsV2()
+            return true
+        }
+        guard let disk = CalendarAnalyticsMonthDiskCache.load(
+            viewerID: profileID,
+            monthKey: cacheKey,
+            modeFilter: analyticsV2ModeFilter
+        ) else { return false }
+        analyticsV2Memory[cacheKey] = disk.payload
+        analyticsV2Payload = disk.payload
+        recomputeAnalyticsV2()
+        #if DEBUG
+        if let bounds = AnalyticsCalendarDay.civilMonthDateBounds(
+            year: visibleMonth.year,
+            month: visibleMonth.month
+        ) {
+            logAnalyticsV2Month(
+                source: "disk",
+                payload: disk.payload,
+                reconciled: false,
+                reason: .monthLoad,
+                startDate: bounds.start,
+                endDate: bounds.end
+            )
+        }
+        #endif
+        return true
+    }
+
+    func refreshAnalyticsV2Caches() {
+        analyticsV2Memory.removeAll()
+        analyticsV2YearMemory.removeAll()
+        analyticsV2Payload = nil
+        analyticsV2Stale.removeAll()
+        resetGRDBReconcileSchedule()
+        CalendarAnalyticsSessionStore.shared.invalidate()
+    }
+
+    var analyticsV2ModeFilter: String? { nil }
+
+    private var analyticsV2Payload: AnalyticsDailyRangeBootstrapV1? {
+        get { analyticsV2PayloadStorage }
+        set { analyticsV2PayloadStorage = newValue }
+    }
+
+    func reconcileAnalyticsMonth(
+        force: Bool,
+        reason: CalendarAnalyticsDailyRangeReason = .monthReconcile
+    ) async {
+        guard usesCalendarAnalyticsV2,
+              let bounds = AnalyticsCalendarDay.civilMonthDateBounds(
+                  year: visibleMonth.year,
+                  month: visibleMonth.month
+              ),
+              let rpc,
+              let profileID
+        else { return }
+
+        let cacheKey = visibleMonth.cacheKey
+        let stale = analyticsV2Stale.contains(cacheKey)
+        let allowDespiteLocalCover = reason == .grdbBackgroundFreshness
+        if !force, !stale, analyticsV2Memory[cacheKey] != nil, !allowDespiteLocalCover {
+            return
+        }
+
+        CalendarAnalyticsGRDBProbe.logReconcile(
+            reason: stale ? "stale" : String(reason.rawValue),
+            range: "\(bounds.start)...\(bounds.end)"
+        )
+
+        isMonthTransitioning = month != nil
+        defer { isMonthTransitioning = false }
+
+        #if DEBUG
+        let started = Date()
+        #endif
+
+        do {
+            let payload = try await AnalyticsCalendarBootstrapLoader.loadDailyRange(
+                rpc: rpc,
+                start: bounds.start,
+                end: bounds.end,
+                accountID: nil,
+                mode: analyticsV2ModeFilter
+            )
+            analyticsV2Memory[cacheKey] = payload
+            analyticsV2Payload = payload
+            analyticsV2Stale.remove(cacheKey)
+
+            let blob = CalendarAnalyticsMonthDiskCache.Blob(
+                viewerID: profileID.rawValue,
+                monthKey: cacheKey,
+                modeFilter: analyticsV2ModeFilter,
+                contractVersion: BackendV2Versioning.contractVersion,
+                schemaVersion: CalendarAnalyticsMonthDiskCache.schemaVersion,
+                revision: payload.revisionInt,
+                savedAt: Date(),
+                payload: payload
+            )
+            CalendarAnalyticsMonthDiskCache.save(blob)
+            AnalyticsShadowWriter.ingestCalendarDailyRangeIfNeeded(
+                viewerID: profileID,
+                payload: payload,
+                startDate: bounds.start,
+                endDate: bounds.end,
+                queryAccountID: nil,
+                queryMode: analyticsV2ModeFilter
+            )
+            recomputeAnalyticsV2()
+            SessionNetworkProbe.record(.networkFetch, resource: "calendar.v2.month", detail: cacheKey)
+            CalendarAnalyticsGRDBProbe.logRender(
+                source: "network",
+                range: "\(bounds.start)...\(bounds.end)",
+                account: grdbAccountLogLabel,
+                mode: grdbModeLogLabel,
+                localState: .available,
+                revision: payload.revisionInt,
+                elapsedMs: 0
+            )
+            #if DEBUG
+            let approxBytes = (try? JSONEncoder().encode(payload))?.count
+            logAnalyticsV2Month(
+                source: "network",
+                payload: payload,
+                reconciled: reason == .monthReconcile || reason == .monthLoad,
+                started: started,
+                payloadBytes: approxBytes,
+                reason: reason,
+                startDate: bounds.start,
+                endDate: bounds.end
+            )
+            #endif
+        } catch {
+            if month == nil {
+                phase = .failed(ProfileSectionSupport.message(for: error))
+            }
+        }
+    }
+
+    #if DEBUG
+    private func logAnalyticsV2DailyRange(
+        reason: CalendarAnalyticsDailyRangeReason,
+        startDate: String,
+        endDate: String,
+        monthKey: String?,
+        source: String,
+        payload: AnalyticsDailyRangeBootstrapV1,
+        payloadBytes: Int?,
+        elapsedMs: Int
+    ) {
+        let accountLabel: String = {
+            switch accountFilter {
+            case .all: return "all"
+            case .account(let id): return id.rawValue
+            }
+        }()
+        CalendarAnalyticsV2Probe.logDailyRange(
+            reason: reason,
+            startDate: startDate,
+            endDate: endDate,
+            monthKey: monthKey ?? visibleMonth.cacheKey,
+            account: accountLabel,
+            mode: analyticsV2ModeFilter,
+            source: source,
+            revision: payload.revisionInt,
+            dailyRows: payload.days.count,
+            payloadBytes: payloadBytes,
+            elapsedMs: elapsedMs
+        )
+    }
+
+    private func logAnalyticsV2Month(
+        source: String,
+        payload: AnalyticsDailyRangeBootstrapV1,
+        reconciled: Bool,
+        started: Date? = nil,
+        payloadBytes: Int? = nil,
+        reason: CalendarAnalyticsDailyRangeReason = .monthLoad,
+        startDate: String? = nil,
+        endDate: String? = nil
+    ) {
+        let elapsed = started.map { Int(Date().timeIntervalSince($0) * 1000) }
+            ?? monthProbeStart.map { Int(Date().timeIntervalSince($0) * 1000) } ?? 0
+        let accountLabel: String = {
+            switch accountFilter {
+            case .all: return "all"
+            case .account(let id): return id.rawValue
+            }
+        }()
+        CalendarAnalyticsV2Probe.logMonth(
+            source: source,
+            month: visibleMonth.cacheKey,
+            account: accountLabel,
+            mode: analyticsV2ModeFilter,
+            revision: payload.revisionInt,
+            dailyRows: payload.days.count,
+            payloadBytes: payloadBytes,
+            elapsedMs: elapsed,
+            stale: analyticsV2Stale.contains(visibleMonth.cacheKey),
+            reconciled: reconciled,
+            reason: reason,
+            startDate: startDate,
+            endDate: endDate
+        )
+    }
+    #endif
+
+    // MARK: - Calendar Analytics GRDB-first (Phase 5E)
+
+    var usesCalendarAnalyticsGRDB: Bool {
+        usesCalendarAnalyticsV2 && BackendV2FeatureFlags.isEnabled(.calendarAnalyticsGRDB)
+    }
+
+    @discardableResult
+    func tryApplyGRDBVisibleMonth(profileID: ProfileID) async -> Bool {
+        guard usesCalendarAnalyticsGRDB else { return false }
+        let id = visibleMonth
+        let cacheKey = id.cacheKey
+        guard let bounds = AnalyticsCalendarDay.civilMonthDateBounds(
+            year: id.year,
+            month: id.month
+        ) else { return false }
+
+        let presentation = await CalendarAnalyticsGRDBLoader.loadMonth(
+            viewerID: profileID,
+            year: id.year,
+            month: id.month,
+            queryAccountID: nil,
+            queryMode: analyticsV2ModeFilter
+        )
+
+        guard presentation.canRenderMonth, let revision = presentation.revision else {
+            logGRDBFallback(for: presentation.readState)
+            return false
+        }
+
+        let payload = CalendarAnalyticsGRDBLoader.syntheticPayload(
+            rows: presentation.wireRows,
+            revision: revision,
+            start: bounds.start,
+            end: bounds.end
+        )
+        analyticsV2Memory[cacheKey] = payload
+        analyticsV2PayloadStorage = payload
+        recomputeAnalyticsV2()
+        phase = .loaded
+
+        CalendarAnalyticsGRDBProbe.logRender(
+            source: "grdb",
+            range: "\(bounds.start)...\(bounds.end)",
+            account: grdbAccountLogLabel,
+            mode: grdbModeLogLabel,
+            localState: presentation.readState,
+            revision: revision,
+            elapsedMs: presentation.elapsedMs
+        )
+        scheduleGRDBBackgroundReconcileIfNeeded(
+            cacheKey: cacheKey,
+            range: "\(bounds.start)...\(bounds.end)"
+        )
+        return true
+    }
+
+    @discardableResult
+    func tryApplyGRDBVisibleYear(profileID: ProfileID) async -> Bool {
+        guard usesCalendarAnalyticsGRDB else { return false }
+        let year = visibleYear
+        guard let bounds = AnalyticsCalendarDay.civilYearDateBounds(year: year) else { return false }
+
+        let presentation = await CalendarAnalyticsGRDBLoader.loadYear(
+            viewerID: profileID,
+            year: year,
+            queryAccountID: nil,
+            queryMode: analyticsV2ModeFilter
+        )
+
+        guard presentation.canRenderMonth, let revision = presentation.revision else {
+            logGRDBFallback(for: presentation.readState)
+            return false
+        }
+
+        let payload = CalendarAnalyticsGRDBLoader.syntheticPayload(
+            rows: presentation.wireRows,
+            revision: revision,
+            start: bounds.start,
+            end: bounds.end
+        )
+        analyticsV2YearMemory[year] = payload
+        yearOverview = CalendarAnalyticsAggregator.buildYearOverview(
+            year: year,
+            rows: payload.days,
+            accountFilter: accountFilter,
+            modeFilter: analyticsV2ModeFilter
+        )
+
+        CalendarAnalyticsGRDBProbe.logRender(
+            source: "grdb",
+            range: "\(bounds.start)...\(bounds.end)",
+            account: grdbAccountLogLabel,
+            mode: grdbModeLogLabel,
+            localState: presentation.readState,
+            revision: revision,
+            elapsedMs: presentation.elapsedMs
+        )
+        scheduleGRDBBackgroundReconcileIfNeeded(
+            cacheKey: "year:\(year)",
+            range: "\(bounds.start)...\(bounds.end)"
+        )
+        return true
+    }
+
+    func logGRDBAccountFilterLocalIfNeeded() {
+        guard usesCalendarAnalyticsGRDB, analyticsV2PayloadStorage != nil else { return }
+        CalendarAnalyticsGRDBProbe.logNetworkAvoided(reason: "account_filter_local")
+    }
+
+    func logGRDBModeFilterLocalIfNeeded() {
+        guard usesCalendarAnalyticsGRDB, analyticsV2PayloadStorage != nil else { return }
+        CalendarAnalyticsGRDBProbe.logNetworkAvoided(reason: "mode_filter_local")
+    }
+
+    var grdbAccountLogLabel: String {
+        switch accountFilter {
+        case .all: return "all"
+        case .account(let id): return id.rawValue
+        }
+    }
+
+    var grdbModeLogLabel: String {
+        analyticsV2ModeFilter ?? "all"
+    }
+
+    private func logGRDBFallback(for state: AnalyticsLocalReadState) {
+        let reason: String = switch state {
+        case .missing: "missing"
+        case .partial: "partial"
+        case .stale: "stale"
+        case .available: "other"
+        }
+        CalendarAnalyticsGRDBProbe.logFallback(reason: reason)
+    }
+
+    private func scheduleGRDBBackgroundReconcileIfNeeded(cacheKey: String, range: String) {
+        guard grdbBackgroundReconcileScheduled.insert(cacheKey).inserted else { return }
+        CalendarAnalyticsGRDBProbe.logReconcile(reason: "grdbBackgroundFreshness", range: range)
+        Task {
+            await reconcileAnalyticsMonth(
+                force: false,
+                reason: .grdbBackgroundFreshness
+            )
+        }
+    }
+
+    func resetGRDBReconcileSchedule() {
+        grdbBackgroundReconcileScheduled.removeAll()
     }
 }

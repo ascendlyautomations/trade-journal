@@ -1,7 +1,10 @@
 import Foundation
 import Observation
 
-/// Session-scoped owner trade list used by Dashboard, Trade History, and Calendar.
+/// Session-scoped owner trade list used by Dashboard, Trade History, and legacy Calendar month fallback.
+///
+/// **Analytical / list window only** — not authoritative ``TradeDetail``. Detail/edit uses
+/// ``TradeDetailRepository``. Journal list uses ``TradeOwnerJournalSummary`` (Phase 8C).
 ///
 /// Single in-memory + disk source — bounded to dashboard trade window (≤500).
 @Observable
@@ -150,7 +153,7 @@ final class SessionOwnerTradesStore {
     ) {
         tradesByOwner[profileID] = trades
         loadedAt[profileID] = Date()
-        detailCache.seed(trades: trades)
+        detailCache.seedListPreviews(trades)
         if let historyComplete, let totalTradeCount {
             noteBootstrapMetadata(
                 for: profileID,
@@ -170,7 +173,7 @@ final class SessionOwnerTradesStore {
         list.insert(trade, at: 0)
         tradesByOwner[owner] = list
         loadedAt[owner] = Date()
-        detailCache.seed(trade)
+        detailCache.seedAuthoritativeDetail(trade, authority: .authoritativeMutation)
         if var meta = metadataByOwner[owner] {
             if !existed {
                 meta.totalTradeCount += 1

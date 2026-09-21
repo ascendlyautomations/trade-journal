@@ -16,21 +16,27 @@ nonisolated final class TieredImageCache: ImageCaching, @unchecked Sendable {
         _ = diskEligibleKeys.withLock { $0.insert(key) }
     }
 
+    func memoryImageData(forKey key: String) async -> Data? {
+        await memory.imageData(forKey: key)
+    }
+
+    func diskImageDataPromotingToMemory(forKey key: String) async -> Data? {
+        guard let data = await disk.imageData(forKey: key) else { return nil }
+        #if DEBUG
+        MediaEgressTracker.recordImageDiskCacheHit(bytes: data.count)
+        #endif
+        await memory.setImageData(data, forKey: key)
+        return data
+    }
+
     func imageData(forKey key: String) async -> Data? {
-        if let data = await memory.imageData(forKey: key) {
+        if let data = await memoryImageData(forKey: key) {
             #if DEBUG
             MediaEgressTracker.recordImageMemoryCacheHit(bytes: data.count)
             #endif
             return data
         }
-        if let data = await disk.imageData(forKey: key) {
-            #if DEBUG
-            MediaEgressTracker.recordImageDiskCacheHit(bytes: data.count)
-            #endif
-            await memory.setImageData(data, forKey: key)
-            return data
-        }
-        return nil
+        return await diskImageDataPromotingToMemory(forKey: key)
     }
 
     func setImageData(_ data: Data, forKey key: String) async {

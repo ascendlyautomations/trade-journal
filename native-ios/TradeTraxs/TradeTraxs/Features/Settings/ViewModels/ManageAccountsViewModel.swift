@@ -202,10 +202,15 @@ final class ManageAccountsViewModel {
     func update(id: TradingAccountID, draft: TradingAccountDraft) async -> Bool {
         await mutate {
             guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
+            let previous = accounts.first(where: { $0.id == id })
             let updated = try await trades.updateAccount(id: id, ownerID: viewerID, draft: draft)
             accounts = Self.sorted(accounts.map { $0.id == id ? updated : $0 })
             SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
-            AccountMutationStore.shared.noteAccountUpdated(updated, allAccounts: accounts)
+            AccountMutationStore.shared.noteAccountUpdated(
+                updated,
+                allAccounts: accounts,
+                previous: previous
+            )
             ExperienceHaptics.play(.success)
         }
     }

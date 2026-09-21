@@ -19,6 +19,7 @@ struct FeedHomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.tabIsActive) private var tabIsActive
     @State private var scrollViewportFrame: CGRect = .zero
+    @State private var feedImageWarmGeneration: UInt64 = 0
 
     init(
         data: DataEnvironment,
@@ -149,7 +150,9 @@ struct FeedHomeView: View {
                 return
             }
             MainThreadWorkProbe.measure("feed.tab.activate", surface: "feed") {
+                AuthenticatedLaunchPhasing.noteActiveTab(.feed)
                 viewModel.loadIfNeeded()
+                viewModel.noteTabBecameActive()
                 viewModel.subscribeRealtime()
             }
             #if DEBUG
@@ -302,6 +305,26 @@ struct FeedHomeView: View {
         }
         .scrollContentBackground(.hidden)
         .accessibilityIdentifier("feed.list")
+        .onAppear {
+            scheduleFeedImageCacheWarmAndViewportGate()
+        }
+        .onChange(of: viewModel.visibleEntryIDs) { _, _ in
+            scheduleFeedImageCacheWarmAndViewportGate()
+        }
+    }
+
+    private func scheduleFeedImageCacheWarmAndViewportGate() {
+        FeedImageViewportReadiness.registerInitialViewport(entries: viewModel.visibleEntries)
+        feedImageWarmGeneration &+= 1
+        let generation = feedImageWarmGeneration
+        let entries = viewModel.visibleEntries
+        Task(priority: .userInitiated) {
+            guard generation == feedImageWarmGeneration else { return }
+            await FeedImageCacheWarmer.warmInitialViewport(
+                entries: entries,
+                pipeline: imagePipeline
+            )
+        }
     }
 
     private var clipsExperience: some View {

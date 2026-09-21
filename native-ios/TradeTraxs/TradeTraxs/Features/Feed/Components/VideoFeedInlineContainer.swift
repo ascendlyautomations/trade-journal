@@ -121,8 +121,10 @@ struct FeedClipPosterImage: View {
     var feedItemID: String? = nil
     var contentMode: ContentMode = .fill
     var mediaBucket: StorageBucket = .reels
+    var allowsVideoFrameExtraction: Bool = false
 
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.themeColors) private var colors
     @State private var displayImage: UIImage?
 
     var body: some View {
@@ -133,6 +135,11 @@ struct FeedClipPosterImage: View {
                     .interpolation(.high)
                     .aspectRatio(contentMode: contentMode)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ZStack {
+                    colors.fillPrimary
+                    ExperienceIcon(icon: .photo, size: .xl, color: colors.tertiaryText)
+                }
             }
         }
         .task(id: posterTaskID) {
@@ -153,12 +160,18 @@ struct FeedClipPosterImage: View {
             imagePipeline: imagePipeline,
             storage: objectStorage,
             bucket: mediaBucket,
-            displayScale: scale
+            displayScale: scale,
+            allowsVideoFrameExtraction: allowsVideoFrameExtraction
         )
         guard !Task.isCancelled else { return }
         displayImage = image
         if image != nil {
             FeedMediaReadyProbe.log(itemID: itemID, kind: "clip-thumbnail", source: "poster")
+            if let feedItemID {
+                FeedImageViewportReadiness.noteMediaResolved(entryID: feedItemID, outcome: .loaded)
+            }
+        } else if let feedItemID {
+            FeedImageViewportReadiness.noteMediaResolved(entryID: feedItemID, outcome: .failed)
         }
     }
 }

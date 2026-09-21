@@ -32,6 +32,56 @@ begin
 end;
 $$;
 
+create or replace function public.owner_comparison_scope_trades(p_viewer uuid)
+returns table (
+  id uuid,
+  pnl numeric,
+  rr numeric,
+  hold_seconds integer,
+  root_ticker text,
+  activity_at timestamptz
+)
+language sql
+stable
+security invoker
+set search_path = public, pg_temp
+as $$
+  select distinct on (t.id)
+    t.id,
+    coalesce(t.pnl, 0) as pnl,
+    t.rr,
+    coalesce(
+      nullif(t.duration_seconds, 0),
+      case
+        when nullif(trim(t.exit_time), '') is not null
+          and nullif(trim(t.entry_time), '') is not null
+          then greatest(
+            0,
+            extract(
+              epoch from (
+                nullif(trim(t.exit_time), '')::timestamptz
+                - nullif(trim(t.entry_time), '')::timestamptz
+              )
+            )::int
+          )
+        else null
+      end
+    ) as hold_seconds,
+    public.normalize_trade_ticker(t.ticker) as root_ticker,
+    coalesce(
+      nullif(trim(t.entry_time), '')::timestamptz,
+      t.created_at
+    ) as activity_at
+  from public.trades t
+  left join public.accounts a
+    on a.id::text = nullif(trim(t.account_id), '')
+  where t.user_id = p_viewer
+    and coalesce(lower(trim(t.mode)), '') <> 'backtest'
+    and coalesce(lower(trim(t.account_type)), '') <> 'backtest'
+    and coalesce(lower(trim(a.mode)), '') <> 'backtest'
+  order by t.id;
+$$;
+
 create or replace function public.rpc_v1_trade_detail_owner_comparison(p_trade_id text)
 returns jsonb
 language plpgsql
@@ -84,7 +134,7 @@ begin
     return jsonb_build_object(
       'meta', jsonb_build_object(
         'contract_version', 'v1',
-        'server_time', to_jsonb(now() at time zone 'utc'),
+        'server_time', to_char(timezone('utc', now()), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
         'viewer_id', v_uid::text
       ),
       'data', jsonb_build_object(
@@ -100,60 +150,41 @@ begin
   v_current_hold := coalesce(
     nullif(v_trade.duration_seconds, 0),
     case
-      when v_trade.exit_time is not null and v_trade.entry_time is not null
-        then greatest(0, extract(epoch from (v_trade.exit_time - v_trade.entry_time))::int)
+      when nullif(trim(v_trade.exit_time), '') is not null
+        and nullif(trim(v_trade.entry_time), '') is not null
+        then greatest(
+          0,
+          extract(
+            epoch from (
+              nullif(trim(v_trade.exit_time), '')::timestamptz
+              - nullif(trim(v_trade.entry_time), '')::timestamptz
+            )
+          )::int
+        )
       else null
     end
   );
 
-  -- Owner journal scope — mirrors trades list bootstrap (exclude backtest rows).
-  create temp table tmp_owner_comparison_trades on commit drop as
-  select *
-  from (
-    select distinct on (t.id)
-      t.id,
-      coalesce(t.pnl, 0) as pnl,
-      t.rr,
-      coalesce(
-        nullif(t.duration_seconds, 0),
-        case
-          when t.exit_time is not null and t.entry_time is not null
-            then greatest(0, extract(epoch from (t.exit_time - t.entry_time))::int)
-          else null
-        end
-      ) as hold_seconds,
-      public.normalize_trade_ticker(t.ticker) as root_ticker,
-      coalesce(t.entry_time, t.created_at) as activity_at
-    from public.trades t
-    left join public.accounts a
-      on a.id::text = nullif(trim(t.account_id), '')
-    where t.user_id = v_uid
-      and coalesce(lower(trim(t.mode)), '') <> 'backtest'
-      and coalesce(lower(trim(t.account_type)), '') <> 'backtest'
-      and coalesce(lower(trim(a.mode)), '') <> 'backtest'
-    order by t.id
-  ) scoped;
-
   -- Cohort = all previous owner trades (excluding current).
   select
     count(*)::int,
-    avg(pnl),
-    avg(rr) filter (where rr is not null),
-    avg(hold_seconds) filter (where hold_seconds is not null)
+    avg(s.pnl),
+    avg(s.rr) filter (where s.rr is not null),
+    avg(s.hold_seconds) filter (where s.hold_seconds is not null)
   into v_cohort_count, v_cohort_avg_pnl, v_cohort_avg_rr, v_cohort_avg_hold
-  from tmp_owner_comparison_trades
-  where id::text <> trim(p_trade_id);
+  from public.owner_comparison_scope_trades(v_uid) s
+  where s.id::text <> trim(p_trade_id);
 
   if v_cohort_count >= 5 then
     select
-      (count(*) filter (where pnl < v_current_pnl)::numeric / nullif(count(*), 0)) * 100,
-      (count(*) filter (where rr is not null and rr < v_current_rr)::numeric
-        / nullif(count(*) filter (where rr is not null), 0)) * 100,
-      (count(*) filter (where hold_seconds is not null and hold_seconds > v_current_hold)::numeric
-        / nullif(count(*) filter (where hold_seconds is not null), 0)) * 100
+      (count(*) filter (where s.pnl < v_current_pnl)::numeric / nullif(count(*), 0)) * 100,
+      (count(*) filter (where s.rr is not null and s.rr < v_current_rr)::numeric
+        / nullif(count(*) filter (where s.rr is not null), 0)) * 100,
+      (count(*) filter (where s.hold_seconds is not null and s.hold_seconds > v_current_hold)::numeric
+        / nullif(count(*) filter (where s.hold_seconds is not null), 0)) * 100
     into v_cohort_pnl_percentile, v_cohort_rr_percentile, v_cohort_hold_shorter_pct
-    from tmp_owner_comparison_trades
-    where id::text <> trim(p_trade_id);
+    from public.owner_comparison_scope_trades(v_uid) s
+    where s.id::text <> trim(p_trade_id);
 
     v_cohort := jsonb_build_object(
       'trade_count', v_cohort_count,
@@ -169,11 +200,11 @@ begin
   if v_root_ticker <> '' then
     select
       count(*)::int,
-      count(*) filter (where pnl > 0)::int,
-      coalesce(sum(pnl), 0),
-      coalesce(sum(pnl) filter (where pnl > 0), 0),
-      coalesce(sum(pnl) filter (where pnl < 0), 0),
-      count(*) filter (where pnl < v_current_pnl)::int
+      count(*) filter (where s.pnl > 0)::int,
+      coalesce(sum(s.pnl), 0),
+      coalesce(sum(s.pnl) filter (where s.pnl > 0), 0),
+      coalesce(sum(s.pnl) filter (where s.pnl < 0), 0),
+      count(*) filter (where s.pnl < v_current_pnl)::int
     into
       v_prev_ticker_count,
       v_prev_ticker_wins,
@@ -181,9 +212,9 @@ begin
       v_prev_ticker_gross_wins,
       v_prev_ticker_gross_losses,
       v_prev_ticker_better
-    from tmp_owner_comparison_trades
-    where id::text <> trim(p_trade_id)
-      and root_ticker = v_root_ticker;
+    from public.owner_comparison_scope_trades(v_uid) s
+    where s.id::text <> trim(p_trade_id)
+      and s.root_ticker = v_root_ticker;
 
     if v_prev_ticker_count > 0 then
       v_prev_ticker_avg := v_prev_ticker_total_pnl / v_prev_ticker_count;
@@ -194,14 +225,14 @@ begin
 
     select
       count(*)::int,
-      count(*) filter (where pnl > 0)::int
+      count(*) filter (where recent.pnl > 0)::int
     into v_recent_count, v_recent_wins
     from (
-      select pnl
-      from tmp_owner_comparison_trades
-      where id::text <> trim(p_trade_id)
-        and root_ticker = v_root_ticker
-      order by activity_at desc
+      select s.pnl
+      from public.owner_comparison_scope_trades(v_uid) s
+      where s.id::text <> trim(p_trade_id)
+        and s.root_ticker = v_root_ticker
+      order by s.activity_at desc
       limit 10
     ) recent;
 
@@ -224,7 +255,7 @@ begin
   return jsonb_build_object(
     'meta', jsonb_build_object(
       'contract_version', 'v1',
-      'server_time', to_jsonb(now() at time zone 'utc'),
+      'server_time', to_char(timezone('utc', now()), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
       'viewer_id', v_uid::text
     ),
     'data', jsonb_build_object(

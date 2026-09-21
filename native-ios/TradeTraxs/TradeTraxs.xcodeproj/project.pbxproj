@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C77437DE3061A6DE00DDFDCA /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A5B0GRDB0000000000000002 /* GRDB */; };
+		C77437DF3061A6DE00DDFDCA /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A5B0GRDB0000000000000002 /* GRDB */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		C734419F3025511900D1FF5B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -83,6 +88,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C77437DE3061A6DE00DDFDCA /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -90,6 +96,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C77437DF3061A6DE00DDFDCA /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -144,6 +151,7 @@
 			);
 			name = TradeTraxs;
 			packageProductDependencies = (
+				A5B0GRDB0000000000000002 /* GRDB */,
 			);
 			productName = TradeTraxs;
 			productReference = C73441913025511800D1FF5B /* TradeTraxs.app */;
@@ -167,6 +175,7 @@
 			);
 			name = TradeTraxsTests;
 			packageProductDependencies = (
+				A5B0GRDB0000000000000002 /* GRDB */,
 			);
 			productName = TradeTraxsTests;
 			productReference = C734419E3025511900D1FF5B /* TradeTraxsTests.xctest */;
@@ -227,6 +236,9 @@
 			);
 			mainGroup = C73441883025511800D1FF5B;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A5B0GRDB0000000000000001 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C73441923025511800D1FF5B /* Products */;
 			projectDirPath = "";
@@ -641,6 +653,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A5B0GRDB0000000000000001 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A5B0GRDB0000000000000002 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A5B0GRDB0000000000000001 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C73441893025511800D1FF5B /* Project object */;
 }

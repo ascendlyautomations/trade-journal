@@ -42,10 +42,37 @@ struct PublicTradeMetaChipRow: View {
         case wrap
     }
 
-    let trade: Trade
-    var showsQuantity: Bool = true
-    var showsSession: Bool = true
-    var layout: LayoutStyle = .horizontalScroll
+    private let trade: Trade?
+    private let summary: TradeSummary?
+    private let showsQuantity: Bool
+    private let showsSession: Bool
+    private let layout: LayoutStyle
+
+    init(
+        trade: Trade,
+        showsQuantity: Bool = true,
+        showsSession: Bool = true,
+        layout: LayoutStyle = .horizontalScroll
+    ) {
+        self.trade = trade
+        self.summary = nil
+        self.showsQuantity = showsQuantity
+        self.showsSession = showsSession
+        self.layout = layout
+    }
+
+    init(
+        summary: TradeSummary,
+        showsQuantity: Bool = true,
+        showsSession: Bool = true,
+        layout: LayoutStyle = .horizontalScroll
+    ) {
+        self.trade = nil
+        self.summary = summary
+        self.showsQuantity = showsQuantity
+        self.showsSession = showsSession
+        self.layout = layout
+    }
 
     var body: some View {
         switch layout {
@@ -71,40 +98,71 @@ struct PublicTradeMetaChipRow: View {
 
     @ViewBuilder
     private var chipContent: some View {
-        PublicTradeMetaChip(
-            title: TradeDisplay.sideTitle(trade.side),
-            tone: trade.side == .long ? .success : .error
-        )
-        if let accountBadge = trade.publicAccountBadge {
-            PublicTradeMetaChip(title: accountBadge, tone: .info)
-        }
-        if trade.riskReward != nil {
-            PublicTradeMetaChip(title: TradeDisplay.rrText(trade.riskReward), tone: .info)
-        }
-        if let points = TradeDisplay.pointsText(trade.points) {
-            PublicTradeMetaChip(title: "Pts \(points)", tone: .info)
-        }
-        if trade.mode == .copyTraded {
+        if let trade {
             PublicTradeMetaChip(
-                title: TradeDisplay.tradeModeFallbackTitle(.copyTraded) ?? "Copy Traded",
-                tone: .info
+                title: TradeDisplay.sideTitle(trade.side),
+                tone: trade.side == .long ? .success : .error
             )
-        }
-        if showsQuantity {
+            if let accountBadge = trade.publicAccountBadge {
+                PublicTradeMetaChip(title: accountBadge, tone: .info)
+            }
+            if trade.riskReward != nil {
+                PublicTradeMetaChip(title: TradeDisplay.rrText(trade.riskReward), tone: .info)
+            }
+            if let points = TradeDisplay.pointsText(trade.points) {
+                PublicTradeMetaChip(title: "Pts \(points)", tone: .info)
+            }
+            if trade.mode == .copyTraded {
+                PublicTradeMetaChip(
+                    title: TradeDisplay.tradeModeFallbackTitle(.copyTraded) ?? "Copy Traded",
+                    tone: .info
+                )
+            }
+            if showsQuantity {
+                PublicTradeMetaChip(
+                    title: TradeDisplay.quantityBadgeText(trade.quantity),
+                    tone: .info
+                )
+            }
+            if let duration = TradeDisplay.cardDurationText(for: trade) {
+                PublicTradeMetaChip(title: duration, tone: .info)
+            }
+            if showsSession,
+               let session = trade.sessionLabel?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !session.isEmpty
+            {
+                PublicTradeMetaChip(title: session, tone: .info)
+            }
+        } else if let summary {
             PublicTradeMetaChip(
-                title: TradeDisplay.quantityBadgeText(trade.quantity),
-                tone: .info
+                title: TradeDisplay.sideTitle(summary.side),
+                tone: summary.side == .long ? .success : .error
             )
-        }
-        if let duration = TradeDisplay.cardDurationText(for: trade) {
-            PublicTradeMetaChip(title: duration, tone: .info)
-        }
-        if showsSession,
-           let session = trade.sessionLabel?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !session.isEmpty
-        {
-            PublicTradeMetaChip(title: session, tone: .info)
+            if let accountBadge = summary.publicAccountBadge {
+                PublicTradeMetaChip(title: accountBadge, tone: .info)
+            }
+            if summary.riskReward != nil {
+                PublicTradeMetaChip(title: TradeDisplay.rrText(summary.riskReward), tone: .info)
+            }
+            if let points = TradeDisplay.pointsText(summary.points) {
+                PublicTradeMetaChip(title: "Pts \(points)", tone: .info)
+            }
+            if summary.mode == .copyTraded {
+                PublicTradeMetaChip(
+                    title: TradeDisplay.tradeModeFallbackTitle(.copyTraded) ?? "Copy Traded",
+                    tone: .info
+                )
+            }
+            if showsQuantity {
+                PublicTradeMetaChip(
+                    title: TradeDisplay.quantityBadgeText(summary.quantity),
+                    tone: .info
+                )
+            }
+            if let duration = TradeDisplay.cardDurationText(for: summary) {
+                PublicTradeMetaChip(title: duration, tone: .info)
+            }
         }
     }
 }

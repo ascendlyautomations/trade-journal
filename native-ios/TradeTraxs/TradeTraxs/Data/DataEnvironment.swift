@@ -21,6 +21,7 @@ final class DataEnvironment {
     let detailCache: DetailPresentationCache
 
     let trades: any TradeRepository
+    let tradeDetailRepository: any TradeDetailRepository
     let profiles: any ProfileRepository
     let feed: any FeedRepository
     let messages: any MessageRepository
@@ -71,6 +72,7 @@ final class DataEnvironment {
         rpc: any RPCClient,
         detailCache: DetailPresentationCache,
         trades: any TradeRepository,
+        tradeDetailRepository: any TradeDetailRepository,
         profiles: any ProfileRepository,
         feed: any FeedRepository,
         messages: any MessageRepository,
@@ -115,6 +117,7 @@ final class DataEnvironment {
         self.rpc = rpc
         self.detailCache = detailCache
         self.trades = trades
+        self.tradeDetailRepository = tradeDetailRepository
         self.profiles = profiles
         self.feed = feed
         self.messages = messages
@@ -240,6 +243,11 @@ final class DataEnvironment {
             session: session
         )
         let detailCache = DetailPresentationCache()
+        let tradeDetailRepository: any TradeDetailRepository = DefaultTradeDetailRepository(
+            trades: tradesRepository,
+            session: session,
+            detailCache: detailCache
+        )
         TradeJournalMutationStore.shared.configure(detailCache: detailCache)
         GettingStartedStore.shared.configure(
             rpc: rpc,
@@ -254,6 +262,13 @@ final class DataEnvironment {
             repository: dailyCheckInRepository,
             session: session,
             realtimeHub: realtimeHub
+        )
+        AnalyticsRevisionRealtimeSession.shared.configure(
+            realtimeHub: realtimeHub,
+            session: session
+        )
+        AnalyticsRevisionRepairNetworkObserver.shared.configure(
+            reachability: networking.reachability
         )
 
         let transport = supabase.transport ?? SupabaseTransport(
@@ -286,6 +301,7 @@ final class DataEnvironment {
             rpc: rpc,
             detailCache: detailCache,
             trades: tradesRepository,
+            tradeDetailRepository: tradeDetailRepository,
             profiles: profiles,
             feed: DefaultFeedRepository(supabase: supabase, cache: cache, session: session),
             messages: DefaultMessageRepository(supabase: supabase, cache: cache, session: session),
@@ -397,6 +413,11 @@ final class DataEnvironment {
             cache: cache,
             session: session
         )
+        let tradeDetailRepository: any TradeDetailRepository = DefaultTradeDetailRepository(
+            trades: tradesRepository,
+            session: session,
+            detailCache: detailCache
+        )
         let storeKitSubscriptions: any StoreKitSubscriptionServicing = StoreKitSubscriptionService(
             syncClient: LoginShellAppleSubscriptionSyncClient()
         )
@@ -462,6 +483,7 @@ final class DataEnvironment {
             rpc: rpc,
             detailCache: detailCache,
             trades: tradesRepository,
+            tradeDetailRepository: tradeDetailRepository,
             profiles: profiles,
             feed: repositories.feed,
             messages: repositories.messages,
@@ -536,6 +558,11 @@ final class DataEnvironment {
             cache: cache,
             session: session
         )
+        let tradeDetailRepository: any TradeDetailRepository = DefaultTradeDetailRepository(
+            trades: tradesRepository,
+            session: session,
+            detailCache: detailCache
+        )
         let profiles: any ProfileRepository = DemoProfileRepository()
         let achievements: any AchievementRepository = DemoAchievementRepository()
         let interactions: any InteractionRepository = DemoInteractionRepository()
@@ -583,6 +610,7 @@ final class DataEnvironment {
             rpc: rpc,
             detailCache: detailCache,
             trades: tradesRepository,
+            tradeDetailRepository: tradeDetailRepository,
             profiles: profiles,
             feed: feedRepository,
             messages: messagesRepository,

@@ -50,7 +50,8 @@ final class TradeDetailExperienceTests: XCTestCase {
         let profileID = ProfileID("dev.trade-detail-account")
         let trade = ProfileTradeFixtures.samples(owner: profileID)[0]
         let cache = environment.data.detailCache
-        cache.seed(trade)
+        cache.seedAuthoritativeDetail(trade, authority: .authoritativeNetwork)
+        await environment.data.tradeDetailRepository.replaceCachedDetail(trade, authority: .authoritativeNetwork)
         cache.seed(accounts: PropFirmFixtures.accounts(owner: profileID), for: profileID)
 
         let viewModel = TradeDetailViewModel(

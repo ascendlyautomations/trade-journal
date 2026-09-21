@@ -189,62 +189,84 @@ struct InteractiveImageView: View {
 
         let requestKey = reference.id
         let targetQuality = effectiveDeliveryQuality
-        let request = ImageRequest(
+        let cacheKey = ImageCacheKey.make(
+            referenceID: reference.id,
+            purpose: purpose,
+            deliveryQuality: targetQuality,
+            maxPixelSize: nil
+        )
+        let traceID = FeedImageTimingTrace.begin(
+            mediaID: mediaID,
+            cacheKey: cacheKey,
+            surface: auditSurface.isEmpty ? "unknown" : auditSurface,
+            deliveryQuality: targetQuality.rawValue
+        )
+        var request = ImageRequest(
             reference: reference,
             purpose: purpose,
             maxPixelSize: nil,
             allowsProgressiveLoading: true,
             deliveryQuality: targetQuality,
             auditSurface: auditSurface,
-            auditMediaID: mediaID
-        )
-        let cacheKey = MediaPipelineAudit.cacheKey(
-            referenceID: reference.id,
-            purpose: purpose,
-            deliveryQuality: targetQuality,
-            maxPixelSize: nil
+            auditMediaID: mediaID,
+            imageTraceCorrelationID: traceID
         )
 
         didFail = false
         FeedImageProbe.log(id: mediaID, event: .requestStarted, url: requestKey)
 
-        if let best = await imagePipeline.bestCachedImageData(for: request) {
-            let sourceLabel = best.quality == targetQuality ? "memory" : "memory-tier-\(best.quality.rawValue)"
-            FeedImageProbe.log(id: mediaID, event: .cacheHitMemory, url: requestKey)
+        if let best = await imagePipeline.bestCachedImageDataWithTier(for: request) {
+            let probeEvent: FeedImageProbe.Event = best.tier == .memory ? .cacheHitMemory : .cacheHitDisk
+            FeedImageProbe.log(id: mediaID, event: probeEvent, url: requestKey)
+            let sourceLabel: String = {
+                switch (best.tier, best.quality == targetQuality) {
+                case (.memory, true): return "memory"
+                case (.disk, true): return "disk"
+                case (.memory, false): return "memory-tier-\(best.quality.rawValue)"
+                case (.disk, false): return "disk-tier-\(best.quality.rawValue)"
+                }
+            }()
             await assignDisplayImage(
                 from: best.data,
                 requestKey: requestKey,
                 cacheKey: cacheKey,
-                source: sourceLabel
+                source: sourceLabel,
+                traceID: traceID,
+                notifyViewport: true,
+                viewportOutcome: .cacheHit
             )
             if best.quality == targetQuality {
+                FeedImageTimingTrace.complete(traceID)
                 return
             }
-        } else if let cachedData = await imagePipeline.cachedImageData(for: request) {
-            FeedImageProbe.log(id: mediaID, event: .cacheHitMemory, url: requestKey)
-            await assignDisplayImage(
-                from: cachedData,
-                requestKey: requestKey,
-                cacheKey: cacheKey,
-                source: "memory"
-            )
-            return
         }
 
         FeedImageProbe.log(id: mediaID, event: .networkStarted, url: requestKey)
 
         do {
+            request.imageTraceCorrelationID = traceID
             let data = try await imagePipeline.data(for: request)
             await assignDisplayImage(
                 from: data,
                 requestKey: requestKey,
                 cacheKey: cacheKey,
-                source: "network"
+                source: "network",
+                traceID: traceID,
+                notifyViewport: true,
+                viewportOutcome: .loaded
             )
+            FeedImageTimingTrace.complete(traceID)
+        } catch is CancellationError {
+            FeedImageTimingTrace.cancelled(traceID)
+            return
         } catch {
             guard reference.id == requestKey else { return }
             didFail = true
             displayImage = nil
+            FeedImageTimingTrace.failed(traceID, message: String(describing: error))
+            if auditSurface == "feed" {
+                FeedImageViewportReadiness.noteMediaResolved(entryID: mediaID, outcome: .failed)
+            }
         }
     }
 
@@ -253,18 +275,27 @@ struct InteractiveImageView: View {
         from data: Data,
         requestKey: String,
         cacheKey: String,
-        source: String
+        source: String,
+        traceID: UUID? = nil,
+        notifyViewport: Bool = false,
+        viewportOutcome: FeedImageViewportReadiness.Outcome = .loaded
     ) async {
         guard reference?.id == requestKey else {
             FeedImageProbe.log(id: mediaID, event: .staleCompletionDropped, url: requestKey)
             return
         }
 
+        if let traceID {
+            FeedImageTimingTrace.event(traceID, "decode.start")
+        }
         let scale = displayScale
         let normalized = await Task.detached(priority: .userInitiated) {
             guard let decoded = UIImage(data: data, scale: scale) else { return nil as UIImage? }
             return MediaImageOrientation.normalized(decoded)
         }.value
+        if let traceID {
+            FeedImageTimingTrace.event(traceID, "decode.end")
+        }
 
         guard reference?.id == requestKey else {
             FeedImageProbe.log(id: mediaID, event: .staleCompletionDropped, url: requestKey)
@@ -274,6 +305,12 @@ struct InteractiveImageView: View {
         guard let normalized else {
             didFail = true
             displayImage = nil
+            if let traceID {
+                FeedImageTimingTrace.failed(traceID, message: "decodeFailed")
+            }
+            if notifyViewport, auditSurface == "feed" {
+                FeedImageViewportReadiness.noteMediaResolved(entryID: mediaID, outcome: .failed)
+            }
             return
         }
 
@@ -308,11 +345,17 @@ struct InteractiveImageView: View {
         #endif
 
         displayImage = normalized
+        if let traceID {
+            FeedImageTimingTrace.event(traceID, "image.assigned", detail: source)
+        }
         FeedMediaReadyProbe.log(
             itemID: mediaID,
             kind: mediaReadyKind,
             source: source
         )
+        if notifyViewport, auditSurface == "feed" {
+            FeedImageViewportReadiness.noteMediaResolved(entryID: mediaID, outcome: viewportOutcome)
+        }
     }
 
     private var mediaReadyKind: String {

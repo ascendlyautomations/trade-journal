@@ -42,7 +42,8 @@ enum VideoPosterFrameLoader {
         imagePipeline: any ImagePipeline,
         storage: any ObjectStorageProviding,
         bucket: StorageBucket,
-        displayScale: CGFloat
+        displayScale: CGFloat,
+        allowsVideoFrameExtraction: Bool = false
     ) async -> UIImage? {
         let cacheKey = video.id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cacheKey.isEmpty else { return nil }
@@ -59,6 +60,8 @@ enum VideoPosterFrameLoader {
             await Cache.shared.store(image, for: cacheKey)
             return image
         }
+
+        guard allowsVideoFrameExtraction else { return nil }
 
         return await Cache.shared.coalesce(cacheKey: cacheKey) {
             await generatePosterFromVideo(

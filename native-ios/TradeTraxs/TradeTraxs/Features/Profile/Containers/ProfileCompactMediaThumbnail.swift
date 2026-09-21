@@ -92,7 +92,8 @@ struct ProfileCompactMediaThumbnail: View {
                     reference: reference,
                     purpose: purpose,
                     maxPixelSize: pixelBudget,
-                    allowsProgressiveLoading: true
+                    allowsProgressiveLoading: true,
+                    deliveryQuality: .profileGrid
                 )
             )
             let scale = displayScale

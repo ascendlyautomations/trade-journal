@@ -196,9 +196,9 @@ enum FeedBootstrap: ScreenBootstrap {
         switch item.kind {
         case .trade:
             guard let tradeID = item.tradeID,
-                  let trade = detailCache.trade(id: tradeID)
+                  let summary = detailCache.tradeSummary(id: tradeID)
             else { return nil }
-            return .trade(item, trade)
+            return .trade(item, summary)
 
         case .post:
             guard let postID = item.postID else { return nil }
@@ -335,11 +335,11 @@ enum FeedBootstrap: ScreenBootstrap {
 
         let tradeIDs = items.compactMap { item -> TradeID? in
             guard item.kind == .trade, let id = item.tradeID else { return nil }
-            return detailCache.trade(id: id) == nil ? id : nil
+            return detailCache.tradeSummary(id: id) == nil ? id : nil
         }
         let linkedTradeIDs = items.compactMap { item -> TradeID? in
             guard item.kind == .reel, let id = item.tradeID else { return nil }
-            return detailCache.trade(id: id) == nil ? id : nil
+            return detailCache.tradeSummary(id: id) == nil ? id : nil
         }
         let missingTradeIDs = Array(Set(tradeIDs + linkedTradeIDs))
         if !missingTradeIDs.isEmpty {
@@ -418,12 +418,13 @@ enum FeedBootstrap: ScreenBootstrap {
         switch item.kind {
         case .trade:
             guard let tradeID = item.tradeID else { return nil }
-            if let cached = detailCache.trade(id: tradeID) {
+            if let cached = detailCache.tradeSummary(id: tradeID) {
                 return .trade(item, cached)
             }
             if let trade = try? await trades.trade(id: tradeID) {
-                detailCache.seed(trade)
-                return .trade(item, trade)
+                let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+                detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: trade))
+                return .trade(item, summary)
             }
             return nil
 

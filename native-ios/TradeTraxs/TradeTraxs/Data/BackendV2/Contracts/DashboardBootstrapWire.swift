@@ -31,6 +31,10 @@ nonisolated struct DashboardTradeWireV1: Codable, Sendable, Equatable {
     var news_event: PostgresFlexibleBool?
     var timeframe: String?
     var psychology_notes: String?
+    var exit_emotion: String?
+    var execution_rating: PostgresFlexibleDouble?
+    var import_source: String?
+    var import_fingerprint: String?
     var trade_type: String?
     var public_description: String?
     var is_pinned: PostgresFlexibleBool?
@@ -88,9 +92,13 @@ nonisolated struct DashboardTradeWireV1: Codable, Sendable, Equatable {
             timeframe: timeframe,
             news_event: news_event?.value,
             psychology_notes: psychology_notes,
+            exit_emotion: exit_emotion,
+            execution_rating: flex(execution_rating),
             image_display_mode: image_display_mode,
             reviewed: reviewed?.value,
-            is_initial_import: is_initial_import?.value
+            is_initial_import: is_initial_import?.value,
+            import_source: import_source,
+            import_fingerprint: import_fingerprint
         )
     }
 

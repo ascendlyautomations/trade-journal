@@ -103,6 +103,7 @@ final class TradeJournalCardTests: XCTestCase {
             trades: TradeJournalCardStubRepository(),
             session: TradeJournalCardStubSession(userID: "dev.journal.vm"),
             detailCache: DetailPresentationCache(),
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: coordinator
         )
         viewModel.loadIfNeeded()

@@ -2,7 +2,9 @@ import Foundation
 
 nonisolated enum ProfileTabBootstrapApplier {
     struct Applied: Sendable {
-        var trades: [Trade]?
+        var tradeSummaries: [TradeSummary]?
+        /// Reels tab joined trade rows — not Profile tab summaries.
+        var reelLinkedTrades: [Trade]?
         var posts: [Post]?
         var reels: [Reel]?
         var achievements: [Achievement]?
@@ -31,11 +33,11 @@ nonisolated enum ProfileTabBootstrapApplier {
             guard let wires = try? decoder.decode([DashboardTradeWireV1].self, from: payload) else {
                 return emptyApplied(tab: tab, bootstrap: bootstrap)
             }
-            var trades: [Trade] = []
+            var summaries: [TradeSummary] = []
             for row in wires {
                 let dto = row.asTradeDTO(ownerID: ownerID.rawValue)
                 if let trade = try? TradeMapper.mapToDomain(dto) {
-                    trades.append(trade)
+                    summaries.append(TradeSummaryMapper.summary(fromPartialListTrade: trade))
                 }
             }
             var names: [TradingAccountID: String] = [:]
@@ -60,8 +62,16 @@ nonisolated enum ProfileTabBootstrapApplier {
                     sizes[accountID] = size
                 }
             }
+            #if DEBUG
+            TradeSummaryProfileTelemetry.recordDecode(
+                path: "v1.rpc.mappedSummary",
+                tradeCount: summaries.count,
+                skipped: wires.count - summaries.count
+            )
+            #endif
             return Applied(
-                trades: trades,
+                tradeSummaries: summaries,
+                reelLinkedTrades: nil,
                 nextCursor: bootstrap.data.next_cursor,
                 tradeEngagement: bootstrap.data.engagement,
                 accountNames: names,
@@ -90,7 +100,8 @@ nonisolated enum ProfileTabBootstrapApplier {
                 }
             }
             return Applied(
-                trades: linkedTrades.isEmpty ? nil : linkedTrades,
+                tradeSummaries: nil,
+                reelLinkedTrades: linkedTrades.isEmpty ? nil : linkedTrades,
                 reels: reels,
                 nextCursor: bootstrap.data.next_cursor
             )
@@ -106,7 +117,8 @@ nonisolated enum ProfileTabBootstrapApplier {
 
     private static func emptyApplied(tab: ProfileTabKind, bootstrap: ProfileTabBootstrapV1) -> Applied {
         Applied(
-            trades: tab == .trades ? [] : nil,
+            tradeSummaries: tab == .trades ? [] : nil,
+            reelLinkedTrades: nil,
             posts: tab == .posts ? [] : nil,
             reels: tab == .reels ? [] : nil,
             achievements: tab == .achievements ? [] : nil,

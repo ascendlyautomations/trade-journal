@@ -326,7 +326,7 @@ nonisolated enum TradeMapper: DTOMapper {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func mapSide(_ direction: String?) -> TradeSide {
+    static func mapSide(_ direction: String?) -> TradeSide {
         switch direction?.lowercased() {
         case "short", "sell", "s":
             return .short
@@ -335,7 +335,7 @@ nonisolated enum TradeMapper: DTOMapper {
         }
     }
 
-    private static func mapMode(_ raw: String?) -> TradeMode {
+    static func mapMode(_ raw: String?) -> TradeMode {
         switch (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "backtest":
             return .backtest

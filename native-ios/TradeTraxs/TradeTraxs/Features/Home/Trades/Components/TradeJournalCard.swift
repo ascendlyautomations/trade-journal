@@ -5,7 +5,7 @@ import SwiftUI
 /// Distinct from ``ProfileTradeCard`` — no likes/comments/share chrome.
 /// Adapts layout when a screenshot is present vs absent.
 struct TradeJournalCard: View {
-    let trade: Trade
+    let item: TradeOwnerJournalSummary
     let accountName: String?
     let imagePipeline: any ImagePipeline
     let onOpen: () -> Void
@@ -16,23 +16,30 @@ struct TradeJournalCard: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
 
+    private var summary: TradeSummary { item.summary }
+
     private var hasImage: Bool {
-        guard let thumbnail = trade.thumbnail else { return false }
+        guard let thumbnail = summary.thumbnail else { return false }
         return !thumbnail.id.isEmpty
     }
 
     private var notes: String? {
-        guard let note = trade.notePreview?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let note = summary.notePreview?.trimmingCharacters(in: .whitespacesAndNewlines),
               !note.isEmpty
         else { return nil }
         return note
     }
 
     private var strategy: String? {
-        guard let value = trade.strategy?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let value = item.strategy?.trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty
         else { return nil }
         return value
+    }
+
+    private var resolvedAccountName: String? {
+        if let accountName, !accountName.isEmpty { return accountName }
+        return item.accountName
     }
 
     var body: some View {
@@ -97,14 +104,14 @@ struct TradeJournalCard: View {
                 }
             }
         } preview: {
-            TradeJournalCardPreview(trade: trade, accountName: accountName)
+            TradeJournalCardPreview(item: item, accountName: resolvedAccountName)
                 .frame(width: 320)
                 .padding()
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilitySummary)
         .accessibilityHint("Opens trade detail")
-        .accessibilityIdentifier("trades.journalCard.\(trade.id.rawValue)")
+        .accessibilityIdentifier("trades.journalCard.\(item.id.rawValue)")
     }
 
     // MARK: - Sections
@@ -112,26 +119,26 @@ struct TradeJournalCard: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
             HStack(spacing: ExperienceSpacing.xs) {
-                Text(trade.symbol.ticker)
+                Text(summary.symbol.ticker)
                     .experienceStyle(.headline, color: colors.primaryText)
                 Text("·")
                     .experienceStyle(.caption, color: colors.tertiaryText)
-                Text(TradeDisplay.sideTitle(trade.side).uppercased())
+                Text(TradeDisplay.sideTitle(summary.side).uppercased())
                     .experienceStyle(
                         .caption,
-                        color: trade.side == .long ? colors.profit : colors.loss
+                        color: summary.side == .long ? colors.profit : colors.loss
                     )
                     .fontWeight(.semibold)
             }
             Spacer(minLength: ExperienceSpacing.xs)
-            Text(TradeDisplay.pnlText(trade.realizedPnL))
+            Text(TradeDisplay.pnlText(summary.realizedPnL))
                 .experienceStyle(
                     .metric,
                     color: theme.metricColor(
-                        for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
+                        for: NSDecimalNumber(decimal: summary.realizedPnL?.amount ?? 0).doubleValue
                     )
                 )
-                .accessibilityLabel("P and L \(TradeDisplay.pnlText(trade.realizedPnL))")
+                .accessibilityLabel("P and L \(TradeDisplay.pnlText(summary.realizedPnL))")
             if hasImage {
                 visibilityLabel
             }
@@ -139,7 +146,7 @@ struct TradeJournalCard: View {
     }
 
     private var metaLine: some View {
-        Text(TradeDisplay.journalContextLine(accountName: accountName, at: trade.entryAt))
+        Text(TradeDisplay.journalContextLine(accountName: resolvedAccountName, at: summary.entryAt))
             .experienceStyle(.caption, color: colors.secondaryText)
             .lineLimit(1)
     }
@@ -147,9 +154,9 @@ struct TradeJournalCard: View {
     private var screenshot: some View {
         GeometryReader { geo in
             TradeImageView(
-                reference: trade.thumbnail,
+                reference: summary.thumbnail,
                 imagePipeline: imagePipeline,
-                contentMode: trade.imageDisplayMode == .fill ? .fill : .fit,
+                contentMode: summary.imageDisplayMode == .fill ? .fill : .fit,
                 side: 132,
                 width: geo.size.width,
                 height: 132
@@ -160,18 +167,18 @@ struct TradeJournalCard: View {
     }
 
     private var executionGrid: some View {
-        let duration = TradeDisplay.holdDuration(for: trade)
+        let duration = TradeDisplay.holdDuration(for: item)
         return VStack(spacing: ExperienceSpacing.sm) {
             HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                metricCell(title: "Entry", value: TradeDisplay.priceText(trade.entryPrice))
-                metricCell(title: "Exit", value: TradeDisplay.priceText(trade.exitPrice))
-                metricCell(title: "Contracts", value: TradeDisplay.contractsText(trade.quantity))
+                metricCell(title: "Entry", value: TradeDisplay.priceText(item.entryPrice))
+                metricCell(title: "Exit", value: TradeDisplay.priceText(item.exitPrice))
+                metricCell(title: "Contracts", value: TradeDisplay.contractsText(summary.quantity))
             }
             HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                if let rr = TradeDisplay.journalRRText(trade.riskReward) {
+                if let rr = TradeDisplay.journalRRText(summary.riskReward) {
                     metricCell(title: "R:R", value: rr)
                 }
-                if let points = TradeDisplay.pointsText(trade.points) {
+                if let points = TradeDisplay.pointsText(summary.points) {
                     metricCell(title: "Points", value: points)
                 }
                 if let duration {
@@ -211,26 +218,26 @@ struct TradeJournalCard: View {
         // With image: show compact RR / points / contracts (execution grid is hidden).
         // Without image: those already appear in the execution grid — avoid duplicate.
         if hasImage {
-            if let rr = TradeDisplay.journalRRText(trade.riskReward) {
+            if let rr = TradeDisplay.journalRRText(summary.riskReward) {
                 items.append(("R:R", rr))
             }
-            if let points = TradeDisplay.pointsText(trade.points) {
+            if let points = TradeDisplay.pointsText(summary.points) {
                 items.append(("Points", points))
             }
-            items.append(("Contracts", TradeDisplay.contractsText(trade.quantity)))
-            if let duration = TradeDisplay.holdDuration(for: trade) {
+            items.append(("Contracts", TradeDisplay.contractsText(summary.quantity)))
+            if let duration = TradeDisplay.holdDuration(for: item) {
                 items.append(("Dur", duration))
             }
-        } else if trade.entryPrice == nil && trade.exitPrice == nil {
+        } else if item.entryPrice == nil && item.exitPrice == nil {
             // Sparse trade — still surface whatever performance we have once.
-            if let rr = TradeDisplay.journalRRText(trade.riskReward) {
+            if let rr = TradeDisplay.journalRRText(summary.riskReward) {
                 items.append(("R:R", rr))
             }
-            if let points = TradeDisplay.pointsText(trade.points) {
+            if let points = TradeDisplay.pointsText(summary.points) {
                 items.append(("Points", points))
             }
-            if trade.quantity > 0 {
-                items.append(("Contracts", TradeDisplay.contractsText(trade.quantity)))
+            if summary.quantity > 0 {
+                items.append(("Contracts", TradeDisplay.contractsText(summary.quantity)))
             }
         }
         return items
@@ -275,7 +282,7 @@ struct TradeJournalCard: View {
     }
 
     private var visibilitySymbol: String {
-        switch trade.visibility {
+        switch summary.visibility {
         case .public: return "globe"
         case .private: return "lock.fill"
         case .followersOnly: return "person.2.fill"
@@ -283,7 +290,7 @@ struct TradeJournalCard: View {
     }
 
     private var visibilityTitle: String {
-        switch trade.visibility {
+        switch summary.visibility {
         case .public: return "Public"
         case .private: return "Private"
         case .followersOnly: return "Followers"
@@ -308,12 +315,12 @@ struct TradeJournalCard: View {
 
     private var accessibilitySummary: String {
         var parts = [
-            trade.symbol.ticker,
-            TradeDisplay.sideTitle(trade.side),
-            TradeDisplay.pnlText(trade.realizedPnL),
+            summary.symbol.ticker,
+            TradeDisplay.sideTitle(summary.side),
+            TradeDisplay.pnlText(summary.realizedPnL),
         ]
-        if let accountName, !accountName.isEmpty {
-            parts.append(accountName)
+        if let resolvedAccountName, !resolvedAccountName.isEmpty {
+            parts.append(resolvedAccountName)
         }
         if let strategy {
             parts.append(strategy)
@@ -325,39 +332,41 @@ struct TradeJournalCard: View {
 
 /// Lightweight context-menu preview — no network, no engagement chrome.
 private struct TradeJournalCardPreview: View {
-    let trade: Trade
+    let item: TradeOwnerJournalSummary
     let accountName: String?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
 
+    private var summary: TradeSummary { item.summary }
+
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             HStack {
-                Text(trade.symbol.ticker)
+                Text(summary.symbol.ticker)
                     .experienceStyle(.headline, color: colors.primaryText)
                 Spacer()
-                Text(TradeDisplay.pnlText(trade.realizedPnL))
+                Text(TradeDisplay.pnlText(summary.realizedPnL))
                     .experienceStyle(
                         .metric,
                         color: theme.metricColor(
-                            for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
+                            for: NSDecimalNumber(decimal: summary.realizedPnL?.amount ?? 0).doubleValue
                         )
                     )
             }
             HStack(spacing: ExperienceSpacing.xs) {
                 ExperienceTag(
-                    title: TradeDisplay.sideTitle(trade.side),
-                    tone: trade.side == .long ? .success : .error
+                    title: TradeDisplay.sideTitle(summary.side),
+                    tone: summary.side == .long ? .success : .error
                 )
-                Text(TradeDisplay.dateText(trade.createdAt))
+                Text(TradeDisplay.dateText(summary.createdAt))
                     .experienceStyle(.caption, color: colors.secondaryText)
             }
             if let accountName, !accountName.isEmpty {
                 Text(accountName)
                     .experienceStyle(.caption, color: colors.tertiaryText)
             }
-            if let note = trade.notePreview, !note.isEmpty {
+            if let note = summary.notePreview, !note.isEmpty {
                 Text(note)
                     .experienceStyle(.footnote, color: colors.secondaryText)
                     .lineLimit(3)

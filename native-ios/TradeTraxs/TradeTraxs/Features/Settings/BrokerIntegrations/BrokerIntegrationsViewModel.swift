@@ -645,7 +645,7 @@ final class BrokerIntegrationsViewModel {
     private func refreshTradesAfterImport(newTradeIds: [String]) async {
         guard let userID = await session.currentUserID else { return }
         let owner = ProfileID(userID.rawValue)
-        TradeJournalMutationStore.shared.noteBulkImport(owner: owner)
+        TradeJournalMutationStore.shared.noteBulkImport(owner: owner, source: .tradovate)
         _ = newTradeIds
     }
 

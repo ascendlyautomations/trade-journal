@@ -91,12 +91,7 @@ nonisolated enum SessionDiskCache {
     // MARK: - IO
 
     private static func directoryURL() -> URL? {
-        guard let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        let dir = base.appendingPathComponent(folderName, isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        PersistentAppDataDiskCache.directoryURL(component: folderName)
     }
 
     private static func write<T: Encodable>(_ value: T, file: String) {

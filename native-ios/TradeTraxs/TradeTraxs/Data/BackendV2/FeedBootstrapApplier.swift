@@ -84,6 +84,9 @@ enum FeedBootstrapApplier {
         item.imageCrop = decodeImageCrop(row.payload["image_crop"])
             ?? nestedImageCrop(row.payload, objectKey: "achievements")
             ?? nestedImageCrop(row.payload, objectKey: "trades")
+        if engagement[row.id] != nil {
+            FeedEngagementCacheRestore.markEngagementCached(on: &item)
+        }
         switch kind {
         case .trade:
             item.tradeID = TradeID(stringPayload(row.payload, keys: ["trade_id"]) ?? row.id)

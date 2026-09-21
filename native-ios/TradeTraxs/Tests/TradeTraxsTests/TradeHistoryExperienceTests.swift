@@ -165,6 +165,7 @@ final class TradeHistoryExperienceTests: XCTestCase {
             trades: repository,
             session: TradeHistoryStubSession(userID: "dev.trades.vm"),
             detailCache: cache,
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: coordinator
         )
 
@@ -196,6 +197,7 @@ final class TradeHistoryExperienceTests: XCTestCase {
             trades: repository,
             session: TradeHistoryStubSession(userID: "00000000-0000-4000-8000-000000000221"),
             detailCache: DetailPresentationCache(),
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: coordinator
         )
 
@@ -219,6 +221,7 @@ final class TradeHistoryExperienceTests: XCTestCase {
             trades: TradeHistoryStubTradeRepository(empty: true),
             session: TradeHistoryStubSession(userID: "00000000-0000-4000-8000-000000000223"),
             detailCache: DetailPresentationCache(),
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
         emptyVM.loadIfNeeded()
@@ -229,6 +232,7 @@ final class TradeHistoryExperienceTests: XCTestCase {
             trades: TradeHistoryStubTradeRepository(),
             session: TradeHistoryStubSession(userID: "dev.trades.empty.filter"),
             detailCache: DetailPresentationCache(),
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
         filteredVM.loadIfNeeded()
@@ -255,7 +259,7 @@ final class TradeHistoryExperienceTests: XCTestCase {
                     searchText: ""
                 ),
                 profileID: profileID,
-                items: [trade],
+                items: [TradeSummaryMapper.ownerJournal(fromListTrade: trade)],
                 nextCursor: nil,
                 filters: filters,
                 searchText: "",
@@ -269,6 +273,7 @@ final class TradeHistoryExperienceTests: XCTestCase {
             trades: repository,
             session: TradeHistoryStubSession(userID: profileID.rawValue),
             detailCache: cache,
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
         viewModel.loadIfNeeded()
@@ -291,6 +296,7 @@ final class TradeHistoryExperienceTests: XCTestCase {
             trades: repository,
             session: TradeHistoryStubSession(userID: profileID.rawValue),
             detailCache: DetailPresentationCache(),
+            tradeDetailRepository: NullTradeDetailRepository(),
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
         viewModel.loadIfNeeded()

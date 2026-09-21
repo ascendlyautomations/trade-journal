@@ -279,11 +279,12 @@ final class ClipsContainerViewModel {
                     tab: .reels,
                     profileID: profileOwnerID,
                     rpc: rpc,
+                    detailCache: nil,
                     cursor: nil
                 )
                 pageReels = applied.reels ?? []
                 cursor = applied.nextCursor
-                if let linkedTrades = applied.trades, !linkedTrades.isEmpty {
+                if let linkedTrades = applied.reelLinkedTrades, !linkedTrades.isEmpty {
                     detailCache.seed(trades: linkedTrades)
                 }
             } else {
@@ -391,11 +392,12 @@ final class ClipsContainerViewModel {
                     tab: .reels,
                     profileID: profileOwnerID,
                     rpc: rpc,
+                    detailCache: nil,
                     cursor: cursor
                 )
                 pageReels = applied.reels ?? []
                 newCursor = applied.nextCursor
-                if let linkedTrades = applied.trades, !linkedTrades.isEmpty {
+                if let linkedTrades = applied.reelLinkedTrades, !linkedTrades.isEmpty {
                     detailCache.seed(trades: linkedTrades)
                 }
             } else {

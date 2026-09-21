@@ -9,7 +9,15 @@ enum ProfileCardMediaPresence {
     }
 
     static func tradeMedia(in trade: Trade) -> MediaReference? {
-        guard let thumbnail = trade.thumbnail else { return nil }
+        tradeMedia(thumbnail: trade.thumbnail)
+    }
+
+    static func tradeMedia(in summary: TradeSummary) -> MediaReference? {
+        tradeMedia(thumbnail: summary.thumbnail)
+    }
+
+    private static func tradeMedia(thumbnail: MediaReference?) -> MediaReference? {
+        guard let thumbnail else { return nil }
         let trimmed = thumbnail.id.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : thumbnail
     }

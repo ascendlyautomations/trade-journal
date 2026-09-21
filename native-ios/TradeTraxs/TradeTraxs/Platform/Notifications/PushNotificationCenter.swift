@@ -185,7 +185,7 @@ final class PushNotificationCenter: NSObject {
         let userInfo = response.notification.request.content.userInfo
         route(userInfo: userInfo)
         // Mirror backend BadgeService — do not trust a stale APNs payload integer alone.
-        AppIconBadgeSync.refresh(animated: false)
+        AppIconBadgeSync.refresh(animated: false, force: true)
         Task { await softRefreshActivityUnread() }
     }
 

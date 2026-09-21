@@ -5,7 +5,7 @@ import Foundation
 /// Structured metadata only — no media blobs. Server + RLS remain authoritative.
 nonisolated enum ProfileDiskCache {
     static let folderName = "ProfileDiskCache"
-    static let schemaVersion = 1
+    static let schemaVersion = 2
 
     // MARK: - Bounds
 
@@ -37,7 +37,7 @@ nonisolated enum ProfileDiskCache {
         var activeStories: [Story]
         var pinnedContent: [ProfilePinnedItem]
 
-        var trades: [Trade]
+        var trades: [TradeSummary]
         var tradesNextCursor: String?
         var accountNames: [String: String]
         var accountModes: [String: String]
@@ -151,12 +151,7 @@ nonisolated enum ProfileDiskCache {
     }
 
     private static func directoryURL() -> URL? {
-        guard let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        let dir = base.appendingPathComponent(folderName, isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        PersistentAppDataDiskCache.directoryURL(component: folderName)
     }
 
     private static func write<T: Encodable>(_ value: T, file: String) {

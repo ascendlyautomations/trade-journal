@@ -5,6 +5,7 @@ import Foundation
 /// Patched from Feed / Profile / Detail mutations so surfaces stay coherent offline.
 nonisolated enum SocialEntityDiskCache {
     static let folderName = "SocialEntityDiskCache"
+    static let schemaVersion = 2
     static let maxEntitiesPerViewer = 150
     static let hardExpirySeconds: TimeInterval = 7 * 24 * 60 * 60
 
@@ -17,11 +18,15 @@ nonisolated enum SocialEntityDiskCache {
     }
 
     struct Record: Codable, Sendable {
+        var schemaVersion: Int = SocialEntityDiskCache.schemaVersion
         var viewerID: String
         var kind: EntityKind
         var entityID: String
         var savedAt: Date
         var lastAccessedAt: Date
+        /// Phase 8F — social preview only (never authoritative detail).
+        var tradeSummary: TradeSummary?
+        /// Legacy v1 full trade blob — rejected on read unless migrated to summary.
         var trade: Trade?
         var post: Post?
         var reel: Reel?
@@ -31,15 +36,17 @@ nonisolated enum SocialEntityDiskCache {
 
     // MARK: - Trades
 
-    static func saveTrade(_ trade: Trade, viewerID: ProfileID) {
+    static func saveTradeSummary(_ summary: TradeSummary, viewerID: ProfileID) {
         save(
             Record(
+                schemaVersion: schemaVersion,
                 viewerID: viewerID.rawValue,
                 kind: .trade,
-                entityID: trade.id.rawValue,
+                entityID: summary.id.rawValue,
                 savedAt: Date(),
                 lastAccessedAt: Date(),
-                trade: trade,
+                tradeSummary: summary,
+                trade: nil,
                 post: nil,
                 reel: nil,
                 achievement: nil,
@@ -48,8 +55,30 @@ nonisolated enum SocialEntityDiskCache {
         )
     }
 
+    /// Back-compat — persists canonical ``TradeSummary`` (list/mutation rows are not authoritative detail).
+    static func saveTrade(_ trade: Trade, viewerID: ProfileID) {
+        saveTradeSummary(TradeSummaryMapper.summary(fromPartialListTrade: trade), viewerID: viewerID)
+    }
+
+    static func loadTradeSummary(id: TradeID, viewerID: ProfileID) -> TradeSummary? {
+        guard let record = loadRecord(kind: .trade, entityID: id.rawValue, viewerID: viewerID) else {
+            return nil
+        }
+        if let summary = record.tradeSummary {
+            return summary
+        }
+        if let legacy = record.trade {
+            let summary = TradeSummaryMapper.summary(fromPartialListTrade: legacy)
+            saveTradeSummary(summary, viewerID: viewerID)
+            return summary
+        }
+        return nil
+    }
+
+    /// Non-authoritative card preview — never use for edit/detail completeness.
     static func loadTrade(id: TradeID, viewerID: ProfileID) -> Trade? {
-        load(kind: .trade, entityID: id.rawValue, viewerID: viewerID)?.trade
+        guard let summary = loadTradeSummary(id: id, viewerID: viewerID) else { return nil }
+        return TradeSummaryMapper.previewTrade(from: summary)
     }
 
     static func removeTrade(id: TradeID, viewerID: ProfileID) {
@@ -178,7 +207,7 @@ nonisolated enum SocialEntityDiskCache {
         enforceEntityLimit(viewerID: record.viewerID)
     }
 
-    private static func load(kind: EntityKind, entityID: String, viewerID: ProfileID) -> Record? {
+    private static func loadRecord(kind: EntityKind, entityID: String, viewerID: ProfileID) -> Record? {
         guard let record: Record = read(
             file: entityFile(viewerID: viewerID.rawValue, kind: kind, entityID: entityID)
         ) else { return nil }
@@ -186,12 +215,24 @@ nonisolated enum SocialEntityDiskCache {
               record.kind == kind,
               record.entityID == entityID
         else { return nil }
+        if record.kind == .trade,
+           record.schemaVersion < schemaVersion,
+           record.tradeSummary == nil,
+           record.trade == nil
+        {
+            remove(kind: kind, entityID: entityID, viewerID: viewerID)
+            return nil
+        }
         let age = Date().timeIntervalSince(record.savedAt)
         guard age <= hardExpirySeconds else {
             remove(kind: kind, entityID: entityID, viewerID: viewerID)
             return nil
         }
         return record
+    }
+
+    private static func load(kind: EntityKind, entityID: String, viewerID: ProfileID) -> Record? {
+        loadRecord(kind: kind, entityID: entityID, viewerID: viewerID)
     }
 
     private static func remove(kind: EntityKind, entityID: String, viewerID: ProfileID) {
@@ -221,12 +262,7 @@ nonisolated enum SocialEntityDiskCache {
     }
 
     private static func directoryURL() -> URL? {
-        guard let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        let dir = base.appendingPathComponent(folderName, isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        PersistentAppDataDiskCache.directoryURL(component: folderName)
     }
 
     private static func write<T: Encodable>(_ value: T, file: String) {

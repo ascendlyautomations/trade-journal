@@ -17,6 +17,7 @@ struct TradeHistoryView: View {
                 trades: data.trades,
                 session: data.session,
                 detailCache: data.detailCache,
+                tradeDetailRepository: data.tradeDetailRepository,
                 navigationCoordinator: navigationCoordinator,
                 rpc: data.rpc
             )
@@ -134,7 +135,7 @@ struct TradeHistoryView: View {
             }
         } message: {
             if let trade = viewModel.pendingDelete {
-                Text("\(trade.symbol.ticker) will be removed from your journal.")
+                Text("\(trade.summary.symbol.ticker) will be removed from your journal.")
             }
         }
         .sheet(item: $viewModel.sharePayload) { payload in
@@ -182,15 +183,15 @@ struct TradeHistoryView: View {
             }
 
             Section {
-                ForEach(viewModel.items) { trade in
+                ForEach(viewModel.items) { item in
                     TradeJournalCard(
-                        trade: trade,
-                        accountName: viewModel.displayAccountTitle(for: trade.accountID),
+                        item: item,
+                        accountName: viewModel.displayAccountTitle(for: item.accountID),
                         imagePipeline: imagePipeline,
-                        onOpen: { viewModel.openTrade(trade) },
-                        onShare: { viewModel.shareTrade(trade) },
-                        onEdit: { viewModel.editTrade(trade) },
-                        onDelete: { viewModel.requestDelete(trade) }
+                        onOpen: { viewModel.openTrade(item) },
+                        onShare: { viewModel.shareTrade(item) },
+                        onEdit: { viewModel.editTrade(item) },
+                        onDelete: { viewModel.requestDelete(item) }
                     )
                     .listRowInsets(EdgeInsets(
                         top: ExperienceSpacing.xs,
@@ -202,21 +203,21 @@ struct TradeHistoryView: View {
                     .listRowSeparator(.hidden)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
-                            viewModel.requestDelete(trade)
+                            viewModel.requestDelete(item)
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
                         Button {
-                            viewModel.editTrade(trade)
+                            viewModel.editTrade(item)
                         } label: {
                             Label("Edit", systemImage: "square.and.pencil")
                         }
                         .tint(colors.accent)
                     }
                     .onAppear {
-                        Task { await viewModel.loadMoreIfNeeded(currentTradeID: trade.id) }
+                        Task { await viewModel.loadMoreIfNeeded(currentTradeID: item.id) }
                     }
-                    .accessibilityIdentifier("trades.row.\(trade.id.rawValue)")
+                    .accessibilityIdentifier("trades.row.\(item.id.rawValue)")
                 }
 
                 if viewModel.isLoadingMore {

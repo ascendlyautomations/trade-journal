@@ -44,6 +44,7 @@ final class DashboardViewModel {
     private var coldLoadFinished = false
     private var contractDecodeFailed = false
     private var loadGeneration: UInt64 = 0
+    private var pendingHistoryBackfill = false
     private var watchedChannel: RealtimeChannelID?
     /// Manual date-range override for the current account filter (cleared on account switch).
     private var hasUserSelectedDateRangeForCurrentFilter = false
@@ -55,6 +56,24 @@ final class DashboardViewModel {
     private var authoritativeTotalTradeCount: Int?
     /// Funded prop-firm payout cycles keyed by account — drives Prop Firm Status card boundaries.
     private var payoutCyclesByAccount: [TradingAccountID: [AccountPayoutCycle]] = [:]
+    /// Dashboard V3 authoritative analytical payload (no fat trade window).
+    private var analyticsV3Bootstrap: AnalyticsDashboardBootstrapV3?
+    private var analyticsV3Revision: Int64 = 0
+    private var lastAccountScopedSummary: DashboardChartMetrics.Summary?
+    private var lastAccountScopedFilter: DashboardAccountFilter?
+    private var lastV3MetricsLookup: DashboardAnalyticsAccountMetricsLookup?
+    private var accountChartSelectionToken: UInt64 = 0
+    private var accountChartHydrateTask: Task<Void, Never>?
+    private var dashboardGRDBBackgroundReconcileScheduled = false
+    private var analyticsReconciliationObserver: NSObjectProtocol?
+
+    private var usesDashboardAnalyticsV3: Bool {
+        BackendV2FeatureFlags.isEnabled(.dashboardAnalyticsV3)
+    }
+
+    private var usesDashboardAnalyticsGRDB: Bool {
+        usesDashboardAnalyticsV3 && BackendV2FeatureFlags.isEnabled(.dashboardAnalyticsGRDB)
+    }
 
     /// Test / composition seam — `home` retained for call-site compatibility but unused.
     init(
@@ -181,6 +200,9 @@ final class DashboardViewModel {
 
     var equityHeroDisplayValue: Decimal {
         guard let summary else { return 0 }
+        if usesDashboardAnalyticsV3, !selectedAccountChartsLoaded {
+            return summary.netPnL
+        }
         return DashboardEquityHeroPresentation.displayEquity(
             currentEquity: summary.currentEquity,
             propStartingBalance: equityHeroPropStartingBalance
@@ -188,10 +210,27 @@ final class DashboardViewModel {
     }
 
     var equityHeroChartPoints: [ProfileStatisticsMetrics.EquityPoint] {
-        guard let summary else { return [] }
+        guard let summary, selectedAccountChartsLoaded else { return [] }
         return DashboardEquityHeroPresentation.chartPoints(
             summary.equityData,
             propStartingBalance: equityHeroPropStartingBalance
+        )
+    }
+
+    private var selectedAccountChartsLoaded: Bool {
+        guard usesDashboardAnalyticsV3 else { return true }
+        guard case .account(let id) = accountFilter else { return true }
+        return DashboardAnalyticsAccountChartsStore.shared
+            .availability(accountID: id, revision: analyticsV3Revision)
+            .isLoaded
+    }
+
+    private var selectedAccountChartsAvailability: DashboardAnalyticsChartsAvailability {
+        guard usesDashboardAnalyticsV3 else { return .loaded }
+        guard case .account(let id) = accountFilter else { return .loaded }
+        return DashboardAnalyticsAccountChartsStore.shared.availability(
+            accountID: id,
+            revision: analyticsV3Revision
         )
     }
 
@@ -284,21 +323,89 @@ final class DashboardViewModel {
         isRefreshing = true
         coldLoadFinished = false
         contractDecodeFailed = false
+        dashboardGRDBBackgroundReconcileScheduled = false
         loadGeneration &+= 1
         let generation = loadGeneration
-        await performLoad(forceNetwork: true, generation: generation)
+        await performLoad(
+            forceNetwork: true,
+            generation: generation,
+            refreshTrigger: .pullRefresh
+        )
         isRefreshing = false
+    }
+
+    private func ensureAnalyticsReconciliationObserver() {
+        guard analyticsReconciliationObserver == nil, profileID != nil else { return }
+        analyticsReconciliationObserver = NotificationCenter.default.addObserver(
+            forName: AnalyticsReconciliationUIApply.dashboardCommittedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            Task { await self?.applyDashboardAnalyticsReconciliationNotification(notification) }
+        }
+    }
+
+    private func applyDashboardAnalyticsReconciliationNotification(_ notification: Notification) async {
+        guard usesDashboardAnalyticsV3, AnalyticsReconciliationGate.isEnabled else { return }
+        guard let viewerRaw = notification.userInfo?["viewerID"] as? String,
+              viewerRaw == profileID?.rawValue
+        else { return }
+        guard let revision = notification.userInfo?["serverRevision"] as? Int64 else { return }
+        guard let cached = DashboardAnalyticsDiskCache.load(viewerID: ProfileID(viewerRaw)),
+              cached.revision == revision
+        else { return }
+        do {
+            let applied = try DashboardAnalyticsV3Applier.apply(
+                cached.payload,
+                expectedViewerID: viewerRaw,
+                detailCache: detailCache
+            )
+            analyticsV3Bootstrap = applied.bootstrap
+            analyticsV3Revision = applied.revision
+            recompute()
+        } catch {
+            DashboardAnalyticsGRDBProbe.logFallback(reason: "reconciliation_apply_error")
+        }
     }
 
     /// Mutation observer — patch when possible; never full refetch for a single insert/update/delete.
     func handleJournalMutation() {
         switch TradeJournalMutationStore.shared.latest {
         case .created(let trade), .updated(let trade):
-            upsertTrade(trade)
+            if usesDashboardAnalyticsV3 {
+                if AnalyticsReconciliationGate.isEnabled {
+                    break
+                }
+                scheduleAnalyticsV3RefreshAfterMutation()
+            } else {
+                upsertTrade(trade)
+            }
         case .deleted(let id, _):
-            removeTrade(id: id)
-        case .bulkImport, .none:
-            Task { await refresh() }
+            if usesDashboardAnalyticsV3 {
+                if AnalyticsReconciliationGate.isEnabled {
+                    break
+                }
+                scheduleAnalyticsV3RefreshAfterMutation()
+            } else {
+                removeTrade(id: id)
+            }
+        case .bulkImport:
+            if usesDashboardAnalyticsV3, AnalyticsReconciliationGate.isEnabled {
+                break
+            }
+            Task {
+                loadTask?.cancel()
+                secondaryTask?.cancel()
+                loadGeneration &+= 1
+                let generation = loadGeneration
+                await performLoad(
+                    forceNetwork: true,
+                    generation: generation,
+                    refreshTrigger: .journalMutation
+                )
+            }
+        case .none:
+            break
         }
     }
 
@@ -308,6 +415,9 @@ final class DashboardViewModel {
             Task { await reloadAfterPayout(accountID: accountID) }
         case .generic:
             patchAccountsFromSessionStore()
+            if usesDashboardAnalyticsV3, !AnalyticsReconciliationGate.isEnabled {
+                scheduleAnalyticsV3RefreshAfterMutation()
+            }
         }
     }
 
@@ -345,6 +455,12 @@ final class DashboardViewModel {
             }
         }
         recompute()
+        if usesDashboardAnalyticsV3 {
+            if usesDashboardAnalyticsGRDB, analyticsV3Bootstrap != nil {
+                DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "account_metrics_local")
+            }
+            scheduleAccountChartHydration()
+        }
     }
 
     func setDateRange(_ range: DashboardDateRange) {
@@ -354,6 +470,9 @@ final class DashboardViewModel {
         pendingAutomaticDateRangeResolution = false
         dateRange = range
         recompute()
+        if usesDashboardAnalyticsGRDB, analyticsV3Bootstrap != nil {
+            DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "preset_local")
+        }
     }
 
     func openCalendar() {
@@ -492,9 +611,14 @@ final class DashboardViewModel {
 
     // MARK: - Load
 
-    private func performLoad(forceNetwork: Bool = false, generation: UInt64? = nil) async {
+    private func performLoad(
+        forceNetwork: Bool = false,
+        generation: UInt64? = nil,
+        isAuthoritativeFollowUp: Bool = false,
+        refreshTrigger: DashboardAuthoritativeRefreshTrigger? = nil
+    ) async {
         let activeGeneration = generation ?? loadGeneration
-        if !forceNetwork {
+        if !forceNetwork, !isAuthoritativeFollowUp {
             DashboardLoadProbe.beginSession()
             DashboardLoadProbe.recordColdAttempt()
         } else {
@@ -502,18 +626,18 @@ final class DashboardViewModel {
         }
         defer {
             loadTask = nil
-            if !forceNetwork {
+            if !forceNetwork, !isAuthoritativeFollowUp {
                 coldLoadFinished = true
             }
         }
 
-        await SessionNetworkGate.shared.awaitReady()
-
         let userID = await session.currentUserID
         let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
         self.profileID = profileID
+        ensureAnalyticsReconciliationObserver()
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            await SessionNetworkGate.shared.awaitReady()
             await DashboardLoadProbe.measure(
                 "dashboard.fixtures",
                 kind: .local,
@@ -525,20 +649,47 @@ final class DashboardViewModel {
             phase = .loaded
             DashboardLoadProbe.markFirstUsefulRender()
             DashboardLoadProbe.markFullHydration()
+            AuthenticatedLaunchPhasing.markCriticalVisibleSurfaceReady(tab: .home)
             await startRealtime(profileID: profileID)
             loadTask = nil
             return
         }
 
+        if !forceNetwork, !isAuthoritativeFollowUp, summary == nil {
+            if await tryPaintFromDiskCache(profileID: profileID, generation: activeGeneration) {
+                loadTask = nil
+                return
+            }
+        }
+
+        await SessionNetworkGate.shared.awaitReady()
+
         if summary == nil { phase = .loading }
 
         do {
+            if usesDashboardAnalyticsV3, BackendV2FeatureFlags.isEnabled(.dashboard), let rpc {
+                if try await loadDashboardAnalyticsV3(
+                    profileID: profileID,
+                    rpc: rpc,
+                    forceNetwork: forceNetwork,
+                    generation: activeGeneration
+                ) {
+                    loadTask = nil
+                    return
+                }
+            }
+
             if BackendV2FeatureFlags.isEnabled(.dashboard), let rpc {
                 if let loadResult = try await BootstrapTransportTimeout.run({ [self] in
                     try await loadDashboardV2(
                         profileID: profileID,
                         rpc: rpc,
                         forceNetwork: forceNetwork,
+                        trigger: dashboardLoadTrigger(
+                            forceNetwork: forceNetwork,
+                            isAuthoritativeFollowUp: isAuthoritativeFollowUp,
+                            explicit: refreshTrigger
+                        ),
                         generation: activeGeneration
                     )
                 }) {
@@ -564,28 +715,27 @@ final class DashboardViewModel {
                     phase = .loaded
                     #if DEBUG
                     let source: String = switch loadResult.path {
-                    case .cache_fresh, .cache_stale_revalidate, .error_preserved_cache: "disk"
+                    case .cache_fresh, .cache_stale_revalidate, .cache_display_only, .error_preserved_cache: "disk"
                     case .v2_rpc: "network"
                     default: "unknown"
                     }
                     ColdLaunchSummaryProbe.markDashboardFirstRender(source: source)
                     #endif
                     DashboardLoadProbe.markFirstUsefulRender()
+                    if !AuthenticatedLaunchPhasing.allowsDeferredStartupNetworking {
+                        AuthenticatedLaunchPhasing.markCriticalVisibleSurfaceReady(tab: .home)
+                    }
                     if v2.payoutTotal != nil {
                         DashboardLoadProbe.markFullHydration()
                     }
-                    let needsTradeHistoryBackfill = !v2.tradeHistoryComplete
-                        || !SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
-                    if pendingAutomaticDateRangeResolution, needsTradeHistoryBackfill {
-                        Task { [weak self] in
-                            await self?.refreshAuthoritativeTradeHistory(
-                                profileID: profileID,
-                                generation: activeGeneration
-                            )
-                        }
-                    }
+                    noteDeferredHistoryBackfillIfNeeded(
+                        profileID: profileID,
+                        generation: activeGeneration,
+                        tradeHistoryComplete: v2.tradeHistoryComplete
+                    )
                     secondaryTask?.cancel()
                     secondaryTask = Task { [weak self] in
+                        await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
                         await self?.runSecondaryHydration(
                             profileID: profileID,
                             forceNetwork: forceNetwork,
@@ -615,6 +765,7 @@ final class DashboardViewModel {
                 phase = .loaded
                 DashboardLoadProbe.markFirstUsefulRender()
                 DashboardLoadProbe.markFullHydration()
+                AuthenticatedLaunchPhasing.markCriticalVisibleSurfaceReady(tab: .home)
                 loadTask = nil
                 return
             }
@@ -648,21 +799,20 @@ final class DashboardViewModel {
             recompute()
             phase = .loaded
             DashboardLoadProbe.markFirstUsefulRender()
+            AuthenticatedLaunchPhasing.markCriticalVisibleSurfaceReady(tab: .home)
 
-            if !initialTradeHistoryReady, pendingAutomaticDateRangeResolution {
-                Task { [weak self] in
-                    await self?.refreshAuthoritativeTradeHistory(
-                        profileID: profileID,
-                        generation: activeGeneration
-                    )
-                }
-            }
+            noteDeferredHistoryBackfillIfNeeded(
+                profileID: profileID,
+                generation: activeGeneration,
+                tradeHistoryComplete: forceNetwork || !page.items.isEmpty
+            )
 
             await startRealtime(profileID: profileID)
 
             // Deferred: achievements only feed the Payouts chip — never block first useful render.
             secondaryTask?.cancel()
             secondaryTask = Task { [weak self] in
+                await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
                 await self?.runSecondaryHydration(
                     profileID: profileID,
                     forceNetwork: forceNetwork,
@@ -690,10 +840,129 @@ final class DashboardViewModel {
     }
 
     /// Returns nil to fall through to legacy REST bootstrap.
+    @discardableResult
+    private func tryPaintFromDiskCache(profileID: ProfileID, generation: UInt64) async -> Bool {
+        guard BackendV2FeatureFlags.isEnabled(.dashboard), rpc != nil else { return false }
+        if usesDashboardAnalyticsV3 {
+            return await tryPaintFromAnalyticsV3DiskCache(profileID: profileID, generation: generation)
+        }
+        guard let cached = BackendV2BootstrapDiskCache.loadDashboard(viewerID: profileID.rawValue) else {
+            return false
+        }
+        do {
+            let v2 = try await DashboardBootstrapApplier.apply(
+                cached.bootstrap,
+                expectedViewerID: profileID.rawValue,
+                detailCache: detailCache
+            )
+            guard generation == loadGeneration, !Task.isCancelled else { return false }
+            apply(trades: v2.trades, accounts: v2.accounts, profileID: profileID)
+            noteTradeHistoryApplied(
+                totalTradeCount: v2.totalTradeCount,
+                historyComplete: v2.tradeHistoryComplete
+            )
+            if let payout = v2.payoutTotal {
+                payoutTotal = payout
+            }
+            hasLoaded = true
+            recompute()
+            phase = .loaded
+            #if DEBUG
+            ColdLaunchSummaryProbe.markDashboardFirstRender(source: "disk")
+            #endif
+            DashboardLoadProbe.markFirstUsefulRender()
+            if v2.payoutTotal != nil {
+                DashboardLoadProbe.markFullHydration()
+            }
+            AuthenticatedLaunchPhasing.markCriticalVisibleSurfaceReady(tab: .home)
+            noteDeferredHistoryBackfillIfNeeded(
+                profileID: profileID,
+                generation: generation,
+                tradeHistoryComplete: v2.tradeHistoryComplete
+            )
+            if cached.freshness != .fresh {
+                scheduleAuthoritativeDashboardRefresh(generation: generation)
+            }
+            secondaryTask?.cancel()
+            secondaryTask = Task { [weak self] in
+                await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
+                await self?.runSecondaryHydration(
+                    profileID: profileID,
+                    forceNetwork: false,
+                    skipPayouts: v2.payoutTotal != nil
+                )
+                if v2.payoutTotal == nil {
+                    DashboardLoadProbe.markFullHydration()
+                }
+            }
+            await SessionNetworkGate.shared.awaitReady()
+            await startRealtime(profileID: profileID)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func scheduleAuthoritativeDashboardRefresh(generation: UInt64) {
+        Task { [weak self] in
+            await SessionNetworkGate.shared.awaitReady()
+            await self?.performLoad(
+                forceNetwork: true,
+                generation: generation,
+                isAuthoritativeFollowUp: true
+            )
+        }
+    }
+
+    private func dashboardLoadTrigger(
+        forceNetwork: Bool,
+        isAuthoritativeFollowUp: Bool,
+        explicit: DashboardAuthoritativeRefreshTrigger?
+    ) -> DashboardAuthoritativeRefreshTrigger {
+        if let explicit { return explicit }
+        if isAuthoritativeFollowUp { return .staleAuthoritative }
+        if forceNetwork { return .pullRefresh }
+        return .cold
+    }
+
+    private func noteDeferredHistoryBackfillIfNeeded(
+        profileID: ProfileID,
+        generation: UInt64,
+        tradeHistoryComplete: Bool
+    ) {
+        guard pendingAutomaticDateRangeResolution else { return }
+
+        if tradeHistoryComplete {
+            return
+        }
+
+        if let last = DashboardAuthoritativeRefreshCoordinator.shared.lastSuccessfulNetworkRefresh(
+            viewerID: profileID
+        ), last.tradeHistoryComplete {
+            return
+        }
+
+        pendingHistoryBackfill = true
+        scheduleDeferredOwnerTradesBackfill(profileID: profileID, generation: generation)
+    }
+
+    private func scheduleDeferredOwnerTradesBackfill(profileID: ProfileID, generation: UInt64) {
+        Task { [weak self] in
+            await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
+            await DashboardAuthoritativeRefreshCoordinator.shared.awaitInFlightIfNeeded(
+                viewerID: profileID
+            )
+            guard let self, self.pendingHistoryBackfill, generation == self.loadGeneration else { return }
+            await self.refreshExtendedOwnerTradesIfNeeded(profileID: profileID, generation: generation)
+            self.pendingHistoryBackfill = false
+        }
+    }
+
     private func loadDashboardV2(
         profileID: ProfileID,
         rpc: any RPCClient,
         forceNetwork: Bool,
+        trigger: DashboardAuthoritativeRefreshTrigger,
         generation: UInt64
     ) async throws -> DashboardBootstrapLoadResult? {
         do {
@@ -702,6 +971,7 @@ final class DashboardViewModel {
                 rpc: rpc,
                 detailCache: detailCache,
                 forceNetwork: forceNetwork,
+                trigger: trigger,
                 loadGeneration: generation,
                 currentGeneration: { [weak self] in self?.loadGeneration ?? 0 }
             )
@@ -979,6 +1249,10 @@ final class DashboardViewModel {
 
     private func recompute() {
         resolveAutomaticDateRangeIfNeeded()
+        if usesDashboardAnalyticsV3, let bootstrap = analyticsV3Bootstrap {
+            recomputeFromAnalyticsV3(bootstrap: bootstrap)
+            return
+        }
         let result = DashboardChartMetrics.compute(
             from: tradeInputs,
             accountFilter: accountFilter,
@@ -989,6 +1263,360 @@ final class DashboardViewModel {
         recomputePsychology()
     }
 
+    private func accountChartsForFilter() -> [String: AnalyticsDashboardChartsPresetV1]? {
+        guard selectedAccountChartsLoaded else { return nil }
+        guard case .account(let id) = accountFilter else { return nil }
+        return DashboardAnalyticsAccountChartsStore.shared.charts(
+            accountID: id,
+            revision: analyticsV3Revision
+        )
+    }
+
+    private func scheduleAccountChartHydration() {
+        accountChartSelectionToken = DashboardAnalyticsAccountChartsCoordinator.bumpSelection()
+        let token = accountChartSelectionToken
+        accountChartHydrateTask?.cancel()
+        accountChartHydrateTask = Task(priority: .userInitiated) { [weak self] in
+            await self?.hydrateAccountChartsIfNeeded(selectionToken: token)
+        }
+    }
+
+    private func hydrateAccountChartsIfNeeded(selectionToken: UInt64) async {
+        guard usesDashboardAnalyticsV3, let rpc, let profileID, case .account(let id) = accountFilter else {
+            return
+        }
+        guard selectionToken == accountChartSelectionToken else { return }
+
+        if await trySeedAccountChartsFromGRDB(
+            accountID: id,
+            profileID: profileID,
+            selectionToken: selectionToken
+        ) {
+            recompute()
+            return
+        }
+
+        let applied = await DashboardAnalyticsAccountChartsCoordinator.loadIfNeeded(
+            selectedAccountID: id,
+            selectionToken: selectionToken,
+            revision: analyticsV3Revision,
+            viewerID: profileID,
+            rpc: rpc
+        )
+        guard applied else { return }
+        guard selectionToken == accountChartSelectionToken else { return }
+        guard case .account(let current) = accountFilter, current == id else { return }
+        recompute()
+    }
+
+    private func recomputeFromAnalyticsV3(bootstrap: AnalyticsDashboardBootstrapV3) {
+        let resolution = DashboardAnalyticsMapper.resolve(
+            in: bootstrap,
+            accountFilter: accountFilter,
+            dateRange: dateRange,
+            accountCharts: accountChartsForFilter()
+        )
+        lastV3MetricsLookup = resolution
+
+        switch resolution {
+        case .aggregate(let bundle):
+            lastAccountScopedSummary = nil
+            lastAccountScopedFilter = nil
+            summary = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+        case .account(let bundle, _):
+            let next = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+            summary = next
+            lastAccountScopedSummary = next
+            lastAccountScopedFilter = accountFilter
+        case .accountMetricsMissing:
+            if accountFilter == lastAccountScopedFilter, let lastAccountScopedSummary {
+                summary = lastAccountScopedSummary
+            } else {
+                summary = nil
+            }
+        }
+
+        guard let bundle = DashboardAnalyticsMapper.bundle(
+            in: bootstrap,
+            accountFilter: accountFilter,
+            dateRange: dateRange,
+            accountCharts: accountChartsForFilter()
+        ) else {
+            recomputePsychology()
+            return
+        }
+        let equityCount = selectedAccountChartsLoaded ? bundle.equity.points.count : 0
+        DashboardAnalyticsV3Probe.log(
+            source: "local",
+            reason: "recompute",
+            range: DashboardAnalyticsMapper.presetKey(for: dateRange),
+            account: accountFilterTitle,
+            mode: "all_non_backtest",
+            revision: analyticsV3Revision,
+            payloadBytes: nil,
+            summaryCount: bootstrap.data.aggregatePresets.count,
+            dailyRows: 0,
+            equityPoints: equityCount,
+            elapsedMs: nil
+        )
+        #if DEBUG
+        if case .account = accountFilter {
+            print(
+                "[DashboardV3] chartsAvailability=\(selectedAccountChartsAvailability) " +
+                    "equityAuthoritative=\(selectedAccountChartsLoaded)"
+            )
+        }
+        #endif
+        #if DEBUG
+        runV3ParityAgainstLegacyDiskCacheIfPresent(bootstrap: bootstrap)
+        #endif
+        recomputePsychology()
+    }
+
+    #if DEBUG
+    private func runV3ParityAgainstLegacyDiskCacheIfPresent(bootstrap: AnalyticsDashboardBootstrapV3) {
+        guard let profileID else { return }
+        guard let cached = BackendV2BootstrapDiskCache.loadDashboard(viewerID: profileID.rawValue) else {
+            return
+        }
+        guard let v3Summary = summary else { return }
+        let accounts = DashboardBootstrapApplier.mappedAccounts(from: cached.bootstrap, ownerID: profileID)
+        var inputs: [DashboardChartMetrics.Input] = []
+        for row in cached.bootstrap.data.trade_window {
+            let dto = row.asTradeDTO(ownerID: profileID.rawValue)
+            if let trade = try? TradeMapper.mapToDomain(dto) {
+                let accountType = accounts.first(where: { $0.id == trade.accountID })?.mode.rawValue
+                inputs.append(DashboardChartMetrics.Input(trade: trade, accountType: accountType))
+            }
+        }
+        let legacy = DashboardChartMetrics.compute(
+            from: inputs,
+            accountFilter: accountFilter,
+            dateRange: dateRange,
+            payoutTotal: payoutTotal
+        )
+        _ = DashboardAnalyticsV3Parity.compare(
+            legacy: legacy,
+            v3: v3Summary,
+            preset: dateRange,
+            account: accountFilter,
+            historyComplete: cached.bootstrap.data.trade_window_meta.history_complete,
+            v3Lookup: lastV3MetricsLookup,
+            chartsAvailability: selectedAccountChartsAvailability
+        )
+        _ = bootstrap
+    }
+    #endif
+
+    @discardableResult
+    private func loadDashboardAnalyticsV3(
+        profileID: ProfileID,
+        rpc: any RPCClient,
+        forceNetwork: Bool,
+        generation: UInt64
+    ) async throws -> Bool {
+        if !forceNetwork, await tryPaintFromAnalyticsV3DiskCache(profileID: profileID, generation: generation) {
+            return true
+        }
+
+        if summary == nil {
+            DashboardAnalyticsGRDBProbe.logFallback(reason: "cold_miss_visible_network")
+        }
+
+        let loadResult = try await DashboardAnalyticsV3Loader.load(
+            viewerID: profileID,
+            rpc: rpc,
+            forceNetwork: forceNetwork
+        )
+        guard generation == loadGeneration, !Task.isCancelled else { return true }
+
+        let applied = try DashboardAnalyticsV3Applier.apply(
+            loadResult.bootstrap,
+            expectedViewerID: profileID.rawValue,
+            detailCache: detailCache
+        )
+        analyticsV3Bootstrap = applied.bootstrap
+        analyticsV3Revision = applied.revision
+        apply(trades: [], accounts: applied.accounts, profileID: profileID)
+        if let payout = applied.payoutTotal {
+            payoutTotal = payout
+        }
+        noteTradeHistoryApplied(
+            totalTradeCount: applied.bootstrap.data.aggregatePresets["all"]?.metrics.trade_count,
+            historyComplete: true
+        )
+        hasLoaded = true
+        recompute()
+        phase = .loaded
+        DashboardAnalyticsGRDBProbe.logRender(
+            source: "network",
+            revision: analyticsV3Revision,
+            scope: accountFilterTitle,
+            preset: DashboardAnalyticsMapper.presetKey(for: dateRange),
+            elapsedMs: 0
+        )
+        if case .account = accountFilter {
+            scheduleAccountChartHydration()
+        }
+        #if DEBUG
+        ColdLaunchSummaryProbe.markDashboardFirstRender(source: loadResult.source)
+        #endif
+        DashboardLoadProbe.markFirstUsefulRender()
+        AuthenticatedLaunchPhasing.markCriticalVisibleSurfaceReady(tab: .home)
+        if applied.payoutTotal != nil {
+            DashboardLoadProbe.markFullHydration()
+        }
+        secondaryTask?.cancel()
+        secondaryTask = Task { [weak self] in
+            await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
+            await self?.runSecondaryHydration(
+                profileID: profileID,
+                forceNetwork: forceNetwork,
+                skipPayouts: applied.payoutTotal != nil
+            )
+            if applied.payoutTotal == nil {
+                DashboardLoadProbe.markFullHydration()
+            }
+        }
+        await startRealtime(profileID: profileID)
+        return true
+    }
+
+    @discardableResult
+    private func tryPaintFromAnalyticsV3DiskCache(profileID: ProfileID, generation: UInt64) async -> Bool {
+        if await tryPaintFromGRDBCache(profileID: profileID, generation: generation) {
+            return true
+        }
+        guard let cached = DashboardAnalyticsDiskCache.load(viewerID: profileID) else { return false }
+        do {
+            let applied = try DashboardAnalyticsV3Applier.apply(
+                cached.payload,
+                expectedViewerID: profileID.rawValue,
+                detailCache: detailCache
+            )
+            guard generation == loadGeneration, !Task.isCancelled else { return false }
+            analyticsV3Bootstrap = applied.bootstrap
+            analyticsV3Revision = applied.revision
+            apply(trades: [], accounts: applied.accounts, profileID: profileID)
+            if let payout = applied.payoutTotal {
+                payoutTotal = payout
+            }
+            noteTradeHistoryApplied(
+                totalTradeCount: applied.bootstrap.data.aggregatePresets["all"]?.metrics.trade_count,
+                historyComplete: true
+            )
+            hasLoaded = true
+            recompute()
+            phase = .loaded
+            DashboardAnalyticsGRDBProbe.logRender(
+                source: "json",
+                revision: analyticsV3Revision,
+                scope: accountFilterTitle,
+                preset: DashboardAnalyticsMapper.presetKey(for: dateRange),
+                elapsedMs: 0
+            )
+            #if DEBUG
+            let breakdown = DashboardAnalyticsV3PayloadProbe.measure(applied.bootstrap)
+            DashboardAnalyticsV3PayloadProbe.log(breakdown)
+            DashboardAnalyticsV3Probe.log(
+                source: "disk",
+                reason: "prime",
+                range: DashboardAnalyticsMapper.presetKey(for: dateRange),
+                account: accountFilterTitle,
+                mode: "all_non_backtest",
+                revision: analyticsV3Revision,
+                payloadBytes: breakdown.totalBytes,
+                summaryCount: applied.bootstrap.data.aggregatePresets.count,
+                dailyRows: 0,
+                equityPoints: nil,
+                elapsedMs: nil
+            )
+            #else
+            DashboardAnalyticsV3Probe.log(
+                source: "disk",
+                reason: "prime",
+                range: DashboardAnalyticsMapper.presetKey(for: dateRange),
+                account: accountFilterTitle,
+                mode: "all_non_backtest",
+                revision: analyticsV3Revision,
+                payloadBytes: nil,
+                summaryCount: applied.bootstrap.data.aggregatePresets.count,
+                dailyRows: 0,
+                equityPoints: nil,
+                elapsedMs: nil
+            )
+            #endif
+            #if DEBUG
+            ColdLaunchSummaryProbe.markDashboardFirstRender(source: "disk")
+            #endif
+            DashboardLoadProbe.markFirstUsefulRender()
+            if applied.payoutTotal != nil {
+                DashboardLoadProbe.markFullHydration()
+            }
+            AuthenticatedLaunchPhasing.markCriticalVisibleSurfaceReady(tab: .home)
+            #if DEBUG
+            AnalyticsShadowReadCoordinator.scheduleColdStartProbeIfNeeded(viewerID: profileID)
+            #endif
+            secondaryTask?.cancel()
+            secondaryTask = Task { [weak self] in
+                await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
+                await self?.runSecondaryHydration(
+                    profileID: profileID,
+                    forceNetwork: false,
+                    skipPayouts: applied.payoutTotal != nil
+                )
+            }
+            await SessionNetworkGate.shared.awaitReady()
+            if usesDashboardAnalyticsGRDB {
+                scheduleDashboardGRDBBackgroundReconcile(profileID: profileID, generation: generation)
+            } else if cached.revision != applied.revision {
+                scheduleAnalyticsV3AuthoritativeRefresh(generation: generation)
+            }
+            if case .account(let id) = accountFilter {
+                if await trySeedAccountChartsFromGRDB(
+                    accountID: id,
+                    profileID: profileID,
+                    selectionToken: accountChartSelectionToken
+                ) {
+                    recompute()
+                }
+            }
+            await startRealtime(profileID: profileID)
+            return true
+        } catch {
+            DashboardAnalyticsGRDBProbe.logFallback(reason: "decode_error")
+            return false
+        }
+    }
+
+    private func scheduleAnalyticsV3AuthoritativeRefresh(generation: UInt64) {
+        Task { [weak self] in
+            await SessionNetworkGate.shared.awaitReady()
+            await self?.performLoad(
+                forceNetwork: true,
+                generation: generation,
+                isAuthoritativeFollowUp: true
+            )
+        }
+    }
+
+    private func scheduleAnalyticsV3RefreshAfterMutation() {
+        dashboardGRDBBackgroundReconcileScheduled = false
+        DashboardAnalyticsAccountChartsStore.shared.invalidate()
+        Task { [weak self] in
+            guard let self else { return }
+            loadTask?.cancel()
+            secondaryTask?.cancel()
+            loadGeneration &+= 1
+            let generation = loadGeneration
+            await performLoad(
+                forceNetwork: true,
+                generation: generation,
+                refreshTrigger: .journalMutation
+            )
+        }
+    }
+
     /// Picks 30D → 90D → YTD → All for the current ``accountFilter`` when history is ready.
     private func resolveAutomaticDateRangeIfNeeded() {
         guard pendingAutomaticDateRangeResolution else { return }
@@ -997,6 +1625,18 @@ final class DashboardViewModel {
             return
         }
         guard initialTradeHistoryReady else { return }
+
+        if usesDashboardAnalyticsV3, let bootstrap = analyticsV3Bootstrap {
+            let resolved = DashboardDateRangeFallback.initialEffectiveRange(
+                analyticsBootstrap: bootstrap,
+                accountFilter: accountFilter
+            )
+            pendingAutomaticDateRangeResolution = false
+            if dateRange != resolved {
+                dateRange = resolved
+            }
+            return
+        }
 
         if tradeInputs.isEmpty {
             if authoritativeTotalTradeCount == 0 {
@@ -1021,35 +1661,10 @@ final class DashboardViewModel {
         initialTradeHistoryReady = historyComplete
     }
 
-    /// Re-fetch owner trades when a stale dashboard cache blocked initial date-range resolution.
-    private func refreshAuthoritativeTradeHistory(profileID: ProfileID, generation: UInt64) async {
+    /// Extends owner trade history via the dedicated trades path — never a second full dashboard bootstrap.
+    private func refreshExtendedOwnerTradesIfNeeded(profileID: ProfileID, generation: UInt64) async {
         guard generation == loadGeneration, pendingAutomaticDateRangeResolution else { return }
-
-        if BackendV2FeatureFlags.isEnabled(.dashboard), let rpc {
-            do {
-                let loadResult = try await DashboardBootstrapLoader.load(
-                    viewerID: profileID,
-                    rpc: rpc,
-                    detailCache: detailCache,
-                    forceNetwork: true,
-                    loadGeneration: generation,
-                    currentGeneration: { [weak self] in self?.loadGeneration ?? 0 }
-                )
-                guard generation == loadGeneration, !Task.isCancelled, pendingAutomaticDateRangeResolution else {
-                    return
-                }
-                let v2 = loadResult.applied
-                apply(trades: v2.trades, accounts: v2.accounts, profileID: profileID)
-                noteTradeHistoryApplied(
-                    totalTradeCount: v2.totalTradeCount,
-                    historyComplete: v2.tradeHistoryComplete
-                )
-                recompute()
-            } catch {
-                // Preserve current presentation — non-fatal.
-            }
-            return
-        }
+        guard !initialTradeHistoryReady else { return }
 
         do {
             let page = try await bootstrapTrades(profileID: profileID, forceNetwork: true)
@@ -1058,9 +1673,10 @@ final class DashboardViewModel {
             }
             let fetchedAccounts = try await bootstrapAccounts(profileID: profileID, forceNetwork: false)
             apply(trades: page.items, accounts: fetchedAccounts, profileID: profileID)
+            let complete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
             noteTradeHistoryApplied(
-                totalTradeCount: page.items.count,
-                historyComplete: true
+                totalTradeCount: authoritativeTotalTradeCount ?? page.items.count,
+                historyComplete: complete
             )
             recompute()
         } catch {
@@ -1282,6 +1898,178 @@ final class DashboardViewModel {
         guard let realtimeHub, let channel = watchedChannel else { return }
         try? await realtimeHub.subscriptions.unsubscribe(channel)
         watchedChannel = nil
+    }
+
+    // MARK: - Dashboard GRDB-first (Phase 5F)
+
+    @discardableResult
+    private func tryPaintFromGRDBCache(profileID: ProfileID, generation: UInt64) async -> Bool {
+        guard usesDashboardAnalyticsGRDB else { return false }
+        let diskBlob = DashboardAnalyticsDiskCache.load(viewerID: profileID)
+        let sessionAccounts =
+            SessionAccountsStore.shared.cached(for: profileID)
+            ?? detailCache.accounts(for: profileID)
+            ?? []
+        let presentation = await DashboardAnalyticsGRDBLoader.loadPresentation(
+            viewerID: profileID,
+            diskEnvelope: diskBlob?.payload,
+            sessionAccounts: sessionAccounts
+        )
+        guard presentation.canRender, let bootstrap = presentation.bootstrap else {
+            let reason: String = switch presentation.readState {
+            case .missing: "missing"
+            case .partial: "partial"
+            case .stale: "stale"
+            case .available: "other"
+            }
+            DashboardAnalyticsGRDBProbe.logFallback(reason: reason)
+            return false
+        }
+        do {
+            let applied = try DashboardAnalyticsV3Applier.apply(
+                bootstrap,
+                expectedViewerID: profileID.rawValue,
+                detailCache: detailCache
+            )
+            guard generation == loadGeneration, !Task.isCancelled else { return false }
+            analyticsV3Bootstrap = applied.bootstrap
+            analyticsV3Revision = applied.revision
+            apply(trades: [], accounts: applied.accounts, profileID: profileID)
+            if let payout = applied.payoutTotal {
+                payoutTotal = payout
+            }
+            noteTradeHistoryApplied(
+                totalTradeCount: applied.bootstrap.data.aggregatePresets["all"]?.metrics.trade_count,
+                historyComplete: true
+            )
+            hasLoaded = true
+            recompute()
+            phase = .loaded
+            DashboardAnalyticsGRDBProbe.logRender(
+                source: "grdb",
+                revision: analyticsV3Revision,
+                scope: accountFilterTitle,
+                preset: DashboardAnalyticsMapper.presetKey(for: dateRange),
+                elapsedMs: presentation.elapsedMs
+            )
+            DashboardLoadProbe.markFirstUsefulRender()
+            if applied.payoutTotal != nil {
+                DashboardLoadProbe.markFullHydration()
+            }
+            AuthenticatedLaunchPhasing.markCriticalVisibleSurfaceReady(tab: .home)
+            #if DEBUG
+            ColdLaunchSummaryProbe.markDashboardFirstRender(source: "grdb")
+            #endif
+            secondaryTask?.cancel()
+            secondaryTask = Task { [weak self] in
+                await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
+                await self?.runSecondaryHydration(
+                    profileID: profileID,
+                    forceNetwork: false,
+                    skipPayouts: applied.payoutTotal != nil
+                )
+            }
+            if case .account(let id) = accountFilter {
+                _ = await trySeedAccountChartsFromGRDB(
+                    accountID: id,
+                    profileID: profileID,
+                    selectionToken: accountChartSelectionToken
+                )
+                recompute()
+            }
+            scheduleDashboardGRDBBackgroundReconcile(profileID: profileID, generation: generation)
+            await startRealtime(profileID: profileID)
+            return true
+        } catch {
+            DashboardAnalyticsGRDBProbe.logFallback(reason: "decode_error")
+            return false
+        }
+    }
+
+    @discardableResult
+    private func trySeedAccountChartsFromGRDB(
+        accountID: TradingAccountID,
+        profileID: ProfileID,
+        selectionToken: UInt64
+    ) async -> Bool {
+        guard usesDashboardAnalyticsGRDB else { return false }
+        guard selectionToken == accountChartSelectionToken else { return false }
+        guard let read = await DashboardAnalyticsGRDBLoader.loadAccountCharts(
+            viewerID: profileID,
+            accountID: accountID,
+            revision: analyticsV3Revision
+        ) else {
+            DashboardAnalyticsGRDBProbe.logFallback(reason: "database_error")
+            return false
+        }
+        let stateLabel: String = switch read.state {
+        case .available: "available"
+        case .stale: "stale"
+        case .partial: "partial"
+        case .missing: "missing"
+        }
+        DashboardAnalyticsGRDBProbe.logAccountCharts(
+            account: accountID.rawValue,
+            state: stateLabel,
+            revision: read.requiredRevision
+        )
+        guard read.state == .available, !read.presets.isEmpty else { return false }
+        DashboardAnalyticsAccountChartsStore.shared.seed(
+            accountID: accountID,
+            revision: analyticsV3Revision,
+            presets: read.presets
+        )
+        DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "account_charts_local")
+        return true
+    }
+
+    private func scheduleDashboardGRDBBackgroundReconcile(profileID: ProfileID, generation: UInt64) {
+        guard usesDashboardAnalyticsGRDB, !dashboardGRDBBackgroundReconcileScheduled else { return }
+        dashboardGRDBBackgroundReconcileScheduled = true
+        Task {
+            await reconcileDashboardAnalyticsV3Background(profileID: profileID, generation: generation)
+        }
+    }
+
+    private func reconcileDashboardAnalyticsV3Background(
+        profileID: ProfileID,
+        generation: UInt64
+    ) async {
+        guard usesDashboardAnalyticsV3, let rpc else { return }
+        guard generation == loadGeneration, !Task.isCancelled else { return }
+        let localRevision = analyticsV3Revision
+        do {
+            let loadResult = try await DashboardAnalyticsV3Loader.load(
+                viewerID: profileID,
+                rpc: rpc,
+                forceNetwork: true
+            )
+            guard generation == loadGeneration, !Task.isCancelled else { return }
+            let serverRevision = loadResult.bootstrap.data.revisionInt
+            let changed = serverRevision != localRevision
+            DashboardAnalyticsGRDBProbe.logReconcile(
+                localRevision: localRevision,
+                serverRevision: serverRevision,
+                changed: changed
+            )
+            guard changed else { return }
+            let applied = try DashboardAnalyticsV3Applier.apply(
+                loadResult.bootstrap,
+                expectedViewerID: profileID.rawValue,
+                detailCache: detailCache
+            )
+            analyticsV3Bootstrap = applied.bootstrap
+            analyticsV3Revision = applied.revision
+            if let payout = applied.payoutTotal {
+                payoutTotal = payout
+            }
+            recompute()
+            if case .account = accountFilter {
+                scheduleAccountChartHydration()
+            }
+        } catch {
+            // Preserve GRDB/JSON presentation when background reconcile fails.
+        }
     }
 
     // MARK: - Format

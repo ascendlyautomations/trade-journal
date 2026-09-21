@@ -7,13 +7,20 @@ final class FeedPersistentCacheTests: XCTestCase {
     private let viewerB = ProfileID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
     private let blockedPeer = ProfileID("dddddddd-dddd-dddd-dddd-dddddddddddd")
 
+    override func setUp() {
+        super.setUp()
+        FeedPersistedCacheTestHooks.forceSynchronousDiskWrites = true
+    }
+
     override func tearDown() {
-        FeedPersistedCacheCoordinator.clearAll()
-        FeedSessionStore.shared.invalidate()
-        FeedBlockedAuthorsFilter.shared.clear()
+        FeedPersistedCacheCoordinator.flushPendingDiskWritesForTesting()
+        FeedPersistedCacheTestHooks.forceSynchronousDiskWrites = false
         #if DEBUG
         FeedPersistentCacheProbe.resetForTesting()
         #endif
+        FeedPersistedCacheCoordinator.clearAll()
+        FeedSessionStore.shared.invalidate()
+        FeedBlockedAuthorsFilter.shared.clear()
         super.tearDown()
     }
 
@@ -28,7 +35,7 @@ final class FeedPersistentCacheTests: XCTestCase {
             nextCursor: "cursor-2"
         )
 
-        FeedSessionStore.shared.invalidate()
+        FeedSessionStore.shared.dropMemorySnapshots(viewerID: viewerA)
         XCTAssertTrue(
             FeedPersistedCacheCoordinator.hydrateSessionStore(viewerID: viewerA)
         )
@@ -295,6 +302,6 @@ final class FeedPersistentCacheTests: XCTestCase {
             commentCount: 0,
             viewerHasLiked: false
         )
-        return .trade(item, trade)
+        return .trade(item, TradeSummaryMapper.summary(fromPartialListTrade: trade))
     }
 }

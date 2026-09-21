@@ -84,20 +84,30 @@ final class FeedSessionStore {
         }
     }
 
+    /// In-memory snapshots only — preserves on-disk feed pages (warm relaunch / unit tests).
+    func dropMemorySnapshots(viewerID: ProfileID? = nil) {
+        if let viewerID {
+            let prefix = viewerID.rawValue + "|"
+            snapshots = snapshots.filter { !$0.key.hasPrefix(prefix) }
+        } else {
+            snapshots = [:]
+        }
+    }
+
     struct SharedContentSeed: Sendable {
         var item: FeedItem
-        var trade: Trade?
+        var tradeSummary: TradeSummary?
         var post: Post?
         var reel: Reel?
         var achievement: Achievement?
 
         var syntheticFeedPost: Post {
             let caption = item.caption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let body = caption.isEmpty ? (trade?.publicCaption ?? "") : caption
+            let body = caption.isEmpty ? (tradeSummary?.publicCaption ?? tradeSummary?.notePreview ?? "") : caption
             let media: [MediaReference]
             if let url = item.mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines), !url.isEmpty {
                 media = [MediaReference(id: url, kind: .image, altText: nil)]
-            } else if let thumb = trade?.thumbnail {
+            } else if let thumb = tradeSummary?.thumbnail {
                 media = [thumb]
             } else {
                 media = []
@@ -107,8 +117,8 @@ final class FeedSessionStore {
                 authorProfileID: item.authorProfileID,
                 body: body,
                 media: media,
-                visibility: trade?.visibility ?? .public,
-                linkedTradeID: trade?.id,
+                visibility: tradeSummary?.visibility ?? .public,
+                linkedTradeID: tradeSummary?.id,
                 isPinned: false,
                 createdAt: item.createdAt,
                 updatedAt: item.createdAt
@@ -129,12 +139,12 @@ final class FeedSessionStore {
         return nil
     }
 
-    func lookupTrade(id: TradeID, viewerID: ProfileID) -> Trade? {
+    func lookupTradeSummary(id: TradeID, viewerID: ProfileID) -> TradeSummary? {
         let prefix = "\(viewerID.rawValue)|"
         for snapshot in snapshots.values where snapshot.cacheKey.hasPrefix(prefix) {
             for entry in snapshot.entries {
-                if case .trade(_, let trade) = entry, trade.id == id {
-                    return trade
+                if case .trade(_, let summary) = entry, summary.id == id {
+                    return summary
                 }
             }
         }
@@ -143,18 +153,18 @@ final class FeedSessionStore {
 
     private func match(entry: FeedTimelineEntry, reference: SharedContentReference) -> SharedContentSeed? {
         switch (reference, entry) {
-        case (.feedPost(let id), .trade(let item, let trade)) where PostID(item.id) == id:
-            return SharedContentSeed(item: item, trade: trade, post: nil, reel: nil, achievement: nil)
+        case (.feedPost(let id), .trade(let item, let summary)) where PostID(item.id) == id:
+            return SharedContentSeed(item: item, tradeSummary: summary, post: nil, reel: nil, achievement: nil)
         case (.feedPost(let id), .post(let item, let post)) where post.id == id:
-            return SharedContentSeed(item: item, trade: nil, post: post, reel: nil, achievement: nil)
+            return SharedContentSeed(item: item, tradeSummary: nil, post: post, reel: nil, achievement: nil)
         case (.profilePost(let id), .post(let item, let post)) where post.id == id:
-            return SharedContentSeed(item: item, trade: nil, post: post, reel: nil, achievement: nil)
+            return SharedContentSeed(item: item, tradeSummary: nil, post: post, reel: nil, achievement: nil)
         case (.reel(let id), .clip(let item, let reel)) where reel.id == id:
-            return SharedContentSeed(item: item, trade: nil, post: nil, reel: reel, achievement: nil)
+            return SharedContentSeed(item: item, tradeSummary: nil, post: nil, reel: reel, achievement: nil)
         case (.achievementPost(let id), .achievement(let item, let achievement)) where PostID(item.id) == id:
-            return SharedContentSeed(item: item, trade: nil, post: nil, reel: nil, achievement: achievement)
-        case (.trade(let id), .trade(_, let trade)) where trade.id == id:
-            return SharedContentSeed(item: entry.item, trade: trade, post: nil, reel: nil, achievement: nil)
+            return SharedContentSeed(item: item, tradeSummary: nil, post: nil, reel: nil, achievement: achievement)
+        case (.trade(let id), .trade(_, let summary)) where summary.id == id:
+            return SharedContentSeed(item: entry.item, tradeSummary: summary, post: nil, reel: nil, achievement: nil)
         default:
             return nil
         }

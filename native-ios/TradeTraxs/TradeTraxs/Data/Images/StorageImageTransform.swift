@@ -7,10 +7,13 @@ import Foundation
 nonisolated enum StorageImageTransform {
     /// Bump when feed render query params change so image caches miss stale cropped bytes.
     static let feedDisplayCacheRevision = 2
+    /// Bump when profile grid render params change.
+    static let profileGridCacheRevision = 1
 
     enum Preset: Sendable {
         case avatar
         case feedThumb
+        case profileCompact
         case feedDetail
         case story
         case reelThumb
@@ -63,6 +66,12 @@ nonisolated enum StorageImageTransform {
                 // Downscale only — default `cover` center-crops when only width is set.
                 URLQueryItem(name: "resize", value: "contain"),
             ]
+        case .profileCompact:
+            query = [
+                URLQueryItem(name: "width", value: "256"),
+                URLQueryItem(name: "quality", value: "70"),
+                URLQueryItem(name: "resize", value: "contain"),
+            ]
         case .feedDetail:
             query = [
                 URLQueryItem(name: "width", value: "1280"),
@@ -98,6 +107,13 @@ nonisolated enum StorageImageTransform {
             case .tradeScreenshot, .postImage: return .feedDetail
             case .storyMedia: return .story
             case .reelThumbnail: return .reelThumb
+            }
+        case .profileGrid:
+            switch purpose {
+            case .profileAvatar: return .avatar
+            case .tradeScreenshot, .postImage: return .profileCompact
+            case .storyMedia: return .story
+            case .reelThumbnail: return .profileCompact
             }
         case .feedDisplay:
             switch purpose {

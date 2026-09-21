@@ -13,6 +13,7 @@ enum FeedImagePrefetch {
         currentEntryID: String,
         pipeline: any ImagePipeline
     ) {
+        guard FeedImageViewportReadiness.allowsPrefetch else { return }
         guard let index = entries.firstIndex(where: { $0.id == currentEntryID }) else { return }
         let requests = entries
             .dropFirst(index + 1)
@@ -31,6 +32,8 @@ enum FeedImagePrefetch {
                     #endif
                     return
                 }
+                await FeedPrefetchScheduler.waitForBackgroundCapacity()
+                if Task.isCancelled || token != generation { return }
                 if await pipeline.cachedImageData(for: request) != nil {
                     continue
                 }
@@ -47,14 +50,15 @@ enum FeedImagePrefetch {
 
     static func imageRequest(for entry: FeedTimelineEntry) -> ImageRequest? {
         switch entry {
-        case .trade(_, let trade):
-            guard let reference = trade.thumbnail else { return nil }
+        case .trade(_, let summary):
+            guard let reference = summary.thumbnail else { return nil }
             return ImageRequest(
                 reference: reference,
                 purpose: .tradeScreenshot,
                 allowsProgressiveLoading: true,
                 deliveryQuality: .feedDisplay,
-                auditSurface: "feed"
+                auditSurface: "feed",
+                isSpeculativePrefetch: true
             )
 
         case .post(_, let post):
@@ -66,7 +70,8 @@ enum FeedImagePrefetch {
                 purpose: .postImage,
                 allowsProgressiveLoading: true,
                 deliveryQuality: .feedDisplay,
-                auditSurface: "feed"
+                auditSurface: "feed",
+                isSpeculativePrefetch: true
             )
 
         case .achievement(_, let achievement):
@@ -76,7 +81,8 @@ enum FeedImagePrefetch {
                 purpose: .postImage,
                 allowsProgressiveLoading: true,
                 deliveryQuality: .feedDisplay,
-                auditSurface: "feed"
+                auditSurface: "feed",
+                isSpeculativePrefetch: true
             )
 
         case .clip(_, let reel):
@@ -86,7 +92,8 @@ enum FeedImagePrefetch {
                 purpose: .reelThumbnail,
                 allowsProgressiveLoading: true,
                 deliveryQuality: .feedDisplay,
-                auditSurface: "feed"
+                auditSurface: "feed",
+                isSpeculativePrefetch: true
             )
         }
     }

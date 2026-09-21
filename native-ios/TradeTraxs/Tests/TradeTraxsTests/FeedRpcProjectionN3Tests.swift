@@ -16,7 +16,9 @@ final class FeedRpcProjectionN3Tests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(seed.trades, 1)
         XCTAssertGreaterThanOrEqual(seed.posts, 1)
-        XCTAssertNotNil(cache.trade(id: TradeID("dddddddd-dddd-dddd-dddd-dddddddddddd")))
+        let tradeID = TradeID("dddddddd-dddd-dddd-dddd-dddddddddddd")
+        XCTAssertNotNil(cache.trade(id: tradeID))
+        XCTAssertNil(cache.authoritativeDetail(id: tradeID))
 
         let applied = FeedBootstrapApplier.apply(bootstrap)
         let entries = FeedBootstrap.buildEntriesFromSeededItems(applied.items, detailCache: cache)
