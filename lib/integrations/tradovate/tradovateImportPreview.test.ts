@@ -129,6 +129,31 @@ describe("Tradovate import preview (review path)", () => {
     assert.equal(previews[0]!.pnl, 21)
   })
 
+  it("preview pnl falls back to gross when lifecycle fees are UNAVAILABLE", () => {
+    const previews = buildTradovateImportPreviewTrades({
+      completed: [mnqShort],
+      contracts: new Map([["4399654", { symbolRoot: "MNQ", valuePerPoint: 2 }]]),
+      feesByFillId: new Map([
+        [
+          "f1",
+          {
+            totals: { clearingFee: 0, exchangeFee: 0, nfaFee: 0, commission: 0 },
+            availability: "UNAVAILABLE",
+          },
+        ],
+        [
+          "f2",
+          {
+            totals: { clearingFee: 0, exchangeFee: 0, nfaFee: 0, commission: 0 },
+            availability: "UNAVAILABLE",
+          },
+        ],
+      ]),
+    })
+    assert.equal(previews[0]!.grossPnl, 22)
+    assert.equal(previews[0]!.pnl, 22)
+  })
+
   it("serialization boundary keeps pnl field", () => {
     const previews = buildTradovateImportPreviewTrades({
       completed: [mnqShort],

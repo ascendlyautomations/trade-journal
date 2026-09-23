@@ -5,7 +5,7 @@ import {
 } from "./tradovateBrokerTradeFinancials.ts"
 import type { ReconstructedLifecycleTrade } from "./tradeReconstruction.ts"
 
-/** Wire shape for Review Imported Trades — same financial projection as persist. */
+/** Wire shape for Review Imported Trades (financial projection matches persist except preview `pnl`; see builder). */
 export type TradovateImportPreviewTrade = {
   lifecycleKey: string
   contractId: string
@@ -57,7 +57,8 @@ export function buildTradovateImportPreviewTrades(params: {
       entryTime: lifecycle.entryTime,
       exitTime: lifecycle.exitTime,
       points: lifecycle.points,
-      pnl: financials.netPnL,
+      // Review UI: show gross when net is unknown (Phase 3 UNAVAILABLE fees). Journal persist keeps net-only authority.
+      pnl: financials.netPnL ?? financials.grossPnL,
       grossPnl: financials.grossPnL,
       fees: financials.fees,
     }
