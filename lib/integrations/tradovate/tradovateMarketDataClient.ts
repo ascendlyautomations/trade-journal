@@ -9,6 +9,10 @@ import type {
   TradovateOrderRaw,
   TradovateProductRaw,
 } from "@/lib/integrations/tradovate/tradovateFillModels"
+import type {
+  TradovateFillPairRaw,
+  TradovatePositionRaw,
+} from "@/lib/integrations/tradovate/tradovateFillPairModels"
 
 const ID_BATCH = 40
 
@@ -53,6 +57,63 @@ export async function fetchTradovateFillList(
   )
   if (!Array.isArray(body)) return []
   return body.filter((row) => row && typeof row === "object") as TradovateFillRaw[]
+}
+
+/** Official Tradovate REST: GET /v1/order/deps?masterid={accountId} */
+export async function fetchTradovateOrdersByAccountDeps(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string,
+  accountId: string
+): Promise<TradovateOrderRaw[]> {
+  const masterid = encodeURIComponent(String(accountId).trim())
+  const body = await tradovateAuthedJsonRequest<unknown>(
+    supabase,
+    userId,
+    connectionId,
+    `/v1/order/deps?masterid=${masterid}`
+  )
+  if (!Array.isArray(body)) return []
+  return body.filter((row) => row && typeof row === "object") as TradovateOrderRaw[]
+}
+
+export async function fetchTradovateFillsByOrderIdsLdeps(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string,
+  orderIds: string[]
+): Promise<{ fills: TradovateFillRaw[]; batchErrors: string[] }> {
+  const { TRADOVATE_LDEPS_BATCH_SIZE } = await import("./tradovateFillAcquisitionCore.ts")
+  const unique = [...new Set(orderIds.filter(Boolean))]
+  const fills: TradovateFillRaw[] = []
+  const batchErrors: string[] = []
+  const BATCH = TRADOVATE_LDEPS_BATCH_SIZE
+
+  for (let i = 0; i < unique.length; i += BATCH) {
+    const batch = unique.slice(i, i + BATCH)
+    const path = `/v1/fill/ldeps?masterids=${idsQuery(batch)}`
+    try {
+      const rows = await tradovateAuthedJsonRequest<unknown>(
+        supabase,
+        userId,
+        connectionId,
+        path
+      )
+      if (!Array.isArray(rows)) {
+        batchErrors.push(`batch_${i / BATCH}:non_array_response`)
+        continue
+      }
+      for (const row of rows) {
+        if (row && typeof row === "object") fills.push(row as TradovateFillRaw)
+      }
+    } catch (err) {
+      const detail =
+        err instanceof Error ? err.message.slice(0, 160) : "batch_request_failed"
+      batchErrors.push(`batch_${i / BATCH}:${detail}`)
+    }
+  }
+
+  return { fills, batchErrors }
 }
 
 /** Official Tradovate REST: GET /v1/order/list (Order entities — includes accountId). */
@@ -129,6 +190,96 @@ export async function fetchTradovateProductsByIds(
     "product",
     productIds
   )
+}
+
+/** Official Tradovate REST: GET /v1/fillPair/list */
+export async function fetchTradovateFillPairList(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string
+): Promise<TradovateFillPairRaw[]> {
+  const body = await tradovateAuthedJsonRequest<unknown>(
+    supabase,
+    userId,
+    connectionId,
+    "/v1/fillPair/list"
+  )
+  if (!Array.isArray(body)) return []
+  return body.filter((row) => row && typeof row === "object") as TradovateFillPairRaw[]
+}
+
+export async function fetchTradovateFillPairsByIds(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string,
+  fillPairIds: string[]
+): Promise<TradovateFillPairRaw[]> {
+  return fetchItems<TradovateFillPairRaw>(
+    supabase,
+    userId,
+    connectionId,
+    "fillPair",
+    fillPairIds
+  )
+}
+
+/** GET /v1/position/deps?masterid={accountId} */
+export async function fetchTradovatePositionsByAccountDeps(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string,
+  accountId: string
+): Promise<TradovatePositionRaw[]> {
+  const masterid = encodeURIComponent(String(accountId).trim())
+  const body = await tradovateAuthedJsonRequest<unknown>(
+    supabase,
+    userId,
+    connectionId,
+    `/v1/position/deps?masterid=${masterid}`
+  )
+  if (!Array.isArray(body)) return []
+  return body.filter((row) => row && typeof row === "object") as TradovatePositionRaw[]
+}
+
+export async function fetchTradovateFillPairsByPositionIdsLdeps(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string,
+  positionIds: string[]
+): Promise<{ pairs: TradovateFillPairRaw[]; batchErrors: string[] }> {
+  const { TRADOVATE_LDEPS_BATCH_SIZE } = await import(
+    "./tradovateFillAcquisitionCore.ts"
+  )
+  const unique = [...new Set(positionIds.filter(Boolean))]
+  const pairs: TradovateFillPairRaw[] = []
+  const batchErrors: string[] = []
+  const BATCH = TRADOVATE_LDEPS_BATCH_SIZE
+
+  for (let i = 0; i < unique.length; i += BATCH) {
+    const batch = unique.slice(i, i + BATCH)
+    const path = `/v1/fillPair/ldeps?masterids=${idsQuery(batch)}`
+    try {
+      const rows = await tradovateAuthedJsonRequest<unknown>(
+        supabase,
+        userId,
+        connectionId,
+        path
+      )
+      if (!Array.isArray(rows)) {
+        batchErrors.push(`batch_${i / BATCH}:non_array_response`)
+        continue
+      }
+      for (const row of rows) {
+        if (row && typeof row === "object") pairs.push(row as TradovateFillPairRaw)
+      }
+    } catch (err) {
+      const detail =
+        err instanceof Error ? err.message.slice(0, 160) : "batch_request_failed"
+      batchErrors.push(`batch_${i / BATCH}:${detail}`)
+    }
+  }
+
+  return { pairs, batchErrors }
 }
 
 /** Official Tradovate REST: GET /v1/fillFee/ldeps?masterids=… */
@@ -259,7 +410,7 @@ export async function resolveTradovateContracts(
     resolved.set(contractId, {
       contractId,
       contractName,
-      symbolRoot: resolvedRoot || contractId,
+      symbolRoot: resolvedRoot || "",
       valuePerPoint,
     })
   }

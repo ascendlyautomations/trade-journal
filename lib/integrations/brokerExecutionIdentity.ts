@@ -56,7 +56,7 @@ export const BROKER_EXECUTION_EXTENDED_RECONSTRUCTION_SELECT =
 
 /** Tradovate reconstruction + persisted contract hints on the execution ledger. */
 export const BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT =
-  BROKER_EXECUTION_EXTENDED_RECONSTRUCTION_SELECT
+  "external_fill_id, external_contract_id, side, quantity, price, executed_at, symbol_root, contract_name, provider_metadata" as const
 
 /** Reconstruction columns plus Rithmic contract metadata from the execution ledger. */
 export const BROKER_EXECUTION_RITHMIC_RECONSTRUCTION_SELECT =
@@ -65,6 +65,8 @@ export const BROKER_EXECUTION_RITHMIC_RECONSTRUCTION_SELECT =
 export type BrokerExecutionReconstructionSelect =
   | typeof BROKER_EXECUTION_RECONSTRUCTION_SELECT
   | typeof BROKER_EXECUTION_EXTENDED_RECONSTRUCTION_SELECT
+  | typeof BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT
+  | typeof BROKER_EXECUTION_RITHMIC_RECONSTRUCTION_SELECT
 
 /** Projection of `broker_integration_executions` used by fill reconstruction. */
 export type BrokerExecutionReconstructionRow = {
@@ -86,6 +88,7 @@ export type BrokerExecutionTradovateReconstructionRow =
   BrokerExecutionReconstructionRow & {
     symbol_root: string | null
     contract_name: string | null
+    provider_metadata?: unknown
   }
 
 type ListBrokerExecutionsBaseParams = {
@@ -123,7 +126,13 @@ function isBrokerExecutionRithmicReconstructionRow(
 function isBrokerExecutionTradovateReconstructionRow(
   row: unknown
 ): row is BrokerExecutionTradovateReconstructionRow {
-  return isBrokerExecutionRithmicReconstructionRow(row)
+  return (
+    isBrokerExecutionRithmicReconstructionRow(row) &&
+    (!("provider_metadata" in (row as object)) ||
+      (row as BrokerExecutionTradovateReconstructionRow).provider_metadata ===
+        undefined ||
+      (row as BrokerExecutionTradovateReconstructionRow).provider_metadata != null)
+  )
 }
 
 async function fetchBrokerExecutionsForExternalAccount(
@@ -195,7 +204,7 @@ export async function listBrokerExecutionsForExternalAccount(
     params,
     params.select
   )
-  if (params.select === BROKER_EXECUTION_EXTENDED_RECONSTRUCTION_SELECT) {
+  if (params.select.includes("symbol_root")) {
     return rows.filter(isBrokerExecutionTradovateReconstructionRow)
   }
   return rows.filter(isBrokerExecutionReconstructionRow)

@@ -9,9 +9,19 @@ export const TRACED_MGC_FILL_IDS = [
   "660290950290",
 ] as const
 
-export const TRADOVATE_SYNC_VERSION_MARKER = "missingOrderHydration=v2"
+export const TRADOVATE_SYNC_VERSION_MARKER =
+  "missingOrderHydration=v2,fillAcquisition=v2,metadata=v2,fillPairValidation=v1"
 
 const tracedFillIdSet = new Set<string>(TRACED_MGC_FILL_IDS)
+
+/** Investigation fill trace — off in production unless TRADOVATE_FILL_TRACE=1. */
+export function isTradovateFillTraceEnabled(): boolean {
+  return process.env.TRADOVATE_FILL_TRACE === "1"
+}
+
+function whenFillTraceEnabled(run: () => void): void {
+  if (isTradovateFillTraceEnabled()) run()
+}
 
 export function isTradovateTracedFillId(fillId: string): boolean {
   return tracedFillIdSet.has(String(fillId).trim())
@@ -27,12 +37,14 @@ type TraceFields = Record<
 >
 
 export function logTradovateFillTrace(fields: TraceFields): void {
-  const parts = ["[TradovateFillTrace]"]
-  for (const [key, value] of Object.entries(fields)) {
-    if (value === undefined) continue
-    parts.push(`${key}=${value === null ? "null" : String(value)}`)
-  }
-  console.info(parts.join(" "))
+  whenFillTraceEnabled(() => {
+    const parts = ["[TradovateFillTrace]"]
+    for (const [key, value] of Object.entries(fields)) {
+      if (value === undefined) continue
+      parts.push(`${key}=${value === null ? "null" : String(value)}`)
+    }
+    console.info(parts.join(" "))
+  })
 }
 
 function fillRowById(
@@ -67,19 +79,22 @@ export function traceTradovateFillListStage(params: {
   mappingId: string
   fillsRaw: TradovateFillRaw[]
 }): void {
-  const window = fillListWindow(params.fillsRaw)
-  logTradovateSyncVersionMarker()
-  console.info(
-    [
-      "[TradovateFillTrace]",
-      "stage=fill_list_window",
-      `rawFillCount=${window.rawFillCount}`,
-      `earliestFillTimestamp=${window.earliestFillTimestamp ?? "null"}`,
-      `latestFillTimestamp=${window.latestFillTimestamp ?? "null"}`,
-      `targetAccountId=${params.targetAccountId}`,
-      `mappingId=${params.mappingId}`,
-    ].join(" ")
-  )
+  if (!isTradovateFillTraceEnabled()) return
+  whenFillTraceEnabled(() => {
+    const window = fillListWindow(params.fillsRaw)
+    logTradovateSyncVersionMarker()
+    console.info(
+      [
+        "[TradovateFillTrace]",
+        "stage=fill_list_window",
+        `rawFillCount=${window.rawFillCount}`,
+        `earliestFillTimestamp=${window.earliestFillTimestamp ?? "null"}`,
+        `latestFillTimestamp=${window.latestFillTimestamp ?? "null"}`,
+        `targetAccountId=${params.targetAccountId}`,
+        `mappingId=${params.mappingId}`,
+      ].join(" ")
+    )
+  })
 
   for (const fillId of TRACED_MGC_FILL_IDS) {
     const row = fillRowById(params.fillsRaw, fillId)
@@ -104,6 +119,7 @@ export function traceTradovateOrderAndFilterStage(params: {
   hydratedOrders: TradovateOrderRaw[]
   accountFillIds: Set<string>
 }): void {
+  if (!isTradovateFillTraceEnabled()) return
   const hydratedOrderIds = new Set(
     params.hydratedOrders
       .filter((o) => o.id != null)
@@ -206,6 +222,7 @@ export async function traceTradovateExecutionLedgerAfterPersist(params: {
   mappingId: string
   targetAccountId: string
 }): Promise<void> {
+  if (!isTradovateFillTraceEnabled()) return
   const { data, error } = await params.supabase
     .from("broker_integration_executions")
     .select(
@@ -254,6 +271,7 @@ export function traceTradovateReconstructionLoad(params: {
   reconstructionExecutionCount: number
   reconstructionFillIds: Set<string>
 }): void {
+  if (!isTradovateFillTraceEnabled()) return
   console.info(
     [
       "[TradovateFillTrace]",
@@ -305,6 +323,7 @@ export function traceTradovateReconstructionResult(params: {
   targetAccountId: string
   completed: Array<{ lifecycleKey: string; fillIds: string[] }>
 }): void {
+  if (!isTradovateFillTraceEnabled()) return
   for (const fillId of TRACED_MGC_FILL_IDS) {
     const lifecycle = params.completed.find((t) => t.fillIds.includes(fillId))
     logTradovateFillTrace({
@@ -324,6 +343,7 @@ export async function traceTradovateFinalTradeIds(params: {
   targetAccountId: string
   completed: Array<{ lifecycleKey: string; fillIds: string[] }>
 }): Promise<void> {
+  if (!isTradovateFillTraceEnabled()) return
   for (const fillId of TRACED_MGC_FILL_IDS) {
     const lifecycle = params.completed.find((t) => t.fillIds.includes(fillId))
     if (!lifecycle) {

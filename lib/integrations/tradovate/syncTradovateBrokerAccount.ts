@@ -9,18 +9,34 @@ import {
   tradovateSide,
 } from "@/lib/integrations/tradovate/tradovateFillModels"
 import {
-  fetchTradovateFillFeesForFillIds,
-  fetchTradovateFillList,
-  fetchTradovateOrderList,
-  fetchTradovateOrdersByIds,
-  resolveTradovateContracts,
-} from "@/lib/integrations/tradovate/tradovateMarketDataClient"
+  acquireTradovateFillsForAccount,
+  logTradovateFillAcquisitionSummary,
+} from "@/lib/integrations/tradovate/tradovateFillAcquisition"
+import { acquireTradovateFillPairsForAccount } from "@/lib/integrations/tradovate/tradovateFillPairAcquisition"
 import {
-  buildTradovateOrderAccountMap,
-  filterParsedTradovateFillsForAccount,
-  mergeTradovateOrderAccountMap,
-  missingOrderIdsForTradovateFills,
-} from "@/lib/integrations/tradovate/tradovateOrderAccountMap"
+  reconcileTradovateFinancials,
+  logTradovateFinancialReconciliation,
+} from "@/lib/integrations/tradovate/tradovateFinancialReconciliationCore"
+import type { TradovateLedgerFillContext } from "@/lib/integrations/tradovate/tradovateFillPairCore"
+import {
+  providerMetadataWithPersistedFillFee,
+  resolveTradovateFillFeesForSync,
+} from "@/lib/integrations/tradovate/tradovateFillFeeCoverage"
+import {
+  executionHintToMetadataSnapshot,
+  logTradovateContractResolutionSummary,
+  logTradovateContractUnresolved,
+  mergeTradovateContractMetadataSnapshots,
+  resolveTradovateContractMetadataBatch,
+  resolvedSnapshotToMarketContract,
+  unresolvedTradovateContractSnapshot,
+  type TradovateContractResolutionStats,
+} from "@/lib/integrations/tradovate/tradovateContractResolution"
+import { computeTradovateBrokerTradeFinancials } from "@/lib/integrations/tradovate/tradovateBrokerTradeFinancials"
+import {
+  mergeTradovateProviderMetadataContractFields,
+  readTradovateContractMetadataFromProviderMetadata,
+} from "@/lib/integrations/tradovate/tradovateExecutionProviderMetadata"
 import { upsertReconstructedBrokerTrades } from "@/lib/integrations/tradovate/persistBrokerTrades"
 import {
   BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT,
@@ -30,7 +46,7 @@ import {
 import {
   aggregateTradovateExecutionContractHints,
   mergeTradovateContractMetaMaps,
-  mergeTradovateExecutionContractFields,
+  mergeTradovateExecutionMetadataFields,
   type TradovateExecutionContractHint,
 } from "@/lib/integrations/tradovate/tradovateContractMeta"
 import {
@@ -62,8 +78,15 @@ import {
   traceTradovateOrderAndFilterStage,
   traceTradovateReconstructionLoad,
   traceTradovateReconstructionResult,
-  TRACED_MGC_FILL_IDS,
 } from "@/lib/integrations/tradovate/tradovateFillTrace"
+import {
+  deriveTradovateFeeCoverageStatus,
+  deriveTradovateImportAcquisitionStatus,
+} from "@/lib/integrations/tradovate/tradovateSyncCompleteness"
+import {
+  logTradovateSyncSummary,
+  type TradovateSyncStageDurationsMs,
+} from "@/lib/integrations/tradovate/tradovateSyncSummaryLog"
 import type {
   TradovateSyncFailureCategory,
   TradovateSyncFailureStage,
@@ -97,6 +120,7 @@ export type TradovateSyncSummary = {
   errorCode?: string
   failureCategory?: TradovateSyncFailureCategory
   failureStage?: TradovateSyncFailureStage
+  acquisitionStatus?: string
 }
 
 type MappingRow = {
@@ -310,105 +334,55 @@ export async function syncTradovateBrokerAccount(
     persistSkippedReason = "manual_import_hold"
   }
 
+  const stageDurationsMs: TradovateSyncStageDurationsMs = {}
+  let acquisitionStatus: ReturnType<typeof deriveTradovateImportAcquisitionStatus> =
+    "IMPORT_SUCCESS_COMPLETE"
+  let financialReconciliationStatus: import("@/lib/integrations/tradovate/tradovateFinancialReconciliationCore").TradovateFinancialReconciliationStatus =
+    "INSUFFICIENT_FILLPAIR_DATA"
+  let financialReconciliationDifference: number | null = null
+  let feeCoverageStatus: ReturnType<typeof deriveTradovateFeeCoverageStatus> = "COMPLETE"
+  let unresolvedContractCount = 0
+  let feeBatchErrors: string[] = []
+
   try {
-    let fillsRaw: Awaited<ReturnType<typeof fetchTradovateFillList>>
-    let ordersRaw: Awaited<ReturnType<typeof fetchTradovateOrderList>>
-    try {
-      failureStage = "fill_list"
-      fillsRaw = await fetchTradovateFillList(supabase, userId, connectionId)
-    } catch (err) {
-      const code =
-        err instanceof TradovateApiError ? err.code : "fill_retrieval_failed"
-      logTradovateSync("sync_error", {
-        userId,
-        connectionId,
-        mappingId: brokerIntegrationAccountId,
-        trigger,
-        failureCategory:
-          err instanceof TradovateApiError && err.code === "reconnect_required"
-            ? "token_refresh_failure"
-            : "fill_retrieval_failure",
-        failureStage: "fill_list",
-        errorCode: code,
-        providerHttpStatus:
-          err instanceof TradovateApiError ? err.httpStatus : undefined,
-      })
-      throw err
-    }
+    const acquisitionStarted = Date.now()
+    failureStage = "fill_list"
+    const fillAcquisition = await acquireTradovateFillsForAccount(supabase, {
+      userId,
+      connectionId,
+      targetAccountId,
+      mappingId: brokerIntegrationAccountId,
+      trigger,
+    })
+    stageDurationsMs.acquisition = Date.now() - acquisitionStarted
+    acquisitionStatus = deriveTradovateImportAcquisitionStatus({
+      stats: fillAcquisition.stats,
+      acquisitionErrors: fillAcquisition.acquisitionErrors,
+      mergedFillCount: fillAcquisition.accountFills.length,
+    })
 
     traceTradovateFillListStage({
       targetAccountId,
       mappingId: brokerIntegrationAccountId,
-      fillsRaw,
+      fillsRaw: fillAcquisition.supplementalFillList,
     })
 
-    try {
-      failureStage = "order_list"
-      ordersRaw = await fetchTradovateOrderList(supabase, userId, connectionId)
-    } catch (err) {
-      const code =
-        err instanceof TradovateApiError ? err.code : "order_retrieval_failed"
-      logTradovateSync("sync_error", {
-        userId,
-        connectionId,
-        mappingId: brokerIntegrationAccountId,
-        trigger,
-        failureCategory:
-          err instanceof TradovateApiError && err.code === "reconnect_required"
-            ? "token_refresh_failure"
-            : "order_retrieval_failure",
-        failureStage: "order_list",
-        errorCode: code,
-        providerHttpStatus:
-          err instanceof TradovateApiError ? err.httpStatus : undefined,
-      })
-      throw err
-    }
-
-    const orderAccountById = buildTradovateOrderAccountMap(ordersRaw)
-    const missingOrderIds = missingOrderIdsForTradovateFills(fillsRaw, orderAccountById)
-    let hydratedOrders: Awaited<ReturnType<typeof fetchTradovateOrdersByIds>> = []
-    if (missingOrderIds.length > 0) {
-      hydratedOrders = await fetchTradovateOrdersByIds(
-        supabase,
-        userId,
-        connectionId,
-        missingOrderIds
-      )
-      mergeTradovateOrderAccountMap(orderAccountById, hydratedOrders)
-    }
-
-    console.info(
-      [
-        "[TradovateFillTrace]",
-        "stage=order_hydration",
-        `missingOrderCount=${missingOrderIds.length}`,
-        `requestedOrderIds=${missingOrderIds.join(",") || "none"}`,
-        `returnedOrderIds=${hydratedOrders
-          .map((o) => (o.id != null ? String(o.id) : ""))
-          .filter(Boolean)
-          .join(",") || "none"}`,
-        `targetAccountId=${targetAccountId}`,
-      ].join(" ")
-    )
-
-    const accountFills = filterParsedTradovateFillsForAccount(
-      fillsRaw,
-      targetAccountId,
-      orderAccountById
-    )
-
+    const accountFills = fillAcquisition.accountFills
+    const orderAccountById = fillAcquisition.orderAccountById
     const accountFillIds = new Set(
       accountFills.map((fill) => tradovateFillStableId(fill))
     )
 
     traceTradovateOrderAndFilterStage({
       targetAccountId,
-      fillsRaw,
-      ordersRaw,
+      fillsRaw: fillAcquisition.supplementalFillList,
+      ordersRaw: [
+        ...fillAcquisition.ordersFromDeps,
+        ...fillAcquisition.ordersFromList,
+      ],
       orderAccountById,
-      missingOrderIds,
-      hydratedOrders,
+      missingOrderIds: [],
+      hydratedOrders: [],
       accountFillIds,
     })
 
@@ -419,6 +393,7 @@ export async function syncTradovateBrokerAccount(
 
     const contractIdsForResolve = new Set<string>()
 
+    const persistExecutionsStarted = Date.now()
     failureStage = "persist_executions"
     for (const fill of accountFills) {
       const fillId = tradovateFillStableId(fill)
@@ -521,19 +496,7 @@ export async function syncTradovateBrokerAccount(
       }
     }
 
-    for (const tracedFillId of TRACED_MGC_FILL_IDS) {
-      if (accountFillIds.has(tracedFillId)) continue
-      traceTradovateExecutionPersist({
-        fillId: tracedFillId,
-        targetAccountId,
-        outcome: {
-          executionInsertAttempted: false,
-          executionInsertSucceeded: false,
-          executionInsertError: null,
-          executionAlreadyExists: false,
-        },
-      })
-    }
+    stageDurationsMs.persistExecutions = Date.now() - persistExecutionsStarted
 
     await traceTradovateExecutionLedgerAfterPersist({
       supabase,
@@ -542,29 +505,40 @@ export async function syncTradovateBrokerAccount(
       targetAccountId,
     })
 
-    failureStage = "resolve_contracts"
-    const contracts = await resolveTradovateContracts(
-      supabase,
-      userId,
-      connectionId,
-      [...contractIdsForResolve]
-    )
+    logTradovateFillAcquisitionSummary({
+      stats: fillAcquisition.stats,
+      newLedgerExecutions: newExecutions,
+      existingLedgerExecutions: duplicateExecutions,
+    })
 
+    const resolveContractsStarted = Date.now()
+    failureStage = "resolve_contracts"
     const contractIdList = [...contractIdsForResolve]
     let executionHintsBeforeEnrich: TradovateExecutionContractHint[] = []
+    const providerMetadataByContract = new Map<string, unknown>()
     if (contractIdList.length > 0) {
       const { data: executionRowsBeforeEnrich } = await supabase
         .from("broker_integration_executions")
-        .select("external_contract_id, symbol_root, contract_name")
+        .select("external_contract_id, symbol_root, contract_name, provider_metadata")
         .eq("user_id", userId)
         .eq("provider", "tradovate")
         .eq("broker_integration_account_id", brokerIntegrationAccountId)
         .in("external_contract_id", contractIdList)
-      executionHintsBeforeEnrich = (executionRowsBeforeEnrich ?? []).map((row) => ({
-        external_contract_id: String(row.external_contract_id),
-        symbol_root: row.symbol_root,
-        contract_name: row.contract_name,
-      }))
+      executionHintsBeforeEnrich = (executionRowsBeforeEnrich ?? []).map((row) => {
+        const persisted = readTradovateContractMetadataFromProviderMetadata(
+          row.provider_metadata
+        )
+        const contractKey = String(row.external_contract_id)
+        providerMetadataByContract.set(contractKey, row.provider_metadata)
+        return {
+          external_contract_id: contractKey,
+          symbol_root: row.symbol_root,
+          contract_name: row.contract_name,
+          value_per_point: persisted.valuePerPoint,
+          tick_size: persisted.tickSize,
+          metadata_quality: persisted.metadataQuality,
+        }
+      })
     }
     const bestExistingHintByContract = new Map(
       aggregateTradovateExecutionContractHints(executionHintsBeforeEnrich).map(
@@ -572,29 +546,89 @@ export async function syncTradovateBrokerAccount(
       )
     )
 
-    for (const [contractId, meta] of contracts) {
+    const { cache: contractMetadataCache, stats: resolutionStatsBase } =
+      await resolveTradovateContractMetadataBatch(
+        supabase,
+        userId,
+        connectionId,
+        contractIdList
+      )
+
+    const resolutionStats: TradovateContractResolutionStats = {
+      ...resolutionStatsBase,
+      persistedHintUsed: 0,
+      localFallbackUsed: 0,
+      numericTickerPrevented: 0,
+    }
+
+    for (const contractId of contractIdList) {
       const key = String(contractId).trim()
-      const existing = bestExistingHintByContract.get(key)
-      const mergedFields = mergeTradovateExecutionContractFields(
+      const existingHint = bestExistingHintByContract.get(key)
+      const hintSnapshot = existingHint
+        ? executionHintToMetadataSnapshot(existingHint)
+        : null
+      if (hintSnapshot && hintSnapshot.metadataQuality === "PERSISTED_VALID_HINT") {
+        resolutionStats.persistedHintUsed += 1
+      }
+      const mergedSnapshot = mergeTradovateContractMetadataSnapshots(
+        hintSnapshot,
+        contractMetadataCache.get(key) ?? unresolvedTradovateContractSnapshot(key)
+      )
+
+      if (mergedSnapshot.metadataQuality === "UNRESOLVED") {
+        logTradovateContractUnresolved(mergedSnapshot)
+      }
+
+      const mergedFields = mergeTradovateExecutionMetadataFields(
         {
-          symbol_root: existing?.symbol_root,
-          contract_name: existing?.contract_name,
+          symbol_root: existingHint?.symbol_root,
+          contract_name: existingHint?.contract_name,
+          value_per_point: existingHint?.value_per_point,
+          tick_size: existingHint?.tick_size,
+          metadata_quality: existingHint?.metadata_quality,
         },
         {
-          symbol_root: meta.symbolRoot,
-          contract_name: meta.contractName,
+          symbol_root: mergedSnapshot.symbolRoot,
+          contract_name: mergedSnapshot.contractName,
+          value_per_point: mergedSnapshot.valuePerPoint,
+          tick_size: mergedSnapshot.tickSize,
+          metadata_quality: mergedSnapshot.metadataQuality,
         }
       )
+      resolutionStats.numericTickerPrevented += mergedFields.numericTickerPrevented
+        ? 1
+        : 0
+
+      const providerMetadata = mergeTradovateProviderMetadataContractFields(
+        providerMetadataByContract.get(key),
+        {
+          valuePerPoint: mergedFields.value_per_point,
+          tickSize: mergedFields.tick_size,
+          metadataQuality: mergedFields.metadata_quality,
+          productName: mergedSnapshot.productName,
+        }
+      )
+
       await supabase
         .from("broker_integration_executions")
         .update({
           contract_name: mergedFields.contract_name,
           symbol_root: mergedFields.symbol_root,
+          provider_metadata: providerMetadata,
           updated_at: new Date().toISOString(),
         })
         .eq("broker_integration_account_id", brokerIntegrationAccountId)
         .eq("external_contract_id", key)
     }
+
+    const contracts = new Map(
+      [...contractMetadataCache.entries()].map(([id, snap]) => [
+        id,
+        resolvedSnapshotToMarketContract(snap),
+      ])
+    )
+    unresolvedContractCount = resolutionStats.unresolved
+    stageDurationsMs.resolveContracts = Date.now() - resolveContractsStarted
 
     const storedExecutions = await listBrokerExecutionsForExternalAccount(
       supabase,
@@ -607,6 +641,7 @@ export async function syncTradovateBrokerAccount(
       }
     )
 
+    const reconstructStarted = Date.now()
     failureStage = "reconstruct"
     const reconstructionFills: ReconstructionFill[] = storedExecutions.map((row) => ({
       fillId: String(row.external_fill_id),
@@ -633,36 +668,144 @@ export async function syncTradovateBrokerAccount(
       targetAccountId,
       completed,
     })
+    stageDurationsMs.reconstruct = Date.now() - reconstructStarted
 
     const feeFillIds = [...new Set(completed.flatMap((t) => t.fillIds))]
+    const fetchFeesStarted = Date.now()
     failureStage = "fetch_fees"
-    let feesByFillId = new Map<
+    let feeRecordsByFillId = new Map<
       string,
-      { clearingFee: number; exchangeFee: number; nfaFee: number; commission: number }
+      import("@/lib/integrations/tradovate/tradovateFillFeeCoverageCore").TradovateFillFeeRecord
     >()
     try {
-      feesByFillId = await fetchTradovateFillFeesForFillIds(
-        supabase,
-        userId,
-        connectionId,
-        feeFillIds
-      )
+      ;({ fees: feeRecordsByFillId, batchErrors: feeBatchErrors } =
+        await resolveTradovateFillFeesForSync(supabase, {
+          userId,
+          connectionId,
+          fillIds: feeFillIds,
+          executionRows: storedExecutions.map((row) => ({
+            external_fill_id: String(row.external_fill_id),
+            provider_metadata: row.provider_metadata,
+          })),
+        }))
     } catch (feeErr) {
-      // Fills/orders already succeeded with the same connection. Fee enrichment
-      // must not convert a mid-sync auth glitch into reconnect_required and
-      // abort the import — persist trades with zeroed fees instead.
       if (!(feeErr instanceof TradovateApiError)) throw feeErr
-      feesByFillId = new Map()
     }
+    stageDurationsMs.fetchFees = Date.now() - fetchFeesStarted
+    feeCoverageStatus = deriveTradovateFeeCoverageStatus({
+      fillIds: feeFillIds,
+      feeBatchErrors,
+      fees: feeRecordsByFillId,
+    })
+
+    for (const row of storedExecutions) {
+      const fillId = String(row.external_fill_id)
+      if (!feeFillIds.includes(fillId)) continue
+      const record = feeRecordsByFillId.get(fillId)
+      const providerMetadata = providerMetadataWithPersistedFillFee(
+        row.provider_metadata,
+        fillId,
+        record
+      )
+      await supabase
+        .from("broker_integration_executions")
+        .update({
+          provider_metadata: providerMetadata,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId)
+        .eq("provider", "tradovate")
+        .eq("external_fill_id", fillId)
+    }
+
+    const executionHintsForPersist: TradovateExecutionContractHint[] =
+      storedExecutions.map((row) => {
+        const persisted = readTradovateContractMetadataFromProviderMetadata(
+          row.provider_metadata
+        )
+        return {
+          external_contract_id: String(row.external_contract_id),
+          symbol_root: row.symbol_root,
+          contract_name: row.contract_name,
+          value_per_point: persisted.valuePerPoint,
+          tick_size: persisted.tickSize,
+          metadata_quality: persisted.metadataQuality,
+        }
+      })
 
     const contractsForPersist = mergeTradovateContractMetaMaps(
       contracts,
-      storedExecutions
+      executionHintsForPersist
     )
+
+    for (const lifecycle of completed) {
+      const contractIdKey = String(lifecycle.contractId).trim()
+      const contract =
+        contractsForPersist.get(contractIdKey) ??
+        contractsForPersist.get(lifecycle.contractId)
+      const fin = computeTradovateBrokerTradeFinancials({
+        lifecycle,
+        contract,
+        contractIdKey,
+        feesByFillId: feeRecordsByFillId,
+      })
+      if (fin.valuePerPointSource === "local_fallback") {
+        resolutionStats.localFallbackUsed += 1
+      }
+    }
+    logTradovateContractResolutionSummary(resolutionStats)
+
+    const fillsByIdForValidation = new Map<string, TradovateLedgerFillContext>()
+    for (const row of storedExecutions) {
+      const fillId = String(row.external_fill_id)
+      const ts = String(row.executed_at)
+      fillsByIdForValidation.set(fillId, {
+        fillId,
+        contractId: String(row.external_contract_id),
+        tradeDate: ts.slice(0, 10),
+      })
+    }
+
+    const fillPairStarted = Date.now()
+    let fillPairAcquisition = {
+      fillPairs: [] as import("@/lib/integrations/tradovate/tradovateFillPairModels").NormalizedTradovateFillPair[],
+      insufficientData: true,
+      acquisitionErrors: [] as string[],
+    }
+    try {
+      fillPairAcquisition = await acquireTradovateFillPairsForAccount(supabase, {
+        userId,
+        connectionId,
+        targetAccountId,
+        mappingId: brokerIntegrationAccountId,
+        trigger,
+        accountFills: fillAcquisition.accountFills,
+      })
+    } catch {
+      fillPairAcquisition = {
+        fillPairs: [],
+        insufficientData: true,
+        acquisitionErrors: ["fill_pair_acquisition_failed"],
+      }
+    }
+
+    const financialReconciliation = reconcileTradovateFinancials({
+      accountId: targetAccountId,
+      fillPairs: fillPairAcquisition.fillPairs,
+      fillsById: fillsByIdForValidation,
+      completed,
+      contracts: contractsForPersist,
+      insufficientFillPairData: fillPairAcquisition.insufficientData,
+    })
+    logTradovateFinancialReconciliation(financialReconciliation)
+    financialReconciliationStatus = financialReconciliation.status
+    financialReconciliationDifference = financialReconciliation.difference
+    stageDurationsMs.fillPairValidation = Date.now() - fillPairStarted
+
     const allPreviews = buildTradovateImportPreviewTrades({
       completed,
       contracts: contractsForPersist,
-      feesByFillId,
+      feesByFillId: feeRecordsByFillId,
     })
     const importablePreviews = filterPreviewsNotInBaseline(
       allPreviews,
@@ -691,6 +834,7 @@ export async function syncTradovateBrokerAccount(
     let numericTickersPersisted = 0
 
     if (persistTrades) {
+      const persistTradesStarted = Date.now()
       failureStage = "persist_trades"
       ;({
         tradesCreated,
@@ -710,7 +854,7 @@ export async function syncTradovateBrokerAccount(
           account: mapping.account,
           completed,
           contracts: contractsForPersist,
-          feesByFillId,
+          feesByFillId: feeRecordsByFillId,
         }
       ).catch((err) => {
         logTradovateSync("sync_error", {
@@ -725,6 +869,7 @@ export async function syncTradovateBrokerAccount(
         })
         throw err
       }))
+      stageDurationsMs.persistTrades = Date.now() - persistTradesStarted
     }
 
     await traceTradovateFinalTradeIds({
@@ -733,16 +878,6 @@ export async function syncTradovateBrokerAccount(
       targetAccountId,
       completed,
     })
-
-    console.info(
-      [
-        "[TradovateFillTrace]",
-        "stage=sync_summary",
-        `completedLifecycleCount=${completed.length}`,
-        `targetAccountId=${targetAccountId}`,
-        `mappingId=${brokerIntegrationAccountId}`,
-      ].join(" ")
-    )
 
     if (trigger === "manual" && mode === "import") {
       await clearManualImportPreviewHold(supabase, brokerIntegrationAccountId)
@@ -765,8 +900,49 @@ export async function syncTradovateBrokerAccount(
 
     const successAt = new Date().toISOString()
     const durationMs = Date.now() - started
+    const syncLockStatus =
+      acquisitionStatus === "IMPORT_SUCCESS_PARTIAL" ? "partial" : "success"
+    let lifecycleGrossTotal: number | null = null
+    for (const lifecycle of completed) {
+      const contractIdKey = String(lifecycle.contractId).trim()
+      const contract =
+        contractsForPersist.get(contractIdKey) ??
+        contractsForPersist.get(lifecycle.contractId)
+      const fin = computeTradovateBrokerTradeFinancials({
+        lifecycle,
+        contract,
+        contractIdKey,
+        feesByFillId: feeRecordsByFillId,
+      })
+      if (fin.grossPnL != null) {
+        lifecycleGrossTotal = (lifecycleGrossTotal ?? 0) + fin.grossPnL
+      }
+    }
+
+    logTradovateSyncSummary({
+      accountId: targetAccountId,
+      acquisitionStatus,
+      orders: fillAcquisition.stats.orderIdsCount,
+      dependencyFills: fillAcquisition.stats.fillLdepsCount,
+      supplementalFills: fillAcquisition.stats.fillListCount,
+      uniqueFills: fillAcquisition.stats.mergedUniqueFillCount,
+      ledgerExecutions: storedExecutions.length,
+      newExecutions,
+      existingExecutions: duplicateExecutions,
+      completedLifecycles: completed.length,
+      tradesInserted: tradesCreated,
+      tradesUpdated: tradesUpdated,
+      unresolvedContracts: unresolvedContractCount,
+      fillPairStatus: financialReconciliationStatus,
+      fillPairDifference: financialReconciliationDifference,
+      feeCoverage: feeCoverageStatus,
+      grossPnl: lifecycleGrossTotal,
+      durationMs,
+      stageDurationsMs,
+    })
+
     await releaseBrokerSyncLock(supabase, brokerIntegrationAccountId, {
-      lastSyncStatus: "success",
+      lastSyncStatus: syncLockStatus,
       lastSyncSuccessAt: successAt,
       lastSyncErrorCode: null,
       lastSyncErrorMessage: null,
@@ -801,8 +977,9 @@ export async function syncTradovateBrokerAccount(
     })
 
     return {
-      ok: true,
-      status: "success",
+      ok: acquisitionStatus !== "IMPORT_FAILED",
+      status: syncLockStatus,
+      acquisitionStatus,
       trigger,
       fetched: accountFills.length,
       newExecutions,

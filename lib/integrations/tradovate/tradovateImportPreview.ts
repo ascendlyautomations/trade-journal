@@ -25,10 +25,15 @@ export type TradovateImportPreviewTrade = {
 export function buildTradovateImportPreviewTrades(params: {
   completed: ReconstructedLifecycleTrade[]
   contracts: Map<string, BrokerContractMeta>
-  feesByFillId: Map<
-    string,
-    { clearingFee: number; exchangeFee: number; nfaFee: number; commission: number }
-  >
+  feesByFillId:
+    | Map<
+        string,
+        { clearingFee: number; exchangeFee: number; nfaFee: number; commission: number }
+      >
+    | Map<
+        string,
+        import("./tradovateFillFeeCoverageCore.ts").TradovateFillFeeRecord
+      >
 }): TradovateImportPreviewTrade[] {
   return params.completed.map((lifecycle) => {
     const contractIdKey = String(lifecycle.contractId).trim()

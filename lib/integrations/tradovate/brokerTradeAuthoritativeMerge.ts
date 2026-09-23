@@ -47,7 +47,10 @@ export function mergeBrokerTradeFinancialFields(
   let finalTicker = incomingTicker
   let tickerDecision = "use_incoming_ticker"
 
-  if (existingTickerAuthoritative && !incomingTickerAuthoritative) {
+  if (!incomingTicker && existingTickerAuthoritative) {
+    finalTicker = normalizeFuturesSymbol(existingTicker) || existingTicker
+    tickerDecision = "keep_existing_ticker_over_empty_incoming"
+  } else if (existingTickerAuthoritative && !incomingTickerAuthoritative) {
     finalTicker = normalizeFuturesSymbol(existingTicker) || existingTicker
     tickerDecision = "keep_existing_ticker_over_numeric_or_empty_incoming"
   } else if (

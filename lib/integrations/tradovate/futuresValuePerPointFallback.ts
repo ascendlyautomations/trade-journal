@@ -1,4 +1,5 @@
 import { normalizeFuturesSymbol } from "../../normalizeFuturesSymbol.ts"
+import { isValidResolvedTradovateSymbol } from "./tradovateContractMeta.ts"
 
 /**
  * When Tradovate product metadata omits valuePerPoint, derive a best-effort
@@ -37,8 +38,9 @@ const ROOT_VALUE_PER_POINT: Readonly<Record<string, number>> = {
 export function fallbackFuturesValuePerPoint(
   symbolRoot: string | null | undefined
 ): number | null {
+  if (!isValidResolvedTradovateSymbol(symbolRoot)) return null
   const root = normalizeFuturesSymbol(symbolRoot ?? "")
-  if (!root) return null
+  if (!root || !isValidResolvedTradovateSymbol(root)) return null
   const direct = ROOT_VALUE_PER_POINT[root]
   if (direct != null && direct > 0) return direct
   return null
@@ -52,5 +54,22 @@ export function resolveEffectiveValuePerPoint(params: {
   if (fromContract != null && Number.isFinite(fromContract) && fromContract > 0) {
     return fromContract
   }
+  if (!isValidResolvedTradovateSymbol(params.symbolRoot)) {
+    return null
+  }
   return fallbackFuturesValuePerPoint(params.symbolRoot)
+}
+
+/** Whether VPP came from Tradovate product metadata vs local root table. */
+export function resolveEffectiveValuePerPointSource(params: {
+  symbolRoot: string
+  contractValuePerPoint?: number | null
+}): "product" | "local_fallback" | "unresolved" {
+  const fromContract = params.contractValuePerPoint
+  if (fromContract != null && Number.isFinite(fromContract) && fromContract > 0) {
+    return "product"
+  }
+  const local = fallbackFuturesValuePerPoint(params.symbolRoot)
+  if (local != null) return "local_fallback"
+  return "unresolved"
 }

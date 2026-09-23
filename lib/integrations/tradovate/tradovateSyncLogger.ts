@@ -14,6 +14,8 @@ export type TradovateSyncFailureStage =
   | "mapping"
   | "lock"
   | "fill_list"
+  | "order_deps"
+  | "fill_ldeps"
   | "order_list"
   | "persist_executions"
   | "resolve_contracts"

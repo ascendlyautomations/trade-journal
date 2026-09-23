@@ -9,6 +9,7 @@ export type TradovateFillRaw = {
   price?: number
   active?: boolean
   finallyPaired?: number
+  positionId?: number | string
 }
 
 export type TradovateOrderRaw = {
@@ -32,6 +33,7 @@ export type TradovateProductRaw = {
   id?: number | string
   name?: string
   valuePerPoint?: number
+  tickSize?: number
 }
 
 export type TradovateFillFeeRaw = {

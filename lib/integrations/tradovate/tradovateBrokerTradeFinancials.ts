@@ -1,8 +1,14 @@
 import { resolveEffectiveValuePerPoint } from "./futuresValuePerPointFallback.ts"
 import {
+  normalizedFuturesRootFromContractMeta,
   resolveBrokerTradeTicker,
   type BrokerContractMeta,
 } from "./tradovateContractMeta.ts"
+import { resolveEffectiveValuePerPointSource } from "./futuresValuePerPointFallback.ts"
+import {
+  sumLifecycleFeesWithAvailability,
+  type TradovateFillFeeRecord,
+} from "./tradovateFillFeeCoverageCore.ts"
 import {
   computeFuturesGrossPnl,
   sumFillFees,
@@ -18,6 +24,7 @@ export type { BrokerContractMeta }
 export type TradovateBrokerTradeFinancials = {
   ticker: string
   valuePerPoint: number | null
+  valuePerPointSource: "product" | "local_fallback" | "unresolved"
   grossPnL: number | null
   fees: number
   netPnL: number | null
@@ -30,17 +37,25 @@ export function computeTradovateBrokerTradeFinancials(params: {
   lifecycle: ReconstructedLifecycleTrade
   contract?: BrokerContractMeta | null
   contractIdKey: string
-  feesByFillId: Map<
-    string,
-    { clearingFee: number; exchangeFee: number; nfaFee: number; commission: number }
-  >
+  feesByFillId:
+    | Map<
+        string,
+        { clearingFee: number; exchangeFee: number; nfaFee: number; commission: number }
+      >
+    | Map<string, TradovateFillFeeRecord>
 }): TradovateBrokerTradeFinancials {
   const ticker = resolveBrokerTradeTicker({
     contract: params.contract,
     contractId: params.contractIdKey,
   })
+  const vppRoot =
+    ticker || normalizedFuturesRootFromContractMeta(params.contract) || ""
   const valuePerPoint = resolveEffectiveValuePerPoint({
-    symbolRoot: ticker,
+    symbolRoot: vppRoot,
+    contractValuePerPoint: params.contract?.valuePerPoint ?? null,
+  })
+  const valuePerPointSource = resolveEffectiveValuePerPointSource({
+    symbolRoot: vppRoot,
     contractValuePerPoint: params.contract?.valuePerPoint ?? null,
   })
   let grossPnL: number | null = null
@@ -54,8 +69,24 @@ export function computeTradovateBrokerTradeFinancials(params: {
       params.lifecycle.contracts,
       valuePerPoint
     )
-    fees = sumFillFees(params.feesByFillId, params.lifecycle.fillIds)
-    netPnL = grossPnL - fees
+    const first = params.feesByFillId.values().next().value
+    if (first && typeof first === "object" && "availability" in first) {
+      const feeResult = sumLifecycleFeesWithAvailability(
+        params.feesByFillId as Map<string, TradovateFillFeeRecord>,
+        params.lifecycle.fillIds
+      )
+      fees = feeResult.fees
+      netPnL = feeResult.hasUnavailable ? null : grossPnL - fees
+    } else {
+      fees = sumFillFees(
+        params.feesByFillId as Map<
+          string,
+          { clearingFee: number; exchangeFee: number; nfaFee: number; commission: number }
+        >,
+        params.lifecycle.fillIds
+      )
+      netPnL = grossPnL - fees
+    }
   }
   const nullReason = deriveTradovatePnLNullReason({
     lifecycle: params.lifecycle,
@@ -69,6 +100,7 @@ export function computeTradovateBrokerTradeFinancials(params: {
   return {
     ticker,
     valuePerPoint,
+    valuePerPointSource,
     grossPnL,
     fees,
     netPnL,

@@ -14,11 +14,12 @@ describe("tradovateFillTrace", () => {
     assert.equal(isTradovateTracedFillId("660290950999"), false)
   })
 
-  it("exposes deployment version marker for missing order hydration", () => {
-    assert.equal(TRADOVATE_SYNC_VERSION_MARKER, "missingOrderHydration=v2")
+  it("exposes deployment version marker for fill acquisition v2", () => {
+    assert.match(TRADOVATE_SYNC_VERSION_MARKER, /fillAcquisition=v2/)
   })
 
   it("fill_list stage marks absent traced ids", () => {
+    process.env.TRADOVATE_FILL_TRACE = "1"
     traceTradovateFillListStage({
       targetAccountId: "65788591",
       mappingId: "mapping-1",

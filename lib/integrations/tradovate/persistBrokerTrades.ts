@@ -75,10 +75,15 @@ export async function upsertReconstructedBrokerTrades(
     account: CanonicalAccountSnapshot
     completed: ReconstructedLifecycleTrade[]
     contracts: Map<string, BrokerContractMeta>
-    feesByFillId: Map<
-      string,
-      { clearingFee: number; exchangeFee: number; nfaFee: number; commission: number }
-    >
+    feesByFillId:
+      | Map<
+          string,
+          { clearingFee: number; exchangeFee: number; nfaFee: number; commission: number }
+        >
+      | Map<
+          string,
+          import("@/lib/integrations/tradovate/tradovateFillFeeCoverageCore").TradovateFillFeeRecord
+        >
     importSource?: "tradovate" | "rithmic"
   }
 ): Promise<{
