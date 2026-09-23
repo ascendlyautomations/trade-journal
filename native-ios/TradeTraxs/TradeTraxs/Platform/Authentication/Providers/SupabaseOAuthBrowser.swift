@@ -150,6 +150,14 @@ nonisolated final class SupabaseOAuthBrowser: NSObject, ASWebAuthenticationPrese
 
         if let authCode = values["code"], !authCode.isEmpty {
             AppLog.authentication.info("OAuth PKCE exchange started")
+            AuthLifecycleTrace.log(
+                operation: "oauth.pkceExchange.started",
+                authGeneration: AuthLifecycleGeneration.current(),
+                phase: "authenticating",
+                requestPath: "/auth/v1/token",
+                decision: "allowed",
+                reason: "oauthCallback"
+            )
             return try await backend.exchangeOAuthPKCECode(
                 authCode,
                 codeVerifier: codeVerifier,

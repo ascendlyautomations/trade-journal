@@ -1,28 +1,72 @@
 import Foundation
 
-/// Session-scoped following-ID set — one `followers` edge SELECT per viewer when possible.
+/// Session-scoped following state — canonical **complete** following ID set when marked complete.
 ///
-/// Feed, Stories, Explore, and Profile follow-state all share this. ID-only (not full profiles).
+/// Pairwise edges may exist without a complete set; absence in a partial/unknown set is not proof of not-following.
 actor SessionFollowingStore {
     static let shared = SessionFollowingStore()
 
-    private var idsByViewer: [String: Set<String>] = [:]
-    private var inFlight: [String: Task<Set<String>, Error>] = [:]
-
-    func cached(viewerID: String) -> Set<String>? {
-        idsByViewer[viewerID]
+    enum Completeness: Sendable, Equatable {
+        case unknown
+        case complete(Set<String>)
     }
 
-    /// Cache-first. `fetch` runs only on miss / force. Concurrent callers share one task.
+    private struct ViewerState: Sendable {
+        var completeness: Completeness = .unknown
+        /// Pairwise viewer→target edges from Profile headers / explicit patches.
+        var pairwiseFollowing: [String: Bool] = [:]
+        var pairwiseRequested: [String: Bool] = [:]
+    }
+
+    private var stateByViewer: [String: ViewerState] = [:]
+    private var inFlight: [String: Task<Set<String>, Error>] = [:]
+
+    func completeness(viewerID: String) -> Completeness {
+        let key = normalizedViewer(viewerID)
+        return stateByViewer[key]?.completeness ?? .unknown
+    }
+
+    func isComplete(viewerID: String) -> Bool {
+        if case .complete = completeness(viewerID: viewerID) { return true }
+        return false
+    }
+
+    /// Complete following IDs when known — nil when set is unknown/incomplete.
+    func cached(viewerID: String) -> Set<String>? {
+        let key = normalizedViewer(viewerID)
+        guard case .complete(let ids) = stateByViewer[key]?.completeness else { return nil }
+        return ids
+    }
+
+    /// Resolved follow edge when known — nil when relationship is unknown.
+    func knownIsFollowing(viewerID: String, targetID: String) -> Bool? {
+        let key = normalizedViewer(viewerID)
+        let target = targetID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !target.isEmpty else { return nil }
+        guard let state = stateByViewer[key] else { return nil }
+        if case .complete(let ids) = state.completeness {
+            return ids.contains(target)
+        }
+        return state.pairwiseFollowing[target]
+    }
+
+    func knownIsRequested(viewerID: String, targetID: String) -> Bool? {
+        let key = normalizedViewer(viewerID)
+        let target = targetID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !target.isEmpty else { return nil }
+        return stateByViewer[key]?.pairwiseRequested[target]
+    }
+
+    /// Cache-first network load — always marks the loaded set **complete**.
     func followingIDs(
         viewerID: String,
         forceNetwork: Bool = false,
         fetch: @escaping @Sendable () async throws -> [String]
     ) async throws -> [String] {
-        let key = viewerID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = normalizedViewer(viewerID)
         guard !key.isEmpty else { return [] }
 
-        if !forceNetwork, let cached = idsByViewer[key] {
+        if !forceNetwork, let cached = cached(viewerID: key) {
             await MainActor.run {
                 SessionNetworkProbe.record(
                     .cacheHit,
@@ -57,7 +101,7 @@ actor SessionFollowingStore {
         defer { inFlight[key] = nil }
 
         let loaded = try await task.value
-        idsByViewer[key] = loaded
+        seedComplete(viewerID: key, ids: loaded)
         await MainActor.run {
             SessionNetworkProbe.record(
                 .cacheHit,
@@ -69,32 +113,79 @@ actor SessionFollowingStore {
     }
 
     func seed(viewerID: String, ids: Set<String>) {
-        let key = viewerID.trimmingCharacters(in: .whitespacesAndNewlines)
+        seedComplete(viewerID: viewerID, ids: ids)
+    }
+
+    func seedComplete(viewerID: String, ids: Set<String>) {
+        let key = normalizedViewer(viewerID)
         guard !key.isEmpty else { return }
-        idsByViewer[key] = ids
+        var state = stateByViewer[key] ?? ViewerState()
+        state.completeness = .complete(ids)
+        for id in ids {
+            state.pairwiseFollowing[id] = true
+            state.pairwiseRequested[id] = false
+        }
+        stateByViewer[key] = state
+    }
+
+    func seedPairwiseEdge(viewerID: String, targetID: String, isFollowing: Bool) {
+        let key = normalizedViewer(viewerID)
+        let target = targetID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, !target.isEmpty else { return }
+        var state = stateByViewer[key] ?? ViewerState()
+        state.pairwiseFollowing[target] = isFollowing
+        if isFollowing {
+            state.pairwiseRequested[target] = false
+        }
+        stateByViewer[key] = state
+    }
+
+    func setPairwiseRequested(viewerID: String, targetID: String, isRequested: Bool) {
+        let key = normalizedViewer(viewerID)
+        let target = targetID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, !target.isEmpty else { return }
+        var state = stateByViewer[key] ?? ViewerState()
+        state.pairwiseRequested[target] = isRequested
+        if isRequested {
+            state.pairwiseFollowing[target] = false
+        }
+        stateByViewer[key] = state
     }
 
     func setFollowing(viewerID: String, targetID: String, isFollowing: Bool) {
-        let key = viewerID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
-        var set = idsByViewer[key] ?? []
+        let key = normalizedViewer(viewerID)
+        let target = targetID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, !target.isEmpty else { return }
+        var state = stateByViewer[key] ?? ViewerState()
+        state.pairwiseFollowing[target] = isFollowing
         if isFollowing {
-            set.insert(targetID)
-        } else {
-            set.remove(targetID)
+            state.pairwiseRequested[target] = false
         }
-        idsByViewer[key] = set
+        if case .complete(var ids) = state.completeness {
+            if isFollowing {
+                ids.insert(target)
+            } else {
+                ids.remove(target)
+            }
+            state.completeness = .complete(ids)
+        }
+        stateByViewer[key] = state
     }
 
     func invalidate(viewerID: String? = nil) {
         if let viewerID {
-            idsByViewer[viewerID] = nil
-            inFlight[viewerID]?.cancel()
-            inFlight[viewerID] = nil
+            let key = normalizedViewer(viewerID)
+            stateByViewer[key] = nil
+            inFlight[key]?.cancel()
+            inFlight[key] = nil
         } else {
             inFlight.values.forEach { $0.cancel() }
-            idsByViewer = [:]
+            stateByViewer = [:]
             inFlight = [:]
         }
+    }
+
+    private func normalizedViewer(_ viewerID: String) -> String {
+        viewerID.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -164,6 +164,12 @@ struct ProfileView: View {
             headerViewModel.onAppear()
             screen.onAppear(currentUserProfile: currentUserProfile)
         }
+        .onDisappear {
+            if SocialRealtimeRepairSurfaces.shared.profileViewModel === screen {
+                SocialRealtimeRepairSurfaces.shared.profileViewModel = nil
+            }
+            screen.onDisappearProfileEntityRealtime()
+        }
         .onChange(of: ContentMutationStore.shared.revision) { _, _ in
             guard contentStore.resolvedProfileID ?? contentStore.profile?.id != nil else { return }
             switch ContentMutationStore.shared.latest {

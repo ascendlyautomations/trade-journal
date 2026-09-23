@@ -13,6 +13,7 @@ nonisolated enum FeedLoadTrigger: String, Sendable {
     case contentMutation
     case journalMutation
     case pagination
+    case reconnectRepair
 }
 
 #if DEBUG

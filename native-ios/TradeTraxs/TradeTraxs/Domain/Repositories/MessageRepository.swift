@@ -20,6 +20,8 @@ nonisolated protocol MessageRepository: Sendable {
         in conversationID: ConversationID,
         page: PageRequest
     ) async throws -> CursorPage<Message>
+    /// Bounded single-row hydrate when Realtime payload is insufficient.
+    func message(id: MessageID, in conversationID: ConversationID) async throws -> Message?
     func send(_ message: Message) async throws -> Message
     /// Web `mark_conversation_read(p_conversation_id)` — no extra parameters.
     func markRead(conversationID: ConversationID) async throws
@@ -76,6 +78,10 @@ nonisolated protocol MessageRepository: Sendable {
 }
 
 extension MessageRepository {
+    func message(id: MessageID, in conversationID: ConversationID) async throws -> Message? {
+        throw AppError.notImplemented(feature: "message(id:in:)")
+    }
+
     func fetchDmBlockStatus(conversationID: ConversationID) async throws -> DmBlockStatus {
         throw AppError.notImplemented(feature: "fetchDmBlockStatus")
     }

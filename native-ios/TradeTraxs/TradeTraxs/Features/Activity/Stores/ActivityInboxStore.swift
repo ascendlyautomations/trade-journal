@@ -25,12 +25,14 @@ final class ActivityInboxStore {
     private(set) var hasMore = true
 
     private var realtimeTask: Task<Void, Never>?
+    private var notificationsRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var activeRealtimeUserID: String?
     private weak var activeRealtimeHub: RealtimeHub?
     private var startedForUserID: String?
     private var isStarting = false
     private var isBootstrappingUnread = false
     private var persistedViewerID: ProfileID?
+    private var seenNotificationEventKeys: Set<String> = []
 
     private init() {}
 
@@ -646,6 +648,7 @@ final class ActivityInboxStore {
         isStarting = false
         isBootstrappingUnread = false
         persistedViewerID = nil
+        seenNotificationEventKeys.removeAll()
         AppIconBadgeController.shared.clear()
     }
 
@@ -716,6 +719,19 @@ final class ActivityInboxStore {
         }
     }
 
+    /// Bounded Activity catch-up after Realtime reconnect — merge only, no wipe.
+    func repairAfterReconnect(
+        viewerID: ProfileID,
+        detailCache: DetailPresentationCache?,
+        rpc: (any RPCClient)?
+    ) async {
+        await catchUpActivityIfNeeded(
+            viewerID: viewerID,
+            detailCache: detailCache,
+            rpc: rpc
+        )
+    }
+
     private func catchUpActivityIfNeeded(
         viewerID: ProfileID,
         detailCache: DetailPresentationCache?,
@@ -768,9 +784,11 @@ final class ActivityInboxStore {
         let hub = activeRealtimeHub
         activeRealtimeUserID = nil
         activeRealtimeHub = nil
+        let consumer = notificationsRealtimeConsumer
+        notificationsRealtimeConsumer = nil
         guard let userID, let hub else { return }
         Task {
-            await hub.stopWatchingNotifications(userID: userID)
+            await hub.releaseWatch(consumer)
             try? await hub.subscriptions.unsubscribe(
                 RealtimeChannelID(kind: .notifications, topic: "user:\(userID)")
             )
@@ -792,14 +810,16 @@ final class ActivityInboxStore {
 #endif
         let channel = RealtimeChannelID(kind: .notifications, topic: "user:\(userID)")
         realtimeTask = Task { [weak self] in
-            await realtimeHub.stopWatchingNotifications(userID: userID)
             try? await realtimeHub.subscriptions.subscribe(channel)
             let token = await session.accessToken
-            for await signal in realtimeHub.watchNotifications(
+            let watch = realtimeHub.watchNotifications(
                 userID: userID,
-                accessToken: token
-            ) {
-                guard let self else { break }
+                accessToken: token,
+                debugOwner: "ActivityInbox"
+            )
+            guard let self else { return }
+            self.notificationsRealtimeConsumer = watch.consumer
+            for await signal in watch.events {
                 await self.applyRealtime(signal: signal, notifications: notifications)
             }
         }
@@ -811,17 +831,78 @@ final class ActivityInboxStore {
     ) async {
         guard let rawID = signal.messageID else { return }
         let id = NotificationID(rawID)
+        let dedupeKey = "\(signal.kind.rawValue):\(rawID)"
+        if seenNotificationEventKeys.contains(dedupeKey) {
+#if DEBUG
+            ActivityRealtimeDebugLog.duplicateDeliveryIgnored(id: rawID)
+#endif
+            return
+        }
+        seenNotificationEventKeys.insert(dedupeKey)
+
         switch signal.kind {
         case .insert, .update:
-            if let item = try? await notifications.notification(id: id) {
+            var hydrated = false
+            if let payload = signal.recordPayload,
+               var merged = ActivityNotificationRealtimeMerge.notification(from: payload)
+            {
+                if signal.kind == .update,
+                   let existing = items.first(where: { $0.id == id })
+                {
+                    if merged.actorProfileID == nil { merged.actorProfileID = existing.actorProfileID }
+                    if merged.title.isEmpty { merged.title = existing.title }
+                    if merged.body.isEmpty { merged.body = existing.body }
+                }
+                if ActivityNotificationRealtimeMerge.needsRowHydration(merged) {
+#if DEBUG
+                    ActivityRealtimeDebugLog.notificationHydration(id: rawID, reason: "missing_actor")
+#endif
+                    if let row = try? await notifications.notification(id: id) {
+                        upsert(row)
+                        hydrated = true
+                    } else {
+                        upsert(merged)
+                    }
+                } else {
+                    upsert(merged)
+                }
+#if DEBUG
+                if signal.kind == .insert {
+                    ActivityRealtimeDebugLog.notificationInsert(id: rawID, hydrated: hydrated)
+                } else {
+                    ActivityRealtimeDebugLog.notificationUpdate(id: rawID, hydrated: hydrated)
+                }
+#endif
+            } else if let item = try? await notifications.notification(id: id) {
+#if DEBUG
+                ActivityRealtimeDebugLog.networkFallback(reason: "payload_merge_miss")
+                if signal.kind == .insert {
+                    ActivityRealtimeDebugLog.notificationInsert(id: rawID, hydrated: true)
+                } else {
+                    ActivityRealtimeDebugLog.notificationUpdate(id: rawID, hydrated: true)
+                }
+#endif
                 upsert(item)
             } else if signal.kind == .update {
-                // Soft miss — recount unread.
-                if let count = try? await notifications.unreadCount() {
+                if let existing = items.first(where: { $0.id == id }) {
+                    var patched = existing
+                    if let payload = signal.recordPayload,
+                       let dto = PostgresChangeRecordCodec.decode(NotificationDTO.Item.self, from: payload)
+                    {
+                        if let read = dto.read ?? dto.is_read { patched.isRead = read }
+                    }
+                    upsert(patched)
+                } else if let count = try? await notifications.unreadCount() {
+#if DEBUG
+                    ActivityRealtimeDebugLog.networkFallback(reason: "update_unread_recount")
+#endif
                     setUnreadCount(count)
                 }
             }
         case .delete:
+#if DEBUG
+            ActivityRealtimeDebugLog.notificationDelete(id: rawID)
+#endif
             remove(id: id)
         }
     }
@@ -830,3 +911,11 @@ final class ActivityInboxStore {
         items.sorted { $0.createdAt > $1.createdAt }
     }
 }
+
+#if DEBUG
+extension ActivityInboxStore {
+    func testing_applyRealtime(signal: MessageRealtimeSignal, notifications: any NotificationRepository) async {
+        await applyRealtime(signal: signal, notifications: notifications)
+    }
+}
+#endif

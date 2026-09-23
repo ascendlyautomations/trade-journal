@@ -419,6 +419,8 @@ enum CompositionRoot {
         authBackend: SupabaseAuthenticationBackend,
         authState: AuthenticationState
     ) -> AppEnvironment {
+        SocialRealtimeRepairExecutor.shared.configure(data: data)
+
         authentication.manager.sessionBootstrap = AuthenticatedSessionBootstrap(
             profiles: data.profiles,
             backend: authBackend
@@ -552,6 +554,8 @@ enum CompositionRoot {
                 let profileID = ProfileID(userID.rawValue)
                 Task { await AnalyticsReconciliationCoordinator.shared.bindViewer(profileID) }
                 AnalyticsRevisionRealtimeSession.shared.bindAuthenticatedViewer(profileID)
+                RelationshipRealtimeSession.shared.bindAuthenticatedViewer(profileID)
+                Task { await SocialRealtimeReconciliationCoordinator.shared.bindViewer(profileID) }
                 Task { await AnalyticsRevisionRepairCoordinator.shared.bindViewer(profileID) }
             }
             Task {

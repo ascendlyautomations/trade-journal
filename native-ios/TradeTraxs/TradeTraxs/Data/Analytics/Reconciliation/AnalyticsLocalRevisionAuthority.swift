@@ -21,7 +21,7 @@ nonisolated enum LocalAnalyticsRevisionAuthority: Sendable, Equatable {
 
 extension DefaultAnalyticsRevisionSeeder {
     func localRevisionAuthority(viewerID: ProfileID) async -> LocalAnalyticsRevisionAuthority {
-        if let sync = try? await AnalyticsLocalStore().syncState(viewerID: viewerID) {
+        if let sync = try? await AnalyticsLocalStore.sharedStore().syncState(viewerID: viewerID) {
             return .known(
                 revision: sync.server_revision,
                 source: "grdb_analytics_sync_state"

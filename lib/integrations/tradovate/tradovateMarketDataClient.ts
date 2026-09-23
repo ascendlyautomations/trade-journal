@@ -238,10 +238,13 @@ export async function resolveTradovateContracts(
       product?.valuePerPoint != null && Number.isFinite(Number(product.valuePerPoint))
         ? Number(product.valuePerPoint)
         : null
+    const resolvedRoot =
+      symbolRoot ||
+      (contractName && !/^\d+$/.test(contractName) ? contractName : "")
     resolved.set(contractId, {
       contractId,
       contractName,
-      symbolRoot: symbolRoot || contractName || contractId,
+      symbolRoot: resolvedRoot || contractId,
       valuePerPoint,
     })
   }

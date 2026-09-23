@@ -36,7 +36,7 @@ nonisolated enum SessionNetworkProbe {
         }
         let suffix = detail.isEmpty ? "" : " — \(detail)"
         AppLog.networking.info(
-            "\(event.rawValue, privacy: .public) \(resource, privacy: .public)\(suffix, privacy: .public)"
+            "[SessionNetworkProbe] \(event.rawValue, privacy: .public) \(resource, privacy: .public)\(suffix, privacy: .public)"
         )
     }
 

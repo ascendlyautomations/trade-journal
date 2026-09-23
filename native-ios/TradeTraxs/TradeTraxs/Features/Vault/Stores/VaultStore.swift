@@ -10,6 +10,7 @@ final class VaultStore {
     private(set) var lastConfirmationMessage: String?
 
     private let repository: any VaultRepository
+    private var persistence: (any VaultPersistenceClient)?
     private var loadedRefs: Set<VaultContentRef> = []
     private var requestedRefs: Set<VaultContentRef> = []
     private var pendingRefs: Set<VaultContentRef> = []
@@ -34,6 +35,10 @@ final class VaultStore {
 
     init(repository: any VaultRepository) {
         self.repository = repository
+    }
+
+    func configurePersistence(_ client: any VaultPersistenceClient) {
+        persistence = client
     }
 
     func state(for ref: VaultContentRef) -> VaultItemState {
@@ -97,7 +102,9 @@ final class VaultStore {
         folders: [VaultFolder],
         nextCursor: String?,
         filter: VaultContentFilter,
-        folderID: VaultFolderID?
+        folderID: VaultFolderID?,
+        loadedAt: Date = .now,
+        shouldPersist: Bool = true
     ) {
         self.folders = folders
         foldersLoaded = true
@@ -107,8 +114,19 @@ final class VaultStore {
             nextCursor: nextCursor,
             filter: filter,
             folderID: folderID,
-            loadedAt: .now
+            loadedAt: loadedAt
         )
+        for item in items {
+            states[item.ref] = VaultItemState(
+                isVaulted: true,
+                vaultItemID: item.id,
+                folderIDs: item.folderIDs
+            )
+            loadedRefs.insert(item.ref)
+        }
+        if shouldPersist {
+            Task { await persistence?.persistVaultPresentation(reason: "seedHome", isRollback: false) }
+        }
     }
 
     func invalidateHomeList() {
@@ -125,14 +143,19 @@ final class VaultStore {
             applyOptimisticVault(ref: ref, folderID: folderID, provisionalID: VaultItemID("dev-vault-\(ref.contentID)"))
             loadedRefs.insert(ref)
             lastConfirmationMessage = confirmation
+            patchHomeForOptimisticSave(ref: ref, folderID: folderID)
+            await persistence?.persistVaultPresentation(reason: "saveDev", isRollback: false)
             return true
         }
 
         let previous = state(for: ref)
+        let homeBefore = homeSnapshot
         inFlightRefs.insert(ref)
         defer { inFlightRefs.remove(ref) }
 
         applyOptimisticVault(ref: ref, folderID: folderID, provisionalID: previous.vaultItemID ?? VaultItemID(UUID().uuidString))
+        patchHomeForOptimisticSave(ref: ref, folderID: folderID)
+        await persistence?.persistVaultPresentation(reason: "saveOptimistic", isRollback: false)
 
         do {
             let item = try await repository.saveToVault(ref: ref, folderID: folderID)
@@ -140,14 +163,17 @@ final class VaultStore {
                 ref: ref,
                 state: VaultItemState(isVaulted: true, vaultItemID: item.id, folderIDs: item.folderIDs)
             )
+            reconcileHomeItem(item)
             if let folderID {
                 Self.storeRecentFolderID(folderID)
             }
             lastConfirmationMessage = confirmation
-            invalidateHomeList()
+            await persistence?.persistVaultPresentation(reason: "save", isRollback: false)
             return true
         } catch {
             states[ref] = previous
+            homeSnapshot = homeBefore
+            await persistence?.persistVaultPresentation(reason: "save", isRollback: true)
             ExperienceHaptics.play(.warning)
             return false
         }
@@ -168,16 +194,18 @@ final class VaultStore {
         }
         optimistic.isVaulted = true
         states[ref] = optimistic
+        await persistence?.persistVaultPresentation(reason: "addToFolderOptimistic", isRollback: false)
 
         do {
             try await repository.addToFolder(vaultItemID: vaultItemID, folderID: folderID)
             commitSuccessfulMutation(ref: ref, state: optimistic)
             Self.storeRecentFolderID(folderID)
             lastConfirmationMessage = "Added to \(folderName)"
-            invalidateHomeList()
+            await persistence?.persistVaultPresentation(reason: "addToFolder", isRollback: false)
             return true
         } catch {
             states[ref] = previous
+            await persistence?.persistVaultPresentation(reason: "addToFolder", isRollback: true)
             ExperienceHaptics.play(.warning)
             return false
         }
@@ -190,18 +218,23 @@ final class VaultStore {
         defer { inFlightRefs.remove(ref) }
 
         let previous = state(for: ref)
+        let homeBefore = homeSnapshot
         var optimistic = previous
         optimistic.folderIDs.removeAll { $0 == folderID }
         states[ref] = optimistic
+        patchHomeRemoveFolderMembership(ref: ref, folderID: folderID)
+        await persistence?.persistVaultPresentation(reason: "removeFromFolderOptimistic", isRollback: false)
 
         do {
             try await repository.removeFromFolder(vaultItemID: vaultItemID, folderID: folderID)
             commitSuccessfulMutation(ref: ref, state: optimistic)
             lastConfirmationMessage = "Removed from folder"
-            invalidateHomeList()
+            await persistence?.persistVaultPresentation(reason: "removeFromFolder", isRollback: false)
             return true
         } catch {
             states[ref] = previous
+            homeSnapshot = homeBefore
+            await persistence?.persistVaultPresentation(reason: "removeFromFolder", isRollback: true)
             ExperienceHaptics.play(.warning)
             return false
         }
@@ -214,16 +247,21 @@ final class VaultStore {
         defer { inFlightRefs.remove(ref) }
 
         let previous = state(for: ref)
+        let homeBefore = homeSnapshot
         states[ref] = .notVaulted
+        removeRefFromHome(ref)
+        await persistence?.persistVaultPresentation(reason: "removeOptimistic", isRollback: false)
 
         do {
             try await repository.removeFromVault(vaultItemID: vaultItemID)
             commitSuccessfulMutation(ref: ref, state: .notVaulted)
             lastConfirmationMessage = "Removed from Vault"
-            invalidateHomeList()
+            await persistence?.persistVaultPresentation(reason: "remove", isRollback: false)
             return true
         } catch {
             states[ref] = previous
+            homeSnapshot = homeBefore
+            await persistence?.persistVaultPresentation(reason: "remove", isRollback: true)
             ExperienceHaptics.play(.warning)
             return false
         }
@@ -236,12 +274,99 @@ final class VaultStore {
             folders.append(folder)
             folders.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             foldersLoaded = true
-            invalidateHomeList()
+            await persistence?.persistVaultPresentation(reason: "createFolder", isRollback: false)
             return folder
         } catch {
             ExperienceHaptics.play(.warning)
             return nil
         }
+    }
+
+    func applyFolderListAfterDelete(removedID: VaultFolderID) {
+        folders.removeAll { $0.id == removedID }
+        for (ref, var state) in states where state.isVaulted {
+            state.folderIDs.removeAll { $0 == removedID }
+            states[ref] = state
+        }
+        if var snapshot = homeSnapshot {
+            snapshot.folders = folders
+            snapshot.items = snapshot.items.map { item in
+                var copy = item
+                copy.folderIDs.removeAll { $0 == removedID }
+                return copy
+            }
+            homeSnapshot = snapshot
+        }
+        Task { await persistence?.persistVaultPresentation(reason: "deleteFolder", isRollback: false) }
+    }
+
+    func applyRenamedFolder(_ folder: VaultFolder) {
+        if let index = folders.firstIndex(where: { $0.id == folder.id }) {
+            folders[index] = folder
+        }
+        folders.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        if var snapshot = homeSnapshot {
+            snapshot.folders = folders
+            homeSnapshot = snapshot
+        }
+        Task { await persistence?.persistVaultPresentation(reason: "renameFolder", isRollback: false) }
+    }
+
+    func pruneContentReference(_ ref: VaultContentRef) {
+        states[ref] = .notVaulted
+        removeRefFromHome(ref)
+    }
+
+    func makeSnapshotBlob(viewerID: ProfileID, writeGeneration: UInt64) -> VaultDiskCache.SnapshotBlob {
+        var homePages: [VaultDiskCache.HomePageRecord] = []
+        if let snapshot = homeSnapshot {
+            homePages.append(
+                VaultDiskCache.HomePageRecord(
+                    filter: snapshot.filter,
+                    folderID: snapshot.folderID?.rawValue,
+                    items: snapshot.items,
+                    nextCursor: snapshot.nextCursor,
+                    savedAt: snapshot.loadedAt
+                )
+            )
+        }
+        let stateMap = Dictionary(uniqueKeysWithValues: states.map { ($0.key.cacheKey, $0.value) })
+        return VaultDiskCache.SnapshotBlob(
+            viewerID: viewerID.rawValue,
+            savedAt: Date(),
+            lastAccessedAt: Date(),
+            folders: folders,
+            states: stateMap,
+            homePages: homePages,
+            writeGeneration: writeGeneration
+        )
+    }
+
+    func applyPersistedSnapshot(
+        _ blob: VaultDiskCache.SnapshotBlob,
+        filter: VaultContentFilter,
+        folderID: VaultFolderID?
+    ) {
+        folders = blob.folders
+        foldersLoaded = !blob.folders.isEmpty
+        for (key, state) in blob.states {
+            guard let ref = ref(fromCacheKey: key) else { continue }
+            states[ref] = state
+            loadedRefs.insert(ref)
+        }
+        guard let page = blob.homePages.first(where: {
+            $0.filter == filter && $0.folderID == folderID?.rawValue
+        }) ?? blob.homePages.first(where: { $0.filter == .all && $0.folderID == nil })
+        else { return }
+        seedHome(
+            items: page.items,
+            folders: blob.folders,
+            nextCursor: page.nextCursor,
+            filter: page.filter,
+            folderID: page.folderID.map { VaultFolderID($0) },
+            loadedAt: page.savedAt,
+            shouldPersist: false
+        )
     }
 
     func recentFolderID() -> VaultFolderID? {
@@ -329,6 +454,60 @@ final class VaultStore {
             self.prefetchTask = nil
             self.pumpPrefetchIfNeeded()
         }
+    }
+
+    private func ref(fromCacheKey key: String) -> VaultContentRef? {
+        let parts = key.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2, let type = VaultContentType(rawValue: parts[0]) else { return nil }
+        return VaultContentRef(contentType: type, contentID: parts[1])
+    }
+
+    private func patchHomeForOptimisticSave(ref: VaultContentRef, folderID: VaultFolderID?) {
+        guard var snapshot = homeSnapshot else { return }
+        let state = self.state(for: ref)
+        guard let vaultItemID = state.vaultItemID else { return }
+        if let scopedFolder = snapshot.folderID, scopedFolder != folderID { return }
+        let item = VaultItem(
+            id: vaultItemID,
+            ref: ref,
+            createdAt: .now,
+            folderIDs: state.folderIDs
+        )
+        if let index = snapshot.items.firstIndex(where: { $0.ref == ref }) {
+            snapshot.items[index] = item
+        } else if snapshot.filter.matches(ref.contentType) {
+            snapshot.items.insert(item, at: 0)
+        }
+        homeSnapshot = snapshot
+    }
+
+    private func patchHomeRemoveFolderMembership(ref: VaultContentRef, folderID: VaultFolderID) {
+        guard var snapshot = homeSnapshot else { return }
+        if snapshot.folderID == folderID {
+            snapshot.items.removeAll { $0.ref == ref }
+        } else {
+            snapshot.items = snapshot.items.map { item in
+                guard item.ref == ref else { return item }
+                var copy = item
+                copy.folderIDs.removeAll { $0 == folderID }
+                return copy
+            }
+        }
+        homeSnapshot = snapshot
+    }
+
+    private func removeRefFromHome(_ ref: VaultContentRef) {
+        guard var snapshot = homeSnapshot else { return }
+        snapshot.items.removeAll { $0.ref == ref }
+        homeSnapshot = snapshot
+    }
+
+    private func reconcileHomeItem(_ item: VaultItem) {
+        guard var snapshot = homeSnapshot else { return }
+        if let index = snapshot.items.firstIndex(where: { $0.ref == item.ref }) {
+            snapshot.items[index] = item
+        }
+        homeSnapshot = snapshot
     }
 
     private static func storeRecentFolderID(_ id: VaultFolderID) {

@@ -76,6 +76,7 @@ final class RoomConversationViewModel {
 
     private var nextOlderCursor: String?
     private var realtimeTask: Task<Void, Never>?
+    private var roomLiveRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var loadTask: Task<Void, Never>?
     private var channelLoadTasks: [RoomChannelID: Task<Void, Never>] = [:]
     private var channelCaches: [RoomChannelID: ChannelThreadCache] = [:]
@@ -482,7 +483,9 @@ final class RoomConversationViewModel {
         realtimeTask?.cancel()
         realtimeTask = Task { [weak self] in
             guard let self else { return }
-            await realtimeHub?.stopWatchingRoomLive(roomID: roomID)
+            if let previous = roomLiveRealtimeConsumer {
+                await realtimeHub?.releaseWatch(previous)
+            }
             let channel = RealtimeChannelID(kind: .room, topic: roomID.rawValue)
             try? await realtimeHub?.subscriptions.subscribe(channel)
             let token = await session.accessToken
@@ -491,8 +494,13 @@ final class RoomConversationViewModel {
             let streams = realtimeHub.watchRoomLive(
                 roomID: roomID,
                 accessToken: token,
-                presenceTrack: nil
+                presenceTrack: nil,
+                debugOwner: "RoomConversation"
             )
+            roomLiveRealtimeConsumer = streams.consumer
+            SocialRealtimeRepairSurfaces.shared.repairOpenRoom = { [weak self] in
+                await self?.repairMissedRoomMessagesAfterReconnect()
+            }
 
             for await signal in streams.messages {
                 guard !Task.isCancelled else { break }
@@ -508,12 +516,15 @@ final class RoomConversationViewModel {
         if inboxStore.activeRoomID == roomID {
             inboxStore.setActiveRoom(nil)
         }
+        SocialRealtimeRepairSurfaces.shared.repairOpenRoom = nil
         realtimeTask?.cancel()
         realtimeTask = nil
-        Task { [roomID, realtimeHub] in
+        let consumer = roomLiveRealtimeConsumer
+        roomLiveRealtimeConsumer = nil
+        Task { [roomID, realtimeHub, consumer] in
             let channel = RealtimeChannelID(kind: .room, topic: roomID.rawValue)
             try? await realtimeHub?.subscriptions.unsubscribe(channel)
-            await realtimeHub?.stopWatchingRoomLive(roomID: roomID)
+            await realtimeHub?.releaseWatch(consumer)
         }
         persistActiveChannelCache(scrollAnchor: messages.last?.id)
     }
@@ -1669,6 +1680,30 @@ final class RoomConversationViewModel {
         unavailableSharedContentKeys = hydrated.unavailableSharedContentKeys
     }
 
+    fileprivate func repairMissedRoomMessagesAfterReconnect() async {
+        guard let viewerID, let channel = selectedChannel else { return }
+        guard !isApplyingRealtime else { return }
+        isApplyingRealtime = true
+        defer { isApplyingRealtime = false }
+        do {
+            let page = try await rooms.messages(
+                roomID: roomID,
+                channel: channel,
+                page: PageRequest(limit: 30)
+            )
+            let mapped = page.items.map(RoomMessageMapping.displayMessage)
+            commitMessages(mapped)
+            persistActiveChannelCache(scrollAnchor: messages.last?.id)
+            if let last = messages.last {
+                patchInboxPreview(with: last)
+            }
+            await hydrateSenders(for: mapped)
+            _ = viewerID
+        } catch {
+            // Non-destructive — keep cached thread.
+        }
+    }
+
     /// Incremental apply from Realtime — never reloads the whole room.
     private func applyRealtimeSignal(_ signal: MessageRealtimeSignal) async {
         if let reaction = signal.reactionEvent {
@@ -1689,33 +1724,63 @@ final class RoomConversationViewModel {
             return
         }
 
+        if signal.kind == .insert, let rawID = signal.messageID {
+            if messages.contains(where: { $0.id == MessageID(rawID) }) {
+#if DEBUG
+                MessagingRealtimeDebugLog.messageEchoIgnored(messageID: rawID, source: "room-thread")
+#endif
+                return
+            }
+            if !MessagingRealtimeDeliveryCoordinator.claimMessageInsert(
+                domain: "room-thread",
+                messageID: rawID,
+                conversationID: roomID.rawValue
+            ) {
+                return
+            }
+        }
+
         isApplyingRealtime = true
         defer { isApplyingRealtime = false }
-        do {
-            let page = try await rooms.messages(
-                roomID: roomID,
-                channel: channel,
-                page: PageRequest(limit: 30)
-            )
-            let mapped = page.items.map(RoomMessageMapping.displayMessage)
-            let beforeIDs = Set(messages.map(\.id))
-            // Commit merge immediately — hydrate senders afterward (no await before write).
-            commitMessages(mapped)
-            let addedPeerMessages = mapped.contains {
-                $0.senderProfileID != viewerID && !beforeIDs.contains($0.id)
+
+        var merged: Message?
+        if let payload = signal.recordPayload {
+            merged = MessageRealtimeMerge.roomDisplayMessage(from: payload)
+        }
+        if merged == nil, let rawID = signal.messageID {
+#if DEBUG
+            MessagingRealtimeDebugLog.networkFallback(reason: "room_single_page_fallback")
+#endif
+            do {
+                let page = try await rooms.messages(
+                    roomID: roomID,
+                    channel: channel,
+                    page: PageRequest(limit: 1)
+                )
+                merged = page.items.first.map(RoomMessageMapping.displayMessage)
+                _ = rawID
+            } catch {
+                return
             }
-            await hydrateSenders(for: mapped)
-            persistActiveChannelCache(scrollAnchor: messages.last?.id)
-            await hydrateSharedContent(from: mapped)
-            if let last = messages.last {
-                patchInboxPreview(with: last)
-            }
-            // Web: while the room is open, inbound inserts re-run `mark_room_read`.
-            if addedPeerMessages {
-                await markRoomSeenIfNeeded(force: true)
-            }
-        } catch {
-            // Soft-fail event-driven hydrate.
+        }
+        guard let incoming = merged else { return }
+
+        let beforeIDs = Set(messages.map(\.id))
+        commitMessages([incoming])
+        let addedPeerMessage = incoming.senderProfileID != viewerID && !beforeIDs.contains(incoming.id)
+        await hydrateSenders(for: [incoming])
+        persistActiveChannelCache(scrollAnchor: messages.last?.id)
+        await hydrateSharedContent(from: [incoming])
+        patchInboxPreview(with: incoming)
+#if DEBUG
+        MessagingRealtimeDebugLog.roomInsert(
+            roomID: roomID.rawValue,
+            messageID: incoming.id.rawValue,
+            source: "roomThread"
+        )
+#endif
+        if addedPeerMessage {
+            await markRoomSeenIfNeeded(force: true)
         }
     }
 

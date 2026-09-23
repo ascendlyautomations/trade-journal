@@ -14,7 +14,11 @@ nonisolated protocol BrokerIntegrationRepository: Sendable {
         brokerIntegrationAccountId: String,
         draft: TradingAccountDraft
     ) async throws -> BrokerLinkAccountsResponse
-    func syncTradovateAccount(connectionId: String, mappingId: String) async throws -> TradovateAccountSyncResponse
+    func syncTradovateAccount(
+        connectionId: String,
+        mappingId: String,
+        mode: TradovateSyncRequestMode
+    ) async throws -> TradovateAccountSyncResponse
     func runBrokerImport(mappingIds: [String]) async throws -> BrokerManualImportResponse
     func importEligibility() async throws -> BrokerImportEligibilityResponse
     func disconnectTradovate(connectionId: String) async throws

@@ -21,7 +21,7 @@ nonisolated enum AnalyticsCalendarRangeCoalescing {
     }
 
     private static func mergeSameScope(_ intents: [AnalyticsCalendarRangeIntent]) -> [AnalyticsCalendarRangeIntent] {
-        guard let first = intents.first else { return [] }
+        guard !intents.isEmpty else { return [] }
         let sorted = intents.sorted {
             if $0.startDate != $1.startDate { return $0.startDate < $1.startDate }
             return $0.endDate < $1.endDate

@@ -158,6 +158,8 @@ nonisolated enum ColdLaunchSummaryProbe {
 
             logger.debug("\(coldSummary, privacy: .public)")
             logger.debug("\(performanceSummary, privacy: .public)")
+            print(coldSummary)
+            print(performanceSummary)
         }
     }
 

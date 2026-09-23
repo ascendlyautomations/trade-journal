@@ -36,7 +36,7 @@ enum AnalyticsShadowWriter {
             accountScope: AnalyticsScopeKeys.accountScopeKey(forQueryAccountID: queryAccountID),
             modeScope: AnalyticsScopeKeys.modeScopeKey(forQueryMode: queryMode)
         )
-        let store = AnalyticsLocalStore()
+        let store = AnalyticsLocalStore.sharedStore()
         do {
             try await store.ingestCalendarDailyRange(
                 viewerID: viewerID,

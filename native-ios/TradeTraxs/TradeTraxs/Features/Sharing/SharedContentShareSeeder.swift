@@ -29,22 +29,38 @@ enum SharedContentShareSeeder {
         switch reference {
         case .feedPost(let id), .profilePost(let id):
             if detailCache.post(id: id) != nil { return }
-            if let post = SocialEntityDiskCache.loadPost(id: id, viewerID: viewerID) {
+            if let post = SocialEntityPersistedCacheCoordinator.loadPost(
+                id: id,
+                viewerID: viewerID,
+                purpose: "sharedContentShareSeeder"
+            ) {
                 detailCache.seed(post)
                 if let tradeID = post.linkedTradeID,
                    detailCache.tradeSummary(id: tradeID) == nil,
-                   let summary = SocialEntityDiskCache.loadTradeSummary(id: tradeID, viewerID: viewerID)
+                   let summary = SocialEntityPersistedCacheCoordinator.loadTradeSummary(
+                       id: tradeID,
+                       viewerID: viewerID,
+                       purpose: "sharedContentShareSeeder.linkedTrade"
+                   )
                 {
                     detailCache.seedPresentationSeed(summary)
                 }
             }
         case .reel(let id):
             if detailCache.reel(id: id) != nil { return }
-            if let reel = SocialEntityDiskCache.loadReel(id: id, viewerID: viewerID) {
+            if let reel = SocialEntityPersistedCacheCoordinator.loadReel(
+                id: id,
+                viewerID: viewerID,
+                purpose: "sharedContentShareSeeder"
+            ) {
                 detailCache.seed(reel)
                 if let tradeID = reel.linkedTradeID,
                    detailCache.tradeSummary(id: tradeID) == nil,
-                   let summary = SocialEntityDiskCache.loadTradeSummary(id: tradeID, viewerID: viewerID)
+                   let summary = SocialEntityPersistedCacheCoordinator.loadTradeSummary(
+                       id: tradeID,
+                       viewerID: viewerID,
+                       purpose: "sharedContentShareSeeder.linkedTrade"
+                   )
                 {
                     detailCache.seedPresentationSeed(summary)
                 }
@@ -52,7 +68,11 @@ enum SharedContentShareSeeder {
         case .achievementPost(let id):
             let achievementID = AchievementID(id.rawValue)
             if detailCache.achievement(id: achievementID) != nil { return }
-            if let achievement = SocialEntityDiskCache.loadAchievement(id: achievementID, viewerID: viewerID) {
+            if let achievement = SocialEntityPersistedCacheCoordinator.loadAchievement(
+                id: achievementID,
+                viewerID: viewerID,
+                purpose: "sharedContentShareSeeder"
+            ) {
                 detailCache.seed(achievement)
             }
         case .trade(let id):
@@ -71,7 +91,11 @@ enum SharedContentShareSeeder {
             detailCache.seedPresentationSeed(summary)
             return
         }
-        if let summary = SocialEntityDiskCache.loadTradeSummary(id: tradeID, viewerID: viewerID) {
+        if let summary = SocialEntityPersistedCacheCoordinator.loadTradeSummary(
+            id: tradeID,
+            viewerID: viewerID,
+            purpose: "sharedContentShareSeeder.trade"
+        ) {
             detailCache.seedPresentationSeed(summary)
         }
     }

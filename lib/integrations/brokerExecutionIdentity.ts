@@ -50,6 +50,10 @@ export async function findCanonicalTradeIdForBrokerFillIds(
 export const BROKER_EXECUTION_RECONSTRUCTION_SELECT =
   "external_fill_id, external_contract_id, side, quantity, price, executed_at" as const
 
+/** Tradovate reconstruction + persisted contract hints on the execution ledger. */
+export const BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT =
+  "external_fill_id, external_contract_id, side, quantity, price, executed_at, symbol_root, contract_name" as const
+
 /** Reconstruction columns plus Rithmic contract metadata from the execution ledger. */
 export const BROKER_EXECUTION_RITHMIC_RECONSTRUCTION_SELECT =
   "external_fill_id, external_contract_id, side, quantity, price, executed_at, symbol_root, contract_name" as const
@@ -65,6 +69,12 @@ export type BrokerExecutionReconstructionRow = {
 }
 
 export type BrokerExecutionRithmicReconstructionRow =
+  BrokerExecutionReconstructionRow & {
+    symbol_root: string | null
+    contract_name: string | null
+  }
+
+export type BrokerExecutionTradovateReconstructionRow =
   BrokerExecutionReconstructionRow & {
     symbol_root: string | null
     contract_name: string | null
@@ -100,6 +110,12 @@ function isBrokerExecutionRithmicReconstructionRow(
     "symbol_root" in row &&
     "contract_name" in row
   )
+}
+
+function isBrokerExecutionTradovateReconstructionRow(
+  row: unknown
+): row is BrokerExecutionTradovateReconstructionRow {
+  return isBrokerExecutionRithmicReconstructionRow(row)
 }
 
 async function fetchBrokerExecutionsForExternalAccount(
@@ -152,12 +168,22 @@ export async function listBrokerExecutionsForExternalAccount(
 export async function listBrokerExecutionsForExternalAccount(
   supabase: SupabaseClient,
   params: ListBrokerExecutionsBaseParams & {
+    select: typeof BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT
+  }
+): Promise<BrokerExecutionTradovateReconstructionRow[]>
+
+export async function listBrokerExecutionsForExternalAccount(
+  supabase: SupabaseClient,
+  params: ListBrokerExecutionsBaseParams & {
     select:
       | typeof BROKER_EXECUTION_RECONSTRUCTION_SELECT
       | typeof BROKER_EXECUTION_RITHMIC_RECONSTRUCTION_SELECT
+      | typeof BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT
   }
 ): Promise<
-  BrokerExecutionReconstructionRow[] | BrokerExecutionRithmicReconstructionRow[]
+  | BrokerExecutionReconstructionRow[]
+  | BrokerExecutionRithmicReconstructionRow[]
+  | BrokerExecutionTradovateReconstructionRow[]
 > {
   const rows = await fetchBrokerExecutionsForExternalAccount(
     supabase,
@@ -166,6 +192,9 @@ export async function listBrokerExecutionsForExternalAccount(
   )
   if (params.select === BROKER_EXECUTION_RITHMIC_RECONSTRUCTION_SELECT) {
     return rows.filter(isBrokerExecutionRithmicReconstructionRow)
+  }
+  if (params.select === BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT) {
+    return rows.filter(isBrokerExecutionTradovateReconstructionRow)
   }
   return rows.filter(isBrokerExecutionReconstructionRow)
 }

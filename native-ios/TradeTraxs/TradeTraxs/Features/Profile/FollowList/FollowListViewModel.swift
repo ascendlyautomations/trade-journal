@@ -229,11 +229,16 @@ final class FollowListViewModel {
             viewerFollowingIDs = ids
             detailCache.seedViewerFollowingIDs(ids)
             detailCache.seed(following: page.items, for: viewerID)
-            await SessionFollowingStore.shared.seed(
+            await SessionFollowingStore.shared.seedComplete(
                 viewerID: viewerID.rawValue,
                 ids: Set(ids.map(\.rawValue))
             )
-            SessionDiskCache.saveFollowing(ids: ids.map(\.rawValue), for: viewerID)
+            let generation = RelationshipWriteGeneration.bump(viewerID: viewerID)
+            RelationshipFollowingPersistence.saveComplete(
+                ids: ids.map(\.rawValue),
+                viewerID: viewerID,
+                generation: generation
+            )
         } catch {
             // Soft-fail — buttons default to Follow.
         }

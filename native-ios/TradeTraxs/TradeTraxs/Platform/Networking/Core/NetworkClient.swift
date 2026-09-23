@@ -89,7 +89,8 @@ actor URLSessionNetworkClient: NetworkClient {
                 let (data, response, taskMetrics) = try await NetworkConcurrencyCoordinator.shared.runWithSlot(
                     priority: priority,
                     path: path,
-                    host: host
+                    host: host,
+                    method: current.method
                 ) {
                     if isAuthTokenRefresh {
                         AuthRefreshTiming.concurrencyAcquired(path: path, priority: priority)
@@ -204,6 +205,17 @@ actor URLSessionNetworkClient: NetworkClient {
                         reason: cancelled.localizedDescription,
                         cancelSource: "transport"
                     )
+                    if Self.isAuthTokenRefreshRequest(path: current.url.path, method: current.method) {
+                        AuthLifecycleTrace.log(
+                            operation: "network.tokenExchange",
+                            authGeneration: AuthLifecycleGeneration.current(),
+                            requestPath: current.url.path,
+                            decision: "cancelled",
+                            reason: cancelled.localizedDescription,
+                            cancelInitiatorGeneration: await NetworkConcurrencyCoordinator.shared
+                                .currentSessionEndGeneration()
+                        )
+                    }
                     #endif
                     throw cancelled
                 }
@@ -245,7 +257,8 @@ actor URLSessionNetworkClient: NetworkClient {
             return try await NetworkConcurrencyCoordinator.shared.runWithSlot(
                 priority: priority,
                 path: path,
-                host: host
+                host: host,
+                method: current.method
             ) {
                 try await session.bytes(for: urlRequest)
             }

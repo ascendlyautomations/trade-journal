@@ -48,8 +48,19 @@ final class AchievementsContainerViewModel {
     }
 
     func prefetchEngagement(for achievementIDs: [AchievementID]) {
-        guard !achievementIDs.isEmpty else { return }
-        engagementStore?.prefetch(achievementIDs.map { .achievement($0) })
+        let targets = achievementIDs.map { InteractionTarget.achievement($0) }
+        if targets.isEmpty {
+            EngagementRealtimeSession.shared.updateRetention(
+                ownerKey: "profile-achievements:\(profileID.rawValue)",
+                targets: []
+            )
+            return
+        }
+        engagementStore?.prefetch(targets)
+        EngagementRealtimeSession.shared.updateRetention(
+            ownerKey: "profile-achievements:\(profileID.rawValue)",
+            targets: Set(targets)
+        )
     }
 
     func applyBootstrap(_ snapshot: ProfileState) {

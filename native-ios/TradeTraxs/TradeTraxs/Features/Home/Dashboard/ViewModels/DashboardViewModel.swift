@@ -25,6 +25,8 @@ final class DashboardViewModel {
 
     var accountFilter: DashboardAccountFilter = .all
     var dateRange: DashboardDateRange = .thirtyDays
+    /// Widened preset for the equity hero when the dashboard selection has no trades in-range.
+    private(set) var effectiveEquityChartRange: DashboardDateRange = .thirtyDays
 
     private let trades: any TradeRepository
     private let achievements: any AchievementRepository
@@ -46,7 +48,7 @@ final class DashboardViewModel {
     private var loadGeneration: UInt64 = 0
     private var pendingHistoryBackfill = false
     private var watchedChannel: RealtimeChannelID?
-    /// Manual date-range override for the current account filter (cleared on account switch).
+    /// Manual date-range override (persists across account switches).
     private var hasUserSelectedDateRangeForCurrentFilter = false
     /// When true, pick the best preset for ``accountFilter`` once trade history is authoritative.
     private var pendingAutomaticDateRangeResolution = true
@@ -58,6 +60,8 @@ final class DashboardViewModel {
     private var payoutCyclesByAccount: [TradingAccountID: [AccountPayoutCycle]] = [:]
     /// Dashboard V3 authoritative analytical payload (no fat trade window).
     private var analyticsV3Bootstrap: AnalyticsDashboardBootstrapV3?
+    private var equityChartSummary: DashboardChartMetrics.Summary?
+    private var equityChartAccountFilter: DashboardAccountFilter?
     private var analyticsV3Revision: Int64 = 0
     private var lastAccountScopedSummary: DashboardChartMetrics.Summary?
     private var lastAccountScopedFilter: DashboardAccountFilter?
@@ -198,21 +202,34 @@ final class DashboardViewModel {
         DashboardEquityHeroPresentation.title(propStartingBalance: equityHeroPropStartingBalance)
     }
 
+    var equityHeroSummary: DashboardChartMetrics.Summary? {
+        guard equityChartAccountFilter == accountFilter else { return nil }
+        return equityChartSummary
+    }
+
     var equityHeroDisplayValue: Decimal {
-        guard let summary else { return 0 }
-        if usesDashboardAnalyticsV3, !selectedAccountChartsLoaded {
-            return summary.netPnL
+        guard let heroSummary = equityHeroSummary ?? summary else { return 0 }
+        if usesDashboardAnalyticsV3,
+           case .account = accountFilter,
+           !selectedAccountChartsLoaded
+        {
+            return heroSummary.netPnL
         }
         return DashboardEquityHeroPresentation.displayEquity(
-            currentEquity: summary.currentEquity,
+            currentEquity: heroSummary.currentEquity,
             propStartingBalance: equityHeroPropStartingBalance
         )
     }
 
     var equityHeroChartPoints: [ProfileStatisticsMetrics.EquityPoint] {
-        guard let summary, selectedAccountChartsLoaded else { return [] }
+        guard equityChartAccountFilter == accountFilter,
+              let heroSummary = equityChartSummary
+        else { return [] }
+        if usesDashboardAnalyticsV3, case .account = accountFilter, !selectedAccountChartsLoaded {
+            return []
+        }
         return DashboardEquityHeroPresentation.chartPoints(
-            summary.equityData,
+            heroSummary.equityData,
             propStartingBalance: equityHeroPropStartingBalance
         )
     }
@@ -438,8 +455,8 @@ final class DashboardViewModel {
         guard accountFilter != filter else { return }
         ExperienceHaptics.play(.selection)
         accountFilter = filter
-        hasUserSelectedDateRangeForCurrentFilter = false
-        pendingAutomaticDateRangeResolution = true
+        equityChartSummary = nil
+        equityChartAccountFilter = nil
         if case .account(let id) = filter,
            payoutCyclesByAccount[id] == nil,
            let profileID,
@@ -1260,6 +1277,7 @@ final class DashboardViewModel {
             payoutTotal: payoutTotal
         )
         summary = result
+        refreshEquityChartPresentation()
         recomputePsychology()
     }
 
@@ -1336,6 +1354,8 @@ final class DashboardViewModel {
             }
         }
 
+        refreshEquityChartPresentation(bootstrap: bootstrap)
+
         guard let bundle = DashboardAnalyticsMapper.bundle(
             in: bootstrap,
             accountFilter: accountFilter,
@@ -1345,7 +1365,14 @@ final class DashboardViewModel {
             recomputePsychology()
             return
         }
-        let equityCount = selectedAccountChartsLoaded ? bundle.equity.points.count : 0
+        let equityCount = selectedAccountChartsLoaded
+            ? (DashboardAnalyticsMapper.bundle(
+                in: bootstrap,
+                accountFilter: accountFilter,
+                dateRange: effectiveEquityChartRange,
+                accountCharts: accountChartsForFilter()
+            )?.equity.points.count ?? 0)
+            : 0
         DashboardAnalyticsV3Probe.log(
             source: "local",
             reason: "recompute",
@@ -1617,43 +1644,61 @@ final class DashboardViewModel {
         }
     }
 
-    /// Picks 30D → 90D → YTD → All for the current ``accountFilter`` when history is ready.
+    /// Clears the one-time automatic preset flag without mutating ``dateRange``.
+    /// Equity widening is handled by ``refreshEquityChartPresentation()``.
     private func resolveAutomaticDateRangeIfNeeded() {
         guard pendingAutomaticDateRangeResolution else { return }
-        guard !hasUserSelectedDateRangeForCurrentFilter else {
-            pendingAutomaticDateRangeResolution = false
-            return
-        }
-        guard initialTradeHistoryReady else { return }
-
-        if usesDashboardAnalyticsV3, let bootstrap = analyticsV3Bootstrap {
-            let resolved = DashboardDateRangeFallback.initialEffectiveRange(
-                analyticsBootstrap: bootstrap,
-                accountFilter: accountFilter
-            )
-            pendingAutomaticDateRangeResolution = false
-            if dateRange != resolved {
-                dateRange = resolved
-            }
-            return
-        }
-
-        if tradeInputs.isEmpty {
-            if authoritativeTotalTradeCount == 0 {
+        if usesDashboardAnalyticsV3 {
+            if analyticsV3Bootstrap != nil {
                 pendingAutomaticDateRangeResolution = false
             }
-            // Server reports trades but owner history not hydrated yet — wait for fuller data.
+            return
+        }
+        if !initialTradeHistoryReady {
+            if tradeInputs.isEmpty, authoritativeTotalTradeCount == 0 {
+                pendingAutomaticDateRangeResolution = false
+            }
+            return
+        }
+        pendingAutomaticDateRangeResolution = false
+    }
+
+    private func refreshEquityChartPresentation(bootstrap: AnalyticsDashboardBootstrapV3? = nil) {
+        let charts = accountChartsForFilter()
+        if let bootstrap {
+            effectiveEquityChartRange = DashboardEquityChartRangeResolver.effectiveRange(
+                requested: dateRange,
+                analyticsBootstrap: bootstrap,
+                accountFilter: accountFilter,
+                accountCharts: charts
+            )
+            guard let bundle = DashboardAnalyticsMapper.bundle(
+                in: bootstrap,
+                accountFilter: accountFilter,
+                dateRange: effectiveEquityChartRange,
+                accountCharts: charts
+            ) else {
+                equityChartSummary = nil
+                equityChartAccountFilter = accountFilter
+                return
+            }
+            equityChartSummary = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+            equityChartAccountFilter = accountFilter
             return
         }
 
-        let resolved = DashboardDateRangeFallback.initialEffectiveRange(
+        effectiveEquityChartRange = DashboardEquityChartRangeResolver.effectiveRange(
+            requested: dateRange,
             tradeInputs: tradeInputs,
             accountFilter: accountFilter
         )
-        pendingAutomaticDateRangeResolution = false
-        if dateRange != resolved {
-            dateRange = resolved
-        }
+        equityChartSummary = DashboardChartMetrics.compute(
+            from: tradeInputs,
+            accountFilter: accountFilter,
+            dateRange: effectiveEquityChartRange,
+            payoutTotal: payoutTotal
+        )
+        equityChartAccountFilter = accountFilter
     }
 
     private func noteTradeHistoryApplied(totalTradeCount: Int?, historyComplete: Bool) {

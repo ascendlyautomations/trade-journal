@@ -11,7 +11,7 @@ nonisolated struct ProfileAnalyticsVisibilityIdentity: Equatable, Sendable {
     }
 
     static func from(snapshot: ProfileState, subjectProfileID: ProfileID) -> ProfileAnalyticsVisibilityIdentity {
-        if snapshot.isContentLocked {
+        if !snapshot.canViewTrades, !snapshot.isOwner {
             return locked(subjectProfileID: subjectProfileID)
         }
         let isPrivate = snapshot.profile?.isPrivate == true

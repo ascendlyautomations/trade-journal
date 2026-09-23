@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 /// Viewer-scoped analytical store (shadow write + typed read APIs — not UI-authoritative through Phase 5D).
-struct AnalyticsLocalStore {
+nonisolated struct AnalyticsLocalStore: Sendable {
     struct IngestScope: Sendable, Equatable {
         var startDate: String
         var endDate: String
@@ -14,8 +14,12 @@ struct AnalyticsLocalStore {
 
     let database: AnalyticsDatabase
 
-    init(database: AnalyticsDatabase = .shared) {
+    nonisolated init(database: AnalyticsDatabase) {
         self.database = database
+    }
+
+    nonisolated static func sharedStore() -> AnalyticsLocalStore {
+        AnalyticsLocalStore(database: .shared)
     }
 
     /// Replace daily rows for the ingested scope, then coverage + sync revision (single transaction).
@@ -31,13 +35,14 @@ struct AnalyticsLocalStore {
             AnalyticsDailyStatRecord.from(row: $0, viewerID: viewer, ingestedRevision: revision)
         }
         let started = Date()
+        let recordsToInsert = records
         let queue = try await database.databaseQueue()
         try await queue.write { db in
             try deleteDailyStatsInIngestScope(db: db, viewerID: viewer, scope: scope)
             if simulateFailureAfterDelete {
-                throw AnalyticsLocalStoreTestSupport.simulatedFailure
+                throw AnalyticsLocalStoreSimulatedIngestFailure.afterDelete
             }
-            for record in records {
+            for record in recordsToInsert {
                 try record.insert(db, onConflict: .replace)
             }
             let coverage = AnalyticsRangeCoverageRecord(
@@ -178,6 +183,8 @@ struct AnalyticsLocalStore {
             _ = key
         }
 
+        let metricRecordsToWrite = metricRecords
+        let aggregateChartsToWrite = aggregateCharts
         let queue = try await database.databaseQueue()
         try await queue.write { db in
             try DashboardPresetMetricsRecord
@@ -187,10 +194,10 @@ struct AnalyticsLocalStore {
                 .filter(Column("viewer_id") == viewer)
                 .filter(Column("account_scope_key") == AnalyticsScopeKeys.allAccountsQuery)
                 .deleteAll(db)
-            for record in metricRecords {
+            for record in metricRecordsToWrite {
                 try record.insert(db, onConflict: .replace)
             }
-            for record in aggregateCharts {
+            for record in aggregateChartsToWrite {
                 try record.insert(db, onConflict: .replace)
             }
             let coverage = AnalyticsRangeCoverageRecord(
@@ -239,13 +246,14 @@ struct AnalyticsLocalStore {
             )
         }
 
+        let bundlesToWrite = bundles
         let queue = try await database.databaseQueue()
         try await queue.write { db in
             try DashboardChartBundleRecord
                 .filter(Column("viewer_id") == viewer)
                 .filter(Column("account_scope_key") == accountKey)
                 .deleteAll(db)
-            for record in bundles {
+            for record in bundlesToWrite {
                 try record.insert(db, onConflict: .replace)
             }
             let coverage = AnalyticsRangeCoverageRecord(
@@ -329,7 +337,7 @@ struct AnalyticsLocalStore {
         return raw
     }
 
-    private func deleteDailyStatsInIngestScope(
+    nonisolated private func deleteDailyStatsInIngestScope(
         db: Database,
         viewerID: String,
         scope: IngestScope
@@ -352,11 +360,11 @@ struct AnalyticsLocalStore {
         try db.execute(sql: sql, arguments: StatementArguments(args))
     }
 
-    private func isoNow() -> String {
+    nonisolated private func isoNow() -> String {
         ISO8601DateFormatter().string(from: Date())
     }
 
-    private func upsertMonotonicSyncState(db: Database, viewerID: String, revision: Int64) throws {
+    nonisolated private func upsertMonotonicSyncState(db: Database, viewerID: String, revision: Int64) throws {
         if var existing = try AnalyticsSyncStateRecord.fetchOne(db, key: viewerID) {
             existing.server_revision = max(existing.server_revision, revision)
             existing.updated_at = isoNow()
@@ -381,7 +389,8 @@ nonisolated enum AnalyticsLocalStoreDebug {
     }
 }
 
-enum AnalyticsLocalStoreTestSupport {
-    static let simulatedFailure = NSError(domain: "AnalyticsLocalStoreTest", code: 1)
-}
 #endif
+
+nonisolated enum AnalyticsLocalStoreSimulatedIngestFailure: Error {
+    case afterDelete
+}

@@ -14,7 +14,6 @@ enum RealtimeLifecycleDebugLog {
 
     nonisolated static func log(_ message: String) {
         let line = "\(prefix) \(message)"
-        logger.debug("\(line, privacy: .public)")
         print(line)
     }
 
@@ -128,6 +127,106 @@ enum RealtimeLifecycleDebugLog {
     nonisolated static func hubResumeIfNeeded() {
         log("HUB-RESUME-IF-NEEDED")
     }
+
+    // MARK: - Phase 10B consumer-safe route lifecycle (`[RealtimeLifecycle]`)
+
+    nonisolated private static let lifecyclePrefix = "[RealtimeLifecycle]"
+
+    nonisolated private static func lifecycleLog(_ message: String) {
+        let line = "\(lifecyclePrefix) \(message)"
+        print(line)
+    }
+
+    nonisolated static func consumerRetain(
+        routeKey: String,
+        consumerID: UUID,
+        owner: String?,
+        consumerCount: Int,
+        joined: Bool,
+        sessionGeneration: UInt64
+    ) {
+        let ownerPart = owner.map { " owner=\($0)" } ?? ""
+        lifecycleLog(
+            "consumerRetain route=\(routeKey) consumer=\(consumerID.uuidString.prefix(8))\(ownerPart) "
+                + "consumers=\(consumerCount) joined=\(joined) sessionGen=\(sessionGeneration)"
+        )
+    }
+
+    nonisolated static func duplicateRetainIgnored(
+        routeKey: String,
+        consumerID: UUID,
+        owner: String?,
+        consumerCount: Int,
+        sessionGeneration: UInt64
+    ) {
+        let ownerPart = owner.map { " owner=\($0)" } ?? ""
+        lifecycleLog(
+            "duplicateRetainIgnored route=\(routeKey) consumer=\(consumerID.uuidString.prefix(8))\(ownerPart) "
+                + "consumers=\(consumerCount) sessionGen=\(sessionGeneration)"
+        )
+    }
+
+    nonisolated static func consumerRelease(
+        routeKey: String,
+        consumerID: UUID,
+        owner: String?,
+        consumerCount: Int,
+        joined: Bool,
+        willLeave: Bool
+    ) {
+        let ownerPart = owner.map { " owner=\($0)" } ?? ""
+        lifecycleLog(
+            "consumerRelease route=\(routeKey) consumer=\(consumerID.uuidString.prefix(8))\(ownerPart) "
+                + "consumers=\(consumerCount) joined=\(joined) willLeave=\(willLeave)"
+        )
+    }
+
+    nonisolated static func duplicateReleaseIgnored(
+        routeKey: String,
+        consumerID: UUID,
+        owner: String?,
+        consumerCount: Int
+    ) {
+        let ownerPart = owner.map { " owner=\($0)" } ?? ""
+        lifecycleLog(
+            "duplicateReleaseIgnored route=\(routeKey) consumer=\(consumerID.uuidString.prefix(8))\(ownerPart) "
+                + "consumers=\(consumerCount)"
+        )
+    }
+
+    nonisolated static func consumerStreamDetach(
+        routeKey: String,
+        consumerID: UUID,
+        owner: String?,
+        consumerCount: Int,
+        streamsRemaining: Int
+    ) {
+        let ownerPart = owner.map { " owner=\($0)" } ?? ""
+        lifecycleLog(
+            "consumerStreamDetach route=\(routeKey) consumer=\(consumerID.uuidString.prefix(8))\(ownerPart) "
+                + "consumers=\(consumerCount) streamsRemaining=\(streamsRemaining)"
+        )
+    }
+
+    nonisolated static func routeJoin(routeKey: String, topic: String) {
+        lifecycleLog("routeJoin route=\(routeKey) topic=\(topic)")
+    }
+
+    nonisolated static func routeReuse(routeKey: String, topic: String) {
+        lifecycleLog("routeReuse route=\(routeKey) topic=\(topic)")
+    }
+
+    nonisolated static func routeLeave(routeKey: String, topic: String) {
+        lifecycleLog("routeLeave route=\(routeKey) topic=\(topic)")
+    }
+
+    nonisolated static func routeRejoin(routeKey: String, topic: String) {
+        lifecycleLog("routeRejoin route=\(routeKey) topic=\(topic)")
+    }
+
+    nonisolated static func forceSessionClear(reason: String, sessionGeneration: UInt64) {
+        lifecycleLog("forceSessionClear reason=\(reason) sessionGen=\(sessionGeneration)")
+    }
 }
 #else
 enum RealtimeLifecycleDebugLog {
@@ -167,5 +266,46 @@ enum RealtimeLifecycleDebugLog {
     nonisolated static func hubStart() {}
     nonisolated static func hubStop() {}
     nonisolated static func hubResumeIfNeeded() {}
+    nonisolated static func consumerRetain(
+        routeKey: String,
+        consumerID: UUID,
+        owner: String?,
+        consumerCount: Int,
+        joined: Bool,
+        sessionGeneration: UInt64
+    ) {}
+    nonisolated static func duplicateRetainIgnored(
+        routeKey: String,
+        consumerID: UUID,
+        owner: String?,
+        consumerCount: Int,
+        sessionGeneration: UInt64
+    ) {}
+    nonisolated static func consumerRelease(
+        routeKey: String,
+        consumerID: UUID,
+        owner: String?,
+        consumerCount: Int,
+        joined: Bool,
+        willLeave: Bool
+    ) {}
+    nonisolated static func duplicateReleaseIgnored(
+        routeKey: String,
+        consumerID: UUID,
+        owner: String?,
+        consumerCount: Int
+    ) {}
+    nonisolated static func consumerStreamDetach(
+        routeKey: String,
+        consumerID: UUID,
+        owner: String?,
+        consumerCount: Int,
+        streamsRemaining: Int
+    ) {}
+    nonisolated static func routeJoin(routeKey: String, topic: String) {}
+    nonisolated static func routeReuse(routeKey: String, topic: String) {}
+    nonisolated static func routeLeave(routeKey: String, topic: String) {}
+    nonisolated static func routeRejoin(routeKey: String, topic: String) {}
+    nonisolated static func forceSessionClear(reason: String, sessionGeneration: UInt64) {}
 }
 #endif

@@ -217,7 +217,7 @@ nonisolated enum CalendarAnalyticsAggregator {
     }
 }
 
-private func analyticsDecimal(_ wire: PostgresFlexibleDouble) -> Decimal {
+nonisolated private func analyticsDecimal(_ wire: PostgresFlexibleDouble) -> Decimal {
     guard let value = wire.value else { return 0 }
     return Decimal(value)
 }

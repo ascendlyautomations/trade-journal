@@ -7,7 +7,6 @@ actor AnalyticsDatabase {
 
     struct Configuration: Sendable {
         var databaseURL: URL?
-        var fileManager: FileManager = .default
 
         static let production = Configuration()
 
@@ -53,7 +52,7 @@ actor AnalyticsDatabase {
     }
 
     private func fileBytes(at url: URL) -> Int64 {
-        guard let attrs = try? configuration.fileManager.attributesOfItem(atPath: url.path),
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
               let size = attrs[.size] as? NSNumber
         else { return 0 }
         return size.int64Value
@@ -74,7 +73,7 @@ actor AnalyticsDatabase {
         AnalyticsGRDBProbe.logMigration(elapsedMs: migrateMs)
         let openMs = Int(Date().timeIntervalSince(started) * 1000)
         AnalyticsGRDBProbe.logOpen(elapsedMs: openMs)
-        let bytes = (try? configuration.fileManager.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?
+        let bytes = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?
             .int64Value ?? 0
         AnalyticsGRDBProbe.logDatabaseBytes(bytes)
         return queue
@@ -104,10 +103,10 @@ actor AnalyticsDatabase {
     private func ensureDatabaseURL() throws -> URL {
         if let url = configuration.databaseURL {
             let dir = url.deletingLastPathComponent()
-            try configuration.fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             return url
         }
-        guard let support = configuration.fileManager.urls(
+        guard let support = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first else {
@@ -116,7 +115,7 @@ actor AnalyticsDatabase {
         let dir = support
             .appendingPathComponent("TradeTraxs", isDirectory: true)
             .appendingPathComponent("Analytics", isDirectory: true)
-        try configuration.fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("TradeTraxsAnalytics.sqlite")
     }
 
@@ -124,7 +123,7 @@ actor AnalyticsDatabase {
         if let url = configuration.databaseURL {
             return url
         }
-        guard let support = configuration.fileManager.urls(
+        guard let support = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first else { return nil }

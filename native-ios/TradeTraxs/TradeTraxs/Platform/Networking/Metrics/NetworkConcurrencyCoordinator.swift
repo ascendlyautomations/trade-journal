@@ -22,8 +22,52 @@ actor NetworkConcurrencyCoordinator {
     }
 
     private var backgroundWaiters: [BackgroundWaiter] = []
+    /// Blocks authenticated REST/RPC acquires after logout — not GoTrue bootstrap/token exchange.
+    private var authenticatedSessionNetworkingBlocked = false
+    private var sessionEndGeneration: UInt64 = 0
 
     private init() {}
+
+    /// Hard session boundary — resume every waiter and reject new authenticated acquires until login succeeds.
+    func resetForAuthenticatedSessionEnd(authGeneration: UInt64) -> (waitersReleased: Int, inFlightCleared: Int) {
+        authenticatedSessionNetworkingBlocked = true
+        sessionEndGeneration = authGeneration
+        let waitersReleased = backgroundWaiters.count
+        drainBackgroundWaiters()
+        let inFlightCleared = visibleInFlight + backgroundInFlight
+        visibleInFlight = 0
+        backgroundInFlight = 0
+#if DEBUG
+        AuthLifecycleTrace.log(
+            operation: "network.authenticatedSessionBlocked",
+            authGeneration: authGeneration,
+            sessionGeneration: authGeneration,
+            phase: "unauthenticated",
+            decision: "allowed",
+            reason: "logoutSessionEnd"
+        )
+#endif
+        return (waitersReleased, inFlightCleared)
+    }
+
+    func markAuthenticatedSessionActive(authGeneration: UInt64) {
+        authenticatedSessionNetworkingBlocked = false
+        sessionEndGeneration = authGeneration
+#if DEBUG
+        AuthLifecycleTrace.log(
+            operation: "network.authenticatedSessionActive",
+            authGeneration: authGeneration,
+            sessionGeneration: authGeneration,
+            phase: "authenticated",
+            decision: "allowed",
+            reason: "sessionInstalled"
+        )
+#endif
+    }
+
+    func currentSessionEndGeneration() -> UInt64 {
+        sessionEndGeneration
+    }
 
     var totalInFlight: Int { visibleInFlight + backgroundInFlight }
     var waitingBackgroundCount: Int { backgroundWaiters.count }
@@ -33,9 +77,10 @@ actor NetworkConcurrencyCoordinator {
         priority: NetworkSchedulingPriority,
         path: String,
         host: String,
+        method: HTTPMethod = .get,
         operation: @Sendable () async throws -> T
     ) async throws -> T {
-        try await acquire(priority: priority, path: path, host: host)
+        try await acquire(priority: priority, path: path, host: host, method: method)
         do {
             let value = try await operation()
             release(priority: priority, path: path, host: host)
@@ -50,7 +95,31 @@ actor NetworkConcurrencyCoordinator {
         (totalInFlight, visibleInFlight, backgroundInFlight, backgroundWaiters.count)
     }
 
-    private func acquire(priority: NetworkSchedulingPriority, path: String, host: String) async throws {
+    private func acquire(
+        priority: NetworkSchedulingPriority,
+        path: String,
+        host: String,
+        method: HTTPMethod
+    ) async throws {
+        if Task.isCancelled {
+            throw CancellationError()
+        }
+        if authenticatedSessionNetworkingBlocked,
+           !AuthNetworkPolicy.allowsDuringAuthenticatedSessionEnd(path: path, method: method)
+        {
+#if DEBUG
+            AuthLifecycleTrace.log(
+                operation: "network.acquire",
+                authGeneration: AuthLifecycleGeneration.current(),
+                sessionGeneration: sessionEndGeneration,
+                requestPath: path,
+                decision: "cancelled",
+                reason: "authenticatedSessionEnd",
+                cancelInitiatorGeneration: sessionEndGeneration
+            )
+#endif
+            throw CancellationError()
+        }
         switch priority {
         case .visible:
             visibleInFlight += 1
@@ -85,9 +154,20 @@ actor NetworkConcurrencyCoordinator {
                         )
                     }
                 } onCancel: {
-                    Task { await self.removeBackgroundWaiter(id: waiterID) }
+                    Task { await self.cancelBackgroundWaiter(id: waiterID) }
                 }
                 if Task.isCancelled { throw CancellationError() }
+                if authenticatedSessionNetworkingBlocked,
+                   !AuthNetworkPolicy.allowsDuringAuthenticatedSessionEnd(path: path, method: method)
+                {
+                    throw CancellationError()
+                }
+            }
+            if Task.isCancelled { throw CancellationError() }
+            if authenticatedSessionNetworkingBlocked,
+               !AuthNetworkPolicy.allowsDuringAuthenticatedSessionEnd(path: path, method: method)
+            {
+                throw CancellationError()
             }
             backgroundInFlight += 1
             #if DEBUG
@@ -125,10 +205,19 @@ actor NetworkConcurrencyCoordinator {
         #endif
     }
 
-    /// Cancelled waiters leave the queue without acquiring a slot.
-    private func removeBackgroundWaiter(id: UUID) {
+    /// Cancelled or session-invalidated waiters must resume exactly once.
+    private func cancelBackgroundWaiter(id: UUID) {
         guard let index = backgroundWaiters.firstIndex(where: { $0.id == id }) else { return }
-        backgroundWaiters.remove(at: index)
+        let waiter = backgroundWaiters.remove(at: index)
+        waiter.continuation.resume()
+    }
+
+    private func drainBackgroundWaiters() {
+        let pending = backgroundWaiters
+        backgroundWaiters.removeAll()
+        for waiter in pending {
+            waiter.continuation.resume()
+        }
     }
 
     /// Classifies scheduling lane from path, method, and PostgREST query shape.

@@ -29,6 +29,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     private var resolveTask: Task<Void, Never>?
     private var connectivityRetryTask: Task<Void, Never>?
     private var realtimeTask: Task<Void, Never>?
+    private var viewerProfileRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var loadGeneration: UInt64 = 0
     /// True until the first successful gate resolve for this authenticated session.
     private var requiresAuthoritativeResolve = true
@@ -335,7 +336,13 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         realtimeTask = Task { [weak self] in
             guard let self else { return }
             let token = await self.session.accessToken
-            for await _ in realtimeHub.watchViewerProfile(userID: viewerID, accessToken: token) {
+            let watch = realtimeHub.watchViewerProfile(
+                userID: viewerID,
+                accessToken: token,
+                debugOwner: "ProfileOnboarding"
+            )
+            viewerProfileRealtimeConsumer = watch.consumer
+            for await _ in watch.events {
                 guard !Task.isCancelled else { break }
                 await self.handleExternalProfileUpdate()
             }
@@ -345,10 +352,10 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     private func stopRealtime() {
         realtimeTask?.cancel()
         realtimeTask = nil
-        if let userID = snapshot?.profileID.rawValue {
-            Task {
-                await realtimeHub?.stopWatchingViewerProfile(userID: userID)
-            }
+        let consumer = viewerProfileRealtimeConsumer
+        viewerProfileRealtimeConsumer = nil
+        Task {
+            await realtimeHub?.releaseWatch(consumer)
         }
     }
 

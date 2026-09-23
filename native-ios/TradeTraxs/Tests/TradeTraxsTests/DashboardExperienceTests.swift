@@ -221,16 +221,132 @@ final class DashboardExperienceTests: XCTestCase {
         )
     }
 
-    func testViewModelResolvesDateRangeWhenSwitchingAccounts() async {
+    func testEquityChartRangeResolverWidenOrderMatchesSupportedPresets() {
+        XCTAssertEqual(
+            DashboardEquityChartRangeResolver.widenOrder(from: .thirtyDays),
+            [.thirtyDays, .ninetyDays, .ytd, .all]
+        )
+        XCTAssertEqual(
+            DashboardEquityChartRangeResolver.widenOrder(from: .sevenDays),
+            [.sevenDays, .thirtyDays, .ninetyDays, .ytd, .all]
+        )
+    }
+
+    func testEquityChartRangeResolverCases() {
+        let profileID = ProfileID("dev.dashboard.equity-fallback")
+        let now = Date()
+        let accountID = TradingAccountID("dev-account")
+
+        func trade(_ id: String, dayOffset: Int, pnl: Decimal = 100) -> DashboardChartMetrics.Input {
+            let stamp = now.addingTimeInterval(TimeInterval(dayOffset * 86_400))
+            return DashboardChartMetrics.Input(
+                trade: Trade(
+                    id: TradeID(id),
+                    ownerProfileID: profileID,
+                    accountID: accountID,
+                    symbol: Symbol(ticker: "ES"),
+                    side: .long,
+                    mode: .live,
+                    quantity: 1,
+                    entryPrice: 1,
+                    exitPrice: 2,
+                    entryAt: stamp,
+                    exitAt: stamp.addingTimeInterval(3_600),
+                    realizedPnL: Money(amount: pnl),
+                    riskReward: 1,
+                    points: nil,
+                    sessionLabel: "NY",
+                    visibility: .private,
+                    publicCaption: nil,
+                    thumbnail: nil,
+                    notePreview: nil,
+                    createdAt: stamp,
+                    updatedAt: stamp
+                ),
+                accountType: "eval"
+            )
+        }
+
+        let case1 = [trade("recent", dayOffset: -5)]
+        XCTAssertEqual(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                tradeInputs: case1,
+                accountFilter: .all,
+                now: now
+            ),
+            .thirtyDays
+        )
+
+        let case2 = [trade("d90", dayOffset: -45)]
+        XCTAssertEqual(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                tradeInputs: case2,
+                accountFilter: .all,
+                now: now
+            ),
+            .ninetyDays
+        )
+
+        let case3 = (0..<3).map { trade("ytd-\($0)", dayOffset: -120 - $0) }
+        XCTAssertEqual(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                tradeInputs: case3,
+                accountFilter: .all,
+                now: now
+            ),
+            .ytd
+        )
+
+        let case4 = (0..<2).map { trade("all-\($0)", dayOffset: -400 - $0) }
+        XCTAssertEqual(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                tradeInputs: case4,
+                accountFilter: .all,
+                now: now
+            ),
+            .all
+        )
+
+        XCTAssertEqual(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                tradeInputs: [],
+                accountFilter: .all,
+                now: now
+            ),
+            .thirtyDays,
+            "All-empty account keeps requested range for legitimate empty state"
+        )
+
+        let case6 = [trade("zero-pnl", dayOffset: -3, pnl: 0)]
+        XCTAssertEqual(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                tradeInputs: case6,
+                accountFilter: .all,
+                now: now
+            ),
+            .thirtyDays,
+            "Zero net P&L with trades must not widen"
+        )
+    }
+
+    func testViewModelEquityChartRangeWhenSwitchingAccounts() async {
         let profileID = ProfileID("00000000-0000-4000-8000-0000000000aa")
         let now = Date()
         let accountA = TradingAccountID("account-a")
         let accountB = TradingAccountID("account-b")
-        let tradesRepo = DashboardPerAccountFallbackTradeRepository(
+        let accountC = TradingAccountID("account-c")
+        let tradesRepo = DashboardPerAccountEquityFallbackTradeRepository(
             profileID: profileID,
             now: now,
             accountA: accountA,
-            accountB: accountB
+            accountB: accountB,
+            accountC: accountC
         )
         let viewModel = DashboardViewModel(
             home: DashboardStubHomeRepository(),
@@ -245,20 +361,21 @@ final class DashboardExperienceTests: XCTestCase {
         viewModel.loadIfNeeded()
         await waitFor { viewModel.phase == .loaded }
 
-        XCTAssertEqual(viewModel.dateRange, .ytd, "All accounts: two trades in YTD")
+        XCTAssertEqual(viewModel.dateRange, .thirtyDays, "Dashboard filter stays on default 30D")
+        XCTAssertEqual(viewModel.effectiveEquityChartRange, .thirtyDays, "Account A recent trade in 30D")
 
         viewModel.setAccountFilter(.account(accountB))
-        await waitFor { viewModel.dateRange == .all }
+        await waitFor { viewModel.effectiveEquityChartRange == .ytd }
+        XCTAssertEqual(viewModel.dateRange, .thirtyDays, "Dashboard filter unchanged on account switch")
 
-        viewModel.setAccountFilter(.account(accountA))
-        await waitFor { viewModel.dateRange == .all }
+        viewModel.setAccountFilter(.account(accountC))
+        await waitFor { viewModel.effectiveEquityChartRange == .ninetyDays }
+        XCTAssertEqual(viewModel.dateRange, .thirtyDays)
 
         viewModel.setDateRange(.all)
-        XCTAssertEqual(viewModel.dateRange, .all, "Manual selection respected on current account")
-
-        viewModel.setAccountFilter(.account(accountB))
-        await waitFor { viewModel.dateRange == .all }
-        XCTAssertEqual(viewModel.dateRange, .all, "Switching accounts re-runs automatic resolution")
+        viewModel.setAccountFilter(.account(accountA))
+        await waitFor { viewModel.effectiveEquityChartRange == .all }
+        XCTAssertEqual(viewModel.dateRange, .all, "Manual dashboard range respected")
     }
 
     func testChartMetricsExcludeBacktestAndHonorDateRange() {
@@ -660,6 +777,106 @@ private struct DashboardStubTradeRepository: TradeRepository {
     }
 
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] { [] }
+}
+
+private struct DashboardPerAccountEquityFallbackTradeRepository: TradeRepository {
+    let profileID: ProfileID
+    let now: Date
+    let accountA: TradingAccountID
+    let accountB: TradingAccountID
+    let accountC: TradingAccountID
+
+    func trade(id: TradeID) async throws -> Trade {
+        throw AppError.unknown(message: "not found")
+    }
+
+    func trades(
+        ownedBy profileID: ProfileID,
+        accountID: TradingAccountID?,
+        page: PageRequest,
+        publicOnly: Bool
+    ) async throws -> CursorPage<Trade> {
+        CursorPage(items: sampleTrades(), nextCursor: nil)
+    }
+
+    func save(_ draft: TradeDraft) async throws -> Trade {
+        throw AppError.unknown(message: "stub")
+    }
+
+    func update(_ trade: Trade) async throws -> Trade { trade }
+    func delete(id: TradeID) async throws {}
+    func images(for tradeID: TradeID) async throws -> [TradeImage] { [] }
+    func notes(for tradeID: TradeID) async throws -> [TradeNote] { [] }
+
+    func statistics(
+        for profileID: ProfileID,
+        interval: DateIntervalValue
+    ) async throws -> TradeStatistics {
+        TradeStatistics(
+            tradeCount: 3,
+            winCount: 3,
+            lossCount: 0,
+            totalPnL: Money(amount: 200),
+            averagePnL: Money(amount: 100),
+            averageRiskReward: nil,
+            winRate: 1
+        )
+    }
+
+    func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
+        [accountA, accountB, accountC].map { id in
+            TradingAccount(
+                id: id,
+                ownerProfileID: self.profileID,
+                name: id.rawValue,
+                category: .personal,
+                mode: .live,
+                size: Money(amount: 25_000),
+                isActive: true,
+                canAddTrades: true
+            )
+        }
+    }
+
+    private func sampleTrades() -> [Trade] {
+        [
+            makeTrade(id: "a-recent", accountID: accountA, dayOffset: -5),
+            makeTrade(id: "b-ytd", accountID: accountB, dayOffset: -120),
+            makeTrade(id: "c-90d", accountID: accountC, dayOffset: -45, pnl: 0),
+        ]
+    }
+
+    private func makeTrade(
+        id: String,
+        accountID: TradingAccountID,
+        dayOffset: Int,
+        pnl: Decimal = 100
+    ) -> Trade {
+        let stamp = now.addingTimeInterval(TimeInterval(dayOffset * 86_400))
+        return Trade(
+            id: TradeID(id),
+            ownerProfileID: profileID,
+            accountID: accountID,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 1,
+            exitPrice: 2,
+            entryAt: stamp,
+            exitAt: stamp.addingTimeInterval(3_600),
+            realizedPnL: Money(amount: pnl),
+            riskReward: 1,
+            points: nil,
+            sessionLabel: "NY",
+            visibility: .private,
+            publicCaption: nil,
+            thumbnail: nil,
+            notePreview: nil,
+            createdAt: stamp,
+            updatedAt: stamp
+        )
+    }
 }
 
 private struct DashboardPerAccountFallbackTradeRepository: TradeRepository {

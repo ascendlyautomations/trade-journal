@@ -27,6 +27,8 @@ final class CommentsViewModel {
     private var loadTask: Task<Void, Never>?
     private var commentLikeRealtimeTask: Task<Void, Never>?
     private var commentPinRealtimeTask: Task<Void, Never>?
+    private var commentLikeRealtimeConsumer: RealtimeRouteConsumerHandle?
+    private var commentPinRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var trackedCommentIDs: [String] = []
     private var busyCommentIDs: Set<CommentID> = []
     private var busyPinCommentIDs: Set<CommentID> = []
@@ -269,8 +271,10 @@ final class CommentsViewModel {
         let ids = trackedCommentIDs
         trackedCommentIDs = []
         guard !ids.isEmpty else { return }
-        Task { [commentLikeSource, realtimeHub] in
-            await realtimeHub?.stopWatchingCommentLikes(source: commentLikeSource, commentIDs: ids)
+        let consumer = commentLikeRealtimeConsumer
+        commentLikeRealtimeConsumer = nil
+        Task { [realtimeHub, consumer] in
+            await realtimeHub?.releaseWatch(consumer)
         }
     }
 
@@ -278,8 +282,10 @@ final class CommentsViewModel {
         commentPinRealtimeTask?.cancel()
         commentPinRealtimeTask = nil
         guard !target.id.hasPrefix("dev-") else { return }
-        Task { [target, realtimeHub] in
-            await realtimeHub?.stopWatchingCommentPinUpdates(target: target)
+        let consumer = commentPinRealtimeConsumer
+        commentPinRealtimeConsumer = nil
+        Task { [realtimeHub, consumer] in
+            await realtimeHub?.releaseWatch(consumer)
         }
     }
 
@@ -395,11 +401,14 @@ final class CommentsViewModel {
         commentLikeRealtimeTask = Task { [weak self] in
             guard let self else { return }
             let token = await session.accessToken
-            for await signal in realtimeHub.watchCommentLikes(
+            let watch = realtimeHub.watchCommentLikes(
                 source: commentLikeSource,
                 commentIDs: ids,
-                accessToken: token
-            ) {
+                accessToken: token,
+                debugOwner: "CommentsLike"
+            )
+            commentLikeRealtimeConsumer = watch.consumer
+            for await signal in watch.events {
                 guard !Task.isCancelled else { break }
                 applyCommentLikeRealtime(signal)
             }
@@ -414,10 +423,13 @@ final class CommentsViewModel {
         commentPinRealtimeTask = Task { [weak self] in
             guard let self else { return }
             let token = await session.accessToken
-            for await signal in realtimeHub.watchCommentPinUpdates(
+            let watch = realtimeHub.watchCommentPinUpdates(
                 target: target,
-                accessToken: token
-            ) {
+                accessToken: token,
+                debugOwner: "CommentsPin"
+            )
+            commentPinRealtimeConsumer = watch.consumer
+            for await signal in watch.events {
                 guard !Task.isCancelled else { break }
                 applyCommentPinRealtime(signal)
             }

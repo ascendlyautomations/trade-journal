@@ -36,7 +36,7 @@ enum ProfileAnalyticsPresentationCoordinator {
         guard usesProfileAnalyticsV2 else { return nil }
 
         let viewerScope = await ProfileAnalyticsV2ShadowCoordinator.viewerScopeID(session: session)
-        let store = AnalyticsLocalStore()
+        let store = AnalyticsLocalStore.sharedStore()
         let cacheKey = store.profileAnalyticsCacheKey(
             viewerScopeID: viewerScope,
             subjectProfileID: request.subjectProfileID,
@@ -105,7 +105,7 @@ enum ProfileAnalyticsPresentationCoordinator {
     ) async {
         guard usesProfileAnalyticsGRDB else { return }
         let viewerScope = await ProfileAnalyticsV2ShadowCoordinator.viewerScopeID(session: session)
-        let store = AnalyticsLocalStore()
+        let store = AnalyticsLocalStore.sharedStore()
         let viewer = viewerScope.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let subject = subjectProfileID.rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         try? await store.deleteProfileAnalyticsSnapshots(viewerID: viewer, subjectProfileID: subject)

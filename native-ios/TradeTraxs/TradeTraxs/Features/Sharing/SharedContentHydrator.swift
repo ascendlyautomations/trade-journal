@@ -372,22 +372,38 @@ enum SharedContentHydrator {
     ) -> Bool {
         switch reference {
         case .feedPost(let id), .profilePost(let id):
-            guard let post = SocialEntityDiskCache.loadPost(id: id, viewerID: viewerID) else { return false }
+            guard let post = SocialEntityPersistedCacheCoordinator.loadPost(
+                id: id,
+                viewerID: viewerID,
+                purpose: "sharedContentHydrator"
+            ) else { return false }
             detailCache.seed(post)
             sharedPosts[id] = post
             if let tradeID = post.linkedTradeID,
-               let summary = SocialEntityDiskCache.loadTradeSummary(id: tradeID, viewerID: viewerID)
+               let summary = SocialEntityPersistedCacheCoordinator.loadTradeSummary(
+                   id: tradeID,
+                   viewerID: viewerID,
+                   purpose: "sharedContentHydrator.linkedTrade"
+               )
             {
                 detailCache.seedPresentationSeed(summary)
                 sharedTrades[tradeID] = TradeSummaryMapper.previewTrade(from: summary)
             }
             return true
         case .reel(let id):
-            guard let reel = SocialEntityDiskCache.loadReel(id: id, viewerID: viewerID) else { return false }
+            guard let reel = SocialEntityPersistedCacheCoordinator.loadReel(
+                id: id,
+                viewerID: viewerID,
+                purpose: "sharedContentHydrator"
+            ) else { return false }
             detailCache.seed(reel)
             sharedReels[id] = reel
             if let tradeID = reel.linkedTradeID,
-               let summary = SocialEntityDiskCache.loadTradeSummary(id: tradeID, viewerID: viewerID)
+               let summary = SocialEntityPersistedCacheCoordinator.loadTradeSummary(
+                   id: tradeID,
+                   viewerID: viewerID,
+                   purpose: "sharedContentHydrator.linkedTrade"
+               )
             {
                 detailCache.seedPresentationSeed(summary)
                 sharedTrades[tradeID] = TradeSummaryMapper.previewTrade(from: summary)
@@ -395,13 +411,21 @@ enum SharedContentHydrator {
             return true
         case .achievementPost(let id):
             let achievementID = AchievementID(id.rawValue)
-            guard let achievement = SocialEntityDiskCache.loadAchievement(id: achievementID, viewerID: viewerID)
+            guard let achievement = SocialEntityPersistedCacheCoordinator.loadAchievement(
+                id: achievementID,
+                viewerID: viewerID,
+                purpose: "sharedContentHydrator"
+            )
             else { return false }
             detailCache.seed(achievement)
             sharedAchievements[achievementID] = achievement
             return true
         case .trade(let id):
-            guard let summary = SocialEntityDiskCache.loadTradeSummary(id: id, viewerID: viewerID) else { return false }
+            guard let summary = SocialEntityPersistedCacheCoordinator.loadTradeSummary(
+                id: id,
+                viewerID: viewerID,
+                purpose: "sharedContentHydrator"
+            ) else { return false }
             detailCache.seedPresentationSeed(summary)
             sharedTrades[id] = TradeSummaryMapper.previewTrade(from: summary)
             return true

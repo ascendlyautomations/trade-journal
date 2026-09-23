@@ -140,7 +140,15 @@ enum FeedPersistedCacheCoordinator {
 
     // MARK: - Persist
 
-    static func persist(snapshot: FeedSessionStore.Snapshot, engagementStore: EngagementStore? = nil) {
+    static func persist(
+        snapshot: FeedSessionStore.Snapshot,
+        engagementStore: EngagementStore? = nil,
+        engagementWriteGeneration: (
+            viewerID: ProfileID,
+            target: InteractionTarget,
+            generation: UInt64
+        )? = nil
+    ) {
         guard let parsed = parseFirstPageKey(snapshot.cacheKey) else { return }
         var entries = snapshot.entries
         if let engagementStore {
@@ -157,14 +165,39 @@ enum FeedPersistedCacheCoordinator {
             nextCursor: snapshot.nextCursor
         )
         let pageBlob = blob
+        let generationGuard = engagementWriteGeneration
         if shouldPersistFeedDiskSynchronously {
             diskWriteQueue.sync {
+                if let generationGuard,
+                   SocialPresentationWriteThroughGeneration.isStale(
+                       viewerID: generationGuard.viewerID,
+                       target: generationGuard.target,
+                       generation: generationGuard.generation
+                   ) {
+                    return
+                }
                 FeedDiskCache.savePage(pageBlob)
+                SocialEntityPersistedCacheCoordinator.persistFeedTimelineEntities(
+                    entries: pageBlob.entries,
+                    viewerID: ProfileID(pageBlob.viewerID)
+                )
             }
             return
         }
         diskWriteQueue.async {
+            if let generationGuard,
+               SocialPresentationWriteThroughGeneration.isStale(
+                   viewerID: generationGuard.viewerID,
+                   target: generationGuard.target,
+                   generation: generationGuard.generation
+               ) {
+                return
+            }
             FeedDiskCache.savePage(pageBlob)
+            SocialEntityPersistedCacheCoordinator.persistFeedTimelineEntities(
+                entries: pageBlob.entries,
+                viewerID: ProfileID(pageBlob.viewerID)
+            )
         }
     }
 
@@ -189,7 +222,12 @@ enum FeedPersistedCacheCoordinator {
         entries: [FeedTimelineEntry],
         stories: [Story],
         nextCursor: String?,
-        engagementStore: EngagementStore? = nil
+        engagementStore: EngagementStore? = nil,
+        engagementWriteGeneration: (
+            viewerID: ProfileID,
+            target: InteractionTarget,
+            generation: UInt64
+        )? = nil
     ) {
         let key = FeedSessionStore.cacheKey(
             viewerID: viewerID,
@@ -205,7 +243,11 @@ enum FeedPersistedCacheCoordinator {
             loadedAt: Date()
         )
         FeedSessionStore.shared.save(snapshot)
-        persist(snapshot: snapshot, engagementStore: engagementStore)
+        persist(
+            snapshot: snapshot,
+            engagementStore: engagementStore,
+            engagementWriteGeneration: engagementWriteGeneration
+        )
     }
 
     static func persistBlockedPeers(viewerID: ProfileID, peers: Set<ProfileID>) {
@@ -258,11 +300,17 @@ enum FeedPersistedCacheCoordinator {
 
     static func patchTrade(_ trade: Trade, viewerID: ProfileID) {
         let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
-        SocialEntityDiskCache.saveTradeSummary(summary, viewerID: viewerID)
         guard trade.visibility == .public else {
+            SocialEntityPersistedCacheCoordinator.removeTrade(id: trade.id, viewerID: viewerID)
             removeEntry(viewerID: viewerID, entryID: trade.id.rawValue)
             return
         }
+        SocialEntityPersistedCacheCoordinator.saveTradeSummary(
+            summary,
+            viewerID: viewerID,
+            source: .mutation,
+            mergeMode: .merge
+        )
         for blob in FeedDiskCache.allPages(for: viewerID) {
             var changed = false
             var updatedEntries = blob.entries.map { entry -> FeedTimelineEntry in
@@ -315,6 +363,89 @@ enum FeedPersistedCacheCoordinator {
                 nextCursor: blob.nextCursor
             )
         }
+    }
+
+    /// Patches embedded engagement on cached first-page Feed rows for ``target`` (all scope/filter variants).
+    @discardableResult
+    static func patchEngagement(
+        viewerID: ProfileID,
+        target: InteractionTarget,
+        snapshot: EngagementSnapshot,
+        writeGeneration: UInt64
+    ) -> Int {
+        guard !SocialPresentationWriteThroughGeneration.isStale(
+            viewerID: viewerID,
+            target: target,
+            generation: writeGeneration
+        ) else { return 0 }
+
+        var patchedPages = 0
+        var persistedKeys = Set<String>()
+        let generationGuard = (viewerID, target, writeGeneration)
+
+        for blob in FeedDiskCache.allPages(for: viewerID) {
+            var changed = false
+            let updatedEntries = blob.entries.map { entry -> FeedTimelineEntry in
+                guard SocialPresentationTargetMatching.matches(entry: entry, target: target) else {
+                    return entry
+                }
+                changed = true
+                return entry.patchingEngagement(snapshot)
+            }
+            guard changed,
+                  let scope = FeedScope(rawValue: blob.scope),
+                  let filter = contentFilter(fromRPC: blob.contentFilter)
+            else { continue }
+
+            let key = FeedSessionStore.cacheKey(
+                viewerID: viewerID,
+                scope: scope,
+                contentFilter: filter,
+                cursor: nil
+            )
+            persistedKeys.insert(key)
+            persistFirstPage(
+                viewerID: viewerID,
+                scope: scope,
+                contentFilter: filter,
+                entries: updatedEntries,
+                stories: blob.stories,
+                nextCursor: blob.nextCursor,
+                engagementWriteGeneration: generationGuard
+            )
+            patchedPages += 1
+        }
+
+        for scope in FeedScope.allCases {
+            for filter in FeedContentFilter.allCases {
+                let key = FeedSessionStore.cacheKey(
+                    viewerID: viewerID,
+                    scope: scope,
+                    contentFilter: filter,
+                    cursor: nil
+                )
+                guard !persistedKeys.contains(key),
+                      var sessionSnapshot = FeedSessionStore.shared.restore(key: key)
+                else { continue }
+                var sessionChanged = false
+                sessionSnapshot.entries = sessionSnapshot.entries.map { entry in
+                    guard SocialPresentationTargetMatching.matches(entry: entry, target: target) else {
+                        return entry
+                    }
+                    sessionChanged = true
+                    return entry.patchingEngagement(snapshot)
+                }
+                guard sessionChanged else { continue }
+                FeedSessionStore.shared.save(sessionSnapshot)
+                persist(
+                    snapshot: sessionSnapshot,
+                    engagementWriteGeneration: generationGuard
+                )
+                patchedPages += 1
+            }
+        }
+
+        return patchedPages
     }
 
     static func removeEntry(viewerID: ProfileID, entryID: String) {

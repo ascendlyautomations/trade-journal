@@ -149,8 +149,8 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         if let cached = await SessionFollowingStore.shared.cached(viewerID: viewerID) {
             return Array(cached).sorted()
         }
-        if let disk = SessionDiskCache.loadFollowing(for: ProfileID(viewerID)) {
-            await SessionFollowingStore.shared.seed(viewerID: viewerID, ids: Set(disk))
+        if let disk = RelationshipFollowingPersistence.loadComplete(for: ProfileID(viewerID)) {
+            await SessionFollowingStore.shared.seedComplete(viewerID: viewerID, ids: Set(disk))
             return disk.sorted()
         }
         let database = supabase.database
@@ -168,7 +168,9 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                 let id = row.following_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 return id.isEmpty ? nil : id
             }
-            SessionDiskCache.saveFollowing(ids: ids, for: ProfileID(viewerID))
+            let viewer = ProfileID(viewerID)
+            let generation = RelationshipWriteGeneration.bump(viewerID: viewer)
+            RelationshipFollowingPersistence.saveComplete(ids: ids, viewerID: viewer, generation: generation)
             return ids
         }
     }

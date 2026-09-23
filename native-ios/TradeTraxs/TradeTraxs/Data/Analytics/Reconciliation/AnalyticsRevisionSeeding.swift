@@ -7,7 +7,7 @@ nonisolated protocol AnalyticsRevisionSeeding: Sendable {
 /// GRDB sync high-water first, then persisted dashboard revision, else zero.
 nonisolated struct DefaultAnalyticsRevisionSeeder: AnalyticsRevisionSeeding {
     func seedHighWaterRevision(viewerID: ProfileID) async -> AnalyticsRevisionSeed {
-        if let sync = try? await AnalyticsLocalStore().syncState(viewerID: viewerID) {
+        if let sync = try? await AnalyticsLocalStore.sharedStore().syncState(viewerID: viewerID) {
             return AnalyticsRevisionSeed(
                 highWaterRevision: sync.server_revision,
                 source: "grdb_analytics_sync_state"

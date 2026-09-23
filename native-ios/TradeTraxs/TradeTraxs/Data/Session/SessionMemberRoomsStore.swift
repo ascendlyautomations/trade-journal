@@ -136,6 +136,15 @@ final class SessionMemberRoomsStore {
         roomsByViewer[viewerID] = rooms
     }
 
+    func applyMemberCountDelta(roomID: RoomID, delta: Int, for viewerID: ProfileID) {
+        guard delta != 0, var rooms = roomsByViewer[viewerID],
+              let index = rooms.firstIndex(where: { $0.id == roomID })
+        else { return }
+        let current = rooms[index].memberCount ?? 0
+        rooms[index].memberCount = max(0, current + delta)
+        roomsByViewer[viewerID] = rooms
+    }
+
     func invalidate(viewerID: ProfileID? = nil) {
         if let viewerID {
             roomsByViewer[viewerID] = nil

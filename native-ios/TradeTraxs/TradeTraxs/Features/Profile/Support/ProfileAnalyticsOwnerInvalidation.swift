@@ -5,7 +5,7 @@ nonisolated enum ProfileAnalyticsOwnerInvalidation {
         guard BackendV2FeatureFlags.isEnabled(.profileAnalyticsGRDB) else { return }
         Task {
             let viewer = viewerID.rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            try? await AnalyticsLocalStore().deleteProfileAnalyticsSnapshots(
+            try? await AnalyticsLocalStore.sharedStore().deleteProfileAnalyticsSnapshots(
                 viewerID: viewer,
                 subjectProfileID: viewer
             )

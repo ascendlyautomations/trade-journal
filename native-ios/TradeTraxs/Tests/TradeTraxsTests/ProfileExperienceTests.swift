@@ -660,6 +660,7 @@ final class ProfileExperienceTests: XCTestCase {
         let viewModel = TradesContainerViewModel(
             profileID: profileID,
             trades: environment.data.trades,
+            session: environment.data.session,
             navigationCoordinator: environment.navigation.coordinator,
             detailCache: environment.data.detailCache,
             tradeDetailRepository: environment.data.tradeDetailRepository,

@@ -31,7 +31,7 @@ nonisolated struct LiveAnalyticsReconciliationExecutor: AnalyticsReconciliationE
             )
         )
 
-        try await AnalyticsDashboardShadowWriter.ingestBootstrap(
+        await AnalyticsDashboardShadowWriter.ingestBootstrap(
             viewerID: viewerID,
             bootstrap: bootstrap
         )

@@ -165,13 +165,6 @@ final class TradeDetailViewModel {
         deleteErrorMessage = nil
         defer { isDeleting = false }
         do {
-            if let viewer = await session.currentUserID,
-               viewer.rawValue.hasPrefix("dev.")
-            {
-                // Local development — mutate caches only.
-            } else {
-                try await trades.delete(id: tradeID)
-            }
             let owner: ProfileID
             if let trade {
                 owner = trade.ownerProfileID
@@ -180,9 +173,15 @@ final class TradeDetailViewModel {
             } else {
                 throw AppError.domain(.permission(.notAuthenticated))
             }
-            cache.removeTrade(id: tradeID)
-            await tradeDetailRepository.evict(tradeID: tradeID)
-            TradeJournalMutationStore.shared.noteDeleted(id: tradeID, owner: owner, previous: trade)
+            try await OwnerTradeDeletionService.deleteOwnedTrade(
+                tradeID: tradeID,
+                owner: owner,
+                previous: trade,
+                trades: trades,
+                session: session,
+                detailCache: cache,
+                tradeDetailRepository: tradeDetailRepository
+            )
             ExperienceHaptics.play(.success)
             navigationCoordinator.completeTradeDeletionNavigation()
             return true

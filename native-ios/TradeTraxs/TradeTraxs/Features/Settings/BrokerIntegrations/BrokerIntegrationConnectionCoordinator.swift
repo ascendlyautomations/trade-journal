@@ -107,6 +107,20 @@ struct BrokerIntegrationConnectionCoordinator: View {
                     viewModel.pendingReviewTradeIDs = []
                 }
             }
+            .sheet(isPresented: $viewModel.showsTradovateImportPreview) {
+                if let pending = viewModel.pendingTradovateImportPreview {
+                    BrokerTradovateImportPreviewView(
+                        trades: pending.trades,
+                        isConfirming: viewModel.isConfirmingTradovateImport,
+                        onConfirm: {
+                            await viewModel.confirmTradovateImportFromPreview()
+                        },
+                        onCancel: {
+                            viewModel.cancelTradovateImportPreview()
+                        }
+                    )
+                }
+            }
     }
 
     private var showsImportedTradesReviewBinding: Binding<Bool> {

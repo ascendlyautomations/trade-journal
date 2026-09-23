@@ -13,6 +13,7 @@ final class ProfileShellViewModel {
     private(set) var trades: TradesContainerViewModel?
     private(set) var posts: PostsContainerViewModel?
     private(set) var clips: ClipsContainerViewModel?
+    private var clipsSectionPersistence: (([Reel]) -> Void)?
     private(set) var stats: StatsContainerViewModel?
     private(set) var achievements: AchievementsContainerViewModel?
 
@@ -35,12 +36,20 @@ final class ProfileShellViewModel {
         self.isOwner = isOwner
     }
 
+    func bindClipsSectionPersistence(_ handler: @escaping ([Reel]) -> Void) {
+        clipsSectionPersistence = handler
+        clips?.clipsSectionPersistenceHandler = { [weak self] reels in
+            self?.clipsSectionPersistence?(reels)
+        }
+    }
+
     /// Ensures the Trades section VM exists without changing the selected tab.
     func ensureTradesSection() {
         if trades == nil {
             trades = TradesContainerViewModel(
                 profileID: profileID,
                 trades: data.trades,
+                session: data.session,
                 rpc: data.rpc,
                 navigationCoordinator: navigationCoordinator,
                 detailCache: data.detailCache,
@@ -71,7 +80,7 @@ final class ProfileShellViewModel {
     /// Ensures the Clips section VM exists without changing the selected tab.
     func ensureClipsSection() {
         if clips == nil {
-            clips = ClipsContainerViewModel(
+            let vm = ClipsContainerViewModel(
                 profileID: profileID,
                 feed: data.feed,
                 navigationCoordinator: navigationCoordinator,
@@ -79,6 +88,10 @@ final class ProfileShellViewModel {
                 engagementStore: data.engagementStore,
                 isOwner: isOwner
             )
+            vm.clipsSectionPersistenceHandler = { [weak self] reels in
+                self?.clipsSectionPersistence?(reels)
+            }
+            clips = vm
         }
         clips?.applyBootstrap(latestState)
     }
@@ -225,6 +238,7 @@ final class ProfileShellViewModel {
                 trades = TradesContainerViewModel(
                     profileID: profileID,
                     trades: data.trades,
+                    session: data.session,
                     rpc: data.rpc,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
@@ -251,7 +265,7 @@ final class ProfileShellViewModel {
             posts?.loadIfNeeded()
         case .clips:
             if clips == nil {
-                clips = ClipsContainerViewModel(
+                let vm = ClipsContainerViewModel(
                     profileID: profileID,
                     feed: data.feed,
                     rpc: data.rpc,
@@ -260,6 +274,10 @@ final class ProfileShellViewModel {
                     engagementStore: data.engagementStore,
                     isOwner: isOwner
                 )
+                vm.clipsSectionPersistenceHandler = { [weak self] reels in
+                    self?.clipsSectionPersistence?(reels)
+                }
+                clips = vm
             }
             clips?.applyBootstrap(latestState)
             clips?.loadIfNeeded()

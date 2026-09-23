@@ -12,7 +12,7 @@ enum SessionScopedCaches {
     ) {
         if let viewerID = currentUserProfile.profile?.id {
             Task {
-                await AnalyticsLocalStore().clearViewer(viewerID)
+                await AnalyticsLocalStore.sharedStore().clearViewer(viewerID)
             }
         }
         currentUserProfile.clear()
@@ -59,6 +59,11 @@ enum SessionScopedCaches {
         AnalyticsReconciliationRuntime.reset()
         Task { await AnalyticsReconciliationCoordinator.shared.reset() }
         AnalyticsRevisionRealtimeSession.shared.invalidate()
+        EngagementRealtimeSession.shared.invalidate()
+        SocialEntityRealtimeSession.shared.invalidate()
+        RelationshipRealtimeSession.shared.invalidate()
+        MessagingRealtimeDeliveryCoordinator.resetSession()
+        Task { await SocialRealtimeReconciliationCoordinator.shared.reset() }
         Task { await AnalyticsRevisionRepairCoordinator.shared.reset() }
         data.cache.memory.removeAll()
         Task {
@@ -72,6 +77,7 @@ enum SessionScopedCaches {
         SocialPersistedCacheCoordinator.clearAll()
         FeedPersistedCacheCoordinator.clearAll()
         ProfilePersistedCacheCoordinator.clearAll()
+        VaultPersistedCacheCoordinator.clearAll()
         AuthenticatedLaunchPhasing.reset()
         DashboardAuthoritativeRefreshCoordinator.shared.reset()
         TradeJournalMutationStore.shared.invalidate()

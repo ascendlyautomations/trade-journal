@@ -32,6 +32,11 @@ final class MessagingDomain {
     private var roomReadCursorTask: Task<Void, Never>?
     private var roomMemberCountTask: Task<Void, Never>?
     private var inboxMessagesTask: Task<Void, Never>?
+    private var readCursorRealtimeConsumer: RealtimeRouteConsumerHandle?
+    private var roomUnreadRealtimeConsumer: RealtimeRouteConsumerHandle?
+    private var roomReadCursorRealtimeConsumer: RealtimeRouteConsumerHandle?
+    private var roomMemberCountRealtimeConsumer: RealtimeRouteConsumerHandle?
+    private var inboxMessagesRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var realtimeRetainCount = 0
     private var isConfigured = false
     private var loadGeneration: UInt64 = 0
@@ -193,6 +198,24 @@ final class MessagingDomain {
         }
     }
 
+    /// Phase 10F — bounded inbox catch-up after Realtime reconnect (existing loader, no thread fan-out).
+    func repairInboxAfterReconnect(expectedViewerGeneration: UInt64) async {
+        guard let session else { return }
+        guard let userID = await session.currentUserID else { return }
+        let viewerID = state.viewerID ?? ProfileID(userID.rawValue)
+        guard state.viewerID == nil || state.viewerID == viewerID else { return }
+        _ = expectedViewerGeneration
+        guard inboxStore.hasLoaded else { return }
+        let generation = loadGeneration
+        guard let rpc else { return }
+        await performInboxCatchUp(
+            viewerID: viewerID,
+            rpc: rpc,
+            generation: generation,
+            owner: "MessagingDomain.reconnectRepair"
+        )
+    }
+
     func invalidate() {
         loadGeneration &+= 1
         bootstrapTask?.cancel()
@@ -203,6 +226,7 @@ final class MessagingDomain {
         revalidationTask = nil
         stopRealtime()
         realtimeRetainCount = 0
+        MessagingRealtimeDeliveryCoordinator.resetSession()
         state = MessagingState()
         peerProfiles = [:]
         isConfigured = false
@@ -557,7 +581,6 @@ final class MessagingDomain {
     }
 
     private func stopRealtime() {
-        let viewerID = state.viewerID?.rawValue
         readCursorTask?.cancel()
         roomUnreadTask?.cancel()
         roomReadCursorTask?.cancel()
@@ -568,6 +591,16 @@ final class MessagingDomain {
         roomReadCursorTask = nil
         roomMemberCountTask = nil
         inboxMessagesTask = nil
+        let readConsumer = readCursorRealtimeConsumer
+        let roomUnreadConsumer = roomUnreadRealtimeConsumer
+        let roomReadConsumer = roomReadCursorRealtimeConsumer
+        let memberCountConsumer = roomMemberCountRealtimeConsumer
+        let inboxConsumer = inboxMessagesRealtimeConsumer
+        readCursorRealtimeConsumer = nil
+        roomUnreadRealtimeConsumer = nil
+        roomReadCursorRealtimeConsumer = nil
+        roomMemberCountRealtimeConsumer = nil
+        inboxMessagesRealtimeConsumer = nil
         Task { [realtimeHub] in
             try? await realtimeHub?.subscriptions.unsubscribe(
                 RealtimeChannelID(kind: .conversation, topic: "inbox")
@@ -575,13 +608,11 @@ final class MessagingDomain {
             try? await realtimeHub?.subscriptions.unsubscribe(
                 RealtimeChannelID(kind: .room, topic: "trade-rooms-home")
             )
-            if let viewerID {
-                await realtimeHub?.stopWatchingConversationReadCursors(userID: viewerID)
-                await realtimeHub?.stopWatchingRoomReadCursors(userID: viewerID)
-            }
-            await realtimeHub?.stopWatchingMemberRoomMessages()
-            await realtimeHub?.stopWatchingMemberRoomMembership()
-            await realtimeHub?.stopWatchingInboxConversationMessages()
+            await realtimeHub?.releaseWatch(readConsumer)
+            await realtimeHub?.releaseWatch(roomReadConsumer)
+            await realtimeHub?.releaseWatch(roomUnreadConsumer)
+            await realtimeHub?.releaseWatch(memberCountConsumer)
+            await realtimeHub?.releaseWatch(inboxConsumer)
         }
     }
 
@@ -595,10 +626,13 @@ final class MessagingDomain {
         readCursorTask = Task { [weak self] in
             guard let self else { return }
             let token = await session.accessToken
-            for await signal in realtimeHub.watchConversationReadCursors(
+            let watch = realtimeHub.watchConversationReadCursors(
                 userID: viewerID.rawValue,
-                accessToken: token
-            ) {
+                accessToken: token,
+                debugOwner: "MessagingDomain.dmRead"
+            )
+            readCursorRealtimeConsumer = watch.consumer
+            for await signal in watch.events {
                 guard !Task.isCancelled else { break }
                 guard let rawID = signal.conversationID ?? signal.messageID else { continue }
                 let conversationID = ConversationID(rawID)
@@ -607,6 +641,14 @@ final class MessagingDomain {
                 let locallyCleared = inboxStore.unreadCount(for: existing) == 0
                 if BackendV2FeatureFlags.isEnabled(.messages) {
                     if locallyCleared {
+                        inboxStore.markRead(conversationID: conversationID)
+                    } else if signal.recordPayload != nil {
+#if DEBUG
+                        MessagingRealtimeDebugLog.readStatePatch(
+                            domain: "dm",
+                            id: conversationID.rawValue
+                        )
+#endif
                         inboxStore.markRead(conversationID: conversationID)
                     }
                     continue
@@ -635,17 +677,37 @@ final class MessagingDomain {
         roomUnreadTask = Task { [weak self] in
             guard let self else { return }
             let token = await session.accessToken
-            for await signal in realtimeHub.watchMemberRoomMessages(
+            let watch = realtimeHub.watchMemberRoomMessages(
                 roomIDs: roomIDs,
-                accessToken: token
-            ) {
+                accessToken: token,
+                debugOwner: "MessagingDomain.memberRooms"
+            )
+            roomUnreadRealtimeConsumer = watch.consumer
+            for await signal in watch.events {
                 guard !Task.isCancelled else { break }
                 guard signal.kind == .insert else { continue }
                 guard let rawID = signal.conversationID ?? signal.messageID else { continue }
                 let roomID = RoomID(rawID)
                 guard inboxStore.rooms.contains(where: { $0.id == roomID }) else { continue }
-                guard inboxStore.activeRoomID != roomID else { continue }
+                if inboxStore.activeRoomID == roomID {
+#if DEBUG
+                    MessagingRealtimeDebugLog.roomOpenSuppressUnread(roomID: rawID)
+#endif
+                    continue
+                }
+                if let messageID = signal.messageID,
+                   !MessagingRealtimeDeliveryCoordinator.claimMessageInsert(
+                       domain: "member-rooms",
+                       messageID: messageID,
+                       conversationID: rawID
+                   )
+                {
+                    continue
+                }
                 inboxStore.markRoomUnread(roomID: roomID)
+#if DEBUG
+                MessagingRealtimeDebugLog.roomUnreadPatch(roomID: rawID, delta: 1)
+#endif
             }
             roomUnreadTask = nil
         }
@@ -663,25 +725,39 @@ final class MessagingDomain {
         roomMemberCountTask = Task { [weak self] in
             guard let self else { return }
             let token = await session.accessToken
-            for await _ in realtimeHub.watchMemberRoomMembership(
+            let watch = realtimeHub.watchMemberRoomMembership(
                 roomIDs: roomIDs,
-                accessToken: token
-            ) {
+                accessToken: token,
+                debugOwner: "MessagingDomain.roomMembership"
+            )
+            roomMemberCountRealtimeConsumer = watch.consumer
+            for await signal in watch.events {
                 guard !Task.isCancelled else { break }
-                let visible = inboxStore.rooms.map(\.id)
-                guard !visible.isEmpty else { continue }
-                if let counts = try? await rooms.activeMemberCounts(for: visible) {
-                    inboxStore.applyMemberCounts(counts)
+                guard let payload = signal.recordPayload,
+                      let record = PostgresChangeRecordCodec.dictionary(from: payload),
+                      let rawRoomID = record["room_id"] as? String
+                else { continue }
+                let roomID = RoomID(rawRoomID)
+                guard inboxStore.rooms.contains(where: { $0.id == roomID }) else { continue }
+                if let delta = RoomMemberCountRealtimeSemantics.membershipDelta(
+                    kind: signal.kind,
+                    record: record,
+                    oldRecord: nil
+                ) {
+                    inboxStore.applyMemberCountDelta(roomID: roomID, delta: delta)
+                    SessionMemberRoomsStore.shared.applyMemberCountDelta(
+                        roomID: roomID,
+                        delta: delta,
+                        for: viewerID
+                    )
+                } else if let counts = try? await rooms.activeMemberCounts(for: [roomID]),
+                          let count = counts[roomID]
+                {
+#if DEBUG
+                    MessagingRealtimeDebugLog.networkFallback(reason: "room_member_bounded_reconcile")
+#endif
+                    inboxStore.updateRoomMemberCount(roomID: roomID, count: count)
                     SessionMemberRoomsStore.shared.applyMemberCounts(counts, for: viewerID)
-                    for (roomID, count) in counts {
-                        RoomMemberCountProbe.record(
-                            roomID: roomID,
-                            displayedMemberCount: count,
-                            activeMembershipCount: count,
-                            loadedMemberListCount: nil,
-                            source: .realtime
-                        )
-                    }
                 }
             }
             roomMemberCountTask = nil
@@ -698,21 +774,31 @@ final class MessagingDomain {
         roomReadCursorTask = Task { [weak self] in
             guard let self else { return }
             let token = await session.accessToken
-            for await signal in realtimeHub.watchRoomReadCursors(
+            let watch = realtimeHub.watchRoomReadCursors(
                 userID: viewerID.rawValue,
-                accessToken: token
-            ) {
+                accessToken: token,
+                debugOwner: "MessagingDomain.roomRead"
+            )
+            roomReadCursorRealtimeConsumer = watch.consumer
+            for await signal in watch.events {
                 guard !Task.isCancelled else { break }
                 guard let rawID = signal.conversationID ?? signal.messageID else { continue }
                 let roomID = RoomID(rawID)
                 guard inboxStore.rooms.contains(where: { $0.id == roomID }) else { continue }
                 let locallyCleared = (inboxStore.roomUnread[roomID] ?? 0) == 0
-                if let counts = try? await rooms.unreadCounts(for: [roomID]),
-                   let count = counts[roomID]
-                {
-                    inboxStore.setRoomUnread(roomID: roomID, count: locallyCleared ? 0 : count)
-                } else if locallyCleared {
+                if locallyCleared {
                     inboxStore.markRoomRead(roomID: roomID)
+#if DEBUG
+                    MessagingRealtimeDebugLog.readStatePatch(domain: "room", id: roomID.rawValue)
+#endif
+                } else if signal.recordPayload == nil,
+                          let counts = try? await rooms.unreadCounts(for: [roomID]),
+                          let count = counts[roomID]
+                {
+#if DEBUG
+                    MessagingRealtimeDebugLog.networkFallback(reason: "room_read_unread_reconcile")
+#endif
+                    inboxStore.setRoomUnread(roomID: roomID, count: count)
                 }
             }
             roomReadCursorTask = nil
@@ -731,10 +817,13 @@ final class MessagingDomain {
         inboxMessagesTask = Task { [weak self] in
             guard let self else { return }
             let token = await session.accessToken
-            for await signal in realtimeHub.watchInboxConversationMessages(
+            let watch = realtimeHub.watchInboxConversationMessages(
                 conversationIDs: conversationIDs,
-                accessToken: token
-            ) {
+                accessToken: token,
+                debugOwner: "MessagingDomain.inboxDms"
+            )
+            inboxMessagesRealtimeConsumer = watch.consumer
+            for await signal in watch.events {
                 guard !Task.isCancelled else { break }
                 guard signal.kind == .insert || signal.kind == .update else { continue }
                 guard let rawID = signal.conversationID else { continue }
@@ -742,7 +831,17 @@ final class MessagingDomain {
                 guard inboxStore.conversations.contains(where: { $0.id == conversationID }) else {
                     continue
                 }
+                if inboxStore.activeConversationID == conversationID {
+#if DEBUG
+                    MessagingRealtimeDebugLog.inboxPatchSkipped(
+                        reason: "thread_open",
+                        conversationID: rawID
+                    )
+#endif
+                    continue
+                }
                 await applyInboxMessagesRealtimeSignal(
+                    signal: signal,
                     conversationID: conversationID,
                     viewerID: viewerID,
                     messages: messages
@@ -754,29 +853,56 @@ final class MessagingDomain {
 
     /// Patch inbox activity from canonical `public.messages` — never denormalized conversation rows.
     private func applyInboxMessagesRealtimeSignal(
+        signal: MessageRealtimeSignal,
         conversationID: ConversationID,
         viewerID: ProfileID,
         messages: any MessageRepository
     ) async {
-        do {
-            let page = try await messages.messages(
-                in: conversationID,
-                page: PageRequest(limit: 30)
-            )
-            guard let newest = MessageChronology.newest(in: page.items) else { return }
-            let isOpen = inboxStore.activeConversationID == conversationID
-            let policy: MessagesInboxStore.MessagePatchPolicy =
-                newest.senderProfileID == viewerID ? .confirmedOutgoing : .canonical
-            inboxStore.patchFromMessage(
-                newest,
-                viewerID: viewerID,
-                conversationOpen: isOpen,
-                policy: policy,
-                source: "inboxRealtime"
-            )
-        } catch {
-            // Soft-fail — confirmed-send patch remains authoritative.
+        if let rawMessageID = signal.messageID,
+           !MessagingRealtimeDeliveryCoordinator.claimMessageInsert(
+               domain: "inbox-dm",
+               messageID: rawMessageID,
+               conversationID: conversationID.rawValue
+           )
+        {
+            return
         }
+
+        var merged: Message?
+        if let payload = signal.recordPayload {
+            merged = MessageRealtimeMerge.dmMessage(
+                from: payload,
+                conversationID: conversationID,
+                viewerID: viewerID
+            )
+        }
+        if merged == nil, let rawMessageID = signal.messageID {
+#if DEBUG
+            MessagingRealtimeDebugLog.networkFallback(reason: "inbox_single_row_hydrate")
+#endif
+            merged = try? await messages.message(
+                id: MessageID(rawMessageID),
+                in: conversationID
+            )
+        }
+        guard let newest = merged else { return }
+
+        let policy: MessagesInboxStore.MessagePatchPolicy =
+            newest.senderProfileID == viewerID ? .confirmedOutgoing : .canonical
+        inboxStore.patchFromMessage(
+            newest,
+            viewerID: viewerID,
+            conversationOpen: false,
+            policy: policy,
+            source: "inboxRealtime"
+        )
+#if DEBUG
+        MessagingRealtimeDebugLog.messageInsert(
+            conversationID: conversationID.rawValue,
+            messageID: newest.id.rawValue,
+            source: "inboxRealtime"
+        )
+#endif
     }
 }
 

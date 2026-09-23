@@ -9,6 +9,7 @@ final class AnalyticsRevisionRealtimeSession {
     private var session: (any SessionProviding)?
     private var coalescer = AnalyticsRevisionRealtimeCoalescer()
     private var watchTask: Task<Void, Never>?
+    private var analyticsRevisionConsumer: RealtimeRouteConsumerHandle?
     private var boundViewerID: ProfileID?
     private var boundGeneration: UInt64 = 0
 
@@ -52,10 +53,13 @@ final class AnalyticsRevisionRealtimeSession {
         watchTask = Task { [weak self] in
             guard let self else { return }
             let token = await self.session?.accessToken
-            for await signal in realtimeHub.watchAnalyticsRevision(
+            let watch = realtimeHub.watchAnalyticsRevision(
                 userID: viewerRaw,
-                accessToken: token
-            ) {
+                accessToken: token,
+                debugOwner: "AnalyticsRevision"
+            )
+            analyticsRevisionConsumer = watch.consumer
+            for await signal in watch.events {
                 guard !Task.isCancelled else { break }
                 await self.handleSignal(signal, expectedViewer: viewerID, generation: generation)
             }
@@ -65,10 +69,12 @@ final class AnalyticsRevisionRealtimeSession {
     private func stopWatch(reason: String) {
         watchTask?.cancel()
         watchTask = nil
+        let consumer = analyticsRevisionConsumer
+        analyticsRevisionConsumer = nil
         if let viewerID = boundViewerID?.rawValue {
             AnalyticsReconciliationProbe.unsubscribe(viewer: viewerID, reason: reason)
-            Task { await realtimeHub?.stopWatchingAnalyticsRevision(userID: viewerID) }
         }
+        Task { await realtimeHub?.releaseWatch(consumer) }
     }
 
     private func handleSignal(

@@ -15,6 +15,8 @@ final class FollowMutationCoordinator {
     enum Kind: Equatable {
         case followed(viewer: ProfileID, target: ProfileID)
         case unfollowed(viewer: ProfileID, target: ProfileID)
+        case followRequested(viewer: ProfileID, target: ProfileID)
+        case followRequestCancelled(viewer: ProfileID, target: ProfileID)
         case followerRemoved(owner: ProfileID, follower: ProfileID)
         case followRequestApproved(owner: ProfileID, requester: ProfileID)
     }
@@ -80,6 +82,7 @@ final class FollowMutationCoordinator {
             viewerID: viewer,
             targetProfileID: target,
             isFollowing: isFollowing,
+            isRequested: isFollowing ? false : nil,
             stats: detailCache?.stats(for: target)
         )
 
@@ -91,6 +94,52 @@ final class FollowMutationCoordinator {
             resource: isFollowing ? "follow.edge.follow" : "follow.edge.unfollow",
             detail: "\(viewer.rawValue)->\(target.rawValue)"
         )
+        logPatch(
+            viewer: viewer,
+            subject: target,
+            action: isFollowing ? "follow" : "unfollow"
+        )
+        revision += 1
+        Task {
+            await SocialEntityRealtimeSession.shared.syncFollowingAuthorsFromSession(viewerID: viewer)
+        }
+    }
+
+    /// Pending request presentation — does not insert into the complete following set.
+    func applyFollowRequestPresentation(
+        viewer: ProfileID,
+        target: ProfileID,
+        isRequested: Bool
+    ) {
+        guard viewer != target else { return }
+        detailCache?.setViewerFollowRequested(target, isRequested: isRequested)
+        if isRequested {
+            detailCache?.setViewerFollows(target, isFollowing: false)
+        }
+        Task {
+            await SessionFollowingStore.shared.setPairwiseRequested(
+                viewerID: viewer.rawValue,
+                targetID: target.rawValue,
+                isRequested: isRequested
+            )
+            await SessionFollowingStore.shared.seedPairwiseEdge(
+                viewerID: viewer.rawValue,
+                targetID: target.rawValue,
+                isFollowing: false
+            )
+        }
+        ProfilePersistedCacheCoordinator.patchProfileHeader(
+            viewerID: viewer,
+            targetProfileID: target,
+            isFollowing: false,
+            isRequested: isRequested,
+            stats: detailCache?.stats(for: target)
+        )
+        syncActiveProfileRequest(target: target, isRequested: isRequested)
+        latest = isRequested
+            ? .followRequested(viewer: viewer, target: target)
+            : .followRequestCancelled(viewer: viewer, target: target)
+        logPatch(viewer: viewer, subject: target, action: isRequested ? "request" : "cancel")
         revision += 1
     }
 
@@ -149,6 +198,7 @@ final class FollowMutationCoordinator {
     func isFollowRelationshipResolved(viewer: ProfileID, target: ProfileID) -> Bool {
         guard viewer != target else { return true }
         if detailCache?.viewerFollowEdge(for: target) != nil { return true }
+        if detailCache?.viewerFollowRequested(for: target) != nil { return true }
         if detailCache?.viewerFollowingIDs() != nil { return true }
         return false
     }
@@ -165,23 +215,55 @@ final class FollowMutationCoordinator {
             return
         }
         detailCache.seedViewerFollowingIDs(normalized)
-        Task {
-            await SessionFollowingStore.shared.seed(
+        Task { [viewer] in
+            await SessionFollowingStore.shared.seedComplete(
                 viewerID: viewer.rawValue,
                 ids: Set(normalized.map(\.rawValue))
             )
+            await self.persistCompleteFollowingSet(viewer: viewer)
         }
+        logHydrate(
+            viewer: viewer,
+            source: "network",
+            completeness: "complete",
+            followingCount: normalized.count,
+            ageSec: nil
+        )
         revision += 1
     }
 
-    /// Hydrates the shared following set from SessionFollowingStore when bootstrap cache missed DetailPresentationCache.
+    /// Hydrates complete following set from session memory or disk when DPC has no complete set.
     func hydrateViewerFollowingRelationshipsIfNeeded(viewer: ProfileID) async {
         guard detailCache?.viewerFollowingIDs() == nil else { return }
-        guard let cached = await SessionFollowingStore.shared.cached(viewerID: viewer.rawValue) else { return }
-        seedViewerFollowingRelationships(
-            ids: Set(cached.map { ProfileID($0) }),
-            viewer: viewer
-        )
+        if let cached = await SessionFollowingStore.shared.cached(viewerID: viewer.rawValue) {
+            seedViewerFollowingRelationships(
+                ids: Set(cached.map { ProfileID($0) }),
+                viewer: viewer
+            )
+            logHydrate(
+                viewer: viewer,
+                source: "memory",
+                completeness: "complete",
+                followingCount: cached.count,
+                ageSec: nil
+            )
+            return
+        }
+        if let disk = RelationshipFollowingPersistence.loadComplete(for: viewer) {
+            let ids = Set(disk)
+            await SessionFollowingStore.shared.seedComplete(viewerID: viewer.rawValue, ids: ids)
+            seedViewerFollowingRelationships(
+                ids: Set(ids.map { ProfileID($0) }),
+                viewer: viewer
+            )
+            logHydrate(
+                viewer: viewer,
+                source: "disk",
+                completeness: "complete",
+                followingCount: ids.count,
+                ageSec: nil
+            )
+        }
     }
 
     func invalidate() {
@@ -200,8 +282,7 @@ final class FollowMutationCoordinator {
         if let set = detailCache?.viewerFollowingIDs() {
             return set.contains(target)
         }
-        return ExploreSessionStore.shared.viewerFollowingIDs.contains(target)
-            || LeaderboardSessionStore.shared.followingIDs.contains(target)
+        return false
     }
 
     private func patchDetailCache(
@@ -272,16 +353,41 @@ final class FollowMutationCoordinator {
         target: ProfileID,
         isFollowing: Bool
     ) {
-        Task {
+        Task { [viewer, target, isFollowing] in
+            if let complete = self.detailCache?.viewerFollowingIDs() {
+                await SessionFollowingStore.shared.seedComplete(
+                    viewerID: viewer.rawValue,
+                    ids: Set(complete.map(\.rawValue))
+                )
+            }
             await SessionFollowingStore.shared.setFollowing(
                 viewerID: viewer.rawValue,
                 targetID: target.rawValue,
                 isFollowing: isFollowing
             )
-            if let ids = await SessionFollowingStore.shared.cached(viewerID: viewer.rawValue) {
-                SessionDiskCache.saveFollowing(ids: Array(ids), for: viewer)
-            }
+            await self.persistCompleteFollowingSet(viewer: viewer)
         }
+    }
+
+    private func persistCompleteFollowingSet(viewer: ProfileID) async {
+        guard await SessionFollowingStore.shared.isComplete(viewerID: viewer.rawValue),
+              let ids = await SessionFollowingStore.shared.cached(viewerID: viewer.rawValue)
+        else { return }
+        let generation = RelationshipWriteGeneration.bump(viewerID: viewer)
+        RelationshipFollowingPersistence.saveComplete(
+            ids: Array(ids).sorted(),
+            viewerID: viewer,
+            generation: generation
+        )
+    }
+
+    private func syncActiveProfileRequest(target: ProfileID, isRequested: Bool) {
+        guard let content = activeProfileContent,
+              content.resolvedProfileID == target,
+              !content.isOwner
+        else { return }
+        content.applyExternalFollowRequestState(isRequested: isRequested)
+        activeProfileScreen?.applyExternalFollowRequestState(isRequested: isRequested)
     }
 
     private func patchExplore(target: ProfileID, isFollowing: Bool, countsChanged: Bool) {
@@ -328,6 +434,55 @@ final class FollowMutationCoordinator {
         activeProfileScreen?.applyExternalFollowState(
             isFollowing: false,
             stats: detailCache?.stats(for: viewer)
+        )
+    }
+
+    private static func logPatch(viewer: ProfileID, subject: ProfileID, action: String) {
+        #if DEBUG
+        print(
+            """
+            [RelationshipState][Patch] viewer=\(viewer.rawValue) subject=\(subject.rawValue) \
+            action=\(action)
+            """
+        )
+        #endif
+    }
+
+    private static func logHydrate(
+        viewer: ProfileID,
+        source: String,
+        completeness: String,
+        followingCount: Int,
+        ageSec: Int?
+    ) {
+        #if DEBUG
+        let age = ageSec.map { " ageSec=\($0)" } ?? ""
+        print(
+            """
+            [RelationshipState][Hydrate] viewer=\(viewer.rawValue) source=\(source) \
+            completeness=\(completeness) followingCount=\(followingCount)\(age)
+            """
+        )
+        #endif
+    }
+
+    private func logPatch(viewer: ProfileID, subject: ProfileID, action: String) {
+        Self.logPatch(viewer: viewer, subject: subject, action: action)
+    }
+
+    private func logHydrate(
+        viewer: ProfileID,
+        source: String,
+        completeness: String,
+        followingCount: Int,
+        ageSec: Int?
+    ) {
+        Self.logHydrate(
+            viewer: viewer,
+            source: source,
+            completeness: completeness,
+            followingCount: followingCount,
+            ageSec: ageSec
         )
     }
 

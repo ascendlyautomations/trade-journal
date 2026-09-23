@@ -24,7 +24,7 @@ actor FeedVisibleImageFetchLimiter {
         }
 
         let waiterID = UUID()
-        try await withTaskCancellationHandler {
+        await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 waiters.append(Waiter(id: waiterID, continuation: continuation))
             }

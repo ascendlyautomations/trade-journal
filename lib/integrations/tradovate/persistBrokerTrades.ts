@@ -2,11 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { getSessionFromDate } from "@/lib/getSession"
 import { findCanonicalTradeIdForBrokerFillIds } from "@/lib/integrations/brokerExecutionIdentity"
 import type { ReconstructedLifecycleTrade } from "@/lib/integrations/tradovate/tradeReconstruction"
+import { mergeBrokerTradeFinancialFields } from "@/lib/integrations/tradovate/brokerTradeAuthoritativeMerge"
+import { logTradovatePnLTrace } from "@/lib/integrations/tradovate/tradovatePnLDebugLog"
 import {
-  computeFuturesGrossPnl,
-  sumFillFees,
-} from "@/lib/integrations/tradovate/tradeReconstruction"
-import type { ResolvedTradovateContract } from "@/lib/integrations/tradovate/tradovateMarketDataClient"
+  computeTradovateBrokerTradeFinancials,
+  type BrokerContractMeta,
+} from "@/lib/integrations/tradovate/tradovateBrokerTradeFinancials"
 
 export type CanonicalAccountSnapshot = {
   id: string
@@ -62,11 +63,7 @@ function tradeDateFromIso(iso: string): string {
   return d.toISOString().slice(0, 10)
 }
 
-export type BrokerContractMeta = {
-  symbolRoot: string
-  contractName?: string | null
-  valuePerPoint?: number | null
-}
+export type { BrokerContractMeta } from "@/lib/integrations/tradovate/tradovateBrokerTradeFinancials"
 
 export async function upsertReconstructedBrokerTrades(
   supabase: SupabaseClient,
@@ -89,9 +86,15 @@ export async function upsertReconstructedBrokerTrades(
   tradesUpdated: number
   newTradeIds: string[]
   updatedTradeIds: string[]
+  tradesWithPnL: number
+  tradesWithoutPnL: number
+  numericTickersPersisted: number
 }> {
   let tradesCreated = 0
   let tradesUpdated = 0
+  let tradesWithPnL = 0
+  let tradesWithoutPnL = 0
+  let numericTickersPersisted = 0
   const newTradeIds: string[] = []
   const updatedTradeIds: string[] = []
   const nowIso = new Date().toISOString()
@@ -100,22 +103,18 @@ export async function upsertReconstructedBrokerTrades(
   const importSource = params.importSource ?? "tradovate"
 
   for (const lifecycle of params.completed) {
-    const contract = params.contracts.get(lifecycle.contractId)
-    const ticker = contract?.symbolRoot ?? lifecycle.contractId
-    const valuePerPoint = contract?.valuePerPoint ?? null
-
-    let pnl: number | null = null
-    if (valuePerPoint != null && valuePerPoint > 0) {
-      const gross = computeFuturesGrossPnl(
-        lifecycle.direction,
-        lifecycle.entryPrice,
-        lifecycle.exitPrice,
-        lifecycle.contracts,
-        valuePerPoint
-      )
-      const fees = sumFillFees(params.feesByFillId, lifecycle.fillIds)
-      pnl = gross - fees
-    }
+    const contractIdKey = String(lifecycle.contractId).trim()
+    const contract =
+      params.contracts.get(contractIdKey) ??
+      params.contracts.get(lifecycle.contractId)
+    const financials = computeTradovateBrokerTradeFinancials({
+      lifecycle,
+      contract,
+      contractIdKey,
+      feesByFillId: params.feesByFillId,
+    })
+    const incomingTicker = financials.ticker
+    const incomingPnL = financials.netPnL
 
     const { duration_seconds, duration_text } = durationFromIso(
       lifecycle.entryTime,
@@ -126,9 +125,9 @@ export async function upsertReconstructedBrokerTrades(
 
     const brokerRow = {
       user_id: params.userId,
-      ticker,
+      ticker: incomingTicker,
       direction: lifecycle.direction,
-      pnl,
+      pnl: incomingPnL,
       points: lifecycle.points,
       contracts: lifecycle.contracts,
       entry_price: lifecycle.entryPrice,
@@ -162,12 +161,12 @@ export async function upsertReconstructedBrokerTrades(
 
     const { data: existingByLifecycle } = await supabase
       .from("trades")
-      .select("id")
+      .select("id, pnl, ticker")
       .eq("user_id", params.userId)
       .eq("broker_lifecycle_id", lifecycle.lifecycleKey)
       .maybeSingle()
 
-    const existingTradeId =
+    let existingTradeId =
       (existingByLifecycle?.id ? String(existingByLifecycle.id) : null) ??
       (await findCanonicalTradeIdForBrokerFillIds(supabase, {
         userId: params.userId,
@@ -175,8 +174,68 @@ export async function upsertReconstructedBrokerTrades(
         fillIds: lifecycle.fillIds,
       }))
 
+    let existingStoredPnL =
+      existingByLifecycle?.pnl != null ? Number(existingByLifecycle.pnl) : null
+    let existingTicker = existingByLifecycle?.ticker ?? null
+
+    if (
+      existingTradeId &&
+      existingByLifecycle?.id == null &&
+      (existingStoredPnL == null || !existingTicker)
+    ) {
+      const { data: existingById } = await supabase
+        .from("trades")
+        .select("pnl, ticker")
+        .eq("user_id", params.userId)
+        .eq("id", existingTradeId)
+        .maybeSingle()
+      if (existingById) {
+        existingStoredPnL =
+          existingById.pnl != null ? Number(existingById.pnl) : existingStoredPnL
+        existingTicker = existingById.ticker ?? existingTicker
+      }
+    }
+
+    const mergedFinancials =
+      existingTradeId != null
+        ? mergeBrokerTradeFinancialFields({
+            existingPnL: existingStoredPnL,
+            existingTicker,
+            incomingPnL,
+            incomingTicker,
+          })
+        : {
+            finalPnL: incomingPnL,
+            finalTicker: incomingTicker,
+            decision: "insert_incoming",
+          }
+
+    const ticker = mergedFinancials.finalTicker
+    const pnl = mergedFinancials.finalPnL
+    if (/^\d+$/.test(String(ticker).trim())) numericTickersPersisted += 1
+    if (pnl != null) tradesWithPnL += 1
+    else tradesWithoutPnL += 1
+
+    logTradovatePnLTrace({
+      lifecycle,
+      contract,
+      contractIdKey,
+      feesByFillId: params.feesByFillId,
+      financials,
+      existingStoredPnL,
+      existingTicker,
+      calculatedPnL: incomingPnL,
+      incomingPnL,
+      finalPnL: pnl,
+      incomingTicker,
+      finalTicker: ticker,
+      decision: mergedFinancials.decision,
+    })
+
     if (existingTradeId) {
       const patch: Record<string, unknown> = { ...brokerRow }
+      patch.ticker = ticker
+      patch.pnl = pnl
       for (const key of USER_AUTHORITATIVE_TRADE_FIELDS) {
         delete patch[key]
       }
@@ -209,9 +268,10 @@ export async function upsertReconstructedBrokerTrades(
       continue
     }
 
+    const insertRow = { ...brokerRow, ticker, pnl }
     const { data: inserted, error } = await supabase
       .from("trades")
-      .insert([brokerRow])
+      .insert([insertRow])
       .select("id")
       .single()
 
@@ -233,5 +293,13 @@ export async function upsertReconstructedBrokerTrades(
       .in("external_fill_id", lifecycle.fillIds)
   }
 
-  return { tradesCreated, tradesUpdated, newTradeIds, updatedTradeIds }
+  return {
+    tradesCreated,
+    tradesUpdated,
+    newTradeIds,
+    updatedTradeIds,
+    tradesWithPnL,
+    tradesWithoutPnL,
+    numericTickersPersisted,
+  }
 }

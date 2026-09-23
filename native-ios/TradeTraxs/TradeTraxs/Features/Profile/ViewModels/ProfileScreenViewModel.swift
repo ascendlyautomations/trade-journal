@@ -67,18 +67,116 @@ final class ProfileScreenViewModel {
     }
 
     /// Exactly one bootstrap on first presentation (unless already completed).
+    func repairAfterSocialReconnect(
+        expectedViewerGeneration: UInt64,
+        profileSurfaceGeneration: UInt64
+    ) async {
+        guard state.phase == .loaded else { return }
+        guard SocialRealtimeRepairSurfaces.shared.profileRepairGeneration == profileSurfaceGeneration
+        else {
+#if DEBUG
+            SocialRealtimeRepairDebugLog.staleGenerationRejected(context: "profile_surface")
+#endif
+            return
+        }
+        _ = expectedViewerGeneration
+        isReconcilingFromDisk = true
+        await performBootstrap(force: true)
+        isReconcilingFromDisk = false
+    }
+
     func onAppear(currentUserProfile: CurrentUserProfileStore) {
         seedOwnerCacheIfNeeded(from: currentUserProfile)
         FollowMutationCoordinator.shared.registerActiveProfile(screen: self)
+        SocialRealtimeRepairSurfaces.shared.profileViewModel = self
+        SocialRealtimeRepairSurfaces.shared.bumpProfileRepairGeneration()
         if case .currentUser = target {
             OwnerProfileOptimisticStore.shared.registerOwnerScreen(self)
         }
         if state.didBootstrap {
             syncSectionSnapshotsIntoState()
             reapplyOptimisticOverlaysToSections()
+            bindProfileEntityRealtime()
             return
         }
         bootstrapIfNeeded(force: false)
+        bindProfileEntityRealtime()
+    }
+
+    func onDisappearProfileEntityRealtime() {
+        SocialEntityRealtimeSession.shared.updateProfileBinding(nil)
+        SocialEntityRealtimeProcessor.shared.bindProfile(nil)
+    }
+
+    private func bindProfileEntityRealtime() {
+        let profileID: ProfileID? = {
+            if let id = state.profileID { return id }
+            if case .profile(let id) = target { return id }
+            return contentStore.resolvedProfileID
+        }()
+        guard let profileID else { return }
+        Task {
+            guard let userID = await data.session.currentUserID else { return }
+            let viewerID = ProfileID(userID.rawValue)
+            SocialEntityRealtimeSession.shared.updateProfileBinding(
+                SocialEntityRealtimeSession.ProfileBinding(
+                    viewerID: viewerID,
+                    profileID: profileID
+                )
+            )
+            SocialEntityRealtimeProcessor.shared.bindProfile(
+                SocialEntityRealtimeProcessor.ProfileContext(
+                    viewerID: viewerID,
+                    profileID: profileID,
+                    onPatch: { [weak self] event in
+                        self?.applyProfileEntityPatch(event)
+                    },
+                    onDelete: { [weak self] event in
+                        self?.applyProfileEntityDelete(event)
+                    }
+                )
+            )
+        }
+    }
+
+    private func applyProfileEntityPatch(_ event: SocialEntityRealtimeEvent) {
+        var next = state
+        switch event.table {
+        case .profilePosts:
+            if let index = next.posts.firstIndex(where: { $0.id.rawValue == event.entityID }) {
+                var post = next.posts[index]
+                if let caption = event.payload.caption { post.body = caption }
+                next.posts[index] = post
+            }
+        case .trades:
+            break
+        case .reels:
+            break
+        case .achievementPosts:
+            break
+        case .posts:
+            break
+        }
+        applyLocalState(next)
+        Task { await persistProfileStateIfPossible(next, source: .network) }
+    }
+
+    private func applyProfileEntityDelete(_ event: SocialEntityRealtimeEvent) {
+        var next = state
+        switch event.table {
+        case .profilePosts:
+            next.posts.removeAll { $0.id.rawValue == event.entityID }
+        case .trades:
+            next.trades.removeAll { $0.id.rawValue == event.entityID }
+        case .reels:
+            next.clips.removeAll { $0.id.rawValue == event.entityID }
+        case .achievementPosts:
+            next.achievements.removeAll { $0.id.rawValue == event.entityID }
+        case .posts:
+            break
+        }
+        applyLocalState(next)
+        Task { await persistProfileStateIfPossible(next, source: .network) }
     }
 
     /// FollowMutationCoordinator — keep ProfileState aligned with shared caches.
@@ -86,9 +184,23 @@ final class ProfileScreenViewModel {
         var next = state
         if !next.isOwner {
             next.isFollowing = isFollowing
+            if isFollowing {
+                next.isRequested = false
+            }
         }
         if let stats {
             next.stats = stats
+        }
+        guard next != state else { return }
+        applyLocalState(next)
+    }
+
+    func applyExternalFollowRequestState(isRequested: Bool) {
+        guard !state.isOwner else { return }
+        var next = state
+        next.isRequested = isRequested
+        if isRequested {
+            next.isFollowing = false
         }
         guard next != state else { return }
         applyLocalState(next)
@@ -134,6 +246,9 @@ final class ProfileScreenViewModel {
             )
         }
         shellViewModel?.apply(state: state)
+        shellViewModel?.bindClipsSectionPersistence { [weak self] clips in
+            self?.syncClipsFromSection(clips)
+        }
         shellViewModel?.activateSelected()
     }
 
@@ -149,6 +264,9 @@ final class ProfileScreenViewModel {
             isOwner: contentStore.isOwner
         )
         shellViewModel?.apply(state: state)
+        shellViewModel?.bindClipsSectionPersistence { [weak self] clips in
+            self?.syncClipsFromSection(clips)
+        }
         activateShellForLaunch()
     }
 
@@ -414,14 +532,30 @@ final class ProfileScreenViewModel {
 
     /// Keeps ``ProfileState.clips`` aligned with the section VM after authoritative refresh.
     func syncClipsFromSection(_ clips: [Reel]) {
-        guard isOwnerTarget else { return }
         var next = state
         next.clips = clips
         next.didLoadClips = true
         next.lastUpdated = Date()
-        guard next != state else { return }
-        state = next
-        shellViewModel?.adoptLatestState(next)
+        let shouldPublish = next != state
+        if shouldPublish {
+            state = next
+            shellViewModel?.adoptLatestState(next)
+        }
+        Task { await persistClipsSectionIfPossible(clips) }
+    }
+
+    private func persistClipsSectionIfPossible(_ clips: [Reel]) async {
+        guard state.phase == .loaded,
+              let userID = await data.session.currentUserID,
+              let targetID = state.profileID ?? contentStore.resolvedProfileID
+        else { return }
+        let viewerID = ProfileID(userID.rawValue)
+        ProfilePersistedCacheCoordinator.persistClipsSection(
+            viewerID: viewerID,
+            targetProfileID: targetID,
+            clips: clips,
+            engagementStore: data.engagementStore
+        )
     }
 
     /// Keeps ``ProfileState.trades`` aligned with the section VM after journal create/update.
@@ -951,7 +1085,12 @@ final class ProfileScreenViewModel {
             Task {
                 guard let userID = await data.session.currentUserID else { return }
                 let viewerID = ProfileID(userID.rawValue)
-                SocialEntityDiskCache.saveProfile(profile, viewerID: viewerID)
+                SocialEntityPersistedCacheCoordinator.saveProfile(
+                    profile,
+                    viewerID: viewerID,
+                    source: .profile,
+                    mergeMode: .merge
+                )
             }
         }
     }

@@ -15,7 +15,7 @@ final class AuthenticationCoordinator {
 
     /// Bound by ``CompositionRoot`` after session stores exist (MainActor).
     var invalidateSessionCaches: (@MainActor () -> Void)?
-    /// Bound by ``CompositionRoot`` — await push unregister **before** clearing auth.
+    /// Bound by ``CompositionRoot`` — best-effort push unregister after local logout (never blocks Login UI).
     var prepareSessionTeardown: (@MainActor () async -> Void)?
     /// Bound by ``CompositionRoot`` — all-device push unregister + realtime stop after server deletion.
     var prepareAccountDeletion: (@MainActor () async -> Void)?
@@ -201,37 +201,64 @@ final class AuthenticationCoordinator {
         defer { logoutInFlight = false }
 
         restoreGeneration &+= 1
+        let generation = restoreGeneration
+#if DEBUG
+        LogoutTrace.tap(generation: generation)
+#endif
         let correlation = AuthFlowTracer.beginCorrelation()
         AuthFlowTracer.trace(
             "\(correlationLabel).started",
             phase: authenticationManager.state.authFlowPhase,
             correlation: correlation,
-            generation: restoreGeneration
+            generation: generation
         )
 
         if useAccountDeletionTeardown {
 #if DEBUG
             AccountDeletionDebugLog.localTeardownStarted()
 #endif
-            if let prepareAccountDeletion {
-                await prepareAccountDeletion()
-            }
-        } else if let prepareSessionTeardown {
-            await prepareSessionTeardown()
         }
 
         await authenticationManager.logout()
-        await invalidateCachesForSessionChange()
+#if DEBUG
+        LogoutTrace.generationInvalidated(elapsedMs: LogoutTrace.elapsedSinceTapMs())
+#endif
+
+        invalidateCachesForSessionChange()
+#if DEBUG
+        LogoutTrace.localSessionCleared(elapsedMs: LogoutTrace.elapsedSinceTapMs())
+#endif
+
         boundUserID = nil
         navigation.clearDeferredAuthenticatedSnapshot()
         navigation.clearPersistedState()
         navigation.coordinator.markUnauthenticated()
         applyNavigation(for: authenticationManager.state, correlation: correlation)
+#if DEBUG
+        LogoutTrace.loginPresented(elapsedMs: LogoutTrace.elapsedSinceTapMs())
+#endif
+
+        let pushTeardown = prepareSessionTeardown
+        let accountDeletionTeardown = prepareAccountDeletion
+        Task { @MainActor in
+            if useAccountDeletionTeardown, let accountDeletionTeardown {
+                await accountDeletionTeardown()
+            } else if let pushTeardown {
+#if DEBUG
+                LogoutTrace.pushUnregisterStarted(background: true)
+#endif
+                await pushTeardown()
+#if DEBUG
+                LogoutTrace.pushUnregisterCompleted(outcome: "finished")
+#endif
+            }
+        }
+
         AuthFlowTracer.trace(
             "\(correlationLabel).completed",
             phase: .unauthenticated,
             correlation: correlation,
-            generation: restoreGeneration
+            generation: generation
         )
     }
 
@@ -307,7 +334,7 @@ final class AuthenticationCoordinator {
             navigation.clearDeferredAuthenticatedSnapshot()
             if boundUserID != nil {
                 boundUserID = nil
-                Task { await invalidateCachesForSessionChange() }
+                Task { invalidateCachesForSessionChange() }
             }
             if case .unauthenticated = state {
                 navigation.clearPersistedState()
@@ -418,7 +445,7 @@ final class AuthenticationCoordinator {
         let newID = authenticationManager.state.session?.userID
         let switchedAccounts = boundUserID != nil && newID != nil && boundUserID != newID
         if switchedAccounts {
-            await invalidateCachesForSessionChange()
+            invalidateCachesForSessionChange()
         }
         let isNewBind = boundUserID == nil && newID != nil
         boundUserID = newID
@@ -439,7 +466,7 @@ final class AuthenticationCoordinator {
         }
     }
 
-    private func invalidateCachesForSessionChange() async {
+    private func invalidateCachesForSessionChange() {
         invalidateSessionCaches?()
     }
 }

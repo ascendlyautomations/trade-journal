@@ -62,10 +62,21 @@ struct ClipDetailView: View {
         }
         .task {
             viewModel.loadIfNeeded()
-            data.engagementStore.prefetch([.reel(viewModel.reelID)])
+            let target = InteractionTarget.reel(viewModel.reelID)
+            data.engagementStore.prefetch([target])
+            EngagementRealtimeSession.shared.updateRetention(
+                ownerKey: "detail-reel:\(viewModel.reelID.rawValue)",
+                targets: [target]
+            )
             data.vaultStore.prefetch([
                 VaultContentRef(contentType: .reel, contentID: viewModel.reelID.rawValue),
             ])
+        }
+        .onDisappear {
+            EngagementRealtimeSession.shared.updateRetention(
+                ownerKey: "detail-reel:\(viewModel.reelID.rawValue)",
+                targets: []
+            )
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {

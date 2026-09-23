@@ -28,8 +28,18 @@ final class SessionTradeEntityStore {
                 hit.append(TradeSummaryMapper.previewTrade(from: summary))
             } else if !forceNetwork,
                       let viewerID,
-                      let summary = SocialEntityDiskCache.loadTradeSummary(id: id, viewerID: viewerID)
+                      let summary = SocialEntityPersistedCacheCoordinator.loadTradeSummary(
+                          id: id,
+                          viewerID: viewerID,
+                          purpose: "sessionTradeEntityStore.batch"
+                      )
             {
+                SocialEntityPersistedCacheCoordinator.logHydrationAvoided(
+                    type: .trade,
+                    id: id.rawValue,
+                    purpose: "sessionTradeEntityStore.batch",
+                    oldPath: "TradeRepository.trades(ids:)"
+                )
                 detailCache.seedPresentationSeed(summary)
                 hit.append(TradeSummaryMapper.previewTrade(from: summary))
             } else {
@@ -71,7 +81,12 @@ final class SessionTradeEntityStore {
             if let viewerID {
                 for trade in fetched {
                     let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
-                    SocialEntityDiskCache.saveTradeSummary(summary, viewerID: viewerID)
+                    SocialEntityPersistedCacheCoordinator.saveTradeSummary(
+                        summary,
+                        viewerID: viewerID,
+                        source: .sessionTrade,
+                        mergeMode: .merge
+                    )
                 }
             }
             return fetched
@@ -87,9 +102,10 @@ final class SessionTradeEntityStore {
         SessionNetworkProbe.record(.realtimeUpdate, resource: "trades.entity", detail: trade.id.rawValue)
         detailCache.seedAuthoritativeDetail(trade, authority: .authoritativeMutation)
         if let viewerID {
-            SocialEntityDiskCache.saveTradeSummary(
-                TradeSummaryMapper.summary(fromPartialListTrade: trade),
-                viewerID: viewerID
+            SocialEntityPersistedCacheCoordinator.saveTradeFromListRow(
+                trade,
+                viewerID: viewerID,
+                source: .mutation
             )
         }
     }

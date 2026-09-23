@@ -37,6 +37,8 @@ final class DetailPresentationCache {
     private var viewerFollowingIDSet: Set<ProfileID>?
     /// Per-profile follow edges from pairwise `followState` / toggle — never treated as a full list.
     private var viewerFollowEdgeByProfile: [ProfileID: Bool] = [:]
+    /// Pending follow request (private profiles) — never implies following.
+    private var viewerFollowRequestByProfile: [ProfileID: Bool] = [:]
 
     func seed(_ profile: Profile) {
         if let existing = profilesByID[profile.id] {
@@ -384,6 +386,9 @@ final class DetailPresentationCache {
 
     func setViewerFollows(_ profileID: ProfileID, isFollowing: Bool) {
         viewerFollowEdgeByProfile[profileID] = isFollowing
+        if isFollowing {
+            viewerFollowRequestByProfile[profileID] = false
+        }
         // Only mutate the complete following set when it already exists.
         guard var ids = viewerFollowingIDSet else { return }
         if isFollowing {
@@ -392,6 +397,17 @@ final class DetailPresentationCache {
             ids.remove(profileID)
         }
         viewerFollowingIDSet = ids
+    }
+
+    func viewerFollowRequested(for profileID: ProfileID) -> Bool? {
+        viewerFollowRequestByProfile[profileID]
+    }
+
+    func setViewerFollowRequested(_ profileID: ProfileID, isRequested: Bool) {
+        viewerFollowRequestByProfile[profileID] = isRequested
+        if isRequested {
+            viewerFollowEdgeByProfile[profileID] = false
+        }
     }
 
     /// Card/list preview transport — not authoritative detail (prefer ``tradeSummary(id:)``).
@@ -440,6 +456,9 @@ final class DetailPresentationCache {
     }
 
     // MARK: - Feed engagement overrides (detail opened from Home feed)
+    //
+    // Phase 9B: Detail UI reads ``EngagementStore`` for like/comment presentation — DPC stores
+    // feed-vs-trade target routing only, not duplicate engagement counts.
 
     private var feedEngagementTargetByTradeID: [TradeID: InteractionTarget] = [:]
     private var feedEngagementTargetByAchievementID: [AchievementID: InteractionTarget] = [:]
@@ -540,6 +559,7 @@ final class DetailPresentationCache {
         followingByProfile = [:]
         viewerFollowingIDSet = nil
         viewerFollowEdgeByProfile = [:]
+        viewerFollowRequestByProfile = [:]
         feedEngagementTargetByTradeID = [:]
         feedEngagementTargetByAchievementID = [:]
     }

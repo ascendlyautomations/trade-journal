@@ -23,6 +23,7 @@ struct BrokerOnboardingView: View {
         _viewModel = State(
             initialValue: BrokerIntegrationsViewModel(
                 broker: data.brokerIntegrations,
+                trades: data.trades,
                 manageAccounts: manage,
                 session: data.session,
                 detailCache: data.detailCache

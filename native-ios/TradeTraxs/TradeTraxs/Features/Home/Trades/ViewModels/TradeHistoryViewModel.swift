@@ -399,25 +399,38 @@ final class TradeHistoryViewModel {
 
     func requestDelete(_ item: TradeOwnerJournalSummary) {
         ExperienceHaptics.play(.warning)
-        pendingDelete = item
+        TradeDeleteConfirmationPresenter.scheduleConfirmation { [weak self] in
+            self?.pendingDelete = item
+        }
     }
 
     func confirmDelete() async {
         guard let item = pendingDelete else { return }
         pendingDelete = nil
+        let previous = TradeSummaryMapper.listMatchTrade(from: item)
+        let owner = item.summary.ownerProfileID
+        let removedIndex = items.firstIndex { $0.id == item.id }
+        items.removeAll { $0.id == item.id }
+        persistSnapshot()
         do {
-            try await trades.delete(id: item.id)
-            items.removeAll { $0.id == item.id }
-            detailCache.removeTrade(id: item.id)
-            await tradeDetailRepository.evict(tradeID: item.id)
-            let previous = TradeSummaryMapper.listMatchTrade(from: item)
-            TradeJournalMutationStore.shared.noteDeleted(
-                id: item.id,
-                owner: item.summary.ownerProfileID,
-                previous: previous
+            try await OwnerTradeDeletionService.deleteOwnedTrade(
+                tradeID: item.id,
+                owner: owner,
+                previous: previous,
+                trades: trades,
+                session: session,
+                detailCache: detailCache,
+                tradeDetailRepository: tradeDetailRepository
             )
             ExperienceHaptics.play(.success)
         } catch {
+            if let removedIndex {
+                items.insert(item, at: min(removedIndex, items.count))
+            } else {
+                items.append(item)
+                items = TradeHistorySortSupport.sorted(items, sort: filters.sort)
+            }
+            persistSnapshot()
             paginationErrorMessage = ProfileSectionSupport.message(for: error)
             ExperienceHaptics.play(.warning)
         }

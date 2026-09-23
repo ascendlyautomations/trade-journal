@@ -15,7 +15,7 @@ nonisolated enum AnalyticsShadowReadParity {
         accountFilter: DashboardAccountFilter,
         modeFilter: String?
     ) async {
-        let store = AnalyticsLocalStore()
+        let store = AnalyticsLocalStore.sharedStore()
         let started = Date()
         do {
             let read = try await store.readCalendarRange(
@@ -63,7 +63,7 @@ nonisolated enum AnalyticsShadowReadParity {
         year: Int,
         month: Int
     ) async {
-        let store = AnalyticsLocalStore()
+        let store = AnalyticsLocalStore.sharedStore()
         let started = Date()
         do {
             let read = try await store.readCalendarRange(
@@ -102,7 +102,7 @@ nonisolated enum AnalyticsShadowReadParity {
         viewerID: ProfileID,
         bootstrap: AnalyticsDashboardBootstrapV3
     ) async {
-        let store = AnalyticsLocalStore()
+        let store = AnalyticsLocalStore.sharedStore()
         let revision = bootstrap.data.revisionInt
         let started = Date()
         do {
@@ -133,7 +133,7 @@ nonisolated enum AnalyticsShadowReadParity {
         revision: Int64,
         response: AnalyticsDashboardAccountChartsV3
     ) async {
-        let store = AnalyticsLocalStore()
+        let store = AnalyticsLocalStore.sharedStore()
         let started = Date()
         do {
             let read = try await store.readDashboardAccountCharts(
@@ -283,7 +283,8 @@ nonisolated enum AnalyticsShadowReadParity {
 
     private static func rowIdentity(_ row: AnalyticsDailyStatRowV1) -> String {
         let account = row.account_id ?? AnalyticsScopeKeys.nullAccountRow
-        return "\(row.calendar_day)|\(row.mode_effective)|\(account)"
+        let mode = row.mode_effective ?? AnalyticsScopeKeys.allModesQuery
+        return "\(row.calendar_day)|\(mode)|\(account)"
     }
 
     private static func logCalendarMetric(_ field: String, _ left: String, _ right: String) {

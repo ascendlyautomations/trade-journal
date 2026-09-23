@@ -164,6 +164,20 @@ final class FeedScreenViewModel {
         await refresh(trigger: .pullRefresh)
     }
 
+    /// Phase 10F — bounded first-page head reconcile after Realtime reconnect (merge, no pagination reset).
+    func reconcileHeadAfterSocialReconnect(expectedViewerGeneration: UInt64) async {
+        guard state.didBootstrap else { return }
+        _ = expectedViewerGeneration
+        let generation = bootstrapGeneration
+        await performBootstrap(
+            forceNetwork: true,
+            resetting: true,
+            generation: generation,
+            trigger: .reconnectRepair
+        )
+        await syncSocialEntityRealtimeBindings()
+    }
+
     func refresh(trigger: FeedLoadTrigger) async {
         cancelInFlightLoads()
         bootstrapGeneration &+= 1
@@ -229,6 +243,9 @@ final class FeedScreenViewModel {
         guard state.entries.contains(where: { matchesReel($0, reelID: reelID) }) else { return }
         state.entries.removeAll { matchesReel($0, reelID: reelID) }
         rebuildVisibleEntriesCache()
+        if let viewerID = state.viewerID {
+            SocialEntityPersistedCacheCoordinator.removeReel(id: reelID, viewerID: viewerID)
+        }
         persistFeedFirstPage()
     }
 
@@ -289,7 +306,28 @@ final class FeedScreenViewModel {
     }
 
     func handleRealtimeEvent(_ event: MessageRealtimeSignal) {
-        Task { await applyRealtimeSignal(event) }
+        Task { await applyLegacyPostRealtimeBridge(event) }
+    }
+
+    private func applyLegacyPostRealtimeBridge(_ signal: MessageRealtimeSignal) async {
+        guard let viewerID = state.viewerID else { return }
+        bindSocialEntityFeedProcessor(viewerID: viewerID)
+        let mutation: SocialEntityRealtimeMutation
+        switch signal.kind {
+        case .insert: mutation = .insert
+        case .update: mutation = .update
+        case .delete: mutation = .delete
+        }
+        guard let raw = signal.messageID else { return }
+        let entityEvent = SocialEntityRealtimeEvent(
+            table: .posts,
+            mutation: mutation,
+            entityID: raw,
+            authorID: signal.conversationID,
+            eventRowID: raw,
+            payload: SocialEntityRealtimePayload()
+        )
+        await SocialEntityRealtimeProcessor.shared.handle(entityEvent, viewerUserID: viewerID.rawValue)
     }
 
 #if DEBUG
@@ -310,7 +348,7 @@ final class FeedScreenViewModel {
     }
 
     func testing_applyRealtimeSignal(_ signal: MessageRealtimeSignal) async {
-        await applyRealtimeSignal(signal)
+        await applyLegacyPostRealtimeBridge(signal)
     }
 #endif
 
@@ -469,10 +507,11 @@ final class FeedScreenViewModel {
     func stopRealtime() {
         realtimeTask?.cancel()
         realtimeTask = nil
+        SocialEntityRealtimeSession.shared.updateFeedBinding(nil)
+        SocialEntityRealtimeProcessor.shared.bindFeed(nil)
         Task { [realtimeHub] in
             let channel = RealtimeChannelID(kind: .feed, topic: "home")
             try? await realtimeHub?.subscriptions.unsubscribe(channel)
-            await realtimeHub?.stopWatchingFeedPosts()
         }
     }
 
@@ -765,6 +804,18 @@ final class FeedScreenViewModel {
                     ? "backgroundReconcile"
                     : (resolved?.source.rawValue ?? "none")
             )
+            let cacheSource = hadCachedFirstRender
+                ? "disk"
+                : (resolved?.source.rawValue ?? "none")
+            FeedLoadTrace.log(
+                trigger: trigger,
+                generation: activeGeneration,
+                scope: resolvedScope,
+                filter: resolvedFilter,
+                caller: "FeedScreenViewModel.performBootstrap",
+                cacheSource: cacheSource,
+                networkRequired: !hadCachedFirstRender || forceNetwork
+            )
         }
         #endif
 
@@ -804,6 +855,17 @@ final class FeedScreenViewModel {
                 }
                 let feedScope = guestPublicFeed ? FeedScope.global : resolvedScope
                 if hadCachedFirstRender && !forceNetwork && resolvedCursor == nil {
+                    #if DEBUG
+                    FeedLoadTrace.log(
+                        trigger: trigger,
+                        generation: activeGeneration,
+                        scope: resolvedScope,
+                        filter: resolvedFilter,
+                        caller: "FeedScreenViewModel.performBootstrap.cacheOnlyReturn",
+                        cacheSource: "disk",
+                        networkRequired: false
+                    )
+                    #endif
                     state.viewerID = viewerID
                     state.phase = .loaded
                     state.didBootstrap = true
@@ -1073,6 +1135,11 @@ final class FeedScreenViewModel {
         if !missing.isEmpty {
             engagementStore.prefetch(missing)
         }
+        EngagementRealtimeSession.shared.updateRetention(
+            ownerKey: "feed-visible",
+            targets: Set(targets)
+        )
+        Task { await syncSocialEntityRealtimeBindings() }
         let vaultRefs = visible.compactMap { VaultContentRef.from($0.interactionTarget) }
         vaultStore.prefetch(vaultRefs)
     }
@@ -1162,7 +1229,7 @@ final class FeedScreenViewModel {
     // MARK: - Realtime (screen-owned only)
 
     private func startRealtimeIfNeeded() async {
-        guard let realtimeHub else { return }
+        guard realtimeHub != nil else { return }
         guard !ExploreModeSupport.skipsAuthenticatedViewerServices else { return }
         guard let viewerID = state.viewerID,
               !FeedSupport.isLocalDevelopmentProfile(viewerID) else { return }
@@ -1170,65 +1237,80 @@ final class FeedScreenViewModel {
 
         let channel = RealtimeChannelID(kind: .feed, topic: "home")
         await MainThreadWorkProbe.measureAsync("feed.realtime.setup", surface: "feed") {
-            try? await realtimeHub.subscriptions.subscribe(channel)
+            try? await realtimeHub?.subscriptions.subscribe(channel)
         }
-        let token = await session.accessToken
-
         realtimeTask = Task { [weak self] in
             guard let self else { return }
-            for await signal in realtimeHub.watchFeedPosts(accessToken: token) {
-                guard !Task.isCancelled else { break }
-                await applyRealtimeSignal(signal)
-            }
-            realtimeTask = nil
+            await self.syncSocialEntityRealtimeBindings()
+            self.realtimeTask = nil
         }
     }
 
-    private func applyRealtimeSignal(_ signal: MessageRealtimeSignal) async {
-        switch signal.kind {
-        case .delete:
-            guard let raw = signal.messageID else { return }
-            state.entries.removeAll { $0.item.postID?.rawValue == raw || $0.id == raw }
-            rebuildVisibleEntriesCache()
-            if let viewerID = state.viewerID {
-                FeedPersistedCacheCoordinator.removeEntry(viewerID: viewerID, entryID: raw)
-            }
-            persistFeedFirstPage()
-        case .insert, .update:
-            guard let raw = signal.messageID else { return }
-            let postID = PostID(raw)
-            guard let post = try? await feed.post(id: postID) else { return }
-            guard !shouldSuppressFeedAuthor(post.authorProfileID) else { return }
-            detailCache.seed(post)
-            let kind: FeedItemKind = post.linkedTradeID == nil ? .post : .trade
-            let item = FeedItem(
-                id: post.id.rawValue,
-                kind: kind,
-                authorProfileID: post.authorProfileID,
-                createdAt: post.createdAt,
-                tradeID: post.linkedTradeID,
-                postID: post.id,
-                reelID: nil,
-                storyID: nil,
-                achievementID: nil,
-                caption: post.body,
-                likeCount: 0,
-                commentCount: 0,
-                viewerHasLiked: false
-            )
-            FeedBootstrap.seedAuthor(from: item, detailCache: detailCache)
-            if let hydrated = await FeedBootstrap.hydrateOne(
-                item,
-                feed: feed,
-                trades: trades,
-                profiles: profiles,
-                achievements: achievements,
-                detailCache: detailCache
-            ) {
-                upsert(hydrated)
-                prefetchEngagement()
+    func syncSocialEntityRealtimeBindings() async {
+        guard let viewerID = state.viewerID else { return }
+        bindSocialEntityFeedProcessor(viewerID: viewerID)
+        var followingAuthors: Set<String>?
+        if state.scope == .following {
+            if await SessionFollowingStore.shared.isComplete(viewerID: viewerID.rawValue),
+               let cached = await SessionFollowingStore.shared.cached(viewerID: viewerID.rawValue)
+            {
+                followingAuthors = cached
             }
         }
+        SocialEntityRealtimeSession.shared.updateFeedBinding(
+            SocialEntityRealtimeSession.FeedBinding(
+                viewerID: viewerID,
+                scope: state.scope,
+                followingAuthorIDs: followingAuthors,
+                trackedEntityIDsByTable: trackedEntityIDsByTable()
+            )
+        )
+    }
+
+    private func bindSocialEntityFeedProcessor(viewerID: ProfileID) {
+        SocialEntityRealtimeProcessor.shared.bindFeed(
+            SocialEntityRealtimeProcessor.FeedContext(
+                viewerID: viewerID,
+                scope: state.scope,
+                contentFilter: state.contentFilter,
+                trackedEntityIDsByTable: trackedEntityIDsByTable(),
+                onInsert: { [weak self] entry in
+                    self?.upsert(entry)
+                },
+                onUpdate: { [weak self] entry in
+                    self?.upsert(entry)
+                },
+                onDelete: { [weak self] entryID in
+                    self?.removeFeedEntry(id: entryID)
+                },
+                persistFirstPage: { [weak self] in
+                    self?.persistFeedFirstPage()
+                }
+            )
+        )
+    }
+
+    private func trackedEntityIDsByTable() -> [SocialEntityRealtimeTable: Set<String>] {
+        var map: [SocialEntityRealtimeTable: Set<String>] = [:]
+        for entry in state.entries {
+            switch entry {
+            case .trade:
+                map[.trades, default: []].insert(entry.id)
+            case .post:
+                map[.profilePosts, default: []].insert(entry.id)
+                map[.posts, default: []].insert(entry.id)
+            case .clip:
+                map[.reels, default: []].insert(entry.id)
+            case .achievement:
+                map[.achievementPosts, default: []].insert(entry.id)
+            }
+        }
+        return map
+    }
+
+    private func removeFeedEntry(id: String) {
+        state.entries.removeAll { $0.id == id || $0.item.postID?.rawValue == id }
+        rebuildVisibleEntriesCache()
     }
 
     private func upsert(_ entry: FeedTimelineEntry) {

@@ -165,6 +165,9 @@ final class MessagesHomeViewModel {
 
     func openConversation(_ item: DirectMessageInboxItem) {
         ExperienceHaptics.play(.selection)
+#if DEBUG
+        ConversationOpenTrace.tap(conversationID: item.id.rawValue)
+#endif
         // Mark-read runs inside ``NavigationCoordinator/pushMessages`` so push
         // deep links and inbox taps share one pipeline.
         navigationCoordinator.open(.messages(.thread(item.id)))

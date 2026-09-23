@@ -77,6 +77,24 @@ final class BrokerIntegrationsViewModel {
     var pendingReviewTradeIDs: [TradeID] = []
     var showsReviewImportedTrades = false
 
+    struct PendingTradovateImportPreview: Equatable, Sendable {
+        var connectionId: String
+        var mappingId: String
+        var trades: [TradovateImportPreviewTrade]
+    }
+
+    var pendingTradovateImportPreview: PendingTradovateImportPreview?
+    var showsTradovateImportPreview = false
+    var isConfirmingTradovateImport = false
+
+    struct ImportReconnectPrompt: Equatable, Sendable {
+        var provider: BrokerIntegrationProvider
+        var connectionId: String
+        var mappingId: String
+    }
+
+    private(set) var importReconnectPrompt: ImportReconnectPrompt?
+
     var isRithmicConnectUIAvailable: Bool {
         rithmicConnectCapabilitiesPhase == .loaded
             && rithmicConnectCapabilities?.showConnectUi == true
@@ -130,17 +148,20 @@ final class BrokerIntegrationsViewModel {
     }
 
     private let broker: any BrokerIntegrationRepository
+    private let trades: any TradeRepository
     private let manageAccounts: ManageAccountsViewModel
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
 
     init(
         broker: any BrokerIntegrationRepository,
+        trades: any TradeRepository,
         manageAccounts: ManageAccountsViewModel,
         session: any SessionProviding,
         detailCache: DetailPresentationCache
     ) {
         self.broker = broker
+        self.trades = trades
         self.manageAccounts = manageAccounts
         self.session = session
         self.detailCache = detailCache
@@ -362,18 +383,16 @@ final class BrokerIntegrationsViewModel {
                 password: password
             )
             accountsByConnection[connectionId] = response.accounts
-            let newIds = response.summary.newTradeIds
-            await refreshTradesAfterImport(newTradeIds: newIds)
             if response.summary.ok {
                 rithmicImportReauthConnectionId = nil
                 rithmicImportReauthMappingId = nil
                 showsRithmicConnectSheet = false
-                noteBrokerIntegrationChanged()
-                presentMessage(BrokerIntegrationDisplay.importResultMessage(newTradeCount: newIds.count), error: false)
-                if !newIds.isEmpty {
-                    pendingReviewTradeIDs = newIds.map { TradeID($0) }
-                    showsReviewImportedTrades = true
-                }
+                await applyImportSyncResponse(
+                    response,
+                    provider: .rithmic,
+                    connectionId: connectionId,
+                    mappingId: mappingId
+                )
             } else if response.summary.errorCode == "rithmic_password_required" {
                 presentMessage(
                     response.summary.error ?? "Enter your Rithmic password to import.",
@@ -508,40 +527,219 @@ final class BrokerIntegrationsViewModel {
         importingMappingIds.insert(mappingId)
         defer { importingMappingIds.remove(mappingId) }
         do {
-            let response: TradovateAccountSyncResponse
             switch provider {
             case .tradovate:
-                response = try await broker.syncTradovateAccount(connectionId: connectionId, mappingId: mappingId)
+                let response = try await broker.syncTradovateAccount(
+                    connectionId: connectionId,
+                    mappingId: mappingId,
+                    mode: .preview
+                )
+                BrokerSyncDebugLog.syncReport(
+                    provider: provider,
+                    connectionID: connectionId,
+                    accountMappingID: mappingId,
+                    response: response
+                )
+                if response.summary.ok {
+                    importReconnectPrompt = nil
+                    let previews = response.summary.importPreviewTrades
+                    if previews.isEmpty {
+                        presentMessage("No new trades to import.", error: false)
+                    } else {
+                        pendingTradovateImportPreview = PendingTradovateImportPreview(
+                            connectionId: connectionId,
+                            mappingId: mappingId,
+                            trades: previews
+                        )
+                        showsTradovateImportPreview = true
+                    }
+                } else {
+                    handleImportSyncFailure(
+                        response,
+                        provider: provider,
+                        connectionId: connectionId,
+                        mappingId: mappingId
+                    )
+                }
             case .rithmic:
-                response = try await broker.syncRithmicAccount(
+                let response = try await broker.syncRithmicAccount(
                     connectionId: connectionId,
                     mappingId: mappingId,
                     password: nil
                 )
-            }
-            accountsByConnection[connectionId] = response.accounts
-            let newIds = response.summary.newTradeIds
-            await refreshTradesAfterImport(newTradeIds: newIds)
-            if response.summary.ok {
-                noteBrokerIntegrationChanged()
-                presentMessage(BrokerIntegrationDisplay.importResultMessage(newTradeCount: newIds.count), error: false)
-                if !newIds.isEmpty {
-                    pendingReviewTradeIDs = newIds.map { TradeID($0) }
-                    showsReviewImportedTrades = true
-                }
-            } else if provider == .rithmic,
-                      response.summary.errorCode == "rithmic_password_required"
-            {
-                presentRithmicImportReauth(connectionId: connectionId, mappingId: mappingId)
-            } else {
-                presentMessage(
-                    BrokerIntegrationDisplay.importFailureMessage(serverSummary: response.summary.error),
-                    error: true
+                BrokerSyncDebugLog.syncReport(
+                    provider: provider,
+                    connectionID: connectionId,
+                    accountMappingID: mappingId,
+                    response: response
+                )
+                await applyImportSyncResponse(
+                    response,
+                    provider: provider,
+                    connectionId: connectionId,
+                    mappingId: mappingId
                 )
             }
         } catch {
+            importReconnectPrompt = nil
             presentMessage(BrokerIntegrationDisplay.importFailureMessage(for: error), error: true)
         }
+    }
+
+    func confirmTradovateImportFromPreview() async {
+        guard let pending = pendingTradovateImportPreview else { return }
+        isConfirmingTradovateImport = true
+        importingMappingIds.insert(pending.mappingId)
+        defer {
+            isConfirmingTradovateImport = false
+            importingMappingIds.remove(pending.mappingId)
+        }
+        do {
+            let response = try await broker.syncTradovateAccount(
+                connectionId: pending.connectionId,
+                mappingId: pending.mappingId,
+                mode: .import
+            )
+            BrokerSyncDebugLog.syncReport(
+                provider: .tradovate,
+                connectionID: pending.connectionId,
+                accountMappingID: pending.mappingId,
+                response: response
+            )
+            showsTradovateImportPreview = false
+            pendingTradovateImportPreview = nil
+            await applyImportSyncResponse(
+                response,
+                provider: .tradovate,
+                connectionId: pending.connectionId,
+                mappingId: pending.mappingId
+            )
+        } catch {
+            presentMessage(BrokerIntegrationDisplay.importFailureMessage(for: error), error: true)
+        }
+    }
+
+    func cancelTradovateImportPreview() {
+        showsTradovateImportPreview = false
+        if let pending = pendingTradovateImportPreview {
+            Task {
+                _ = try? await broker.syncTradovateAccount(
+                    connectionId: pending.connectionId,
+                    mappingId: pending.mappingId,
+                    mode: .cancelPreview
+                )
+            }
+        }
+        pendingTradovateImportPreview = nil
+    }
+
+    func reconnectTradovateAndImport(connectionId: String, mappingId: String) async {
+        importingMappingIds.insert(mappingId)
+        defer { importingMappingIds.remove(mappingId) }
+        let outcome = await BrokerTradovateReconnectImport.reconnectAndSync(
+            broker: broker,
+            connectionId: connectionId,
+            mappingId: mappingId
+        )
+        switch outcome {
+        case .cancelled:
+            break
+        case .oauthFailed(let message):
+            presentMessage(message ?? "Tradovate connection failed.", error: true)
+        case .syncCompleted(let response):
+            await refreshAll()
+            await applyImportSyncResponse(
+                response,
+                provider: .tradovate,
+                connectionId: connectionId,
+                mappingId: mappingId
+            )
+        }
+    }
+
+    private func applyImportSyncResponse(
+        _ response: TradovateAccountSyncResponse,
+        provider: BrokerIntegrationProvider,
+        connectionId: String,
+        mappingId: String
+    ) async {
+        if !response.accounts.isEmpty {
+            accountsByConnection[connectionId] = response.accounts
+        }
+        let resolution = BrokerSyncFailureResolution.from(response)
+        if response.summary.ok {
+            importReconnectPrompt = nil
+            if let userID = await session.currentUserID {
+                let owner = ProfileID(userID.rawValue)
+                let reconciliation = await BrokerImportReconciliation.apply(
+                    owner: owner,
+                    summary: response.summary,
+                    tradesRepository: trades,
+                    detailCache: detailCache
+                )
+                let count = reconciliation.authoritativeNewImportCount
+                noteBrokerIntegrationChanged()
+                presentMessage(BrokerIntegrationDisplay.importResultMessage(newTradeCount: count), error: false)
+                if !reconciliation.newTradeIDs.isEmpty {
+                    pendingReviewTradeIDs = reconciliation.newTradeIDs
+                    showsReviewImportedTrades = true
+                }
+            } else {
+                noteBrokerIntegrationChanged()
+                presentMessage(
+                    BrokerIntegrationDisplay.importResultMessage(
+                        newTradeCount: response.summary.authoritativeNewImportCount
+                    ),
+                    error: false
+                )
+            }
+            return
+        }
+        handleImportSyncFailure(
+            response,
+            provider: provider,
+            connectionId: connectionId,
+            mappingId: mappingId
+        )
+    }
+
+    private func handleImportSyncFailure(
+        _ response: TradovateAccountSyncResponse,
+        provider: BrokerIntegrationProvider,
+        connectionId: String,
+        mappingId: String
+    ) {
+        let resolution = BrokerSyncFailureResolution.from(response)
+        if provider == .rithmic, response.summary.errorCode == "rithmic_password_required" {
+            importReconnectPrompt = nil
+            presentRithmicImportReauth(connectionId: connectionId, mappingId: mappingId)
+            return
+        }
+        if resolution == .reconnectRequired, provider == .tradovate {
+            importReconnectPrompt = ImportReconnectPrompt(
+                provider: provider,
+                connectionId: connectionId,
+                mappingId: mappingId
+            )
+            presentMessage(
+                BrokerSyncPresentation.message(
+                    for: response,
+                    provider: provider,
+                    resolution: resolution
+                ),
+                error: true
+            )
+            return
+        }
+        importReconnectPrompt = nil
+        presentMessage(
+            BrokerSyncPresentation.message(
+                for: response,
+                provider: provider,
+                resolution: resolution
+            ),
+            error: true
+        )
     }
 
     func isImportingTrades(mappingId: String) -> Bool {
@@ -640,13 +838,6 @@ final class BrokerIntegrationsViewModel {
                 viewerID: viewerID
             )
         }
-    }
-
-    private func refreshTradesAfterImport(newTradeIds: [String]) async {
-        guard let userID = await session.currentUserID else { return }
-        let owner = ProfileID(userID.rawValue)
-        TradeJournalMutationStore.shared.noteBulkImport(owner: owner, source: .tradovate)
-        _ = newTradeIds
     }
 
     private func presentMessage(_ message: String, error: Bool) {

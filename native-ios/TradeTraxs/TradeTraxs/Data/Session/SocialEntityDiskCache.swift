@@ -3,6 +3,9 @@ import Foundation
 /// Viewer-scoped shared social entity records — one canonical disk copy per entity.
 ///
 /// Patched from Feed / Profile / Detail mutations so surfaces stay coherent offline.
+///
+/// Phase 9B: entity records do not embed engagement fields — ``SocialPresentationWriteThroughCoordinator``
+/// patches Feed/Profile presentation only (never partial entity overwrites for likes/comments).
 nonisolated enum SocialEntityDiskCache {
     static let folderName = "SocialEntityDiskCache"
     static let schemaVersion = 2
@@ -83,6 +86,23 @@ nonisolated enum SocialEntityDiskCache {
 
     static func removeTrade(id: TradeID, viewerID: ProfileID) {
         remove(kind: .trade, entityID: id.rawValue, viewerID: viewerID)
+    }
+
+    /// Merge path — skips migration side effects; used only from ``SocialEntityPersistedCacheCoordinator``.
+    static func loadRecordForMerge(
+        kind: EntityKind,
+        entityID: String,
+        viewerID: ProfileID
+    ) -> Record? {
+        loadRecord(kind: kind, entityID: entityID, viewerID: viewerID)
+    }
+
+    static func writeRecord(_ record: Record) {
+        save(record)
+    }
+
+    static func remove(kind: EntityKind, entityID: String, viewerID: ProfileID) {
+        remove(file: entityFile(viewerID: viewerID.rawValue, kind: kind, entityID: entityID))
     }
 
     // MARK: - Posts
@@ -233,10 +253,6 @@ nonisolated enum SocialEntityDiskCache {
 
     private static func load(kind: EntityKind, entityID: String, viewerID: ProfileID) -> Record? {
         loadRecord(kind: kind, entityID: entityID, viewerID: viewerID)
-    }
-
-    private static func remove(kind: EntityKind, entityID: String, viewerID: ProfileID) {
-        remove(file: entityFile(viewerID: viewerID.rawValue, kind: kind, entityID: entityID))
     }
 
     private static func enforceEntityLimit(viewerID: String) {

@@ -369,6 +369,47 @@ nonisolated struct BrokerLinkAccountsResponse: Codable, Sendable {
     var alreadyLinked: Bool?
 }
 
+nonisolated enum TradovateSyncRequestMode: String, Codable, Sendable {
+    case preview
+    case `import`
+    case cancelPreview = "cancel_preview"
+}
+
+/// Server-computed broker trade row for Review Imported Trades (before confirm).
+nonisolated struct TradovateImportPreviewTrade: Codable, Sendable, Hashable, Identifiable {
+    var lifecycleKey: String
+    var contractId: String
+    var ticker: String
+    var direction: String
+    var contracts: Double
+    var entryPrice: Double
+    var exitPrice: Double
+    var entryTime: String
+    var exitTime: String
+    var points: Double
+    var pnl: Double?
+    var grossPnl: Double?
+    var fees: Double?
+
+    var id: String { lifecycleKey }
+
+    enum CodingKeys: String, CodingKey {
+        case lifecycleKey
+        case contractId
+        case ticker
+        case direction
+        case contracts
+        case entryPrice
+        case exitPrice
+        case entryTime
+        case exitTime
+        case points
+        case pnl
+        case grossPnl
+        case fees
+    }
+}
+
 nonisolated struct TradovateSyncSummaryPayload: Codable, Sendable {
     var ok: Bool
     var status: String
@@ -376,6 +417,9 @@ nonisolated struct TradovateSyncSummaryPayload: Codable, Sendable {
     var tradesUpdated: Int
     var newTradeIds: [String]
     var updatedTradeIds: [String]
+    var importPreviewTrades: [TradovateImportPreviewTrade]
+    var previewEligibleCount: Int?
+    var persistCalled: Bool?
     var error: String?
     var errorCode: String?
 
@@ -386,20 +430,59 @@ nonisolated struct TradovateSyncSummaryPayload: Codable, Sendable {
         case tradesUpdated
         case newTradeIds
         case updatedTradeIds
+        case importPreviewTrades
+        case previewEligibleCount
+        case persistCalled
         case error
         case errorCode
     }
 
+    private enum SnakeCodingKeys: String, CodingKey {
+        case trades_created
+        case trades_updated
+        case new_trade_ids
+        case updated_trade_ids
+        case import_preview_trades
+        case preview_eligible_count
+        case persist_called
+        case error_code
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let snake = try decoder.container(keyedBy: SnakeCodingKeys.self)
         ok = try container.decodeIfPresent(Bool.self, forKey: .ok) ?? false
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "error"
-        tradesCreated = try container.decodeIfPresent(Int.self, forKey: .tradesCreated) ?? 0
-        tradesUpdated = try container.decodeIfPresent(Int.self, forKey: .tradesUpdated) ?? 0
-        newTradeIds = try container.decodeIfPresent([String].self, forKey: .newTradeIds) ?? []
-        updatedTradeIds = try container.decodeIfPresent([String].self, forKey: .updatedTradeIds) ?? []
+        tradesCreated =
+            try container.decodeIfPresent(Int.self, forKey: .tradesCreated)
+            ?? snake.decodeIfPresent(Int.self, forKey: .trades_created)
+            ?? 0
+        tradesUpdated =
+            try container.decodeIfPresent(Int.self, forKey: .tradesUpdated)
+            ?? snake.decodeIfPresent(Int.self, forKey: .trades_updated)
+            ?? 0
+        newTradeIds =
+            try container.decodeIfPresent([String].self, forKey: .newTradeIds)
+            ?? snake.decodeIfPresent([String].self, forKey: .new_trade_ids)
+            ?? []
+        updatedTradeIds =
+            try container.decodeIfPresent([String].self, forKey: .updatedTradeIds)
+            ?? snake.decodeIfPresent([String].self, forKey: .updated_trade_ids)
+            ?? []
+        importPreviewTrades =
+            try container.decodeIfPresent([TradovateImportPreviewTrade].self, forKey: .importPreviewTrades)
+            ?? snake.decodeIfPresent([TradovateImportPreviewTrade].self, forKey: .import_preview_trades)
+            ?? []
+        previewEligibleCount =
+            try container.decodeIfPresent(Int.self, forKey: .previewEligibleCount)
+            ?? snake.decodeIfPresent(Int.self, forKey: .preview_eligible_count)
+        persistCalled =
+            try container.decodeIfPresent(Bool.self, forKey: .persistCalled)
+            ?? snake.decodeIfPresent(Bool.self, forKey: .persist_called)
         error = try container.decodeIfPresent(String.self, forKey: .error)
-        errorCode = try container.decodeIfPresent(String.self, forKey: .errorCode)
+        errorCode =
+            try container.decodeIfPresent(String.self, forKey: .errorCode)
+            ?? snake.decodeIfPresent(String.self, forKey: .error_code)
     }
 }
 
@@ -409,6 +492,36 @@ nonisolated struct TradovateAccountSyncResponse: Codable, Sendable {
     var mappingId: String
     var summary: TradovateSyncSummaryPayload
     var accounts: [BrokerIntegrationAccount]
+    /// Stable BFF contract (`BROKER_RECONNECT_REQUIRED`, …).
+    var code: String?
+    var errorCode: String?
+    var failureCategory: String?
+    var failureStage: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case connectionId
+        case mappingId
+        case summary
+        case accounts
+        case code
+        case errorCode
+        case failureCategory
+        case failureStage
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try container.decodeIfPresent(Bool.self, forKey: .ok) ?? false
+        connectionId = try container.decodeIfPresent(String.self, forKey: .connectionId) ?? ""
+        mappingId = try container.decodeIfPresent(String.self, forKey: .mappingId) ?? ""
+        summary = try container.decode(TradovateSyncSummaryPayload.self, forKey: .summary)
+        accounts = try container.decodeIfPresent([BrokerIntegrationAccount].self, forKey: .accounts) ?? []
+        code = try container.decodeIfPresent(String.self, forKey: .code)
+        errorCode = try container.decodeIfPresent(String.self, forKey: .errorCode)
+        failureCategory = try container.decodeIfPresent(String.self, forKey: .failureCategory)
+        failureStage = try container.decodeIfPresent(String.self, forKey: .failureStage)
+    }
 }
 
 nonisolated struct BrokerManualImportResponse: Codable, Sendable {

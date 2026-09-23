@@ -214,8 +214,8 @@ struct DashboardHomeView: View {
                     dashboardQuickActionsGroup(includeBrokerImport: true)
 
                     DashboardEquityHero(
-                        summary: summary,
-                        periodTitle: viewModel.dateRange.title,
+                        summary: viewModel.equityHeroSummary ?? summary,
+                        periodTitle: viewModel.effectiveEquityChartRange.title,
                         title: viewModel.equityHeroTitle,
                         displayEquity: viewModel.equityHeroDisplayValue,
                         chartPoints: viewModel.equityHeroChartPoints

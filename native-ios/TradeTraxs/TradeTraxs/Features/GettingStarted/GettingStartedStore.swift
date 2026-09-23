@@ -18,6 +18,7 @@ final class GettingStartedStore {
     private var viewerID: ProfileID?
     private var refreshTask: Task<Void, Never>?
     private var realtimeTask: Task<Void, Never>?
+    private var viewerProfileRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var loadGeneration: UInt64 = 0
     private var pendingUserActionRefresh = false
 
@@ -183,7 +184,13 @@ final class GettingStartedStore {
         realtimeTask = Task { [weak self] in
             guard let self else { return }
             let token = await self.session?.accessToken
-            for await _ in realtimeHub.watchViewerProfile(userID: viewerID, accessToken: token) {
+            let watch = realtimeHub.watchViewerProfile(
+                userID: viewerID,
+                accessToken: token,
+                debugOwner: "GettingStarted"
+            )
+            viewerProfileRealtimeConsumer = watch.consumer
+            for await _ in watch.events {
                 guard !Task.isCancelled else { break }
                 await MainActor.run {
                     self.refresh(fromUserAction: false)
@@ -195,9 +202,9 @@ final class GettingStartedStore {
     private func stopRealtime() {
         realtimeTask?.cancel()
         realtimeTask = nil
-        if let viewerID = viewerID?.rawValue {
-            Task { await realtimeHub?.stopWatchingViewerProfile(userID: viewerID) }
-        }
+        let consumer = viewerProfileRealtimeConsumer
+        viewerProfileRealtimeConsumer = nil
+        Task { await realtimeHub?.releaseWatch(consumer) }
     }
 }
 

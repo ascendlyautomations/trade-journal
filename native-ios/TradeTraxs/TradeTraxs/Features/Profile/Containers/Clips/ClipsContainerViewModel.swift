@@ -25,6 +25,8 @@ final class ClipsContainerViewModel {
     private let initialLoadFailureGrace = ProfileSectionFailureGrace()
     private var syncGeneration: UInt64 = 0
     private var trackedPublishedReelID: ReelID?
+    /// Non-owner Profile — sync clips into persisted profile snapshot (owner uses ``OwnerProfileOptimisticStore``).
+    var clipsSectionPersistenceHandler: (([Reel]) -> Void)?
 
     var hasAuthoritativePayload: Bool { hasLoaded }
 
@@ -47,8 +49,19 @@ final class ClipsContainerViewModel {
     }
 
     func prefetchEngagement(for reelIDs: [ReelID]) {
-        guard !reelIDs.isEmpty else { return }
-        engagementStore?.prefetch(reelIDs.map { .reel($0) })
+        let targets = reelIDs.map { InteractionTarget.reel($0) }
+        if targets.isEmpty {
+            EngagementRealtimeSession.shared.updateRetention(
+                ownerKey: "profile-clips:\(profileOwnerID.rawValue)",
+                targets: []
+            )
+            return
+        }
+        engagementStore?.prefetch(targets)
+        EngagementRealtimeSession.shared.updateRetention(
+            ownerKey: "profile-clips:\(profileOwnerID.rawValue)",
+            targets: Set(targets)
+        )
     }
 
     func applyBootstrap(_ snapshot: ProfileState) {
@@ -141,7 +154,7 @@ final class ClipsContainerViewModel {
         )
         state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
         prefetchEngagement(for: items.map(\.id))
-        OwnerProfileOptimisticStore.shared.syncOwnerClipsState(items)
+        notifyClipsSectionPersistence(items)
     }
 
     /// Owner publish — upsert immediately, then refresh using the same path as manual reload.
@@ -263,7 +276,7 @@ final class ClipsContainerViewModel {
             ProfileClipsSync.logAuthoritativeReturned(generation: generation, count: items.count)
             ProfileClipsSync.logUIVisibleCount(items.count)
             #endif
-            OwnerProfileOptimisticStore.shared.syncOwnerClipsState(items)
+            notifyClipsSectionPersistence(items)
             loadTask = nil
             return
         }
@@ -348,7 +361,7 @@ final class ClipsContainerViewModel {
             #endif
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
             prefetchEngagement(for: items.map(\.id))
-            OwnerProfileOptimisticStore.shared.syncOwnerClipsState(items)
+            notifyClipsSectionPersistence(items)
         } catch {
             guard !Task.isCancelled else { return }
             guard generation == syncGeneration else {
@@ -380,6 +393,14 @@ final class ClipsContainerViewModel {
             }
         }
         loadTask = nil
+    }
+
+    private func notifyClipsSectionPersistence(_ clips: [Reel]) {
+        if isOwner {
+            OwnerProfileOptimisticStore.shared.syncOwnerClipsState(clips)
+        } else {
+            clipsSectionPersistenceHandler?(clips)
+        }
     }
 
     private func performLoadMore(cursor: String?, generation: Int) async {

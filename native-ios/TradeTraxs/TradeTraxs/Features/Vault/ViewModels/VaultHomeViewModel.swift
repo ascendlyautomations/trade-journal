@@ -31,20 +31,35 @@ final class VaultHomeViewModel {
     func onAppear(store: VaultStore) {
         let renderStarted = CFAbsoluteTimeGetCurrent()
         if let cached = store.cachedHome(filter: filter, folderID: selectedFolderID) {
-            items = cached.items
-            folders = cached.folders
-            nextCursor = cached.nextCursor
-            phase = .loaded
-            VaultLoadDiagnostics.logCacheHit(items: cached.items.count, folders: cached.folders.count)
-            VaultLoadDiagnostics.logFirstRenderable(
-                dtMs: Int((CFAbsoluteTimeGetCurrent() - renderStarted) * 1000)
-            )
-            if store.isHomeSoftStale(filter: filter, folderID: selectedFolderID) {
-                Task { await refresh(store: store, reason: "softStale") }
-            }
+            applyCachedHome(cached, renderStarted: renderStarted, store: store)
             return
         }
-        Task { await refresh(store: store, reason: "cold") }
+        Task {
+            let hydrated = await VaultPersistedCacheCoordinator.shared.hydrateIfNeeded(
+                store: store,
+                filter: filter,
+                folderID: selectedFolderID
+            )
+            if hydrated, let cached = store.cachedHome(filter: filter, folderID: selectedFolderID) {
+                applyCachedHome(cached, renderStarted: renderStarted, store: store)
+                return
+            }
+            await refresh(store: store, reason: "cold")
+        }
+    }
+
+    private func applyCachedHome(_ cached: VaultStore.HomeSnapshot, renderStarted: CFAbsoluteTime, store: VaultStore) {
+        items = cached.items
+        folders = cached.folders
+        nextCursor = cached.nextCursor
+        phase = .loaded
+        VaultLoadDiagnostics.logCacheHit(items: cached.items.count, folders: cached.folders.count)
+        VaultLoadDiagnostics.logFirstRenderable(
+            dtMs: Int((CFAbsoluteTimeGetCurrent() - renderStarted) * 1000)
+        )
+        if store.isHomeSoftStale(filter: filter, folderID: selectedFolderID) {
+            Task { await refresh(store: store, reason: "softStale") }
+        }
     }
 
     func refresh(store: VaultStore, reason: String = "explicit") async {
@@ -80,6 +95,11 @@ final class VaultHomeViewModel {
                     dtMs: Int((CFAbsoluteTimeGetCurrent() - renderStarted) * 1000)
                 )
             }
+            await VaultPersistedCacheCoordinator.shared.logReconcileAfterNetworkRefresh(
+                items: loaded.items.count,
+                folders: loadedFolders.count,
+                started: renderStarted
+            )
         } catch {
             if items.isEmpty {
                 phase = .failed(FeedSupport.message(for: error))
@@ -149,7 +169,7 @@ final class VaultHomeViewModel {
             if selectedFolderID == folder.id {
                 selectedFolderID = nil
             }
-            store.invalidateHomeList()
+            store.applyFolderListAfterDelete(removedID: folder.id)
             await refresh(store: store, reason: "folderDeleted")
         } catch {
             ExperienceHaptics.play(.warning)
@@ -168,7 +188,7 @@ final class VaultHomeViewModel {
                 folders[index] = updated
             }
             folders.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            store.invalidateHomeList()
+            store.applyRenamedFolder(updated)
             await store.refreshFolders()
             return nil
         } catch let error as AppError {

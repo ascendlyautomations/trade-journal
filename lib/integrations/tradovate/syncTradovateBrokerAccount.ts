@@ -17,10 +17,31 @@ import {
 } from "@/lib/integrations/tradovate/tradovateMarketDataClient"
 import { upsertReconstructedBrokerTrades } from "@/lib/integrations/tradovate/persistBrokerTrades"
 import {
-  BROKER_EXECUTION_RECONSTRUCTION_SELECT,
+  BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT,
   listBrokerExecutionsForExternalAccount,
   refreshBrokerExecutionRowAfterDuplicateInsert,
 } from "@/lib/integrations/brokerExecutionIdentity"
+import {
+  aggregateTradovateExecutionContractHints,
+  mergeTradovateContractMetaMaps,
+  mergeTradovateExecutionContractFields,
+  type TradovateExecutionContractHint,
+} from "@/lib/integrations/tradovate/tradovateContractMeta"
+import {
+  buildTradovateImportPreviewTrades,
+  type TradovateImportPreviewTrade,
+} from "@/lib/integrations/tradovate/tradovateImportPreview"
+import { logTradovateImportFlow } from "@/lib/integrations/tradovate/tradovateImportFlowLog"
+import {
+  filterPreviewsNotInBaseline,
+  loadTradovateLifecycleKeysAtSyncStart,
+} from "@/lib/integrations/tradovate/tradovateLifecycleKeys"
+import {
+  clearManualImportPreviewHold,
+  isManualImportHoldActive,
+  loadTradovateProviderSyncState,
+  setManualImportPreviewHold,
+} from "@/lib/integrations/tradovate/tradovateManualImportHold"
 import {
   reconstructAllCompletedTrades,
   type ReconstructionFill,
@@ -32,6 +53,9 @@ import type {
 } from "@/lib/integrations/tradovate/tradovateSyncLogger"
 
 export type TradovateSyncTrigger = "manual" | "auto" | "reconnect" | "startup"
+
+/** Manual import: preview reconstructs + financials without writing trades; import persists. */
+export type TradovateSyncMode = "preview" | "import"
 
 export type TradovateSyncSummary = {
   ok: boolean
@@ -46,6 +70,11 @@ export type TradovateSyncSummary = {
   updatedTradeIds: string[]
   openPositions: number
   durationMs?: number
+  /** Reconstructed trades with canonical ticker + dollar P&L for Review Imported Trades. */
+  importPreviewTrades?: TradovateImportPreviewTrade[]
+  existingLifecycleCountAtStart?: number
+  previewEligibleCount?: number
+  persistCalled?: boolean
   error?: string
   /** Machine code for clients/logs (iOS already decodes optionally). */
   errorCode?: string
@@ -141,6 +170,7 @@ function emptySummary(
     newTradeIds: [],
     updatedTradeIds: [],
     openPositions: 0,
+    importPreviewTrades: [],
     ...patch,
   }
 }
@@ -169,11 +199,17 @@ export async function syncTradovateBrokerAccount(
     connectionId: string
     brokerIntegrationAccountId: string
     trigger: TradovateSyncTrigger
+    mode?: TradovateSyncMode
   }
 ): Promise<TradovateSyncSummary> {
   const started = Date.now()
   const { userId, connectionId, brokerIntegrationAccountId, trigger } = params
+  const mode: TradovateSyncMode = params.mode ?? "import"
+  let persistTrades = mode === "import"
   const autoOnly = trigger !== "manual"
+  let existingLifecycleCountAtStart = 0
+  let previewEligibleCount = 0
+  let persistSkippedReason: string | undefined
 
   logTradovateSync("sync_started", {
     userId,
@@ -236,6 +272,26 @@ export async function syncTradovateBrokerAccount(
 
   const targetAccountId = String(mapping.external_account_id)
   let failureStage: TradovateSyncFailureStage = "unknown"
+
+  const existingLifecycleKeysAtStart = await loadTradovateLifecycleKeysAtSyncStart(
+    supabase,
+    { userId, mappingId: brokerIntegrationAccountId }
+  )
+  existingLifecycleCountAtStart = existingLifecycleKeysAtStart.size
+
+  const providerSyncState = await loadTradovateProviderSyncState(
+    supabase,
+    brokerIntegrationAccountId
+  )
+  const manualImportHoldActive = isManualImportHoldActive(providerSyncState)
+  if (
+    persistTrades &&
+    manualImportHoldActive &&
+    !(trigger === "manual" && mode === "import")
+  ) {
+    persistTrades = false
+    persistSkippedReason = "manual_import_hold"
+  }
 
   try {
     let fillsRaw: Awaited<ReturnType<typeof fetchTradovateFillList>>
@@ -380,16 +436,50 @@ export async function syncTradovateBrokerAccount(
       [...contractIdsForResolve]
     )
 
+    const contractIdList = [...contractIdsForResolve]
+    let executionHintsBeforeEnrich: TradovateExecutionContractHint[] = []
+    if (contractIdList.length > 0) {
+      const { data: executionRowsBeforeEnrich } = await supabase
+        .from("broker_integration_executions")
+        .select("external_contract_id, symbol_root, contract_name")
+        .eq("user_id", userId)
+        .eq("provider", "tradovate")
+        .eq("broker_integration_account_id", brokerIntegrationAccountId)
+        .in("external_contract_id", contractIdList)
+      executionHintsBeforeEnrich = (executionRowsBeforeEnrich ?? []).map((row) => ({
+        external_contract_id: String(row.external_contract_id),
+        symbol_root: row.symbol_root,
+        contract_name: row.contract_name,
+      }))
+    }
+    const bestExistingHintByContract = new Map(
+      aggregateTradovateExecutionContractHints(executionHintsBeforeEnrich).map(
+        (hint) => [String(hint.external_contract_id).trim(), hint] as const
+      )
+    )
+
     for (const [contractId, meta] of contracts) {
+      const key = String(contractId).trim()
+      const existing = bestExistingHintByContract.get(key)
+      const mergedFields = mergeTradovateExecutionContractFields(
+        {
+          symbol_root: existing?.symbol_root,
+          contract_name: existing?.contract_name,
+        },
+        {
+          symbol_root: meta.symbolRoot,
+          contract_name: meta.contractName,
+        }
+      )
       await supabase
         .from("broker_integration_executions")
         .update({
-          contract_name: meta.contractName,
-          symbol_root: meta.symbolRoot,
+          contract_name: mergedFields.contract_name,
+          symbol_root: mergedFields.symbol_root,
           updated_at: new Date().toISOString(),
         })
         .eq("broker_integration_account_id", brokerIntegrationAccountId)
-        .eq("external_contract_id", String(contractId))
+        .eq("external_contract_id", key)
     }
 
     const storedExecutions = await listBrokerExecutionsForExternalAccount(
@@ -399,7 +489,7 @@ export async function syncTradovateBrokerAccount(
         provider: "tradovate",
         externalAccountId: targetAccountId,
         fallbackMappingId: brokerIntegrationAccountId,
-        select: BROKER_EXECUTION_RECONSTRUCTION_SELECT,
+        select: BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT,
       }
     )
 
@@ -439,32 +529,95 @@ export async function syncTradovateBrokerAccount(
       feesByFillId = new Map()
     }
 
-    failureStage = "persist_trades"
-    const { tradesCreated, tradesUpdated, newTradeIds, updatedTradeIds } =
-      await upsertReconstructedBrokerTrades(
-      supabase,
-      {
-        userId,
-        connectionId,
-        mappingId: brokerIntegrationAccountId,
-        externalBrokerAccountId: targetAccountId,
-        account: mapping.account,
-        completed,
-        contracts,
-        feesByFillId,
+    const contractsForPersist = mergeTradovateContractMetaMaps(
+      contracts,
+      storedExecutions
+    )
+    const allPreviews = buildTradovateImportPreviewTrades({
+      completed,
+      contracts: contractsForPersist,
+      feesByFillId,
+    })
+    const importablePreviews = filterPreviewsNotInBaseline(
+      allPreviews,
+      existingLifecycleKeysAtStart
+    )
+    previewEligibleCount = importablePreviews.length
+
+    if (trigger === "manual" && mode === "preview") {
+      if (importablePreviews.length > 0) {
+        await setManualImportPreviewHold(
+          supabase,
+          brokerIntegrationAccountId,
+          importablePreviews.map((p) => p.lifecycleKey)
+        )
+      } else {
+        await clearManualImportPreviewHold(supabase, brokerIntegrationAccountId)
       }
-    ).catch((err) => {
-      logTradovateSync("sync_error", {
-        userId,
-        connectionId,
-        mappingId: brokerIntegrationAccountId,
-        trigger,
-        failureCategory: "supabase_write_failure",
-        failureStage: "persist_trades",
-        errorCode: "trade_upsert_failed",
-        detail: err instanceof Error ? err.message.slice(0, 120) : "unknown",
-      })
-      throw err
+    }
+
+    let tradesCreated = 0
+    let tradesUpdated = 0
+    let newTradeIds: string[] = []
+    let updatedTradeIds: string[] = []
+    let tradesWithPnL = 0
+    let tradesWithoutPnL = 0
+    let numericTickersPersisted = 0
+
+    if (persistTrades) {
+      failureStage = "persist_trades"
+      ;({
+        tradesCreated,
+        tradesUpdated,
+        newTradeIds,
+        updatedTradeIds,
+        tradesWithPnL,
+        tradesWithoutPnL,
+        numericTickersPersisted,
+      } = await upsertReconstructedBrokerTrades(
+        supabase,
+        {
+          userId,
+          connectionId,
+          mappingId: brokerIntegrationAccountId,
+          externalBrokerAccountId: targetAccountId,
+          account: mapping.account,
+          completed,
+          contracts: contractsForPersist,
+          feesByFillId,
+        }
+      ).catch((err) => {
+        logTradovateSync("sync_error", {
+          userId,
+          connectionId,
+          mappingId: brokerIntegrationAccountId,
+          trigger,
+          failureCategory: "supabase_write_failure",
+          failureStage: "persist_trades",
+          errorCode: "trade_upsert_failed",
+          detail: err instanceof Error ? err.message.slice(0, 120) : "unknown",
+        })
+        throw err
+      }))
+    }
+
+    if (trigger === "manual" && mode === "import") {
+      await clearManualImportPreviewHold(supabase, brokerIntegrationAccountId)
+    }
+
+    logTradovateImportFlow({
+      mode,
+      trigger,
+      mappingId: brokerIntegrationAccountId,
+      persistCalled: persistTrades,
+      lifecyclesBuilt: completed.length,
+      existingLifecycleCountAtStart,
+      previewEligibleCount,
+      importPreviewTradesCount: importablePreviews.length,
+      inserted: tradesCreated,
+      updated: tradesUpdated,
+      manualImportHoldActive,
+      persistSkippedReason,
     })
 
     const successAt = new Date().toISOString()
@@ -498,6 +651,10 @@ export async function syncTradovateBrokerAccount(
       newExecutions,
       tradesCreated,
       tradesUpdated,
+      tradesWithPnL,
+      tradesWithoutPnL,
+      tradesBuilt: completed.length,
+      numericTickersPersisted,
     })
 
     return {
@@ -513,6 +670,10 @@ export async function syncTradovateBrokerAccount(
       updatedTradeIds,
       openPositions: openByContract.size,
       durationMs,
+      importPreviewTrades: importablePreviews,
+      existingLifecycleCountAtStart,
+      previewEligibleCount,
+      persistCalled: persistTrades,
     }
   } catch (err) {
     let code = "sync_failed"

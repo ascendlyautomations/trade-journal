@@ -30,6 +30,7 @@ nonisolated final class AnalyticsRevisionRepairNetworkObserver: @unchecked Senda
         guard previous != .satisfied, status == .satisfied else { return }
         Task {
             await AnalyticsRevisionRepairCoordinator.shared.requestRepair(.networkRegain)
+            await SocialRealtimeReconciliationCoordinator.shared.requestRepair(.networkRegain)
         }
     }
 }

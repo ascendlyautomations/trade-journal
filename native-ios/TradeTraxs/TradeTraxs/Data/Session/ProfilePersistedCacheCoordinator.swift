@@ -84,8 +84,17 @@ enum ProfilePersistedCacheCoordinator {
 
     static func patchTrade(_ trade: Trade, viewerID: ProfileID) {
         let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
-        SocialEntityDiskCache.saveTradeSummary(summary, viewerID: viewerID)
         let ownerID = trade.ownerProfileID
+        if trade.visibility != .public {
+            SocialEntityPersistedCacheCoordinator.removeTrade(id: trade.id, viewerID: viewerID)
+        } else {
+            SocialEntityPersistedCacheCoordinator.saveTradeSummary(
+                summary,
+                viewerID: viewerID,
+                source: .mutation,
+                mergeMode: .merge
+            )
+        }
 
         if var state = ProfileSessionStore.shared.restore(
             viewerID: viewerID,
@@ -118,7 +127,7 @@ enum ProfilePersistedCacheCoordinator {
     }
 
     static func removeTrade(id: TradeID, owner: ProfileID, viewerID: ProfileID) {
-        SocialEntityDiskCache.removeTrade(id: id, viewerID: viewerID)
+        SocialEntityPersistedCacheCoordinator.removeTrade(id: id, viewerID: viewerID)
         for blob in ProfileDiskCache.allSnapshots(for: viewerID)
             where blob.targetProfileID == owner.rawValue
         {
@@ -130,7 +139,12 @@ enum ProfilePersistedCacheCoordinator {
     }
 
     static func patchPost(_ post: Post, viewerID: ProfileID) {
-        SocialEntityDiskCache.savePost(post, viewerID: viewerID)
+        SocialEntityPersistedCacheCoordinator.savePost(
+            post,
+            viewerID: viewerID,
+            source: .mutation,
+            mergeMode: .merge
+        )
         patchSectionItem(
             viewerID: viewerID,
             ownerID: post.authorProfileID,
@@ -143,7 +157,7 @@ enum ProfilePersistedCacheCoordinator {
     }
 
     static func removePost(id: PostID, owner: ProfileID, viewerID: ProfileID) {
-        SocialEntityDiskCache.removePost(id: id, viewerID: viewerID)
+        SocialEntityPersistedCacheCoordinator.removePost(id: id, viewerID: viewerID)
         removeSectionItem(
             viewerID: viewerID,
             ownerID: owner,
@@ -153,7 +167,12 @@ enum ProfilePersistedCacheCoordinator {
     }
 
     static func patchReel(_ reel: Reel, viewerID: ProfileID) {
-        SocialEntityDiskCache.saveReel(reel, viewerID: viewerID)
+        SocialEntityPersistedCacheCoordinator.saveReel(
+            reel,
+            viewerID: viewerID,
+            source: .mutation,
+            mergeMode: .merge
+        )
         patchSectionItem(
             viewerID: viewerID,
             ownerID: reel.authorProfileID,
@@ -166,7 +185,7 @@ enum ProfilePersistedCacheCoordinator {
     }
 
     static func removeReel(id: ReelID, owner: ProfileID, viewerID: ProfileID) {
-        SocialEntityDiskCache.removeReel(id: id, viewerID: viewerID)
+        SocialEntityPersistedCacheCoordinator.removeReel(id: id, viewerID: viewerID)
         removeSectionItem(
             viewerID: viewerID,
             ownerID: owner,
@@ -175,8 +194,44 @@ enum ProfilePersistedCacheCoordinator {
         )
     }
 
+    /// Phase 9 — authoritative Profile → Clips tab load (lazy section; not in Stage-1 bootstrap).
+    static func persistClipsSection(
+        viewerID: ProfileID,
+        targetProfileID: ProfileID,
+        clips: [Reel],
+        engagementStore: EngagementStore? = nil
+    ) {
+        guard var state = ProfileSessionStore.shared.restore(
+            viewerID: viewerID,
+            targetProfileID: targetProfileID
+        ) ?? ProfileDiskCache.loadSnapshot(viewerID: viewerID, targetProfileID: targetProfileID)
+            .map(mapBlobToState)
+        else { return }
+        state.clips = Array(clips.prefix(ProfileDiskCache.maxClipsPerProfile))
+        state.didLoadClips = true
+        persist(
+            viewerID: viewerID,
+            targetProfileID: targetProfileID,
+            state: state,
+            engagementStore: engagementStore
+        )
+        for reel in state.clips {
+            SocialEntityPersistedCacheCoordinator.saveReel(
+                reel,
+                viewerID: viewerID,
+                source: .profile,
+                mergeMode: .replace
+            )
+        }
+    }
+
     static func patchAchievement(_ achievement: Achievement, viewerID: ProfileID) {
-        SocialEntityDiskCache.saveAchievement(achievement, viewerID: viewerID)
+        SocialEntityPersistedCacheCoordinator.saveAchievement(
+            achievement,
+            viewerID: viewerID,
+            source: .mutation,
+            mergeMode: .merge
+        )
         patchSectionItem(
             viewerID: viewerID,
             ownerID: achievement.ownerProfileID,
@@ -192,6 +247,7 @@ enum ProfilePersistedCacheCoordinator {
         viewerID: ProfileID,
         targetProfileID: ProfileID,
         isFollowing: Bool?,
+        isRequested: Bool? = nil,
         stats: ProfileStats?
     ) {
         guard var state = ProfileSessionStore.shared.restore(
@@ -202,6 +258,9 @@ enum ProfilePersistedCacheCoordinator {
         else { return }
         if let isFollowing, !state.isOwner {
             state.isFollowing = isFollowing
+        }
+        if let isRequested, !state.isOwner {
+            state.isRequested = isRequested
         }
         if let stats {
             state.stats = stats
@@ -216,13 +275,13 @@ enum ProfilePersistedCacheCoordinator {
     static func clear(viewerID: ProfileID) {
         ProfileDiskCache.clear(viewerID: viewerID)
         ProfileSessionStore.shared.invalidate(viewerID: viewerID)
-        SocialEntityDiskCache.clear(viewerID: viewerID)
+        SocialEntityPersistedCacheCoordinator.clear(viewerID: viewerID)
     }
 
     static func clearAll() {
         ProfileDiskCache.clearAll()
         ProfileSessionStore.shared.invalidate()
-        SocialEntityDiskCache.clearAll()
+        SocialEntityPersistedCacheCoordinator.clearAll()
     }
 
     // MARK: - Mapping
@@ -265,6 +324,7 @@ enum ProfilePersistedCacheCoordinator {
         state.didLoadPosts = blob.didLoadPosts
         state.didLoadClips = blob.didLoadClips
         state.didLoadAchievements = blob.didLoadAchievements
+        state.engagementPresentation = blob.engagementPresentation
         state.lastUpdated = blob.savedAt
         return state
     }
@@ -321,8 +381,56 @@ enum ProfilePersistedCacheCoordinator {
             didLoadTrades: state.didLoadTrades,
             didLoadPosts: state.didLoadPosts,
             didLoadClips: state.didLoadClips,
-            didLoadAchievements: state.didLoadAchievements
+            didLoadAchievements: state.didLoadAchievements,
+            engagementPresentation: state.engagementPresentation
         )
+    }
+
+    /// Patches presentation engagement on cached Profile snapshots when the target row is already present.
+    @discardableResult
+    static func patchEngagementPresentation(
+        viewerID: ProfileID,
+        target: InteractionTarget,
+        snapshot: EngagementSnapshot,
+        writeGeneration: UInt64
+    ) -> Int {
+        guard !SocialPresentationWriteThroughGeneration.isStale(
+            viewerID: viewerID,
+            target: target,
+            generation: writeGeneration
+        ) else { return 0 }
+
+        var patched = 0
+        var touchedProfileIDs = Set<String>()
+
+        for profileID in ProfileSessionStore.shared.profileIDs(viewerID: viewerID) {
+                guard var state = ProfileSessionStore.shared.restore(
+                    viewerID: viewerID,
+                    targetProfileID: profileID
+                ), SocialPresentationTargetMatching.profileContains(target: target, state: state)
+                else { continue }
+                state.engagementPresentation[target.presentationStorageKey] = snapshot
+                persist(viewerID: viewerID, targetProfileID: profileID, state: state)
+                touchedProfileIDs.insert(profileID.rawValue)
+                patched += 1
+        }
+
+        for blob in ProfileDiskCache.allSnapshots(for: viewerID) {
+            guard !touchedProfileIDs.contains(blob.targetProfileID) else { continue }
+            var state = mapBlobToState(blob)
+            guard SocialPresentationTargetMatching.profileContains(target: target, state: state) else {
+                continue
+            }
+            state.engagementPresentation[target.presentationStorageKey] = snapshot
+            persist(
+                viewerID: viewerID,
+                targetProfileID: ProfileID(blob.targetProfileID),
+                state: state
+            )
+            patched += 1
+        }
+
+        return patched
     }
 
     private static func seedCaches(
@@ -334,7 +442,12 @@ enum ProfilePersistedCacheCoordinator {
         guard let profileID = state.profileID ?? state.profile?.id else { return }
         if let profile = state.profile {
             detailCache.seed(profile)
-            SocialEntityDiskCache.saveProfile(profile, viewerID: viewerID)
+            SocialEntityPersistedCacheCoordinator.saveProfile(
+                profile,
+                viewerID: viewerID,
+                source: .profile,
+                mergeMode: .replace
+            )
         }
         if let stats = state.stats {
             detailCache.seed(stats: stats)
@@ -360,17 +473,42 @@ enum ProfilePersistedCacheCoordinator {
         for story in state.activeStories {
             detailCache.seed(story)
         }
+        for (key, snap) in state.engagementPresentation {
+            guard let target = InteractionTarget(presentationStorageKey: key) else { continue }
+            engagementStore?.seed(snap, for: target)
+        }
         for summary in state.trades {
             _ = engagementStore?.snapshot(for: .trade(summary.id))
+            SocialEntityPersistedCacheCoordinator.saveTradeSummary(
+                summary,
+                viewerID: viewerID,
+                source: .profile,
+                mergeMode: .replace
+            )
         }
         for post in state.posts {
-            SocialEntityDiskCache.savePost(post, viewerID: viewerID)
+            SocialEntityPersistedCacheCoordinator.savePost(
+                post,
+                viewerID: viewerID,
+                source: .profile,
+                mergeMode: .replace
+            )
         }
         for reel in state.clips {
-            SocialEntityDiskCache.saveReel(reel, viewerID: viewerID)
+            SocialEntityPersistedCacheCoordinator.saveReel(
+                reel,
+                viewerID: viewerID,
+                source: .profile,
+                mergeMode: .replace
+            )
         }
         for achievement in state.achievements {
-            SocialEntityDiskCache.saveAchievement(achievement, viewerID: viewerID)
+            SocialEntityPersistedCacheCoordinator.saveAchievement(
+                achievement,
+                viewerID: viewerID,
+                source: .profile,
+                mergeMode: .replace
+            )
         }
     }
 

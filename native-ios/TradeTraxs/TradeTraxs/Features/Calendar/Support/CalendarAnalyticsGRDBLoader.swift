@@ -17,8 +17,9 @@ nonisolated enum CalendarAnalyticsGRDBLoader {
         month: Int,
         queryAccountID: String?,
         queryMode: String?,
-        store: AnalyticsLocalStore = AnalyticsLocalStore()
+        store: AnalyticsLocalStore? = nil
     ) async -> MonthPresentation {
+        let store = store ?? AnalyticsLocalStore.sharedStore()
         let started = Date()
         guard let bounds = AnalyticsCalendarDay.civilMonthDateBounds(year: year, month: month) else {
             return emptyPresentation(elapsedMs: elapsed(started), state: .missing)
@@ -49,8 +50,9 @@ nonisolated enum CalendarAnalyticsGRDBLoader {
         year: Int,
         queryAccountID: String?,
         queryMode: String?,
-        store: AnalyticsLocalStore = AnalyticsLocalStore()
+        store: AnalyticsLocalStore? = nil
     ) async -> MonthPresentation {
+        let store = store ?? AnalyticsLocalStore.sharedStore()
         let started = Date()
         guard let bounds = AnalyticsCalendarDay.civilYearDateBounds(year: year) else {
             return emptyPresentation(elapsedMs: elapsed(started), state: .missing)

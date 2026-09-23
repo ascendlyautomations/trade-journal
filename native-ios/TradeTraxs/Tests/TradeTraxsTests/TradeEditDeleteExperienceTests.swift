@@ -99,6 +99,34 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
         }
     }
 
+    func testOwnerTradeDeletionServiceMatchesDetailPath() async throws {
+        let owner = ProfileID("user.delete-service")
+        let trade = sampleTrade(id: "del-svc-1", owner: owner.rawValue)
+        let cache = DetailPresentationCache()
+        TradeJournalMutationStore.shared.configure(detailCache: cache)
+        cache.seed(trade)
+        let repository = DeleteTrackingTradeRepository(seed: trade)
+
+        try await OwnerTradeDeletionService.deleteOwnedTrade(
+            tradeID: trade.id,
+            owner: owner,
+            previous: trade,
+            trades: repository,
+            session: EditTradeStubSession(userID: owner.rawValue),
+            detailCache: cache,
+            tradeDetailRepository: NullTradeDetailRepository()
+        )
+
+        XCTAssertEqual(repository.deleteCalls, [trade.id])
+        XCTAssertNil(cache.trade(id: trade.id))
+        if case .deleted(let id, let deletedOwner) = TradeJournalMutationStore.shared.latest {
+            XCTAssertEqual(id, trade.id)
+            XCTAssertEqual(deletedOwner, owner)
+        } else {
+            XCTFail("Expected noteDeleted mutation")
+        }
+    }
+
     func testDeleteMutationClearsSessionCaches() {
         let owner = ProfileID("dev.edit-delete")
         let trade = sampleTrade(id: "del-1", owner: owner.rawValue)
@@ -295,7 +323,15 @@ private struct EditTradeStubSession: SessionProviding {
     var accessToken: String? { get async { userID == nil ? nil : "token" } }
 }
 
-private final class EditTradeStubRepository: TradeRepository, @unchecked Sendable {
+private final class DeleteTrackingTradeRepository: EditTradeStubRepository {
+    private(set) var deleteCalls: [TradeID] = []
+
+    override func delete(id: TradeID) async throws {
+        deleteCalls.append(id)
+    }
+}
+
+private class EditTradeStubRepository: TradeRepository, @unchecked Sendable {
     private let seed: Trade
     private(set) var updateCalls = 0
 

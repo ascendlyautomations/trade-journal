@@ -128,6 +128,22 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         return mapped
     }
 
+    func message(id: MessageID, in conversationID: ConversationID) async throws -> Message? {
+        let rows: [MessageDTO.Message] = try await supabase.database.select(
+            MessageDTO.Message.self,
+            from: "messages",
+            query: [
+                SupabaseQuery.select(Self.messageSelect),
+                SupabaseQuery.eq("id", id.rawValue),
+                SupabaseQuery.eq("conversation_id", conversationID.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
+        guard let row = rows.first else { return nil }
+        if row.deleted_for_everyone == true { return nil }
+        return try MessageMapper.mapToDomain(row)
+    }
+
     func messages(
         in conversationID: ConversationID,
         page: PageRequest

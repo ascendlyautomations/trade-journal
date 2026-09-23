@@ -215,6 +215,9 @@ final class NavigationCoordinator {
         guard store.sessionPhase == .authenticated else { return }
         switch route {
         case .thread(let conversationID):
+#if DEBUG
+            ConversationOpenTrace.navigationCommitted(conversationID: conversationID.rawValue)
+#endif
             InboxMarkReadCoordinator.shared.prepareOpenConversation(conversationID)
         case .room(let roomID):
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)

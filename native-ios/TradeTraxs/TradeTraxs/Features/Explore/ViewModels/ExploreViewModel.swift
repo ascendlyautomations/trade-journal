@@ -710,21 +710,26 @@ final class ExploreViewModel {
             detailCache.seedViewerFollowingIDs(ids)
             return ids
         }
-        if let disk = SessionDiskCache.loadFollowing(for: viewerID) {
+        if let disk = RelationshipFollowingPersistence.loadComplete(for: viewerID) {
             let ids = Set(disk.map { ProfileID($0) })
-            await SessionFollowingStore.shared.seed(viewerID: viewerID.rawValue, ids: Set(disk))
+            await SessionFollowingStore.shared.seedComplete(viewerID: viewerID.rawValue, ids: Set(disk))
             detailCache.seedViewerFollowingIDs(ids)
             return ids
         }
         do {
             let page = try await profiles.following(of: viewerID, page: PageRequest(limit: 200))
             let ids = Set(page.items.map(\.id))
-            await SessionFollowingStore.shared.seed(
+            await SessionFollowingStore.shared.seedComplete(
                 viewerID: viewerID.rawValue,
                 ids: Set(ids.map(\.rawValue))
             )
             detailCache.seedViewerFollowingIDs(ids)
-            SessionDiskCache.saveFollowing(ids: ids.map(\.rawValue), for: viewerID)
+            let generation = RelationshipWriteGeneration.bump(viewerID: viewerID)
+            RelationshipFollowingPersistence.saveComplete(
+                ids: ids.map(\.rawValue),
+                viewerID: viewerID,
+                generation: generation
+            )
             return ids
         } catch {
             return []

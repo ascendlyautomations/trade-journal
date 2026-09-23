@@ -278,7 +278,6 @@
 /* Begin PBXShellScriptBuildPhase section */
 		C73441D13025511900D1FF5B /* Copy Secrets.plist */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);

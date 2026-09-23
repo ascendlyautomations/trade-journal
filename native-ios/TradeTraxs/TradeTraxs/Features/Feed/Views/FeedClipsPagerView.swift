@@ -149,6 +149,7 @@ struct FeedClipsPagerView: View {
         activeClipEntryID = entry.id
         activateEntry(entry, atIndex: index)
         prefetchNeighborClip(from: index, scrollDirection: scrollDirection)
+        syncClipEngagementRealtimeRetention(activeIndex: index)
         onLoadMore(entry.id)
         if index >= clipEntries.count - 2 {
             onLoadMore(clipEntries.last?.id ?? entry.id)
@@ -162,6 +163,18 @@ struct FeedClipsPagerView: View {
               case .clip(_, let reel) = clipEntries[neighborIndex]
         else { return }
         playbackCoordinator.prepareNeighborClip(reel, atIndex: neighborIndex)
+    }
+
+    /// Current clip ± one neighbor — bounded Realtime retention for the clips pager.
+    private func syncClipEngagementRealtimeRetention(activeIndex: Int) {
+        let indices = [activeIndex - 1, activeIndex, activeIndex + 1]
+            .filter { clipEntries.indices.contains($0) }
+        let targets = Set(indices.map { clipEntries[$0].interactionTarget })
+        engagementStore.prefetch(Array(targets))
+        EngagementRealtimeSession.shared.updateRetention(
+            ownerKey: "feed-clips-pager",
+            targets: targets
+        )
     }
 
     private func presentCommentsSheet(for entry: FeedTimelineEntry) {
@@ -200,8 +213,10 @@ private enum FeedClipsOverlayLayout {
     static let metadataActionGap: CGFloat = 12
     static let actionItemSpacing: CGFloat = 18
     static let actionIconPointSize: CGFloat = 24
-    /// Single tunable lift for the entire Clip overlay — metadata + action rail move together.
+    /// Bottom anchor for the right-side action rail only.
     static let clipOverlayBottomPadding: CGFloat = 15
+    /// Fallback when clip pages ignore safe area and geometry inset is unavailable.
+    static let metadataBottomLiftFallback: CGFloat = ExperienceSpacing.huge
     static let gradientHeight: CGFloat = 280
 }
 
@@ -228,6 +243,7 @@ private struct FeedClipsPageView: View {
     @Environment(\.themeColors) private var colors
     @State private var followInFlight = false
     @State private var showsVaultSheet = false
+    @State private var bottomSafeAreaInset: CGFloat = 0
 
     private var vaultRef: VaultContentRef? { VaultContentRef.from(entry.interactionTarget) }
     private var isVaulted: Bool {
@@ -258,6 +274,9 @@ private struct FeedClipsPageView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
+        .onGeometryChange(for: CGFloat.self, of: { $0.safeAreaInsets.bottom }) { _, inset in
+            bottomSafeAreaInset = inset
+        }
         .sheet(isPresented: $showsVaultSheet) {
             if let vaultRef {
                 VaultDestinationSheet(ref: vaultRef, store: vaultStore)
@@ -285,18 +304,26 @@ private struct FeedClipsPageView: View {
         .allowsHitTesting(false)
     }
 
-    /// Unified bottom overlay — metadata and action rail share one bottom boundary.
+    /// Bottom overlay — action rail keeps the legacy anchor; metadata lifts to clear the tab bar.
     private func clipOverlayBottom(reel: Reel) -> some View {
         HStack(alignment: .bottom, spacing: FeedClipsOverlayLayout.metadataActionGap) {
             clipMetadata(reel: reel)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
+                .padding(.bottom, clipMetadataBottomLift)
 
             clipActionRail(reel: reel)
                 .fixedSize(horizontal: true, vertical: true)
         }
         .padding(.horizontal, FeedClipsOverlayLayout.horizontalPadding)
         .padding(.bottom, FeedClipsOverlayLayout.clipOverlayBottomPadding)
+    }
+
+    private var clipMetadataBottomLift: CGFloat {
+        if bottomSafeAreaInset > 0 {
+            return bottomSafeAreaInset
+        }
+        return FeedClipsOverlayLayout.metadataBottomLiftFallback
     }
 
     @ViewBuilder

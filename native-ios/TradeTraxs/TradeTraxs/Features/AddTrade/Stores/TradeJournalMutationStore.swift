@@ -34,12 +34,14 @@ final class TradeJournalMutationStore {
     }
 
     private var detailCache: DetailPresentationCache?
+    private weak var vaultStore: VaultStore?
 
     private init() {}
 
     /// Bind the shared presentation cache once at app bootstrap — central upsert path for all journal mutations.
-    func configure(detailCache: DetailPresentationCache) {
+    func configure(detailCache: DetailPresentationCache, vaultStore: VaultStore? = nil) {
         self.detailCache = detailCache
+        self.vaultStore = vaultStore
     }
 
     func noteCreated(_ trade: Trade) {
@@ -70,8 +72,6 @@ final class TradeJournalMutationStore {
     private func propagateUpsert(_ trade: Trade, resource: String) {
         if let detailCache {
             detailCache.seedAuthoritativeDetail(trade, authority: .authoritativeMutation)
-            let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
-            SocialEntityDiskCache.saveTradeSummary(summary, viewerID: trade.ownerProfileID)
             SessionOwnerTradesStore.shared.upsert(trade, detailCache: detailCache)
             SessionTradeEntityStore.shared.upsert(trade, detailCache: detailCache, viewerID: trade.ownerProfileID)
         }
@@ -89,6 +89,15 @@ final class TradeJournalMutationStore {
         TradeHistorySessionStore.shared.noteDeleted(id: id, owner: owner)
         CalendarMonthSessionStore.shared.noteDeleted(id: id)
         TradePersistedCacheCoordinator.noteDeleted(id: id, owner: owner)
+        vaultStore?.pruneContentReference(
+            VaultContentRef(contentType: .trade, contentID: id.rawValue)
+        )
+        Task {
+            await VaultPersistedCacheCoordinator.shared.persistVaultPresentation(
+                reason: "tradeDeleted",
+                isRollback: false
+            )
+        }
         SessionNetworkProbe.record(.localMutation, resource: "journal.trade.deleted", detail: id.rawValue)
         revision += 1
         if let previous {

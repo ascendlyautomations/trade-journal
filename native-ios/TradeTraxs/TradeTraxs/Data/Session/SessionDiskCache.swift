@@ -15,9 +15,12 @@ nonisolated enum SessionDiskCache {
     }
 
     struct FollowingBlob: Codable, Sendable {
+        var schemaVersion: Int = RelationshipFollowingPersistence.schemaVersion
         var viewerID: String
         var savedAt: Date
         var followingIDs: [String]
+        /// Only complete following-set snapshots are persisted (Phase 9E).
+        var isComplete: Bool = true
     }
 
     struct OwnerTradesBlob: Codable, Sendable {
@@ -44,12 +47,32 @@ nonisolated enum SessionDiskCache {
     }
 
     static func saveFollowing(ids: [String], for viewerID: ProfileID) {
-        let blob = FollowingBlob(viewerID: viewerID.rawValue, savedAt: Date(), followingIDs: ids)
+        saveCompleteFollowing(ids: ids, for: viewerID)
+    }
+
+    static func saveCompleteFollowing(ids: [String], for viewerID: ProfileID) {
+        let blob = FollowingBlob(
+            viewerID: viewerID.rawValue,
+            savedAt: Date(),
+            followingIDs: ids,
+            isComplete: true
+        )
         write(blob, file: "following-\(viewerID.rawValue).json")
     }
 
     static func loadFollowing(for viewerID: ProfileID, maxAge: TimeInterval = 6 * 60 * 60) -> [String]? {
-        guard let blob: FollowingBlob = read(file: "following-\(viewerID.rawValue).json") else { return nil }
+        loadCompleteFollowing(for: viewerID, maxAge: maxAge)
+    }
+
+    static func loadCompleteFollowing(
+        for viewerID: ProfileID,
+        maxAge: TimeInterval = 6 * 60 * 60
+    ) -> [String]? {
+        guard let blob: FollowingBlob = read(file: "following-\(viewerID.rawValue).json") else {
+            return nil
+        }
+        guard blob.viewerID == viewerID.rawValue else { return nil }
+        guard blob.isComplete else { return nil }
         guard Date().timeIntervalSince(blob.savedAt) <= maxAge else { return nil }
         return blob.followingIDs
     }

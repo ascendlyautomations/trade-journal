@@ -496,8 +496,6 @@ extension AnalyticsLocalStore {
         let metricsAtR = metrics.filter { $0.ingested_revision == requiredRevision }
         let chartsAtR = aggregateCharts.filter { $0.ingested_revision == requiredRevision }
         let aggregateAtR = metricsAtR.filter { $0.scope == AnalyticsLocalSchema.scopeAggregate }
-        let accountAtR = metricsAtR.filter { $0.scope == AnalyticsLocalSchema.scopeAccount }
-
         let aggregateKeysOK = keys.allSatisfy { key in
             aggregateAtR.contains(where: { $0.preset_key == key })
         }

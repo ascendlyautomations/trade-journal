@@ -1,7 +1,7 @@
 import Foundation
 
 /// Maps `RoomMessage` ↔ display `Message` so Trade Rooms reuse DM bubble UI.
-enum RoomMessageMapping {
+nonisolated enum RoomMessageMapping {
     static func displayMessage(from roomMessage: RoomMessage) -> Message {
         // ConversationID is the selected channel (subroom), not the Trade Room container.
         let conversationID = ConversationID(

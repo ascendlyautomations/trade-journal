@@ -20,7 +20,8 @@ enum ClipDisplayTitle {
     static func text(for reel: Reel, cache: DetailPresentationCache) -> String {
         let linkedTrade: Trade? = {
             guard let tradeID = reel.linkedTradeID else { return nil }
-            return cache.trade(id: tradeID)
+            guard let summary = cache.tradeSummary(id: tradeID) else { return nil }
+            return TradeSummaryMapper.previewTrade(from: summary)
         }()
         return text(for: reel, linkedTrade: linkedTrade)
     }

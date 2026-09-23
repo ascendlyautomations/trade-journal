@@ -25,6 +25,7 @@ final class TraderDailyCheckInStore {
     private var viewerID: ProfileID?
     private var refreshTask: Task<Void, Never>?
     private var realtimeTask: Task<Void, Never>?
+    private var dailyCheckInRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var loadGeneration: UInt64 = 0
 
     private init() {}
@@ -118,7 +119,13 @@ final class TraderDailyCheckInStore {
         realtimeTask = Task { [weak self] in
             guard let self else { return }
             let token = await self.session?.accessToken
-            for await _ in realtimeHub.watchTraderDailyCheckIns(userID: viewerID, accessToken: token) {
+            let watch = realtimeHub.watchTraderDailyCheckIns(
+                userID: viewerID,
+                accessToken: token,
+                debugOwner: "DailyCheckIn"
+            )
+            dailyCheckInRealtimeConsumer = watch.consumer
+            for await _ in watch.events {
                 guard !Task.isCancelled else { break }
                 await MainActor.run {
                     self.refresh(fromUserAction: false)
@@ -130,8 +137,8 @@ final class TraderDailyCheckInStore {
     private func stopRealtime() {
         realtimeTask?.cancel()
         realtimeTask = nil
-        if let viewerID = viewerID?.rawValue {
-            Task { await realtimeHub?.stopWatchingTraderDailyCheckIns(userID: viewerID) }
-        }
+        let consumer = dailyCheckInRealtimeConsumer
+        dailyCheckInRealtimeConsumer = nil
+        Task { await realtimeHub?.releaseWatch(consumer) }
     }
 }

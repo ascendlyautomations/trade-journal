@@ -24,6 +24,14 @@ final class ProfileSessionStore {
         loadedAt[key] = Date()
     }
 
+    func profileIDs(viewerID: ProfileID) -> [ProfileID] {
+        let prefix = viewerID.rawValue + "|"
+        return snapshots.keys.compactMap { key in
+            guard key.hasPrefix(prefix) else { return nil }
+            return ProfileID(String(key.dropFirst(prefix.count)))
+        }
+    }
+
     func invalidate(viewerID: ProfileID? = nil) {
         if let viewerID {
             let prefix = viewerID.rawValue + "|"

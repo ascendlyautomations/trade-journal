@@ -240,9 +240,20 @@ final class ProfileContentStore {
     func applyExternalFollowState(isFollowing: Bool, stats: ProfileStats?) {
         if !isOwner {
             self.isFollowing = isFollowing
+            if isFollowing {
+                isRequested = false
+            }
         }
         if let stats {
             self.stats = stats
+        }
+    }
+
+    func applyExternalFollowRequestState(isRequested: Bool) {
+        guard !isOwner else { return }
+        self.isRequested = isRequested
+        if isRequested {
+            isFollowing = false
         }
     }
 

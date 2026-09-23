@@ -47,10 +47,21 @@ struct AchievementDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .task {
             viewModel.loadIfNeeded()
-            data.engagementStore.prefetch([engagementTarget(forRouteID: viewModel.achievementID)])
+            let target = engagementTarget(forRouteID: viewModel.achievementID)
+            data.engagementStore.prefetch([target])
+            EngagementRealtimeSession.shared.updateRetention(
+                ownerKey: "detail-achievement:\(viewModel.achievementID.rawValue)",
+                targets: [target]
+            )
             data.vaultStore.prefetch([
                 VaultContentRef(contentType: .achievement, contentID: viewModel.achievementID.rawValue),
             ])
+        }
+        .onDisappear {
+            EngagementRealtimeSession.shared.updateRetention(
+                ownerKey: "detail-achievement:\(viewModel.achievementID.rawValue)",
+                targets: []
+            )
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {

@@ -21,6 +21,7 @@ final class TradesContainerViewModel {
 
     private let profileID: ProfileID
     private let trades: any TradeRepository
+    private let session: any SessionProviding
     private let rpc: (any RPCClient)?
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
@@ -49,6 +50,7 @@ final class TradesContainerViewModel {
     init(
         profileID: ProfileID,
         trades: any TradeRepository,
+        session: any SessionProviding,
         rpc: (any RPCClient)? = nil,
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
@@ -58,6 +60,7 @@ final class TradesContainerViewModel {
     ) {
         self.profileID = profileID
         self.trades = trades
+        self.session = session
         self.rpc = rpc
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
@@ -68,8 +71,19 @@ final class TradesContainerViewModel {
 
     /// Screen-owned engagement prefetch — views must not call the repository path.
     func prefetchEngagement(for tradeIDs: [TradeID]) {
-        guard !tradeIDs.isEmpty else { return }
-        engagementStore?.prefetch(tradeIDs.map { .trade($0) })
+        let targets = tradeIDs.map { InteractionTarget.trade($0) }
+        if targets.isEmpty {
+            EngagementRealtimeSession.shared.updateRetention(
+                ownerKey: "profile-trades:\(profileID.rawValue)",
+                targets: []
+            )
+            return
+        }
+        engagementStore?.prefetch(targets)
+        EngagementRealtimeSession.shared.updateRetention(
+            ownerKey: "profile-trades:\(profileID.rawValue)",
+            targets: Set(targets)
+        )
     }
 
     var visibleItems: [TradeSummary] {
@@ -326,25 +340,38 @@ final class TradesContainerViewModel {
     func requestDelete(_ summary: TradeSummary) {
         guard isOwner else { return }
         ExperienceHaptics.play(.warning)
-        pendingDelete = summary
+        TradeDeleteConfirmationPresenter.scheduleConfirmation { [weak self] in
+            self?.pendingDelete = summary
+        }
     }
 
     func confirmDelete() async {
-        guard let summary = pendingDelete else { return }
+        guard isOwner, let summary = pendingDelete else { return }
         pendingDelete = nil
+        let previous = TradeSummaryMapper.previewTrade(from: summary)
+        let owner = summary.ownerProfileID
+        let removedIndex = items.firstIndex { $0.id == summary.id }
+        items.removeAll { $0.id == summary.id }
+        updateStateForVisibleItems()
         do {
-            try await trades.delete(id: summary.id)
-            items.removeAll { $0.id == summary.id }
-            detailCache.removeTrade(id: summary.id)
-            await tradeDetailRepository.evict(tradeID: summary.id)
-            TradeJournalMutationStore.shared.noteDeleted(
-                id: summary.id,
-                owner: summary.ownerProfileID,
-                previous: TradeSummaryMapper.previewTrade(from: summary)
+            try await OwnerTradeDeletionService.deleteOwnedTrade(
+                tradeID: summary.id,
+                owner: owner,
+                previous: previous,
+                trades: trades,
+                session: session,
+                detailCache: detailCache,
+                tradeDetailRepository: tradeDetailRepository
             )
             ExperienceHaptics.play(.success)
             updateStateForVisibleItems()
         } catch {
+            if let removedIndex {
+                items.insert(summary, at: min(removedIndex, items.count))
+            } else {
+                items.insert(summary, at: 0)
+            }
+            updateStateForVisibleItems()
             paginationErrorMessage = ProfileSectionSupport.message(for: error)
             ExperienceHaptics.play(.warning)
         }

@@ -81,7 +81,12 @@ struct TradeDetailView: View {
         .task {
             viewModel.loadIfNeeded()
             if experience == .social {
-                data.engagementStore.prefetch([socialEngagementTarget(for: viewModel.tradeID)])
+                let target = socialEngagementTarget(for: viewModel.tradeID)
+                data.engagementStore.prefetch([target])
+                EngagementRealtimeSession.shared.updateRetention(
+                    ownerKey: "detail-trade:\(viewModel.tradeID.rawValue)",
+                    targets: [target]
+                )
             }
             data.vaultStore.prefetch([
                 VaultContentRef(contentType: .trade, contentID: viewModel.tradeID.rawValue),
@@ -89,6 +94,14 @@ struct TradeDetailView: View {
             if let tradeAI {
                 tradeAI.updateContext(trade: viewModel.trade, notes: viewModel.notes)
                 await tradeAI.loadHistoryIfNeeded()
+            }
+        }
+        .onDisappear {
+            if experience == .social {
+                EngagementRealtimeSession.shared.updateRetention(
+                    ownerKey: "detail-trade:\(viewModel.tradeID.rawValue)",
+                    targets: []
+                )
             }
         }
         .onChange(of: viewModel.trade?.id) { _, _ in

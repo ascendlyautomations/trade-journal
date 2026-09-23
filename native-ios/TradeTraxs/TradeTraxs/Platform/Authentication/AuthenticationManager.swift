@@ -463,10 +463,27 @@ final class AuthenticationManager {
 
         emit(.logoutStarted)
         restorationGeneration &+= 1
+        let authGeneration = AuthLifecycleGeneration.bump()
+        AuthLifecycleTrace.log(
+            operation: "logout.generationInvalidated",
+            authGeneration: authGeneration,
+            sessionGeneration: restorationGeneration,
+            phase: "unauthenticated",
+            decision: "allowed",
+            reason: "localLogout"
+        )
         refreshCoordinator.cancel()
         await AuthRefreshSingleFlight.shared.bumpSessionGeneration()
         await AuthRefreshSingleFlight.shared.cancelAll()
         await SessionNetworkGate.shared.markUnauthenticated()
+        let networkReset = await NetworkConcurrencyCoordinator.shared.resetForAuthenticatedSessionEnd(
+            authGeneration: authGeneration
+        )
+#if DEBUG
+        LogoutTrace.networkWaitersCancelled(count: networkReset.waitersReleased)
+        LogoutTrace.networkTasksCancelled(count: networkReset.inFlightCleared)
+#endif
+        await BackendV2SingleFlight.shared.clear()
         lastSessionValidationError = nil
 
         let remoteSession = logoutCoordinator.performLocalTeardown()
@@ -477,7 +494,13 @@ final class AuthenticationManager {
 
         if let remoteSession {
             Task {
+#if DEBUG
+                LogoutTrace.remoteSupabaseLogoutStarted(background: true)
+#endif
                 await self.logoutCoordinator.signOutRemotely(session: remoteSession)
+#if DEBUG
+                LogoutTrace.remoteSupabaseLogoutCompleted(outcome: "finished")
+#endif
             }
         }
     }
@@ -527,6 +550,14 @@ final class AuthenticationManager {
     ) async throws {
         state = .authenticating(provider)
         emit(.signInStarted(provider))
+        AuthLifecycleTrace.log(
+            operation: "signIn.started",
+            authGeneration: AuthLifecycleGeneration.current(),
+            sessionGeneration: restorationGeneration,
+            phase: "authenticating(\(provider.rawValue))",
+            decision: "allowed",
+            reason: "userInitiated"
+        )
         defer {
             if case .authenticating = state {
                 state = .unauthenticated
@@ -569,6 +600,14 @@ final class AuthenticationManager {
             let mapped = AuthenticationError.unknown(error.localizedDescription)
             state = .failure(mapped)
             emit(.signInFailed(mapped))
+            AuthLifecycleTrace.log(
+                operation: "signIn.failed",
+                authGeneration: AuthLifecycleGeneration.current(),
+                sessionGeneration: restorationGeneration,
+                phase: "failure",
+                decision: "cancelled",
+                reason: String(describing: mapped)
+            )
             throw mapped
         }
     }
@@ -578,8 +617,20 @@ final class AuthenticationManager {
         firstLoginHint: OAuthFirstLoginHint?
     ) async throws {
         restorationGeneration &+= 1
+        let authGeneration = AuthLifecycleGeneration.bump()
         await AuthRefreshSingleFlight.shared.cancelAll()
         try sessionManager.install(session)
+        await NetworkConcurrencyCoordinator.shared.markAuthenticatedSessionActive(
+            authGeneration: authGeneration
+        )
+        AuthLifecycleTrace.log(
+            operation: "session.installed",
+            authGeneration: authGeneration,
+            sessionGeneration: restorationGeneration,
+            phase: "authenticated",
+            decision: "allowed",
+            reason: "supabaseSessionPersisted"
+        )
         let mergedHint = OAuthFirstLoginHint.merged(explicit: firstLoginHint, session: session)
         if let sessionBootstrap {
             try await sessionBootstrap.finalize(
@@ -619,6 +670,11 @@ final class AuthenticationManager {
         state = .authenticated(session)
         emit(event)
         AuthFlowTracer.traceRootTransition(to: .authenticated, generation: restorationGeneration)
+        Task {
+            await NetworkConcurrencyCoordinator.shared.markAuthenticatedSessionActive(
+                authGeneration: AuthLifecycleGeneration.current()
+            )
+        }
     }
 
     private func performRefresh(

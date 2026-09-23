@@ -50,7 +50,7 @@ final class TradeHistorySessionStore {
         searchText: String
     ) -> Snapshot? {
         let key = Self.queryKey(profileID: profileID, filters: filters, searchText: searchText)
-        guard var snap = snapshots[key] else {
+        guard let snap = snapshots[key] else {
             SessionNetworkProbe.record(.cacheMiss, resource: "trades.history", detail: key)
             return nil
         }

@@ -248,7 +248,9 @@ final class DataEnvironment {
             session: session,
             detailCache: detailCache
         )
-        TradeJournalMutationStore.shared.configure(detailCache: detailCache)
+        let vaultStore = makeVaultStore(repository: vaultRepository, session: session)
+        TradeJournalMutationStore.shared.configure(detailCache: detailCache, vaultStore: vaultStore)
+        ContentMutationStore.shared.configure(vaultStore: vaultStore)
         GettingStartedStore.shared.configure(
             rpc: rpc,
             session: session,
@@ -284,6 +286,23 @@ final class DataEnvironment {
             supabase: supabase,
             cache: cache,
             storeKitSync: storeKitSubscriptions
+        )
+
+        let engagementStore = makeEngagementStore(interactions: interactions, session: session)
+        EngagementRealtimeSession.shared.configure(
+            realtimeHub: realtimeHub,
+            session: session,
+            database: supabase.database,
+            engagementStore: engagementStore
+        )
+        SocialEntityRealtimeSession.shared.configure(realtimeHub: realtimeHub, session: session)
+        RelationshipRealtimeSession.shared.configure(realtimeHub: realtimeHub, session: session)
+        SocialEntityRealtimeProcessor.shared.configure(
+            feed: DefaultFeedRepository(supabase: supabase, cache: cache, session: session),
+            trades: tradesRepository,
+            profiles: profiles,
+            achievements: DefaultAchievementRepository(supabase: supabase, cache: cache),
+            detailCache: detailCache
         )
 
         return DataEnvironment(
@@ -332,7 +351,7 @@ final class DataEnvironment {
             authentication: DefaultAuthenticationRepository(manager: authenticationManager),
             home: DefaultHomeRepository(supabase: supabase, cache: cache, session: session),
             interactions: interactions,
-            engagementStore: EngagementStore(repository: interactions),
+            engagementStore: engagementStore,
             ai: DefaultAIRepository(supabase: supabase, session: session),
             tradingReports: DefaultTradingReportRepository(
                 trades: tradesRepository,
@@ -349,7 +368,7 @@ final class DataEnvironment {
             dailyCheckIns: dailyCheckInRepository,
             contentReports: DefaultContentReportRepository(supabase: supabase),
             vault: vaultRepository,
-            vaultStore: VaultStore(repository: vaultRepository),
+            vaultStore: vaultStore,
             brokerIntegrations: {
                 let repository = DefaultBrokerIntegrationRepository(transport: transport)
                 BrokerImportEligibilityStore.shared.configure(
@@ -504,7 +523,7 @@ final class DataEnvironment {
             authentication: DefaultAuthenticationRepository(manager: authenticationManager),
             home: repositories.home,
             interactions: interactions,
-            engagementStore: EngagementStore(repository: interactions),
+            engagementStore: makeEngagementStore(interactions: interactions, session: session),
             ai: repositories.ai,
             tradingReports: repositories.tradingReports,
             psychologyReports: repositories.psychologyReports,
@@ -642,7 +661,7 @@ final class DataEnvironment {
             authentication: DefaultAuthenticationRepository(manager: authenticationManager),
             home: DefaultHomeRepository(supabase: supabase, cache: cache, session: session),
             interactions: interactions,
-            engagementStore: EngagementStore(repository: interactions),
+            engagementStore: makeEngagementStore(interactions: interactions, session: session),
             ai: DefaultAIRepository(supabase: supabase, session: session),
             tradingReports: tradingReports,
             psychologyReports: psychologyReports,
@@ -652,6 +671,27 @@ final class DataEnvironment {
             vaultStore: VaultStore(repository: DemoVaultRepository()),
             brokerIntegrations: LoginShellBrokerIntegrationRepository()
         )
+    }
+    @MainActor
+    private static func makeEngagementStore(
+        interactions: any InteractionRepository,
+        session: any SessionProviding
+    ) -> EngagementStore {
+        SocialPresentationWriteThroughCoordinator.shared.configure(session: session)
+        let store = EngagementStore(repository: interactions)
+        store.configurePresentationWriteThrough(SocialPresentationWriteThroughCoordinator.shared)
+        return store
+    }
+
+    @MainActor
+    private static func makeVaultStore(
+        repository: any VaultRepository,
+        session: any SessionProviding
+    ) -> VaultStore {
+        let store = VaultStore(repository: repository)
+        VaultPersistedCacheCoordinator.shared.configure(store: store, session: session)
+        store.configurePersistence(VaultPersistedCacheCoordinator.shared)
+        return store
     }
 }
 
@@ -671,7 +711,11 @@ private struct LoginShellBrokerIntegrationRepository: BrokerIntegrationRepositor
     func createAndLinkTradovateAccount(connectionId: String, brokerIntegrationAccountId: String, draft: TradingAccountDraft) async throws -> BrokerLinkAccountsResponse {
         throw unavailable()
     }
-    func syncTradovateAccount(connectionId: String, mappingId: String) async throws -> TradovateAccountSyncResponse {
+    func syncTradovateAccount(
+        connectionId: String,
+        mappingId: String,
+        mode: TradovateSyncRequestMode
+    ) async throws -> TradovateAccountSyncResponse {
         throw unavailable()
     }
     func runBrokerImport(mappingIds: [String]) async throws -> BrokerManualImportResponse { throw unavailable() }

@@ -14,8 +14,9 @@ nonisolated enum DashboardAnalyticsGRDBLoader {
         viewerID: ProfileID,
         diskEnvelope: AnalyticsDashboardBootstrapV3?,
         sessionAccounts: [TradingAccount],
-        store: AnalyticsLocalStore = AnalyticsLocalStore()
+        store: AnalyticsLocalStore? = nil
     ) async -> Presentation {
+        let store = store ?? AnalyticsLocalStore.sharedStore()
         do {
             let read = try await store.readDashboardSnapshotForPresentation(viewerID: viewerID)
             guard read.canRenderLocally, let snapshot = read.snapshot, let revision = read.effectiveRevision else {
@@ -58,9 +59,10 @@ nonisolated enum DashboardAnalyticsGRDBLoader {
         viewerID: ProfileID,
         accountID: TradingAccountID,
         revision: Int64,
-        store: AnalyticsLocalStore = AnalyticsLocalStore()
+        store: AnalyticsLocalStore? = nil
     ) async -> AnalyticsDashboardAccountChartsReadResult? {
-        try? await store.readDashboardAccountCharts(
+        let store = store ?? AnalyticsLocalStore.sharedStore()
+        return try? await store.readDashboardAccountCharts(
             viewerID: viewerID,
             accountID: accountID,
             requiredRevision: revision

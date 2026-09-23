@@ -48,6 +48,9 @@ struct ProfileState: Equatable {
     var didLoadClips = false
     var didLoadAchievements = false
 
+    /// Viewer-scoped engagement presentation overlay for cached section rows (v2 disk extension).
+    var engagementPresentation: [String: EngagementSnapshot] = [:]
+
     var errorMessage: String?
     var isRefreshing = false
     var lastUpdated: Date?

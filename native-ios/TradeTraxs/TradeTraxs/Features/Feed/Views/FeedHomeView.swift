@@ -146,10 +146,12 @@ struct FeedHomeView: View {
         })
         .task(id: tabIsActive) {
             guard tabIsActive else {
+                SocialRealtimeRepairSurfaces.shared.feedViewModel = nil
                 viewModel.unsubscribeRealtime()
                 return
             }
             MainThreadWorkProbe.measure("feed.tab.activate", surface: "feed") {
+                SocialRealtimeRepairSurfaces.shared.feedViewModel = viewModel
                 AuthenticatedLaunchPhasing.noteActiveTab(.feed)
                 viewModel.loadIfNeeded()
                 viewModel.noteTabBecameActive()
@@ -192,7 +194,7 @@ struct FeedHomeView: View {
             guard viewModel.scope == .following else { return }
             switch FollowMutationCoordinator.shared.latest {
             case .followed, .unfollowed, .followRequestApproved:
-                Task { await viewModel.refresh(trigger: .followingChanged) }
+                Task { await viewModel.syncSocialEntityRealtimeBindings() }
             default:
                 break
             }

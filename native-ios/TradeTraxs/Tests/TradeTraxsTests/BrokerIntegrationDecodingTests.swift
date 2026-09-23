@@ -81,6 +81,75 @@ final class BrokerIntegrationDecodingTests: XCTestCase {
         XCTAssertNotNil(decoded.resolvedAuthorizeURLString)
     }
 
+    func testDecodesTradovateSyncFailure400WithReconnectCode() throws {
+        let json = """
+        {
+          "ok": false,
+          "connectionId": "11111111-1111-1111-1111-111111111111",
+          "mappingId": "22222222-2222-2222-2222-222222222222",
+          "code": "BROKER_RECONNECT_REQUIRED",
+          "errorCode": "reconnect_required",
+          "failureCategory": "token_refresh_failure",
+          "summary": {
+            "ok": false,
+            "status": "reconnect_required",
+            "tradesCreated": 0,
+            "tradesUpdated": 0,
+            "newTradeIds": [],
+            "updatedTradeIds": [],
+            "error": "Tradovate authorization expired. Reconnect this connection.",
+            "errorCode": "reconnect_required"
+          },
+          "accounts": []
+        }
+        """.data(using: .utf8)!
+        let decoded = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
+        XCTAssertFalse(decoded.ok)
+        XCTAssertEqual(decoded.code, "BROKER_RECONNECT_REQUIRED")
+        XCTAssertEqual(decoded.summary.status, "reconnect_required")
+    }
+
+    func testDecodesTradovateImportPreviewTradesInSyncSummary() throws {
+        let json = """
+        {
+          "ok": true,
+          "connectionId": "11111111-1111-1111-1111-111111111111",
+          "mappingId": "22222222-2222-2222-2222-222222222222",
+          "summary": {
+            "ok": true,
+            "status": "success",
+            "tradesCreated": 0,
+            "tradesUpdated": 0,
+            "newTradeIds": [],
+            "updatedTradeIds": [],
+            "importPreviewTrades": [
+              {
+                "lifecycleKey": "tradovate:v2:65788591:4399654:3",
+                "contractId": "4399654",
+                "ticker": "MNQ",
+                "direction": "Short",
+                "contracts": 1,
+                "entryPrice": 29011,
+                "exitPrice": 29000,
+                "entryTime": "2026-09-01T14:00:00.000Z",
+                "exitTime": "2026-09-01T14:05:00.000Z",
+                "points": 11,
+                "pnl": 22,
+                "grossPnl": 22,
+                "fees": 0
+              }
+            ]
+          },
+          "accounts": []
+        }
+        """.data(using: .utf8)!
+        let decoded = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
+        XCTAssertEqual(decoded.summary.importPreviewTrades.count, 1)
+        XCTAssertEqual(decoded.summary.importPreviewTrades[0].ticker, "MNQ")
+        XCTAssertEqual(decoded.summary.importPreviewTrades[0].pnl, 22)
+        XCTAssertEqual(decoded.summary.importPreviewTrades[0].points, 11)
+    }
+
     func testDecodesBrokerImportEligibilityPayloadWithLinkedMapping() throws {
         let json = """
         {

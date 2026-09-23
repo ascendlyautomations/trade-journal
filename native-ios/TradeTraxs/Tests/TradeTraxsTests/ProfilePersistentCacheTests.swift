@@ -7,7 +7,14 @@ final class ProfilePersistentCacheTests: XCTestCase {
     private let viewerB = ProfileID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
     private let target = ProfileID("cccccccc-cccc-cccc-cccc-cccccccccccc")
 
+    override func setUp() {
+        super.setUp()
+        SocialEntityPersistedCacheTestHooks.forceSynchronousDiskWrites = true
+    }
+
     override func tearDown() {
+        SocialEntityPersistedCacheCoordinator.flushPendingDiskWritesForTesting()
+        SocialEntityPersistedCacheTestHooks.forceSynchronousDiskWrites = false
         ProfilePersistedCacheCoordinator.clearAll()
         FeedPersistedCacheCoordinator.clearAll()
         ProfileSessionStore.shared.invalidate()
@@ -152,6 +159,43 @@ final class ProfilePersistentCacheTests: XCTestCase {
         )
         let loaded = ProfileDiskCache.loadSnapshot(viewerID: viewerA, targetProfileID: target)
         XCTAssertEqual(loaded?.tradesNextCursor, "cursor-page-2")
+    }
+
+    func testClipsSectionLoadPersistsProfileSnapshotAndSocialEntity() {
+        var header = makeLoadedState(target: target, viewerIsOwner: false)
+        header.didLoadClips = false
+        header.clips = []
+        ProfilePersistedCacheCoordinator.persist(
+            viewerID: viewerA,
+            targetProfileID: target,
+            state: header
+        )
+
+        let reel = CreateReelFixtures.sampleReel(author: target, tradeID: nil)
+        ProfilePersistedCacheCoordinator.persistClipsSection(
+            viewerID: viewerA,
+            targetProfileID: target,
+            clips: [reel]
+        )
+
+        ProfileSessionStore.shared.invalidate()
+        let detailCache = DetailPresentationCache()
+        let hydrated = ProfilePersistedCacheCoordinator.hydrate(
+            viewerID: viewerA,
+            targetProfileID: target,
+            detailCache: detailCache
+        )
+        XCTAssertEqual(hydrated?.clips.count, 1)
+        XCTAssertEqual(hydrated?.clips.first?.id, reel.id)
+        XCTAssertTrue(hydrated?.didLoadClips == true)
+        XCTAssertEqual(detailCache.reel(id: reel.id)?.id, reel.id)
+        XCTAssertNotNil(
+            SocialEntityPersistedCacheCoordinator.loadReel(
+                id: reel.id,
+                viewerID: viewerA,
+                purpose: "test"
+            )
+        )
     }
 
     // MARK: - Helpers

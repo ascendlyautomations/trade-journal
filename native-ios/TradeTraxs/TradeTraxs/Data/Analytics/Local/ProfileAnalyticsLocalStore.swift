@@ -102,7 +102,7 @@ extension AnalyticsLocalStore {
         expectedVisibility: String
     ) async throws {
         let queue = try await database.databaseQueue()
-        try await queue.write { db in
+        _ = try await queue.write { db in
             try ProfileAnalyticsSnapshotRecord
                 .filter(Column("viewer_id") == viewerID)
                 .filter(Column("subject_profile_id") == subjectProfileID)

@@ -15,7 +15,7 @@ enum AnalyticsDashboardShadowWriter {
         viewerID: ProfileID,
         bootstrap: AnalyticsDashboardBootstrapV3
     ) async {
-        let store = AnalyticsLocalStore()
+        let store = AnalyticsLocalStore.sharedStore()
         do {
             _ = try await store.ingestDashboardBootstrap(viewerID: viewerID, bootstrap: bootstrap)
             #if DEBUG
@@ -63,7 +63,7 @@ enum AnalyticsDashboardShadowWriter {
         accountID: TradingAccountID,
         revision: Int64
     ) async {
-        let store = AnalyticsLocalStore()
+        let store = AnalyticsLocalStore.sharedStore()
         let accountKey = AnalyticsScopeKeys.accountScopeKey(forQueryAccountID: accountID.rawValue)
         do {
             _ = try await store.ingestDashboardAccountCharts(

@@ -51,6 +51,9 @@ nonisolated enum ProfileDiskCache {
         var didLoadPosts: Bool
         var didLoadClips: Bool
         var didLoadAchievements: Bool
+
+        /// Presentation-only engagement keyed by ``InteractionTarget/presentationStorageKey``.
+        var engagementPresentation: [String: EngagementSnapshot] = [:]
     }
 
     // MARK: - IO

@@ -128,6 +128,84 @@ nonisolated enum DashboardDateRangeFallback {
     }
 }
 
+/// Equity hero only — widens from the dashboard-selected preset until chart data exists.
+/// Does not mutate ``DashboardViewModel/dateRange``.
+nonisolated enum DashboardEquityChartRangeResolver {
+    static let supportedWidenOrder: [DashboardDateRange] = [
+        .sevenDays,
+        .thirtyDays,
+        .ninetyDays,
+        .ytd,
+        .all,
+    ]
+
+    static func widenOrder(from requested: DashboardDateRange) -> [DashboardDateRange] {
+        guard let start = supportedWidenOrder.firstIndex(of: requested) else {
+            return [.thirtyDays, .ninetyDays, .ytd, .all]
+        }
+        return Array(supportedWidenOrder[start...])
+    }
+
+    static func effectiveRange(
+        requested: DashboardDateRange,
+        analyticsBootstrap: AnalyticsDashboardBootstrapV3,
+        accountFilter: DashboardAccountFilter,
+        accountCharts: [String: AnalyticsDashboardChartsPresetV1]? = nil
+    ) -> DashboardDateRange {
+        for range in widenOrder(from: requested) {
+            if hasUsableEquityData(
+                in: analyticsBootstrap,
+                accountFilter: accountFilter,
+                dateRange: range,
+                accountCharts: accountCharts
+            ) {
+                return range
+            }
+        }
+        return requested
+    }
+
+    static func effectiveRange(
+        requested: DashboardDateRange,
+        tradeInputs: [DashboardChartMetrics.Input],
+        accountFilter: DashboardAccountFilter,
+        now: Date = Date()
+    ) -> DashboardDateRange {
+        for range in widenOrder(from: requested) {
+            let tradeCount = DashboardChartMetrics.filteredTrades(
+                from: tradeInputs,
+                accountFilter: accountFilter,
+                dateRange: range,
+                now: now
+            ).count
+            if tradeCount > 0 {
+                return range
+            }
+        }
+        return requested
+    }
+
+    static func hasUsableEquityData(
+        in bootstrap: AnalyticsDashboardBootstrapV3,
+        accountFilter: DashboardAccountFilter,
+        dateRange: DashboardDateRange,
+        accountCharts: [String: AnalyticsDashboardChartsPresetV1]? = nil
+    ) -> Bool {
+        guard let bundle = DashboardAnalyticsMapper.bundle(
+            in: bootstrap,
+            accountFilter: accountFilter,
+            dateRange: dateRange,
+            accountCharts: accountCharts
+        ) else {
+            return false
+        }
+        if bundle.metrics.trade_count > 0 {
+            return true
+        }
+        return !bundle.equity.points.isEmpty
+    }
+}
+
 nonisolated enum DashboardAccountFilter: Hashable, Sendable {
     case all
     case account(TradingAccountID)

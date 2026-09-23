@@ -50,6 +50,7 @@ struct BrokerIntegrationsView: View {
         _viewModel = State(
             initialValue: BrokerIntegrationsViewModel(
                 broker: data.brokerIntegrations,
+                trades: data.trades,
                 manageAccounts: manage,
                 session: data.session,
                 detailCache: data.detailCache
@@ -545,25 +546,56 @@ struct BrokerIntegrationsView: View {
             }
 
             if account.hasTradetraxsMapping, connection.connected {
-                Button {
-                    Task {
-                        await viewModel.importTrades(
-                            provider: provider,
-                            connectionId: connection.id,
-                            mappingId: account.id
-                        )
+                if let prompt = viewModel.importReconnectPrompt,
+                   prompt.mappingId == account.id,
+                   prompt.provider == provider
+                {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                        Text(BrokerSyncPresentation.reconnectRequiredMessage(provider: provider))
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button {
+                            Task {
+                                if provider == .tradovate {
+                                    await viewModel.reconnectTradovateAndImport(
+                                        connectionId: prompt.connectionId,
+                                        mappingId: prompt.mappingId
+                                    )
+                                }
+                            }
+                        } label: {
+                            if viewModel.isImportingTrades(mappingId: account.id) {
+                                Label("Reconnecting…", systemImage: "arrow.triangle.2.circlepath")
+                            } else {
+                                Text(BrokerSyncPresentation.reconnectPrimaryActionTitle())
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(viewModel.isImportingTrades(mappingId: account.id))
+                        .accessibilityIdentifier("brokerIntegrations.reconnectAccount.\(account.id)")
                     }
-                } label: {
-                    if viewModel.isImportingTrades(mappingId: account.id) {
-                        Label("Importing…", systemImage: "arrow.triangle.2.circlepath")
-                    } else {
-                        Label("Import Trades", systemImage: "square.and.arrow.down")
+                } else {
+                    Button {
+                        Task {
+                            await viewModel.importTrades(
+                                provider: provider,
+                                connectionId: connection.id,
+                                mappingId: account.id
+                            )
+                        }
+                    } label: {
+                        if viewModel.isImportingTrades(mappingId: account.id) {
+                            Label("Importing…", systemImage: "arrow.triangle.2.circlepath")
+                        } else {
+                            Label("Import Trades", systemImage: "square.and.arrow.down")
+                        }
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(viewModel.isImportingTrades(mappingId: account.id))
+                    .accessibilityIdentifier("brokerIntegrations.importTrades.\(account.id)")
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(viewModel.isImportingTrades(mappingId: account.id))
-                .accessibilityIdentifier("brokerIntegrations.importTrades.\(account.id)")
             } else if !account.hasTradetraxsMapping, connection.connected {
                 Button("Link Account") {
                     linkTarget = BrokerIntegrationLinkTarget(

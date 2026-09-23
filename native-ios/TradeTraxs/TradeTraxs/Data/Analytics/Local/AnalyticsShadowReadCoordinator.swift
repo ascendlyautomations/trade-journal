@@ -21,7 +21,7 @@ enum AnalyticsShadowReadCoordinator {
 
     static func runColdStartProbe(viewerID: ProfileID) async {
         let openStarted = Date()
-        let store = AnalyticsLocalStore()
+        let store = AnalyticsLocalStore.sharedStore()
         do {
             _ = try await store.syncState(viewerID: viewerID)
             let openMs = Int(Date().timeIntervalSince(openStarted) * 1000)

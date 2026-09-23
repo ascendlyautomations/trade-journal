@@ -69,6 +69,8 @@ final class FeedVideoPlaybackCoordinator {
     private let maxInlineFrozenFrames = 10
     private var preparedNeighborReelID: ReelID?
     private var preparedNeighborIndex: Int?
+    /// Prevents overlapping async player builds for the same reel (e.g. onAppear + scenePhase).
+    private var preparingActiveReelIDs: Set<ReelID> = []
     #if DEBUG
     private var loggedFirstFrameReelIDs: Set<ReelID> = []
     #endif
@@ -630,14 +632,18 @@ final class FeedVideoPlaybackCoordinator {
             inlineSessionStates[reelID] = session
         }
 
-        preparationGeneration[reelID, default: 0] &+= 1
-        let prepToken = preparationGeneration[reelID]!
-
         if let existing = players[reelID] {
             if let item = existing.currentItem {
                 configureActiveItem(item)
             }
             #if DEBUG
+            ClipPlayerLifecycle.log(
+                clipID: reelID.rawValue,
+                player: existing,
+                item: existing.currentItem,
+                event: "reuse",
+                reason: reason
+            )
             MediaLoadDiagnostics.log(
                 contentType: "video/mp4",
                 mediaID: reelID.rawValue,
@@ -655,19 +661,37 @@ final class FeedVideoPlaybackCoordinator {
                 reel: reel,
                 isCurrentPage: isCurrentPage
             )
-            warmPresentation(for: reel, prepToken: prepToken)
+            warmPresentation(for: reel, prepToken: preparationGeneration[reelID] ?? 0)
             return
         }
+
+        guard preparingActiveReelIDs.insert(reelID).inserted else {
+            #if DEBUG
+            ClipPlayerLifecycle.log(
+                clipID: reelID.rawValue,
+                player: nil,
+                item: nil,
+                event: "reuse",
+                reason: "prepareAlreadyInFlight"
+            )
+            #endif
+            return
+        }
+
+        preparationGeneration[reelID, default: 0] &+= 1
+        let prepToken = preparationGeneration[reelID]!
 
         guard let url = MediaURLResolver.url(
             for: reel.video,
             bucket: .reels,
             storage: storage
         ) else {
+            preparingActiveReelIDs.remove(reelID)
             return
         }
 
         Task { @MainActor [weak self] in
+            defer { self?.preparingActiveReelIDs.remove(reelID) }
             guard let self else { return }
             guard self.activeReelID == reelID, self.preparationGeneration[reelID] == prepToken else {
                 return
@@ -706,6 +730,13 @@ final class FeedVideoPlaybackCoordinator {
             self.installReadinessObserver(for: reelID, item: item, prepToken: prepToken, prefetchIndex: nil)
 
             #if DEBUG
+            ClipPlayerLifecycle.log(
+                clipID: reelID.rawValue,
+                player: player,
+                item: item,
+                event: "create",
+                reason: reason
+            )
             VideoTransferAudit.logPlayerCreated(
                 clipID: reelID.rawValue,
                 surface: self.isClipsExperience ? "clips" : "feed",
@@ -1022,6 +1053,13 @@ final class FeedVideoPlaybackCoordinator {
         if let player = players.removeValue(forKey: reelID) {
             pausePlayer(player, reelID: reelID, reason: "hardRelease:\(reason)")
             #if DEBUG
+            ClipPlayerLifecycle.log(
+                clipID: reelID.rawValue,
+                player: player,
+                item: player.currentItem,
+                event: "destroy",
+                reason: reason
+            )
             if let item = player.currentItem {
                 VideoAccessLogAccounting.unregisterItem(item)
             }

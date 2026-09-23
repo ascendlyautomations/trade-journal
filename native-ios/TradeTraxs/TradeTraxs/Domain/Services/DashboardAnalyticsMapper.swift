@@ -167,7 +167,7 @@ nonisolated enum DashboardAnalyticsMapper {
             ProfileStatisticsMetrics.EquityPoint(
                 index: point.i ?? offset,
                 equity: decimal(point.v),
-                date: ISO8601DateFormatter.backendV2.date(from: point.t)
+                date: parseBackendV2Timestamp(point.t)
             )
         }
     }
@@ -250,10 +250,8 @@ nonisolated enum DashboardAnalyticsMapper {
     }
 }
 
-private extension ISO8601DateFormatter {
-    static let backendV2: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
+nonisolated private func parseBackendV2Timestamp(_ string: String) -> Date? {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.date(from: string)
 }

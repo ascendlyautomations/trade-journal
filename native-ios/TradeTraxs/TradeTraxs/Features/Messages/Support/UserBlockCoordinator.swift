@@ -57,6 +57,20 @@ final class UserBlockCoordinator {
         } else {
             FeedBlockedAuthorsFilter.shared.noteUnblock(peerID: otherID)
         }
+        if let viewerID = inboxStore.persistedViewerID {
+            FeedPersistedCacheCoordinator.persistBlockedPeers(
+                viewerID: viewerID,
+                peers: FeedBlockedAuthorsFilter.shared.blockedPeerIDs
+            )
+            #if DEBUG
+            print(
+                """
+                [RelationshipState][Patch] viewer=\(viewerID.rawValue) subject=\(otherID.rawValue) \
+                action=\(blocked ? "block" : "unblock")
+                """
+            )
+            #endif
+        }
 
         NotificationCenter.default.post(name: .userBlockListDidChange, object: nil)
         return status

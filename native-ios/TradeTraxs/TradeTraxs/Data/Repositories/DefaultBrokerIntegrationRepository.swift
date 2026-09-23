@@ -188,11 +188,22 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
         return try await post("/api/integrations/tradovate/connections/\(connectionId)/accounts/link", body: body)
     }
 
-    func syncTradovateAccount(connectionId: String, mappingId: String) async throws -> TradovateAccountSyncResponse {
-        try await post(
-            "/api/integrations/tradovate/connections/\(connectionId)/accounts/\(mappingId)/sync",
-            body: Data()
+    func syncTradovateAccount(
+        connectionId: String,
+        mappingId: String,
+        mode: TradovateSyncRequestMode
+    ) async throws -> TradovateAccountSyncResponse {
+        struct Body: Encodable { var mode: String }
+        let path = "/api/integrations/tradovate/connections/\(connectionId)/accounts/\(mappingId)/sync"
+        let body = try transport.encodeJSON(Body(mode: mode.rawValue))
+        let response = try await transport.send(
+            host: .bff,
+            path: path,
+            method: .post,
+            body: body,
+            requiresAuthentication: true
         )
+        return try decodeBrokerAccountSync(from: response, context: path)
     }
 
     func runBrokerImport(mappingIds: [String]) async throws -> BrokerManualImportResponse {
@@ -363,18 +374,7 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
             body: body,
             requiresAuthentication: true
         )
-        if response.statusCode == 409 {
-            struct BusyBody: Decodable {
-                var summary: TradovateSyncSummaryPayload?
-                var userMessage: String?
-            }
-            if let busy = try? transport.decoder.decode(BusyBody.self, from: response),
-               let summary = busy.summary
-            {
-                throw AppError.unknown(message: summary.error ?? "Import already in progress.")
-            }
-        }
-        return try decode(TradovateAccountSyncResponse.self, from: response, context: "rithmic.sync")
+        return try decodeBrokerAccountSync(from: response, context: "rithmic.sync")
     }
 
     func disconnectRithmic(connectionId: String) async throws {
@@ -425,6 +425,20 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
             requiresAuthentication: true
         )
         return try decode(T.self, from: response, context: path)
+    }
+
+    private func decodeBrokerAccountSync(from response: HTTPResponse, context: String) throws -> TradovateAccountSyncResponse {
+        let status = response.statusCode
+        BrokerSyncDebugLog.syncHTTP(path: context, status: status, bytes: response.data.count)
+        guard status == 200 || status == 400 || status == 409 else {
+            throw brokerError(from: response, fallback: "Broker request failed (\(status)).")
+        }
+        do {
+            return try transport.decoder.decode(TradovateAccountSyncResponse.self, from: response)
+        } catch {
+            BrokerIntegrationDebugLog.decodeFailure(context: context, detail: String(describing: error))
+            throw AppError.unknown(message: brokerDecodeUserMessage)
+        }
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from response: HTTPResponse, context: String) throws -> T {

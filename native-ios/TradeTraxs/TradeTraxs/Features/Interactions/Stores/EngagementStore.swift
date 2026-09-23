@@ -8,6 +8,7 @@ final class EngagementStore {
     private(set) var snapshots: [InteractionTarget: EngagementSnapshot] = [:]
 
     private let repository: any InteractionRepository
+    private var presentationWriteThrough: (any SocialPresentationWriteThroughClient)?
     private var loadedTargets: Set<InteractionTarget> = []
     /// Targets currently requested or in-flight — prevents duplicate network work.
     private var requestedTargets: Set<InteractionTarget> = []
@@ -17,6 +18,10 @@ final class EngagementStore {
 
     init(repository: any InteractionRepository) {
         self.repository = repository
+    }
+
+    func configurePresentationWriteThrough(_ client: any SocialPresentationWriteThroughClient) {
+        presentationWriteThrough = client
     }
 
     func snapshot(for target: InteractionTarget) -> EngagementSnapshot {
@@ -53,6 +58,12 @@ final class EngagementStore {
         let optimistic = previous.togglingLike()
         snapshots[target] = optimistic
         ExperienceHaptics.play(.selection)
+        await presentationWriteThrough?.propagateEngagement(
+            target: target,
+            snapshot: optimistic,
+            source: .engagementStore,
+            isRollback: false
+        )
 
         // Fixture / offline-dev content — keep optimistic state without network.
         if target.id.hasPrefix("dev-") {
@@ -64,8 +75,20 @@ final class EngagementStore {
         do {
             try await repository.setLiked(optimistic.viewerHasLiked, on: target)
             commitSuccessfulLikeMutation(optimistic, for: target)
+            await presentationWriteThrough?.propagateEngagement(
+                target: target,
+                snapshot: snapshot(for: target),
+                source: .engagementStore,
+                isRollback: false
+            )
         } catch {
             snapshots[target] = previous
+            await presentationWriteThrough?.propagateEngagement(
+                target: target,
+                snapshot: previous,
+                source: .engagementStore,
+                isRollback: true
+            )
             ExperienceHaptics.play(.warning)
         }
     }
@@ -86,6 +109,12 @@ final class EngagementStore {
             viewerHasLiked: true
         )
         snapshots[target] = optimistic
+        await presentationWriteThrough?.propagateEngagement(
+            target: target,
+            snapshot: optimistic,
+            source: .engagementStore,
+            isRollback: false
+        )
 
         if target.id.hasPrefix("dev-") {
             loadedTargets.insert(target)
@@ -96,8 +125,20 @@ final class EngagementStore {
         do {
             try await repository.setLiked(true, on: target)
             commitSuccessfulLikeMutation(optimistic, for: target)
+            await presentationWriteThrough?.propagateEngagement(
+                target: target,
+                snapshot: snapshot(for: target),
+                source: .engagementStore,
+                isRollback: false
+            )
         } catch {
             snapshots[target] = previous
+            await presentationWriteThrough?.propagateEngagement(
+                target: target,
+                snapshot: previous,
+                source: .engagementStore,
+                isRollback: true
+            )
             ExperienceHaptics.play(.warning)
         }
     }
@@ -108,6 +149,14 @@ final class EngagementStore {
         snapshots[target] = snap
         loadedTargets.insert(target)
         requestedTargets.insert(target)
+        Task {
+            await presentationWriteThrough?.propagateEngagement(
+                target: target,
+                snapshot: snap,
+                source: .comments,
+                isRollback: false
+            )
+        }
     }
 
     func replaceCommentCount(_ count: Int, on target: InteractionTarget) {
@@ -116,6 +165,66 @@ final class EngagementStore {
         snapshots[target] = snap
         loadedTargets.insert(target)
         requestedTargets.insert(target)
+        Task {
+            await presentationWriteThrough?.propagateEngagement(
+                target: target,
+                snapshot: snap,
+                source: .comments,
+                isRollback: false
+            )
+        }
+    }
+
+    /// Incremental content-like Realtime — idempotent patch + Phase 9 write-through.
+    func applyContentLikeRealtime(
+        on target: InteractionTarget,
+        signal: ContentLikeRealtimeSignal,
+        viewerUserID: String
+    ) async {
+        guard hasLoaded(target) || snapshots[target] != nil else { return }
+        if inFlightLikes.contains(target) {
+            #if DEBUG
+            if signal.userID == viewerUserID {
+                EngagementRealtimeDebugLog.viewerEcho(
+                    table: signal.table.rawValue,
+                    contentID: signal.contentID,
+                    kind: signal.kind == .insert ? "insert" : "delete"
+                )
+            }
+            #endif
+        }
+
+        let previous = snapshot(for: target)
+        let next = ContentLikeSemantics.applyRealtimeEvent(
+            previous,
+            event: signal.kind,
+            actorUserID: signal.userID,
+            currentUserID: viewerUserID
+        )
+        guard next != previous else { return }
+
+        snapshots[target] = next
+        loadedTargets.insert(target)
+        #if DEBUG
+        if signal.userID != viewerUserID {
+            EngagementRealtimeDebugLog.remotePatch(
+                targetKind: target.kind.rawValue,
+                targetID: target.id,
+                likeCount: next.likeCount,
+                isLiked: next.viewerHasLiked
+            )
+        }
+        EngagementRealtimeDebugLog.writeThrough(
+            targetKind: target.kind.rawValue,
+            targetID: target.id
+        )
+        #endif
+        await presentationWriteThrough?.propagateEngagement(
+            target: target,
+            snapshot: next,
+            source: .engagementRealtime,
+            isRollback: false
+        )
     }
 
     /// Drop engagement cache when the authenticated user changes.

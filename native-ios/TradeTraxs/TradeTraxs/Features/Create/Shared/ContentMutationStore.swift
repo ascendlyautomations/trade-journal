@@ -29,7 +29,13 @@ final class ContentMutationStore {
     private(set) var latestStoryID: StoryID?
     private(set) var latestDeletedStoryID: StoryID?
 
+    private weak var vaultStore: VaultStore?
+
     private init() {}
+
+    func configure(vaultStore: VaultStore?) {
+        self.vaultStore = vaultStore
+    }
 
     func notePostCreated(_ post: Post) {
         latest = .post(post)
@@ -72,12 +78,32 @@ final class ContentMutationStore {
         latest = .postDeleted(id)
         latestPostID = id
         revision += 1
+        pruneVaultReferences([
+            VaultContentRef(contentType: .profilePost, contentID: id.rawValue),
+            VaultContentRef(contentType: .feedPost, contentID: id.rawValue),
+        ])
     }
 
     func noteReelDeleted(_ id: ReelID) {
         latest = .reelDeleted(id)
         latestReelID = id
         revision += 1
+        pruneVaultReferences([
+            VaultContentRef(contentType: .reel, contentID: id.rawValue),
+        ])
+    }
+
+    private func pruneVaultReferences(_ refs: [VaultContentRef]) {
+        guard let vaultStore else { return }
+        for ref in refs {
+            vaultStore.pruneContentReference(ref)
+        }
+        Task {
+            await VaultPersistedCacheCoordinator.shared.persistVaultPresentation(
+                reason: "contentDeleted",
+                isRollback: false
+            )
+        }
     }
 
     func invalidate() {

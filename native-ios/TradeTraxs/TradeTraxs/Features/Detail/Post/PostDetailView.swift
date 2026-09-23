@@ -47,10 +47,21 @@ struct PostDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .task {
             viewModel.loadIfNeeded()
-            data.engagementStore.prefetch([.profilePost(viewModel.postID)])
+            let target = InteractionTarget.profilePost(viewModel.postID)
+            data.engagementStore.prefetch([target])
+            EngagementRealtimeSession.shared.updateRetention(
+                ownerKey: "detail-post:\(viewModel.postID.rawValue)",
+                targets: [target]
+            )
             data.vaultStore.prefetch([
                 VaultContentRef(contentType: .profilePost, contentID: viewModel.postID.rawValue),
             ])
+        }
+        .onDisappear {
+            EngagementRealtimeSession.shared.updateRetention(
+                ownerKey: "detail-post:\(viewModel.postID.rawValue)",
+                targets: []
+            )
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {

@@ -381,6 +381,17 @@ final class MessagesInboxStore {
         rooms[index].memberCount = count
     }
 
+    func applyMemberCountDelta(roomID: RoomID, delta: Int) {
+        guard delta != 0, let index = rooms.firstIndex(where: { $0.id == roomID }) else { return }
+        let current = rooms[index].memberCount ?? 0
+        let next = max(0, current + delta)
+        rooms[index].memberCount = next
+#if DEBUG
+        MessagingRealtimeDebugLog.memberCountDelta(roomID: roomID.rawValue, delta: delta, next: next)
+#endif
+        persistSnapshotIfPossible()
+    }
+
     /// Patches authoritative room metadata in the member-room inbox list.
     func applyRoomMetadata(_ room: TradeRoom) {
         guard let index = rooms.firstIndex(where: { $0.id == room.id }) else { return }

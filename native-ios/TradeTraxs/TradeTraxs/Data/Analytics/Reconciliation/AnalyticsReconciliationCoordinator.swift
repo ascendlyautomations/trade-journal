@@ -253,7 +253,7 @@ actor AnalyticsReconciliationCoordinator {
     ) async {
         guard Self.shouldQueryLocalStaleCalendarCoverages else { return }
         guard viewerGeneration == generation, self.viewerID == viewerID else { return }
-        let stale = (try? await AnalyticsLocalStore().calendarCoveragesBelowRevision(
+        let stale = (try? await AnalyticsLocalStore.sharedStore().calendarCoveragesBelowRevision(
             viewerID: viewerID,
             revision: pendingRevision,
             limit: AnalyticsRemoteCalendarRepair.defaultMaxStaleRanges

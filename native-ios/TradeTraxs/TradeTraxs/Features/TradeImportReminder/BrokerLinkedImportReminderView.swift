@@ -6,12 +6,12 @@ struct BrokerLinkedImportReminderView: View {
     let accounts: [BrokerImportEligibilityTarget]
     let onClose: () -> Void
 
-    @State private var importingIDs: Set<String> = []
-    @State private var message: String?
-    @State private var messageIsError = false
+    @State private var importFlow = BrokerImportFlowModel()
+    @State private var tradingAccounts: [TradingAccount] = []
     @State private var reviewTradeIDs: [TradeID] = []
     @State private var showsReview = false
-    @State private var tradingAccounts: [TradingAccount] = []
+    @State private var singleEditTradeID: TradeID?
+    @State private var showsSingleEdit = false
     @State private var rithmicReauthTarget: BrokerImportEligibilityTarget?
     @State private var showsRithmicReauth = false
     @State private var isRithmicReauthBusy = false
@@ -22,12 +22,6 @@ struct BrokerLinkedImportReminderView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                if let message {
-                    Text(message)
-                        .experienceStyle(.footnote, color: messageIsError ? colors.primaryText : colors.secondaryText)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
                 Text("Choose a linked broker account to import new trades.")
                     .experienceStyle(.footnote, color: colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -61,9 +55,42 @@ struct BrokerLinkedImportReminderView: View {
         .task {
             await loadTradingAccountsIfNeeded()
         }
+        .fullScreenCover(isPresented: $importFlow.isPresented) {
+            BrokerImportProgressView(
+                model: importFlow,
+                data: data,
+                onReviewImportedTrades: { ids in
+                    reviewTradeIDs = ids
+                    showsReview = true
+                },
+                onEditSingleImportedTrade: { id in
+                    singleEditTradeID = id
+                    showsSingleEdit = true
+                },
+                onClose: {}
+            )
+        }
         .sheet(isPresented: $showsReview) {
             BrokerImportedTradesReviewView(tradeIDs: reviewTradeIDs, data: data) {
                 reviewTradeIDs = []
+            }
+        }
+        .sheet(isPresented: $showsSingleEdit, onDismiss: { singleEditTradeID = nil }) {
+            if let id = singleEditTradeID {
+                NavigationStack {
+                    AddTradeView(
+                        data: data,
+                        mode: .edit(id),
+                        embeddedInTradeEntryHub: false,
+                        onDismiss: { showsSingleEdit = false }
+                    )
+                    .experienceNavigationTitle("Imported Trade")
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { showsSingleEdit = false }
+                        }
+                    }
+                }
             }
         }
         .sheet(isPresented: $showsRithmicReauth, onDismiss: {
@@ -79,9 +106,16 @@ struct BrokerLinkedImportReminderView: View {
                 locksUsername: rithmicReauthUsername != nil,
                 onSubmit: { _, password, _ in
                     guard let target = rithmicReauthTarget else { return }
-                    await importTrades(for: target, rithmicPassword: password)
+                    showsRithmicReauth = false
+                    importFlow.startImport(target: target, data: data, rithmicPassword: password)
                 }
             )
+        }
+        .onChange(of: importFlow.pendingRithmicPasswordTarget?.mappingId) { _, mappingId in
+            guard mappingId != nil, let target = importFlow.pendingRithmicPasswordTarget else { return }
+            rithmicReauthTarget = target
+            Task { await loadRithmicUsername(for: target.connectionId) }
+            showsRithmicReauth = true
         }
         .accessibilityIdentifier("tradeImportReminder.brokerImport")
     }
@@ -104,18 +138,14 @@ struct BrokerLinkedImportReminderView: View {
             .lineLimit(2)
 
             Button {
-                Task { await importTrades(for: account) }
+                importFlow.startImport(target: account, data: data)
             } label: {
-                if importingIDs.contains(account.mappingId) {
-                    Label("Importing…", systemImage: "arrow.triangle.2.circlepath")
-                } else {
-                    Label("Import Trades", systemImage: "square.and.arrow.down")
-                }
+                Label("Import Trades", systemImage: "square.and.arrow.down")
             }
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(colors.accent)
             .padding(.top, ExperienceSpacing.xxs)
-            .disabled(importingIDs.contains(account.mappingId))
+            .disabled(importFlow.isPresented)
             .accessibilityIdentifier("brokerImport.importTrades.\(account.mappingId)")
         }
         .padding(.horizontal, ExperienceSpacing.md)
@@ -153,70 +183,6 @@ struct BrokerLinkedImportReminderView: View {
         } catch {
             tradingAccounts = SessionAccountsStore.shared.cached(for: profileID) ?? []
         }
-    }
-
-    private func importTrades(
-        for target: BrokerImportEligibilityTarget,
-        rithmicPassword: String? = nil
-    ) async {
-        if rithmicPassword != nil {
-            isRithmicReauthBusy = true
-        } else {
-            importingIDs.insert(target.mappingId)
-        }
-        defer {
-            importingIDs.remove(target.mappingId)
-            isRithmicReauthBusy = false
-        }
-        do {
-            let response: TradovateAccountSyncResponse
-            switch target.provider {
-            case .tradovate:
-                response = try await data.brokerIntegrations.syncTradovateAccount(
-                    connectionId: target.connectionId,
-                    mappingId: target.mappingId
-                )
-            case .rithmic:
-                response = try await data.brokerIntegrations.syncRithmicAccount(
-                    connectionId: target.connectionId,
-                    mappingId: target.mappingId,
-                    password: rithmicPassword
-                )
-            }
-            let newIds = response.summary.newTradeIds
-            if let userID = await data.session.currentUserID {
-                TradeJournalMutationStore.shared.noteBulkImport(owner: ProfileID(userID.rawValue))
-            }
-            if response.summary.ok {
-                showsRithmicReauth = false
-                rithmicReauthTarget = nil
-                if newIds.isEmpty {
-                    present("Import finished — no new trades.", error: false)
-                } else {
-                    reviewTradeIDs = newIds.map { TradeID($0) }
-                    showsReview = true
-                    present("Imported \(newIds.count) trade(s).", error: false)
-                }
-            } else if target.provider == .rithmic,
-                      response.summary.errorCode == "rithmic_password_required",
-                      rithmicPassword == nil
-            {
-                rithmicReauthTarget = target
-                if rithmicReauthUsername == nil {
-                    await loadRithmicUsername(for: target.connectionId)
-                }
-                showsRithmicReauth = true
-            } else {
-                present(response.summary.error ?? "Import did not complete.", error: true)
-            }
-        } catch {
-            present(UserFacingError.message(for: error), error: true)
-        }
-    }
-
-    private func present(_ text: String, error: Bool) {
-        message = text
-        messageIsError = error
     }
 
     private func loadRithmicUsername(for connectionId: String) async {

@@ -218,6 +218,9 @@ struct ConversationView: View {
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {
+#if DEBUG
+            ConversationOpenTrace.viewAppeared(conversationID: viewModel.conversationID.rawValue)
+#endif
             guard !contentRevealed else { return }
             ExperienceMotion.withAnimation(
                 ExperienceMotion.navigation,
