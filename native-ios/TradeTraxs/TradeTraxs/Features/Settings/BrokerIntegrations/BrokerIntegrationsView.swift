@@ -66,7 +66,7 @@ struct BrokerIntegrationsView: View {
                         .experienceStyle(.footnote, color: colors.primaryText)
                     if !viewModel.isBrokerConnectionMutationActive {
                         Button("Retry Connect") {
-                            viewModel.connectTradovate()
+                            viewModel.promptConnectTradovate()
                         }
                     }
                 }
@@ -118,6 +118,23 @@ struct BrokerIntegrationsView: View {
             }
         } message: {
             Text("Your TradeTraxs accounts and imported trades will stay in the journal.")
+        }
+        .confirmationDialog(
+            "Connect Tradovate",
+            isPresented: $viewModel.showsTradovateEnvironmentPicker,
+            titleVisibility: .visible
+        ) {
+            Button("Live (production)") {
+                viewModel.connectTradovateWithEnvironment("live")
+            }
+            Button("Demo (simulation)") {
+                viewModel.connectTradovateWithEnvironment("demo")
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.showsTradovateEnvironmentPicker = false
+            }
+        } message: {
+            Text("Choose the Tradovate environment that matches the account you sign in with. Live and Demo use separate API data.")
         }
         .onAppear {
             BrokerIntegrationsLoadPriorityGate.setScreenActive(true)
@@ -248,7 +265,7 @@ struct BrokerIntegrationsView: View {
            viewModel.tradovateLoadPhase != .loading
         {
             Button {
-                viewModel.connectTradovate()
+                viewModel.promptConnectTradovate()
             } label: {
                 Label("Connect Tradovate", systemImage: "link")
             }
@@ -272,7 +289,7 @@ struct BrokerIntegrationsView: View {
                     brokerReconnectRequiredRow(
                         provider: .tradovate,
                         onReconnect: {
-                            viewModel.connectTradovate(reconnectConnectionId: connection.id)
+                            viewModel.promptConnectTradovate(reconnectConnectionId: connection.id)
                         }
                     )
                 }
@@ -288,7 +305,7 @@ struct BrokerIntegrationsView: View {
                 if connection.id == viewModel.tradovateConnections.last?.id {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                         Button {
-                            viewModel.connectTradovate()
+                            viewModel.promptConnectTradovate()
                         } label: {
                             Label("Connect Another Tradovate Login", systemImage: "plus.circle")
                         }

@@ -12,6 +12,7 @@ export type IntegrationOAuthStateRow = {
   redirect_after: string | null
   oauth_intent: IntegrationOAuthIntent
   target_connection_id: string | null
+  api_environment: "demo" | "live" | null
 }
 
 function generateStateToken(): string {
@@ -27,6 +28,7 @@ export async function createIntegrationOAuthState(
     ttlMs?: number
     oauthIntent?: IntegrationOAuthIntent
     targetConnectionId?: string | null
+    apiEnvironment?: "demo" | "live" | null
   }
 ): Promise<{ state: string; expiresAt: Date }> {
   const state = generateStateToken()
@@ -42,6 +44,7 @@ export async function createIntegrationOAuthState(
     oauth_intent: intent,
     target_connection_id:
       intent === "reconnect" ? (params.targetConnectionId ?? null) : null,
+    api_environment: params.apiEnvironment ?? null,
   })
 
   if (error) {
@@ -66,7 +69,7 @@ export async function consumeIntegrationOAuthState(
   const { data: row, error: selectError } = await supabase
     .from("integration_oauth_states")
     .select(
-      "id, user_id, redirect_after, expires_at, consumed_at, oauth_intent, target_connection_id"
+      "id, user_id, redirect_after, expires_at, consumed_at, oauth_intent, target_connection_id, api_environment"
     )
     .eq("provider", params.provider)
     .eq("state_token", trimmed)
@@ -82,10 +85,15 @@ export async function consumeIntegrationOAuthState(
     .eq("id", row.id)
     .is("consumed_at", null)
     .gt("expires_at", now)
-    .select("user_id, redirect_after, oauth_intent, target_connection_id")
+    .select("user_id, redirect_after, oauth_intent, target_connection_id, api_environment")
     .maybeSingle()
 
   if (updateError || !consumed) return null
+
+  const apiEnvironment =
+    consumed.api_environment === "live" || consumed.api_environment === "demo"
+      ? consumed.api_environment
+      : null
 
   return {
     user_id: consumed.user_id,
@@ -93,5 +101,6 @@ export async function consumeIntegrationOAuthState(
     oauth_intent:
       consumed.oauth_intent === "reconnect" ? "reconnect" : "connect_new",
     target_connection_id: consumed.target_connection_id ?? null,
+    api_environment: apiEnvironment,
   }
 }

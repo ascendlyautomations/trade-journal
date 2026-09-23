@@ -14,7 +14,10 @@ enum BrokerTradovateReconnectImport {
         mappingId: String
     ) async -> Outcome {
         do {
-            let url = try await broker.beginTradovateNativeOAuth(reconnectConnectionId: connectionId)
+            let url = try await broker.beginTradovateNativeOAuth(
+                reconnectConnectionId: connectionId,
+                apiEnvironment: nil
+            )
             let oauth = await TradovateBrokerOAuthSession.connect(authorizeURL: url)
             switch oauth {
             case .cancelled:

@@ -1,8 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { loadOwnedBrokerConnection } from "@/lib/integrations/brokerConnectionAccess"
 import {
   releaseBrokerSyncLock,
   tryAcquireBrokerSyncLock,
 } from "@/lib/integrations/brokerIntegrationSync"
+import {
+  assertTradovateRestHostMatchesEnvironment,
+  logTradovateEnvironmentSync,
+  parseTradovateApiEnvironmentInput,
+} from "@/lib/integrations/tradovate/tradovateApiEnvironment"
+import { getTradovateRestBaseUrl } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
 import { TradovateApiError } from "@/lib/integrations/tradovate/tradovateApiClient"
 import {
   tradovateFillStableId,
@@ -313,6 +320,26 @@ export async function syncTradovateBrokerAccount(
 
   const targetAccountId = String(mapping.external_account_id)
   let failureStage: TradovateSyncFailureStage = "unknown"
+
+  const ownedConnection = await loadOwnedBrokerConnection(supabase, {
+    userId,
+    connectionId,
+    provider: "tradovate",
+  })
+  const storedEnvironment = parseTradovateApiEnvironmentInput(
+    ownedConnection?.api_environment
+  )
+  if (storedEnvironment) {
+    assertTradovateRestHostMatchesEnvironment({
+      apiEnvironment: storedEnvironment,
+      restBaseUrl: getTradovateRestBaseUrl(storedEnvironment),
+    })
+    logTradovateEnvironmentSync({
+      connectionId,
+      storedEnvironment,
+      accountId: targetAccountId,
+    })
+  }
 
   const existingLifecycleKeysAtStart = await loadTradovateLifecycleKeysAtSyncStart(
     supabase,

@@ -701,7 +701,10 @@ private struct LoginShellBrokerIntegrationRepository: BrokerIntegrationRepositor
     }
 
     func listTradovateConnections() async throws -> TradovateConnectionsResponse { throw unavailable() }
-    func beginTradovateNativeOAuth(reconnectConnectionId: String?) async throws -> URL { throw unavailable() }
+    func beginTradovateNativeOAuth(
+        reconnectConnectionId: String?,
+        apiEnvironment: String?
+    ) async throws -> URL { throw unavailable() }
     func listTradovateAccounts(connectionId: String, forceRefresh: Bool) async throws -> TradovateConnectionAccountsResponse {
         throw unavailable()
     }

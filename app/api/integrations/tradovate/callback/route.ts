@@ -10,6 +10,10 @@ import {
   resolveTradovateOAuthResultRedirectUrl,
   type TradovateCallbackOutcome,
 } from "@/lib/integrations/tradovate/tradovateOAuthCallback"
+import {
+  parseTradovateApiEnvironmentInput,
+  resolveTradovateApiEnvironmentForOAuth,
+} from "@/lib/integrations/tradovate/tradovateApiEnvironment"
 import { getTradovateOAuthConfig } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
 import {
   exchangeTradovateAuthorizationCode,
@@ -75,7 +79,20 @@ export async function GET(request: NextRequest) {
     return redirectOutcome(request, { kind: "error", reason: "server" }, oauthReturnTo)
   }
 
-  const exchange = await exchangeTradovateAuthorizationCode(query.code)
+  const apiEnvironment = await resolveTradovateApiEnvironmentForOAuth({
+    supabase: supabaseServiceRole,
+    userId: boundUser.user_id,
+    oauthIntent: boundUser.oauth_intent,
+    targetConnectionId: boundUser.target_connection_id,
+    requestedEnvironment: parseTradovateApiEnvironmentInput(
+      boundUser.api_environment
+    ),
+  })
+
+  const exchange = await exchangeTradovateAuthorizationCode(
+    query.code,
+    apiEnvironment
+  )
   if (!exchange.ok) {
     console.info("[tradovate/callback] token_exchange_failed", {
       reason: exchange.reason,
@@ -85,7 +102,6 @@ export async function GET(request: NextRequest) {
   }
 
   const tokens = exchange.tokens
-  const config = getTradovateOAuthConfig()
   const nowMs = Date.now()
   const accessExpiresAt =
     typeof tokens.expires_in === "number" && tokens.expires_in > 0
@@ -99,7 +115,7 @@ export async function GET(request: NextRequest) {
 
   let providerUserId = parseTradovateIdTokenSubject(tokens.id_token)
   let providerDisplayName: string | null = null
-  const me = await fetchTradovateMeProfile(tokens.access_token)
+  const me = await fetchTradovateMeProfile(tokens.access_token, apiEnvironment)
   if (me?.userId != null && !providerUserId) {
     providerUserId = String(me.userId)
   }
@@ -121,7 +137,7 @@ export async function GET(request: NextRequest) {
       },
       accessTokenExpiresAt: accessExpiresAt,
       refreshTokenExpiresAt: refreshExpiresAt,
-      apiEnvironment: config.apiEnvironment,
+      apiEnvironment,
       oauthIntent: boundUser.oauth_intent,
       targetConnectionId: boundUser.target_connection_id,
     })

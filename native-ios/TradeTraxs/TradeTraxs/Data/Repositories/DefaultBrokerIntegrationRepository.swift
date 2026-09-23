@@ -66,12 +66,19 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
             + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000
     }
 
-    func beginTradovateNativeOAuth(reconnectConnectionId: String?) async throws -> URL {
+    func beginTradovateNativeOAuth(
+        reconnectConnectionId: String?,
+        apiEnvironment: String?
+    ) async throws -> URL {
         struct Body: Encodable {
             var client: String = "native"
             var reconnectConnectionId: String?
+            var apiEnvironment: String?
         }
-        let payload = Body(reconnectConnectionId: reconnectConnectionId)
+        let payload = Body(
+            reconnectConnectionId: reconnectConnectionId,
+            apiEnvironment: apiEnvironment
+        )
         let body = try transport.encodeJSON(payload)
         BrokerOAuthDebugLog.authorizeRequest(client: "native", bodyIncluded: !body.isEmpty)
         let response = try await transport.send(

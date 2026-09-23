@@ -1,6 +1,8 @@
-import { TRADOVATE_OAUTH_REDIRECT_URI as DEFAULT_REDIRECT_URI } from "./tradovateOAuthCallback"
-
 export type TradovateApiEnvironment = "demo" | "live"
+
+/** Keep in sync with `TRADOVATE_OAUTH_REDIRECT_URI` in tradovateOAuthCallback.ts (avoid @/ imports here for node tests). */
+const DEFAULT_OAUTH_REDIRECT_URI =
+  "https://www.tradetraxs.com/api/integrations/tradovate/callback" as const
 
 /** Browser OAuth login — same host for demo and live apps per Tradovate's official example. */
 const DEFAULT_AUTHORIZE_URL = "https://trader.tradovate.com/oauth"
@@ -43,18 +45,19 @@ export function getTradovateRestBaseUrl(apiEnvironment: TradovateApiEnvironment)
   return TRADOVATE_REST_BASE_BY_ENV[apiEnvironment]
 }
 
-function readApiEnvironment(): TradovateApiEnvironment {
+export function readServerDefaultTradovateApiEnvironment(): TradovateApiEnvironment {
   const raw = process.env.TRADOVATE_API_ENV?.trim().toLowerCase()
   if (raw === "live") return "live"
   return "demo"
 }
 
-export function getTradovateOAuthConfig() {
+export function getTradovateOAuthConfigForEnvironment(
+  apiEnvironment: TradovateApiEnvironment
+) {
   const clientId = process.env.TRADOVATE_CLIENT_ID?.trim()
   const clientSecret = process.env.TRADOVATE_CLIENT_SECRET?.trim()
   const redirectUri =
-    process.env.TRADOVATE_OAUTH_REDIRECT_URI?.trim() || DEFAULT_REDIRECT_URI
-  const apiEnvironment = readApiEnvironment()
+    process.env.TRADOVATE_OAUTH_REDIRECT_URI?.trim() || DEFAULT_OAUTH_REDIRECT_URI
 
   if (!clientId || !clientSecret) {
     throw new Error("tradovate_oauth_config_missing")
@@ -68,6 +71,7 @@ export function getTradovateOAuthConfig() {
     TOKEN_URL_BY_ENV[apiEnvironment]
   const meUrl =
     process.env.TRADOVATE_OAUTH_ME_URL?.trim() || ME_URL_BY_ENV[apiEnvironment]
+  const websocketUrl = getTradovateWebSocketUrl(apiEnvironment)
 
   return {
     clientId,
@@ -76,8 +80,13 @@ export function getTradovateOAuthConfig() {
     authorizeUrl,
     tokenUrl,
     meUrl,
+    websocketUrl,
     apiEnvironment,
   }
+}
+
+export function getTradovateOAuthConfig() {
+  return getTradovateOAuthConfigForEnvironment(readServerDefaultTradovateApiEnvironment())
 }
 
 export function buildTradovateAuthorizationUrl(params: {

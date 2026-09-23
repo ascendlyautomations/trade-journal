@@ -2,7 +2,10 @@ import Foundation
 
 nonisolated protocol BrokerIntegrationRepository: Sendable {
     func listTradovateConnections() async throws -> TradovateConnectionsResponse
-    func beginTradovateNativeOAuth(reconnectConnectionId: String?) async throws -> URL
+    func beginTradovateNativeOAuth(
+        reconnectConnectionId: String?,
+        apiEnvironment: String?
+    ) async throws -> URL
     func listTradovateAccounts(connectionId: String, forceRefresh: Bool) async throws -> TradovateConnectionAccountsResponse
     func linkTradovateAccount(
         connectionId: String,

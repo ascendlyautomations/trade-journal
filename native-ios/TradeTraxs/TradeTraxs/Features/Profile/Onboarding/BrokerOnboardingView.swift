@@ -252,7 +252,7 @@ struct BrokerOnboardingView: View {
     private func connect(_ provider: BrokerIntegrationProvider) {
         switch provider {
         case .tradovate:
-            viewModel.connectTradovate()
+            viewModel.promptConnectTradovate()
         case .rithmic:
             viewModel.presentRithmicConnect()
         }

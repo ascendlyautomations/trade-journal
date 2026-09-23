@@ -35,6 +35,8 @@ final class BrokerIntegrationsViewModel {
     private(set) var isConnectingRithmic = false
     private(set) var isDisconnecting = false
     private var activeConnectTask: Task<Void, Never>?
+    var showsTradovateEnvironmentPicker = false
+    private var pendingTradovateReconnectConnectionId: String?
 
     var showsRithmicConnectSheet = false
     private(set) var rithmicSystemChoices: [String] = []
@@ -279,7 +281,25 @@ final class BrokerIntegrationsViewModel {
         }
     }
 
-    func connectTradovate(reconnectConnectionId: String? = nil) {
+    func promptConnectTradovate(reconnectConnectionId: String? = nil) {
+        guard !isBrokerConnectionMutationActive else { return }
+        if reconnectConnectionId != nil {
+            connectTradovate(reconnectConnectionId: reconnectConnectionId, apiEnvironment: nil)
+            return
+        }
+        pendingTradovateReconnectConnectionId = nil
+        showsTradovateEnvironmentPicker = true
+    }
+
+    func connectTradovateWithEnvironment(_ apiEnvironment: String) {
+        showsTradovateEnvironmentPicker = false
+        connectTradovate(
+            reconnectConnectionId: pendingTradovateReconnectConnectionId,
+            apiEnvironment: apiEnvironment
+        )
+    }
+
+    func connectTradovate(reconnectConnectionId: String? = nil, apiEnvironment: String? = nil) {
         guard !isBrokerConnectionMutationActive else { return }
         BrokerOAuthDebugLog.tap()
         activeConnectTask?.cancel()
@@ -291,7 +311,10 @@ final class BrokerIntegrationsViewModel {
                 activeConnectTask = nil
             }
             do {
-                let url = try await broker.beginTradovateNativeOAuth(reconnectConnectionId: reconnectConnectionId)
+                let url = try await broker.beginTradovateNativeOAuth(
+                    reconnectConnectionId: reconnectConnectionId,
+                    apiEnvironment: apiEnvironment
+                )
                 let outcome = await TradovateBrokerOAuthSession.connect(authorizeURL: url)
                 guard !Task.isCancelled else { return }
                 switch outcome {

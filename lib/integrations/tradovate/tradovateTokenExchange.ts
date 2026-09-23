@@ -1,4 +1,7 @@
-import { getTradovateOAuthConfig } from "./tradovateOAuthEnv"
+import {
+  getTradovateOAuthConfigForEnvironment,
+  type TradovateApiEnvironment,
+} from "./tradovateOAuthEnv"
 
 export type TradovateOAuthTokenSuccess = {
   access_token: string
@@ -19,9 +22,10 @@ export type TradovateTokenExchangeResult =
   | { ok: false; reason: "malformed" | "oauth_error" | "network"; oauthError?: string }
 
 export async function exchangeTradovateAuthorizationCode(
-  code: string
+  code: string,
+  apiEnvironment: TradovateApiEnvironment
 ): Promise<TradovateTokenExchangeResult> {
-  const config = getTradovateOAuthConfig()
+  const config = getTradovateOAuthConfigForEnvironment(apiEnvironment)
   const trimmedCode = code.trim()
   if (!trimmedCode) {
     return { ok: false, reason: "malformed" }
@@ -142,9 +146,10 @@ export type TradovateMeProfile = {
 }
 
 export async function fetchTradovateMeProfile(
-  accessToken: string
+  accessToken: string,
+  apiEnvironment: TradovateApiEnvironment
 ): Promise<TradovateMeProfile | null> {
-  const config = getTradovateOAuthConfig()
+  const config = getTradovateOAuthConfigForEnvironment(apiEnvironment)
   let response: Response
   try {
     response = await fetch(config.meUrl, {

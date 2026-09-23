@@ -3,6 +3,10 @@ import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { loadOwnedBrokerConnection } from "@/lib/integrations/brokerConnectionAccess"
 import { createIntegrationOAuthState } from "@/lib/integrations/integrationOAuthState"
 import {
+  parseTradovateApiEnvironmentInput,
+  resolveTradovateApiEnvironmentForOAuth,
+} from "@/lib/integrations/tradovate/tradovateApiEnvironment"
+import {
   buildTradovateAuthorizationUrl,
   getTradovateOAuthConfig,
 } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
@@ -68,7 +72,10 @@ async function resolveAuthorizeHandoff(
 
 async function createTradovateAuthorizeUrlForHandoff(
   handoff: TradovateAuthorizeHandoffPayload,
-  redirectAfter: string
+  redirectAfter: string,
+  apiEnvironment: Awaited<
+    ReturnType<typeof resolveTradovateApiEnvironmentForOAuth>
+  >
 ): Promise<{ ok: true; authorizeUrl: string } | { ok: false; response: NextResponse }> {
   try {
     getTradovateOAuthConfig()
@@ -108,6 +115,7 @@ async function createTradovateAuthorizeUrlForHandoff(
       redirectAfter,
       oauthIntent: handoff.oauthIntent,
       targetConnectionId: handoff.targetConnectionId,
+      apiEnvironment,
     })
     state = created.state
   } catch (err) {
@@ -131,9 +139,17 @@ async function beginTradovateOAuthRedirect(
   request: NextRequest,
   handoff: TradovateAuthorizeHandoffPayload
 ): Promise<NextResponse> {
+  const apiEnvironment = await resolveTradovateApiEnvironmentForOAuth({
+    supabase: supabaseServiceRole,
+    userId: handoff.userId,
+    oauthIntent: handoff.oauthIntent,
+    targetConnectionId: handoff.targetConnectionId,
+    requestedEnvironment: null,
+  })
   const created = await createTradovateAuthorizeUrlForHandoff(
     handoff,
-    "/settings/integrations/tradovate"
+    "/settings/integrations/tradovate",
+    apiEnvironment
   )
   if (!created.ok) {
     const res = created.response
@@ -188,6 +204,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const apiEnvironment = await resolveTradovateApiEnvironmentForOAuth({
+    supabase: supabaseServiceRole,
+    userId: user.id,
+    oauthIntent,
+    targetConnectionId: reconnectConnectionId,
+    requestedEnvironment:
+      oauthIntent === "connect_new"
+        ? parseTradovateApiEnvironmentInput(body.apiEnvironment)
+        : null,
+  })
+
   if (nativeClient) {
     const handoff: TradovateAuthorizeHandoffPayload = {
       userId: user.id,
@@ -196,7 +223,8 @@ export async function POST(request: NextRequest) {
     }
     const created = await createTradovateAuthorizeUrlForHandoff(
       handoff,
-      TRADOVATE_NATIVE_OAUTH_REDIRECT_AFTER
+      TRADOVATE_NATIVE_OAUTH_REDIRECT_AFTER,
+      apiEnvironment
     )
     if (!created.ok) {
       return created.response

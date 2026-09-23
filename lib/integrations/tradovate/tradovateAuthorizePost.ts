@@ -6,6 +6,8 @@ export const TRADOVATE_NATIVE_OAUTH_REDIRECT_AFTER =
 export type TradovateAuthorizePostBody = {
   reconnectConnectionId?: string
   client?: string
+  /** connect_new only — demo or live Tradovate API environment */
+  apiEnvironment?: string
 }
 
 export const TRADOVATE_NATIVE_OAUTH_CLIENT = "native" as const
@@ -35,7 +37,9 @@ export function parseTradovateAuthorizePostBody(raw: unknown): TradovateAuthoriz
       ? record.reconnectConnectionId
       : undefined
   const client = typeof record.client === "string" ? record.client : undefined
-  return { reconnectConnectionId, client }
+  const apiEnvironment =
+    typeof record.apiEnvironment === "string" ? record.apiEnvironment : undefined
+  return { reconnectConnectionId, client, apiEnvironment }
 }
 
 export function isNativeTradovateAuthorizeRequest(
