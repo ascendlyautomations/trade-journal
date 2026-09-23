@@ -5,7 +5,6 @@ import {
 } from "@/lib/integrations/brokerIntegrationSync"
 import { TradovateApiError } from "@/lib/integrations/tradovate/tradovateApiClient"
 import {
-  parseTradovateFillRow,
   tradovateFillStableId,
   tradovateSide,
 } from "@/lib/integrations/tradovate/tradovateFillModels"
@@ -13,8 +12,15 @@ import {
   fetchTradovateFillFeesForFillIds,
   fetchTradovateFillList,
   fetchTradovateOrderList,
+  fetchTradovateOrdersByIds,
   resolveTradovateContracts,
 } from "@/lib/integrations/tradovate/tradovateMarketDataClient"
+import {
+  buildTradovateOrderAccountMap,
+  filterParsedTradovateFillsForAccount,
+  mergeTradovateOrderAccountMap,
+  missingOrderIdsForTradovateFills,
+} from "@/lib/integrations/tradovate/tradovateOrderAccountMap"
 import { upsertReconstructedBrokerTrades } from "@/lib/integrations/tradovate/persistBrokerTrades"
 import {
   BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT,
@@ -341,19 +347,23 @@ export async function syncTradovateBrokerAccount(
       throw err
     }
 
-    const orderAccountById = new Map<string, string>()
-    for (const order of ordersRaw) {
-      if (order.id == null || order.accountId == null) continue
-      orderAccountById.set(String(order.id), String(order.accountId))
+    const orderAccountById = buildTradovateOrderAccountMap(ordersRaw)
+    const missingOrderIds = missingOrderIdsForTradovateFills(fillsRaw, orderAccountById)
+    if (missingOrderIds.length > 0) {
+      const extraOrders = await fetchTradovateOrdersByIds(
+        supabase,
+        userId,
+        connectionId,
+        missingOrderIds
+      )
+      mergeTradovateOrderAccountMap(orderAccountById, extraOrders)
     }
 
-    const accountFills = fillsRaw
-      .map(parseTradovateFillRow)
-      .filter((row): row is NonNullable<typeof row> => Boolean(row))
-      .filter((fill) => {
-        const accountId = orderAccountById.get(String(fill.orderId))
-        return accountId === targetAccountId
-      })
+    const accountFills = filterParsedTradovateFillsForAccount(
+      fillsRaw,
+      targetAccountId,
+      orderAccountById
+    )
 
     let newExecutions = 0
     let duplicateExecutions = 0

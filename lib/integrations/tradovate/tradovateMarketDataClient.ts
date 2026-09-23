@@ -71,6 +71,21 @@ export async function fetchTradovateOrderList(
   return body.filter((row) => row && typeof row === "object") as TradovateOrderRaw[]
 }
 
+export async function fetchTradovateOrdersByIds(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string,
+  orderIds: string[]
+): Promise<TradovateOrderRaw[]> {
+  return fetchItems<TradovateOrderRaw>(
+    supabase,
+    userId,
+    connectionId,
+    "order",
+    orderIds
+  )
+}
+
 export async function fetchTradovateContractsByIds(
   supabase: SupabaseClient,
   userId: string,
