@@ -161,7 +161,7 @@ export function mergeTradovateContractMetaMaps(
     const valuePerPoint = existing?.valuePerPoint ?? null
     const normalizedFromHints =
       normalizedFuturesRootFromContractMeta({
-        symbolRoot: mergedRoot ?? undefined,
+        symbolRoot: mergedRoot ?? "",
         contractName: mergedName,
         executionSymbolRoot: hintRoot,
         executionContractName: hintName,

@@ -220,7 +220,6 @@ export async function upsertReconstructedBrokerTrades(
       lifecycle,
       contract,
       contractIdKey,
-      feesByFillId: params.feesByFillId,
       financials,
       existingStoredPnL,
       existingTicker,

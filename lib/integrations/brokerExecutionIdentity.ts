@@ -50,13 +50,21 @@ export async function findCanonicalTradeIdForBrokerFillIds(
 export const BROKER_EXECUTION_RECONSTRUCTION_SELECT =
   "external_fill_id, external_contract_id, side, quantity, price, executed_at" as const
 
+/** Reconstruction + persisted contract hints (`symbol_root`, `contract_name`) on the ledger. */
+export const BROKER_EXECUTION_EXTENDED_RECONSTRUCTION_SELECT =
+  "external_fill_id, external_contract_id, side, quantity, price, executed_at, symbol_root, contract_name" as const
+
 /** Tradovate reconstruction + persisted contract hints on the execution ledger. */
 export const BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT =
-  "external_fill_id, external_contract_id, side, quantity, price, executed_at, symbol_root, contract_name" as const
+  BROKER_EXECUTION_EXTENDED_RECONSTRUCTION_SELECT
 
 /** Reconstruction columns plus Rithmic contract metadata from the execution ledger. */
 export const BROKER_EXECUTION_RITHMIC_RECONSTRUCTION_SELECT =
-  "external_fill_id, external_contract_id, side, quantity, price, executed_at, symbol_root, contract_name" as const
+  BROKER_EXECUTION_EXTENDED_RECONSTRUCTION_SELECT
+
+export type BrokerExecutionReconstructionSelect =
+  | typeof BROKER_EXECUTION_RECONSTRUCTION_SELECT
+  | typeof BROKER_EXECUTION_EXTENDED_RECONSTRUCTION_SELECT
 
 /** Projection of `broker_integration_executions` used by fill reconstruction. */
 export type BrokerExecutionReconstructionRow = {
@@ -175,10 +183,7 @@ export async function listBrokerExecutionsForExternalAccount(
 export async function listBrokerExecutionsForExternalAccount(
   supabase: SupabaseClient,
   params: ListBrokerExecutionsBaseParams & {
-    select:
-      | typeof BROKER_EXECUTION_RECONSTRUCTION_SELECT
-      | typeof BROKER_EXECUTION_RITHMIC_RECONSTRUCTION_SELECT
-      | typeof BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT
+    select: BrokerExecutionReconstructionSelect
   }
 ): Promise<
   | BrokerExecutionReconstructionRow[]
@@ -190,10 +195,7 @@ export async function listBrokerExecutionsForExternalAccount(
     params,
     params.select
   )
-  if (params.select === BROKER_EXECUTION_RITHMIC_RECONSTRUCTION_SELECT) {
-    return rows.filter(isBrokerExecutionRithmicReconstructionRow)
-  }
-  if (params.select === BROKER_EXECUTION_TRADOVATE_RECONSTRUCTION_SELECT) {
+  if (params.select === BROKER_EXECUTION_EXTENDED_RECONSTRUCTION_SELECT) {
     return rows.filter(isBrokerExecutionTradovateReconstructionRow)
   }
   return rows.filter(isBrokerExecutionReconstructionRow)

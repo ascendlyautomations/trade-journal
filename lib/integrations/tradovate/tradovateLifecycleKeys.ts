@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import type { TradovateImportPreviewTrade } from "./tradovateImportPreview.ts"
 
 /** Lifecycles already on `trades` for this mapping at sync start (race-safe preview baseline). */
 export async function loadTradovateLifecycleKeysAtSyncStart(
@@ -22,8 +23,8 @@ export async function loadTradovateLifecycleKeysAtSyncStart(
 }
 
 export function filterPreviewsNotInBaseline(
-  previews: { lifecycleKey: string }[],
+  previews: TradovateImportPreviewTrade[],
   existingAtStart: Set<string>
-): typeof previews {
+): TradovateImportPreviewTrade[] {
   return previews.filter((p) => !existingAtStart.has(p.lifecycleKey))
 }

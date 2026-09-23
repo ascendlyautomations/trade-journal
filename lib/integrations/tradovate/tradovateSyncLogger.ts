@@ -36,6 +36,10 @@ export type TradovateSyncLogContext = {
   newExecutions?: number
   tradesCreated?: number
   tradesUpdated?: number
+  tradesWithPnL?: number
+  tradesWithoutPnL?: number
+  tradesBuilt?: number
+  numericTickersPersisted?: number
   coalesced?: boolean
   reconnectCount?: number
   errorCode?: string
