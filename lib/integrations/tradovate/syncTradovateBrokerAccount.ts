@@ -53,6 +53,17 @@ import {
   type ReconstructionFill,
 } from "@/lib/integrations/tradovate/tradeReconstruction"
 import { logTradovateSync } from "@/lib/integrations/tradovate/tradovateSyncLogger"
+import {
+  isTradovateTracedFillId,
+  traceTradovateExecutionLedgerAfterPersist,
+  traceTradovateExecutionPersist,
+  traceTradovateFillListStage,
+  traceTradovateFinalTradeIds,
+  traceTradovateOrderAndFilterStage,
+  traceTradovateReconstructionLoad,
+  traceTradovateReconstructionResult,
+  TRACED_MGC_FILL_IDS,
+} from "@/lib/integrations/tradovate/tradovateFillTrace"
 import type {
   TradovateSyncFailureCategory,
   TradovateSyncFailureStage,
@@ -324,6 +335,13 @@ export async function syncTradovateBrokerAccount(
       })
       throw err
     }
+
+    traceTradovateFillListStage({
+      targetAccountId,
+      mappingId: brokerIntegrationAccountId,
+      fillsRaw,
+    })
+
     try {
       failureStage = "order_list"
       ordersRaw = await fetchTradovateOrderList(supabase, userId, connectionId)
@@ -349,21 +367,50 @@ export async function syncTradovateBrokerAccount(
 
     const orderAccountById = buildTradovateOrderAccountMap(ordersRaw)
     const missingOrderIds = missingOrderIdsForTradovateFills(fillsRaw, orderAccountById)
+    let hydratedOrders: Awaited<ReturnType<typeof fetchTradovateOrdersByIds>> = []
     if (missingOrderIds.length > 0) {
-      const extraOrders = await fetchTradovateOrdersByIds(
+      hydratedOrders = await fetchTradovateOrdersByIds(
         supabase,
         userId,
         connectionId,
         missingOrderIds
       )
-      mergeTradovateOrderAccountMap(orderAccountById, extraOrders)
+      mergeTradovateOrderAccountMap(orderAccountById, hydratedOrders)
     }
+
+    console.info(
+      [
+        "[TradovateFillTrace]",
+        "stage=order_hydration",
+        `missingOrderCount=${missingOrderIds.length}`,
+        `requestedOrderIds=${missingOrderIds.join(",") || "none"}`,
+        `returnedOrderIds=${hydratedOrders
+          .map((o) => (o.id != null ? String(o.id) : ""))
+          .filter(Boolean)
+          .join(",") || "none"}`,
+        `targetAccountId=${targetAccountId}`,
+      ].join(" ")
+    )
 
     const accountFills = filterParsedTradovateFillsForAccount(
       fillsRaw,
       targetAccountId,
       orderAccountById
     )
+
+    const accountFillIds = new Set(
+      accountFills.map((fill) => tradovateFillStableId(fill))
+    )
+
+    traceTradovateOrderAndFilterStage({
+      targetAccountId,
+      fillsRaw,
+      ordersRaw,
+      orderAccountById,
+      missingOrderIds,
+      hydratedOrders,
+      accountFillIds,
+    })
 
     let newExecutions = 0
     let duplicateExecutions = 0
@@ -420,7 +467,31 @@ export async function syncTradovateBrokerAccount(
             connectionId,
             brokerIntegrationAccountId,
           })
+          if (isTradovateTracedFillId(String(fillId))) {
+            traceTradovateExecutionPersist({
+              fillId: String(fillId),
+              targetAccountId,
+              outcome: {
+                executionInsertAttempted: true,
+                executionInsertSucceeded: false,
+                executionInsertError: `23505:${insertError.message}`,
+                executionAlreadyExists: true,
+              },
+            })
+          }
         } else {
+          if (isTradovateTracedFillId(String(fillId))) {
+            traceTradovateExecutionPersist({
+              fillId: String(fillId),
+              targetAccountId,
+              outcome: {
+                executionInsertAttempted: true,
+                executionInsertSucceeded: false,
+                executionInsertError: `${insertError.code ?? "unknown"}:${insertError.message}`,
+                executionAlreadyExists: false,
+              },
+            })
+          }
           logTradovateSync("sync_error", {
             userId,
             connectionId,
@@ -429,14 +500,47 @@ export async function syncTradovateBrokerAccount(
             failureCategory: "execution_persistence_failure",
             failureStage: "persist_executions",
             errorCode: insertError.code ?? "execution_persist_failed",
-            detail: "broker_integration_executions_insert",
+            detail: insertError.message.slice(0, 200),
           })
           throw new Error("execution_persist_failed")
         }
       } else {
         newExecutions += 1
+        if (isTradovateTracedFillId(String(fillId))) {
+          traceTradovateExecutionPersist({
+            fillId: String(fillId),
+            targetAccountId,
+            outcome: {
+              executionInsertAttempted: true,
+              executionInsertSucceeded: true,
+              executionInsertError: null,
+              executionAlreadyExists: false,
+            },
+          })
+        }
       }
     }
+
+    for (const tracedFillId of TRACED_MGC_FILL_IDS) {
+      if (accountFillIds.has(tracedFillId)) continue
+      traceTradovateExecutionPersist({
+        fillId: tracedFillId,
+        targetAccountId,
+        outcome: {
+          executionInsertAttempted: false,
+          executionInsertSucceeded: false,
+          executionInsertError: null,
+          executionAlreadyExists: false,
+        },
+      })
+    }
+
+    await traceTradovateExecutionLedgerAfterPersist({
+      supabase,
+      userId,
+      mappingId: brokerIntegrationAccountId,
+      targetAccountId,
+    })
 
     failureStage = "resolve_contracts"
     const contracts = await resolveTradovateContracts(
@@ -513,10 +617,22 @@ export async function syncTradovateBrokerAccount(
       price: Number(row.price),
     }))
 
+    traceTradovateReconstructionLoad({
+      targetAccountId,
+      ledgerExecutionCount: storedExecutions.length,
+      reconstructionExecutionCount: reconstructionFills.length,
+      reconstructionFillIds: new Set(reconstructionFills.map((f) => f.fillId)),
+    })
+
     const { completed, openByContract } = reconstructAllCompletedTrades(
       reconstructionFills,
       targetAccountId
     )
+
+    traceTradovateReconstructionResult({
+      targetAccountId,
+      completed,
+    })
 
     const feeFillIds = [...new Set(completed.flatMap((t) => t.fillIds))]
     failureStage = "fetch_fees"
@@ -610,6 +726,23 @@ export async function syncTradovateBrokerAccount(
         throw err
       }))
     }
+
+    await traceTradovateFinalTradeIds({
+      supabase,
+      userId,
+      targetAccountId,
+      completed,
+    })
+
+    console.info(
+      [
+        "[TradovateFillTrace]",
+        "stage=sync_summary",
+        `completedLifecycleCount=${completed.length}`,
+        `targetAccountId=${targetAccountId}`,
+        `mappingId=${brokerIntegrationAccountId}`,
+      ].join(" ")
+    )
 
     if (trigger === "manual" && mode === "import") {
       await clearManualImportPreviewHold(supabase, brokerIntegrationAccountId)

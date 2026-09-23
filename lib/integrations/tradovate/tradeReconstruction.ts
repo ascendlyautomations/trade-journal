@@ -1,3 +1,8 @@
+import {
+  isTradovateTracedFillId,
+  traceTradovateReconstructionFillStep,
+} from "./tradovateFillTrace.ts"
+
 export type ReconstructionFill = {
   fillId: string
   contractId: string
@@ -96,6 +101,7 @@ export function reconstructCompletedTradesForContract(
   let lifecycleIndex = 0
   let current: OpenLifecycle | null = null
   const completed: ReconstructedLifecycleTrade[] = []
+  let lastClosedLifecycleKeyForTrace: string | null = null
 
   function emitCompleted() {
     if (!current || current.exitQty <= 0) return
@@ -103,13 +109,17 @@ export function reconstructCompletedTradesForContract(
     const entryPrice = current.entryValue / current.entryQty
     const exitPrice = current.exitValue / current.exitQty
     const direction = current.direction
+    const lifecycleKey = buildBrokerLifecycleKey(
+      lifecycleProvider,
+      params.brokerAccountScopeId,
+      params.contractId,
+      lifecycleIndex
+    )
+    if (current.fillIds.some((id) => isTradovateTracedFillId(id))) {
+      lastClosedLifecycleKeyForTrace = lifecycleKey
+    }
     completed.push({
-      lifecycleKey: buildBrokerLifecycleKey(
-        lifecycleProvider,
-        params.brokerAccountScopeId,
-        params.contractId,
-        lifecycleIndex
-      ),
+      lifecycleKey,
       contractId: params.contractId,
       direction,
       contracts,
@@ -140,6 +150,9 @@ export function reconstructCompletedTradesForContract(
 
   for (const fill of sorted) {
     if (!Number.isFinite(fill.qty) || fill.qty <= 0) continue
+    const positionBeforeFill = position
+    const lifecycleIndexBeforeFill = lifecycleIndex
+    lastClosedLifecycleKeyForTrace = null
     let remaining = signedDelta(fill.action, fill.qty)
 
     while (remaining !== 0) {
@@ -184,6 +197,27 @@ export function reconstructCompletedTradesForContract(
         openLifecycle(remaining > 0 ? 1 : -1, qty, fill.price, fill)
         remaining = 0
       }
+    }
+
+    if (isTradovateTracedFillId(fill.fillId)) {
+      traceTradovateReconstructionFillStep({
+        fillId: fill.fillId,
+        contractId: fill.contractId,
+        fillSide: fill.action,
+        quantity: fill.qty,
+        positionBefore: positionBeforeFill,
+        positionAfter: position,
+        lifecycleOpened:
+          lifecycleIndex > lifecycleIndexBeforeFill
+            ? buildBrokerLifecycleKey(
+                lifecycleProvider,
+                params.brokerAccountScopeId,
+                params.contractId,
+                lifecycleIndex
+              )
+            : null,
+        lifecycleClosed: lastClosedLifecycleKeyForTrace,
+      })
     }
   }
 
