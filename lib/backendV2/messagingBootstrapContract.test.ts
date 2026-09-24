@@ -148,7 +148,7 @@ describe("Phase C hardening — V2 migration + rollback", () => {
 describe("Phase C — Messages client loading wiring", () => {
   it("inbox consolidates mark-read into bootstrap when V2 ON", () => {
     const src = fs.readFileSync(
-      path.join(__dirname, "../../app/(app)/messages/page.tsx"),
+      path.join(__dirname, "../../app/(app)/messages/MessagesShell.tsx"),
       "utf8"
     )
     assert.match(src, /markMessageNotificationsRead: markOnOpen/)

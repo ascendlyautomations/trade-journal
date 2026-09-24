@@ -87,10 +87,14 @@ struct TradeRoomsHomeView: View {
         .refreshable {
             await viewModel.refresh()
         }
+        .onAppear {
+            ActiveScreenBootstrapPriorityGate.tradeRooms.setScreenActive(true)
+        }
         .task {
             viewModel.loadIfNeeded()
         }
         .onDisappear {
+            ActiveScreenBootstrapPriorityGate.tradeRooms.setScreenActive(false)
             viewModel.releaseRealtime()
         }
         .onChange(of: viewModel.phase) { _, _ in

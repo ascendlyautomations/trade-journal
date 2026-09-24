@@ -10,8 +10,8 @@ nonisolated struct AnalyticsDashboardBootstrapV3: Codable, Sendable, Equatable {
         var payload_kind: String?
         var payout_total: PostgresFlexibleDouble?
         var accounts: [DashboardAccountWireV1]
-        /// All-accounts aggregate preset bundles (5 keys).
-        var presets: [String: AnalyticsDashboardPresetBundleV1]?
+        /// All-accounts aggregate presets (5 keys). Compact bootstrap is metrics-only; charts load separately.
+        var presets: [String: AnalyticsDashboardAggregatePresetV1]?
         /// Per-account metrics-only presets for instant account filter KPIs.
         var account_preset_metrics: [AccountPresetMetrics]?
         /// Legacy bloated shape — read only when `presets` is nil (pre payload-fix servers).
@@ -22,8 +22,14 @@ nonisolated struct AnalyticsDashboardBootstrapV3: Codable, Sendable, Equatable {
         }
 
         var aggregatePresets: [String: AnalyticsDashboardPresetBundleV1] {
-            if let presets, !presets.isEmpty { return presets }
+            if let presets, !presets.isEmpty {
+                return presets.mapValues { $0.presetBundle() }
+            }
             return scopes?.first(where: { $0.account_id == nil })?.presets ?? [:]
+        }
+
+        var isCompactPayload: Bool {
+            payload_kind == "dashboard_analytics_v3_compact"
         }
     }
 
@@ -49,6 +55,79 @@ nonisolated struct AnalyticsDashboardMetricsPresetV1: Codable, Sendable, Equatab
     var metrics: AnalyticsDashboardMetricsWireV1
 }
 
+/// Aggregate preset wire shape for ``rpc_v1_analytics_dashboard_bootstrap_v3``.
+/// Compact payloads include metrics only; legacy payloads may include chart blocks.
+nonisolated struct AnalyticsDashboardAggregatePresetV1: Codable, Sendable, Equatable {
+    var preset: String
+    var start: String
+    var end: String
+    var metrics: AnalyticsDashboardMetricsWireV1
+    var equity: AnalyticsDashboardEquityWireV1?
+    var distributions: AnalyticsDashboardDistributionsWireV1?
+    var insights: [AnalyticsDashboardInsightWireV1]?
+
+    func presetBundle() -> AnalyticsDashboardPresetBundleV1 {
+        AnalyticsDashboardPresetBundleV1(
+            preset: preset,
+            start: start,
+            end: end,
+            metrics: metrics,
+            equity: equity ?? Self.emptyEquity,
+            distributions: distributions ?? Self.emptyDistributions,
+            insights: insights ?? []
+        )
+    }
+
+    init(
+        preset: String,
+        start: String,
+        end: String,
+        metrics: AnalyticsDashboardMetricsWireV1,
+        equity: AnalyticsDashboardEquityWireV1? = nil,
+        distributions: AnalyticsDashboardDistributionsWireV1? = nil,
+        insights: [AnalyticsDashboardInsightWireV1]? = nil
+    ) {
+        self.preset = preset
+        self.start = start
+        self.end = end
+        self.metrics = metrics
+        self.equity = equity
+        self.distributions = distributions
+        self.insights = insights
+    }
+
+    init(full bundle: AnalyticsDashboardPresetBundleV1) {
+        preset = bundle.preset
+        start = bundle.start
+        end = bundle.end
+        metrics = bundle.metrics
+        equity = bundle.equity
+        distributions = bundle.distributions
+        insights = bundle.insights
+    }
+
+    private static let emptyEquity = AnalyticsDashboardEquityWireV1(
+        points: [],
+        max_drawdown: PostgresFlexibleDouble(0),
+        current_equity: PostgresFlexibleDouble(0)
+    )
+
+    private static let emptyDistributions = AnalyticsDashboardDistributionsWireV1(
+        sessions: [],
+        weekday_bars: [],
+        weekday_heatmap: [],
+        hour_bars: [],
+        hour_heatmap: [],
+        avg_hold_seconds: nil,
+        avg_winner_hold_seconds: nil,
+        avg_loser_hold_seconds: nil,
+        hold_histogram: [],
+        long_short: [],
+        long_trade_count: 0,
+        short_trade_count: 0
+    )
+}
+
 nonisolated struct AnalyticsDashboardChartsPresetV1: Codable, Sendable, Equatable {
     var preset: String
     var start: String
@@ -63,7 +142,8 @@ nonisolated struct AnalyticsDashboardAccountChartsV3: Codable, Sendable, Equatab
     var data: DataPayload
 
     nonisolated struct DataPayload: Codable, Sendable, Equatable {
-        var account_id: String
+        /// Null on all-accounts aggregate charts responses.
+        var account_id: String?
         var as_of_et: String
         var presets: [String: AnalyticsDashboardChartsPresetV1]
     }

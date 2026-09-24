@@ -43,7 +43,10 @@ actor AnalyticsRevisionRepairCoordinator {
             viewerGeneration &+= 1
         }
         self.viewerID = viewerID
-        requestRepair(.sessionBind, bypassFreshSuppression: true)
+        Task {
+            await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
+            requestRepair(.sessionBind, bypassFreshSuppression: true)
+        }
     }
 
     func reset() {

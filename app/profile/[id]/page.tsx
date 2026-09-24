@@ -3849,7 +3849,7 @@ function ProfilePageContent() {
             ])
           }}
         >
-        <div className="mx-auto max-w-5xl space-y-2 pt-3 pb-6 pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] sm:space-y-4 sm:px-6 sm:pt-4 lg:px-8">
+        <div className="mx-auto max-w-5xl space-y-2 pt-3 pb-6 pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] sm:space-y-4 sm:px-6 sm:pt-4 lg:px-8 xl:max-w-[1480px]">
           {bootstrapTransientError || (bootstrapRefreshing && headerPreviewOnly) ? (
             <div
               role="status"

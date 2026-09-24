@@ -10,13 +10,18 @@ nonisolated struct PostgRESTValidationDetail: Sendable, Equatable {
 
     /// Telemetry-safe single-line summary — no raw JSON bodies or secrets.
     var telemetrySummary: String {
-        var parts: [String] = ["validation"]
+        var parts: [String] = [failureKindLabel]
         if let httpStatus { parts.append("status=\(httpStatus)") }
         if let code, !code.isEmpty { parts.append("code=\(Self.safeField(code, max: 48))") }
         if let message, !message.isEmpty { parts.append("message=\(Self.safeField(message, max: 96))") }
         if let details, !details.isEmpty { parts.append("details=\(Self.safeField(details, max: 64))") }
         if let hint, !hint.isEmpty { parts.append("hint=\(Self.safeField(hint, max: 64))") }
         return parts.joined(separator: " ")
+    }
+
+    private var failureKindLabel: String {
+        guard let httpStatus else { return "rpcFailure" }
+        return httpStatus >= 500 ? "server" : "validation"
     }
 
     static func parse(httpStatus: Int?, body: String) -> PostgRESTValidationDetail {

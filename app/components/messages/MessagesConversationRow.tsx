@@ -20,6 +20,7 @@ export type MessagesConversationRowProps = {
   lastMessageAt?: string | null
   avatarUrl: string | null
   unreadCount: number
+  selected?: boolean
   isMenuOpen: boolean
   onOpen: (conversationId: string) => void
   onToggleMenu: (conversationId: string) => void
@@ -40,6 +41,7 @@ function MessagesConversationRow({
   lastMessageAt,
   avatarUrl,
   unreadCount,
+  selected = false,
   isMenuOpen,
   onOpen,
   onToggleMenu,
@@ -62,7 +64,9 @@ function MessagesConversationRow({
   return (
     <div
       onClick={() => onOpen(conversationId)}
-      className="relative bg-white/5 border border-white/10 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition"
+      className={`relative bg-white/5 border border-white/10 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition${
+        selected ? " xl:border-blue-400/40 xl:bg-white/10" : ""
+      }`}
     >
       <button
         type="button"

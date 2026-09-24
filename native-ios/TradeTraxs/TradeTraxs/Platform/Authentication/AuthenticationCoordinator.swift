@@ -295,7 +295,7 @@ final class AuthenticationCoordinator {
     // MARK: - Session cache lifecycle
 
     private func applyNavigation(for state: AuthenticationState, correlation: String? = nil) {
-        let bootstrapAllowed = state.isSessionReady
+        let bootstrapAllowed = state.allowsAuthenticatedExperience
         AuthFlowTracer.traceBootstrapAllowed(
             bootstrapAllowed,
             authPhase: state.authFlowPhase,
@@ -316,16 +316,23 @@ final class AuthenticationCoordinator {
             }
             Task { await bindAuthenticatedUser() }
 
-        case .sessionValidationFailed:
-            if navigation.store.sessionPhase == .authenticated {
-                navigation.coordinator.markUnauthenticated()
+        case .sessionValidationFailed(let session, _):
+            if navigation.store.sessionPhase != .authenticated {
+                let deferred = navigation.consumeDeferredAuthenticatedSnapshot()
+                navigation.coordinator.markAuthenticated(applyingDeferred: deferred)
             }
-            navigation.clearDeferredAuthenticatedSnapshot()
+            if boundUserID == nil {
+                boundUserID = session.userID
+            }
 
-        case .refreshing, .unknown:
-            if navigation.store.sessionPhase == .authenticated {
-                navigation.coordinator.markUnauthenticated()
+        case .refreshing:
+            if navigation.store.sessionPhase != .authenticated, boundUserID != nil {
+                let deferred = navigation.consumeDeferredAuthenticatedSnapshot()
+                navigation.coordinator.markAuthenticated(applyingDeferred: deferred)
             }
+
+        case .unknown:
+            break
 
         case .unauthenticated, .failure, .authenticating:
             if navigation.store.sessionPhase != .unauthenticated {

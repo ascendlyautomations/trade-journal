@@ -236,7 +236,7 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
             case .cancelled:
                 return .cancelled
             case .server(let code, let message):
-                if provider != .email, (502...504).contains(code) {
+                if (500...599).contains(code) {
                     return .unknown("serverUnavailable")
                 }
                 return mapProviderServerFailure(

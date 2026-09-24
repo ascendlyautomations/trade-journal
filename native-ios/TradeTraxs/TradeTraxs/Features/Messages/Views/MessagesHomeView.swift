@@ -110,8 +110,10 @@ struct MessagesHomeView: View {
 #if DEBUG
             SafeInboxLog.storeObserved(instance: inboxStore.debugInstance, source: "MessagesHomeView")
 #endif
+            ActiveScreenBootstrapPriorityGate.messages.setScreenActive(true)
             viewModel.setHomeScreenVisible(true)
             defer {
+                ActiveScreenBootstrapPriorityGate.messages.setScreenActive(false)
                 viewModel.setHomeScreenVisible(false)
                 viewModel.releaseRealtime()
             }

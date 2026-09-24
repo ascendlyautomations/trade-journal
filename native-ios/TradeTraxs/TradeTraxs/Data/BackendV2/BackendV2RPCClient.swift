@@ -116,8 +116,9 @@ nonisolated struct BackendV2RPCClient: Sendable {
                     correlation: correlation,
                     error: decodingError
                 )
+                let summary = BackendV2DecodingDiagnostics.telemetrySummary(from: decodingError)
                 errorCode = BackendV2RPCError.decode("").code
-                throw decodingError
+                throw BackendV2RPCError.decode(summary)
             } catch {
                 BackendV2RpcStageTracer.trace(name, stage: "decoder.failed", correlation: correlation)
                 errorCode = BackendV2RPCError.decode("").code
@@ -176,15 +177,35 @@ nonisolated struct BackendV2RPCClient: Sendable {
         correlation: String
     ) -> BackendV2RPCError {
         if let rpc = error as? BackendV2RPCError {
-            if case .requestValidation(let detail) = rpc {
+            switch rpc {
+            case .requestValidation(let detail):
                 BackendV2RpcStageTracer.trace(
                     rpcName,
                     stage: "transport.failed",
                     correlation: correlation,
                     detail: detail.telemetrySummary
                 )
+            case .decode(let summary):
+                BackendV2RpcStageTracer.trace(
+                    rpcName,
+                    stage: "decoder.failed",
+                    correlation: correlation,
+                    detail: summary
+                )
+            default:
+                break
             }
             return rpc
+        }
+        if let decoding = error as? DecodingError {
+            let summary = BackendV2DecodingDiagnostics.telemetrySummary(from: decoding)
+            BackendV2RpcStageTracer.trace(
+                rpcName,
+                stage: "decoder.failed",
+                correlation: correlation,
+                detail: summary
+            )
+            return .decode(summary)
         }
         if error is CancellationError {
             BackendV2RpcStageTracer.trace(rpcName, stage: "cancellation.received", correlation: correlation)
@@ -220,10 +241,14 @@ nonisolated struct BackendV2RPCClient: Sendable {
     }
 
     private static func validationDetail(from network: NetworkError) -> PostgRESTValidationDetail? {
-        if case .validation(let statusCode, let message) = network {
+        switch network {
+        case .validation(let statusCode, let message):
             return PostgRESTValidationDetail.parse(httpStatus: statusCode, body: message)
+        case .server(let statusCode, let message):
+            return PostgRESTValidationDetail.parse(httpStatus: statusCode, body: message ?? "")
+        default:
+            return nil
         }
-        return nil
     }
 
     private func durationMilliseconds(from start: ContinuousClock.Instant) -> Double {

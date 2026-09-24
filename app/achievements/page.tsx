@@ -126,8 +126,8 @@ export default function AchievementsPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6">
-        <div className="mx-auto max-w-6xl space-y-5">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6 xl:px-8 2xl:px-12">
+        <div className="mx-auto max-w-6xl space-y-5 xl:max-w-[1500px]">
           <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-blue-300">

@@ -149,9 +149,45 @@ function DashboardCharts({
       />
     ) : null
 
+  const desktopEquity =
+    showEquity && deferredSectionsReady ? (
+      <DashboardEquityCurve
+        variant="desktop"
+        isPro={isPro}
+        data={equityData}
+        profitFactor={isPro ? profitFactor : undefined}
+        currentStreak={isPro ? currentStreak : undefined}
+        avgDay={isPro ? avgDay : undefined}
+        consistency={isPro ? consistency : undefined}
+        totalTrades={totalTrades}
+      />
+    ) : showEquity ? (
+      <ChartSkeleton className="h-72" />
+    ) : null
+
+  const desktopSide = isPro ? (
+    <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-2">
+      {showSessions ? (
+        <>
+          <div className="hidden md:block">{recentTrades}</div>
+          <div className="hidden md:block">{sessionChartDesktop}</div>
+        </>
+      ) : (
+        <div className="hidden md:block lg:col-span-2">{recentTrades}</div>
+      )}
+    </div>
+  ) : null
+
   return (
-    <div className="flex flex-col gap-2 max-md:gap-2 md:contents">
-      <div className="grid gap-2 overflow-visible max-md:gap-2 md:gap-3 lg:grid-cols-3">
+    <div className="flex flex-col gap-2 max-md:gap-2 md:gap-3">
+      {desktopEquity ? (
+        <div className="hidden md:block">{desktopEquity}</div>
+      ) : null}
+      <div
+        className={`grid gap-2 overflow-visible max-md:gap-2 md:gap-3 ${
+          desktopSide ? "lg:grid-cols-3" : ""
+        }`}
+      >
         <DashboardStatsGrid
           isPro={isPro}
           totalTrades={totalTrades}
@@ -175,35 +211,11 @@ function DashboardCharts({
           maxDrawdownSlot={maxDrawdownSlot}
         />
 
-        <div className="hidden space-y-2 overflow-visible md:block md:space-y-3 lg:col-span-2">
-          {showEquity && deferredSectionsReady ? (
-            <DashboardEquityCurve
-              variant="desktop"
-              isPro={isPro}
-              data={equityData}
-              profitFactor={isPro ? profitFactor : undefined}
-              currentStreak={isPro ? currentStreak : undefined}
-              avgDay={isPro ? avgDay : undefined}
-              consistency={isPro ? consistency : undefined}
-              totalTrades={totalTrades}
-            />
-          ) : showEquity ? (
-            <ChartSkeleton className="h-72" />
-          ) : null}
-
-          {isPro ? (
-            <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-2">
-              {showSessions ? (
-                <>
-                  <div className="hidden md:block">{recentTrades}</div>
-                  <div className="hidden md:block">{sessionChartDesktop}</div>
-                </>
-              ) : (
-                <div className="hidden md:block lg:col-span-2">{recentTrades}</div>
-              )}
-            </div>
-          ) : null}
-        </div>
+        {desktopSide ? (
+          <div className="hidden space-y-2 overflow-visible md:block md:space-y-3 lg:col-span-2">
+            {desktopSide}
+          </div>
+        ) : null}
       </div>
 
       {isPro && mobileProTabs ? (

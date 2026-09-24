@@ -22,6 +22,7 @@ export type MessagesConversationListItem = {
 
 type MessagesConversationListProps = {
   conversations: MessagesConversationListItem[]
+  selectedConversationId?: string | null
   openConvoMenuId: string | null
   onOpen: MessagesConversationRowProps["onOpen"]
   onToggleMenu: MessagesConversationRowProps["onToggleMenu"]
@@ -32,6 +33,7 @@ type MessagesConversationListProps = {
 
 function MessagesConversationList({
   conversations,
+  selectedConversationId = null,
   openConvoMenuId,
   onOpen,
   onToggleMenu,
@@ -55,6 +57,7 @@ function MessagesConversationList({
           lastMessageAt={c.lastMessageAt}
           avatarUrl={c.avatar_url}
           unreadCount={c.unreadCount ?? 0}
+          selected={selectedConversationId === c.id}
           isMenuOpen={openConvoMenuId === c.id}
           onOpen={onOpen}
           onToggleMenu={onToggleMenu}

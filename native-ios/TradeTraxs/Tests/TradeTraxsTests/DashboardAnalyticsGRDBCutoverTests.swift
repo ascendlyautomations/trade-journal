@@ -13,7 +13,9 @@ struct DashboardAnalyticsGRDBCutoverTests {
     private func fullBootstrap(revision: Int64) throws -> AnalyticsDashboardBootstrapV3 {
         var bootstrap = try DashboardAnalyticsV3Tests().makeBootstrap()
         bootstrap.data.revision = PostgresFlexibleDouble(Double(revision))
-        bootstrap.data.presets = fullAggregatePresets(from: bootstrap)
+        bootstrap.data.presets = fullAggregatePresets(from: bootstrap).mapValues {
+            AnalyticsDashboardAggregatePresetV1(full: $0)
+        }
         return bootstrap
     }
 
@@ -24,6 +26,7 @@ struct DashboardAnalyticsGRDBCutoverTests {
         let viewer = ProfileID("dash-grdb-present")
         let bootstrap = try fullBootstrap(revision: 44)
         _ = try await store.ingestDashboardBootstrap(viewerID: viewer, bootstrap: bootstrap)
+        try await ingestAggregateCharts(from: bootstrap, viewer: viewer, store: store, revision: 44)
         let read = try await store.readDashboardSnapshotForPresentation(viewerID: viewer)
         #expect(read.canRenderLocally)
         #expect(read.effectiveRevision == 44)
@@ -37,6 +40,7 @@ struct DashboardAnalyticsGRDBCutoverTests {
         let viewer = ProfileID("dash-grdb-map")
         let bootstrap = try fullBootstrap(revision: 7)
         _ = try await store.ingestDashboardBootstrap(viewerID: viewer, bootstrap: bootstrap)
+        try await ingestAggregateCharts(from: bootstrap, viewer: viewer, store: store, revision: 7)
         let read = try await store.readDashboardSnapshotForPresentation(viewerID: viewer)
         guard let snapshot = read.snapshot else {
             Issue.record("expected snapshot")
@@ -82,6 +86,38 @@ struct DashboardAnalyticsGRDBCutoverTests {
         #expect(!BackendV2FeatureFlags.isEnabled(.dashboardAnalyticsGRDB))
         BackendV2FeatureFlags.resetFlagsForTests()
     }
+}
+
+private func ingestAggregateCharts(
+    from bootstrap: AnalyticsDashboardBootstrapV3,
+    viewer: ProfileID,
+    store: AnalyticsLocalStore,
+    revision: Int64
+) async throws {
+    var presets: [String: AnalyticsDashboardChartsPresetV1] = [:]
+    for (key, bundle) in bootstrap.data.aggregatePresets {
+        presets[key] = AnalyticsDashboardChartsPresetV1(
+            preset: bundle.preset,
+            start: bundle.start,
+            end: bundle.end,
+            equity: bundle.equity,
+            distributions: bundle.distributions,
+            insights: bundle.insights
+        )
+    }
+    let response = AnalyticsDashboardAccountChartsV3(
+        meta: bootstrap.meta,
+        data: .init(
+            account_id: nil,
+            as_of_et: bootstrap.data.as_of_et,
+            presets: presets
+        )
+    )
+    _ = try await store.ingestDashboardAggregateCharts(
+        viewerID: viewer,
+        response: response,
+        knownRevision: revision
+    )
 }
 
 private func fullAggregatePresets(

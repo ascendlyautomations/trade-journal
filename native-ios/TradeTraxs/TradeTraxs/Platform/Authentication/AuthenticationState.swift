@@ -24,6 +24,23 @@ nonisolated enum AuthenticationState: Sendable, Equatable {
         }
     }
 
+    /// Cached authenticated UI may remain visible (Keychain session retained).
+    var preservesAuthenticatedShell: Bool {
+        switch self {
+        case .authenticated, .locked, .sessionValidationFailed:
+            return true
+        case .refreshing:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Session bootstrap / repository reads allowed (includes degraded offline refresh).
+    var allowsAuthenticatedExperience: Bool {
+        isSessionReady || preservesAuthenticatedShell
+    }
+
     /// Legacy alias — prefer ``isSessionReady`` for shell gating.
     var isAuthenticated: Bool { isSessionReady }
 

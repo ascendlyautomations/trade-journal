@@ -41,6 +41,33 @@ enum AnalyticsDashboardShadowWriter {
         }
     }
 
+    static func ingestAggregateChartsIfNeeded(
+        viewerID: ProfileID,
+        response: AnalyticsDashboardAccountChartsV3,
+        revision: Int64
+    ) {
+        Task(priority: .utility) {
+            await ingestAggregateCharts(viewerID: viewerID, response: response, revision: revision)
+        }
+    }
+
+    static func ingestAggregateCharts(
+        viewerID: ProfileID,
+        response: AnalyticsDashboardAccountChartsV3,
+        revision: Int64
+    ) async {
+        let store = AnalyticsLocalStore.sharedStore()
+        do {
+            _ = try await store.ingestDashboardAggregateCharts(
+                viewerID: viewerID,
+                response: response,
+                knownRevision: revision
+            )
+        } catch {
+            AnalyticsGRDBProbe.logShadowIngestFailure("aggregateCharts \(error)")
+        }
+    }
+
     static func ingestAccountChartsIfNeeded(
         viewerID: ProfileID,
         response: AnalyticsDashboardAccountChartsV3,

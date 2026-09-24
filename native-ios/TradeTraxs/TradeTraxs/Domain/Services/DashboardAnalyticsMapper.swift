@@ -24,7 +24,9 @@ nonisolated enum DashboardAnalyticsMapper {
             guard let bundle = bootstrap.data.aggregatePresets[key] else {
                 return .accountMetricsMissing(accountID: "all", preset: key)
             }
-            return .aggregate(bundle)
+            let charts = accountCharts?[key]
+            let composed = composeAggregateBundle(base: bundle, charts: charts)
+            return .aggregate(composed)
         case .account(let id):
             guard let metricsPreset = DashboardAnalyticsAccountMetricsLookup.metricsRow(
                 accountID: id,
@@ -55,6 +57,22 @@ nonisolated enum DashboardAnalyticsMapper {
         case .accountMetricsMissing:
             return nil
         }
+    }
+
+    private static func composeAggregateBundle(
+        base: AnalyticsDashboardPresetBundleV1,
+        charts: AnalyticsDashboardChartsPresetV1?
+    ) -> AnalyticsDashboardPresetBundleV1 {
+        guard let charts else { return base }
+        return AnalyticsDashboardPresetBundleV1(
+            preset: base.preset,
+            start: base.start,
+            end: base.end,
+            metrics: base.metrics,
+            equity: charts.equity,
+            distributions: charts.distributions,
+            insights: charts.insights
+        )
     }
 
     /// Account KPIs always from ``metrics``; charts overlay when loaded (never aggregate KPI fallback).

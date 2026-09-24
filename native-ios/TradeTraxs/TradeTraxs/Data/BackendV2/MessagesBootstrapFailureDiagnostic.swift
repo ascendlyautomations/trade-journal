@@ -251,15 +251,16 @@ nonisolated struct MessagesBootstrapFailureDiagnostic: Sendable {
                 isTransient: false,
                 summary: "auth"
             )
-        case .server(let status, _):
+        case .server(let status, let message):
+            let detail = PostgRESTValidationDetail.parse(httpStatus: status, body: message ?? "")
             return MessagesBootstrapFailureDiagnostic(
                 errorKind: .http,
                 urlErrorCode: nil,
-                httpStatus: status,
+                httpStatus: detail.httpStatus ?? status,
                 taskCancelled: taskCancelled,
                 isTerminal: false,
                 isTransient: status >= 500,
-                summary: "http\(status)"
+                summary: detail.telemetrySummary
             )
         case .decoding:
             return MessagesBootstrapFailureDiagnostic(

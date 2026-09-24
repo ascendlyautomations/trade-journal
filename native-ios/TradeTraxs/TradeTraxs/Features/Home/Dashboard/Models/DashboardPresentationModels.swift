@@ -128,9 +128,12 @@ nonisolated enum DashboardDateRangeFallback {
     }
 }
 
-/// Equity hero only — widens from the dashboard-selected preset until chart data exists.
+/// Equity hero only — widens from the dashboard-selected preset until the curve can draw (≥2 trades).
 /// Does not mutate ``DashboardViewModel/dateRange``.
 nonisolated enum DashboardEquityChartRangeResolver {
+    /// ``ProfileEquityCurveView`` needs at least two equity points (two closed trades in range).
+    static let minimumTradeCountForEquityCurve = 2
+
     static let supportedWidenOrder: [DashboardDateRange] = [
         .sevenDays,
         .thirtyDays,
@@ -162,7 +165,7 @@ nonisolated enum DashboardEquityChartRangeResolver {
                 return range
             }
         }
-        return requested
+        return .all
     }
 
     static func effectiveRange(
@@ -178,11 +181,11 @@ nonisolated enum DashboardEquityChartRangeResolver {
                 dateRange: range,
                 now: now
             ).count
-            if tradeCount > 0 {
+            if tradeCount >= minimumTradeCountForEquityCurve {
                 return range
             }
         }
-        return requested
+        return .all
     }
 
     static func hasUsableEquityData(
@@ -191,6 +194,7 @@ nonisolated enum DashboardEquityChartRangeResolver {
         dateRange: DashboardDateRange,
         accountCharts: [String: AnalyticsDashboardChartsPresetV1]? = nil
     ) -> Bool {
+        _ = accountCharts
         guard let bundle = DashboardAnalyticsMapper.bundle(
             in: bootstrap,
             accountFilter: accountFilter,
@@ -199,10 +203,7 @@ nonisolated enum DashboardEquityChartRangeResolver {
         ) else {
             return false
         }
-        if bundle.metrics.trade_count > 0 {
-            return true
-        }
-        return !bundle.equity.points.isEmpty
+        return bundle.metrics.trade_count >= minimumTradeCountForEquityCurve
     }
 }
 

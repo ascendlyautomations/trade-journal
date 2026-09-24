@@ -280,7 +280,8 @@ final class AuthenticationManager {
             if error.isTransientRefreshFailure {
                 lastSessionValidationError = error
                 state = .sessionValidationFailed(session, error)
-                await SessionNetworkGate.shared.markUnauthenticated()
+                await SessionNetworkGate.shared.markReady()
+                scheduleTransientRefreshRetry()
                 return .transientFailure
             }
             await handleExpiredSession()
@@ -296,7 +297,8 @@ final class AuthenticationManager {
             if mapped.isTransientRefreshFailure {
                 lastSessionValidationError = mapped
                 state = .sessionValidationFailed(session, mapped)
-                await SessionNetworkGate.shared.markUnauthenticated()
+                await SessionNetworkGate.shared.markReady()
+                scheduleTransientRefreshRetry()
                 return .transientFailure
             }
             await handleExpiredSession()
@@ -667,6 +669,7 @@ final class AuthenticationManager {
 
     private func applyAuthenticated(_ session: AuthenticationSession, event: AuthenticationEvent) {
         lastSessionValidationError = nil
+        resetTransientRefreshRetryBackoff()
         state = .authenticated(session)
         emit(event)
         AuthFlowTracer.traceRootTransition(to: .authenticated, generation: restorationGeneration)
@@ -779,7 +782,6 @@ final class AuthenticationManager {
             AuthFlowTracer.traceRootTransition(to: .unauthenticated, generation: generation)
             await handleExpiredSession()
         } else if error.isTransientRefreshFailure {
-            await invalidateStaleRefreshAttempt(activeGeneration: generation)
             AuthRestoreDebug.refreshFailed(
                 classification: "transient",
                 durationMs: durationMs,
@@ -789,7 +791,8 @@ final class AuthenticationManager {
             AuthFlowTracer.traceRefreshCompleted(.transientFailure, generation: generation)
             lastSessionValidationError = error
             state = .sessionValidationFailed(session, error)
-            await SessionNetworkGate.shared.markUnauthenticated()
+            await SessionNetworkGate.shared.markReady()
+            scheduleTransientRefreshRetry()
             AuthFlowTracer.trace("session.validation.completed", phase: .restoring, generation: generation)
         } else {
             AuthRestoreDebug.refreshFailed(
@@ -853,8 +856,30 @@ final class AuthenticationManager {
             AuthFlowTracer.traceRefreshCompleted(.transientFailure, generation: generation)
             lastSessionValidationError = error
             state = .sessionValidationFailed(session, error)
-            await SessionNetworkGate.shared.markUnauthenticated()
+            await SessionNetworkGate.shared.markReady()
+            scheduleTransientRefreshRetry()
         }
+    }
+
+    private var transientRefreshRetryTask: Task<Void, Never>?
+    private var transientRefreshRetryAttempt = 0
+
+    private func scheduleTransientRefreshRetry() {
+        transientRefreshRetryTask?.cancel()
+        transientRefreshRetryAttempt = min(transientRefreshRetryAttempt + 1, 6)
+        let delaySeconds = min(pow(2.0, Double(transientRefreshRetryAttempt)), 60.0)
+        transientRefreshRetryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            guard case .sessionValidationFailed = self.state else { return }
+            await self.retrySessionValidation()
+        }
+    }
+
+    private func resetTransientRefreshRetryBackoff() {
+        transientRefreshRetryAttempt = 0
+        transientRefreshRetryTask?.cancel()
+        transientRefreshRetryTask = nil
     }
 
     private func handleExpiredSession() async {

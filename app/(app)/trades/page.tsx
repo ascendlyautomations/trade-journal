@@ -419,7 +419,7 @@ export default function TradesPage() {
       >
       <div
         data-tt-native-surface="trades"
-        className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10"
+        className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10 xl:px-8 2xl:px-12"
       >
         <PlatformTradesHeader
           accounts={accounts}
@@ -448,7 +448,7 @@ export default function TradesPage() {
           onAccountPickerOpen={requestCopyGroups}
         />
 
-        <div className="w-full px-1 md:px-6 md:max-w-[1600px] md:mx-auto">
+        <div className="w-full px-1 md:px-6 md:max-w-[1600px] md:mx-auto xl:max-w-[1900px] xl:px-0">
           <BrokerEnrichmentInboxBanner />
           <TradesPageMainContent
             loading={loading}

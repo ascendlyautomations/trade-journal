@@ -6,6 +6,7 @@ nonisolated enum AnalyticsLocalSchema {
     static let domainCalendar = "calendar"
     static let domainDashboardBootstrap = "dashboard_bootstrap"
     static let domainDashboardAccountCharts = "dashboard_account_charts"
+    static let domainDashboardAggregateCharts = "dashboard_aggregate_charts"
     static let domainProfileAnalytics = "profile_analytics"
 
     static let profileAnalyticsContractVersion = "v2"

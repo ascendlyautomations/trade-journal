@@ -136,6 +136,17 @@ actor URLSessionNetworkClient: NetworkClient {
                     metrics.statusCode = (response as? HTTPURLResponse)?.statusCode
                     metrics.errorDescription = String(describing: mapped)
                     metricsRecorder?.record(metrics)
+                    if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+                        let totalMs = (CFAbsoluteTimeGetCurrent() - transportStarted) * 1000
+                        SupabaseRPCFailureLog.logHTTPFailure(
+                            path: path,
+                            method: current.method.rawValue,
+                            statusCode: http.statusCode,
+                            body: data,
+                            requestID: metrics.requestID,
+                            elapsedMs: totalMs
+                        )
+                    }
 
                     if case .unauthorized = mapped,
                        current.endpoint.requiresAuthentication,

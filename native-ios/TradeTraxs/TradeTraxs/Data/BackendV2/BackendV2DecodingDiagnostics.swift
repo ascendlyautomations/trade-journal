@@ -56,6 +56,25 @@ nonisolated enum BackendV2DecodingDiagnostics {
         }
     }
 
+    static func telemetrySummary(from error: Error) -> String {
+        guard let snap = snapshot(from: error) else {
+            return "decode category=nonDecoding description=\(String(describing: error))"
+        }
+        var parts = [
+            "decode",
+            "category=\(snap.category)",
+            "path=\(snap.codingPath)",
+        ]
+        if let expected = snap.expectedType {
+            parts.append("expected=\(expected)")
+        }
+        if let key = snap.missingKey {
+            parts.append("key=\(key)")
+        }
+        parts.append("description=\(snap.debugDescription)")
+        return parts.joined(separator: " ")
+    }
+
     static func trace(rpcName: String, correlation: String, error: Error) {
         #if DEBUG
         guard let snap = snapshot(from: error) else { return }

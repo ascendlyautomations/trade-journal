@@ -162,42 +162,13 @@ nonisolated struct AnalyticsLocalStore: Sendable {
             }
         }
 
-        var aggregateCharts: [DashboardChartBundleRecord] = []
-        for (key, bundle) in bootstrap.data.aggregatePresets {
-            let charts = AnalyticsDashboardChartsPresetV1(
-                preset: bundle.preset,
-                start: bundle.start,
-                end: bundle.end,
-                equity: bundle.equity,
-                distributions: bundle.distributions,
-                insights: bundle.insights
-            )
-            aggregateCharts.append(
-                try DashboardChartBundleRecord.from(
-                    charts: charts,
-                    viewerID: viewer,
-                    accountScopeKey: AnalyticsScopeKeys.allAccountsQuery,
-                    revision: revision
-                )
-            )
-            _ = key
-        }
-
         let metricRecordsToWrite = metricRecords
-        let aggregateChartsToWrite = aggregateCharts
         let queue = try await database.databaseQueue()
         try await queue.write { db in
             try DashboardPresetMetricsRecord
                 .filter(Column("viewer_id") == viewer)
                 .deleteAll(db)
-            try DashboardChartBundleRecord
-                .filter(Column("viewer_id") == viewer)
-                .filter(Column("account_scope_key") == AnalyticsScopeKeys.allAccountsQuery)
-                .deleteAll(db)
             for record in metricRecordsToWrite {
-                try record.insert(db, onConflict: .replace)
-            }
-            for record in aggregateChartsToWrite {
                 try record.insert(db, onConflict: .replace)
             }
             let coverage = AnalyticsRangeCoverageRecord(
@@ -216,10 +187,61 @@ nonisolated struct AnalyticsLocalStore: Sendable {
         let elapsed = Int(Date().timeIntervalSince(started) * 1000)
         AnalyticsGRDBProbe.logDashboardBootstrapIngest(
             metricsRows: metricRecords.count,
-            chartBundles: aggregateCharts.count,
+            chartBundles: 0,
             elapsedMs: elapsed
         )
-        return (metricRecords.count, aggregateCharts.count, elapsed)
+        return (metricRecords.count, 0, elapsed)
+    }
+
+    func ingestDashboardAggregateCharts(
+        viewerID: ProfileID,
+        response: AnalyticsDashboardAccountChartsV3,
+        knownRevision: Int64
+    ) async throws -> (bundlesWritten: Int, elapsedMs: Int) {
+        let viewer = normalizedViewer(viewerID)
+        let scopeKey = AnalyticsScopeKeys.allAccountsQuery
+        let ingestRevision = knownRevision
+        let asOf = response.data.as_of_et
+        let started = Date()
+
+        var bundles: [DashboardChartBundleRecord] = []
+        for (_, charts) in response.data.presets {
+            bundles.append(
+                try DashboardChartBundleRecord.from(
+                    charts: charts,
+                    viewerID: viewer,
+                    accountScopeKey: scopeKey,
+                    revision: ingestRevision
+                )
+            )
+        }
+
+        let bundlesToWrite = bundles
+        let queue = try await database.databaseQueue()
+        try await queue.write { db in
+            try DashboardChartBundleRecord
+                .filter(Column("viewer_id") == viewer)
+                .filter(Column("account_scope_key") == scopeKey)
+                .deleteAll(db)
+            for record in bundlesToWrite {
+                try record.insert(db, onConflict: .replace)
+            }
+            let coverage = AnalyticsRangeCoverageRecord(
+                viewer_id: viewer,
+                domain: AnalyticsLocalSchema.domainDashboardAggregateCharts,
+                account_scope: scopeKey,
+                mode_scope: AnalyticsScopeKeys.allModesQuery,
+                start_date: asOf,
+                end_date: asOf,
+                server_revision: ingestRevision,
+                fetched_at: isoNow()
+            )
+            try coverage.insert(db, onConflict: .replace)
+            try upsertMonotonicSyncState(db: db, viewerID: viewer, revision: ingestRevision)
+        }
+        let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+        AnalyticsGRDBProbe.logAccountChartsIngest(bundles: bundles.count, elapsedMs: elapsed)
+        return (bundles.count, elapsed)
     }
 
     func ingestDashboardAccountCharts(

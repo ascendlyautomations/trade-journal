@@ -196,7 +196,7 @@ export default function BacktestPage() {
     return (
       <>
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-          <div className="mx-auto max-w-7xl px-6 pb-6 pt-6">
+          <div className="mx-auto max-w-7xl px-6 pb-6 pt-6 xl:max-w-[1560px]">
             <LockedFeature title="Backtest Lab" className="mx-auto max-w-lg" />
           </div>
         </div>
@@ -207,7 +207,7 @@ export default function BacktestPage() {
   return (
     <>
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-        <div className="mx-auto max-w-7xl px-6 pb-6 pt-3">
+        <div className="mx-auto max-w-7xl px-6 pb-6 pt-3 xl:max-w-[1560px]">
           <h1 className="text-xl md:text-2xl font-semibold text-blue-300 text-center mb-1 mt-0 md:mt-0">
   Backtest Lab
 </h1>

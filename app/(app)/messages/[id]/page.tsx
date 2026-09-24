@@ -2,7 +2,7 @@
 
 import DmStyleComposer, {
   type VoiceSendPayload,
-} from "../../components/DmStyleComposer"
+} from "@/app/components/DmStyleComposer"
 import VoiceMessageBubble from "@/app/components/messages/VoiceMessageBubble"
 import SharedTradeMessageCard from "@/app/components/SharedTradeMessageCard"
 import FeedPostScreenshot from "@/app/components/feed/FeedPostScreenshot"
@@ -23,7 +23,7 @@ import {
   shouldShowDmClusterTimestamp,
   shouldShowDmDateDivider,
 } from "@/lib/formatMessageTimestamp"
-import { supabase } from "../../../lib/supabaseClient"
+import { supabase } from "@/lib/supabaseClient"
 import { devLog } from "@/lib/devLog"
 import { compressImage, compressScreenshot } from "@/lib/compressImage"
 import { feedbackPresets } from "@/lib/feedbackPresets"
@@ -3419,12 +3419,12 @@ export default function DMPage() {
         className={`flex min-h-0 w-full flex-col overflow-hidden text-white ${
           nativeIos
             ? "h-dvh bg-[var(--tt-surface)]"
-            : "h-[var(--app-viewport-height)] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-4 pt-2"
+            : "h-[var(--app-viewport-height)] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-4 pt-2 xl:h-full xl:min-h-0"
         }`}
       >
 
         <div
-          className={`mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden ${
+          className={`mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden xl:max-w-none ${
             nativeIos ? "" : "rounded-xl border border-white/10 bg-black/30"
           }`}
         >
@@ -3819,7 +3819,7 @@ export default function DMPage() {
                         isMe ? "justify-end" : "justify-start"
                       }`}
                     >
-                      <div className="relative group inline-block max-w-[75%] overflow-visible">
+                      <div className="relative group inline-block max-w-[75%] overflow-visible xl:max-w-[32rem]">
                         <DmMessageActionMenu
                           message={message}
                           isMe={isMe}

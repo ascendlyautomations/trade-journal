@@ -90,6 +90,7 @@ import {
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { useDashboardModals } from "./useDashboardModals"
 import { useDashboardAnalytics } from "./useDashboardAnalytics"
+import "./dashboardCanvas.css"
 
 const DashboardPremiumPreviewSection = dynamic(
   () => import("../../components/dashboard/DashboardPremiumPreviewSection"),
@@ -848,10 +849,11 @@ export default function Dashboard() {
       <NativeIosPullToRefresh onRefresh={refreshDashboardData}>
       <div
         data-tt-native-surface="dashboard"
-        className="w-full px-2.5 pb-3 pt-4 text-white max-md:px-2 max-md:pb-2 max-md:pt-2 md:px-10 md:pb-10 md:pt-0"
+        data-tt-dashboard-canvas=""
+        className="w-full px-2.5 pb-3 pt-4 text-white max-md:px-2 max-md:pb-2 max-md:pt-2 md:px-10 md:pb-10 md:pt-0 xl:px-8 2xl:px-12"
       >
 
-        <div className="relative z-50 mx-auto w-full max-w-[1600px] px-0 md:px-6">
+        <div className="relative z-50 mx-auto w-full max-w-[1600px] px-0 md:px-6 xl:max-w-[1900px] xl:px-0">
           {!hasNoTrades && !statsStillLoading ? (
             <DashboardFilters
               isPro={isPro}
@@ -910,7 +912,7 @@ export default function Dashboard() {
           />
         </div>
 
-          <div className="relative z-0 mx-auto flex w-full max-w-[1600px] flex-col gap-2 overflow-visible px-0 max-md:gap-2 md:gap-3 md:px-6">
+          <div className="relative z-0 mx-auto flex w-full max-w-[1600px] flex-col gap-2 overflow-visible px-0 max-md:gap-2 md:gap-3 md:px-6 xl:max-w-[1900px] xl:px-0">
 
   {/* Large Founding Challenge card only until the first trade; afterwards it
       stays reachable from the navbar Getting Started entry. */}

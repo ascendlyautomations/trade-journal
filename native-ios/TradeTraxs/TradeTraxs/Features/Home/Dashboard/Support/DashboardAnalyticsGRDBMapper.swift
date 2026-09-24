@@ -26,7 +26,7 @@ nonisolated enum DashboardAnalyticsGRDBMapper {
                 payload_kind: diskEnvelope?.data.payload_kind,
                 payout_total: payout,
                 accounts: accountWires,
-                presets: snapshot.aggregatePresets,
+                presets: snapshot.aggregatePresets.mapValues { AnalyticsDashboardAggregatePresetV1(full: $0) },
                 account_preset_metrics: snapshot.accountPresetMetrics,
                 scopes: nil
             )

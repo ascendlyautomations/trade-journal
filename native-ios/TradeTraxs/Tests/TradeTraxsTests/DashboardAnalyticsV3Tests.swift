@@ -108,6 +108,139 @@ struct DashboardAnalyticsV3Tests {
         )
     }
 
+    @Test("Equity chart widen requires at least two trades in preset metrics")
+    func equityChartWidenRequiresTwoTrades() throws {
+        let widenTo90 = try makeBootstrapWithAggregateTradeCounts([
+            "d7": 1,
+            "d30": 1,
+            "d90": 4,
+            "ytd": 8,
+            "all": 8,
+        ])
+        #expect(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .sevenDays,
+                analyticsBootstrap: widenTo90,
+                accountFilter: .all
+            ) == .ninetyDays
+        )
+        #expect(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                analyticsBootstrap: widenTo90,
+                accountFilter: .all
+            ) == .ninetyDays
+        )
+
+        let widenToYTD = try makeBootstrapWithAggregateTradeCounts([
+            "d7": 0,
+            "d30": 1,
+            "d90": 1,
+            "ytd": 8,
+            "all": 8,
+        ])
+        #expect(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                analyticsBootstrap: widenToYTD,
+                accountFilter: .all
+            ) == .ytd
+        )
+
+        let onlyAll = try makeBootstrapWithAggregateTradeCounts([
+            "d7": 1,
+            "d30": 1,
+            "d90": 1,
+            "ytd": 1,
+            "all": 2,
+        ])
+        #expect(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .sevenDays,
+                analyticsBootstrap: onlyAll,
+                accountFilter: .all
+            ) == .all
+        )
+
+        let singleTrade = try makeBootstrapWithAggregateTradeCounts([
+            "d7": 1,
+            "d30": 1,
+            "d90": 1,
+            "ytd": 1,
+            "all": 1,
+        ])
+        #expect(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                analyticsBootstrap: singleTrade,
+                accountFilter: .all
+            ) == .all
+        )
+
+        let accountA = TradingAccountID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        var accountOneTrade = try makeBootstrap()
+        accountOneTrade = try makeBootstrapWithAccountTradeCounts(
+            accountOneTrade,
+            accountID: accountA,
+            counts: ["d30": 1, "d90": 1, "all": 1]
+        )
+        #expect(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                analyticsBootstrap: accountOneTrade,
+                accountFilter: .account(accountA)
+            ) == .all
+        )
+
+        accountOneTrade = try makeBootstrapWithAccountTradeCounts(
+            accountOneTrade,
+            accountID: accountA,
+            counts: ["d30": 1, "d90": 3, "all": 3]
+        )
+        #expect(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                analyticsBootstrap: accountOneTrade,
+                accountFilter: .account(accountA)
+            ) == .ninetyDays
+        )
+    }
+
+    @Test("All Accounts charts overlay supplies equity without changing KPI metrics")
+    func aggregateChartsOverlay() throws {
+        let bootstrap = try makeBootstrap()
+        let charts: [String: AnalyticsDashboardChartsPresetV1] = [
+            "d30": AnalyticsDashboardChartsPresetV1(
+                preset: "d30",
+                start: "2026-08-23",
+                end: "2026-09-21",
+                equity: AnalyticsDashboardEquityWireV1(
+                    points: [
+                        AnalyticsDashboardEquityPointWireV1(
+                            t: "2026-09-01T15:00:00.000Z",
+                            v: PostgresFlexibleDouble(3242.5),
+                            i: 0
+                        ),
+                    ],
+                    max_drawdown: PostgresFlexibleDouble(100),
+                    current_equity: PostgresFlexibleDouble(3242.5)
+                ),
+                distributions: Self.emptyDistributions,
+                insights: []
+            ),
+        ]
+        let bundle = DashboardAnalyticsMapper.bundle(
+            in: bootstrap,
+            accountFilter: .all,
+            dateRange: .thirtyDays,
+            accountCharts: charts
+        )
+        #expect(bundle?.metrics.trade_count == 11)
+        #expect(bundle?.metrics.net_pnl.value == 3063.5)
+        #expect(bundle?.equity.current_equity.value == 3242.5)
+        #expect(bundle?.equity.points.count == 1)
+    }
+
     @Test("Account charts overlay does not replace KPI metrics")
     func chartsDoNotOverwriteMetrics() throws {
         let bootstrap = try makeBootstrap()
@@ -230,6 +363,56 @@ struct DashboardAnalyticsV3Tests {
         #expect(DashboardAnalyticsDiskCache.schemaVersion == 2)
     }
 
+    @Test("Compact bootstrap presets decode without chart blocks")
+    func compactAggregatePresetsDecode() throws {
+        let json = """
+        {
+          "meta": {"contract_version":"v1","server_time":"2026-09-21T12:00:00.000Z","viewer_id":"u"},
+          "data": {
+            "revision": 1,
+            "as_of_et": "2026-09-21",
+            "payload_kind": "dashboard_analytics_v3_compact",
+            "payout_total": 0,
+            "accounts": [],
+            "presets": {
+              "d7": {
+                "preset": "d7",
+                "start": "2026-09-15",
+                "end": "2026-09-21",
+                "metrics": {
+                  "trade_count": 0,
+                  "win_count": 0,
+                  "loss_count": 0,
+                  "breakeven_count": 0,
+                  "net_pnl": 0,
+                  "gross_profit": 0,
+                  "gross_loss": 0,
+                  "long_count": 0,
+                  "long_pnl": 0,
+                  "short_count": 0,
+                  "short_pnl": 0,
+                  "sum_rr": 0,
+                  "rr_count": 0,
+                  "sum_hold_seconds": 0,
+                  "hold_count": 0,
+                  "largest_win": null,
+                  "largest_loss": null
+                }
+              }
+            },
+            "account_preset_metrics": []
+          }
+        }
+        """
+        let decoded = try JSONDecoder().decode(AnalyticsDashboardBootstrapV3.self, from: Data(json.utf8))
+        #expect(decoded.data.isCompactPayload)
+        let bundle = decoded.data.aggregatePresets["d7"]
+        #expect(bundle?.metrics.trade_count == 0)
+        #expect(bundle?.equity.points.isEmpty == true)
+        #expect(bundle?.distributions.sessions.isEmpty == true)
+        #expect(bundle?.insights.isEmpty == true)
+    }
+
     private static let emptyDistributions = AnalyticsDashboardDistributionsWireV1(
         sessions: [],
         weekday_bars: [],
@@ -339,5 +522,54 @@ struct DashboardAnalyticsV3Tests {
         }
         """
         return try JSONDecoder().decode(AnalyticsDashboardBootstrapV3.self, from: Data(json.utf8))
+    }
+
+    private func makeBootstrapWithAggregateTradeCounts(
+        _ counts: [String: Int]
+    ) throws -> AnalyticsDashboardBootstrapV3 {
+        var bootstrap = try makeBootstrap()
+        guard let template = bootstrap.data.aggregatePresets["d30"] else {
+            throw NSError(domain: "test", code: 1)
+        }
+        var presets: [String: AnalyticsDashboardAggregatePresetV1] = [:]
+        for key in AnalyticsLocalDashboardPolicy.aggregatePresetKeys {
+            var wire = AnalyticsDashboardAggregatePresetV1(full: template)
+            wire.preset = key
+            wire.metrics.trade_count = counts[key] ?? 0
+            presets[key] = wire
+        }
+        bootstrap.data.presets = presets
+        return bootstrap
+    }
+
+    private func makeBootstrapWithAccountTradeCounts(
+        _ bootstrap: AnalyticsDashboardBootstrapV3,
+        accountID: TradingAccountID,
+        counts: [String: Int]
+    ) throws -> AnalyticsDashboardBootstrapV3 {
+        var next = bootstrap
+        let accountKey = accountID.rawValue
+        var rows = next.data.account_preset_metrics ?? []
+        guard let index = rows.firstIndex(where: { $0.account_id == accountKey }) else {
+            throw NSError(domain: "test", code: 2)
+        }
+        var presets = rows[index].presets
+        let template = presets["d30"] ?? presets.values.first
+        for (key, count) in counts {
+            if var preset = presets[key] {
+                preset.metrics.trade_count = count
+                presets[key] = preset
+            } else if var base = template {
+                base.preset = key
+                base.metrics.trade_count = count
+                presets[key] = base
+            }
+        }
+        rows[index] = AnalyticsDashboardBootstrapV3.AccountPresetMetrics(
+            account_id: accountKey,
+            presets: presets
+        )
+        next.data.account_preset_metrics = rows
+        return next
     }
 }

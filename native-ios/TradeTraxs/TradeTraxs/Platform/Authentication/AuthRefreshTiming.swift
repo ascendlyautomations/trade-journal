@@ -60,6 +60,7 @@ nonisolated enum AuthRefreshTiming {
 
     private static func priorityLabel(_ priority: NetworkSchedulingPriority) -> String {
         switch priority {
+        case .criticalAuth: return "criticalAuth"
         case .visible: return "visible"
         case .background: return "background"
         }

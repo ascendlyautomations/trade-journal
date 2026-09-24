@@ -484,6 +484,67 @@ extension AnalyticsLocalStore {
         )
     }
 
+    func readDashboardAggregateCharts(
+        viewerID: ProfileID,
+        requiredRevision: Int64
+    ) async throws -> AnalyticsDashboardAccountChartsReadResult {
+        #if DEBUG
+        AnalyticsLocalStoreDebug.assertViewerScoped(viewerID)
+        #endif
+        let started = Date()
+        let viewer = normalizedViewer(viewerID)
+        let scopeKey = AnalyticsScopeKeys.allAccountsQuery
+        let queue = try await database.databaseQueue()
+
+        let (bundles, coverageRows) = try await queue.read { db -> (
+            [DashboardChartBundleRecord],
+            [AnalyticsRangeCoverageRecord]
+        ) in
+            let bundles = try DashboardChartBundleRecord
+                .filter(Column("viewer_id") == viewer)
+                .filter(Column("account_scope_key") == scopeKey)
+                .fetchAll(db)
+            let coverage = try AnalyticsRangeCoverageRecord
+                .filter(Column("viewer_id") == viewer)
+                .filter(Column("domain") == AnalyticsLocalSchema.domainDashboardAggregateCharts)
+                .filter(Column("account_scope") == scopeKey)
+                .fetchAll(db)
+            return (bundles, coverage)
+        }
+
+        let state = Self.accountChartsState(
+            requiredRevision: requiredRevision,
+            bundles: bundles,
+            coverageRows: coverageRows
+        )
+
+        var presets: [String: AnalyticsDashboardChartsPresetV1] = [:]
+        if state == .available {
+            for bundle in bundles where bundle.ingested_revision == requiredRevision {
+                if let decoded = try? bundle.decodedCharts() {
+                    presets[bundle.preset_key] = decoded
+                }
+            }
+        }
+
+        let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+        AnalyticsGRDBProbe.logReadPerf(
+            domain: "aggregateCharts",
+            rows: nil,
+            metricsRows: nil,
+            chartBundles: nil,
+            bundles: bundles.filter { $0.ingested_revision == requiredRevision }.count,
+            elapsedMs: elapsed
+        )
+
+        return AnalyticsDashboardAccountChartsReadResult(
+            state: state,
+            requiredRevision: requiredRevision,
+            accountScopeKey: scopeKey,
+            presets: state == .available ? presets : [:]
+        )
+    }
+
     // MARK: - Dashboard snapshot assembly
 
     static func dashboardSnapshotState(

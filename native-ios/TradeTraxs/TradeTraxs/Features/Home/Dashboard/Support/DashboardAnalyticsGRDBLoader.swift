@@ -68,4 +68,16 @@ nonisolated enum DashboardAnalyticsGRDBLoader {
             requiredRevision: revision
         )
     }
+
+    static func loadAggregateCharts(
+        viewerID: ProfileID,
+        revision: Int64,
+        store: AnalyticsLocalStore? = nil
+    ) async -> AnalyticsDashboardAccountChartsReadResult? {
+        let store = store ?? AnalyticsLocalStore.sharedStore()
+        return try? await store.readDashboardAggregateCharts(
+            viewerID: viewerID,
+            requiredRevision: revision
+        )
+    }
 }

@@ -39,6 +39,7 @@ nonisolated enum BackendV2Versioning {
         case analyticsCalendarDayTrades = "rpc_v1_analytics_calendar_day_trades"
         case analyticsDashboardBootstrapV3 = "rpc_v1_analytics_dashboard_bootstrap_v3"
         case analyticsDashboardAccountChartsV3 = "rpc_v1_analytics_dashboard_account_charts_v3"
+        case analyticsDashboardAggregateChartsV3 = "rpc_v1_analytics_dashboard_aggregate_charts_v3"
         case analyticsRevision = "rpc_v1_analytics_revision"
         case tradesList = "rpc_v1_trades_list_bootstrap"
         case tradesListV2 = "rpc_v1_trades_list_bootstrap_v2"

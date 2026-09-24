@@ -1,11 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import {
-  dashboardMobileNestedLabelClass,
-  dashboardStatLabelClass,
-  dashboardWidgetSectionTitleClass,
-} from "@/app/components/dashboard/dashboardInsightStyles"
+import { dashboardMobileNestedLabelClass } from "@/app/components/dashboard/dashboardInsightStyles"
 import {
   DASHBOARD_MOBILE_CARD_PAD_CLASS,
   DASHBOARD_MOBILE_STAT_PAD_CLASS,
@@ -93,9 +89,9 @@ function Stat({
   subtitle?: ReactNode
   className?: string
 }) {
-  let color = "text-white"
-  if (positive === true) color = "text-green-400"
-  if (positive === false) color = "text-red-400"
+  let color = "tt-dash-value"
+  if (positive === true) color = "tt-dash-value tt-dash-value-pos"
+  if (positive === false) color = "tt-dash-value tt-dash-value-neg"
   const displayValue =
     typeof value === "number"
       ? value.toLocaleString(undefined, {
@@ -106,16 +102,14 @@ function Stat({
 
   return (
     <div
-      className={`flex h-full min-h-[44px] w-full flex-col items-center justify-center gap-0 rounded-xl border border-white/10 bg-white/10 p-2.5 text-center backdrop-blur-md ${DASHBOARD_MOBILE_STAT_PAD_CLASS} md:min-h-[90px] md:gap-0 md:p-4 ${className}`.trim()}
+      className={`tt-dash-chip flex h-full min-h-[44px] w-full flex-col items-center justify-center gap-0 p-2.5 text-center ${DASHBOARD_MOBILE_STAT_PAD_CLASS} md:min-h-[72px] md:gap-0 md:p-3 ${className}`.trim()}
     >
-      <p
-        className={`${dashboardStatLabelClass} max-md:mb-0 max-md:whitespace-nowrap max-md:leading-none`}
-      >
+      <p className="tt-dash-label max-md:mb-0 max-md:whitespace-nowrap max-md:leading-none">
         {title}
       </p>
       <div className="w-full text-center max-md:leading-none">
         <span
-          className={`block text-center text-sm font-semibold leading-tight whitespace-nowrap tabular-nums md:text-lg lg:text-xl ${color}`}
+          className={`block text-center text-sm font-semibold leading-tight whitespace-nowrap md:text-base ${color}`}
         >
           {displayValue}
         </span>
@@ -125,6 +119,34 @@ function Stat({
           </p>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+function StripStat({
+  title,
+  value,
+  positive,
+}: {
+  title: string
+  value: string | number
+  positive?: boolean
+}) {
+  let color = "tt-dash-value"
+  if (positive === true) color = "tt-dash-value tt-dash-value-pos"
+  if (positive === false) color = "tt-dash-value tt-dash-value-neg"
+  const displayValue =
+    typeof value === "number"
+      ? value.toLocaleString(undefined, {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
+        })
+      : String(value ?? "")
+
+  return (
+    <div className="tt-dash-strip-cell">
+      <p className="tt-dash-label">{title}</p>
+      <p className={color}>{displayValue}</p>
     </div>
   )
 }
@@ -237,9 +259,9 @@ export function DashboardStreaksCard({
 
   return (
     <div
-      className={`rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`}
+      className={`tt-dash-chip p-2.5 md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`}
     >
-      <h3 className={dashboardWidgetSectionTitleClass}>Streaks</h3>
+      <h3 className="tt-dash-section-title mb-2">Streaks</h3>
 
       {streakData ? (
         <>
@@ -304,7 +326,7 @@ function MobileStreakRecentStat({
   subtitle?: ReactNode
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col items-center justify-center rounded-lg border border-white/10 bg-white/5 p-2.5 text-center text-xs">
+    <div className="tt-dash-chip flex h-full min-h-0 flex-col items-center justify-center p-2.5 text-center text-xs">
       <p className={`leading-tight ${dashboardMobileNestedLabelClass}`}>
         {title}
       </p>
@@ -332,11 +354,9 @@ export function DashboardTradingHoursCard({
 }) {
   return (
     <div
-      className={`rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md max-md:px-2 max-md:pb-1.5 max-md:pt-1.5 md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`}
+      className={`tt-dash-chip p-2.5 max-md:px-2 max-md:pb-1.5 max-md:pt-1.5 md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`}
     >
-      <h3 className={`${dashboardWidgetSectionTitleClass} max-md:mb-1`}>
-        Trading Hours
-      </h3>
+      <h3 className="tt-dash-section-title mb-2 max-md:mb-1">Trading Hours</h3>
 
       {hourData === null ? (
         <p className="text-[11px] text-gray-200 md:text-sm md:text-gray-400">
@@ -381,28 +401,30 @@ function FreeDashboardKpis({
   | "mobileEquitySlot"
 >) {
   return (
-    <div className="flex flex-col gap-2 md:block md:space-y-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:gap-3 lg:grid-cols-1 xl:grid-cols-2">
-        <Stat
+    <div className="flex flex-col gap-2 md:space-y-3">
+      <div className="tt-dash-strip flex">
+        <StripStat
           title="Net P/L"
           value={formatCurrency(totalPnL)}
           positive={totalPnL >= 0}
         />
-        <Stat title="Win Rate" value={`${winRate.toFixed(1)}%`} />
-        <Stat
-          title="Best Win Streak"
-          value={bestWinStreak}
-          subtitle={bestWinStreakSubtitle(bestWinStreak)}
-        />
-        <Stat title="Total Trades" value={formatNumber(totalTrades)} />
-        <Stat title="Avg RR" value={formatRR(avgRR)} />
-        <Stat
+        <StripStat title="Win Rate" value={`${winRate.toFixed(1)}%`} />
+        <StripStat title="Trades" value={formatNumber(totalTrades)} />
+        <StripStat title="Avg RR" value={formatRR(avgRR)} />
+        <StripStat
           title="Profit Factor"
           value={formatDecimal(profitFactor)}
-          positive={profitFactor >= 1 ? true : profitFactor > 0 ? false : undefined}
+          positive={
+            profitFactor >= 1 ? true : profitFactor > 0 ? false : undefined
+          }
         />
       </div>
-      {showEquity ? mobileEquitySlot : null}
+      <Stat
+        title="Best Win Streak"
+        value={bestWinStreak}
+        subtitle={bestWinStreakSubtitle(bestWinStreak)}
+      />
+      {showEquity ? <div className="md:hidden">{mobileEquitySlot}</div> : null}
     </div>
   )
 }
@@ -467,20 +489,34 @@ export default function DashboardStatsGrid({
         {showEquity ? mobileEquitySlot : null}
       </div>
 
-      {/* Desktop: original 2-col metrics grid (unchanged). */}
+      <div className="tt-dash-strip hidden md:flex">
+        <StripStat
+          title="P&L"
+          value={formatCurrency(totalPnL)}
+          positive={totalPnL >= 0}
+        />
+        <StripStat title="Win %" value={`${winRate.toFixed(1)}%`} />
+        <StripStat title="Trades" value={formatNumber(totalTrades)} />
+        <StripStat title="Avg RR" value={formatRR(avgRR)} />
+        <StripStat
+          title="Profit Factor"
+          value={formatDecimal(profitFactor)}
+          positive={
+            profitFactor >= 1 ? true : profitFactor > 0 ? false : undefined
+          }
+        />
+      </div>
+      <div className="hidden md:block">
+        <p className="tt-dash-section-title">Performance</p>
+        <p className="tt-dash-section-subtitle mb-2">
+          Outcome quality for this period
+        </p>
+      </div>
       <div className="hidden md:grid md:grid-cols-2 md:gap-3">
-        <Stat title="Trades" value={formatNumber(totalTrades)} />
-        <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
         <Stat
           title="Best Win Streak"
           value={bestWinStreak}
           subtitle={bestWinStreakSubtitle(bestWinStreak)}
-        />
-        <Stat title="Avg RR" value={formatRR(avgRR)} />
-        <Stat
-          title="P&L"
-          value={formatCurrency(totalPnL)}
-          positive={totalPnL >= 0}
         />
         <ExpectancyStat expectancyData={expectancyData} />
         <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />

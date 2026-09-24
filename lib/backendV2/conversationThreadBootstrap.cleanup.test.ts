@@ -339,7 +339,7 @@ describe("Phase G cleanup — apply bootstrap side effects", () => {
 describe("Phase G cleanup — inbox openConversation gating", () => {
   it("messages page skips legacy mark-read when messageThreads enabled", () => {
     const src = fs.readFileSync(
-      path.join(process.cwd(), "app/(app)/messages/page.tsx"),
+      path.join(process.cwd(), "app/(app)/messages/MessagesShell.tsx"),
       "utf8"
     )
     assert.match(src, /isBackendV2Enabled\("messageThreads"\)/)
@@ -351,7 +351,7 @@ describe("Phase G cleanup — inbox openConversation gating", () => {
 
   it("thread page skips legacy notification effect when messageThreads enabled", () => {
     const src = fs.readFileSync(
-      path.join(process.cwd(), "app/messages/[id]/page.tsx"),
+      path.join(process.cwd(), "app/(app)/messages/[id]/page.tsx"),
       "utf8"
     )
     assert.match(

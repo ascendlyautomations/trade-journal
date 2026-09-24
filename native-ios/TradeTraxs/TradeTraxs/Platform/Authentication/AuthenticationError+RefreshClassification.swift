@@ -36,7 +36,10 @@ extension AuthenticationError {
                 switch network {
                 case .connectivity, .timeout:
                     return .unknown("networkUnavailable")
-                case .server(let code, _) where (500...599).contains(code):
+                case .server(let code, let message) where (500...599).contains(code):
+                    if Self.isInvalidRefreshTokenTransportMessage(message) {
+                        return .refreshFailed
+                    }
                     return .unknown("serverUnavailable")
                 case .cancelled:
                     return .cancelled
@@ -59,5 +62,14 @@ extension AuthenticationError {
             return .cancelled
         }
         return .unknown(error.localizedDescription)
+    }
+
+    private static func isInvalidRefreshTokenTransportMessage(_ message: String?) -> Bool {
+        let body = message?.lowercased() ?? ""
+        guard !body.isEmpty else { return false }
+        if body.contains("invalid refresh token") { return true }
+        if body.contains("refresh_token_not_found") { return true }
+        if body.contains("refresh token not found") { return true }
+        return false
     }
 }

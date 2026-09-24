@@ -3801,11 +3801,11 @@ function CommunityContent() {
       <div
         data-tt-native-surface="community"
         data-tt-trade-rooms
-        className="flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white"
+        className="flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white xl:px-8 2xl:px-12"
       >
         <div
           data-tt-trade-rooms-shell
-          className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:flex-row md:overflow-hidden"
+          className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:flex-row md:overflow-hidden xl:max-w-[1500px]"
         >
           <aside
             data-tt-trade-rooms-aside

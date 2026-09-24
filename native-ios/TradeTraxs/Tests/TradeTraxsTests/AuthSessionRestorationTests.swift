@@ -188,7 +188,7 @@ final class AuthSessionRestorationTests: XCTestCase {
 
     // MARK: - Transient failures
 
-    func testTransientNetworkFailureDoesNotEnterAuthenticatedShell() async throws {
+    func testTransientNetworkFailurePreservesShellAndSession() async throws {
         var backend = InMemoryAuthenticationBackend()
         backend.refreshError = .unknown("networkUnavailable")
         let (auth, navigation, _) = makeAuth(backend: backend)
@@ -199,7 +199,9 @@ final class AuthSessionRestorationTests: XCTestCase {
             XCTFail("Expected sessionValidationFailed, got \(auth.manager.state)")
         }
         XCTAssertFalse(auth.manager.state.isSessionReady)
-        XCTAssertEqual(navigation.store.sessionPhase, .unauthenticated)
+        XCTAssertTrue(auth.manager.state.preservesAuthenticatedShell)
+        XCTAssertEqual(navigation.store.sessionPhase, .authenticated)
+        XCTAssertNotNil(auth.sessionManager.currentSession)
     }
 
     func testLogoutPublishesUnauthenticatedBeforeSlowRemoteSignOut() async throws {
@@ -232,7 +234,7 @@ final class AuthSessionRestorationTests: XCTestCase {
                 XCTFail("Expected sessionValidationFailed, got \(auth.manager.state)")
             }
             XCTAssertNotNil(auth.sessionManager.currentSession)
-            XCTAssertEqual(navigation.store.sessionPhase, .unauthenticated)
+            XCTAssertEqual(navigation.store.sessionPhase, .authenticated)
         }
     }
 

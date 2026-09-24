@@ -3,6 +3,8 @@ import OSLog
 
 /// Visible vs background scheduling for Supabase HTTP work.
 nonisolated enum NetworkSchedulingPriority: Sendable {
+    /// GoTrue token refresh / session validation — never waits on background or media budgets.
+    case criticalAuth
     case visible
     case background
 }
@@ -13,9 +15,15 @@ actor NetworkConcurrencyCoordinator {
 
     /// Conservative startup budget — background callers wait beyond this count.
     static let maxBackgroundConcurrent = 4
+    /// Storage / render image fetches — separate from JSON RPC budget.
+    static let maxBackgroundMediaConcurrent = 3
+    /// Cap concurrent visible REST/RPC so avatar storms cannot starve bootstraps.
+    static let maxVisibleConcurrent = 8
 
+    private var criticalAuthInFlight = 0
     private var visibleInFlight = 0
     private var backgroundInFlight = 0
+    private var backgroundMediaInFlight = 0
     private struct BackgroundWaiter {
         let id: UUID
         let continuation: CheckedContinuation<Void, Never>
@@ -34,9 +42,12 @@ actor NetworkConcurrencyCoordinator {
         sessionEndGeneration = authGeneration
         let waitersReleased = backgroundWaiters.count
         drainBackgroundWaiters()
-        let inFlightCleared = visibleInFlight + backgroundInFlight
+        let inFlightCleared =
+            criticalAuthInFlight + visibleInFlight + backgroundInFlight + backgroundMediaInFlight
+        criticalAuthInFlight = 0
         visibleInFlight = 0
         backgroundInFlight = 0
+        backgroundMediaInFlight = 0
 #if DEBUG
         AuthLifecycleTrace.log(
             operation: "network.authenticatedSessionBlocked",
@@ -69,7 +80,9 @@ actor NetworkConcurrencyCoordinator {
         sessionEndGeneration
     }
 
-    var totalInFlight: Int { visibleInFlight + backgroundInFlight }
+    var totalInFlight: Int {
+        criticalAuthInFlight + visibleInFlight + backgroundInFlight + backgroundMediaInFlight
+    }
     var waitingBackgroundCount: Int { backgroundWaiters.count }
 
     /// Acquires a slot, runs `operation`, then releases — covers full network lifetime per attempt.
@@ -92,7 +105,16 @@ actor NetworkConcurrencyCoordinator {
     }
 
     func snapshot() -> (total: Int, visible: Int, background: Int, waiting: Int) {
-        (totalInFlight, visibleInFlight, backgroundInFlight, backgroundWaiters.count)
+        (
+            totalInFlight,
+            criticalAuthInFlight + visibleInFlight,
+            backgroundInFlight + backgroundMediaInFlight,
+            backgroundWaiters.count
+        )
+    }
+
+    private func isStorageMediaPath(_ path: String) -> Bool {
+        path.hasPrefix("/storage/v1/object/") || path.contains("/storage/v1/render/")
     }
 
     private func acquire(
@@ -121,20 +143,55 @@ actor NetworkConcurrencyCoordinator {
             throw CancellationError()
         }
         switch priority {
+        case .criticalAuth:
+            criticalAuthInFlight += 1
+            #if DEBUG
+            NetworkConcurrencyProbe.logAcquire(
+                path: path,
+                host: host,
+                priority: priority,
+                visibleInFlight: criticalAuthInFlight + visibleInFlight,
+                backgroundInFlight: backgroundInFlight + backgroundMediaInFlight,
+                waitingBackground: backgroundWaiters.count
+            )
+            #endif
+
         case .visible:
+            while visibleInFlight >= Self.maxVisibleConcurrent {
+                try await Task.sleep(nanoseconds: 25_000_000)
+                if Task.isCancelled { throw CancellationError() }
+            }
             visibleInFlight += 1
             #if DEBUG
             NetworkConcurrencyProbe.logAcquire(
                 path: path,
                 host: host,
                 priority: priority,
-                visibleInFlight: visibleInFlight,
-                backgroundInFlight: backgroundInFlight,
+                visibleInFlight: criticalAuthInFlight + visibleInFlight,
+                backgroundInFlight: backgroundInFlight + backgroundMediaInFlight,
                 waitingBackground: backgroundWaiters.count
             )
             #endif
 
         case .background:
+            if isStorageMediaPath(path) {
+                while backgroundMediaInFlight >= Self.maxBackgroundMediaConcurrent {
+                    try await Task.sleep(nanoseconds: 25_000_000)
+                    if Task.isCancelled { throw CancellationError() }
+                }
+                backgroundMediaInFlight += 1
+                #if DEBUG
+                NetworkConcurrencyProbe.logAcquire(
+                    path: path,
+                    host: host,
+                    priority: priority,
+                    visibleInFlight: criticalAuthInFlight + visibleInFlight,
+                    backgroundInFlight: backgroundInFlight + backgroundMediaInFlight,
+                    waitingBackground: backgroundWaiters.count
+                )
+                #endif
+                return
+            }
             while backgroundInFlight >= Self.maxBackgroundConcurrent {
                 #if DEBUG
                 NetworkConcurrencyProbe.logWait(
@@ -185,12 +242,18 @@ actor NetworkConcurrencyCoordinator {
 
     private func release(priority: NetworkSchedulingPriority, path: String, host: String) {
         switch priority {
+        case .criticalAuth:
+            criticalAuthInFlight = max(0, criticalAuthInFlight - 1)
         case .visible:
             visibleInFlight = max(0, visibleInFlight - 1)
         case .background:
-            backgroundInFlight = max(0, backgroundInFlight - 1)
-            if !backgroundWaiters.isEmpty {
-                backgroundWaiters.removeFirst().continuation.resume()
+            if isStorageMediaPath(path) {
+                backgroundMediaInFlight = max(0, backgroundMediaInFlight - 1)
+            } else {
+                backgroundInFlight = max(0, backgroundInFlight - 1)
+                if !backgroundWaiters.isEmpty {
+                    backgroundWaiters.removeFirst().continuation.resume()
+                }
             }
         }
         #if DEBUG
@@ -228,6 +291,9 @@ actor NetworkConcurrencyCoordinator {
     ) -> NetworkSchedulingPriority {
         if path.contains("/rest/v1/rpc/") {
             let rpc = path.split(separator: "/").last.map(String.init) ?? path
+            if ActiveScreenBootstrapPriorityGate.prefersVisibleBootstrap(rpcName: rpc) {
+                return .visible
+            }
             if rpc == BackendV2Versioning.RPCName.activity.rawValue,
                ActivityFeedBootstrapPriorityGate.prefersVisibleBootstrap
             {
@@ -265,8 +331,11 @@ actor NetworkConcurrencyCoordinator {
             return .background
         }
 
+        if path.hasPrefix("/auth/v1/token"), method == .post {
+            return .criticalAuth
+        }
         if path.hasPrefix("/auth/v1/"), method == .post {
-            return .visible
+            return .criticalAuth
         }
 
         if method == .get,
@@ -314,6 +383,11 @@ actor NetworkConcurrencyCoordinator {
         BackendV2Versioning.RPCName.calendar.rawValue,
         BackendV2Versioning.RPCName.analyticsDashboardBootstrapV3.rawValue,
         BackendV2Versioning.RPCName.analyticsDashboardAccountChartsV3.rawValue,
+        BackendV2Versioning.RPCName.analyticsDashboardAggregateChartsV3.rawValue,
+        BackendV2Versioning.RPCName.messaging.rawValue,
+        BackendV2Versioning.RPCName.tradeRoomsHomeBootstrap.rawValue,
+        BackendV2Versioning.RPCName.analyticsDailyRangeBootstrap.rawValue,
+        BackendV2Versioning.RPCName.tradesListV2.rawValue,
     ]
 
     /// GET by primary key / id batch — trade detail, feed hydration, achievement fetch, etc.
@@ -340,6 +414,15 @@ actor NetworkConcurrencyCoordinator {
             guard item.name == "id", let value = item.value else { return false }
             return value.hasPrefix("eq.") || value.hasPrefix("in.")
         }
+    }
+
+}
+
+nonisolated private func networkSchedulingPriorityLabel(_ priority: NetworkSchedulingPriority) -> String {
+    switch priority {
+    case .criticalAuth: return "criticalAuth"
+    case .visible: return "visible"
+    case .background: return "background"
     }
 }
 
@@ -424,7 +507,7 @@ nonisolated enum NetworkConcurrencyProbe {
             inFlightAtStart=\(inFlightAtStart, privacy: .public) \
             host=\(host, privacy: .public) \
             request=\(request, privacy: .public) \
-            scheduling=\(priority == .visible ? "visible" : "background", privacy: .public)
+            scheduling=\(networkSchedulingPriorityLabel(priority), privacy: .public)
             """
         )
     }
@@ -449,11 +532,13 @@ nonisolated enum NetworkConcurrencyProbe {
             waitingBackground=\(waitingBackground, privacy: .public) \
             host=\(host, privacy: .public) \
             request=\(request, privacy: .public) \
-            scheduling=\(priority == .visible ? "visible" : "background", privacy: .public)
+            scheduling=\(networkSchedulingPriorityLabel(priority), privacy: .public)
             """
         )
     }
+
 }
+
 #else
 nonisolated enum NetworkConcurrencyProbe {
     static func logAcquire(

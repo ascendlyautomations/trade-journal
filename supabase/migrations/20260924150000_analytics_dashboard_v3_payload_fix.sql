@@ -90,7 +90,7 @@ begin
   foreach v_preset in array v_presets loop
     v_all_presets := v_all_presets || jsonb_build_object(
       v_preset,
-      public.analytics_dashboard_preset_bundle(v_uid, v_preset, v_as_of, null)
+      public.analytics_dashboard_metrics_preset_bundle(v_uid, v_preset, v_as_of, null)
     );
   end loop;
 

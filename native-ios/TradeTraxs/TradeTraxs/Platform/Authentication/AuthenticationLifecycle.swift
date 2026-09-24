@@ -53,7 +53,9 @@ final class AuthenticationLifecycle {
     func applicationWillEnterForeground() async {
         guard initialRestoreCompleted else { return }
         guard authenticationManager.state.session != nil else { return }
-        if authenticationManager.sessionNeedsRefresh() {
+        if case .sessionValidationFailed = authenticationManager.state {
+            await authenticationCoordinator.retrySessionValidation()
+        } else if authenticationManager.sessionNeedsRefresh() {
             await authenticationCoordinator.bootstrapSession()
         }
         await refreshBillingEntitlementsOnForeground?()

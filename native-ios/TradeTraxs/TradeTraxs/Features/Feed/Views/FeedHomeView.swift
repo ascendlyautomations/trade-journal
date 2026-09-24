@@ -146,10 +146,13 @@ struct FeedHomeView: View {
         })
         .task(id: tabIsActive) {
             guard tabIsActive else {
+                ActiveScreenBootstrapPriorityGate.feed.setScreenActive(false)
                 SocialRealtimeRepairSurfaces.shared.feedViewModel = nil
                 viewModel.unsubscribeRealtime()
                 return
             }
+            ActiveScreenBootstrapPriorityGate.feed.setScreenActive(true)
+            defer { ActiveScreenBootstrapPriorityGate.feed.setScreenActive(false) }
             MainThreadWorkProbe.measure("feed.tab.activate", surface: "feed") {
                 SocialRealtimeRepairSurfaces.shared.feedViewModel = viewModel
                 AuthenticatedLaunchPhasing.noteActiveTab(.feed)

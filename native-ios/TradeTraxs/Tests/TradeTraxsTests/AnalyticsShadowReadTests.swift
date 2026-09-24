@@ -247,9 +247,12 @@ struct AnalyticsShadowReadTests {
         defer { try? FileManager.default.removeItem(at: url) }
         let viewer = ProfileID("dash-read-full")
         var bootstrap = try DashboardAnalyticsV3Tests().makeBootstrap()
-        bootstrap.data.presets = fullAggregatePresets(from: bootstrap)
+        bootstrap.data.presets = fullAggregatePresets(from: bootstrap).mapValues {
+            AnalyticsDashboardAggregatePresetV1(full: $0)
+        }
         _ = try await store.ingestDashboardBootstrap(viewerID: viewer, bootstrap: bootstrap)
         let revision = bootstrap.data.revisionInt
+        try await ingestAggregateChartsForTest(store: store, viewer: viewer, bootstrap: bootstrap, revision: revision)
         let read = try await store.readDashboardSnapshot(viewerID: viewer, requiredRevision: revision)
         #expect(read.state == .available)
         #expect(read.snapshot?.aggregatePresets.count == AnalyticsLocalDashboardPolicy.aggregatePresetKeys.count)
@@ -382,6 +385,38 @@ struct AnalyticsShadowReadTests {
         let read = try await store2.readDashboardSnapshot(viewerID: viewer, requiredRevision: 99)
         #expect(read.state == .partial)
     }
+}
+
+private func ingestAggregateChartsForTest(
+    store: AnalyticsLocalStore,
+    viewer: ProfileID,
+    bootstrap: AnalyticsDashboardBootstrapV3,
+    revision: Int64
+) async throws {
+    var presets: [String: AnalyticsDashboardChartsPresetV1] = [:]
+    for (key, bundle) in bootstrap.data.aggregatePresets {
+        presets[key] = AnalyticsDashboardChartsPresetV1(
+            preset: bundle.preset,
+            start: bundle.start,
+            end: bundle.end,
+            equity: bundle.equity,
+            distributions: bundle.distributions,
+            insights: bundle.insights
+        )
+    }
+    let response = AnalyticsDashboardAccountChartsV3(
+        meta: bootstrap.meta,
+        data: .init(
+            account_id: nil,
+            as_of_et: bootstrap.data.as_of_et,
+            presets: presets
+        )
+    )
+    _ = try await store.ingestDashboardAggregateCharts(
+        viewerID: viewer,
+        response: response,
+        knownRevision: revision
+    )
 }
 
 private func fullAggregatePresets(

@@ -68,6 +68,8 @@ final class DashboardViewModel {
     private var lastV3MetricsLookup: DashboardAnalyticsAccountMetricsLookup?
     private var accountChartSelectionToken: UInt64 = 0
     private var accountChartHydrateTask: Task<Void, Never>?
+    private var aggregateChartSelectionToken: UInt64 = 0
+    private var aggregateChartHydrateTask: Task<Void, Never>?
     private var dashboardGRDBBackgroundReconcileScheduled = false
     private var analyticsReconciliationObserver: NSObjectProtocol?
 
@@ -209,10 +211,7 @@ final class DashboardViewModel {
 
     var equityHeroDisplayValue: Decimal {
         guard let heroSummary = equityHeroSummary ?? summary else { return 0 }
-        if usesDashboardAnalyticsV3,
-           case .account = accountFilter,
-           !selectedAccountChartsLoaded
-        {
+        if usesDashboardAnalyticsV3, !selectedChartOverlayLoaded {
             return heroSummary.netPnL
         }
         return DashboardEquityHeroPresentation.displayEquity(
@@ -222,33 +221,47 @@ final class DashboardViewModel {
     }
 
     var equityHeroChartPoints: [ProfileStatisticsMetrics.EquityPoint] {
-        guard equityChartAccountFilter == accountFilter,
-              let heroSummary = equityChartSummary
-        else { return [] }
-        if usesDashboardAnalyticsV3, case .account = accountFilter, !selectedAccountChartsLoaded {
+        guard equityChartAccountFilter == accountFilter else { return [] }
+        if usesDashboardAnalyticsV3, !selectedChartOverlayLoaded {
             return []
         }
+        let chartSummary = equityChartSummary ?? summary
+        guard let chartSummary else { return [] }
         return DashboardEquityHeroPresentation.chartPoints(
-            heroSummary.equityData,
+            chartSummary.equityData,
             propStartingBalance: equityHeroPropStartingBalance
         )
     }
 
-    private var selectedAccountChartsLoaded: Bool {
+    private var selectedChartOverlayLoaded: Bool {
         guard usesDashboardAnalyticsV3 else { return true }
-        guard case .account(let id) = accountFilter else { return true }
-        return DashboardAnalyticsAccountChartsStore.shared
-            .availability(accountID: id, revision: analyticsV3Revision)
-            .isLoaded
+        switch accountFilter {
+        case .all:
+            return DashboardAnalyticsAggregateChartsStore.shared
+                .availability(revision: analyticsV3Revision)
+                .isLoaded
+        case .account(let id):
+            return DashboardAnalyticsAccountChartsStore.shared
+                .availability(accountID: id, revision: analyticsV3Revision)
+                .isLoaded
+        }
+    }
+
+    private var selectedAccountChartsLoaded: Bool {
+        selectedChartOverlayLoaded
     }
 
     private var selectedAccountChartsAvailability: DashboardAnalyticsChartsAvailability {
         guard usesDashboardAnalyticsV3 else { return .loaded }
-        guard case .account(let id) = accountFilter else { return .loaded }
-        return DashboardAnalyticsAccountChartsStore.shared.availability(
-            accountID: id,
-            revision: analyticsV3Revision
-        )
+        switch accountFilter {
+        case .all:
+            return DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision)
+        case .account(let id):
+            return DashboardAnalyticsAccountChartsStore.shared.availability(
+                accountID: id,
+                revision: analyticsV3Revision
+            )
+        }
     }
 
     func accountMenuTitle(for account: TradingAccount) -> String {
@@ -476,7 +489,7 @@ final class DashboardViewModel {
             if usesDashboardAnalyticsGRDB, analyticsV3Bootstrap != nil {
                 DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "account_metrics_local")
             }
-            scheduleAccountChartHydration()
+            scheduleChartHydration()
         }
     }
 
@@ -1281,13 +1294,22 @@ final class DashboardViewModel {
         recomputePsychology()
     }
 
-    private func accountChartsForFilter() -> [String: AnalyticsDashboardChartsPresetV1]? {
-        guard selectedAccountChartsLoaded else { return nil }
-        guard case .account(let id) = accountFilter else { return nil }
-        return DashboardAnalyticsAccountChartsStore.shared.charts(
-            accountID: id,
-            revision: analyticsV3Revision
-        )
+    private func chartOverlayForFilter() -> [String: AnalyticsDashboardChartsPresetV1]? {
+        guard selectedChartOverlayLoaded else { return nil }
+        switch accountFilter {
+        case .all:
+            return DashboardAnalyticsAggregateChartsStore.shared.charts(revision: analyticsV3Revision)
+        case .account(let id):
+            return DashboardAnalyticsAccountChartsStore.shared.charts(
+                accountID: id,
+                revision: analyticsV3Revision
+            )
+        }
+    }
+
+    private func scheduleChartHydration() {
+        scheduleAccountChartHydration()
+        scheduleAggregateChartHydration()
     }
 
     private func scheduleAccountChartHydration() {
@@ -1296,6 +1318,15 @@ final class DashboardViewModel {
         accountChartHydrateTask?.cancel()
         accountChartHydrateTask = Task(priority: .userInitiated) { [weak self] in
             await self?.hydrateAccountChartsIfNeeded(selectionToken: token)
+        }
+    }
+
+    private func scheduleAggregateChartHydration() {
+        aggregateChartSelectionToken = DashboardAnalyticsAggregateChartsCoordinator.bumpSelection()
+        let token = aggregateChartSelectionToken
+        aggregateChartHydrateTask?.cancel()
+        aggregateChartHydrateTask = Task(priority: .userInitiated) { [weak self] in
+            await self?.hydrateAggregateChartsIfNeeded(selectionToken: token)
         }
     }
 
@@ -1327,12 +1358,38 @@ final class DashboardViewModel {
         recompute()
     }
 
+    private func hydrateAggregateChartsIfNeeded(selectionToken: UInt64) async {
+        guard usesDashboardAnalyticsV3, let rpc, let profileID, accountFilter == .all else {
+            return
+        }
+        guard selectionToken == aggregateChartSelectionToken else { return }
+
+        if await trySeedAggregateChartsFromGRDB(
+            profileID: profileID,
+            selectionToken: selectionToken
+        ) {
+            recompute()
+            return
+        }
+
+        let applied = await DashboardAnalyticsAggregateChartsCoordinator.loadIfNeeded(
+            selectionToken: selectionToken,
+            revision: analyticsV3Revision,
+            viewerID: profileID,
+            rpc: rpc
+        )
+        guard applied else { return }
+        guard selectionToken == aggregateChartSelectionToken else { return }
+        guard accountFilter == .all else { return }
+        recompute()
+    }
+
     private func recomputeFromAnalyticsV3(bootstrap: AnalyticsDashboardBootstrapV3) {
         let resolution = DashboardAnalyticsMapper.resolve(
             in: bootstrap,
             accountFilter: accountFilter,
             dateRange: dateRange,
-            accountCharts: accountChartsForFilter()
+            accountCharts: chartOverlayForFilter()
         )
         lastV3MetricsLookup = resolution
 
@@ -1360,17 +1417,17 @@ final class DashboardViewModel {
             in: bootstrap,
             accountFilter: accountFilter,
             dateRange: dateRange,
-            accountCharts: accountChartsForFilter()
+            accountCharts: chartOverlayForFilter()
         ) else {
             recomputePsychology()
             return
         }
-        let equityCount = selectedAccountChartsLoaded
+        let equityCount = selectedChartOverlayLoaded
             ? (DashboardAnalyticsMapper.bundle(
                 in: bootstrap,
                 accountFilter: accountFilter,
                 dateRange: effectiveEquityChartRange,
-                accountCharts: accountChartsForFilter()
+                accountCharts: chartOverlayForFilter()
             )?.equity.points.count ?? 0)
             : 0
         DashboardAnalyticsV3Probe.log(
@@ -1482,9 +1539,7 @@ final class DashboardViewModel {
             preset: DashboardAnalyticsMapper.presetKey(for: dateRange),
             elapsedMs: 0
         )
-        if case .account = accountFilter {
-            scheduleAccountChartHydration()
-        }
+        scheduleChartHydration()
         #if DEBUG
         ColdLaunchSummaryProbe.markDashboardFirstRender(source: loadResult.source)
         #endif
@@ -1607,7 +1662,15 @@ final class DashboardViewModel {
                 ) {
                     recompute()
                 }
+            } else if accountFilter == .all {
+                if await trySeedAggregateChartsFromGRDB(
+                    profileID: profileID,
+                    selectionToken: aggregateChartSelectionToken
+                ) {
+                    recompute()
+                }
             }
+            scheduleChartHydration()
             await startRealtime(profileID: profileID)
             return true
         } catch {
@@ -1630,6 +1693,7 @@ final class DashboardViewModel {
     private func scheduleAnalyticsV3RefreshAfterMutation() {
         dashboardGRDBBackgroundReconcileScheduled = false
         DashboardAnalyticsAccountChartsStore.shared.invalidate()
+        DashboardAnalyticsAggregateChartsStore.shared.invalidate()
         Task { [weak self] in
             guard let self else { return }
             loadTask?.cancel()
@@ -1664,7 +1728,7 @@ final class DashboardViewModel {
     }
 
     private func refreshEquityChartPresentation(bootstrap: AnalyticsDashboardBootstrapV3? = nil) {
-        let charts = accountChartsForFilter()
+        let charts = chartOverlayForFilter()
         if let bootstrap {
             effectiveEquityChartRange = DashboardEquityChartRangeResolver.effectiveRange(
                 requested: dateRange,
@@ -1672,17 +1736,29 @@ final class DashboardViewModel {
                 accountFilter: accountFilter,
                 accountCharts: charts
             )
-            guard let bundle = DashboardAnalyticsMapper.bundle(
+            if let bundle = DashboardAnalyticsMapper.bundle(
                 in: bootstrap,
                 accountFilter: accountFilter,
                 dateRange: effectiveEquityChartRange,
                 accountCharts: charts
-            ) else {
+            ) {
+                equityChartSummary = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+            } else {
                 equityChartSummary = nil
-                equityChartAccountFilter = accountFilter
-                return
             }
-            equityChartSummary = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+            if equityChartSummary?.equityData.isEmpty != false,
+               let fallbackBundle = DashboardAnalyticsMapper.bundle(
+                   in: bootstrap,
+                   accountFilter: accountFilter,
+                   dateRange: dateRange,
+                   accountCharts: charts
+               )
+            {
+                let fallback = DashboardAnalyticsMapper.summary(from: fallbackBundle, payoutTotal: payoutTotal)
+                if !fallback.equityData.isEmpty {
+                    equityChartSummary = fallback
+                }
+            }
             equityChartAccountFilter = accountFilter
             return
         }
@@ -2021,7 +2097,14 @@ final class DashboardViewModel {
                     selectionToken: accountChartSelectionToken
                 )
                 recompute()
+            } else if accountFilter == .all {
+                _ = await trySeedAggregateChartsFromGRDB(
+                    profileID: profileID,
+                    selectionToken: aggregateChartSelectionToken
+                )
+                recompute()
             }
+            scheduleChartHydration()
             scheduleDashboardGRDBBackgroundReconcile(profileID: profileID, generation: generation)
             await startRealtime(profileID: profileID)
             return true
@@ -2068,6 +2151,31 @@ final class DashboardViewModel {
         return true
     }
 
+    @discardableResult
+    private func trySeedAggregateChartsFromGRDB(
+        profileID: ProfileID,
+        selectionToken: UInt64
+    ) async -> Bool {
+        guard usesDashboardAnalyticsGRDB else { return false }
+        guard selectionToken == aggregateChartSelectionToken else { return false }
+        guard let read = await DashboardAnalyticsGRDBLoader.loadAggregateCharts(
+            viewerID: profileID,
+            revision: analyticsV3Revision
+        ) else {
+            DashboardAnalyticsGRDBProbe.logFallback(reason: "database_error")
+            return false
+        }
+        guard read.state == .available,
+              DashboardAnalyticsChartsSupport.hasEquityPoints(read.presets)
+        else { return false }
+        DashboardAnalyticsAggregateChartsStore.shared.seed(
+            revision: analyticsV3Revision,
+            presets: read.presets
+        )
+        DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "aggregate_charts_local")
+        return true
+    }
+
     private func scheduleDashboardGRDBBackgroundReconcile(profileID: ProfileID, generation: UInt64) {
         guard usesDashboardAnalyticsGRDB, !dashboardGRDBBackgroundReconcileScheduled else { return }
         dashboardGRDBBackgroundReconcileScheduled = true
@@ -2080,6 +2188,7 @@ final class DashboardViewModel {
         profileID: ProfileID,
         generation: UInt64
     ) async {
+        await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
         guard usesDashboardAnalyticsV3, let rpc else { return }
         guard generation == loadGeneration, !Task.isCancelled else { return }
         let localRevision = analyticsV3Revision
@@ -2109,9 +2218,7 @@ final class DashboardViewModel {
                 payoutTotal = payout
             }
             recompute()
-            if case .account = accountFilter {
-                scheduleAccountChartHydration()
-            }
+            scheduleChartHydration()
         } catch {
             // Preserve GRDB/JSON presentation when background reconcile fails.
         }

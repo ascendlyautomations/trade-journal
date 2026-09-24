@@ -81,16 +81,32 @@ actor BackendV2SingleFlight {
 
     func clear(viewerID: String? = nil) {
         if let viewerID {
-            let prefix = "\(viewerID)|"
-            for (key, slot) in inFlight where key.hasPrefix(prefix) {
-                slot.task.cancel()
-                inFlight[key] = nil
-            }
+            cancelKeys(withPrefix: "\(viewerID)|")
         } else {
             for slot in inFlight.values {
                 slot.task.cancel()
             }
             inFlight.removeAll()
+        }
+    }
+
+    func cancelKey(_ key: String) {
+        guard let slot = inFlight[key] else { return }
+        slot.task.cancel()
+        inFlight[key] = nil
+    }
+
+    func cancelKeys(withPrefix prefix: String) {
+        for (key, slot) in inFlight where key.hasPrefix(prefix) {
+            slot.task.cancel()
+            inFlight[key] = nil
+        }
+    }
+
+    func cancelKeys(containing fragment: String) {
+        for (key, slot) in inFlight where key.contains(fragment) {
+            slot.task.cancel()
+            inFlight[key] = nil
         }
     }
 

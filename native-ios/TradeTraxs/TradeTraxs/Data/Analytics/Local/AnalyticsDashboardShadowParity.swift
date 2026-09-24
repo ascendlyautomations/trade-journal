@@ -67,29 +67,34 @@ nonisolated enum AnalyticsDashboardShadowParity {
             }
         }
 
-        if localAggregateCharts.count != expectedAggregate {
-            AnalyticsGRDBProbe.logShadowMismatch(
-                "aggregate chart bundles rpc=\(expectedAggregate) local=\(localAggregateCharts.count)"
-            )
-            parity = false
+        let expectsAggregateChartsFromBootstrap = bootstrap.data.aggregatePresets.values.contains {
+            !$0.equity.points.isEmpty
         }
+        if expectsAggregateChartsFromBootstrap {
+            if localAggregateCharts.count != expectedAggregate {
+                AnalyticsGRDBProbe.logShadowMismatch(
+                    "aggregate chart bundles rpc=\(expectedAggregate) local=\(localAggregateCharts.count)"
+                )
+                parity = false
+            }
 
-        for (key, bundle) in bootstrap.data.aggregatePresets {
-            guard let local = localAggregateCharts.first(where: { $0.preset_key == key }) else {
-                parity = false
-                continue
-            }
-            if local.ingested_revision != revision {
-                AnalyticsGRDBProbe.logShadowMismatch("chart revision preset=\(key)")
-                parity = false
-            }
-            if let charts = try? local.decodedCharts() {
-                if charts.equity.points.count != bundle.equity.points.count {
-                    AnalyticsGRDBProbe.logShadowMismatch("equity points preset=\(key)")
+            for (key, bundle) in bootstrap.data.aggregatePresets {
+                guard let local = localAggregateCharts.first(where: { $0.preset_key == key }) else {
+                    parity = false
+                    continue
+                }
+                if local.ingested_revision != revision {
+                    AnalyticsGRDBProbe.logShadowMismatch("chart revision preset=\(key)")
                     parity = false
                 }
-            } else {
-                parity = false
+                if let charts = try? local.decodedCharts() {
+                    if charts.equity.points.count != bundle.equity.points.count {
+                        AnalyticsGRDBProbe.logShadowMismatch("equity points preset=\(key)")
+                        parity = false
+                    }
+                } else {
+                    parity = false
+                }
             }
         }
 

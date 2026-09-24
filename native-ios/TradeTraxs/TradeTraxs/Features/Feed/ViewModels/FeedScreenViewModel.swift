@@ -636,6 +636,13 @@ final class FeedScreenViewModel {
         paginationTask?.cancel()
         paginationTask = nil
         state.isLoadingMore = false
+        if state.viewerID != nil {
+            Task {
+                await BackendV2SingleFlight.shared.cancelKeys(
+                    containing: "|\(BackendV2Versioning.RPCName.feed.rawValue)|"
+                )
+            }
+        }
     }
 
     /// Synchronously drop pagination state so stale tail rows cannot page during a query reload.
@@ -720,8 +727,10 @@ final class FeedScreenViewModel {
         entries: [FeedTimelineEntry],
         scope: FeedScope,
         filter: FeedContentFilter,
-        viewerID: ProfileID?
+        viewerID: ProfileID?,
+        authoritativeNetworkSuccess: Bool
     ) {
+        guard authoritativeNetworkSuccess else { return }
         guard let viewerID,
               let key = FeedState.firstPageCacheKey(
                 viewerID: viewerID,
@@ -945,7 +954,8 @@ final class FeedScreenViewModel {
                                 entries: state.entries,
                                 scope: resolvedScope,
                                 filter: resolvedFilter,
-                                viewerID: viewerID
+                                viewerID: viewerID,
+                                authoritativeNetworkSuccess: true
                             )
                             persistFeedFirstPage()
                         }
@@ -1066,7 +1076,8 @@ final class FeedScreenViewModel {
                         entries: filteredEntries,
                         scope: resolvedScope,
                         filter: resolvedFilter,
-                        viewerID: page.viewerID
+                        viewerID: page.viewerID,
+                        authoritativeNetworkSuccess: true
                     )
                     if let viewerID = page.viewerID {
                         FeedPersistedCacheCoordinator.persistFirstPage(
@@ -1206,7 +1217,8 @@ final class FeedScreenViewModel {
                     entries: state.entries,
                     scope: queryScope,
                     filter: queryFilter,
-                    viewerID: viewerID
+                    viewerID: viewerID,
+                    authoritativeNetworkSuccess: true
                 )
                 FeedPersistedCacheCoordinator.persistFirstPage(
                     viewerID: viewerID,

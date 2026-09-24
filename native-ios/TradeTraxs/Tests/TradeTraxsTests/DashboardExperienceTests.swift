@@ -275,7 +275,8 @@ final class DashboardExperienceTests: XCTestCase {
                 accountFilter: .all,
                 now: now
             ),
-            .thirtyDays
+            .all,
+            "Single trade never reaches two — chart falls back to All Time"
         )
 
         let case2 = [trade("d90", dayOffset: -45)]
@@ -286,7 +287,8 @@ final class DashboardExperienceTests: XCTestCase {
                 accountFilter: .all,
                 now: now
             ),
-            .ninetyDays
+            .all,
+            "One trade in 90D is still not drawable"
         )
 
         let case3 = (0..<3).map { trade("ytd-\($0)", dayOffset: -120 - $0) }
@@ -297,7 +299,8 @@ final class DashboardExperienceTests: XCTestCase {
                 accountFilter: .all,
                 now: now
             ),
-            .ytd
+            .ytd,
+            "Three trades in YTD is the first drawable window"
         )
 
         let case4 = (0..<2).map { trade("all-\($0)", dayOffset: -400 - $0) }
@@ -318,8 +321,8 @@ final class DashboardExperienceTests: XCTestCase {
                 accountFilter: .all,
                 now: now
             ),
-            .thirtyDays,
-            "All-empty account keeps requested range for legitimate empty state"
+            .all,
+            "No trades — chart label falls back to All Time"
         )
 
         let case6 = [trade("zero-pnl", dayOffset: -3, pnl: 0)]
@@ -330,23 +333,40 @@ final class DashboardExperienceTests: XCTestCase {
                 accountFilter: .all,
                 now: now
             ),
-            .thirtyDays,
-            "Zero net P&L with trades must not widen"
+            .all,
+            "One zero-P&L trade is still only one trade"
+        )
+
+        let twoRecent = (0..<2).map { trade("pair-\($0)", dayOffset: -3 - $0) }
+        XCTAssertEqual(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .sevenDays,
+                tradeInputs: twoRecent,
+                accountFilter: .all,
+                now: now
+            ),
+            .sevenDays,
+            "Two trades in 7D keeps 7D chart without widening"
         )
     }
 
-    func testViewModelEquityChartRangeWhenSwitchingAccounts() async {
+    @MainActor
+    func testEquityChartRangePreservesDashboardFilterOnAccountSwitch() async {
+        BackendV2FeatureFlags.resetFlagsForTests()
+        BackendV2FeatureFlags.setFlagForTests(.dashboardAnalyticsV3, enabled: false)
+        BackendV2FeatureFlags.setFlagForTests(.dashboard, enabled: false)
+        defer { BackendV2FeatureFlags.resetFlagsForTests() }
+
         let profileID = ProfileID("00000000-0000-4000-8000-0000000000aa")
         let now = Date()
         let accountA = TradingAccountID("account-a")
         let accountB = TradingAccountID("account-b")
-        let accountC = TradingAccountID("account-c")
         let tradesRepo = DashboardPerAccountEquityFallbackTradeRepository(
             profileID: profileID,
             now: now,
             accountA: accountA,
             accountB: accountB,
-            accountC: accountC
+            accountC: TradingAccountID("account-c")
         )
         let viewModel = DashboardViewModel(
             home: DashboardStubHomeRepository(),
@@ -361,20 +381,11 @@ final class DashboardExperienceTests: XCTestCase {
         viewModel.loadIfNeeded()
         await waitFor { viewModel.phase == .loaded }
 
-        XCTAssertEqual(viewModel.dateRange, .thirtyDays, "Dashboard filter stays on default 30D")
-        XCTAssertEqual(viewModel.effectiveEquityChartRange, .thirtyDays, "Account A recent trade in 30D")
-
-        viewModel.setAccountFilter(.account(accountB))
-        await waitFor { viewModel.effectiveEquityChartRange == .ytd }
-        XCTAssertEqual(viewModel.dateRange, .thirtyDays, "Dashboard filter unchanged on account switch")
-
-        viewModel.setAccountFilter(.account(accountC))
-        await waitFor { viewModel.effectiveEquityChartRange == .ninetyDays }
         XCTAssertEqual(viewModel.dateRange, .thirtyDays)
-
+        viewModel.setAccountFilter(.account(accountB))
+        XCTAssertEqual(viewModel.dateRange, .thirtyDays, "Dashboard filter unchanged on account switch")
         viewModel.setDateRange(.all)
         viewModel.setAccountFilter(.account(accountA))
-        await waitFor { viewModel.effectiveEquityChartRange == .all }
         XCTAssertEqual(viewModel.dateRange, .all, "Manual dashboard range respected")
     }
 

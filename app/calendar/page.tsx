@@ -406,7 +406,7 @@ export default function CalendarPage() {
           }}
         />
 
-        <div className="max-w-7xl mx-auto w-full px-4">
+        <div className="max-w-7xl mx-auto w-full px-4 xl:w-[calc(100%-4rem)] xl:max-w-[1900px] xl:px-0 2xl:w-[calc(100%-6rem)]">
 
           {!tradesLoaded ? (
             <SkeletonCalendarPage />

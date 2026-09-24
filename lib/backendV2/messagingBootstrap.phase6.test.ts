@@ -106,7 +106,7 @@ describe("Backend V2 messaging cutover wiring (Phase 6.1)", () => {
   it("messages page wires fetchConversations through isBackendV2Enabled(messages) before REST", () => {
     const pagePath = path.join(
       __dirname,
-      "../../app/(app)/messages/page.tsx"
+      "../../app/(app)/messages/MessagesShell.tsx"
     )
     const src = fs.readFileSync(pagePath, "utf8")
     assert.match(src, /isBackendV2Enabled\("messages"\)/)

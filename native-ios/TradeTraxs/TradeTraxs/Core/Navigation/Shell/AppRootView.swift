@@ -161,10 +161,20 @@ struct AppRootView: View {
                 }
 
             case .sessionValidationFailed:
-                sessionValidationSurface(isRetrying: false)
+                if navigation.store.sessionPhase == .authenticated {
+                    authenticatedShell
+                        .overlay(alignment: .top) {
+                            sessionValidationSurface(isRetrying: false)
+                                .padding(.top, 8)
+                        }
+                } else {
+                    sessionValidationSurface(isRetrying: false)
+                }
 
             case .authenticated, .locked:
-                if navigation.store.sessionPhase == .authenticated, authenticationManager.state.isSessionReady {
+                if navigation.store.sessionPhase == .authenticated,
+                   authenticationManager.state.allowsAuthenticatedExperience
+                {
                     authenticatedShell
                 } else {
                     SplashView()
