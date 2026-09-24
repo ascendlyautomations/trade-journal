@@ -1,14 +1,26 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { TradovateApiError } from "./tradovateApiClient.ts"
 import type { TradovateFillRaw, TradovateOrderRaw } from "./tradovateFillModels.ts"
-import { parseTradovateFillRow } from "./tradovateFillModels.ts"
+import {
+  parseTradovateFillRow,
+  tradovateFillStableId,
+} from "./tradovateFillModels.ts"
 import {
   fetchTradovateFillList,
+  fetchTradovateFillsByIds,
   fetchTradovateFillsByOrderIdsLdeps,
   fetchTradovateOrderList,
   fetchTradovateOrdersByAccountDeps,
   fetchTradovateOrdersByIds,
 } from "./tradovateMarketDataClient.ts"
+import {
+  assessTradovateHistoricalCompleteness,
+  buildTradovateRepairFillIdCandidates,
+  logTradovateHistoricalCompleteness,
+  type TradovateHistoricalCompleteness,
+  type TradovateLedgerAcquisitionSnapshot,
+} from "./tradovateHistoricalAcquisitionCore.ts"
+import { traceTradovateMergedAcquisitionStage } from "./tradovateFillTrace.ts"
 import {
   buildTradovateOrderAccountMap,
   mergeTradovateOrderAccountMap,
@@ -37,10 +49,12 @@ export type TradovateFillAcquisitionResult = {
   orderAccountById: Map<string, string>
   stats: TradovateFillAcquisitionStats
   acquisitionErrors: string[]
+  historicalCompleteness: TradovateHistoricalCompleteness
   /** For fill/trace diagnostics (supplemental path). */
   supplementalFillList: TradovateFillRaw[]
   ordersFromDeps: TradovateOrderRaw[]
   ordersFromList: TradovateOrderRaw[]
+  fillsFromItemsRepair: TradovateFillRaw[]
 }
 
 /**
@@ -55,8 +69,16 @@ export async function acquireTradovateFillsForAccount(
     targetAccountId: string
     mappingId: string
     trigger: string
+    ledgerSnapshot?: TradovateLedgerAcquisitionSnapshot
+    incrementalWatermark?: string | null
   }
 ): Promise<TradovateFillAcquisitionResult> {
+  const ledgerSnapshot = params.ledgerSnapshot ?? {
+    executionCount: 0,
+    earliestExecutedAt: null,
+    latestExecutedAt: null,
+    fillIds: new Set<string>(),
+  }
   const acquisitionErrors: string[] = []
   let orderDepsFailed = false
   let fillListFailed = false
@@ -209,14 +231,93 @@ export async function acquireTradovateFillsForAccount(
     Boolean(parseTradovateFillRow(row))
   )
 
-  const accountFills = mergeAccountScopedTradovateFills({
+  let accountFills = mergeAccountScopedTradovateFills({
     primaryFills,
     supplementalFills: fillsFromList,
     targetAccountId: params.targetAccountId,
     orderAccountById,
   })
 
+  const mergedBeforeRepair = new Set(
+    accountFills.map((f) => tradovateFillStableId(f))
+  )
+  const repairCandidates = buildTradovateRepairFillIdCandidates({
+    mergedFillIds: mergedBeforeRepair,
+    ledgerFillIds: ledgerSnapshot.fillIds,
+  })
+  let fillsFromItemsRepair: TradovateFillRaw[] = []
+  let repairAttempted = false
+  if (repairCandidates.length > 0) {
+    repairAttempted = true
+    try {
+      fillsFromItemsRepair = await fetchTradovateFillsByIds(
+        supabase,
+        params.userId,
+        params.connectionId,
+        repairCandidates
+      )
+    } catch (err) {
+      const detail =
+        err instanceof TradovateApiError
+          ? `${err.code}:${err.message}`
+          : err instanceof Error
+            ? err.message
+            : "fill_items_failed"
+      acquisitionErrors.push(`fill_items_repair:${detail}`)
+    }
+
+    const repairOrderIds = [
+      ...new Set(
+        fillsFromItemsRepair
+          .filter((f) => f.orderId != null)
+          .map((f) => String(f.orderId))
+      ),
+    ].filter((id) => !orderAccountById.has(id))
+    if (repairOrderIds.length > 0) {
+      try {
+        const hydrated = await fetchTradovateOrdersByIds(
+          supabase,
+          params.userId,
+          params.connectionId,
+          repairOrderIds
+        )
+        mergeTradovateOrderAccountMap(orderAccountById, hydrated)
+      } catch (err) {
+        const detail =
+          err instanceof Error ? err.message.slice(0, 120) : "order_items_repair_failed"
+        acquisitionErrors.push(`order_items_repair:${detail}`)
+      }
+    }
+
+    accountFills = mergeAccountScopedTradovateFills({
+      primaryFills: accountFills,
+      supplementalFills: fillsFromItemsRepair,
+      targetAccountId: params.targetAccountId,
+      orderAccountById,
+    })
+  }
+
+  traceTradovateMergedAcquisitionStage({
+    targetAccountId: params.targetAccountId,
+    accountFills,
+    fillsFromItemsRepair,
+    repairCandidates,
+  })
+
   const window = fillTimestampWindow(accountFills)
+  const repairRecovered = repairCandidates.filter((id) =>
+    accountFills.some((f) => tradovateFillStableId(f) === id)
+  )
+
+  const historicalCompleteness = assessTradovateHistoricalCompleteness({
+    ledger: ledgerSnapshot,
+    accountFills,
+    incrementalWatermark: params.incrementalWatermark ?? null,
+    repairAttempted,
+    repairFillIdsRequested: repairCandidates,
+    repairFillIdsRecovered: repairRecovered,
+  })
+  logTradovateHistoricalCompleteness(historicalCompleteness)
 
   const stats: TradovateFillAcquisitionStats = {
     accountId: params.targetAccountId,
@@ -229,6 +330,8 @@ export async function acquireTradovateFillsForAccount(
     fillLdepsBatchErrors,
     orderDepsFailed,
     fillListFailed,
+    fillItemsRepairCount: fillsFromItemsRepair.length,
+    fillItemsRepairRequested: repairCandidates.length,
   }
 
   if (
@@ -246,8 +349,10 @@ export async function acquireTradovateFillsForAccount(
     orderAccountById,
     stats,
     acquisitionErrors,
+    historicalCompleteness,
     supplementalFillList: fillsFromList,
     ordersFromDeps,
     ordersFromList,
+    fillsFromItemsRepair,
   }
 }

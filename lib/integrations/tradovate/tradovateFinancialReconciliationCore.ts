@@ -15,6 +15,7 @@ export type TradovateFinancialReconciliationStatus =
   | "MATCH"
   | "MISMATCH"
   | "INSUFFICIENT_FILLPAIR_DATA"
+  | "INSUFFICIENT_FILLPAIR_COVERAGE"
   | "UNRESOLVED_METADATA"
 
 export type TradovateFinancialReconciliationGroupDiagnostic = {
@@ -80,7 +81,7 @@ export function reconcileTradovateFinancials(params: {
   const tolerance = params.tolerance ?? TRADOVATE_FINANCIAL_RECONCILIATION_TOLERANCE
   const groupDiagnostics: TradovateFinancialReconciliationGroupDiagnostic[] = []
 
-  if (params.insufficientFillPairData && params.fillPairs.length === 0) {
+  if (params.fillPairs.length === 0 && params.completed.length > 0) {
     return {
       accountId: params.accountId,
       fillPairCount: 0,
@@ -88,7 +89,9 @@ export function reconcileTradovateFinancials(params: {
       fillPairGrossPnl: null,
       lifecycleGrossPnl: null,
       difference: null,
-      status: "INSUFFICIENT_FILLPAIR_DATA",
+      status: params.insufficientFillPairData
+        ? "INSUFFICIENT_FILLPAIR_DATA"
+        : "INSUFFICIENT_FILLPAIR_COVERAGE",
       groupDiagnostics,
     }
   }
@@ -154,9 +157,38 @@ export function reconcileTradovateFinancials(params: {
     }
   }
 
-  const difference = fillPairGrossTotal - lifecycleGrossTotal
-  const allGroupKeys = new Set([...fillPairByGroup.keys(), ...lifecycleByGroup.keys()])
-  for (const key of allGroupKeys) {
+  const lifecycleOnlyGroups = [...lifecycleByGroup.keys()].filter(
+    (key) => !fillPairByGroup.has(key)
+  )
+  const coveredLifecycleKeys = [...lifecycleByGroup.keys()].filter((key) =>
+    fillPairByGroup.has(key)
+  )
+
+  if (
+    lifecycleOnlyGroups.length > 0 &&
+    fillPairByGroup.size > 0 &&
+    fillPairByGroup.size < lifecycleByGroup.size
+  ) {
+    return {
+      accountId: params.accountId,
+      fillPairCount: params.fillPairs.length,
+      lifecycleCount: params.completed.length,
+      fillPairGrossPnl: fillPairGrossTotal,
+      lifecycleGrossPnl: lifecycleGrossTotal,
+      difference: null,
+      status: "INSUFFICIENT_FILLPAIR_COVERAGE",
+      groupDiagnostics,
+    }
+  }
+
+  let coveredFillPairTotal = 0
+  let coveredLifecycleTotal = 0
+  for (const key of coveredLifecycleKeys) {
+    coveredFillPairTotal += fillPairByGroup.get(key) ?? 0
+    coveredLifecycleTotal += lifecycleByGroup.get(key) ?? 0
+  }
+
+  for (const key of coveredLifecycleKeys) {
     const [contractId, tradeDate] = key.split(":")
     const fillPairPnl = fillPairByGroup.get(key) ?? 0
     const lifecyclePnl = lifecycleByGroup.get(key) ?? 0
@@ -171,6 +203,12 @@ export function reconcileTradovateFinancials(params: {
       })
     }
   }
+
+  const compareFillTotal =
+    coveredLifecycleKeys.length > 0 ? coveredFillPairTotal : fillPairGrossTotal
+  const compareLifecycleTotal =
+    coveredLifecycleKeys.length > 0 ? coveredLifecycleTotal : lifecycleGrossTotal
+  const difference = compareFillTotal - compareLifecycleTotal
 
   const status =
     Math.abs(difference) <= tolerance && groupDiagnostics.length === 0

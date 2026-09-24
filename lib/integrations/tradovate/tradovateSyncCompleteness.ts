@@ -1,4 +1,5 @@
 import type { TradovateFillAcquisitionStats } from "./tradovateFillAcquisitionCore.ts"
+import type { TradovateHistoricalCompleteness } from "./tradovateHistoricalAcquisitionCore.ts"
 import type { TradovateFinancialReconciliationStatus } from "./tradovateFinancialReconciliationCore.ts"
 
 export type TradovateImportAcquisitionStatus =
@@ -13,12 +14,18 @@ export function deriveTradovateImportAcquisitionStatus(params: {
   acquisitionErrors: string[]
   mergedFillCount: number
   importAborted?: boolean
+  historicalCompleteness?: TradovateHistoricalCompleteness | null
 }): TradovateImportAcquisitionStatus {
   if (params.importAborted) return "IMPORT_FAILED"
   if (params.mergedFillCount === 0 && params.stats.orderDepsFailed) {
     return "IMPORT_FAILED"
   }
+  const historicalIncomplete =
+    params.historicalCompleteness != null &&
+    (!params.historicalCompleteness.historicalBackfillComplete ||
+      params.historicalCompleteness.holesDetected.length > 0)
   const partial =
+    historicalIncomplete ||
     params.stats.orderDepsFailed ||
     params.stats.fillListFailed ||
     params.stats.fillLdepsBatchErrors > 0 ||

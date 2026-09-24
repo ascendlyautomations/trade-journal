@@ -147,6 +147,22 @@ export async function fetchTradovateOrdersByIds(
   )
 }
 
+/** Official Tradovate REST: GET /v1/fill/items?ids= — point lookup for historical repair. */
+export async function fetchTradovateFillsByIds(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string,
+  fillIds: string[]
+): Promise<TradovateFillRaw[]> {
+  return fetchItems<TradovateFillRaw>(
+    supabase,
+    userId,
+    connectionId,
+    "fill",
+    fillIds
+  )
+}
+
 export async function fetchTradovateContractsByIds(
   supabase: SupabaseClient,
   userId: string,

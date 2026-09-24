@@ -2,7 +2,7 @@ import type { TradovateFillRaw } from "./tradovateFillModels.ts"
 import { tradovateFillStableId } from "./tradovateFillModels.ts"
 import { filterParsedTradovateFillsForAccount } from "./tradovateOrderAccountMap.ts"
 
-export const TRADOVATE_FILL_ACQUISITION_VERSION = "fillAcquisition=v2"
+export const TRADOVATE_FILL_ACQUISITION_VERSION = "fillAcquisition=v3"
 
 /** Conservative batch size for Tradovate /ldeps masterids (matches fillFee ldeps). */
 export const TRADOVATE_LDEPS_BATCH_SIZE = 40
@@ -24,6 +24,8 @@ export type TradovateFillAcquisitionStats = {
   fillLdepsBatchErrors: number
   orderDepsFailed: boolean
   fillListFailed: boolean
+  fillItemsRepairCount: number
+  fillItemsRepairRequested: number
 }
 
 export function dedupeTradovateFillsById(fills: TradovateFillRaw[]): TradovateFillRaw[] {
@@ -96,6 +98,8 @@ export function logTradovateFillAcquisitionSummary(params: {
       `orderDepsFailed=${stats.orderDepsFailed}`,
       `fillListFailed=${stats.fillListFailed}`,
       `fillLdepsBatchErrors=${stats.fillLdepsBatchErrors}`,
+      `fillItemsRepairCount=${stats.fillItemsRepairCount}`,
+      `fillItemsRepairRequested=${stats.fillItemsRepairRequested}`,
     ].join(" ")
   )
 }

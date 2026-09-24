@@ -91,6 +91,10 @@ import {
   deriveTradovateImportAcquisitionStatus,
 } from "@/lib/integrations/tradovate/tradovateSyncCompleteness"
 import {
+  loadTradovateIncrementalWatermark,
+  loadTradovateLedgerAcquisitionSnapshot,
+} from "@/lib/integrations/tradovate/tradovateLedgerAcquisitionSnapshot"
+import {
   logTradovateSyncSummary,
   type TradovateSyncStageDurationsMs,
 } from "@/lib/integrations/tradovate/tradovateSyncSummaryLog"
@@ -372,6 +376,15 @@ export async function syncTradovateBrokerAccount(
   let feeBatchErrors: string[] = []
 
   try {
+    const ledgerSnapshotAtStart = await loadTradovateLedgerAcquisitionSnapshot(
+      supabase,
+      { userId, mappingId: brokerIntegrationAccountId }
+    )
+    const incrementalWatermark = await loadTradovateIncrementalWatermark(
+      supabase,
+      brokerIntegrationAccountId
+    )
+
     const acquisitionStarted = Date.now()
     failureStage = "fill_list"
     const fillAcquisition = await acquireTradovateFillsForAccount(supabase, {
@@ -380,12 +393,15 @@ export async function syncTradovateBrokerAccount(
       targetAccountId,
       mappingId: brokerIntegrationAccountId,
       trigger,
+      ledgerSnapshot: ledgerSnapshotAtStart,
+      incrementalWatermark,
     })
     stageDurationsMs.acquisition = Date.now() - acquisitionStarted
     acquisitionStatus = deriveTradovateImportAcquisitionStatus({
       stats: fillAcquisition.stats,
       acquisitionErrors: fillAcquisition.acquisitionErrors,
       mergedFillCount: fillAcquisition.accountFills.length,
+      historicalCompleteness: fillAcquisition.historicalCompleteness,
     })
 
     traceTradovateFillListStage({

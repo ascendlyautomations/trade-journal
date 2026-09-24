@@ -186,6 +186,8 @@ export function simulateAcquisitionStats(params: {
       fillLdepsBatchErrors: params.partialLdepsBatch ? 1 : 0,
       orderDepsFailed: false,
       fillListFailed: false,
+      fillItemsRepairCount: 0,
+      fillItemsRepairRequested: 0,
     },
     acquisitionErrors,
   }
@@ -573,4 +575,7 @@ export function assertFeeSemantics(): void {
   })
   if (fin.grossPnL == null) throw new Error("gross_missing")
   if (fin.netPnL != null) throw new Error("net_fabricated")
+  if (fin.journalPnL == null || Math.abs(fin.journalPnL - (fin.grossPnL ?? 0)) > 0.001) {
+    throw new Error("journal_pnl_should_use_gross_when_fees_unavailable")
+  }
 }

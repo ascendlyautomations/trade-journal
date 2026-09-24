@@ -48,6 +48,12 @@ export function logTradovatePnLTrace(params: {
       `existingTicker=${params.existingTicker ?? "null"}`,
       `incomingTicker=${params.incomingTicker}`,
       `finalTicker=${params.finalTicker}`,
+      `grossPnl=${financials.grossPnL ?? "null"}`,
+      `feeAmount=${financials.fees}`,
+      `feeAvailability=${financials.feeAvailability}`,
+      `journalPnl=${financials.journalPnL ?? "null"}`,
+      `pnlSource=${financials.pnlSource}`,
+      `pnlNullReason=${financials.pnlNullReason}`,
       `nullReason=${financials.nullReason}`,
       `decision=${params.decision}`,
     ].join(" ")

@@ -10,7 +10,7 @@ export const TRACED_MGC_FILL_IDS = [
 ] as const
 
 export const TRADOVATE_SYNC_VERSION_MARKER =
-  "missingOrderHydration=v2,fillAcquisition=v2,metadata=v2,fillPairValidation=v1"
+  "missingOrderHydration=v2,fillAcquisition=v3,historicalRepair=v1,metadata=v2,fillPairValidation=v2"
 
 const tracedFillIdSet = new Set<string>(TRACED_MGC_FILL_IDS)
 
@@ -71,6 +71,33 @@ function fillListWindow(fillsRaw: TradovateFillRaw[]): {
     rawFillCount: fillsRaw.length,
     earliestFillTimestamp: earliest,
     latestFillTimestamp: latest,
+  }
+}
+
+export function traceTradovateMergedAcquisitionStage(params: {
+  targetAccountId: string
+  accountFills: TradovateFillRaw[]
+  fillsFromItemsRepair: TradovateFillRaw[]
+  repairCandidates: string[]
+}): void {
+  for (const fillId of TRACED_MGC_FILL_IDS) {
+    const inRepairRaw = params.fillsFromItemsRepair.some(
+      (f) => String(f.id) === fillId
+    )
+    const inMerged = params.accountFills.some((f) => String(f.id) === fillId)
+    logTradovateFillTrace({
+      fillId,
+      stage: "merged_acquisition",
+      targetAccountId: params.targetAccountId,
+      foundInFillItemsRepair: inRepairRaw,
+      foundInMergedAcquisitionSet: inMerged,
+      repairCandidate: params.repairCandidates.includes(fillId),
+      dropReason: inMerged
+        ? null
+        : inRepairRaw
+          ? "repair_fill_failed_account_filter"
+          : "absent_from_merged_acquisition",
+    })
   }
 }
 

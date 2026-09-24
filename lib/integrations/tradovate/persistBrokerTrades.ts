@@ -119,7 +119,7 @@ export async function upsertReconstructedBrokerTrades(
       feesByFillId: params.feesByFillId,
     })
     const incomingTicker = financials.ticker
-    const incomingPnL = financials.netPnL
+    const incomingPnL = financials.journalPnL
 
     const { duration_seconds, duration_text } = durationFromIso(
       lifecycle.entryTime,

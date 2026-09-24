@@ -15,7 +15,8 @@ describe("tradovateFillTrace", () => {
   })
 
   it("exposes deployment version marker for fill acquisition v2", () => {
-    assert.match(TRADOVATE_SYNC_VERSION_MARKER, /fillAcquisition=v2/)
+    assert.match(TRADOVATE_SYNC_VERSION_MARKER, /fillAcquisition=v3/)
+    assert.match(TRADOVATE_SYNC_VERSION_MARKER, /historicalRepair=v1/)
   })
 
   it("fill_list stage marks absent traced ids", () => {

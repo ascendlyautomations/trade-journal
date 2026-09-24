@@ -57,8 +57,7 @@ export function buildTradovateImportPreviewTrades(params: {
       entryTime: lifecycle.entryTime,
       exitTime: lifecycle.exitTime,
       points: lifecycle.points,
-      // Review UI: show gross when net is unknown (Phase 3 UNAVAILABLE fees). Journal persist keeps net-only authority.
-      pnl: financials.netPnL ?? financials.grossPnL,
+      pnl: financials.journalPnL,
       grossPnl: financials.grossPnL,
       fees: financials.fees,
     }
