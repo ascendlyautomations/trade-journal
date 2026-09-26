@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-enum CreateReelFixtures {
+nonisolated enum CreateReelFixtures {
     static let viewerID = ProfileID("dev.create-reel")
 
     static func sampleTrade(owner: ProfileID = viewerID) -> Trade {

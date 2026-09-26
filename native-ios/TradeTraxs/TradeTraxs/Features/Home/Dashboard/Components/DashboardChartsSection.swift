@@ -42,11 +42,24 @@ struct DashboardChartsSection: View {
 
     private var behaviorGroup: some View {
         sectionGroup(title: "Behavior") {
+            if summary.dailyPerformance != nil || summary.streaks != nil {
+                chartBlock(title: "Consistency & Streaks", subtitle: "Daily rhythm and momentum") {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                        if let daily = summary.dailyPerformance {
+                            DashboardDailyConsistencyView(snapshot: daily)
+                        }
+                        if let streaks = summary.streaks {
+                            DashboardStreakCompactView(streaks: streaks)
+                        }
+                    }
+                }
+            }
             chartBlock(
                 title: "Trading Sessions",
                 subtitle: "Tap a session to browse those trades"
             ) {
                 DashboardSessionBarsView(
+                    performance: summary.sessionPerformance,
                     sessions: summary.sessions,
                     onSelect: onBrowseSession
                 )
@@ -62,16 +75,25 @@ struct DashboardChartsSection: View {
             }
             chartBlock(
                 title: "Long vs Short",
-                subtitle: "Tap Long or Short to open the journal"
+                subtitle: "Tap a side to open the journal"
             ) {
-                DashboardLongShortDonutView(
-                    longCount: summary.longTradeCount,
-                    shortCount: summary.shortTradeCount,
-                    longPnL: summary.longShort.first(where: { $0.label == "Long" })?.value ?? 0,
-                    shortPnL: summary.longShort.first(where: { $0.label == "Short" })?.value ?? 0,
-                    onSelectLong: onBrowseLong,
-                    onSelectShort: onBrowseShort
-                )
+                if let comparison = summary.longShortComparison,
+                   comparison.long != nil || comparison.short != nil {
+                    DashboardLongShortComparisonView(
+                        comparison: comparison,
+                        onSelectLong: onBrowseLong,
+                        onSelectShort: onBrowseShort
+                    )
+                } else {
+                    DashboardLongShortDonutView(
+                        longCount: summary.longTradeCount,
+                        shortCount: summary.shortTradeCount,
+                        longPnL: summary.longShort.first(where: { $0.label == "Long" })?.value ?? 0,
+                        shortPnL: summary.longShort.first(where: { $0.label == "Short" })?.value ?? 0,
+                        onSelectLong: onBrowseLong,
+                        onSelectShort: onBrowseShort
+                    )
+                }
             }
             if summary.hourHeatmap.contains(where: { abs($0.value) > 0.01 }) {
                 chartBlock(
@@ -80,8 +102,26 @@ struct DashboardChartsSection: View {
                 ) {
                     DashboardHourTimelineView(
                         points: summary.hourHeatmap,
+                        highlights: summary.hourHighlights,
                         onSelect: onBrowseHour
                     )
+                }
+            }
+            if !summary.symbolPerformance.isEmpty {
+                chartBlock(
+                    title: "Symbol Performance",
+                    subtitle: "Strongest and weakest instruments in this period"
+                ) {
+                    DashboardSymbolRankedBarsView(rows: summary.symbolPerformance)
+                }
+            }
+            if let strategies = summary.strategyHighlights,
+               strategies.best != nil || strategies.worst != nil {
+                chartBlock(
+                    title: "Setup Performance",
+                    subtitle: "Strategies with enough sample size (3+ trades)"
+                ) {
+                    DashboardStrategyHighlightsView(highlights: strategies)
                 }
             }
         }
@@ -103,6 +143,7 @@ struct DashboardChartsSection: View {
                     DashboardHoldHistogramView(
                         buckets: summary.holdTimeHistogram,
                         averages: summary.holdTime,
+                        holdExtremes: summary.holdExtremes,
                         onSelectBucket: onBrowseHoldBucket
                     )
                 }

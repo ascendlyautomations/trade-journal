@@ -68,11 +68,19 @@ struct CSVImportView: View {
         ) { result in
             switch result {
             case .success(let urls):
-                if let url = urls.first {
-                    viewModel.ingestPickedFile(url: url)
+                guard let url = urls.first else {
+                    viewModel.fail("Unable to read this CSV file.")
+                    return
                 }
-            case .failure(let error):
-                viewModel.fail(UserFacingError.message(for: error))
+                let read = CSVPickedFileReader.read(url)
+                switch read {
+                case .success(let file):
+                    viewModel.ingestPickedFile(data: file.data, fileName: file.name)
+                case .failure:
+                    viewModel.fail("Unable to read this CSV file.")
+                }
+            case .failure:
+                viewModel.fail("Unable to read this CSV file.")
             }
         }
         .task { viewModel.loadAccountsIfNeeded() }
@@ -82,34 +90,72 @@ struct CSVImportView: View {
     private var chooseFile: some View {
         Form {
             Section {
-                Text("Import trades from a supported CSV file.")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            } header: {
-                Text("Import CSV")
-            }
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                    Text("Import Trades")
+                        .experienceStyle(.headline, color: colors.primaryText)
 
-            Section {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    showsFileImporter = true
-                } label: {
-                    SettingsNavigationRow(
-                        title: "Choose CSV File",
-                        systemImage: "doc.text"
+                    Text("Import trades from a supported CSV file.")
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+
+                    Text("Supported CSV exports:")
+                        .font(ExperienceTypography.caption.weight(.semibold))
+                        .foregroundStyle(colors.secondaryText)
+
+                    Text(
+                        "Supports CSV exports from Tradovate and TradeZella, plus NinjaTrader-style and generic CSV formats."
                     )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("csvImport.chooseFile")
-            }
-
-            Section {
-                Text("Supports CSV exports from Tradovate and TradeZella, plus NinjaTrader-style and generic CSV formats.")
                     .experienceStyle(.footnote, color: colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        ExperienceHaptics.play(.selection)
+                        showsFileImporter = true
+                    } label: {
+                        SettingsNavigationRow(
+                            title: "Choose CSV File",
+                            systemImage: "doc.text"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, ExperienceSpacing.xs)
+                    .accessibilityIdentifier("csvImport.chooseFile")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, ExperienceSpacing.xxs)
             }
         }
         .listSectionSpacing(ExperienceSpacing.xs)
         .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
+        .experienceDashboardGroupedRows()
+    }
+}
+
+/// Reads a document-picker URL while its security scope is still valid.
+/// The bytes are copied before the importer callback returns.
+nonisolated enum CSVPickedFileReader {
+    struct File: Sendable {
+        var name: String
+        var data: Data
+    }
+
+    static func read(_ url: URL) -> Result<File, Error> {
+        print("[CSV] picker returned")
+        let scoped = url.startAccessingSecurityScopedResource()
+        print("[CSV] access acquired")
+        defer {
+            if scoped {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            print("[CSV] bytes read")
+            let name = url.lastPathComponent
+            return .success(File(name: name.isEmpty ? "import.csv" : name, data: data))
+        } catch {
+            return .failure(error)
+        }
     }
 }
 

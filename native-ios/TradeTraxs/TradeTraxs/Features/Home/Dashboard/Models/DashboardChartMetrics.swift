@@ -44,6 +44,14 @@ nonisolated enum DashboardChartMetrics {
         /// Full 0–23 hour P&L for heatmap (same formula as ``hours``).
         var hourHeatmap: [DashboardBarPoint]
         var insights: [DashboardInsightItem]
+        var sessionPerformance: [DashboardSessionPerformanceRow]
+        var symbolPerformance: [DashboardSymbolPerformanceRow]
+        var dailyPerformance: DashboardDailyPerformanceSnapshot?
+        var streaks: DashboardStreakSnapshot?
+        var hourHighlights: DashboardHourHighlights?
+        var longShortComparison: DashboardLongShortComparison?
+        var holdExtremes: [DashboardHoldExtremeSnapshot]
+        var strategyHighlights: DashboardStrategyHighlights?
     }
 
     static func compute(
@@ -182,7 +190,15 @@ nonisolated enum DashboardChartMetrics {
             drawdownSeries: drawdownSeries(from: profileStats.equityData),
             weekdayHeatmap: weekdayHeatmapBars(trades),
             hourHeatmap: hourHeatmapBars(trades),
-            insights: insightItems(trades: trades, sessions: profileStats.sessionBreakdown)
+            insights: insightItems(trades: trades, sessions: profileStats.sessionBreakdown),
+            sessionPerformance: localSessionPerformance(trades),
+            symbolPerformance: localSymbolPerformance(trades),
+            dailyPerformance: localDailyPerformance(trades),
+            streaks: localStreaks(trades),
+            hourHighlights: localHourHighlights(trades),
+            longShortComparison: localLongShortComparison(trades),
+            holdExtremes: localHoldExtremes(trades),
+            strategyHighlights: localStrategyHighlights(trades)
         )
     }
 
@@ -557,5 +573,212 @@ nonisolated enum DashboardChartMetrics {
 
     private static func money(_ value: Decimal) -> String {
         NumberDisplay.currency(value, minimumFractionDigits: 0, maximumFractionDigits: 2)
+    }
+
+    // MARK: - Legacy local expansion (non-V3 path only)
+
+    private static func localSessionPerformance(_ trades: [Trade]) -> [DashboardSessionPerformanceRow] {
+        let labels = ["NY", "London", "Asia"]
+        return labels.compactMap { label in
+            let scoped = trades.filter { sessionLabel($0.sessionLabel) == label }
+            guard !scoped.isEmpty else { return nil }
+            let pnls = scoped.map { $0.realizedPnL?.amount ?? 0 }
+            let wins = pnls.filter { $0 > 0 }.count
+            let losses = pnls.filter { $0 < 0 }.count
+            return DashboardSessionPerformanceRow(
+                label: label,
+                tradeCount: scoped.count,
+                netPnL: NSDecimalNumber(decimal: pnls.reduce(0, +)).doubleValue,
+                wins: wins,
+                losses: losses,
+                winRate: scoped.isEmpty ? nil : Double(wins) / Double(scoped.count) * 100
+            )
+        }
+    }
+
+    private static func sessionLabel(_ raw: String?) -> String? {
+        let v = (raw ?? "").lowercased()
+        if v.contains("ny") || v.contains("new york") { return "NY" }
+        if v.contains("london") || v.contains("ldn") { return "London" }
+        if v.contains("asia") || v.contains("tokyo") { return "Asia" }
+        return nil
+    }
+
+    private static func localSymbolPerformance(_ trades: [Trade]) -> [DashboardSymbolPerformanceRow] {
+        var map: [String: (pnl: Decimal, trades: Int, wins: Int, rrSum: Decimal, rrCount: Int)] = [:]
+        for trade in trades {
+            let key = trade.symbol.ticker
+            var row = map[key] ?? (0, 0, 0, 0, 0)
+            let pnl = trade.realizedPnL?.amount ?? 0
+            row.pnl += pnl
+            row.trades += 1
+            if pnl > 0 { row.wins += 1 }
+            if let rr = trade.riskReward {
+                row.rrSum += rr
+                row.rrCount += 1
+            }
+            map[key] = row
+        }
+        return map.map { ticker, row in
+            DashboardSymbolPerformanceRow(
+                ticker: ticker,
+                trades: row.trades,
+                netPnL: NSDecimalNumber(decimal: row.pnl).doubleValue,
+                winRate: row.trades > 0 ? Double(row.wins) / Double(row.trades) * 100 : nil,
+                avgRR: row.rrCount > 0 ? NSDecimalNumber(decimal: row.rrSum / Decimal(row.rrCount)).doubleValue : nil
+            )
+        }
+        .sorted { $0.netPnL > $1.netPnL }
+        .prefix(12)
+        .map { $0 }
+    }
+
+    private static func localDailyPerformance(_ trades: [Trade]) -> DashboardDailyPerformanceSnapshot? {
+        var dayMap: [String: Decimal] = [:]
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(identifier: "America/New_York")
+        formatter.dateFormat = "yyyy-MM-dd"
+        for trade in trades {
+            let day = trade.exitAt ?? trade.entryAt
+            let key = formatter.string(from: day)
+            dayMap[key, default: 0] += trade.realizedPnL?.amount ?? 0
+        }
+        guard !dayMap.isEmpty else { return nil }
+        let values = dayMap.values.map { NSDecimalNumber(decimal: $0).doubleValue }
+        let green = values.filter { $0 > 0 }.count
+        return DashboardDailyPerformanceSnapshot(
+            bestDayPnL: values.max() ?? 0,
+            worstDayPnL: values.min() ?? 0,
+            avgDayPnL: values.reduce(0, +) / Double(values.count),
+            consistencyPct: Double(green) / Double(values.count) * 100,
+            tradingDays: values.count
+        )
+    }
+
+    private static func localStreaks(_ trades: [Trade]) -> DashboardStreakSnapshot? {
+        let ordered = trades.sorted { ($0.exitAt ?? $0.entryAt) < ($1.exitAt ?? $1.entryAt) }
+        guard !ordered.isEmpty else { return nil }
+        var maxWin = 0
+        var maxLoss = 0
+        var tempType: String?
+        var tempLen = 0
+        for trade in ordered {
+            let pnl = trade.realizedPnL?.amount ?? 0
+            let type = pnl > 0 ? "win" : pnl < 0 ? "loss" : "even"
+            if type == tempType { tempLen += 1 } else { tempLen = 1; tempType = type }
+            if type == "win" { maxWin = max(maxWin, tempLen) }
+            if type == "loss" { maxLoss = max(maxLoss, tempLen) }
+        }
+        return DashboardStreakSnapshot(
+            currentStreak: tempLen,
+            currentType: tempType,
+            maxWinStreak: maxWin,
+            maxLossStreak: maxLoss
+        )
+    }
+
+    private static func localHourHighlights(_ trades: [Trade]) -> DashboardHourHighlights? {
+        var map: [Int: Decimal] = [:]
+        let calendar = Calendar.current
+        for trade in trades {
+            let hour = calendar.component(.hour, from: trade.entryAt)
+            map[hour, default: 0] += trade.realizedPnL?.amount ?? 0
+        }
+        guard map.count > 1 else { return nil }
+        let best = map.max(by: { $0.value < $1.value })
+        let worst = map.min(by: { $0.value < $1.value })
+        return DashboardHourHighlights(
+            bestHour: best?.key,
+            worstHour: worst?.key,
+            bestPnL: best.map { NSDecimalNumber(decimal: $0.value).doubleValue },
+            worstPnL: worst.map { NSDecimalNumber(decimal: $0.value).doubleValue }
+        )
+    }
+
+    private static func localLongShortComparison(_ trades: [Trade]) -> DashboardLongShortComparison? {
+        func side(_ isLong: Bool) -> DashboardDirectionSideSnapshot? {
+            let scoped = trades.filter { ($0.side == .long) == isLong }
+            guard !scoped.isEmpty else { return nil }
+            let pnls = scoped.map { $0.realizedPnL?.amount ?? 0 }
+            let wins = pnls.filter { $0 > 0 }
+            let losses = pnls.filter { $0 < 0 }
+            let grossWins = wins.reduce(Decimal(0), +)
+            let grossLoss = abs(losses.reduce(Decimal(0), +))
+            var rrSum = Decimal(0)
+            var rrCount = 0
+            for trade in scoped {
+                if let rr = trade.riskReward { rrSum += rr; rrCount += 1 }
+            }
+            return DashboardDirectionSideSnapshot(
+                trades: scoped.count,
+                netPnL: NSDecimalNumber(decimal: pnls.reduce(0, +)).doubleValue,
+                wins: wins.count,
+                losses: losses.count,
+                winRate: Double(wins.count) / Double(scoped.count) * 100,
+                profitFactor: grossLoss > 0 ? NSDecimalNumber(decimal: grossWins / grossLoss).doubleValue : nil,
+                expectancy: NSDecimalNumber(decimal: pnls.reduce(0, +) / Decimal(scoped.count)).doubleValue,
+                avgRR: rrCount > 0 ? NSDecimalNumber(decimal: rrSum / Decimal(rrCount)).doubleValue : nil,
+                bestTrade: pnls.max().map { NSDecimalNumber(decimal: $0).doubleValue },
+                worstTrade: losses.min().map { NSDecimalNumber(decimal: $0).doubleValue }
+            )
+        }
+        return DashboardLongShortComparison(long: side(true), short: side(false))
+    }
+
+    private static func localHoldExtremes(_ trades: [Trade]) -> [DashboardHoldExtremeSnapshot] {
+        struct Row { var seconds: Double; var pnl: Double }
+        var winners: [Row] = []
+        var losers: [Row] = []
+        for trade in trades {
+            guard let exit = trade.exitAt else { continue }
+            let seconds = exit.timeIntervalSince(trade.entryAt)
+            guard seconds > 0 else { continue }
+            let pnl = NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
+            if pnl > 0 { winners.append(Row(seconds: seconds, pnl: pnl)) }
+            if pnl < 0 { losers.append(Row(seconds: seconds, pnl: pnl)) }
+        }
+        var rows: [DashboardHoldExtremeSnapshot] = []
+        if let fastest = winners.min(by: { $0.seconds < $1.seconds }) {
+            rows.append(DashboardHoldExtremeSnapshot(label: "Fastest winner", durationSeconds: fastest.seconds, pnl: fastest.pnl))
+        }
+        if let longest = winners.max(by: { $0.seconds < $1.seconds }) {
+            rows.append(DashboardHoldExtremeSnapshot(label: "Longest winner", durationSeconds: longest.seconds, pnl: longest.pnl))
+        }
+        if let fastest = losers.min(by: { $0.seconds < $1.seconds }) {
+            rows.append(DashboardHoldExtremeSnapshot(label: "Fastest loser", durationSeconds: fastest.seconds, pnl: fastest.pnl))
+        }
+        if let longest = losers.max(by: { $0.seconds < $1.seconds }) {
+            rows.append(DashboardHoldExtremeSnapshot(label: "Longest loser", durationSeconds: longest.seconds, pnl: longest.pnl))
+        }
+        return rows
+    }
+
+    private static func localStrategyHighlights(_ trades: [Trade]) -> DashboardStrategyHighlights? {
+        var map: [String: (pnl: Decimal, trades: Int, wins: Int)] = [:]
+        for trade in trades {
+            let key = (trade.strategy ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty else { continue }
+            var row = map[key] ?? (0, 0, 0)
+            let pnl = trade.realizedPnL?.amount ?? 0
+            row.pnl += pnl
+            row.trades += 1
+            if pnl > 0 { row.wins += 1 }
+            map[key] = row
+        }
+        let qualified = map.filter { $0.value.trades >= 3 }
+        guard !qualified.isEmpty else { return nil }
+        let best = qualified.max(by: { $0.value.pnl < $1.value.pnl })
+        let worst = qualified.min(by: { $0.value.pnl < $1.value.pnl })
+        func highlight(_ pair: (key: String, value: (pnl: Decimal, trades: Int, wins: Int))?) -> DashboardStrategyHighlight? {
+            guard let pair else { return nil }
+            return DashboardStrategyHighlight(
+                strategy: pair.key,
+                trades: pair.value.trades,
+                netPnL: NSDecimalNumber(decimal: pair.value.pnl).doubleValue,
+                winRate: Double(pair.value.wins) / Double(pair.value.trades) * 100
+            )
+        }
+        return DashboardStrategyHighlights(best: highlight(best.map { ($0.key, $0.value) }), worst: highlight(worst.map { ($0.key, $0.value) }))
     }
 }

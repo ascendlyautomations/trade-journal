@@ -12,6 +12,7 @@ final class GettingStartedChecklistTests: XCTestCase {
             followCount: 0,
             hasEverJoinedOtherRoom: false,
             hasPublicTrade: false,
+            hasCompletedDailyCheckIn: false,
             firstPrivateTradeID: nil
         )
         let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
@@ -60,7 +61,15 @@ final class GettingStartedChecklistTests: XCTestCase {
         XCTAssertTrue(progress.tasks.first(where: { $0.id == .post })?.isComplete == true)
     }
 
-    func testAllSixCompleteMarksAllComplete() {
+    func testDailyCheckInSignalCompletesDailyCheckInTask() {
+        var signals = GettingStartedSignals.empty
+        signals.onboardingCompleted = true
+        signals.hasCompletedDailyCheckIn = true
+        let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
+        XCTAssertTrue(progress.tasks.first(where: { $0.id == .dailyCheckIn })?.isComplete == true)
+    }
+
+    func testAllSevenCompleteMarksAllComplete() {
         let signals = GettingStartedSignals(
             onboardingCompleted: true,
             hasSeenGettingStartedIntro: true,
@@ -70,11 +79,12 @@ final class GettingStartedChecklistTests: XCTestCase {
             followCount: 2,
             hasEverJoinedOtherRoom: true,
             hasPublicTrade: true,
+            hasCompletedDailyCheckIn: true,
             firstPrivateTradeID: TradeID("trade-1")
         )
         let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
-        XCTAssertEqual(progress.completedCount, 6)
-        XCTAssertEqual(progress.totalCount, 6)
+        XCTAssertEqual(progress.completedCount, 7)
+        XCTAssertEqual(progress.totalCount, 7)
         XCTAssertTrue(progress.allComplete)
     }
 
@@ -88,6 +98,7 @@ final class GettingStartedChecklistTests: XCTestCase {
             followCount: 0,
             hasEverJoinedOtherRoom: false,
             hasPublicTrade: false,
+            hasCompletedDailyCheckIn: false,
             firstPrivateTradeID: nil
         )
         let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
@@ -111,6 +122,7 @@ final class GettingStartedChecklistTests: XCTestCase {
             followCount: 2,
             hasEverJoinedOtherRoom: true,
             hasPublicTrade: true,
+            hasCompletedDailyCheckIn: true,
             firstPrivateTradeID: TradeID("trade-1")
         )
         let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
@@ -135,6 +147,7 @@ final class GettingStartedChecklistTests: XCTestCase {
             followCount: 0,
             hasEverJoinedOtherRoom: false,
             hasPublicTrade: false,
+            hasCompletedDailyCheckIn: false,
             firstPrivateTradeID: nil
         )
         let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
@@ -168,6 +181,7 @@ final class GettingStartedChecklistTests: XCTestCase {
             followCount: 1,
             hasEverJoinedOtherRoom: true,
             hasPublicTrade: true,
+            hasCompletedDailyCheckIn: true,
             firstPrivateTradeID: nil
         )
         let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
@@ -199,6 +213,7 @@ final class GettingStartedChecklistTests: XCTestCase {
           "follow_count": 3,
           "has_ever_joined_other_room": true,
           "has_public_trade": false,
+          "has_completed_daily_check_in": true,
           "first_private_trade_id": "abc-123"
         }
         """
@@ -208,6 +223,7 @@ final class GettingStartedChecklistTests: XCTestCase {
         XCTAssertEqual(signals.profilePostCount, 1)
         XCTAssertEqual(signals.followCount, 3)
         XCTAssertTrue(signals.hasEverJoinedOtherRoom)
+        XCTAssertTrue(signals.hasCompletedDailyCheckIn)
         XCTAssertEqual(signals.firstPrivateTradeID?.rawValue, "abc-123")
     }
 }
@@ -292,6 +308,7 @@ final class GettingStartedStoreTests: XCTestCase {
           "follow_count": 0,
           "has_ever_joined_other_room": false,
           "has_public_trade": false,
+          "has_completed_daily_check_in": false,
           "first_private_trade_id": null
         }
         """

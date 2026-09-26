@@ -1,6 +1,6 @@
 import Foundation
 
-enum CreatePostFixtures {
+nonisolated enum CreatePostFixtures {
     static let viewerID = ProfileID("dev.createpost.viewer")
 
     static func samplePost(author: ProfileID = viewerID, body: String = "Fixture wall post") -> Post {

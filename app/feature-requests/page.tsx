@@ -1,5 +1,6 @@
 "use client"
 
+import "../utilityDesktopTheme.css"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
@@ -105,7 +106,7 @@ export default function FeatureRequestsPage() {
 
   return (
     <>
-      <div className={submissionPageShell}>
+      <div className={`tt-phase4-dark ${submissionPageShell}`}>
         <div className={submissionPageContainer}>
           <form onSubmit={handleSubmit} className={submissionFormCard}>
             <h1 className={submissionTitle}>Submit Feature Request</h1>

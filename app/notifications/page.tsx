@@ -1,5 +1,6 @@
 "use client"
 
+import "../socialDesktopTheme.css"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -920,7 +921,7 @@ export default function NotificationsPage() {
   if ((profileLoading && !profile) || (loading && notifications.length === 0)) {
     return (
       <>
-        <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
+        <div className="tt-phase1-dark w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
           <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-xl flex-col gap-3 px-1 md:gap-4 md:px-2">
             <SkeletonNotificationsPage />
           </div>
@@ -937,7 +938,7 @@ export default function NotificationsPage() {
           await fetchNotifications()
         }}
       >
-      <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
+      <div className="tt-phase1-dark w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
         <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-xl flex-col gap-3 px-1 md:gap-4 md:px-2">
           <div>
             <p className="text-md font-semibold uppercase tracking-wide text-blue-300">

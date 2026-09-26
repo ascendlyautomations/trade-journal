@@ -48,7 +48,10 @@ struct CheckInDayDetailView: View {
                     }
                 )
             }
-            .experienceSheetChrome(interactiveDismiss: false)
+            .experienceSheetChrome(
+                detents: [.fraction(0.65), .large],
+                interactiveDismiss: false
+            )
         }
         .accessibilityIdentifier("checkInDay.detail")
     }

@@ -178,9 +178,9 @@ private final class Phase6ERecordingAnalyticsExecutor: AnalyticsReconciliationEx
         _ = viewerID
         _ = generation
         let revision = hintRevision ?? 21
-        lock.lock()
-        dashboardRevisions.append(revision)
-        lock.unlock()
+        TestLock.withLock(lock) {
+            dashboardRevisions.append(revision)
+        }
         return AnalyticsDashboardReconcileResult(serverRevision: revision, elapsedMs: 0)
     }
 

@@ -1,10 +1,11 @@
 "use client"
 
+import "../analyticsDesktopTheme.css"
 import Link from "next/link"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
-import { fetchLeaderboardTrades } from "../../lib/leaderboardFetch"
+import { fetchLeaderboardPayload } from "../../lib/leaderboardFetch"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { getDemoLeaderboardTrades } from "@/lib/demo/demoLeaderboard"
 import { getDemoProfileById } from "@/lib/demo/demoProfile"
@@ -25,7 +26,6 @@ import {
   type LeaderboardAccountTypeFilter,
   type LeaderboardChartRow,
   type LeaderboardView,
-  type TradeForLeaderboard,
 } from "../../lib/leaderboardChart"
 import {
   buildLeaderboardChartDataWithFallback,
@@ -44,9 +44,14 @@ import {
   READABLE_CHART_TICK,
 } from "@/lib/chartTheme"
 import {
-  readLeaderboardSession,
-  writeLeaderboardSession,
+  readLeaderboardAggregate,
+  writeLeaderboardAggregate,
 } from "@/lib/leaderboardSessionCache"
+import {
+  leaderboardAggregateCacheKey,
+  normalizeLeaderboardPayload,
+  type LeaderboardPayload,
+} from "@/lib/leaderboardAggregate"
 
 type LeaderboardProfile = {
   id: string
@@ -196,12 +201,11 @@ function LeaderboardTraderCell({
 
 export default function Leaderboard() {
   const { user } = useUserProfile()
-  const [trades, setTrades] = useState<TradeForLeaderboard[]>([])
+  const [payload, setPayload] = useState<LeaderboardPayload | null>(null)
   const [tradesLoading, setTradesLoading] = useState(true)
   const [leaderboardLoadError, setLeaderboardLoadError] = useState<string | null>(
     null
   )
-  const [userId, setUserId] = useState<string | null>(null)
   const [view, setView] = useState<LeaderboardView>("7D")
   const [accountTypeFilter, setAccountTypeFilter] =
     useState<LeaderboardAccountTypeFilter>("all")
@@ -213,42 +217,46 @@ export default function Leaderboard() {
   const [profilesById, setProfilesById] = useState<
     Record<string, LeaderboardProfile>
   >({})
+  const userId = user?.id ?? null
 
-  useEffect(() => {
-    const cacheKey = user?.id ?? "__anonymous__"
-    const cached = readLeaderboardSession(cacheKey)
-    if (cached?.trades?.length) {
-      setTrades(cached.trades as TradeForLeaderboard[])
-      setUserId(user?.id ?? null)
+  const loadPayload = useCallback(async () => {
+    const queryKey = leaderboardAggregateCacheKey({
+      view,
+      accountType: accountTypeFilter,
+      nowIso: new Date().toISOString(),
+      customStartYmd: customRangeStart,
+      customEndYmd: customRangeEnd,
+      viewerId: userId,
+    })
+    const cached = normalizeLeaderboardPayload(readLeaderboardAggregate(queryKey))
+    if (cached) {
+      setPayload(cached)
       setTradesLoading(false)
+    } else if (!isDemoModeActive()) {
+      setTradesLoading(true)
     }
-    void fetchData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- paint cache then refresh when user changes
-  }, [user?.id])
 
-  async function fetchData() {
-    const cacheKey = user?.id ?? "__anonymous__"
-    const hadCache = (readLeaderboardSession(cacheKey)?.trades?.length ?? 0) > 0
-    if (!hadCache) setTradesLoading(true)
+    if (isDemoModeActive()) {
+      setTradesLoading(false)
+      setLeaderboardLoadError(null)
+      return
+    }
+
     setLeaderboardLoadError(null)
     try {
-      if (isDemoModeActive()) {
-        setUserId(user?.id ?? null)
-        const demoTrades = getDemoLeaderboardTrades()
-        setTrades(demoTrades)
-        writeLeaderboardSession(cacheKey, demoTrades)
-        return
-      }
-
-      setUserId(user?.id ?? null)
-
-      const allTrades = await fetchLeaderboardTrades()
-
-      setTrades(allTrades)
-      writeLeaderboardSession(cacheKey, allTrades)
+      const next = await fetchLeaderboardPayload({
+        view,
+        accountType: accountTypeFilter,
+        nowIso: new Date().toISOString(),
+        customStartYmd: customRangeStart,
+        customEndYmd: customRangeEnd,
+        viewerId: userId,
+      })
+      setPayload(next)
+      writeLeaderboardAggregate(queryKey, next)
     } catch (error) {
       console.error("[leaderboard] fetchData error:", error)
-      if (!hadCache) setTrades([])
+      if (!cached) setPayload(null)
       setLeaderboardLoadError(
         error instanceof Error
           ? error.message
@@ -257,7 +265,11 @@ export default function Leaderboard() {
     } finally {
       setTradesLoading(false)
     }
-  }
+  }, [accountTypeFilter, customRangeEnd, customRangeStart, userId, view])
+
+  useEffect(() => {
+    void loadPayload()
+  }, [loadPayload])
 
   const customRange = useMemo(
     () =>
@@ -273,25 +285,39 @@ export default function Leaderboard() {
     return customRangeStart > customRangeEnd
   }, [view, customRangeStart, customRangeEnd])
 
-  const {
-    chartData,
-    todayStats,
-    rankedTraders,
-    yourRank,
-    hasData,
-    effectiveView,
-    usedFallback,
-  } = useMemo(
-    () =>
-      buildLeaderboardChartDataWithFallback(
-        trades,
-        view,
-        userId,
-        customRange,
-        accountTypeFilter
-      ),
-    [trades, view, userId, customRange, accountTypeFilter]
-  )
+  const demoPayload = useMemo(() => {
+    if (!isDemoModeActive()) return null
+    return buildLeaderboardChartDataWithFallback(
+      getDemoLeaderboardTrades(),
+      view,
+      userId,
+      customRange,
+      accountTypeFilter
+    )
+  }, [accountTypeFilter, customRange, userId, view])
+
+  const activePayload = demoPayload
+    ? {
+        ...demoPayload,
+        profiles: {} as LeaderboardPayload["profiles"],
+      }
+    : payload
+
+  const chartData = activePayload?.chartData ?? []
+  const todayStats = activePayload?.todayStats ?? {
+    yourTradeCount: 0,
+    yourAvgPnl: 0,
+    yourAvgRR: null,
+    globalAvgPnl: 0,
+    globalAvgRR: null,
+    globalTradeCount: 0,
+    percentileTopPct: userId ? "0.0" : "—",
+  }
+  const rankedTraders = activePayload?.rankedTraders ?? []
+  const yourRank = activePayload?.yourRank ?? null
+  const hasData = activePayload?.hasData ?? false
+  const effectiveView = activePayload?.effectiveView ?? view
+  const usedFallback = activePayload?.usedFallback ?? false
 
   const timeframeFallbackMessage = useMemo(
     () => leaderboardTimeframeFallbackMessage(view, effectiveView),
@@ -304,6 +330,15 @@ export default function Leaderboard() {
   )
 
   useEffect(() => {
+    if (
+      !isDemoModeActive() &&
+      payload?.profiles &&
+      Object.keys(payload.profiles).length > 0
+    ) {
+      setProfilesById(payload.profiles)
+      return
+    }
+
     if (rankedTraderIds.length === 0) {
       setProfilesById({})
       return
@@ -354,7 +389,7 @@ export default function Leaderboard() {
     return () => {
       cancelled = true
     }
-  }, [rankedTraderIds])
+  }, [payload, rankedTraderIds])
 
   const yAxisTickFormatter = useCallback((v: number) => {
     return formatPnlCurrency(Number(v), {
@@ -372,7 +407,7 @@ export default function Leaderboard() {
   if (tradesLoading) {
     return (
       <>
-        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8">
+        <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8">
           <SkeletonLeaderboardPage />
         </div>
       </>
@@ -384,10 +419,10 @@ export default function Leaderboard() {
 
       <NativeIosPullToRefresh
         onRefresh={async () => {
-          await fetchData()
+          await loadPayload()
         }}
       >
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8">
+      <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto max-w-7xl space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h1 className="hidden text-2xl font-semibold text-blue-300 md:block md:text-3xl">
@@ -473,7 +508,7 @@ export default function Leaderboard() {
                 action={
                   <button
                     type="button"
-                    onClick={() => void fetchData()}
+                    onClick={() => void loadPayload()}
                     className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
                   >
                     Retry
@@ -686,7 +721,7 @@ export default function Leaderboard() {
                   leaderboardLoadError ? (
                     <button
                       type="button"
-                      onClick={() => void fetchData()}
+                      onClick={() => void loadPayload()}
                       className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
                     >
                       Retry

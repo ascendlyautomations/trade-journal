@@ -23,15 +23,20 @@ struct AppearanceSettingsModel: Hashable, Sendable {
         return AppearanceSettingsModel(selectedTheme: selected, options: options)
     }
 
-    /// Launch-facing picker — System + TradeTraxs only.
-    ///
-    /// Light / Dark remain registered for future exposure via ``ThemeRegistry``.
+    /// Settings → Appearance picker (System / Light / Dark).
     static func makeUserFacing(
         selected: ThemeIdentifier,
         registry: ThemeRegistry = ThemeRegistry()
     ) -> AppearanceSettingsModel {
-        let visible: [ThemeIdentifier] = [.system, .tradeTraxs]
-        let displaySelected: ThemeIdentifier = selected == .tradeTraxs ? .tradeTraxs : .system
+        let visible: [ThemeIdentifier] = [.system, .light, .dark]
+        let displaySelected: ThemeIdentifier = {
+            switch selected {
+            case .system, .light, .dark:
+                return selected
+            default:
+                return .system
+            }
+        }()
         let options = visible.compactMap { id -> ThemeSelectionOption? in
             guard let theme = registry.theme(for: id) else { return nil }
             return ThemeSelectionOption(

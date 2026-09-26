@@ -47,7 +47,6 @@ final class DashboardViewModel {
     private var contractDecodeFailed = false
     private var loadGeneration: UInt64 = 0
     private var pendingHistoryBackfill = false
-    private var watchedChannel: RealtimeChannelID?
     /// Manual date-range override (persists across account switches).
     private var hasUserSelectedDateRangeForCurrentFilter = false
     /// When true, pick the best preset for ``accountFilter`` once trade history is authoritative.
@@ -72,6 +71,13 @@ final class DashboardViewModel {
     private var aggregateChartHydrateTask: Task<Void, Never>?
     private var dashboardGRDBBackgroundReconcileScheduled = false
     private var analyticsReconciliationObserver: NSObjectProtocol?
+
+    private final class LiveBox {
+        weak var model: DashboardViewModel?
+        init(_ model: DashboardViewModel) { self.model = model }
+    }
+
+    private static var liveBoxes: [LiveBox] = []
 
     private var usesDashboardAnalyticsV3: Bool {
         BackendV2FeatureFlags.isEnabled(.dashboardAnalyticsV3)
@@ -102,6 +108,56 @@ final class DashboardViewModel {
         self.navigationCoordinator = navigationCoordinator
         self.realtimeHub = realtimeHub
         self.rpc = rpc
+        Self.register(self)
+    }
+
+    /// Cancels in-flight dashboard work and drops presentation for every live Home model.
+    static func resetAllForSessionBoundary() {
+        liveBoxes.removeAll { $0.model == nil }
+        for box in liveBoxes {
+            box.model?.resetForSessionBoundary()
+        }
+    }
+
+    private static func register(_ model: DashboardViewModel) {
+        liveBoxes.removeAll { $0.model == nil }
+        liveBoxes.append(LiveBox(model))
+    }
+
+    /// Logout / account switch. Keeps the date-range preference. Drops the previous account's rows.
+    func resetForSessionBoundary() {
+        loadTask?.cancel()
+        secondaryTask?.cancel()
+        accountChartHydrateTask?.cancel()
+        aggregateChartHydrateTask?.cancel()
+        loadTask = nil
+        secondaryTask = nil
+        accountChartHydrateTask = nil
+        aggregateChartHydrateTask = nil
+        loadGeneration &+= 1
+        hasLoaded = false
+        coldLoadFinished = false
+        contractDecodeFailed = false
+        isRefreshing = false
+        summary = nil
+        psychologyReport = nil
+        psychologyGuardrailNotices = []
+        accounts = []
+        accountNames = [:]
+        tradeInputs = []
+        payoutTotal = nil
+        analyticsV3Bootstrap = nil
+        analyticsV3Revision = 0
+        equityChartSummary = nil
+        equityChartAccountFilter = nil
+        lastAccountScopedSummary = nil
+        lastAccountScopedFilter = nil
+        lastV3MetricsLookup = nil
+        profileID = nil
+        accountFilter = .all
+        pendingHistoryBackfill = false
+        dashboardGRDBBackgroundReconcileScheduled = false
+        phase = .idle
     }
 
     func openPsychologyAnalytics(highlightSection: String? = nil) {
@@ -331,6 +387,9 @@ final class DashboardViewModel {
     }
 
     func loadIfNeeded() {
+        if let profileID, !SessionViewerGate.shared.allowsDisplay(owner: profileID.rawValue) {
+            resetForSessionBoundary()
+        }
         if hasLoaded {
             SessionNetworkProbe.record(.cacheHit, resource: "dashboard.navigationReturn")
             if let profileID {
@@ -648,6 +707,7 @@ final class DashboardViewModel {
         refreshTrigger: DashboardAuthoritativeRefreshTrigger? = nil
     ) async {
         let activeGeneration = generation ?? loadGeneration
+        var blockColdFinish = false
         if !forceNetwork, !isAuthoritativeFollowUp {
             DashboardLoadProbe.beginSession()
             DashboardLoadProbe.recordColdAttempt()
@@ -656,13 +716,25 @@ final class DashboardViewModel {
         }
         defer {
             loadTask = nil
-            if !forceNetwork, !isAuthoritativeFollowUp {
+            if !blockColdFinish, !forceNetwork, !isAuthoritativeFollowUp {
                 coldLoadFinished = true
             }
         }
 
         let userID = await session.currentUserID
-        let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
+        let profileID: ProfileID
+        if let userID {
+            profileID = ProfileID(userID.rawValue)
+        } else if SessionViewerGate.shared.allowsUnscopedFallback {
+            profileID = ProfileID("dev.screenshot")
+        } else {
+            blockColdFinish = true
+            return
+        }
+        guard canCommit(profileID: profileID, generation: activeGeneration) else {
+            blockColdFinish = true
+            return
+        }
         self.profileID = profileID
         ensureAnalyticsReconciliationObserver()
 
@@ -674,6 +746,10 @@ final class DashboardViewModel {
                 blocksFirstUsefulRender: true
             ) {
                 applyFixtures(profileID: profileID)
+            }
+            guard canCommit(profileID: profileID, generation: activeGeneration) else {
+                blockColdFinish = true
+                return
             }
             hasLoaded = true
             phase = .loaded
@@ -723,7 +799,8 @@ final class DashboardViewModel {
                         generation: activeGeneration
                     )
                 }) {
-                    guard activeGeneration == loadGeneration, !Task.isCancelled else {
+                    guard canCommit(profileID: profileID, generation: activeGeneration) else {
+                        blockColdFinish = true
                         loadTask = nil
                         return
                     }
@@ -809,6 +886,10 @@ final class DashboardViewModel {
             async let tradesTask = bootstrapTrades(profileID: profileID, forceNetwork: forceNetwork)
             let fetchedAccounts = try await accountsTask
             let page = try await tradesTask
+            guard canCommit(profileID: profileID, generation: activeGeneration) else {
+                blockColdFinish = true
+                return
+            }
             detailCache.seed(trades: page.items)
 
             // Seed payouts from cache immediately when available so first paint is complete.
@@ -879,13 +960,14 @@ final class DashboardViewModel {
         guard let cached = BackendV2BootstrapDiskCache.loadDashboard(viewerID: profileID.rawValue) else {
             return false
         }
+        guard canCommit(profileID: profileID, generation: generation) else { return false }
         do {
             let v2 = try await DashboardBootstrapApplier.apply(
                 cached.bootstrap,
                 expectedViewerID: profileID.rawValue,
                 detailCache: detailCache
             )
-            guard generation == loadGeneration, !Task.isCancelled else { return false }
+            guard canCommit(profileID: profileID, generation: generation) else { return false }
             apply(trades: v2.trades, accounts: v2.accounts, profileID: profileID)
             noteTradeHistoryApplied(
                 totalTradeCount: v2.totalTradeCount,
@@ -960,6 +1042,12 @@ final class DashboardViewModel {
         generation: UInt64,
         tradeHistoryComplete: Bool
     ) {
+        if usesDashboardAnalyticsV3 {
+#if DEBUG
+            SupabaseEfficiencyProbe.dashboardTradeSource(.v3)
+#endif
+            return
+        }
         guard pendingAutomaticDateRangeResolution else { return }
 
         if tradeHistoryComplete {
@@ -1066,10 +1154,15 @@ final class DashboardViewModel {
                 totalTradeCount: disk.totalTradeCount
             )
         }
+        let usesNetwork = forceNetwork || !SessionOwnerTradesStore.shared.isFresh(for: profileID)
+        if usesNetwork {
+#if DEBUG
+            SupabaseEfficiencyProbe.dashboardTradeSource(.legacyRawTrades)
+#endif
+        }
         let items = try await DashboardLoadProbe.measure(
             "dashboard.trades",
-            kind: (!forceNetwork && SessionOwnerTradesStore.shared.isFresh(for: profileID))
-                ? .cache : .network,
+            kind: usesNetwork ? .network : .cache,
             blocksFirstUsefulRender: true,
             note: "session owner trades ≤500"
         ) {
@@ -1084,7 +1177,29 @@ final class DashboardViewModel {
         return CursorPage(items: items, nextCursor: nil)
     }
 
+    private func hasAuthoritativeDashboardPayoutFromV3() -> Bool {
+        guard usesDashboardAnalyticsV3 else { return false }
+        if payoutTotal != nil { return true }
+        return analyticsV3Bootstrap?.data.payout_total != nil
+    }
+
     private func hydratePayouts(profileID: ProfileID, forceNetwork: Bool) async {
+        if hasAuthoritativeDashboardPayoutFromV3() {
+#if DEBUG
+            SupabaseEfficiencyProbe.dashboardPayoutSource(.v3)
+#endif
+            if payoutTotal == nil,
+               let wire = analyticsV3Bootstrap?.data.payout_total,
+               let value = wire.value
+            {
+                payoutTotal = Decimal(value)
+                recompute()
+            }
+            return
+        }
+#if DEBUG
+        SupabaseEfficiencyProbe.dashboardPayoutSource(.legacyAchievements)
+#endif
         if !forceNetwork, payoutTotal != nil { return }
         do {
             let achievementPage = try await DashboardLoadProbe.measure(
@@ -1277,7 +1392,19 @@ final class DashboardViewModel {
         }
     }
 
+    private func canCommit(profileID: ProfileID, generation: UInt64) -> Bool {
+        generation == loadGeneration
+            && !Task.isCancelled
+            && SessionViewerGate.shared.allowsDisplay(owner: profileID.rawValue)
+    }
+
     private func recompute() {
+        if let profileID, !SessionViewerGate.shared.allowsDisplay(owner: profileID.rawValue) {
+            summary = nil
+            hasLoaded = false
+            phase = .idle
+            return
+        }
         resolveAutomaticDateRangeIfNeeded()
         if usesDashboardAnalyticsV3, let bootstrap = analyticsV3Bootstrap {
             recomputeFromAnalyticsV3(bootstrap: bootstrap)
@@ -1413,12 +1540,34 @@ final class DashboardViewModel {
 
         refreshEquityChartPresentation(bootstrap: bootstrap)
 
-        guard let bundle = DashboardAnalyticsMapper.bundle(
+        let chartsOverlay = chartOverlayForFilter()
+        #if DEBUG
+        if let summary {
+            let bundleForProbe = DashboardAnalyticsMapper.bundle(
+                in: bootstrap,
+                accountFilter: accountFilter,
+                dateRange: dateRange,
+                accountCharts: chartsOverlay
+            )
+            DashboardVisualExpansionDebug.logPipeline(
+                path: usesDashboardAnalyticsGRDB ? "v3+grdb" : "v3",
+                v3: usesDashboardAnalyticsV3,
+                grdb: usesDashboardAnalyticsGRDB,
+                chartOverlayLoaded: selectedChartOverlayLoaded,
+                revision: analyticsV3Revision,
+                preset: DashboardAnalyticsMapper.presetKey(for: dateRange),
+                distributions: bundleForProbe?.distributions,
+                summary: summary
+            )
+        }
+        #endif
+
+        guard DashboardAnalyticsMapper.bundle(
             in: bootstrap,
             accountFilter: accountFilter,
             dateRange: dateRange,
-            accountCharts: chartOverlayForFilter()
-        ) else {
+            accountCharts: chartsOverlay
+        ) != nil else {
             recomputePsychology()
             return
         }
@@ -1512,7 +1661,7 @@ final class DashboardViewModel {
             rpc: rpc,
             forceNetwork: forceNetwork
         )
-        guard generation == loadGeneration, !Task.isCancelled else { return true }
+        guard canCommit(profileID: profileID, generation: generation) else { return true }
 
         let applied = try DashboardAnalyticsV3Applier.apply(
             loadResult.bootstrap,
@@ -1570,13 +1719,14 @@ final class DashboardViewModel {
             return true
         }
         guard let cached = DashboardAnalyticsDiskCache.load(viewerID: profileID) else { return false }
+        guard canCommit(profileID: profileID, generation: generation) else { return false }
         do {
             let applied = try DashboardAnalyticsV3Applier.apply(
                 cached.payload,
                 expectedViewerID: profileID.rawValue,
                 detailCache: detailCache
             )
-            guard generation == loadGeneration, !Task.isCancelled else { return false }
+            guard canCommit(profileID: profileID, generation: generation) else { return false }
             analyticsV3Bootstrap = applied.bootstrap
             analyticsV3Revision = applied.revision
             apply(trades: [], accounts: applied.accounts, profileID: profileID)
@@ -1708,45 +1858,93 @@ final class DashboardViewModel {
         }
     }
 
-    /// Clears the one-time automatic preset flag without mutating ``dateRange``.
-    /// Equity widening is handled by ``refreshEquityChartPresentation()``.
+    /// Aligns ``dateRange`` (dropdown + V3 preset) with automatic widen/fallback when the user has not overridden the preset.
     private func resolveAutomaticDateRangeIfNeeded() {
-        guard pendingAutomaticDateRangeResolution else { return }
+        guard !hasUserSelectedDateRangeForCurrentFilter else {
+            effectiveEquityChartRange = dateRange
+            return
+        }
+
+        let charts = chartOverlayForFilter()
+        let resolved: DashboardDateRange?
+
         if usesDashboardAnalyticsV3 {
-            if analyticsV3Bootstrap != nil {
-                pendingAutomaticDateRangeResolution = false
+            guard let bootstrap = analyticsV3Bootstrap else {
+                if tradeInputs.isEmpty, authoritativeTotalTradeCount == 0 {
+                    pendingAutomaticDateRangeResolution = false
+                }
+                return
             }
-            return
-        }
-        if !initialTradeHistoryReady {
-            if tradeInputs.isEmpty, authoritativeTotalTradeCount == 0 {
-                pendingAutomaticDateRangeResolution = false
+            resolved = DashboardEquityChartRangeResolver.effectiveRange(
+                requested: dateRange,
+                analyticsBootstrap: bootstrap,
+                accountFilter: accountFilter,
+                accountCharts: charts,
+                allowAutomaticWiden: true
+            )
+            pendingAutomaticDateRangeResolution = false
+        } else {
+            guard initialTradeHistoryReady else {
+                if tradeInputs.isEmpty, authoritativeTotalTradeCount == 0 {
+                    pendingAutomaticDateRangeResolution = false
+                }
+                return
             }
-            return
+            resolved = DashboardEquityChartRangeResolver.effectiveRange(
+                requested: dateRange,
+                tradeInputs: tradeInputs,
+                accountFilter: accountFilter,
+                allowAutomaticWiden: true
+            )
+            pendingAutomaticDateRangeResolution = false
         }
-        pendingAutomaticDateRangeResolution = false
+
+        guard let resolved else { return }
+        if dateRange != resolved {
+            dateRange = resolved
+        }
+        effectiveEquityChartRange = dateRange
     }
 
     private func refreshEquityChartPresentation(bootstrap: AnalyticsDashboardBootstrapV3? = nil) {
         let charts = chartOverlayForFilter()
+        let honorUserSelectedRange = hasUserSelectedDateRangeForCurrentFilter
+        let allowAutomaticWiden = !honorUserSelectedRange
         if let bootstrap {
-            effectiveEquityChartRange = DashboardEquityChartRangeResolver.effectiveRange(
-                requested: dateRange,
-                analyticsBootstrap: bootstrap,
-                accountFilter: accountFilter,
-                accountCharts: charts
-            )
+            if honorUserSelectedRange {
+                effectiveEquityChartRange = DashboardEquityChartRangeResolver.effectiveRange(
+                    requested: dateRange,
+                    analyticsBootstrap: bootstrap,
+                    accountFilter: accountFilter,
+                    accountCharts: charts,
+                    allowAutomaticWiden: false
+                )
+            } else {
+                effectiveEquityChartRange = dateRange
+            }
             if let bundle = DashboardAnalyticsMapper.bundle(
                 in: bootstrap,
                 accountFilter: accountFilter,
                 dateRange: effectiveEquityChartRange,
                 accountCharts: charts
             ) {
-                equityChartSummary = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+                var chartSummary = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+                if honorUserSelectedRange {
+                    chartSummary = DashboardEquityChartSeries.carryForwardFlatIfNeeded(
+                        summary: chartSummary,
+                        presetBundle: bundle,
+                        analyticsBootstrap: bootstrap,
+                        accountFilter: accountFilter,
+                        accountCharts: charts
+                    )
+                }
+                equityChartSummary = chartSummary
             } else {
                 equityChartSummary = nil
             }
-            if equityChartSummary?.equityData.isEmpty != false,
+            if allowAutomaticWiden,
+               equityChartSummary?.equityData.isEmpty != false,
+               effectiveEquityChartRange != dateRange,
                let fallbackBundle = DashboardAnalyticsMapper.bundle(
                    in: bootstrap,
                    accountFilter: accountFilter,
@@ -1763,17 +1961,31 @@ final class DashboardViewModel {
             return
         }
 
-        effectiveEquityChartRange = DashboardEquityChartRangeResolver.effectiveRange(
-            requested: dateRange,
-            tradeInputs: tradeInputs,
-            accountFilter: accountFilter
-        )
-        equityChartSummary = DashboardChartMetrics.compute(
+        if honorUserSelectedRange {
+            effectiveEquityChartRange = DashboardEquityChartRangeResolver.effectiveRange(
+                requested: dateRange,
+                tradeInputs: tradeInputs,
+                accountFilter: accountFilter,
+                allowAutomaticWiden: false
+            )
+        } else {
+            effectiveEquityChartRange = dateRange
+        }
+        var chartSummary = DashboardChartMetrics.compute(
             from: tradeInputs,
             accountFilter: accountFilter,
             dateRange: effectiveEquityChartRange,
             payoutTotal: payoutTotal
         )
+        if honorUserSelectedRange {
+            chartSummary = DashboardEquityChartSeries.carryForwardFlatIfNeeded(
+                summary: chartSummary,
+                dateRange: dateRange,
+                tradeInputs: tradeInputs,
+                accountFilter: accountFilter
+            )
+        }
+        equityChartSummary = chartSummary
         equityChartAccountFilter = accountFilter
     }
 
@@ -1784,6 +1996,12 @@ final class DashboardViewModel {
 
     /// Extends owner trade history via the dedicated trades path — never a second full dashboard bootstrap.
     private func refreshExtendedOwnerTradesIfNeeded(profileID: ProfileID, generation: UInt64) async {
+        guard !usesDashboardAnalyticsV3 else {
+#if DEBUG
+            SupabaseEfficiencyProbe.dashboardTradeSource(.v3)
+#endif
+            return
+        }
         guard generation == loadGeneration, pendingAutomaticDateRangeResolution else { return }
         guard !initialTradeHistoryReady else { return }
 
@@ -1867,11 +2085,7 @@ final class DashboardViewModel {
         if !skipPayouts {
             await hydratePayouts(profileID: profileID, forceNetwork: forceNetwork)
         }
-        await hydratePropFirmPayoutCycles(
-            profileID: profileID,
-            accountIDs: fundedPropAccountIDs(),
-            forceNetwork: forceNetwork
-        )
+        // Payout cycles load on demand when a prop account is selected (prop firm card).
         await hydrateCheckIns(profileID: profileID, forceNetwork: forceNetwork)
     }
 
@@ -1998,28 +2212,11 @@ final class DashboardViewModel {
         return (start, end)
     }
 
-    // MARK: - Realtime (idle subscribe — no polling)
-
     private func startRealtime(profileID: ProfileID) async {
-        guard let realtimeHub else { return }
-        let channel = RealtimeChannelID(kind: .profile, topic: "dashboard:\(profileID.rawValue)")
-        if watchedChannel == channel { return }
-        await stopRealtime()
-        watchedChannel = channel
-        try? await realtimeHub.subscriptions.subscribe(channel)
-        _ = await DashboardLoadProbe.measure(
-            "dashboard.realtime.subscribe",
-            kind: .realtime,
-            blocksFirstUsefulRender: false,
-            note: "registry-only until trade postgres_changes attach"
-        ) { () }
+        _ = profileID
     }
 
-    private func stopRealtime() async {
-        guard let realtimeHub, let channel = watchedChannel else { return }
-        try? await realtimeHub.subscriptions.unsubscribe(channel)
-        watchedChannel = nil
-    }
+    private func stopRealtime() async {}
 
     // MARK: - Dashboard GRDB-first (Phase 5F)
 
@@ -2046,13 +2243,14 @@ final class DashboardViewModel {
             DashboardAnalyticsGRDBProbe.logFallback(reason: reason)
             return false
         }
+        guard canCommit(profileID: profileID, generation: generation) else { return false }
         do {
             let applied = try DashboardAnalyticsV3Applier.apply(
                 bootstrap,
                 expectedViewerID: profileID.rawValue,
                 detailCache: detailCache
             )
-            guard generation == loadGeneration, !Task.isCancelled else { return false }
+            guard canCommit(profileID: profileID, generation: generation) else { return false }
             analyticsV3Bootstrap = applied.bootstrap
             analyticsV3Revision = applied.revision
             apply(trades: [], accounts: applied.accounts, profileID: profileID)
@@ -2142,10 +2340,24 @@ final class DashboardViewModel {
             revision: read.requiredRevision
         )
         guard read.state == .available, !read.presets.isEmpty else { return false }
+        guard DashboardAnalyticsChartsSupport.chartsReadyForPresentation(read.presets) else {
+            #if DEBUG
+            if DashboardAnalyticsChartsSupport.hasEquityPoints(read.presets),
+               !DashboardAnalyticsChartsSupport.hasVisualExpansionContract(read.presets)
+            {
+                DashboardVisualExpansionDebug.logStaleChartsCache(
+                    scope: "grdb-account:\(accountID.rawValue)",
+                    revision: analyticsV3Revision
+                )
+            }
+            #endif
+            return false
+        }
         DashboardAnalyticsAccountChartsStore.shared.seed(
             accountID: accountID,
             revision: analyticsV3Revision,
-            presets: read.presets
+            presets: read.presets,
+            viewerID: profileID.rawValue
         )
         DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "account_charts_local")
         return true
@@ -2166,11 +2378,25 @@ final class DashboardViewModel {
             return false
         }
         guard read.state == .available,
-              DashboardAnalyticsChartsSupport.hasEquityPoints(read.presets)
-        else { return false }
+              DashboardAnalyticsChartsSupport.chartsReadyForPresentation(read.presets)
+        else {
+            #if DEBUG
+            if read.state == .available,
+               DashboardAnalyticsChartsSupport.hasEquityPoints(read.presets),
+               !DashboardAnalyticsChartsSupport.hasVisualExpansionContract(read.presets)
+            {
+                DashboardVisualExpansionDebug.logStaleChartsCache(
+                    scope: "grdb-aggregate",
+                    revision: analyticsV3Revision
+                )
+            }
+            #endif
+            return false
+        }
         DashboardAnalyticsAggregateChartsStore.shared.seed(
             revision: analyticsV3Revision,
-            presets: read.presets
+            presets: read.presets,
+            viewerID: profileID.rawValue
         )
         DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "aggregate_charts_local")
         return true

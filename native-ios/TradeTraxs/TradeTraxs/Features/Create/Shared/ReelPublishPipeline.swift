@@ -24,12 +24,6 @@ enum ReelPublishPipeline {
         objectStorage: any ObjectStorageProviding,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> Reel {
-        ReelPublishDiagnostics.logPreparationCompleted(
-            publishID: publishID,
-            byteCount: draft.byteCount,
-            durationSeconds: draft.durationSeconds
-        )
-
         onProgress?(0.1)
         let uploaded: UploadedMedia
         do {
@@ -139,6 +133,17 @@ enum ReelPublishPipeline {
             )
             throw error
         }
+
+        ReelPublishDiagnostics.logPreparationCompleted(
+            publishID: publishID,
+            byteCount: resolved.byteCount,
+            durationSeconds: resolved.durationSeconds
+        )
+        ReelPublishDiagnostics.logUploadAssetResolved(
+            publishID: publishID,
+            byteCount: resolved.byteCount,
+            assetState: draft.videoAssetState.rawValue
+        )
 
         defer {
             ReelEncodingPipeline.cleanupEphemeralFiles(

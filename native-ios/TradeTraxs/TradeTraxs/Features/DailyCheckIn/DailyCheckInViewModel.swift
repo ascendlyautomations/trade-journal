@@ -71,6 +71,9 @@ final class DailyCheckInViewModel {
             }
             SessionDailyCheckInsStore.shared.upsert(saved)
             CheckInHistorySessionStore.shared.refreshCheckIn(saved)
+            if saved.isComplete {
+                GettingStartedRefreshCenter.noteDailyCheckInCompleted()
+            }
             return true
         } catch {
             errorMessage = UserFacingError.map(

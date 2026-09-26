@@ -15,6 +15,11 @@ nonisolated enum GettingStartedChecklistPolicy {
                 isComplete: signals.tradeCount > 0
             ),
             GettingStartedTask(
+                id: .dailyCheckIn,
+                label: GettingStartedTaskID.dailyCheckIn.label,
+                isComplete: signals.hasCompletedDailyCheckIn
+            ),
+            GettingStartedTask(
                 id: .follow,
                 label: GettingStartedTaskID.follow.label,
                 isComplete: signals.followCount > 0

@@ -12,14 +12,16 @@ import {
   readStoriesSession,
   writeStoriesSession,
 } from "@/lib/storiesSessionCache"
-import { isDemoModeActive } from "@/lib/demo/demoMode"
 
 function normalizeUserIds(userIds: string[]): string[] {
   return [...new Set(userIds.map((id) => String(id).trim()).filter(Boolean))]
 }
 
 /**
- * Shared active-story state: fetch, realtime refresh, and client-side expiry pruning.
+ * Shared active-story state: fetch, client-side expiry pruning, and session cache.
+ *
+ * Phase 3: no postgres_changes on `stories` (table not in `supabase_realtime`).
+ * Feed/profile bootstrap + `loadStories` + local create/delete keep state correct.
  */
 export function useActiveStories(
   userIds: string[],
@@ -59,8 +61,6 @@ export function useActiveStories(
 
   const userIdsRef = useRef(userIds)
   userIdsRef.current = userIds
-  const storiesByUserRef = useRef(storiesByUser)
-  storiesByUserRef.current = storiesByUser
 
   useEffect(() => {
     if (!enabled) {
@@ -74,44 +74,6 @@ export function useActiveStories(
     }
     if (!autoLoad) return
     void loadStories()
-  }, [autoLoad, enabled, loadStories, userIdsKey])
-
-  useEffect(() => {
-    if (!enabled || isDemoModeActive()) return
-
-    const ids = normalizeUserIds(userIdsRef.current)
-    if (ids.length === 0) return
-    if (!autoLoad && Object.keys(storiesByUserRef.current).length === 0) return
-
-    const topic = `active-stories:${userIdsKey}`
-    supabase.getChannels().forEach((c) => {
-      if (c.topic === topic) {
-        void supabase.removeChannel(c)
-      }
-    })
-
-    const channel = supabase.channel(topic)
-
-    for (const userId of ids) {
-      channel.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "stories",
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          void loadStories()
-        }
-      )
-    }
-
-    channel.subscribe()
-
-    return () => {
-      void supabase.removeChannel(channel)
-    }
   }, [autoLoad, enabled, loadStories, userIdsKey])
 
   useEffect(() => {

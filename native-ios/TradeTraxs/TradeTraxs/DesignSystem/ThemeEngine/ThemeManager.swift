@@ -24,8 +24,27 @@ final class ThemeManager {
         self.persistence = persistence
         self.resolver = ThemeResolver(registry: registry, configuration: configuration)
         self.configuration = configuration
-        self.selectedIdentifier = persistence.loadSelectedTheme() ?? configuration.defaultTheme
+        let loaded = persistence.loadSelectedTheme() ?? configuration.defaultTheme
+        let normalized = Self.normalizePersistedTheme(loaded, registry: registry)
+        self.selectedIdentifier = normalized
+        if normalized != loaded {
+            persistence.saveSelectedTheme(normalized)
+        }
         publishAnchor()
+    }
+
+    /// Maps legacy / unknown persisted values to a supported built-in theme.
+    private static func normalizePersistedTheme(
+        _ identifier: ThemeIdentifier,
+        registry: ThemeRegistry
+    ) -> ThemeIdentifier {
+        if identifier.rawValue == ThemeIdentifier.legacyTradeTraxsPersistedValue {
+            return .system
+        }
+        if registry.theme(for: identifier) != nil {
+            return identifier
+        }
+        return .system
     }
 
     var registry: ThemeRegistry { resolver.registry }

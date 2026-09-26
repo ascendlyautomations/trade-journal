@@ -11,6 +11,7 @@ final class TradeAISectionViewModel {
     private(set) var isAnalyzing = false
     private(set) var isLoadingHistory = false
     private(set) var errorMessage: String?
+    private(set) var persistErrorMessage: String?
     /// Selected analysis option for the native Menu → Analyze flow.
     var selectedPrompt: TradeAISuggestedPrompt = TradeAISuggestedPrompts.default
     /// Custom question field (advanced users).
@@ -24,6 +25,7 @@ final class TradeAISectionViewModel {
     private var analyzeTask: Task<Void, Never>?
     private var historyTask: Task<Void, Never>?
     private var didLoadHistory = false
+    private var pendingPersistTurn: (user: TradeAIMessage, assistant: TradeAIMessage)?
 
     init(tradeID: TradeID, ai: any AIRepository) {
         self.tradeID = tradeID
@@ -92,6 +94,8 @@ final class TradeAISectionViewModel {
 
         ExperienceHaptics.play(.selection)
         errorMessage = nil
+        persistErrorMessage = nil
+        pendingPersistTurn = nil
 
         let userMessage = TradeAIMessage(
             role: .user,
@@ -146,11 +150,24 @@ final class TradeAISectionViewModel {
         await analyzeTask?.value
     }
 
+    func retryPersistIfNeeded() async {
+        guard let pending = pendingPersistTurn else { return }
+        persistErrorMessage = nil
+        await persistCompletedTurn(user: pending.user, assistant: pending.assistant)
+    }
+
     private func persistCompletedTurn(user: TradeAIMessage, assistant: TradeAIMessage) async {
         do {
             try await ai.persistMessages([user, assistant], tradeID: tradeID)
+            pendingPersistTurn = nil
+            persistErrorMessage = nil
         } catch {
-            // Analysis already succeeded; persistence is best-effort.
+            pendingPersistTurn = (user, assistant)
+            persistErrorMessage =
+                "Analysis is on screen, but saving to your account failed. Tap Retry Save."
+            #if DEBUG
+            print("[TradeAITrace] persistence.failed surfacedToUser=true")
+            #endif
         }
     }
 

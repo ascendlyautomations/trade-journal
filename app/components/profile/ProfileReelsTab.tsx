@@ -26,7 +26,7 @@ function ProfileReelsTab({
   return (
     <div className="mt-1 w-full pb-8 sm:mt-4">
       {!ready ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
+        <div className="tt-profile-browse-grid tt-profile-reel-grid grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
@@ -56,7 +56,7 @@ function ProfileReelsTab({
           <p className="text-center text-sm text-gray-400">No clips yet.</p>
         )
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
+        <div className="tt-profile-browse-grid tt-profile-reel-grid grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
           {reels.map((reel) => (
             <ProfileReelCard
               key={reel.id}

@@ -318,7 +318,7 @@ export function SkeletonAchievementsGrid({ count = 6 }: { count?: number }) {
     <div
       aria-busy="true"
       aria-label="Loading achievements"
-      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+      className="tt-ach-grid"
     >
       {Array.from({ length: count }).map((_, i) => (
         <SkeletonTradeCard key={i} />

@@ -1,5 +1,6 @@
 "use client"
 
+import "../analyticsDesktopTheme.css"
 import StreakCard from "@/app/components/streaks/StreakCard"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { useUserProfile } from "@/lib/UserProfileProvider"
@@ -16,7 +17,7 @@ export default function StreaksPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6 xl:px-8 2xl:px-12">
+      <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6 xl:px-8 2xl:px-12">
         <div className="mx-auto max-w-6xl space-y-6 xl:max-w-[1440px]">
           <header className="rounded-xl border border-white/10 bg-white/5 p-5 md:p-6">
             <h1 className="text-2xl font-semibold text-blue-300 md:text-3xl">

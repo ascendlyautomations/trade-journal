@@ -1,6 +1,6 @@
 import Foundation
 
-enum ActivityFixtures {
+nonisolated enum ActivityFixtures {
     static let viewerID = ProfileID("dev.activity.viewer")
     static let alexID = ProfileID("dev.activity.alex")
     static let mikeID = ProfileID("dev.activity.mike")

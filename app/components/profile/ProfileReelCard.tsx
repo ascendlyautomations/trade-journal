@@ -38,7 +38,7 @@ export default function ProfileReelCard({ reel, onOpen }: ProfileReelCardProps) 
         ) : null}
       </div>
 
-      <div className="space-y-1.5 p-3">
+      <div className="tt-profile-reel-meta space-y-1.5 p-3">
         {caption ? (
           <p className="line-clamp-2 text-sm text-gray-100">{caption}</p>
         ) : (

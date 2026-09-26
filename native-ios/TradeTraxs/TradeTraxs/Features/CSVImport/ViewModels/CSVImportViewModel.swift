@@ -51,7 +51,7 @@ final class CSVImportViewModel {
             profileID: ownerProfileID,
             fallback: accounts
         )
-        let byID = Dictionary(uniqueKeysWithValues: resolved.map { ($0.id, $0) })
+        let byID = Dictionary(resolved.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return base.map { byID[$0.id] ?? $0 }
     }
 
@@ -94,37 +94,24 @@ final class CSVImportViewModel {
         ExperienceHaptics.play(.selection)
     }
 
-    func ingestPickedFile(url: URL) {
+    func ingestPickedFile(data: Data, fileName: String) {
         parseTask?.cancel()
         phase = .parsing
         parseTask = Task {
-            do {
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer {
-                    if scoped { url.stopAccessingSecurityScopedResource() }
-                }
-                let data = try Data(contentsOf: url)
-                guard data.count <= 10 * 1_024 * 1_024 else {
-                    phase = .failed("CSV must be 10 MB or smaller.")
-                    return
-                }
-                guard let text = String(data: data, encoding: .utf8)
-                    ?? String(data: data, encoding: .isoLatin1)
-                else {
-                    phase = .failed("Couldn't read this CSV file.")
-                    return
-                }
-                rawCSVText = text
-                sourceFileName = url.lastPathComponent
-                #if DEBUG
-                AppLog.networking.info(
-                    "CSV import picked file=\(url.lastPathComponent, privacy: .public) bytes=\(data.count, privacy: .public)"
-                )
-                #endif
-                await parseCurrentText(mappings: nil)
-            } catch {
-                phase = .failed(UserFacingError.message(for: error))
+            guard data.count <= 10 * 1_024 * 1_024 else {
+                phase = .failed("CSV must be 10 MB or smaller.")
+                return
             }
+            guard let text = String(data: data, encoding: .utf8)
+                ?? String(data: data, encoding: .isoLatin1)
+            else {
+                phase = .failed("Unable to read this CSV file.")
+                return
+            }
+            rawCSVText = text
+            sourceFileName = fileName.isEmpty ? "import.csv" : fileName
+            print("[CSV] parser started")
+            await parseCurrentText(mappings: nil)
         }
     }
 
@@ -183,6 +170,7 @@ final class CSVImportViewModel {
         guard canImport, let account = selectedAccount else { return }
         isImporting = true
         phase = .importing
+        print("[CSV] persistence started")
         let tradesToImport = importableTrades
         Task {
             do {
@@ -190,7 +178,8 @@ final class CSVImportViewModel {
                 let count = try await trades.importCSVTrades(drafts, isInitialImport: true)
                 TradeJournalMutationStore.shared.noteBulkImport(
                     owner: account.ownerProfileID,
-                    source: .csv
+                    source: .csv,
+                    persistedTradeCount: count
                 )
                 let result = CSVImportResult(
                     importedCount: count,
@@ -200,6 +189,7 @@ final class CSVImportViewModel {
                     failureMessage: nil
                 )
                 ExperienceHaptics.play(.success)
+                print("[CSV] completed")
                 phase = .result(result)
             } catch {
                 ExperienceHaptics.play(.warning)
@@ -285,24 +275,26 @@ final class CSVImportViewModel {
             phase = .failed(UserFacingError.message(for: error))
         case .success(let summary):
             self.summary = summary
-            #if DEBUG
-            AppLog.networking.info(
-                "CSV import parsed format=\(summary.format.rawValue, privacy: .public) rows=\(summary.totalRows, privacy: .public) ok=\(summary.successCount, privacy: .public) fail=\(summary.failedCount, privacy: .public)"
-            )
-            #endif
-            if mappings == nil, CSVTradeBuilder.needsManualMapping(summary: summary) {
-                columnMappings = CSVHeaderAliases.suggestedMappings(for: summary.headers)
-                phase = .mapping
-            } else if summary.successCount == 0 {
-                if mappings == nil {
+            print("[CSV] rows parsed")
+            print("[CSV] preview built")
+            if summary.totalRows == 0 {
+                phase = .failed("This CSV doesn't contain any trades.")
+                return
+            }
+            if summary.successCount > 0 {
+                if mappings == nil, CSVTradeBuilder.needsManualMapping(summary: summary) {
                     columnMappings = CSVHeaderAliases.suggestedMappings(for: summary.headers)
                     phase = .mapping
                 } else {
-                    phase = .failed("No importable trades found. Check column mapping and try again.")
+                    print("[CSV] account mapping started")
+                    preselectAccountFromCSVIfPossible()
+                    phase = .preview
                 }
+            } else if mappings == nil, CSVTradeBuilder.needsManualMapping(summary: summary) {
+                columnMappings = CSVHeaderAliases.suggestedMappings(for: summary.headers)
+                phase = .mapping
             } else {
-                preselectAccountFromCSVIfPossible()
-                phase = .preview
+                phase = .failed(summary.failures.first?.reason ?? "This CSV format isn't supported.")
             }
         }
     }

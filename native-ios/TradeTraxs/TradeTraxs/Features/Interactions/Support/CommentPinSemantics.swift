@@ -1,7 +1,7 @@
 import Foundation
 
 /// Web `lib/pinComment.ts` + pinned ordering from `lib/commentThreads.ts`.
-enum CommentPinSemantics {
+nonisolated enum CommentPinSemantics {
     static func canPinComment(
         viewerUserID: String?,
         contentOwnerUserID: String?

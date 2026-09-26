@@ -19,9 +19,19 @@ enum DashboardAnalyticsAggregateChartsCoordinator {
         rpc: any RPCClient
     ) async -> Bool {
         let store = DashboardAnalyticsAggregateChartsStore.shared
+        if let cached = store.charts(revision: revision),
+           store.availability(revision: revision).isLoaded,
+           DashboardAnalyticsChartsSupport.hasEquityPoints(cached),
+           !DashboardAnalyticsChartsSupport.hasVisualExpansionContract(cached)
+        {
+            #if DEBUG
+            DashboardVisualExpansionDebug.logStaleChartsCache(scope: "aggregate", revision: revision)
+            #endif
+            store.dropCharts(revision: revision)
+        }
         if store.availability(revision: revision).isLoaded,
            let cached = store.charts(revision: revision),
-           DashboardAnalyticsChartsSupport.hasEquityPoints(cached)
+           DashboardAnalyticsChartsSupport.chartsReadyForPresentation(cached)
         {
             return token == selectionToken
         }

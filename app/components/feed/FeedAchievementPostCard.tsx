@@ -86,6 +86,7 @@ function FeedAchievementPostCard({
           achievement={achievement}
           showVisibility={false}
           mediaPriority={mediaPriority}
+          mediaContext="feed"
         />
       </div>
 

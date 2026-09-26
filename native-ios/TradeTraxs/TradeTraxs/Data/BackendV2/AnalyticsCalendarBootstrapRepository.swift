@@ -18,7 +18,7 @@ nonisolated enum AnalyticsCalendarBootstrapLoader {
         if let mode {
             args["p_mode"] = mode
         }
-        let data = try JSONSerialization.data(withJSONObject: args)
+        let data = try SupabaseJSONEncoding.data(fromJSONObject: args)
         let client = BackendV2RPCClient(transport: rpc, enforceKnownNames: false)
         return try await client.call(
             BackendV2Versioning.RPCName.analyticsDailyRangeBootstrap.rawValue,
@@ -43,7 +43,7 @@ nonisolated enum AnalyticsCalendarBootstrapLoader {
         if let mode {
             args["p_mode"] = mode
         }
-        let data = try JSONSerialization.data(withJSONObject: args)
+        let data = try SupabaseJSONEncoding.data(fromJSONObject: args)
         let client = BackendV2RPCClient(transport: rpc, enforceKnownNames: false)
         return try await client.call(
             BackendV2Versioning.RPCName.analyticsCalendarDayTrades.rawValue,

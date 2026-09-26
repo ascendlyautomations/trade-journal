@@ -38,6 +38,7 @@ struct BrokerTradovateImportPreviewView: View {
                 }
             }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .experienceNavigationTitle(embedInParentNavigation ? "Confirm Import" : "Review Imported Trades")
         .toolbar {

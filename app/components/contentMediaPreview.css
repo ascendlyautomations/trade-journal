@@ -1,0 +1,40 @@
+/* User-content card previews only. Never style bare img. */
+
+.tt-content-media-preview {
+  max-height: min(70dvh, 680px);
+}
+
+.tt-content-media-preview--detail {
+  max-height: min(78dvh, 920px);
+}
+
+/* Feed: show the whole image inside the column. Height is capped; aspect is the file's. */
+.tt-content-media-frame--feed {
+  width: 100%;
+  background: rgb(0 0 0 / 0.3);
+}
+
+.tt-content-media-preview--feed {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(70dvh, 680px);
+  margin-inline: auto;
+  object-fit: contain;
+  object-position: center;
+}
+
+@media (min-width: 768px) {
+  .tt-content-media-preview {
+    max-height: 520px;
+  }
+
+  .tt-content-media-preview--feed {
+    max-height: 540px;
+  }
+
+  .tt-content-media-preview--detail {
+    max-height: min(72dvh, 860px);
+  }
+}

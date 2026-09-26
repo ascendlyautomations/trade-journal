@@ -48,16 +48,58 @@ enum ReelEncodingPipeline {
         try? FileManager.default.removeItem(at: ownedURL)
         try FileManager.default.copyItem(at: preparedURL, to: ownedURL)
 
+        let ownedExists = FileManager.default.fileExists(atPath: ownedURL.path)
+        let ownedBytes = ownedExists
+            ? ((try? ownedURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            : 0
+        ReelHandoffDiagnostics.logOwnershipTransferred(
+            uploadURL: ownedURL,
+            exists: ownedExists,
+            bytes: ownedBytes
+        )
+        guard ownedExists, ownedBytes > 0 else {
+            throw AppError.unknown(message: "Prepared video is no longer available.")
+        }
+
         return ReelDraftSnapshot(
             selectionID: draft.selectionID,
             ownedSourceURL: nil,
             localVideoURL: ownedURL,
             contentType: "video/mp4",
-            byteCount: sourceBytes,
+            byteCount: ownedBytes,
             durationSeconds: draft.durationSeconds,
             thumbnailJPEG: draft.thumbnailJPEG,
             caption: captionOverride ?? draft.caption,
-            linkedTradeID: draft.linkedTradeID
+            linkedTradeID: draft.linkedTradeID,
+            videoAssetState: .preparedDelivery
+        )
+    }
+
+    /// Frozen publish payload while background preparation is still running (no upload copy yet).
+    static func freezeCommittedSnapshot(
+        from draft: ReelDraft,
+        captionOverride: String? = nil
+    ) throws -> ReelDraftSnapshot {
+        guard let ownedSourceURL = draft.ownedSourceURL ?? Optional(draft.localVideoURL),
+              ReelVideoImport.fileIsReadable(at: ownedSourceURL)
+        else {
+            throw AppError.unknown(message: "Video is no longer available. Please select it again.")
+        }
+        let byteCount = (try? ownedSourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? draft.byteCount
+        guard byteCount > 0 else {
+            throw AppError.unknown(message: "Video is no longer available. Please select it again.")
+        }
+        return ReelDraftSnapshot(
+            selectionID: draft.selectionID,
+            ownedSourceURL: ownedSourceURL,
+            localVideoURL: ownedSourceURL,
+            contentType: draft.contentType,
+            byteCount: byteCount,
+            durationSeconds: draft.durationSeconds,
+            thumbnailJPEG: draft.thumbnailJPEG,
+            caption: captionOverride ?? draft.caption,
+            linkedTradeID: draft.linkedTradeID,
+            videoAssetState: .sourceMedia
         )
     }
 
@@ -92,6 +134,36 @@ enum ReelEncodingPipeline {
         let bytes = exists
             ? ((try? localURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
             : 0
+
+        if draft.videoAssetState == .preparedDelivery {
+            guard exists, bytes > 0 else {
+                ReelResolveDiagnostics.log(
+                    selectedURL: localURL,
+                    exists: exists,
+                    bytes: bytes,
+                    decision: "uploadDirectly",
+                    reason: "preparedDelivery-missing-file",
+                    assetState: draft.videoAssetState.rawValue
+                )
+                throw AppError.unknown(message: "Prepared video is no longer available.")
+            }
+            ReelResolveDiagnostics.log(
+                selectedURL: localURL,
+                exists: true,
+                bytes: bytes,
+                decision: "uploadDirectly",
+                reason: "preparedDelivery",
+                assetState: draft.videoAssetState.rawValue
+            )
+            onProgress?(1)
+            await logUploadStarted(fileURL: localURL, byteCount: bytes, durationSeconds: draft.durationSeconds)
+            return ResolvedUploadVideo(
+                fileURL: localURL,
+                byteCount: bytes,
+                durationSeconds: draft.durationSeconds,
+                ephemeralURLs: []
+            )
+        }
 
         if exists, bytes > 0 {
             let localAsset = AVURLAsset(url: localURL)
@@ -274,9 +346,17 @@ enum ReelEncodingPipeline {
         )
     }
 
-    static func logUpload(fileURL: URL, durationSeconds: Int) async {
+    static func logUploadStarted(fileURL: URL, byteCount: Int, durationSeconds: Int) async {
+        ReelEncodeDiagnostics.logUploadStarted(bytes: byteCount, path: fileURL.lastPathComponent)
+        await logUpload(fileURL: fileURL, durationSeconds: durationSeconds, byteCount: byteCount)
+    }
+
+    static func logUpload(fileURL: URL, durationSeconds: Int, byteCount: Int? = nil) async {
         let asset = AVURLAsset(url: fileURL)
         guard let profile = try? await VideoDeliveryExporter.inspectSource(asset: asset, fileURL: fileURL) else {
+            if let byteCount {
+                ReelEncodeDiagnostics.logUploadCompleted(bytes: byteCount)
+            }
             return
         }
         ReelEncodeDiagnostics.logUpload(
@@ -285,6 +365,7 @@ enum ReelEncodingPipeline {
             bitrate: Int(profile.effectiveBitrate),
             duration: durationSeconds
         )
+        ReelEncodeDiagnostics.logUploadCompleted(bytes: profile.fileBytes)
     }
 
     private static func megabytes(_ bytes: Int) -> Double {
@@ -324,6 +405,15 @@ enum ReelHandoffDiagnostics {
             """
         )
     }
+
+    static func logOwnershipTransferred(uploadURL: URL, exists: Bool, bytes: Int) {
+        print(
+            """
+            [REEL_HANDOFF] preparedOwnershipTransferred=true \
+            uploadURL=\(uploadURL.lastPathComponent) exists=\(exists) bytes=\(bytes)
+            """
+        )
+    }
 }
 
 enum ReelResolveDiagnostics {
@@ -332,15 +422,17 @@ enum ReelResolveDiagnostics {
         exists: Bool,
         bytes: Int,
         decision: String,
-        reason: String
+        reason: String,
+        assetState: String? = nil
     ) {
+        let state = assetState.map { " assetState=\($0)" } ?? ""
         print(
             """
             [REEL_RESOLVE] selectedURL=\(selectedURL.lastPathComponent) \
             exists=\(exists) \
             bytes=\(bytes) \
             decision=\(decision) \
-            reason=\(reason)
+            reason=\(reason)\(state)
             """
         )
     }
@@ -375,6 +467,14 @@ enum ReelEncodeDiagnostics {
         )
     }
 
+    static func logUploadStarted(bytes: Int, path: String) {
+        print("[ReelUpload] started bytes=\(bytes) path=\(path)")
+    }
+
+    static func logUploadCompleted(bytes: Int) {
+        print("[ReelUpload] completed bytes=\(bytes)")
+    }
+
     static func logUpload(fileMB: Double, resolution: String, bitrate: Int, duration: Int) {
         print(
             """
@@ -394,6 +494,8 @@ enum ReelHandoffDiagnostics {
         sourceBytes: Int,
         preparedBytes: Int
     ) {}
+
+    static func logOwnershipTransferred(uploadURL: URL, exists: Bool, bytes: Int) {}
 }
 
 enum ReelResolveDiagnostics {
@@ -402,7 +504,8 @@ enum ReelResolveDiagnostics {
         exists: Bool,
         bytes: Int,
         decision: String,
-        reason: String
+        reason: String,
+        assetState: String? = nil
     ) {}
 }
 
@@ -419,6 +522,10 @@ enum ReelEncodeDiagnostics {
         outputFPS: Double,
         encodeDurationMs: Double
     ) {}
+
+    static func logUploadStarted(bytes: Int, path: String) {}
+
+    static func logUploadCompleted(bytes: Int) {}
 
     static func logUpload(fileMB: Double, resolution: String, bitrate: Int, duration: Int) {}
 }

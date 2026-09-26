@@ -2,8 +2,8 @@
 export const TRADE_SCREENSHOT_MAX_HEIGHT_PX = 440
 
 /**
- * Trades-page card preview max height (Tailwind class).
- * Same rendering rules as the full-screen viewer — only the size cap differs.
+ * Previous Trades-page Tailwind cap. Live cards use ContentMediaPreview
+ * (520px desktop ceiling) instead of this class.
  */
 export const TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS = "max-h-[396px]"
 

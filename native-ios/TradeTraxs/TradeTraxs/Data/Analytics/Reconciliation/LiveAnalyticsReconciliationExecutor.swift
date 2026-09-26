@@ -11,13 +11,11 @@ nonisolated struct LiveAnalyticsReconciliationExecutor: AnalyticsReconciliationE
             throw AnalyticsReconciliationExecutorError.missingRuntime("rpc")
         }
         let started = Date()
-        let flightKey = AnalyticsReconciliationFlightKeys.dashboardV3(viewerID: viewerID.rawValue)
-        let encoded = try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
-            let repo = AnalyticsDashboardBootstrapRepository(rpc: rpc)
-            let bootstrap = try await repo.load()
-            return try JSONEncoder().encode(bootstrap)
-        }
-        let bootstrap = try JSONDecoder().decode(AnalyticsDashboardBootstrapV3.self, from: encoded)
+        let bootstrap = try await DashboardAnalyticsV3AuthoritativeFetch.fetchNetwork(
+            viewerID: viewerID,
+            rpc: rpc,
+            reason: "analyticsReconcile.dashboard"
+        )
         try Task.checkCancellation()
 
         DashboardAnalyticsDiskCache.save(

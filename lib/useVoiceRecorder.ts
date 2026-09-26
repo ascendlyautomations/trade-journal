@@ -10,10 +10,15 @@ import {
 } from "@/lib/microphoneAccess"
 import {
   encodeWavBlob,
+  logLocalPlaybackMetadata,
+  measureEncodedAudioPeak,
+  measurePcmPeak,
+  pcmChunksLookSilent,
   pickMediaRecorderFormat,
   VOICE_MESSAGE_MAX_MS,
   type VoiceRecordingFormat,
 } from "@/lib/voiceMessage"
+import { voiceWebLog } from "@/lib/voiceWebLog"
 
 export type VoiceRecorderPhase =
   | "idle"
@@ -65,7 +70,7 @@ function stopMediaRecorder(recorder: MediaRecorder | null) {
 }
 
 async function startWavCapture(stream: MediaStream): Promise<WavCapture> {
-  const context = new AudioContext({ sampleRate: 44_100 })
+  const context = new AudioContext()
   if (context.state === "suspended") {
     await context.resume()
   }
@@ -75,9 +80,41 @@ async function startWavCapture(stream: MediaStream): Promise<WavCapture> {
   processor.onaudioprocess = (event) => {
     chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)))
   }
+  const silentGain = context.createGain()
+  silentGain.gain.value = 0
   source.connect(processor)
-  processor.connect(context.destination)
+  processor.connect(silentGain)
+  silentGain.connect(context.destination)
+  voiceWebLog.wavCaptureStarted(context.sampleRate)
   return { context, source, processor, stream, chunks }
+}
+
+const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  channelCount: 1,
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+}
+
+async function finalizeVoiceTake(
+  blob: Blob,
+  durationMs: number,
+  format: VoiceRecordingFormat,
+  pcmPeak?: number
+): Promise<VoiceTake | null> {
+  const encodedPeak = pcmPeak ?? (await measureEncodedAudioPeak(blob))
+  await logLocalPlaybackMetadata(blob, encodedPeak)
+
+  if (blob.size < MIN_BLOB_BYTES) {
+    voiceWebLog.captureRejected("blob-too-small")
+    return null
+  }
+  if (encodedPeak != null && encodedPeak < 0.002) {
+    voiceWebLog.captureRejected("silent-peak")
+    return null
+  }
+
+  return { blob, durationMs, format }
 }
 
 export function useVoiceRecorder(): UseVoiceRecorderResult {
@@ -140,17 +177,30 @@ export function useVoiceRecorder(): UseVoiceRecorderResult {
         extension: "wav",
         contentType: "audio/wav",
       }
+      const pcmPeak = measurePcmPeak(wav.chunks)
       const blob = encodeWavBlob(wav.chunks, wav.context.sampleRate)
+      voiceWebLog.recorderStopped(
+        wav.chunks.length,
+        blob.size,
+        format.contentType
+      )
       cleanup()
       setPhase("idle")
       setElapsedMs(0)
-      if (blob.size < MIN_BLOB_BYTES) {
+      if (pcmChunksLookSilent(wav.chunks)) {
+        voiceWebLog.captureRejected("silent-pcm")
+        setLastError(
+          "No audio was captured. Check your microphone and try again."
+        )
+        return null
+      }
+      const result = await finalizeVoiceTake(blob, durationMs, format, pcmPeak)
+      if (!result) {
         setLastError(
           "No audio was captured. Try speaking closer to the microphone."
         )
         return null
       }
-      const result = { blob, durationMs, format }
       setCompletedTake(result)
       setLastError(null)
       return result
@@ -177,18 +227,23 @@ export function useVoiceRecorder(): UseVoiceRecorderResult {
       stopMediaRecorder(recorder)
     })
 
+    voiceWebLog.recorderStopped(
+      chunksRef.current.length,
+      blob.size,
+      format.contentType
+    )
+
     cleanup()
     setPhase("idle")
     setElapsedMs(0)
 
-    if (blob.size < MIN_BLOB_BYTES) {
+    const result = await finalizeVoiceTake(blob, durationMs, format)
+    if (!result) {
       setLastError(
         "No audio was captured. Try speaking closer to the microphone."
       )
       return null
     }
-
-    const result = { blob, durationMs, format }
     setCompletedTake(result)
     setLastError(null)
     return result
@@ -219,7 +274,9 @@ export function useVoiceRecorder(): UseVoiceRecorderResult {
 
     let stream: MediaStream
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: AUDIO_CONSTRAINTS,
+      })
     } catch (error) {
       logMicrophoneAccessError("getUserMedia failed", error)
       cleanup()
@@ -235,12 +292,21 @@ export function useVoiceRecorder(): UseVoiceRecorderResult {
     setElapsedMs(0)
     setPhase("recording")
 
+    voiceWebLog.micGranted()
+    const track = stream.getAudioTracks()[0]
+    if (track) {
+      voiceWebLog.trackState(track.enabled, track.muted, track.readyState)
+    }
+
     try {
       const mediaFormat = pickMediaRecorderFormat()
       let recorder: MediaRecorder | null = null
       if (mediaFormat) {
         try {
-          recorder = new MediaRecorder(stream, { mimeType: mediaFormat.mimeType })
+          recorder = new MediaRecorder(stream, {
+            mimeType: mediaFormat.mimeType,
+            audioBitsPerSecond: 128_000,
+          })
         } catch {
           recorder = null
         }
@@ -254,6 +320,7 @@ export function useVoiceRecorder(): UseVoiceRecorderResult {
           if (event.data.size > 0) chunksRef.current.push(event.data)
         }
         recorder.start(250)
+        voiceWebLog.recorderStarted(mediaFormat.mimeType)
       } else {
         wavCaptureRef.current = await startWavCapture(stream)
       }

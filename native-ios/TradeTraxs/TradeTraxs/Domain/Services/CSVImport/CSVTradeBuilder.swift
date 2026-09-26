@@ -13,7 +13,7 @@ nonisolated enum CSVTradeBuilder {
     }
 
     static func detectFormat(headers: [String], firstRow: [String: String]?) -> CSVFileFormat {
-        let probe = firstRow ?? Dictionary(uniqueKeysWithValues: headers.map { ($0, "1") })
+        let probe = firstRow ?? Dictionary(headers.map { ($0, "1") }, uniquingKeysWith: { _, last in last })
         if isTradovate(probe) { return .tradovate }
         if isTradeZella(probe) { return .tradezella }
         if isEnteredExited(probe) { return .enteredExited }
@@ -26,6 +26,7 @@ nonisolated enum CSVTradeBuilder {
         mappings: [CSVColumnMapping]? = nil
     ) throws -> CSVParseSummary {
         let parsed = try CSVTextParser.parse(text: text)
+        print("[CSV] headers parsed")
         let format = detectFormat(headers: parsed.headers, firstRow: parsed.rows.first)
         return build(
             fileName: fileName,
@@ -84,6 +85,19 @@ nonisolated enum CSVTradeBuilder {
             }
         }
 
+        #if DEBUG
+        print("[CSV] detected format=\(format.rawValue)")
+        print(
+            "[CSV] normalized headers=\(headers.map { CSVHeaderAliases.normalizeHeaderKey($0) }.joined(separator: " | "))"
+        )
+        print(
+            "[CSV] total CSV rows=\(rows.count) candidate rows=\(rows.count) parsed rows=\(trades.count) rejected rows=\(failures.count) final trade count=\(trades.count)"
+        )
+        for failure in failures {
+            print("[CSV] rejected row=\(failure.rowNumber) reason=\(redactedRejectionReason(failure.reason))")
+        }
+        #endif
+        print("[CSV] rows parsed")
         return CSVParseSummary(
             format: format,
             fileName: fileName,
@@ -161,13 +175,12 @@ nonisolated enum CSVTradeBuilder {
             in: row,
             aliases: ["sellPrice", "sell price", "exit price", "exit"]
         )
-        guard entryRaw != nil, exitRaw != nil else {
-            return .failure(RowError(message: "Tradovate row missing buy/sell price"))
-        }
-        guard let entry = CSVNumericParser.parse(entryRaw) else {
+        let entry = CSVNumericParser.parse(entryRaw)
+        let exit = CSVNumericParser.parse(exitRaw)
+        if entryRaw != nil, entry == nil {
             return .failure(RowError(message: "Invalid buyPrice: \"\(entryRaw ?? "")\""))
         }
-        guard let exit = CSVNumericParser.parse(exitRaw) else {
+        if exitRaw != nil, exit == nil {
             return .failure(RowError(message: "Invalid sellPrice: \"\(exitRaw ?? "")\""))
         }
         guard let pnlRaw = CSVHeaderAliases.cell(
@@ -289,7 +302,9 @@ nonisolated enum CSVTradeBuilder {
             ?? .long
         let qty = CSVNumericParser.parse(value(["executions", "quantity"])) ?? 1
         let contracts = max(1, Int(truncating: qty as NSDecimalNumber))
-        let baseRaw = exitDate ?? entryDate!
+        guard let baseRaw = exitDate ?? entryDate else {
+            return .failure(RowError(message: "Missing required field: date"))
+        }
         guard let baseDate = parseFlexibleDate(baseRaw) else {
             return .failure(RowError(message: "Unrecognized date format: \"\(baseRaw)\""))
         }
@@ -614,6 +629,14 @@ nonisolated enum CSVTradeBuilder {
         guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return CSVNumericParser.parse(raw)
     }
+
+    #if DEBUG
+    /// Keeps the failure category and drops the quoted cell so logs stay free of trade values.
+    private static func redactedRejectionReason(_ reason: String) -> String {
+        guard let quote = reason.firstIndex(of: "\"") else { return reason }
+        return String(reason[..<quote]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    #endif
 
     private static func sanitizeNotes(_ raw: String) -> String {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -9,6 +9,8 @@ export type GettingStartedChecklistSignals = {
   followCount: number
   hasEverJoinedOtherRoom: boolean
   hasPublicTrade: boolean
+  /** At least one fully submitted row in `trader_daily_check_ins`. */
+  hasCompletedDailyCheckIn: boolean
   /** Most recent private trade — used to deep-link into trade edit. */
   firstPrivateTradeId: string | null
 }

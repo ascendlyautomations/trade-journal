@@ -62,6 +62,7 @@ struct SettingsSubscriptionView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Plan")

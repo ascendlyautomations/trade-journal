@@ -19,6 +19,7 @@ final class AddTradeViewModel {
     }
 
     enum Field: Hashable {
+        case account
         case symbol
         case entry
         case exit
@@ -361,18 +362,18 @@ final class AddTradeViewModel {
         guard let account = accounts.first(where: { $0.id == id }) else { return }
         let keepOriginal = isEditing && id == editingOriginalAccountID
         guard account.canAddTrades || keepOriginal else {
-            formError = "This account is read-only and cannot accept new trades."
+            fieldErrors[.account] = "This account is read-only and cannot accept new trades."
             return
         }
         ExperienceHaptics.play(.selection)
         selectedAccountID = id
         Self.lastAccountID = id
-        formError = nil
+        fieldErrors[.account] = nil
     }
 
     func clearAccountSelection() {
         selectedAccountID = nil
-        formError = nil
+        fieldErrors[.account] = nil
     }
 
     func addExitTime() {
@@ -466,6 +467,7 @@ final class AddTradeViewModel {
                     selectionID: UUID().uuidString,
                     ownedSourceURL: nil,
                     localVideoURL: prepared.fileURL,
+                    videoAssetState: .preparedDelivery,
                     contentType: prepared.contentType,
                     byteCount: prepared.byteCount,
                     durationSeconds: prepared.durationSeconds,
@@ -528,7 +530,7 @@ final class AddTradeViewModel {
         }
     }
 
-    /// Opens Settings → Trading Accounts (keeps Add Trade presentation open, same as CSV import).
+    /// Opens Manage Accounts in the tab stack (only works when Add Trade is not covering the shell).
     func openManageAccounts() {
         NavigationCoordinatorProxy.openManageAccounts?()
     }
@@ -798,14 +800,14 @@ final class AddTradeViewModel {
             return
         }
         guard let account = selectedAccount else {
-            formError = "Choose Account."
+            fieldErrors[.account] = "Choose Account."
             phase = .ready
             saveTask = nil
             return
         }
         let keepOriginalAccount = isEditing && account.id == editingOriginalAccountID
         guard account.canAddTrades || keepOriginalAccount else {
-            formError = "Choose Account."
+            fieldErrors[.account] = "Choose Account."
             phase = .ready
             saveTask = nil
             return
@@ -1088,7 +1090,7 @@ final class AddTradeViewModel {
         if selectedAccountID == nil
             || (selectedAccount?.canAddTrades != true && !keepOriginalAccount)
         {
-            formError = "Choose Account."
+            errors[.account] = "Choose Account."
         }
         if Self.parseDecimal(contractsText, style: .tradeQuantity) == nil {
             errors[.contracts] = "Enter a valid contract count"

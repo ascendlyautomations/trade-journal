@@ -1,11 +1,12 @@
 "use client"
 
 import { useCallback, useRef, useState, type ChangeEvent, type RefObject } from "react"
+import type { ContentImageV2Preset } from "./contentImageV2"
 import type { ImageCropPresetId } from "./imageCropPresets"
 import { validateImageUpload } from "./uploadValidation"
 
 type UseImageCropUploadOptions = {
-  preset: ImageCropPresetId
+  preset: ImageCropPresetId | ContentImageV2Preset
   onCropped: (file: File) => void
   onValidationError?: (message: string) => void
 }

@@ -12,7 +12,7 @@ struct ThemeMetadata: Hashable, Sendable, Identifiable {
     static let system = ThemeMetadata(
         identifier: .system,
         displayName: "System",
-        detail: "Match Light or Dark with iOS",
+        detail: "Follows your iPhone appearance",
         isPremiumSignature: false,
         supportsSystemAppearanceFollow: true
     )
@@ -20,7 +20,7 @@ struct ThemeMetadata: Hashable, Sendable, Identifiable {
     static let light = ThemeMetadata(
         identifier: .light,
         displayName: "Light",
-        detail: "Always use the light appearance",
+        detail: "Always use Light Mode",
         isPremiumSignature: false,
         supportsSystemAppearanceFollow: false
     )
@@ -28,16 +28,8 @@ struct ThemeMetadata: Hashable, Sendable, Identifiable {
     static let dark = ThemeMetadata(
         identifier: .dark,
         displayName: "Dark",
-        detail: "Always use the dark appearance",
+        detail: "Always use Dark Mode",
         isPremiumSignature: false,
-        supportsSystemAppearanceFollow: false
-    )
-
-    static let tradeTraxs = ThemeMetadata(
-        identifier: .tradeTraxs,
-        displayName: "TradeTraxs",
-        detail: "Muted blue canvas with gray surfaces and cyan accents",
-        isPremiumSignature: true,
         supportsSystemAppearanceFollow: false
     )
 }

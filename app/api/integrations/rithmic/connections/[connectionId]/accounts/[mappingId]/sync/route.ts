@@ -59,6 +59,7 @@ export async function POST(req: Request, context: RouteContext) {
   )
 
   const status = summary.ok ? 200 : summary.status === "syncing" ? 409 : 400
+  const code = rithmicBrokerClientCode(summary)
 
   return Response.json(
     {
@@ -67,7 +68,32 @@ export async function POST(req: Request, context: RouteContext) {
       mappingId,
       summary,
       accounts: accountsWithSync,
+      ...(code ? { code, errorCode: summary.errorCode } : {}),
     },
     { status }
   )
+}
+
+/** Same stable client codes as Tradovate sync. iOS classifies from these, not prose. */
+function rithmicBrokerClientCode(summary: {
+  ok: boolean
+  status: string
+  errorCode?: string
+}): string | undefined {
+  if (summary.ok) return undefined
+  const errorCode = summary.errorCode?.trim()
+  if (summary.status === "syncing" || errorCode === "sync_in_progress") {
+    return "BROKER_SYNC_IN_PROGRESS"
+  }
+  if (
+    summary.status === "reconnect_required" ||
+    errorCode === "reconnect_required" ||
+    errorCode === "unauthorized" ||
+    errorCode === "not_connected" ||
+    errorCode === "rithmic_password_required"
+  ) {
+    return "BROKER_RECONNECT_REQUIRED"
+  }
+  if (errorCode === "provider_unavailable") return "BROKER_TEMPORARILY_UNAVAILABLE"
+  return "BROKER_SYNC_FAILED"
 }

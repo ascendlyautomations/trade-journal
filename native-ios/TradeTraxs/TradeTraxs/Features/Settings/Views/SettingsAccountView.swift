@@ -109,6 +109,7 @@ struct SettingsAccountView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Account")
@@ -174,7 +175,55 @@ struct SettingsAccountView: View {
         } message: {
             Text(viewModel.deleteAccountConfirmationMessage)
         }
+        .fullScreenCover(isPresented: Binding(
+            get: { viewModel.showsDeleteAccountSuccess },
+            set: { _ in }
+        )) {
+            AccountDeletionSuccessView {
+                viewModel.returnToSignInAfterAccountDeletion()
+            }
+        }
         .accessibilityIdentifier("settings.account")
+    }
+}
+
+private struct AccountDeletionSuccessView: View {
+    let onReturnToSignIn: () -> Void
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        VStack(spacing: ExperienceSpacing.xl) {
+            Spacer(minLength: ExperienceSpacing.xxl)
+
+            ExperienceIcon(icon: .success, size: .xl, color: colors.accent)
+                .accessibilityHidden(true)
+
+            VStack(spacing: ExperienceSpacing.sm) {
+                Text("Account Deleted")
+                    .font(.system(.title2, design: .rounded).weight(.semibold))
+                    .foregroundStyle(colors.primaryText)
+                    .multilineTextAlignment(.center)
+
+                Text("Your TradeTraxs account has been successfully deleted.")
+                    .experienceStyle(.body, color: colors.secondaryText)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, ExperienceSpacing.xl)
+
+            ExperienceButton(
+                title: "Return to Sign In",
+                kind: .primary,
+                action: onReturnToSignIn
+            )
+            .padding(.horizontal, ExperienceSpacing.xl)
+            .accessibilityIdentifier("settings.account.deletionSuccess.returnToSignIn")
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .experienceScreenBackground()
+        .accessibilityIdentifier("settings.account.deletionSuccess")
     }
 }
 
@@ -228,6 +277,7 @@ struct SettingsSecurityView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Security")

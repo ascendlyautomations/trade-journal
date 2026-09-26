@@ -406,9 +406,9 @@ private final class HangCountingProfileRepository: ProfileRepository, @unchecked
     }
 
     func profile(id: ProfileID) async throws -> Profile {
-        lock.lock()
-        _profileCallCount += 1
-        lock.unlock()
+        TestLock.withLock(lock) {
+            _profileCallCount += 1
+        }
         return Profile(
             id: id,
             userID: UserID(id.rawValue),
@@ -437,9 +437,9 @@ private final class HangCountingProfileRepository: ProfileRepository, @unchecked
     func updateProfile(_ profile: Profile) async throws -> Profile { profile }
 
     func stats(for profileID: ProfileID) async throws -> ProfileStats {
-        lock.lock()
-        _statsCallCount += 1
-        lock.unlock()
+        TestLock.withLock(lock) {
+            _statsCallCount += 1
+        }
         return ProfileStats(
             profileID: profileID,
             followerCount: 0,

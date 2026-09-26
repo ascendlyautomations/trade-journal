@@ -73,6 +73,7 @@ struct CSVImportTradeReviewView: View {
                 }
             }
         }
+        .experienceDashboardGroupedRows()
         .experienceNavigationTitle("Review Trade")
         .scrollDismissesKeyboard(.interactively)
         .experienceSignedDecimalKeyboardSignToggle(isActive: isPnlFocused) {

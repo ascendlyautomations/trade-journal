@@ -42,6 +42,8 @@ function itemHref(
       return "/settings"
     case "trade":
       return "/app"
+    case "dailyCheckIn":
+      return "/app"
     case "post":
       return profileId
         ? `${profilePath({ id: profileId })}?tab=posts&createPost=1`

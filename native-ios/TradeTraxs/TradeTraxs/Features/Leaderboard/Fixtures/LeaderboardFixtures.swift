@@ -1,6 +1,6 @@
 import Foundation
 
-enum LeaderboardFixtures {
+nonisolated enum LeaderboardFixtures {
     /// Dated public trades so Today / Week / Month / Year / All Time diverge (web filter parity).
     static func trades(viewerID: ProfileID) -> [LeaderboardTradeRow] {
         let now = Date()

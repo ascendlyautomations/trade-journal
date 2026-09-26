@@ -24,8 +24,7 @@ import {
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import CustomSelect from "@/app/components/CustomSelect"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
-import ImageCropModal from "@/app/components/ImageCropModal"
-import { useImageCropUpload } from "@/lib/useImageCropUpload"
+import { validateImageUpload } from "@/lib/uploadValidation"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 const SUCCESS_AUTO_CLOSE_MS = 1000
@@ -54,12 +53,7 @@ export default function BugReportModal({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   useModalScrollLock(open)
-  const imageCrop = useImageCropUpload({
-    preset: "content",
-    onCropped: setScreenshot,
-    onValidationError: setError,
-  })
-  const fileInputRef = imageCrop.fileInputRef
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const resetForm = useCallback(() => {
     setTitle("")
@@ -231,7 +225,22 @@ export default function BugReportModal({
                 type="file"
                 accept="image/*"
                 disabled={busy || success}
-                onChange={(e) => imageCrop.handleFileSelected(e.target.files?.[0])}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) {
+                    setScreenshot(null)
+                    return
+                  }
+                  const validationError = validateImageUpload(file)
+                  if (validationError) {
+                    setError(validationError)
+                    e.target.value = ""
+                    setScreenshot(null)
+                    return
+                  }
+                  setError(null)
+                  setScreenshot(file)
+                }}
                 className="hidden"
               />
             </label>
@@ -271,13 +280,6 @@ export default function BugReportModal({
           </form>
         )}
       </div>
-      <ImageCropModal
-        open={imageCrop.cropSourceFile != null}
-        file={imageCrop.cropSourceFile}
-        preset="content"
-        onCancel={imageCrop.handleCropCancel}
-        onSave={imageCrop.handleCropSave}
-      />
     </div>
   )
 }

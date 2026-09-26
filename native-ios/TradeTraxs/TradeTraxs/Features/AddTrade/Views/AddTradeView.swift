@@ -20,11 +20,15 @@ struct AddTradeView: View {
     @State private var didApplyScreenshotPrefill = false
     @State private var screenshotPickerShowsPreview = false
     @State private var isTradeReviewExpanded = false
+    @State private var showsBrokerIntegrations = false
+    @State private var createAccountSheet: CreateAccountSheetPresentation?
     @FocusState private var focusedField: AddTradeViewModel.Field?
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
 
     private let embeddedInTradeEntryHub: Bool
+    private let brokerData: DataEnvironment?
 
     init(
         data: DataEnvironment,
@@ -33,6 +37,7 @@ struct AddTradeView: View {
         onDismiss: @escaping () -> Void
     ) {
         self.embeddedInTradeEntryHub = embeddedInTradeEntryHub
+        self.brokerData = data
         _viewModel = State(
             initialValue: AddTradeViewModel(
                 trades: data.trades,
@@ -52,6 +57,7 @@ struct AddTradeView: View {
 
     init(viewModel: AddTradeViewModel, embeddedInTradeEntryHub: Bool = false) {
         self.embeddedInTradeEntryHub = embeddedInTradeEntryHub
+        self.brokerData = nil
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -194,9 +200,33 @@ struct AddTradeView: View {
             Button("Keep Editing", role: .cancel) {}
         }
         .experienceProtectedFormDismiss()
-        .task { viewModel.loadIfNeeded() }
+        .sheet(isPresented: $showsBrokerIntegrations) {
+            if let brokerData {
+                NavigationStack {
+                    BrokerIntegrationsView(data: brokerData)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Close") { showsBrokerIntegrations = false }
+                            }
+                        }
+                }
+                .experienceSheetChrome(detents: [.large])
+            }
+        }
+        .sheet(item: $createAccountSheet) { presentation in
+            ManageAccountCreateAccountSheet(data: presentation.data)
+        }
+        .task {
+            viewModel.loadIfNeeded()
+            if case .create = viewModel.mode {
+                BrokerImportEligibilityStore.shared.loadIfNeeded()
+            }
+        }
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
             viewModel.reloadAccountsAfterMutation()
+            if createAccountSheet != nil, AccountMutationStore.shared.latestAccountID != nil {
+                createAccountSheet = nil
+            }
         }
         .onChange(of: viewModel.phase) { _, phase in
             #if DEBUG
@@ -228,6 +258,61 @@ struct AddTradeView: View {
         .accessibilityIdentifier("addTrade.root")
     }
 
+    /// Optional CTA. Hidden with no reserved space once a broker connection exists.
+    private var showsConnectBrokerCard: Bool {
+        guard case .create = viewModel.mode, brokerData != nil else { return false }
+        let store = BrokerImportEligibilityStore.shared
+        return store.isReady && store.connectionCount == 0 && !store.hasSupportedConnection
+    }
+
+    private var connectBrokerCard: some View {
+        HStack(spacing: ExperienceSpacing.xs) {
+            Image(systemName: "link.circle.fill")
+                .font(.body)
+                .foregroundStyle(colors.accent)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Connect a Broker")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(colors.primaryText)
+                    .lineLimit(1)
+                Text("Import trades automatically")
+                    .font(.caption2)
+                    .foregroundStyle(colors.secondaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: ExperienceSpacing.xs)
+
+            Button {
+                showsBrokerIntegrations = true
+            } label: {
+                Text("Connect")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(colors.onAccent)
+                    .padding(.horizontal, ExperienceSpacing.sm)
+                    .padding(.vertical, ExperienceSpacing.xxs)
+                    .background(colors.accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("addTrade.connectBroker")
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.vertical, ExperienceSpacing.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                .fill(colorScheme == .dark ? colors.fillSecondary.opacity(0.35) : colors.cardBackground)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                .stroke(colors.border.opacity(ExperienceOpacity.subtle), lineWidth: ExperienceBorder.hairline)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("addTrade.connectBrokerCard")
+    }
+
     private var preTradePsychologyNotice: some View {
         AddTradePreTradePsychologyNotice(
             focusLevel: TraderDailyCheckInStore.shared.todayCheckIn?.focusLevel,
@@ -257,28 +342,47 @@ struct AddTradeView: View {
             ) != nil {
                 Section {
                     preTradePsychologyNotice
+                        .listRowInsets(AddTradeFormLayout.rowInsets)
+                        .listRowBackground(Color.clear)
+                }
+            }
+
+            if showsConnectBrokerCard {
+                Section {
+                    connectBrokerCard
+                        .listRowInsets(AddTradeFormLayout.brokerRowInsets)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
             }
 
             Section {
                 accountPicker
+                if let accountError = viewModel.fieldErrors[.account] {
+                    Text(accountError)
+                        .foregroundStyle(colors.loss)
+                        .font(.footnote)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .listRowInsets(AddTradeFormLayout.rowInsets)
+                        .accessibilityIdentifier("addTrade.accountError")
+                }
                 instrumentRow
                 Picker("Direction", selection: $viewModel.side) {
                     Text("Long").tag(TradeSide.long)
                     Text("Short").tag(TradeSide.short)
                 }
                 .pickerStyle(.segmented)
-                .listRowInsets(EdgeInsets(top: ExperienceSpacing.xxs, leading: ExperienceSpacing.md, bottom: ExperienceSpacing.xxs, trailing: ExperienceSpacing.md))
+                .listRowInsets(AddTradeFormLayout.rowInsets)
                 .accessibilityLabel("Trade direction")
             } header: {
-                Text("Trade")
+                addTradeSectionHeader("Trade")
             } footer: {
                 if !viewModel.hasNoTradingAccounts, viewModel.eligibleAccounts.isEmpty {
                     Text("No accounts can accept new trades. Free plan allows up to \(FreeTierPolicy.maxTradeEntryAccounts) entry-enabled accounts.")
                 }
             }
 
-            Section("Risk & Result") {
+            Section {
                 HStack(alignment: .top, spacing: ExperienceSpacing.md) {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                         Text("P&L")
@@ -314,10 +418,12 @@ struct AddTradeView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .listRowInsets(EdgeInsets(top: ExperienceSpacing.xxs, leading: ExperienceSpacing.md, bottom: ExperienceSpacing.xxs, trailing: ExperienceSpacing.md))
+                .listRowInsets(AddTradeFormLayout.rowInsets)
+            } header: {
+                addTradeSectionHeader("Risk & Result")
             }
 
-            Section("Execution") {
+            Section {
                 HStack(alignment: .top, spacing: ExperienceSpacing.md) {
                     compactNumericField(
                         "Entry Price",
@@ -334,7 +440,7 @@ struct AddTradeView: View {
                         style: .tradePrice
                     )
                 }
-                .listRowInsets(EdgeInsets(top: ExperienceSpacing.xxs, leading: ExperienceSpacing.md, bottom: ExperienceSpacing.xxs, trailing: ExperienceSpacing.md))
+                .listRowInsets(AddTradeFormLayout.rowInsets)
 
                 HStack(alignment: .top, spacing: ExperienceSpacing.md) {
                     compactNumericField(
@@ -352,13 +458,17 @@ struct AddTradeView: View {
                         style: .tradeQuantity
                     )
                 }
-                .listRowInsets(EdgeInsets(top: ExperienceSpacing.xxs, leading: ExperienceSpacing.md, bottom: ExperienceSpacing.xxs, trailing: ExperienceSpacing.md))
+                .listRowInsets(AddTradeFormLayout.rowInsets)
+            } header: {
+                addTradeSectionHeader("Execution")
             }
 
-            Section("Timing") {
+            Section {
                 DatePicker("Entry", selection: $viewModel.entryAt)
+                    .listRowInsets(AddTradeFormLayout.rowInsets)
                 if viewModel.includeExitTime {
                     DatePicker("Exit", selection: $viewModel.exitAt)
+                        .listRowInsets(AddTradeFormLayout.rowInsets)
                     Button("Remove exit time", role: .destructive) {
                         viewModel.removeExitTime()
                     }
@@ -381,6 +491,8 @@ struct AddTradeView: View {
                     .foregroundStyle(colors.accent)
                     .accessibilityIdentifier("addTrade.addExitTime")
                 }
+            } header: {
+                addTradeSectionHeader("Timing")
             }
 
             tradeReviewSection
@@ -393,7 +505,7 @@ struct AddTradeView: View {
             mediaContentSection
             #endif
 
-            Section("Sharing") {
+            Section {
                 Toggle("Share to Profile", isOn: $viewModel.shareToProfile)
                 if viewModel.shareToProfile {
                     HStack {
@@ -410,6 +522,8 @@ struct AddTradeView: View {
                     TextField("Caption (optional)", text: $viewModel.publicCaptionText, axis: .vertical)
                         .lineLimit(1...4)
                 }
+            } header: {
+                addTradeSectionHeader("Sharing")
             }
 
             if let formError = viewModel.formError {
@@ -423,8 +537,10 @@ struct AddTradeView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
+        .experienceDashboardGroupedRows()
         .disabled(viewModel.phase == .saving)
-        .listSectionSpacing(ExperienceSpacing.xs)
+        .listSectionSpacing(AddTradeFormLayout.sectionSpacing)
+        .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .onAppear {
             if viewModel.isEditing, viewModel.hasTradeReviewContent {
                 isTradeReviewExpanded = true
@@ -572,7 +688,7 @@ struct AddTradeView: View {
     }
 
     private var mediaContentSection: some View {
-        Section("Media & Content") {
+        Section {
             if let preview = viewModel.screenshotPreview {
                 AdaptiveMediaPreviewImage(image: preview)
                     .accessibilityLabel("Trade screenshot preview")
@@ -659,6 +775,8 @@ struct AddTradeView: View {
                 )
             }
             .accessibilityIdentifier("addTrade.addClip")
+        } header: {
+            addTradeSectionHeader("Media & Content")
         }
     }
 
@@ -719,7 +837,7 @@ struct AddTradeView: View {
     private var accountPicker: some View {
         if viewModel.hasNoTradingAccounts {
             Button {
-                viewModel.openManageAccounts()
+                presentCreateTradingAccount()
             } label: {
                 HStack {
                     Text("Account")
@@ -759,6 +877,14 @@ struct AddTradeView: View {
                 )
             }
         }
+    }
+
+    private func presentCreateTradingAccount() {
+        guard let brokerData else {
+            viewModel.openManageAccounts()
+            return
+        }
+        createAccountSheet = CreateAccountSheetPresentation(data: brokerData)
     }
 
     private func compactNumericField(
@@ -930,6 +1056,41 @@ struct AddTradeView: View {
         ""
         #endif
     }
+
+    @ViewBuilder
+    private func addTradeSectionHeader(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .padding(.top, -ExperienceSpacing.xxs)
+    }
+}
+
+// MARK: - Create account sheet (matches Manage Accounts `.sheet(item:)` pattern)
+
+private struct CreateAccountSheetPresentation: Identifiable {
+    let id = UUID()
+    let data: DataEnvironment
+}
+
+// MARK: - Add Trade form rhythm
+
+private enum AddTradeFormLayout {
+    /// ~50% tighter than prior `ExperienceSpacing.xs` section gaps.
+    static let sectionSpacing = ExperienceSpacing.xxs
+
+    static let rowInsets = EdgeInsets(
+        top: ExperienceSpacing.xxs,
+        leading: ExperienceSpacing.md,
+        bottom: ExperienceSpacing.xxs,
+        trailing: ExperienceSpacing.md
+    )
+
+    /// Banner spans the same width as the section cards. Bottom inset separates it from the Trade heading.
+    static let brokerRowInsets = EdgeInsets(
+        top: ExperienceSpacing.xs / 2,
+        leading: 0,
+        bottom: ExperienceSpacing.lg / 4,
+        trailing: 0
+    )
 }
 
 // MARK: - Instrument picker
@@ -1050,6 +1211,7 @@ struct AddTradeInstrumentPickerView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .searchable(text: $searchText, prompt: "Search instruments")
@@ -1137,6 +1299,7 @@ struct AddTradeNewClipComposerView: View {
                 Text("Linked to this trade")
             }
         }
+        .experienceDashboardGroupedRows()
         .experienceNavigationTitle("New Clip")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {

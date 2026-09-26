@@ -402,7 +402,7 @@ function FreeDashboardKpis({
 >) {
   return (
     <div className="flex flex-col gap-2 md:space-y-3">
-      <div className="tt-dash-strip flex">
+      <div className="tt-dash-strip tt-dash-hide-desktop-v1 flex">
         <StripStat
           title="Net P/L"
           value={formatCurrency(totalPnL)}
@@ -423,6 +423,7 @@ function FreeDashboardKpis({
         title="Best Win Streak"
         value={bestWinStreak}
         subtitle={bestWinStreakSubtitle(bestWinStreak)}
+        className="tt-dash-hide-desktop-v1"
       />
       {showEquity ? <div className="md:hidden">{mobileEquitySlot}</div> : null}
     </div>
@@ -489,7 +490,7 @@ export default function DashboardStatsGrid({
         {showEquity ? mobileEquitySlot : null}
       </div>
 
-      <div className="tt-dash-strip hidden md:flex">
+      <div className="tt-dash-strip tt-dash-hide-desktop-v1 hidden md:flex">
         <StripStat
           title="P&L"
           value={formatCurrency(totalPnL)}
@@ -506,13 +507,13 @@ export default function DashboardStatsGrid({
           }
         />
       </div>
-      <div className="hidden md:block">
+      <div className="tt-dash-hide-desktop-v1 hidden md:block">
         <p className="tt-dash-section-title">Performance</p>
         <p className="tt-dash-section-subtitle mb-2">
           Outcome quality for this period
         </p>
       </div>
-      <div className="hidden md:grid md:grid-cols-2 md:gap-3">
+      <div className="tt-dash-hide-desktop-v1 hidden md:grid md:grid-cols-2 md:gap-3">
         <Stat
           title="Best Win Streak"
           value={bestWinStreak}
@@ -536,7 +537,7 @@ export default function DashboardStatsGrid({
       </div>
 
       {/* Desktop column: streaks / hours / drawdown stay in the left rail. */}
-      <div className="hidden md:block md:space-y-3">
+      <div className="tt-dash-hide-desktop-v1 hidden md:block md:space-y-3">
         <DashboardStreaksCard streakData={streakData} />
         <DashboardTradingHoursCard hourData={hourData} />
         {maxDrawdownSlot}

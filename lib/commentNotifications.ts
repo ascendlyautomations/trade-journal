@@ -10,8 +10,18 @@ async function authFetch(
 ): Promise<Response | null> {
   const {
     data: { session },
+    error,
   } = await supabase.auth.getSession()
-  const accessToken = session?.access_token
+  if (error) {
+    console.error("[comment-notifications] session read failed", {
+      operation: "getSession",
+      code: error.code ?? null,
+      message: error.message ?? null,
+      status: error.status ?? null,
+    })
+    return null
+  }
+  const accessToken = session?.access_token?.trim()
   if (!accessToken) {
     console.error("[comment-notifications] skipped: no auth session")
     return null
@@ -25,6 +35,42 @@ async function authFetch(
       ...(init.headers as Record<string, string> | undefined),
     },
   })
+}
+
+function notificationFailureLog(
+  operation: string,
+  status: number | undefined,
+  body: string
+) {
+  let error: string | null = null
+  let authErrorCode: string | null = null
+  let authErrorMessage: string | null = null
+  let authErrorStatus: number | null = null
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: unknown
+      authErrorCode?: unknown
+      authErrorMessage?: unknown
+      authErrorStatus?: unknown
+    }
+    error = typeof parsed.error === "string" ? parsed.error : null
+    authErrorCode =
+      typeof parsed.authErrorCode === "string" ? parsed.authErrorCode : null
+    authErrorMessage =
+      typeof parsed.authErrorMessage === "string" ? parsed.authErrorMessage : null
+    authErrorStatus =
+      typeof parsed.authErrorStatus === "number" ? parsed.authErrorStatus : null
+  } catch {
+    error = null
+  }
+  return {
+    operation,
+    status: status ?? null,
+    error,
+    authErrorCode,
+    authErrorMessage,
+    authErrorStatus,
+  }
 }
 
 export type CommentNotificationTarget =
@@ -162,11 +208,10 @@ export async function ensureCommentNotification(
       dispatchNotificationRefresh()
       return
     }
-    console.error("Comment notification API insert failed:", {
-      commentId,
-      status: res.status,
-      body,
-    })
+    console.error(
+      "Comment notification API insert failed:",
+      notificationFailureLog("ensureCommentNotification", res.status, body)
+    )
     return
   }
 
@@ -227,12 +272,18 @@ export async function deleteCommentNotificationByCommentId(
 
   if (!res.ok) {
     const body = await res.text()
-    console.error("Comment notification API delete failed:", {
-      commentId: id,
-      senderUserId: senderUserId ?? null,
-      status: res.status,
-      body,
-    })
+    console.error(
+      "Comment notification API delete failed:",
+      {
+        ...notificationFailureLog(
+          "deleteCommentNotificationByCommentId",
+          res.status,
+          body
+        ),
+        commentId: id,
+        senderUserId: senderUserId ?? null,
+      }
+    )
     return
   }
 
@@ -278,9 +329,13 @@ export async function deleteLegacyCommentNotification(
 
   if (!res?.ok) {
     const body = res ? await res.text() : "no session"
-    console.error("Legacy comment notification API delete failed:", {
-      status: res?.status,
-      body,
-    })
+    console.error(
+      "Legacy comment notification API delete failed:",
+      notificationFailureLog(
+        "deleteLegacyCommentNotification",
+        res?.status,
+        body
+      )
+    )
   }
 }

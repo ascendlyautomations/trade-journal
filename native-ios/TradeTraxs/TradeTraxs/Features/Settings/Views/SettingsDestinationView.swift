@@ -31,7 +31,11 @@ struct SettingsDestinationView: View {
                     navigationCoordinator: navigationCoordinator
                 )
             case .profile:
-                SettingsProfileView(data: data, profileStore: currentUserProfile)
+                SettingsProfileView(
+                    data: data,
+                    profileStore: currentUserProfile,
+                    appConfiguration: appEnvironment.configuration
+                )
             case .notifications:
                 SettingsNotificationsView(
                     data: data,
@@ -82,10 +86,14 @@ struct SettingsDestinationView: View {
                     pushNotifications: appEnvironment.pushNotifications
                 )
             case .subscription:
-                SettingsSubscriptionView(
-                    data: data,
-                    navigationCoordinator: navigationCoordinator
-                )
+                if IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
+                    SettingsSubscriptionView(
+                        data: data,
+                        navigationCoordinator: navigationCoordinator
+                    )
+                } else {
+                    SettingsHomeView(authenticationCoordinator: authenticationCoordinator)
+                }
             case .tradingAccounts:
                 SettingsTradingAccountsView(
                     data: data,
@@ -121,7 +129,11 @@ struct SettingsDestinationView: View {
                     )
                 )
             case .affiliate:
-                SettingsAffiliateView(data: data)
+                if IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled {
+                    SettingsAffiliateView(data: data)
+                } else {
+                    SettingsHomeView(authenticationCoordinator: authenticationCoordinator)
+                }
             case .vault:
                 VaultHomeView(data: data, navigationCoordinator: navigationCoordinator)
             case .support:

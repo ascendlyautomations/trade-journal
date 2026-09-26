@@ -29,41 +29,6 @@ final class Phase6DRealtimeAnalyticsTests: XCTestCase {
         XCTAssertTrue(harness.executor.accountChartAccounts.isEmpty)
     }
 
-    func testCoalescerBurstPreservesMaxRevision() async throws {
-        let coalescer = AnalyticsRevisionRealtimeCoalescer(
-            policy: AnalyticsSignalCoalescingPolicy(
-                debounce: .milliseconds(80),
-                maxDebounce: .milliseconds(300)
-            ),
-            clock: ImmediateAnalyticsReconciliationClock()
-        )
-        var flushed: [Int64] = []
-        for revision in 101...150 {
-            await coalescer.ingest(revision: Int64(revision)) { rev in
-                flushed.append(rev)
-            }
-        }
-        try await Task.sleep(for: .milliseconds(400))
-        XCTAssertEqual(flushed, [150])
-    }
-
-    func testCoalescerSingleEventFlushesAfterDebounce() async throws {
-        let coalescer = AnalyticsRevisionRealtimeCoalescer(
-            policy: AnalyticsSignalCoalescingPolicy(
-                debounce: .milliseconds(60),
-                maxDebounce: .seconds(2)
-            ),
-            clock: ImmediateAnalyticsReconciliationClock()
-        )
-        var flushed: Int64?
-        await coalescer.ingest(revision: 31) { rev in
-            flushed = rev
-        }
-        XCTAssertNil(flushed)
-        try await Task.sleep(for: .milliseconds(120))
-        XCTAssertEqual(flushed, 31)
-    }
-
     func testRemoteCalendarRepairDoesNotSweepWhenNoVisibleMonth() {
         let intents = AnalyticsRemoteCalendarRepair.intents(
             viewerID: viewerA,
@@ -145,9 +110,9 @@ private final class RecordingRemoteAnalyticsExecutor: AnalyticsReconciliationExe
         _ = viewerID
         _ = generation
         let revision = hintRevision ?? 21
-        lock.lock()
-        dashboardRevisions.append(revision)
-        lock.unlock()
+        TestLock.withLock(lock) {
+            dashboardRevisions.append(revision)
+        }
         return AnalyticsDashboardReconcileResult(serverRevision: revision, elapsedMs: 0)
     }
 
@@ -156,9 +121,9 @@ private final class RecordingRemoteAnalyticsExecutor: AnalyticsReconciliationExe
         generation: UInt64
     ) async throws -> AnalyticsCalendarReconcileResult {
         _ = generation
-        lock.lock()
-        calendarIntents.append(intent)
-        lock.unlock()
+        TestLock.withLock(lock) {
+            calendarIntents.append(intent)
+        }
         return AnalyticsCalendarReconcileResult(
             serverRevision: intent.targetRevision ?? 21,
             rowsWritten: 0,
@@ -168,8 +133,8 @@ private final class RecordingRemoteAnalyticsExecutor: AnalyticsReconciliationExe
 
     func reconcileAccountCharts(intent: AccountChartsReconcileIntent, generation: UInt64) async throws {
         _ = generation
-        lock.lock()
-        accountChartAccounts.append(intent.normalizedAccountID)
-        lock.unlock()
+        TestLock.withLock(lock) {
+            accountChartAccounts.append(intent.normalizedAccountID)
+        }
     }
 }

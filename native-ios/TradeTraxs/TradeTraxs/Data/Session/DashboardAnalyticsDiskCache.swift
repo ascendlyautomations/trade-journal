@@ -27,7 +27,13 @@ nonisolated enum DashboardAnalyticsDiskCache {
         guard let dir = PersistentAppDataDiskCache.directoryURL(component: folderName) else { return nil }
         let file = dir.appendingPathComponent("\(viewerID.rawValue).v\(schemaVersion).json")
         guard let data = try? Data(contentsOf: file) else { return nil }
-        return try? JSONDecoder().decode(Blob.self, from: data)
+        guard let blob = try? JSONDecoder().decode(Blob.self, from: data) else { return nil }
+        guard DashboardSessionIsolation.ownersMatch(blob.viewerID, viewerID.rawValue) else { return nil }
+        if let payloadOwner = blob.payload.meta.viewer_id,
+           !DashboardSessionIsolation.ownersMatch(payloadOwner, viewerID.rawValue) {
+            return nil
+        }
+        return blob
     }
 
     static func clear(viewerID: ProfileID) {

@@ -67,6 +67,7 @@ struct SettingsTradetraxsRemindersView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .listSectionSpacing(ExperienceSpacing.sm)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())

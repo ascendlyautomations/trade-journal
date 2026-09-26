@@ -23,12 +23,9 @@ export const DESKTOP_NAV_MORE_DISPLAY_ORDER = [
   "messages",
   "analytics",
   "community",
-  "beta",
 ] as const
 
-export type DesktopNavOverflowId =
-  | DesktopNavLeftOverflowId
-  | "beta"
+export type DesktopNavOverflowId = DesktopNavLeftOverflowId
 
 const GAP_PX = 12 // matches Tailwind gap-3
 
@@ -86,9 +83,8 @@ export function computeDesktopNavOverflow(args: {
 
 export function useDesktopNavOverflow(options: {
   enabled: boolean
-  /** Changes that affect measured widths (badges, labels, beta eligibility). */
+  /** Changes that affect measured widths (badges, labels). */
   measureKey: string
-  betaEligible: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const moreMeasureRef = useRef<HTMLButtonElement>(null)
@@ -138,7 +134,6 @@ export function useDesktopNavOverflow(options: {
       const pinnedWidths = Array.from(pinnedMeasureRefs.current.values()).map(
         (el) => el.offsetWidth
       )
-      const pinnedTotal = sumWithGaps(pinnedWidths, GAP_PX)
       const moreWidth = moreMeasureRef.current?.offsetWidth ?? 64
 
       const itemWidths: Partial<Record<string, number>> = {}
@@ -146,48 +141,13 @@ export function useDesktopNavOverflow(options: {
         const el = itemMeasureRefs.current.get(id)
         if (el) itemWidths[id] = el.offsetWidth
       }
-      const betaEl = itemMeasureRefs.current.get("beta")
-      const betaWidth = betaEl?.offsetWidth ?? 0
-      if (betaEl) itemWidths.beta = betaWidth
-
-      const betaInMore = overflowIdsRef.current.includes("beta")
-      // When beta is in More, the left cluster is wider. Reserve beta's width so we
-      // don't flip-flop it back onto the right until there is genuine spare room.
-      const availableIfBetaOnRight =
-        options.betaEligible && betaInMore
-          ? rawAvailable - betaWidth - GAP_PX
-          : rawAvailable
-
-      const minLeftWithMore =
-        pinnedTotal +
-        (pinnedWidths.length > 0 ? GAP_PX : 0) +
-        moreWidth
-
-      let next: DesktopNavOverflowId[]
-
-      if (
-        options.betaEligible &&
-        minLeftWithMore > Math.max(0, availableIfBetaOnRight)
-      ) {
-        // Core + More still cannot fit with beta on the right — keep beta in More.
-        const leftOverflow = computeDesktopNavOverflow({
-          availableWidth: rawAvailable,
-          pinnedWidths,
-          itemWidths,
-          moreWidth,
-          eligibleIds: leftEligible,
-        }) as DesktopNavLeftOverflowId[]
-        next = [...leftOverflow, "beta"]
-      } else {
-        const leftOverflow = computeDesktopNavOverflow({
-          availableWidth: Math.max(0, availableIfBetaOnRight),
-          pinnedWidths,
-          itemWidths,
-          moreWidth,
-          eligibleIds: leftEligible,
-        }) as DesktopNavLeftOverflowId[]
-        next = leftOverflow
-      }
+      const next = computeDesktopNavOverflow({
+        availableWidth: rawAvailable,
+        pinnedWidths,
+        itemWidths,
+        moreWidth,
+        eligibleIds: leftEligible,
+      }) as DesktopNavOverflowId[]
 
       const prev = overflowIdsRef.current
       const same =
@@ -208,7 +168,7 @@ export function useDesktopNavOverflow(options: {
       observer.disconnect()
       cancelAnimationFrame(raf)
     }
-  }, [options.enabled, options.measureKey, options.betaEligible])
+  }, [options.enabled, options.measureKey])
 
   const isOverflowing = useCallback(
     (id: DesktopNavOverflowId) => overflowIds.includes(id),

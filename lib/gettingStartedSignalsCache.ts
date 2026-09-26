@@ -43,6 +43,7 @@ export function readCachedGettingStartedSignals(
           : 0,
       hasEverJoinedOtherRoom: parsed.hasEverJoinedOtherRoom === true,
       hasPublicTrade: parsed.hasPublicTrade === true,
+      hasCompletedDailyCheckIn: parsed.hasCompletedDailyCheckIn === true,
       firstPrivateTradeId:
         typeof parsed.firstPrivateTradeId === "string"
           ? parsed.firstPrivateTradeId

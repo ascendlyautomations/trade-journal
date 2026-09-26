@@ -115,6 +115,7 @@ struct TradeImportPreviewContent: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ExperienceButton(

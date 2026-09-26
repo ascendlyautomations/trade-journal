@@ -7,6 +7,7 @@ import {
   refreshLikeNotificationUi,
 } from "./likeNotifications"
 import { hapticLight } from "@/lib/nativeHaptics"
+import { isUuidLike } from "@/lib/tradeAccountDisplay"
 
 export type CommentLikeSource =
   | "comments"
@@ -68,6 +69,27 @@ export function commentLikeLabel(meta: CommentLikeMeta): string {
   return heart
 }
 
+/** Persisted comment primary keys only. Optimistic ids are not uuids and fail the batch query. */
+export function commentIdsForLikeQuery(commentIds: readonly string[]): string[] {
+  return commentIds
+    .map((id) => String(id ?? "").trim())
+    .filter((id) => isUuidLike(id))
+}
+
+function describeSupabaseError(error: {
+  message?: string
+  code?: string
+  details?: string | null
+  hint?: string | null
+}) {
+  return {
+    message: error.message ?? null,
+    code: error.code ?? null,
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+  }
+}
+
 export async function fetchCommentLikeMetaByIds(
   client: SupabaseClient,
   commentSource: CommentLikeSource,
@@ -78,16 +100,21 @@ export async function fetchCommentLikeMetaByIds(
   for (const id of commentIds) {
     meta[id] = { count: 0, liked: false }
   }
-  if (commentIds.length === 0) return meta
+  const queryIds = commentIdsForLikeQuery(commentIds)
+  if (queryIds.length === 0) return meta
 
   const { data, error } = await client
     .from("comment_likes")
     .select("comment_id, user_id")
     .eq("comment_source", commentSource)
-    .in("comment_id", commentIds)
+    .in("comment_id", queryIds)
 
   if (error) {
-    console.error("[comment-likes] fetch meta failed", error)
+    console.error("[comment-likes] fetch meta failed", {
+      commentSource,
+      idCount: queryIds.length,
+      ...describeSupabaseError(error),
+    })
     return meta
   }
 

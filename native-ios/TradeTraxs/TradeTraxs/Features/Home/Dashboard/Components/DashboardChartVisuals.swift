@@ -117,50 +117,95 @@ struct DashboardWinLossRingView: View {
 // MARK: - Sessions horizontal bars
 
 struct DashboardSessionBarsView: View {
-    let sessions: [ProfileStatisticsMetrics.SessionRow]
+    var performance: [DashboardSessionPerformanceRow] = []
+    var sessions: [ProfileStatisticsMetrics.SessionRow] = []
     var onSelect: ((String) -> Void)?
 
     @Environment(\.themeColors) private var colors
 
+    private var rows: [DashboardSessionPerformanceRow] {
+        if !performance.isEmpty { return performance }
+        return sessions.map {
+            DashboardSessionPerformanceRow(
+                label: $0.label,
+                tradeCount: $0.count,
+                netPnL: 0,
+                wins: 0,
+                losses: 0,
+                winRate: nil
+            )
+        }
+    }
+
     var body: some View {
-        if sessions.isEmpty {
+        if rows.isEmpty {
             DashboardChartEmptyCopy(
                 message: "Tag sessions on trades to unlock your session breakdown."
             )
         } else {
-            let maxCount = max(sessions.map(\.count).max() ?? 1, 1)
+            let maxAbs = max(rows.map { abs($0.netPnL) }.max() ?? 0, 1)
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                ForEach(sessions) { row in
+                ForEach(rows) { row in
                     Button {
                         onSelect?(row.label)
                     } label: {
-                        HStack(spacing: ExperienceSpacing.sm) {
-                            Text(row.label)
-                                .experienceStyle(.caption, color: colors.secondaryText)
-                                .frame(width: 72, alignment: .leading)
-                                .lineLimit(1)
-                            GeometryReader { geo in
-                                let width = geo.size.width * CGFloat(row.count) / CGFloat(maxCount)
-                                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                    .fill(colors.accent.opacity(0.85))
-                                    .frame(width: max(width, row.count > 0 ? 6 : 0), height: 14)
-                                    .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(sessionTitle(row.label))
+                                    .experienceStyle(.caption, color: colors.secondaryText)
+                                Spacer(minLength: 8)
+                                Text(signedMoney(row.netPnL))
+                                    .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                                    .foregroundStyle(toneColor(row.netPnL))
+                                Text("· \(row.tradeCount)")
+                                    .experienceStyle(.caption2, color: colors.tertiaryText)
                             }
-                            .frame(height: 14)
-                            Text("\(row.count)")
-                                .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
-                                .foregroundStyle(colors.primaryText)
-                                .frame(width: 28, alignment: .trailing)
-                                .contentTransition(.numericText())
+                            GeometryReader { geo in
+                                let width = row.netPnL == 0
+                                    ? 0
+                                    : max(8, geo.size.width * CGFloat(abs(row.netPnL) / maxAbs))
+                                HStack(spacing: 0) {
+                                    if row.netPnL < 0 {
+                                        Spacer(minLength: 0)
+                                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                            .fill(colors.loss.opacity(0.85))
+                                            .frame(width: width, height: 10)
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                            .fill(colors.profit.opacity(0.85))
+                                            .frame(width: width, height: 10)
+                                        Spacer(minLength: 0)
+                                    }
+                                }
+                            }
+                            .frame(height: 10)
+                            if let winRate = row.winRate {
+                                Text("\(Int(winRate.rounded()))% win rate")
+                                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                            }
                         }
                         .contentShape(Rectangle())
                         .frame(minHeight: ExperienceAccessibility.minTouchTarget)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(row.label), \(row.count) trades. Double tap to view trades.")
+                    .accessibilityLabel("\(row.label), \(signedMoney(row.netPnL)), \(row.tradeCount) trades.")
                 }
             }
         }
+    }
+
+    private func sessionTitle(_ label: String) -> String {
+        label == "NY" ? "New York" : label
+    }
+
+    private func toneColor(_ value: Double) -> Color {
+        if value > 0.01 { return colors.profit }
+        if value < -0.01 { return colors.loss }
+        return colors.secondaryText
+    }
+
+    private func signedMoney(_ value: Double) -> String {
+        NumberDisplay.chartSignedCurrency(value)
     }
 }
 
@@ -180,12 +225,33 @@ struct DashboardWeekdayHeatmapView: View {
         points.contains { abs($0.value) > 0.01 }
     }
 
+    private var bestLabel: String? {
+        points.max(by: { $0.value < $1.value }).flatMap { $0.value > 0.01 ? $0.label : nil }
+    }
+
+    private var worstLabel: String? {
+        points.min(by: { $0.value < $1.value }).flatMap { $0.value < -0.01 ? $0.label : nil }
+    }
+
     var body: some View {
         if !hasActivity {
             DashboardChartEmptyCopy(
                 message: "Complete a few more trades to unlock your weekday heatmap."
             )
         } else {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            if bestLabel != nil || worstLabel != nil {
+                HStack(spacing: ExperienceSpacing.md) {
+                    if let best = bestLabel, let p = points.first(where: { $0.label == best }) {
+                        Text("Best \(best) · \(moneyLabel(p.value))")
+                            .experienceStyle(.caption2, color: colors.profit)
+                    }
+                    if let worst = worstLabel, let p = points.first(where: { $0.label == worst }) {
+                        Text("Worst \(worst) · \(moneyLabel(p.value))")
+                            .experienceStyle(.caption2, color: colors.loss)
+                    }
+                }
+            }
             HStack(spacing: ExperienceSpacing.xs) {
                 ForEach(points) { point in
                     Button {
@@ -194,6 +260,12 @@ struct DashboardWeekdayHeatmapView: View {
                         VStack(spacing: 6) {
                             RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
                                 .fill(cellColor(point.value))
+                                .overlay {
+                                    if point.label == bestLabel || point.label == worstLabel {
+                                        RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                                            .stroke(colors.primaryText.opacity(0.45), lineWidth: 1)
+                                    }
+                                }
                                 .frame(height: 44)
                                 .overlay {
                                     if abs(point.value) < 0.01 {
@@ -214,6 +286,7 @@ struct DashboardWeekdayHeatmapView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(point.label), \(moneyLabel(point.value)). Double tap to view trades.")
                 }
+            }
             }
         }
     }
@@ -239,6 +312,7 @@ struct DashboardWeekdayHeatmapView: View {
 /// Height encodes intensity; color encodes profit vs loss. Taps still open the journal.
 struct DashboardHourTimelineView: View {
     let points: [DashboardBarPoint]
+    var highlights: DashboardHourHighlights?
     var onSelect: ((String) -> Void)?
 
     @Environment(\.themeColors) private var colors
@@ -256,13 +330,30 @@ struct DashboardHourTimelineView: View {
         return points.first { $0.label == selectedLabel }
     }
 
-    private var bestHour: DashboardBarPoint? {
-        points.max(by: { $0.value < $1.value }).flatMap { abs($0.value) > 0.01 ? $0 : nil }
+    private var bestHourLabel: String? {
+        if let hour = highlights?.bestHour { return String(format: "%02d", hour) }
+        return points.max(by: { $0.value < $1.value }).flatMap { abs($0.value) > 0.01 ? $0.label : nil }
+    }
+
+    private var worstHourLabel: String? {
+        if let hour = highlights?.worstHour { return String(format: "%02d", hour) }
+        return points.min(by: { $0.value < $1.value }).flatMap { abs($0.value) > 0.01 ? $0.label : nil }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             headerSummary
+            if bestHourLabel != nil || worstHourLabel != nil {
+                HStack(spacing: ExperienceSpacing.md) {
+                    if let best = bestHourLabel {
+                        highlightChip(title: "Best", label: best, value: highlights?.bestPnL ?? points.first { $0.label == best }?.value)
+                    }
+                    if let worst = worstHourLabel, worst != bestHourLabel {
+                        highlightChip(title: "Worst", label: worst, value: highlights?.worstPnL ?? points.first { $0.label == worst }?.value)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
 
             HStack(alignment: .bottom, spacing: 2) {
                 ForEach(points) { point in
@@ -297,13 +388,14 @@ struct DashboardHourTimelineView: View {
                         .foregroundStyle(toneColor(selected.value))
                         .contentTransition(.numericText())
                 }
-            } else if let best = bestHour {
+            } else if let label = bestHourLabel {
+                let value = highlights?.bestPnL ?? points.first { $0.label == label }?.value ?? 0
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Peak hour")
                         .experienceStyle(.caption2, color: colors.tertiaryText)
-                    Text("\(hourDisplay(best.label)) · \(signedMoney(best.value))")
+                    Text("\(hourDisplay(label)) · \(signedMoney(value))")
                         .font(.system(.callout, design: .rounded).weight(.semibold).monospacedDigit())
-                        .foregroundStyle(toneColor(best.value))
+                        .foregroundStyle(toneColor(value))
                         .contentTransition(.numericText())
                 }
             } else {
@@ -392,6 +484,16 @@ struct DashboardHourTimelineView: View {
 
     private func moneyLabel(_ value: Double) -> String {
         NumberDisplay.chartCurrency(value)
+    }
+
+    private func highlightChip(title: String, label: String, value: Double?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .experienceStyle(.caption2, color: colors.tertiaryText)
+            Text("\(hourDisplay(label)) · \(signedMoney(value ?? 0))")
+                .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                .foregroundStyle(toneColor(value ?? 0))
+        }
     }
 }
 
@@ -514,6 +616,7 @@ struct DashboardLongShortDonutView: View {
 struct DashboardHoldHistogramView: View {
     let buckets: [DashboardHistogramBucket]
     let averages: [DashboardHoldTimeRow]
+    var holdExtremes: [DashboardHoldExtremeSnapshot] = []
     var onSelectBucket: ((String) -> Void)?
 
     @Environment(\.themeColors) private var colors
@@ -593,8 +696,291 @@ struct DashboardHoldHistogramView: View {
                     }
                     .padding(.vertical, ExperienceSpacing.xs)
                 }
+
+                if !holdExtremes.isEmpty {
+                    LazyVGrid(
+                        columns: [GridItem(.flexible()), GridItem(.flexible())],
+                        spacing: ExperienceSpacing.sm
+                    ) {
+                        ForEach(holdExtremes, id: \.label) { row in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.label)
+                                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                                Text(formatDuration(row.durationSeconds))
+                                    .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                                    .foregroundStyle(colors.primaryText)
+                                Text(signedMoney(row.pnl))
+                                    .font(.system(.caption2, design: .rounded).weight(.medium).monospacedDigit())
+                                    .foregroundStyle(row.pnl >= 0 ? colors.profit : colors.loss)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(.top, ExperienceSpacing.xs)
+                }
             }
         }
+    }
+
+    private func formatDuration(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded())
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        if h > 0 { return "\(h)h \(m)m" }
+        if m > 0 { return "\(m)m" }
+        return "\(total)s"
+    }
+
+    private func signedMoney(_ value: Double) -> String {
+        NumberDisplay.chartSignedCurrency(value)
+    }
+}
+
+// MARK: - Expanded analytics visuals
+
+struct DashboardDailyConsistencyView: View {
+    let snapshot: DashboardDailyPerformanceSnapshot
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Profitable days")
+                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                    Text("\(Int(snapshot.consistencyPct.rounded()))%")
+                        .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
+                        .foregroundStyle(colors.primaryText)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("Avg day")
+                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                    Text(signedMoney(snapshot.avgDayPnL))
+                        .font(.system(.callout, design: .rounded).weight(.semibold).monospacedDigit())
+                        .foregroundStyle(toneColor(snapshot.avgDayPnL))
+                }
+            }
+            HStack(spacing: ExperienceSpacing.sm) {
+                dayChip(title: "Best day", value: snapshot.bestDayPnL, positive: true)
+                dayChip(title: "Worst day", value: snapshot.worstDayPnL, positive: false)
+            }
+            GeometryReader { geo in
+                let greenWidth = geo.size.width * CGFloat(min(max(snapshot.consistencyPct / 100, 0), 1))
+                ZStack(alignment: .leading) {
+                    Capsule().fill(colors.fillSecondary.opacity(0.55))
+                    Capsule().fill(colors.profit.opacity(0.75)).frame(width: greenWidth)
+                }
+            }
+            .frame(height: 8)
+            Text("\(snapshot.tradingDays) trading days in range")
+                .experienceStyle(.caption2, color: colors.tertiaryText)
+        }
+    }
+
+    private func dayChip(title: String, value: Double, positive: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .experienceStyle(.caption2, color: colors.tertiaryText)
+            Text(signedMoney(value))
+                .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                .foregroundStyle(positive ? colors.profit : colors.loss)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func toneColor(_ value: Double) -> Color {
+        if value > 0.01 { return colors.profit }
+        if value < -0.01 { return colors.loss }
+        return colors.secondaryText
+    }
+
+    private func signedMoney(_ value: Double) -> String {
+        NumberDisplay.chartSignedCurrency(value)
+    }
+}
+
+struct DashboardStreakCompactView: View {
+    let streaks: DashboardStreakSnapshot
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        HStack(spacing: ExperienceSpacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Current streak")
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(streaks.currentStreak)")
+                        .font(.system(.title2, design: .rounded).weight(.bold).monospacedDigit())
+                        .foregroundStyle(streakTone)
+                    Text(streaks.currentType?.capitalized ?? "—")
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("Best win \(streaks.maxWinStreak)")
+                    .experienceStyle(.caption2, color: colors.profit)
+                Text("Max loss \(streaks.maxLossStreak)")
+                    .experienceStyle(.caption2, color: colors.loss)
+            }
+        }
+    }
+
+    private var streakTone: Color {
+        switch streaks.currentType {
+        case "win": return colors.profit
+        case "loss": return colors.loss
+        default: return colors.primaryText
+        }
+    }
+}
+
+struct DashboardSymbolRankedBarsView: View {
+    let rows: [DashboardSymbolPerformanceRow]
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        if rows.isEmpty {
+            DashboardChartEmptyCopy(message: "Symbol performance appears after you log a few tickers.")
+        } else {
+            let maxAbs = max(rows.map { abs($0.netPnL) }.max() ?? 0, 1)
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                ForEach(rows.prefix(8)) { row in
+                    HStack(spacing: ExperienceSpacing.sm) {
+                        Text(row.ticker)
+                            .font(.system(.callout, design: .rounded).weight(.semibold).monospaced())
+                            .foregroundStyle(colors.primaryText)
+                            .frame(width: 52, alignment: .leading)
+                        GeometryReader { geo in
+                            let width = max(6, geo.size.width * CGFloat(abs(row.netPnL) / maxAbs))
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(row.netPnL >= 0 ? colors.profit.opacity(0.85) : colors.loss.opacity(0.85))
+                                .frame(width: width, height: 12)
+                                .frame(maxWidth: .infinity, alignment: row.netPnL >= 0 ? .leading : .trailing)
+                        }
+                        .frame(height: 12)
+                        Text(signedMoney(row.netPnL))
+                            .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                            .foregroundStyle(row.netPnL >= 0 ? colors.profit : colors.loss)
+                            .frame(width: 72, alignment: .trailing)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\(row.ticker), \(signedMoney(row.netPnL)), \(row.trades) trades")
+                }
+            }
+        }
+    }
+
+    private func signedMoney(_ value: Double) -> String {
+        NumberDisplay.chartSignedCurrency(value)
+    }
+}
+
+struct DashboardLongShortComparisonView: View {
+    let comparison: DashboardLongShortComparison
+    var onSelectLong: (() -> Void)?
+    var onSelectShort: (() -> Void)?
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+            sideColumn(title: "Long", side: comparison.long, swatch: colors.profit, action: onSelectLong)
+            sideColumn(title: "Short", side: comparison.short, swatch: colors.accent, action: onSelectShort)
+        }
+    }
+
+    private func sideColumn(
+        title: String,
+        side: DashboardDirectionSideSnapshot?,
+        swatch: Color,
+        action: (() -> Void)?
+    ) -> some View {
+        Button {
+            action?()
+        } label: {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                HStack(spacing: 6) {
+                    Circle().fill(swatch).frame(width: 8, height: 8)
+                    Text(title)
+                        .experienceStyle(.subheadline, color: colors.primaryText)
+                        .fontWeight(.semibold)
+                }
+                if let side {
+                    Text(signedMoney(side.netPnL))
+                        .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
+                        .foregroundStyle(side.netPnL >= 0 ? colors.profit : colors.loss)
+                    performanceBar(side: side)
+                    Text("\(Int((side.winRate ?? 0).rounded()))% WR · \(side.trades) trades")
+                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                } else {
+                    Text("No trades")
+                        .experienceStyle(.caption, color: colors.tertiaryText)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(action == nil || side == nil)
+    }
+
+    private func performanceBar(side: DashboardDirectionSideSnapshot) -> some View {
+        let magnitude = abs(side.netPnL)
+        let maxSide = max(abs(comparison.long?.netPnL ?? 0), abs(comparison.short?.netPnL ?? 0), 1)
+        return GeometryReader { geo in
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(side.netPnL >= 0 ? colors.profit.opacity(0.8) : colors.loss.opacity(0.8))
+                .frame(width: max(8, geo.size.width * CGFloat(magnitude / maxSide)), height: 10)
+        }
+        .frame(height: 10)
+    }
+
+    private func signedMoney(_ value: Double) -> String {
+        NumberDisplay.chartSignedCurrency(value)
+    }
+}
+
+struct DashboardStrategyHighlightsView: View {
+    let highlights: DashboardStrategyHighlights
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            if let best = highlights.best {
+                strategyRow(title: "Strongest setup", highlight: best, tone: colors.profit)
+            }
+            if let worst = highlights.worst, worst.netPnL < 0 {
+                strategyRow(title: "Weakest setup", highlight: worst, tone: colors.loss)
+            }
+        }
+    }
+
+    private func strategyRow(title: String, highlight: DashboardStrategyHighlight, tone: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .experienceStyle(.caption2, color: colors.tertiaryText)
+            Text(highlight.strategy)
+                .experienceStyle(.callout, color: colors.primaryText)
+                .fontWeight(.semibold)
+            HStack(spacing: ExperienceSpacing.sm) {
+                Text(NumberDisplay.chartSignedCurrency(highlight.netPnL))
+                    .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                    .foregroundStyle(tone)
+                Text("· \(highlight.trades) trades")
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                if let wr = highlight.winRate {
+                    Text("· \(Int(wr.rounded()))% WR")
+                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

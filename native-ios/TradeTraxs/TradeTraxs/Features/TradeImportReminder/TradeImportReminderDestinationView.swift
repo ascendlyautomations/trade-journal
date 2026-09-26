@@ -81,6 +81,7 @@ struct TradeImportReminderDestinationView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .experienceNavigationTitle("Import Trades")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -111,6 +112,7 @@ struct TradeImportReminderDestinationView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .experienceNavigationTitle("Import Trades")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

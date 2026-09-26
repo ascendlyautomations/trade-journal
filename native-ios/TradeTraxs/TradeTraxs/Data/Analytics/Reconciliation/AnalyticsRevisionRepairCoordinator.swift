@@ -65,6 +65,15 @@ actor AnalyticsRevisionRepairCoordinator {
         guard AnalyticsRevisionRepairGate.isEnabled else { return }
         guard viewerID != nil else { return }
 
+        if Self.isReconnectBurstReason(reason) {
+            Task {
+                await SupabaseReconnectRepairCoordinator.shared.enqueueRepair(
+                    Self.reconnectTrigger(for: reason)
+                )
+            }
+            return
+        }
+
         if !bypassFreshSuppression, shouldSuppressFreshCheck() {
             AnalyticsReconciliationProbe.repairSuppressed(reason: reason.rawValue)
             return
@@ -73,6 +82,51 @@ actor AnalyticsRevisionRepairCoordinator {
         pendingReasons.insert(reason)
         AnalyticsReconciliationProbe.repairRequest(reason: reason.rawValue)
         scheduleRepairIfNeeded()
+    }
+
+    /// Single coalesced analytics repair cycle — invoked by ``SupabaseReconnectRepairCoordinator`` only.
+    func performCoalescedRepair(reasons: Set<AnalyticsRevisionRepairReason>) async {
+        guard AnalyticsRevisionRepairGate.isEnabled else { return }
+        guard let viewer = viewerID else { return }
+
+        if repairTask != nil {
+            SupabasePressureLog.repairCoalesced(domain: "analytics", detail: "repair_task_active")
+            pendingReasons.formUnion(reasons)
+            return
+        }
+
+        if shouldSuppressFreshCheck() {
+            AnalyticsReconciliationProbe.repairSuppressed(
+                reason: reasons.map(\.rawValue).sorted().joined(separator: ",")
+            )
+            return
+        }
+
+        let generation = viewerGeneration
+        await performRepair(viewerID: viewer, generation: generation, reasons: reasons)
+    }
+
+    /// Shared reconnect coordinator — communication domains only (Phase 3).
+    private static func isReconnectBurstReason(_ reason: AnalyticsRevisionRepairReason) -> Bool {
+        switch reason {
+        case .networkRegain, .realtimeReconnect:
+            return true
+        case .foreground, .sessionBind:
+            return false
+        }
+    }
+
+    private static func reconnectTrigger(for reason: AnalyticsRevisionRepairReason) -> SupabaseReconnectRepairCoordinator.Trigger {
+        switch reason {
+        case .foreground:
+            return .foreground
+        case .networkRegain:
+            return .networkRegain
+        case .realtimeReconnect:
+            return .realtimeReconnect
+        case .sessionBind:
+            return .foreground
+        }
     }
 
     func snapshotForTesting() -> (viewerID: ProfileID?, generation: UInt64) {
@@ -182,6 +236,10 @@ actor AnalyticsRevisionRepairCoordinator {
             switch decision {
             case .current:
                 lastSuccessfulCheckAt = Date()
+                await AnalyticsReconciliationCoordinator.shared.noteAuthoritativeDashboardRevision(
+                    serverRevision,
+                    viewerID: viewerID
+                )
                 AnalyticsReconciliationProbe.repairCurrent(
                     localRevision: localRevision,
                     serverRevision: serverRevision

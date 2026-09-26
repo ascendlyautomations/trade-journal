@@ -1,5 +1,7 @@
 "use client"
 
+import "../utilityDesktopTheme.css"
+import "../addTradeContrast.css"
 import InputTradeForm from "../components/InputTradeForm"
 import CopyTradingGroupsSection from "../components/CopyTradingGroupsSection"
 import QuickTradeModal from "../components/QuickTradeModal"
@@ -306,7 +308,7 @@ export default function Home() {
 
       <div
         data-tt-native-surface="add-trade"
-        className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100"
+        className="tt-add-trade tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100"
       >
         <div
           className={`px-4 pb-4 md:px-6 md:pb-5 max-w-8xl mx-auto ${

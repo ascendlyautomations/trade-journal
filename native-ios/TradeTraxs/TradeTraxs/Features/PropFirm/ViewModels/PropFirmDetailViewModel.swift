@@ -16,7 +16,6 @@ final class PropFirmDetailViewModel {
     private let realtimeHub: RealtimeHub?
 
     private var hasLoaded = false
-    private var watchedChannel: RealtimeChannelID?
 
     init(
         accountID: TradingAccountID,
@@ -56,7 +55,6 @@ final class PropFirmDetailViewModel {
                     )
                     snapshot = result.snapshot
                     hasLoaded = true
-                    await startRealtime(profileID: profileID)
                     isLoading = false
                     return
                 } catch PropFirmBootstrapLoader.LoaderError.flagOff,
@@ -135,31 +133,11 @@ final class PropFirmDetailViewModel {
                 payoutCycles: payoutCycles
             )
             hasLoaded = true
-            await startRealtime(profileID: profileID)
         } catch {
             errorMessage = ProfileSectionSupport.message(for: error)
         }
         isLoading = false
     }
 
-    func onDisappear() {
-        Task { await stopRealtime() }
-    }
-
-    private func startRealtime(profileID: ProfileID) async {
-        guard let realtimeHub else { return }
-        await stopRealtime()
-        let channel = RealtimeChannelID(
-            kind: .profile,
-            topic: "propfirm:\(accountID.rawValue)"
-        )
-        watchedChannel = channel
-        try? await realtimeHub.subscriptions.subscribe(channel)
-    }
-
-    private func stopRealtime() async {
-        guard let realtimeHub, let channel = watchedChannel else { return }
-        try? await realtimeHub.subscriptions.unsubscribe(channel)
-        watchedChannel = nil
-    }
+    func onDisappear() {}
 }

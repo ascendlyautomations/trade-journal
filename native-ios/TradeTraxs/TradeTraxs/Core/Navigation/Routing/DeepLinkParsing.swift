@@ -126,6 +126,9 @@ struct DeepLinkParser: DeepLinkParsing {
             }
             return .tab(.profile)
         case "affiliate", "referrals":
+            guard IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled else {
+                return .settingsStack([.home])
+            }
             return .profile(.affiliate)
         case "settings":
             return parseSettings(Array(parts.dropFirst()))
@@ -196,6 +199,12 @@ struct DeepLinkParser: DeepLinkParsing {
             return .settingsStack([.home])
         }
         if route == .home {
+            return .settingsStack([.home])
+        }
+        if route == .subscription, !IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
+            return .settingsStack([.home])
+        }
+        if route == .affiliate, !IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled {
             return .settingsStack([.home])
         }
         return .settingsStack([.home, route])

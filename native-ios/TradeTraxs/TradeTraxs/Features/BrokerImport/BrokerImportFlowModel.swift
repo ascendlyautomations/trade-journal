@@ -10,7 +10,14 @@ final class BrokerImportFlowModel {
         case awaitingTradovateConfirmation([TradovateImportPreviewTrade])
         case success(newCount: Int, tradeIDs: [TradeID])
         case upToDate
-        case failed(message: String, canRetry: Bool)
+        case failed(message: String, action: BrokerImportFailureAction)
+    }
+
+    enum BrokerImportFailureAction: Equatable {
+        case retry
+        case syncInProgress
+        case reconnect
+        case dismiss
     }
 
     struct BrokerImportProgressSnapshot: Equatable {
@@ -47,7 +54,7 @@ final class BrokerImportFlowModel {
     }
 
     func retryImport() {
-        guard let target = activeTarget, let data else { return }
+        guard let target = activeTarget, data != nil else { return }
         Task { await runImport(target: target, rithmicPassword: nil) }
     }
 
@@ -135,7 +142,51 @@ final class BrokerImportFlowModel {
                 await finishWithSyncResponse(response, target: target, data: data)
             }
         } catch {
-            fail(UserFacingError.message(for: error), canRetry: true)
+            fail(BrokerSyncPresentation.temporaryFailureMessage(), action: .retry)
+        }
+    }
+
+    func reconnectFromFailure() {
+        guard let target = activeTarget, let data else { return }
+        switch target.provider {
+        case .rithmic:
+            pendingRithmicPasswordTarget = target
+            isPresented = false
+            phase = .idle
+        case .tradovate:
+            Task { await reconnectTradovate(data: data, target: target) }
+        }
+    }
+
+    private func reconnectTradovate(
+        data: DataEnvironment,
+        target: BrokerImportEligibilityTarget
+    ) async {
+        let presentation = presentationLines(for: target)
+        beginRunning(
+            accountTitle: presentation.title,
+            accountSubtitle: presentation.subtitle,
+            stage: .connecting,
+            progress: 0.02
+        )
+        let outcome = await BrokerTradovateReconnectImport.reconnectAndSync(
+            broker: data.brokerIntegrations,
+            connectionId: target.connectionId,
+            mappingId: target.mappingId
+        )
+        switch outcome {
+        case .cancelled:
+            fail(
+                BrokerSyncPresentation.reconnectRequiredMessage(provider: .tradovate),
+                action: .reconnect
+            )
+        case .oauthFailed:
+            fail(
+                BrokerSyncPresentation.reconnectRequiredMessage(provider: .tradovate),
+                action: .reconnect
+            )
+        case .syncCompleted(let response):
+            await finishWithSyncResponse(response, target: target, data: data)
         }
     }
 
@@ -177,7 +228,7 @@ final class BrokerImportFlowModel {
             pendingTradovateMappingId = target.mappingId
             phase = .awaitingTradovateConfirmation(previews)
         } catch {
-            fail(UserFacingError.message(for: error), canRetry: true)
+            fail(BrokerSyncPresentation.temporaryFailureMessage(), action: .retry)
         }
     }
 
@@ -220,7 +271,7 @@ final class BrokerImportFlowModel {
             pendingTradovateMappingId = nil
             await finishWithSyncResponse(response, target: target, data: data)
         } catch {
-            fail(UserFacingError.message(for: error), canRetry: true)
+            fail(BrokerSyncPresentation.temporaryFailureMessage(), action: .retry)
         }
     }
 
@@ -235,7 +286,7 @@ final class BrokerImportFlowModel {
         }
         setProgress(stage: .finalizing, progress: 0.94, processedCaption: nil)
         guard let userID = await data.session.currentUserID else {
-            fail("Could not verify your session.", canRetry: true)
+            fail(BrokerSyncPresentation.temporaryFailureMessage(), action: .retry)
             return
         }
         let owner = ProfileID(userID.rawValue)
@@ -262,11 +313,16 @@ final class BrokerImportFlowModel {
         target: BrokerImportEligibilityTarget
     ) async {
         let resolution = BrokerSyncFailureResolution.from(response)
-        if target.provider == .rithmic, response.summary.errorCode == "rithmic_password_required" {
-            pendingRithmicPasswordTarget = target
-            isPresented = false
-            phase = .idle
-            return
+        let action: BrokerImportFailureAction
+        switch resolution {
+        case .success:
+            action = .dismiss
+        case .reconnectRequired:
+            action = .reconnect
+        case .retryable:
+            action = BrokerSyncFailureResolution.isSyncInProgress(response) ? .syncInProgress : .retry
+        case .importFailed:
+            action = .dismiss
         }
         fail(
             BrokerSyncPresentation.message(
@@ -274,7 +330,7 @@ final class BrokerImportFlowModel {
                 provider: target.provider,
                 resolution: resolution
             ),
-            canRetry: resolution != .reconnectRequired
+            action: action
         )
     }
 
@@ -349,9 +405,9 @@ final class BrokerImportFlowModel {
         )
     }
 
-    private func fail(_ message: String, canRetry: Bool) {
+    private func fail(_ message: String, action: BrokerImportFailureAction) {
         stageAnimationTask?.cancel()
-        phase = .failed(message: message, canRetry: canRetry)
+        phase = .failed(message: message, action: action)
     }
 
     private func presentationLines(for target: BrokerImportEligibilityTarget) -> (title: String, subtitle: String) {

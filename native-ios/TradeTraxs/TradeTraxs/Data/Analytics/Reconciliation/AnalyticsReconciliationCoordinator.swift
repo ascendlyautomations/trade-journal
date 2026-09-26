@@ -149,6 +149,15 @@ actor AnalyticsReconciliationCoordinator {
         )
     }
 
+    /// Dashboard / GRDB already holds this revision — skip redundant reconcile work.
+    func noteAuthoritativeDashboardRevision(_ revision: Int64, viewerID: ProfileID) async {
+        guard self.viewerID == viewerID else { return }
+        adoptServerRevision(revision)
+        if dashboardIntent?.targetRevision.map({ revision >= $0 }) == true {
+            dashboardIntent = nil
+        }
+    }
+
     func awaitIdleForTesting(timeout: Duration = .seconds(2)) async {
         let deadline = ContinuousClock.now + timeout
         while ContinuousClock.now < deadline {
@@ -322,6 +331,23 @@ actor AnalyticsReconciliationCoordinator {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
     }
 
+    private func isDashboardRevisionAlreadySatisfied(
+        targetRevision: Int64?,
+        viewerID: ProfileID
+    ) -> Bool {
+        guard let targetRevision else { return false }
+        if targetRevision <= lastAppliedRevision {
+            return true
+        }
+        if let disk = DashboardAnalyticsDiskCache.load(viewerID: viewerID),
+           disk.revision >= targetRevision
+        {
+            adoptServerRevision(disk.revision)
+            return true
+        }
+        return false
+    }
+
     // MARK: - Processing
 
     private func scheduleProcessing() {
@@ -383,12 +409,25 @@ actor AnalyticsReconciliationCoordinator {
                     dash.targetRevision,
                     maxOptionalRevision(maxPendingRevision, remoteHint)
                 )
+                if isDashboardRevisionAlreadySatisfied(
+                    targetRevision: effectiveHint ?? remoteHint,
+                    viewerID: viewer
+                ) {
+#if DEBUG
+                    SupabaseEfficiencyProbe.analyticsReconcile(.skippedCurrentRevision)
+#endif
+                    dashboardIntent = nil
+                    continue
+                }
                 let revisionLabel = effectiveHint ?? remoteHint ?? -1
                 AnalyticsReconciliationProbe.reconcileStart(
                     domain: "dashboardBootstrap",
                     revision: revisionLabel,
                     scope: "viewer=\(viewer.rawValue)"
                 )
+#if DEBUG
+                SupabaseEfficiencyProbe.analyticsReconcile(.network)
+#endif
                 do {
                     let result = try await executor.reconcileDashboard(
                         viewerID: viewer,

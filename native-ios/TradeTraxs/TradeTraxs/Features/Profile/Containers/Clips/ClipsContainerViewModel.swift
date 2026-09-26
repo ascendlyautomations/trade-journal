@@ -50,18 +50,8 @@ final class ClipsContainerViewModel {
 
     func prefetchEngagement(for reelIDs: [ReelID]) {
         let targets = reelIDs.map { InteractionTarget.reel($0) }
-        if targets.isEmpty {
-            EngagementRealtimeSession.shared.updateRetention(
-                ownerKey: "profile-clips:\(profileOwnerID.rawValue)",
-                targets: []
-            )
-            return
-        }
+        guard !targets.isEmpty else { return }
         engagementStore?.prefetch(targets)
-        EngagementRealtimeSession.shared.updateRetention(
-            ownerKey: "profile-clips:\(profileOwnerID.rawValue)",
-            targets: Set(targets)
-        )
     }
 
     func applyBootstrap(_ snapshot: ProfileState) {

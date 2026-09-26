@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreGraphics
 import CoreMedia
 import XCTest
@@ -133,6 +134,32 @@ final class VideoDeliveryExporterTests: XCTestCase {
         XCTAssertEqual(
             VideoDeliveryExporter.targetVideoBitrate(longEdge: 1280, targetFPS: 60),
             3_500_000
+        )
+    }
+
+    func testDeliveryExportPresetName1080Delivery() {
+        let target = VideoDeliveryExporter.DeliveryTarget(
+            outputSize: CGSize(width: 1080, height: 1920),
+            outputFrameRate: 30,
+            videoBitrate: 4_500_000,
+            audioBitrate: 128_000
+        )
+        XCTAssertEqual(
+            VideoDeliveryExporter.deliveryExportPresetName(for: target),
+            AVAssetExportPreset1920x1080
+        )
+    }
+
+    func testDeliveryExportPresetName720Delivery() {
+        let target = VideoDeliveryExporter.DeliveryTarget(
+            outputSize: CGSize(width: 720, height: 1280),
+            outputFrameRate: 30,
+            videoBitrate: 2_800_000,
+            audioBitrate: 128_000
+        )
+        XCTAssertEqual(
+            VideoDeliveryExporter.deliveryExportPresetName(for: target),
+            AVAssetExportPreset1280x720
         )
     }
 
@@ -398,7 +425,7 @@ final class VideoDeliveryExporterTests: XCTestCase {
         XCTAssertTrue(reason.contains("bitrate"))
     }
 
-    func testValidateTranscodeEffectivenessRejectsUnchangedOutput() {
+    func testValidateTranscodeEffectivenessRejectsLargerOrEqualOutput() {
         let source = VideoDeliveryExporter.SourceProfile(
             durationSeconds: 48,
             orientedSize: CGSize(width: 1080, height: 1920),
@@ -413,13 +440,13 @@ final class VideoDeliveryExporterTests: XCTestCase {
         )
         let output = VideoDeliveryExporter.SourceProfile(
             durationSeconds: 48,
-            orientedSize: CGSize(width: 1080, height: 1920),
+            orientedSize: CGSize(width: 720, height: 1280),
             frameRate: 30,
-            estimatedBitrate: 14_949_781,
+            estimatedBitrate: 15_100_000,
             videoCodec: "avc1",
             audioCodec: "mp4a",
             hasAudio: true,
-            fileBytes: 89_059_009,
+            fileBytes: 90_000_000,
             containerExtension: "mp4",
             isMP4Container: true
         )
@@ -433,6 +460,41 @@ final class VideoDeliveryExporterTests: XCTestCase {
         ) { error in
             XCTAssertEqual(error as? VideoPreparationFailure, .compressionFailed)
         }
+    }
+
+    func testValidateTranscodeEffectivenessAllowsAnySmallerOutput() throws {
+        let source = VideoDeliveryExporter.SourceProfile(
+            durationSeconds: 52,
+            orientedSize: CGSize(width: 1080, height: 1920),
+            frameRate: 51.81,
+            estimatedBitrate: 9_310_000,
+            videoCodec: "avc1",
+            audioCodec: "mp4a",
+            hasAudio: true,
+            fileBytes: 60_895_101,
+            containerExtension: "mp4",
+            isMP4Container: true
+        )
+        let output = VideoDeliveryExporter.SourceProfile(
+            durationSeconds: 52,
+            orientedSize: CGSize(width: 720, height: 1280),
+            frameRate: 51.81,
+            estimatedBitrate: 8_070_000,
+            videoCodec: "avc1",
+            audioCodec: "mp4a",
+            hasAudio: true,
+            fileBytes: 52_911_970,
+            containerExtension: "mp4",
+            isMP4Container: true
+        )
+
+        XCTAssertNoThrow(
+            try VideoDeliveryExporter.validateTranscodeEffectiveness(
+                source: source,
+                output: output,
+                decisionReason: "bitrate"
+            )
+        )
     }
 
     func testValidateTranscodeEffectivenessAllowsMaterialCompression() throws {

@@ -1,5 +1,6 @@
 "use client"
 
+import "../../publicInformationalTheme.css"
 import { useMemo, useState } from "react"
 import Fuse, { type IFuseOptions } from "fuse.js"
 import FaqQuestionModal from "@/app/components/marketing/FaqQuestionModal"
@@ -44,7 +45,7 @@ export default function FAQPage() {
   return (
     <>
       <div
-        className={`min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-6 pb-12 text-white ${COMPANY_PAGE_TOP}`}
+        className={`tt-public-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-6 pb-12 text-white ${COMPANY_PAGE_TOP}`}
       >
         <h1 className={`mb-2 text-center ${PAGE_HEADING_MARKETING_CLASS}`}>
           FAQ
@@ -89,7 +90,9 @@ export default function FAQPage() {
               return (
                 <div
                   key={item.question}
-                  className="rounded-xl border border-white/10 bg-[#1e293b]/90 p-4 shadow-lg shadow-black/20 transition-colors hover:border-white/15"
+                  className={`rounded-xl border border-white/10 bg-[#1e293b]/90 p-4 shadow-lg shadow-black/20 transition-colors hover:border-white/15${
+                    isOpen ? " tt-faq-open" : ""
+                  }`}
                 >
                   <button
                     type="button"

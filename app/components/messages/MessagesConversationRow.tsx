@@ -65,7 +65,7 @@ function MessagesConversationRow({
     <div
       onClick={() => onOpen(conversationId)}
       className={`relative bg-white/5 border border-white/10 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition${
-        selected ? " xl:border-blue-400/40 xl:bg-white/10" : ""
+        selected ? " tt-msg-selected xl:border-blue-400/40 xl:bg-white/10" : ""
       }`}
     >
       <button
@@ -90,7 +90,7 @@ function MessagesConversationRow({
               e.stopPropagation()
               onPin(conversationId, isPinned)
             }}
-            className="w-full px-3 py-2 text-left text-sm text-white hover:bg-[#1f2937] cursor-pointer"
+            className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 cursor-pointer"
           >
             {isPinned ? "Unpin Chat" : "Pin Chat"}
           </button>
@@ -100,7 +100,7 @@ function MessagesConversationRow({
               e.stopPropagation()
               onMarkUnread(conversationId)
             }}
-            className="w-full px-3 py-2 text-left text-sm text-white hover:bg-[#1f2937] cursor-pointer"
+            className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 cursor-pointer"
           >
             Mark as Unread
           </button>
@@ -135,7 +135,7 @@ function MessagesConversationRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 min-w-0">
             <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-              <p className="min-w-0 truncate font-semibold text-emerald-400">
+              <p className="min-w-0 truncate font-semibold text-white">
                 {isGroup ? (
                   <>
                     {groupName || displayName}

@@ -106,7 +106,7 @@ struct AspectFitMediaView: View {
             .aspectRatio(contentMode: .fit)
             .frame(maxWidth: .infinity)
             .frame(maxHeight: maxDisplayHeight)
-            .background(colors.fillPrimary)
+            .background(Color.clear)
             .background {
                 GeometryReader { geo in
                     Color.clear
@@ -191,6 +191,10 @@ struct AspectFitMediaView: View {
             return
         }
         didFail = false
+        if let local = OptimisticOutboundImageStore.shared.uiImage(for: reference.id) {
+            displayImage = local
+            return
+        }
         do {
             // `maxPixelSize: nil` → original public-object bytes (web `/object/public/` path).
             let data = try await imagePipeline.data(

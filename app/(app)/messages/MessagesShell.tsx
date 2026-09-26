@@ -1,5 +1,6 @@
 "use client"
 
+import "../../communicationDesktopTheme.css"
 import {
   useCallback,
   useEffect,
@@ -79,6 +80,7 @@ import {
 } from "@/lib/shareToConversations"
 import { traceMessagesInbox } from "@/lib/messagesInboxTrace"
 import { isBackendV2Enabled } from "@/lib/backendV2/flags.ts"
+import { collectMessagingInboxConversations } from "@/lib/backendV2/messagingInboxPages.ts"
 import {
   loadMessagingBootstrapForUser,
   messagingConversationToDmRow,
@@ -394,6 +396,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
           source === "initial-load" && requestGeneration === inboxRequestGenerationRef.current
         const result = await loadMessagingBootstrapForUser(supabase, userId, {
           force,
+          limit: 80,
           caller: `messages.${source}`,
           markMessageNotificationsRead: markOnOpen,
         })
@@ -402,6 +405,23 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
           return null
         }
         const { bootstrap } = result
+        const inboxConversations = await collectMessagingInboxConversations(
+          bootstrap,
+          async (cursor) => {
+            const page = await loadMessagingBootstrapForUser(supabase, userId, {
+              cursor,
+              limit: 80,
+              caller: `messages.${source}.page`,
+              markMessageNotificationsRead: false,
+            })
+            return page.bootstrap
+          },
+          () => requestGeneration === inboxRequestGenerationRef.current
+        )
+        if (requestGeneration !== inboxRequestGenerationRef.current) {
+          traceMessagesInbox("fetch:stale", { userId, source, requestGeneration })
+          return null
+        }
         patchSessionBadges(userId, {
           dm_unread: bootstrap.data.dm_unread_total,
         })
@@ -410,7 +430,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
           window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
         }
 
-        const rows = bootstrap.data.conversations.map(messagingConversationToDmRow)
+        const rows = inboxConversations.map(messagingConversationToDmRow)
         traceMessagesInbox("step:2-conversations", {
           source,
           backendV2: true,
@@ -427,7 +447,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
           return []
         }
 
-        const convoData = bootstrap.data.conversations.map((conv) =>
+        const convoData = inboxConversations.map((conv) =>
           mapDmRowToInboxConversation(
             messagingConversationToDmRow(conv),
             userId,
@@ -1014,7 +1034,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div className="flex min-h-0 w-full flex-col xl:mx-auto xl:h-[var(--app-viewport-height)] xl:max-w-[1560px] xl:flex-row xl:gap-4">
+      <div className="tt-phase2-dark flex min-h-0 w-full flex-col xl:mx-auto xl:h-[var(--app-viewport-height)] xl:max-w-[1560px] xl:flex-row xl:gap-4">
       <div
         className={
           onThread
@@ -1023,7 +1043,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
         }
       >
       <div
-        className="flex h-[var(--app-viewport-height)] min-h-0 w-full flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white xl:h-full"
+        className="flex h-[var(--app-viewport-height)] min-h-0 w-full flex-col overflow-hidden text-white xl:h-full"
       >
         <div
           data-tt-native-surface="messages"
@@ -1040,7 +1060,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search conversations..."
-            className="mt-4 mb-3 w-full shrink-0 rounded border border-white/10 bg-black p-3 focus:border-emerald-400 focus:outline-none"
+            className="mt-4 mb-3 w-full shrink-0 rounded border border-white/10 bg-white/10 p-3 text-white placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
           />
 
           <PlatformMessagesWebInboxActions>
@@ -1170,7 +1190,6 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
       >
         {children}
       </div>
-      </div>
 
       {showGroupModal && (
         <div
@@ -1178,7 +1197,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
           onClick={() => setShowGroupModal(false)}
         >
           <div
-            className="bg-[#0f172a] border border-gray-600 rounded-2xl p-6 w-full max-w-lg shadow-2xl text-white"
+            className="bg-[#0b1f3a] border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl text-white"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-white text-xl font-semibold mb-4">
@@ -1189,7 +1208,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
               placeholder="Group name"
-              className="w-full mb-3 p-3 rounded-lg bg-[#1e293b] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full mb-3 p-3 rounded-lg bg-white/10 text-white border border-white/10 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
             />
 
             <input
@@ -1197,7 +1216,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
               placeholder="Search users..."
               value={groupSearchQuery}
               onChange={(e) => setGroupSearchQuery(e.target.value)}
-              className="w-full mb-3 p-3 rounded-lg bg-[#1e293b] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full mb-3 p-3 rounded-lg bg-white/10 text-white border border-white/10 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
             />
 
             <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
@@ -1217,7 +1236,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
                     className={`flex w-full items-center gap-3 rounded-lg p-3 cursor-pointer transition ${
                       selected
                         ? "bg-blue-500/20 ring-1 ring-blue-400/40"
-                        : "hover:bg-[#1e293b]"
+                        : "hover:bg-white/10"
                     }`}
                   >
                     <ProfileAvatarImg
@@ -1264,7 +1283,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => setShowGroupModal(false)}
-                className="rounded-lg bg-gray-700 px-4 py-2 text-white hover:bg-gray-600"
+                className="rounded-lg bg-white/10 px-4 py-2 text-white hover:bg-white/20"
               >
                 Cancel
               </button>
@@ -1287,7 +1306,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
           onClick={() => setShowDMModal(false)}
         >
           <div
-            className="bg-[#0f172a] border border-gray-600 rounded-2xl p-6 w-full max-w-lg shadow-2xl text-white"
+            className="bg-[#0b1f3a] border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl text-white"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-white text-xl font-semibold mb-4">
@@ -1299,7 +1318,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
               placeholder="Search users..."
               value={dmSearchQuery}
               onChange={(e) => setDmSearchQuery(e.target.value)}
-              className="w-full mb-3 p-3 rounded-lg bg-[#1e293b] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full mb-3 p-3 rounded-lg bg-white/10 text-white border border-white/10 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
             />
 
             <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
@@ -1313,7 +1332,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
                     className={`flex w-full items-center gap-3 rounded-lg p-3 cursor-pointer transition ${
                       selected
                         ? "bg-blue-500/20 ring-1 ring-blue-400/40"
-                        : "hover:bg-[#1e293b]"
+                        : "hover:bg-white/10"
                     }`}
                   >
                     <ProfileAvatarImg
@@ -1356,7 +1375,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => setShowDMModal(false)}
-                className="rounded-lg bg-gray-700 px-4 py-2 text-white hover:bg-gray-600"
+                className="rounded-lg bg-white/10 px-4 py-2 text-white hover:bg-white/20"
               >
                 Cancel
               </button>
@@ -1374,6 +1393,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
       )}
 
       <ConfirmModal {...deleteChatConfirmProps} />
+      </div>
     </>
   )
 }

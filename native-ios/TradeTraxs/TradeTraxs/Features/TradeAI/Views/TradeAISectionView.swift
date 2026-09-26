@@ -27,6 +27,18 @@ struct TradeAISectionView: View {
                         .experienceStyle(.caption, color: colors.error)
                 }
 
+                if let persistError = viewModel.persistErrorMessage {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                        Text(persistError)
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                        Button("Retry Save") {
+                            Task { await viewModel.retryPersistIfNeeded() }
+                        }
+                        .font(.system(.caption, design: .default).weight(.semibold))
+                        .foregroundStyle(colors.accent)
+                    }
+                }
+
                 analysisSelectorRow
 
                 customQuestionSection

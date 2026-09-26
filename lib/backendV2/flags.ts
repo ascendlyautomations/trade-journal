@@ -1,12 +1,18 @@
 /**
- * Backend V2 feature flags — all default OFF.
+ * Backend V2 feature flags — Feed and Messages default ON; every other flag defaults OFF.
  *
  * Runtime enable (web):
  *   1. NEXT_PUBLIC_BACKEND_V2_<FLAG>=1  (must be static process.env access for Next)
  *   2. localStorage.setItem("backendV2.session", "1") then reload
  *   3. Test-only: __setBackendV2FlagForTests("session", true)
  *
- * Priority: test override > localStorage > env > default(false)
+ * Priority: test override > localStorage > env > default
+ *
+ * Feed defaults ON. Explicit rollback: NEXT_PUBLIC_BACKEND_V2_FEED=0
+ * or localStorage backendV2.feed = "0".
+ * Messages defaults ON. Explicit rollback: NEXT_PUBLIC_BACKEND_V2_MESSAGES=0
+ * or localStorage backendV2.messages = "0".
+ * Every other flag still defaults OFF.
  *
  * IMPORTANT (Next.js): Client bundles only inline statically written
  * `process.env.NEXT_PUBLIC_*` identifiers. Dynamic `process.env[key]` is always
@@ -55,9 +61,9 @@ export const BackendV2FlagNames: Record<BackendV2FlagKey, string> = {
 const DEFAULTS: Record<BackendV2FlagKey, boolean> = {
   session: false,
   dashboard: false,
-  feed: false,
+  feed: true,
   profile: false,
-  messages: false,
+  messages: true,
   messageThreads: false,
   rooms: false,
   roomPresence: false,

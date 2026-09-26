@@ -15,6 +15,10 @@ enum GettingStartedTaskNavigation {
         case .trade:
             coordinator.openCompose(.trade)
 
+        case .dailyCheckIn:
+            coordinator.selectTab(.home)
+            coordinator.present(sheet: .dailyCheckIn)
+
         case .follow:
             coordinator.selectTab(.feed)
             coordinator.pushFeed(.suggestedTraders)

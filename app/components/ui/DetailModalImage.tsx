@@ -1,22 +1,26 @@
 "use client"
 
-import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import ContentMediaPreview from "@/app/components/ContentMediaPreview"
 
 type DetailModalImageProps = {
   src: string
   onClick?: (url: string) => void
+  displayMode?: string | null
 }
 
-/** Modal screenshot: natural aspect in feed, capped height for very tall images. */
-export default function DetailModalImage({ src, onClick }: DetailModalImageProps) {
+/** Expanded modal media. Taller than the scrolling card preview. */
+export default function DetailModalImage({
+  src,
+  onClick,
+  displayMode,
+}: DetailModalImageProps) {
   return (
-    <TradeScreenshotImage
+    <ContentMediaPreview
       src={src}
       preset="feed-detail"
-      maxHeightPx={720}
+      variant="detail"
+      displayMode={displayMode}
       onClick={onClick}
-      logContext="detail-modal-screenshot"
-      className="md:max-h-full"
     />
   )
 }

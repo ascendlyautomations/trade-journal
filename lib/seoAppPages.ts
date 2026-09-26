@@ -180,12 +180,6 @@ export const SUGGESTIONS_PAGE_METADATA = buildAppPageMetadata(
   "/suggestions"
 )
 
-export const BETA_PAGE_METADATA = buildAppPageMetadata(
-  "Beta",
-  "TradeTraxs beta program.",
-  "/beta"
-)
-
 export const BANNED_PAGE_METADATA = buildAppPageMetadata(
   "Account Suspended",
   "Your TradeTraxs account has been suspended.",

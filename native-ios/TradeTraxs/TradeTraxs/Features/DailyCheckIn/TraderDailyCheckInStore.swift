@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped today's daily check-in — one fetch, realtime refresh, no polling.
+/// Session-scoped today's daily check-in — one fetch, no Realtime; own saves via ``applySaved``.
 @Observable
 @MainActor
 final class TraderDailyCheckInStore {
@@ -21,11 +21,8 @@ final class TraderDailyCheckInStore {
 
     private var repository: (any TraderDailyCheckInRepository)?
     private var session: (any SessionProviding)?
-    private var realtimeHub: RealtimeHub?
     private var viewerID: ProfileID?
     private var refreshTask: Task<Void, Never>?
-    private var realtimeTask: Task<Void, Never>?
-    private var dailyCheckInRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var loadGeneration: UInt64 = 0
 
     private init() {}
@@ -37,7 +34,7 @@ final class TraderDailyCheckInStore {
     ) {
         self.repository = repository
         self.session = session
-        self.realtimeHub = realtimeHub
+        _ = realtimeHub
     }
 
     func loadIfNeeded() {
@@ -65,15 +62,12 @@ final class TraderDailyCheckInStore {
 
     func invalidate() {
         refreshTask?.cancel()
-        realtimeTask?.cancel()
         refreshTask = nil
-        realtimeTask = nil
         todayCheckIn = nil
         isReady = false
         isRefreshing = false
         viewerID = nil
         loadGeneration &+= 1
-        stopRealtime()
     }
 
     private func performRefresh(fromUserAction: Bool) async {
@@ -83,7 +77,6 @@ final class TraderDailyCheckInStore {
         let profileID = ProfileID(userID.rawValue)
         if viewerID != profileID {
             viewerID = profileID
-            startRealtimeIfNeeded(viewerID: userID.rawValue)
         }
 
         loadGeneration &+= 1
@@ -111,34 +104,5 @@ final class TraderDailyCheckInStore {
 
         isRefreshing = false
         DailyCheckInReminderCoordinator.shared.syncIfNeeded()
-    }
-
-    private func startRealtimeIfNeeded(viewerID: String) {
-        guard let realtimeHub else { return }
-        stopRealtime()
-        realtimeTask = Task { [weak self] in
-            guard let self else { return }
-            let token = await self.session?.accessToken
-            let watch = realtimeHub.watchTraderDailyCheckIns(
-                userID: viewerID,
-                accessToken: token,
-                debugOwner: "DailyCheckIn"
-            )
-            dailyCheckInRealtimeConsumer = watch.consumer
-            for await _ in watch.events {
-                guard !Task.isCancelled else { break }
-                await MainActor.run {
-                    self.refresh(fromUserAction: false)
-                }
-            }
-        }
-    }
-
-    private func stopRealtime() {
-        realtimeTask?.cancel()
-        realtimeTask = nil
-        let consumer = dailyCheckInRealtimeConsumer
-        dailyCheckInRealtimeConsumer = nil
-        Task { await realtimeHub?.releaseWatch(consumer) }
     }
 }

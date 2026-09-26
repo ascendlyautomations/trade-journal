@@ -1,5 +1,6 @@
 "use client"
 
+import "../../publicInformationalTheme.css"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -96,7 +97,7 @@ export default function PricingPage() {
     <>
       <FeedbackModal {...feedbackModalProps} />
       <div
-        className={`min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-14 text-white sm:px-6 sm:pb-20 ${COMPANY_PAGE_TOP}`}
+        className={`tt-public-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-14 text-white sm:px-6 sm:pb-20 ${COMPANY_PAGE_TOP}`}
       >
         <div className="mx-auto flex max-w-5xl flex-col items-center">
           <h1 className={`max-w-3xl text-center leading-tight tracking-tight ${PAGE_HEADING_MARKETING_CLASS}`}>

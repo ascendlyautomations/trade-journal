@@ -11,4 +11,5 @@ nonisolated struct ProfileSettingsUpdate: Sendable, Equatable {
     var username: String
     var persistedUsername: String
     var usernameChangeCount: Int
+    var traderType: TraderType?
 }

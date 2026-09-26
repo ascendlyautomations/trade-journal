@@ -1,0 +1,873 @@
+/*
+ * Authenticated web appearance. Rules match only when the boot script
+ * sets html[data-tt-appearance]. Public, auth, onboarding, and native
+ * shells never receive that attribute.
+ *
+ * Dark desktop geometry (flow-root, min-height) stays in the existing
+ * min-width: 1200px stylesheets, gated to data-tt-appearance="dark".
+ * This file changes color only.
+ */
+
+html[data-tt-appearance="dark"] {
+  color-scheme: dark;
+  --tt-page: #0d1117;
+  --tt-surface: #161b22;
+  --tt-surface-nested: #1c2128;
+  --tt-surface-raised: #21262d;
+  --tt-surface-hover: #292e36;
+  --tt-border: #30363d;
+  --tt-border-strong: #3d444d;
+  --tt-text: #f0f3f6;
+  --tt-text-muted: #b1bac4;
+  --tt-text-tertiary: #7d8590;
+  --tt-accent: #4ec4e0;
+  --tt-accent-fill: #4ec4e0;
+  --tt-on-accent: #041018;
+  --tt-accent-hover: #7dd3f0;
+  --tt-positive: #3ddc97;
+  --tt-negative: #ff7b72;
+  --tt-warning: #e3b341;
+  --tt-navbar: #0b1016;
+  --tt-selected: rgb(78 196 224 / 0.12);
+  --tt-positive-soft: rgb(61 220 151 / 0.14);
+  --tt-negative-soft: rgb(255 123 114 / 0.14);
+  --tt-warning-soft: rgb(227 179 65 / 0.14);
+  --tt-chart-grid: #30363d;
+  --tt-tooltip-bg: #21262d;
+  --tt-tooltip-text: #f0f3f6;
+  --tt-ring: rgb(78 196 224 / 0.28);
+}
+
+html[data-tt-appearance="light"] {
+  color-scheme: light;
+  --tt-page: #f6f8fa;
+  --tt-surface: #ffffff;
+  --tt-surface-nested: #f3f4f6;
+  --tt-surface-raised: #eaeef2;
+  --tt-surface-hover: #e2e7ec;
+  --tt-border: #d0d7de;
+  --tt-border-strong: #b8c0ca;
+  --tt-text: #1f2328;
+  --tt-text-muted: #57606a;
+  --tt-text-tertiary: #6e7781;
+  --tt-accent: #0e7490;
+  --tt-accent-fill: #4ec4e0;
+  --tt-on-accent: #041018;
+  --tt-accent-hover: #7dd3f0;
+  --tt-positive: #1a7f37;
+  --tt-negative: #cf222e;
+  --tt-warning: #9a6700;
+  --tt-navbar: #ffffff;
+  --tt-selected: rgb(14 116 144 / 0.1);
+  --tt-positive-soft: rgb(26 127 55 / 0.12);
+  --tt-negative-soft: rgb(207 34 46 / 0.1);
+  --tt-warning-soft: rgb(154 103 0 / 0.12);
+  --tt-chart-grid: #d0d7de;
+  --tt-tooltip-bg: #ffffff;
+  --tt-tooltip-text: #1f2328;
+  --tt-ring: rgb(14 116 144 / 0.28);
+}
+
+html[data-tt-appearance="dark"] body,
+html[data-tt-appearance="light"] body {
+  background-color: var(--tt-page);
+  background-image: none;
+}
+
+/* Story and clip viewers stay on their own black canvas. */
+html[data-tt-appearance="dark"] :is([aria-label="Stories"], [aria-label="Clip viewer"]),
+html[data-tt-appearance="light"] :is([aria-label="Stories"], [aria-label="Clip viewer"]) {
+  color: #ffffff;
+  background-color: rgb(0 0 0 / 0.95);
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    .tt-app-navbar,
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
+    .z-\[10070\]
+  ),
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    .tt-app-navbar,
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
+    .z-\[10070\]
+  ) {
+  --chrome: var(--tt-navbar);
+  --color-chrome: var(--tt-navbar);
+  --chrome-foreground: var(--tt-text);
+  --color-chrome-foreground: var(--tt-text);
+  --chrome-border: var(--tt-border);
+  --color-chrome-border: var(--tt-border);
+  --foreground: var(--tt-text);
+  --color-foreground: var(--tt-text);
+  --foreground-secondary: var(--tt-text-muted);
+  --color-foreground-secondary: var(--tt-text-muted);
+  --muted-foreground: var(--tt-text-tertiary);
+  --color-muted-foreground: var(--tt-text-tertiary);
+  --placeholder: var(--tt-text-tertiary);
+  --color-placeholder: var(--tt-text-tertiary);
+  --border: var(--tt-border);
+  --color-border: var(--tt-border);
+  --border-subtle: var(--tt-border);
+  --color-border-subtle: var(--tt-border);
+  --divider: var(--tt-border);
+  --color-divider: var(--tt-border);
+  --card: var(--tt-surface);
+  --color-card: var(--tt-surface);
+  --card-foreground: var(--tt-text);
+  --color-card-foreground: var(--tt-text);
+  --card-border: var(--tt-border);
+  --color-card-border: var(--tt-border);
+  --surface-secondary: var(--tt-surface);
+  --color-surface-secondary: var(--tt-surface);
+  --surface-elevated: var(--tt-surface-raised);
+  --color-surface-elevated: var(--tt-surface-raised);
+  --input: var(--tt-surface-raised);
+  --color-input: var(--tt-surface-raised);
+  --accent: var(--tt-accent-fill);
+  --color-accent: var(--tt-accent-fill);
+  --accent-hover: var(--tt-accent-hover);
+  --color-accent-hover: var(--tt-accent-hover);
+  --accent-foreground: var(--tt-on-accent);
+  --color-accent-foreground: var(--tt-on-accent);
+  --accent-soft: var(--tt-selected);
+  --color-accent-soft: var(--tt-selected);
+  --positive: var(--tt-positive);
+  --color-positive: var(--tt-positive);
+  --negative: var(--tt-negative);
+  --color-negative: var(--tt-negative);
+  --warning: var(--tt-warning);
+  --color-warning: var(--tt-warning);
+  --info: var(--tt-accent);
+  --color-info: var(--tt-accent);
+  --ring: var(--tt-ring);
+  --color-ring: var(--tt-ring);
+  --focus-ring: var(--tt-ring);
+  --color-focus-ring: var(--tt-ring);
+  --surface-blur: 0px;
+  --tw-backdrop-blur: blur(0px);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app],
+html[data-tt-appearance="light"] [data-tt-app] {
+  background-color: var(--tt-page);
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"] .tt-app-navbar,
+html[data-tt-appearance="light"] .tt-app-navbar,
+html[data-tt-appearance="dark"] .tt-app-navbar .bg-chrome,
+html[data-tt-appearance="light"] .tt-app-navbar .bg-chrome {
+  background-color: var(--tt-navbar);
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"] .tt-app-navbar .border-chrome-border,
+html[data-tt-appearance="light"] .tt-app-navbar .border-chrome-border,
+html[data-tt-appearance="dark"] .tt-app-navbar .border-border,
+html[data-tt-appearance="light"] .tt-app-navbar .border-border,
+html[data-tt-appearance="dark"] .tt-app-navbar .border-border-subtle,
+html[data-tt-appearance="light"] .tt-app-navbar .border-border-subtle {
+  border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="dark"] .tt-app-navbar .tt-nav-account,
+html[data-tt-appearance="light"] .tt-app-navbar .tt-nav-account {
+  background-color: var(--tt-surface);
+  border-color: var(--tt-border);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] .tt-app-navbar .bg-accent-soft,
+html[data-tt-appearance="light"] .tt-app-navbar .bg-accent-soft {
+  background-color: var(--tt-selected);
+  box-shadow: inset 0 0 0 1px var(--tt-accent);
+}
+
+html[data-tt-appearance="dark"] .tt-app-navbar :is(
+    .text-foreground-secondary,
+    .text-muted-foreground
+  ),
+html[data-tt-appearance="light"] .tt-app-navbar :is(
+    .text-foreground-secondary,
+    .text-muted-foreground
+  ) {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="dark"] .tt-app-navbar :is(
+    .text-chrome-foreground,
+    .text-info,
+    .hover\:text-chrome-foreground:hover,
+    .hover\:text-nav-link-hover:hover
+  ),
+html[data-tt-appearance="light"] .tt-app-navbar :is(
+    .text-chrome-foreground,
+    .text-info,
+    .hover\:text-chrome-foreground:hover,
+    .hover\:text-nav-link-hover:hover
+  ) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] .tt-app-navbar .bg-accent,
+html[data-tt-appearance="light"] .tt-app-navbar .bg-accent {
+  background-color: var(--tt-accent-fill);
+  color: var(--tt-on-accent);
+}
+
+html[data-tt-appearance="dark"] .tt-app-navbar .bg-surface-secondary,
+html[data-tt-appearance="light"] .tt-app-navbar .bg-surface-secondary {
+  background-color: var(--tt-surface);
+  color: var(--tt-text);
+}
+
+/* Page canvases that still carry the original gradient utilities. */
+html[data-tt-appearance="dark"] [data-tt-app] .bg-gradient-to-br.from-\[\#0f172a\],
+html[data-tt-appearance="light"] [data-tt-app] .bg-gradient-to-br.from-\[\#0f172a\] {
+  background-color: var(--tt-page);
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
+    .z-\[10070\]
+  )
+  :is(
+    .bg-white\/5,
+    .bg-white\/\[0\.03\],
+    .bg-white\/\[0\.04\],
+    .bg-white\/\[0\.06\],
+    .bg-surface-elevated\/50,
+    .bg-\[\#0b1f3a\],
+    .bg-\[\#0b1f3a\]\/90,
+    .bg-card
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export],
+    [data-tt-share-export] *
+  )),
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
+    .z-\[10070\]
+  )
+  :is(
+    .bg-white\/5,
+    .bg-white\/\[0\.03\],
+    .bg-white\/\[0\.04\],
+    .bg-white\/\[0\.06\],
+    .bg-surface-elevated\/50,
+    .bg-\[\#0b1f3a\],
+    .bg-\[\#0b1f3a\]\/90,
+    .bg-card
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export],
+    [data-tt-share-export] *
+  )) {
+  background-color: var(--tt-surface);
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
+    .z-\[10070\]
+  )
+  :is(
+    .bg-black\/15,
+    .bg-black\/20,
+    .bg-black\/25,
+    .bg-\[\#0b1220\]\/60,
+    .bg-\[\#0b1220\]
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export],
+    [data-tt-share-export] *
+  )),
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
+    .z-\[10070\]
+  )
+  :is(
+    .bg-black\/15,
+    .bg-black\/20,
+    .bg-black\/25,
+    .bg-\[\#0b1220\]\/60,
+    .bg-\[\#0b1220\]
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export],
+    [data-tt-share-export] *
+  )) {
+  background-color: var(--tt-surface-nested);
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
+    .z-\[10070\]
+  )
+  :is(
+    .bg-white\/10,
+    .bg-white\/15,
+    .bg-\[\#0f172a\],
+    .bg-\[\#0a1329\],
+    .bg-\[\#0b2345\],
+    .bg-\[\#111827\],
+    .bg-\[\#1e293b\],
+    .bg-slate-800,
+    .bg-slate-900,
+    .bg-gray-800,
+    .bg-gray-900
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export],
+    [data-tt-share-export] *
+  )),
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
+    .z-\[10070\]
+  )
+  :is(
+    .bg-white\/10,
+    .bg-white\/15,
+    .bg-\[\#0f172a\],
+    .bg-\[\#0a1329\],
+    .bg-\[\#0b2345\],
+    .bg-\[\#111827\],
+    .bg-\[\#1e293b\],
+    .bg-slate-800,
+    .bg-slate-900,
+    .bg-gray-800,
+    .bg-gray-900
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export],
+    [data-tt-share-export] *
+  )) {
+  background-color: var(--tt-surface-raised);
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    .z-\[10070\]
+  )
+  :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+    [type="color"]
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export] *
+  )),
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    .z-\[10070\]
+  )
+  :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+    [type="color"]
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export] *
+  )) {
+  background-color: var(--tt-surface-raised);
+  color: var(--tt-text);
+  border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    .z-\[10070\]
+  )
+  :is(
+    .hover\:bg-white\/5:hover,
+    .hover\:bg-white\/10:hover,
+    .hover\:bg-white\/15:hover,
+    .hover\:bg-white\/20:hover,
+    .hover\:bg-\[\#1e293b\]:hover,
+    .hover\:bg-\[\#1f2937\]:hover
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export] *
+  )),
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    .z-\[10070\]
+  )
+  :is(
+    .hover\:bg-white\/5:hover,
+    .hover\:bg-white\/10:hover,
+    .hover\:bg-white\/15:hover,
+    .hover\:bg-white\/20:hover,
+    .hover\:bg-\[\#1e293b\]:hover,
+    .hover\:bg-\[\#1f2937\]:hover
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export] *
+  )) {
+  background-color: var(--tt-surface-hover);
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
+    .z-\[10070\]
+  )
+  :is(
+    .border-white\/5,
+    .border-white\/10,
+    .border-white\/15,
+    .border-white\/20,
+    .md\:border-white\/10,
+    .border-gray-600,
+    .border-gray-700,
+    .border-slate-700,
+    .border-blue-400\/20,
+    .border-blue-400\/30,
+    .border-blue-400\/40
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export] *
+  )),
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
+    .z-\[10070\]
+  )
+  :is(
+    .border-white\/5,
+    .border-white\/10,
+    .border-white\/15,
+    .border-white\/20,
+    .md\:border-white\/10,
+    .border-gray-600,
+    .border-gray-700,
+    .border-slate-700,
+    .border-blue-400\/20,
+    .border-blue-400\/30,
+    .border-blue-400\/40
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export] *
+  )) {
+  border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  .hover\:border-white\/20:hover:not(:where([aria-label="Stories"] *, [aria-label="Clip viewer"] *)),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  .hover\:border-white\/20:hover:not(:where([aria-label="Stories"] *, [aria-label="Clip viewer"] *)) {
+  border-color: var(--tt-border-strong);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.backdrop-blur-sm, .backdrop-blur-md, .backdrop-blur-lg, .ui-theme-backdrop):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.backdrop-blur-sm, .backdrop-blur-md, .backdrop-blur-lg, .ui-theme-backdrop):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ) {
+  --tw-backdrop-blur: blur(0px);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(button, a).bg-white:not(:where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(button, a).bg-white:not(:where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)) {
+  background-color: var(--tt-surface);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  .text-black:not(:where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  .text-black:not(:where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    .z-\[10070\]
+  )
+  :is(.text-white, .text-gray-100, .text-slate-100):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ),
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    .z-\[10070\]
+  )
+  :is(.text-white, .text-gray-100, .text-slate-100):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.text-gray-200, .text-gray-300, .text-slate-300, .text-slate-200):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.text-gray-200, .text-gray-300, .text-slate-300, .text-slate-200):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ) {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.text-gray-400, .text-gray-500, .text-slate-400, .text-slate-500):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.text-gray-400, .text-gray-500, .text-slate-400, .text-slate-500):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ) {
+  color: var(--tt-text-tertiary);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  .placeholder\:text-gray-400::placeholder,
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  .placeholder\:text-gray-400::placeholder {
+  color: var(--tt-text-tertiary);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]), .tt-app-navbar)
+  :is(.text-blue-100, .text-blue-200, .text-blue-300, .text-blue-400, .text-sky-400):not(.bg-clip-text):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]), .tt-app-navbar)
+  :is(.text-blue-100, .text-blue-200, .text-blue-300, .text-blue-400, .text-sky-400):not(.bg-clip-text):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ) {
+  color: var(--tt-accent);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(
+    .text-green-400,
+    .text-green-300,
+    .text-emerald-200,
+    .text-emerald-300,
+    .text-emerald-400,
+    .text-emerald-500
+  ):not(:where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(
+    .text-green-400,
+    .text-green-300,
+    .text-emerald-200,
+    .text-emerald-300,
+    .text-emerald-400,
+    .text-emerald-500
+  ):not(:where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)) {
+  color: var(--tt-positive);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.text-red-300, .text-red-400, .text-red-500, .hover\:text-red-400:hover):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.text-red-300, .text-red-400, .text-red-500, .hover\:text-red-400:hover):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ) {
+  color: var(--tt-negative);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.text-yellow-300, .text-yellow-400, .text-amber-300, .text-amber-400, .text-purple-300):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.text-yellow-300, .text-yellow-400, .text-amber-300, .text-amber-400, .text-purple-300):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ) {
+  color: var(--tt-warning);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.bg-green-500\/15, .bg-green-500\/20, .bg-emerald-500\/15, .bg-emerald-500\/20):not(
+    :where([data-tt-share-export] *)
+  ),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.bg-green-500\/15, .bg-green-500\/20, .bg-emerald-500\/15, .bg-emerald-500\/20):not(
+    :where([data-tt-share-export] *)
+  ) {
+  background-color: var(--tt-positive-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tt-positive) 35%, transparent);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.bg-red-500\/10, .bg-red-500\/20):not(:where([data-tt-share-export] *)),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.bg-red-500\/10, .bg-red-500\/20):not(:where([data-tt-share-export] *)) {
+  background-color: var(--tt-negative-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tt-negative) 35%, transparent);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  .bg-yellow-500\/20:not(:where([data-tt-share-export] *)),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  .bg-yellow-500\/20:not(:where([data-tt-share-export] *)) {
+  background-color: var(--tt-warning-soft);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.bg-blue-500, .bg-blue-600, .hover\:bg-blue-500:hover, .hover\:bg-blue-600:hover):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.bg-blue-500, .bg-blue-600, .hover\:bg-blue-500:hover, .hover\:bg-blue-600:hover):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ) {
+  background-color: var(--tt-accent-fill);
+  color: var(--tt-on-accent);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.hover\:bg-blue-500:hover, .hover\:bg-blue-600:hover):not(:where([data-tt-share-export] *)),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.hover\:bg-blue-500:hover, .hover\:bg-blue-600:hover):not(:where([data-tt-share-export] *)) {
+  background-color: var(--tt-accent-hover);
+  color: var(--tt-on-accent);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.bg-blue-500\/10, .bg-blue-500\/15, .bg-blue-500\/20, .bg-blue-500\/25):not(
+    :where([data-tt-share-export] *)
+  ),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.bg-blue-500\/10, .bg-blue-500\/15, .bg-blue-500\/20, .bg-blue-500\/25):not(
+    :where([data-tt-share-export] *)
+  ) {
+  background-color: var(--tt-selected);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(
+    .tt-trades-chip-selected,
+    .tt-dash-selected,
+    .tt-phase1-selected,
+    .tt-msg-selected,
+    button.rounded-xl.bg-white\/15.ring-1
+  ),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(
+    .tt-trades-chip-selected,
+    .tt-dash-selected,
+    .tt-phase1-selected,
+    .tt-msg-selected,
+    button.rounded-xl.bg-white\/15.ring-1
+  ) {
+  background-color: var(--tt-selected);
+  color: var(--tt-accent);
+  box-shadow: inset 0 0 0 1px var(--tt-accent);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.tt-trades-action, .rounded-xl.bg-blue-500:not(button):not(a)),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.tt-trades-action, .rounded-xl.bg-blue-500:not(button):not(a)) {
+  background-color: var(--tt-accent-fill);
+  color: var(--tt-on-accent);
+}
+
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-strip,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-strip,
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-chip,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-chip {
+  border-color: var(--tt-border);
+  background: var(--tt-surface);
+}
+
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-strip-cell + .tt-dash-strip-cell,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-strip-cell + .tt-dash-strip-cell {
+  border-left-color: var(--tt-border);
+}
+
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] :is(.tt-dash-label, .tt-dash-section-title),
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] :is(.tt-dash-label, .tt-dash-section-title) {
+  color: var(--tt-accent);
+}
+
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-value,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-value {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-value-pos,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-value-pos {
+  color: var(--tt-positive);
+}
+
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-value-neg,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-value-neg {
+  color: var(--tt-negative);
+}
+
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle {
+  color: var(--tt-text-tertiary);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] .border-emerald-400\/50.bg-emerald-500\/20,
+html[data-tt-appearance="light"] [data-tt-app] .border-emerald-400\/50.bg-emerald-500\/20 {
+  border-color: color-mix(in srgb, var(--tt-positive) 45%, transparent);
+  background-color: var(--tt-positive-soft);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] .border-red-400\/50,
+html[data-tt-appearance="light"] [data-tt-app] .border-red-400\/50 {
+  border-color: color-mix(in srgb, var(--tt-negative) 45%, transparent);
+}
+
+html[data-tt-appearance="dark"] [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+html[data-tt-appearance="light"] [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+html[data-tt-appearance="dark"] .z-\[10070\],
+html[data-tt-appearance="light"] .z-\[10070\] {
+  background-color: var(--tt-surface);
+  background-image: none;
+  border-color: var(--tt-border);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] .recharts-cartesian-grid line,
+html[data-tt-appearance="light"] [data-tt-app] .recharts-cartesian-grid line,
+html[data-tt-appearance="dark"] [data-tt-app] .recharts-cartesian-axis-line,
+html[data-tt-appearance="light"] [data-tt-app] .recharts-cartesian-axis-line,
+html[data-tt-appearance="dark"] [data-tt-app] .recharts-cartesian-axis-tick-line,
+html[data-tt-appearance="light"] [data-tt-app] .recharts-cartesian-axis-tick-line {
+  stroke: var(--tt-chart-grid);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] .recharts-cartesian-axis-tick text,
+html[data-tt-appearance="light"] [data-tt-app] .recharts-cartesian-axis-tick text {
+  fill: var(--tt-text-tertiary);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] .recharts-default-tooltip,
+html[data-tt-appearance="light"] [data-tt-app] .recharts-default-tooltip {
+  background-color: var(--tt-tooltip-bg) !important;
+  border: 1px solid var(--tt-border) !important;
+  color: var(--tt-tooltip-text);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] .recharts-tooltip-label,
+html[data-tt-appearance="light"] [data-tt-app] .recharts-tooltip-label {
+  color: var(--tt-text-muted) !important;
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] .recharts-tooltip-item,
+html[data-tt-appearance="light"] [data-tt-app] .recharts-tooltip-item {
+  color: var(--tt-tooltip-text) !important;
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] [stroke="#22c55e"],
+html[data-tt-appearance="light"] [data-tt-app] [stroke="#22c55e"],
+html[data-tt-appearance="dark"] [data-tt-app] [stroke="#4ade80"],
+html[data-tt-appearance="light"] [data-tt-app] [stroke="#4ade80"] {
+  stroke: var(--tt-positive);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] [stroke="#f87171"],
+html[data-tt-appearance="light"] [data-tt-app] [stroke="#f87171"],
+html[data-tt-appearance="dark"] [data-tt-app] [stroke="#ef4444"],
+html[data-tt-appearance="light"] [data-tt-app] [stroke="#ef4444"] {
+  stroke: var(--tt-negative);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] [stroke="#38bdf8"],
+html[data-tt-appearance="light"] [data-tt-app] [stroke="#38bdf8"],
+html[data-tt-appearance="dark"] [data-tt-app] [stroke="#3b82f6"],
+html[data-tt-appearance="light"] [data-tt-app] [stroke="#3b82f6"],
+html[data-tt-appearance="dark"] [data-tt-app] [stroke="#60a5fa"],
+html[data-tt-appearance="light"] [data-tt-app] [stroke="#60a5fa"] {
+  stroke: var(--tt-accent);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] [fill="#38bdf8"],
+html[data-tt-appearance="light"] [data-tt-app] [fill="#38bdf8"],
+html[data-tt-appearance="dark"] [data-tt-app] [fill="#60a5fa"],
+html[data-tt-appearance="light"] [data-tt-app] [fill="#60a5fa"] {
+  fill: var(--tt-accent);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] [fill="#22c55e"],
+html[data-tt-appearance="light"] [data-tt-app] [fill="#22c55e"],
+html[data-tt-appearance="dark"] [data-tt-app] [fill="#34d399"],
+html[data-tt-appearance="light"] [data-tt-app] [fill="#34d399"] {
+  fill: var(--tt-positive);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] [fill="#f87171"],
+html[data-tt-appearance="light"] [data-tt-app] [fill="#f87171"] {
+  fill: var(--tt-negative);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] [stroke="#334155"],
+html[data-tt-appearance="light"] [data-tt-app] [stroke="#334155"],
+html[data-tt-appearance="dark"] [data-tt-app] [stroke="#1e293b"],
+html[data-tt-appearance="light"] [data-tt-app] [stroke="#1e293b"] {
+  stroke: var(--tt-chart-grid);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] [stroke="#ffffff"] {
+  stroke: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] [fill="#ffffff"] {
+  fill: var(--tt-text);
+}

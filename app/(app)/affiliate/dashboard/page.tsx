@@ -1,5 +1,6 @@
 "use client"
 
+import "../../../utilityDesktopTheme.css"
 import Link from "next/link"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -278,7 +279,7 @@ export default function AffiliateDashboard() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
+      <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
         <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:p-10">
           {loading ? (
             <SkeletonAffiliateDashboardPage />

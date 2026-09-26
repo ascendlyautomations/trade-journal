@@ -37,8 +37,20 @@ describe("Backend V2 feed cutover (Phase 5)", () => {
     // In loadPosts, RPC path must run before legacy merged REST fan-out.
     const rpcLoadIdx = src.indexOf("loadFeedBootstrapForUser(supabase")
     const restIdx = src.indexOf("topUpMergedFeedBuffer(supabase")
+    const scopePreflightIdx = src.indexOf(
+      "await fetchFollowingIds(supabase, userId)"
+    )
+    const engagementIdx = src.indexOf("await loadEngagementForPosts(")
     assert.ok(rpcLoadIdx > 0, "expected loadFeedBootstrapForUser call")
     assert.ok(restIdx > rpcLoadIdx, "REST fan-out must remain after RPC gate")
+    assert.ok(
+      scopePreflightIdx > 0 && scopePreflightIdx < rpcLoadIdx,
+      "Following scope must be resolved before the first Feed bootstrap"
+    )
+    assert.ok(
+      engagementIdx > restIdx,
+      "engagement fallback must stay on the legacy path after the V2 return"
+    )
   })
 })
 export {}

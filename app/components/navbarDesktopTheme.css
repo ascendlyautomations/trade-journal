@@ -1,0 +1,41 @@
+/*
+ * Desktop app navbar only. Mobile and tablet keep the existing chrome.
+ * Does not style the marketing PublicNavbar.
+ */
+
+@media (min-width: 1200px) {
+  html[data-tt-appearance="dark"] .tt-app-navbar,
+  html[data-tt-appearance="dark"] .tt-app-navbar .bg-chrome {
+    background-color: #0b1016;
+    background-image: none;
+  }
+
+  html[data-tt-appearance="dark"] .tt-app-navbar .border-chrome-border {
+    border-bottom-color: #30363d;
+    border-top-color: #30363d;
+  }
+
+  html[data-tt-appearance="dark"] .tt-app-navbar .text-foreground-secondary {
+    color: #b1bac4;
+  }
+
+  html[data-tt-appearance="dark"] .tt-app-navbar .hover\:text-chrome-foreground:hover,
+  html[data-tt-appearance="dark"] .tt-app-navbar .hover\:text-nav-link-hover:hover {
+    color: #f0f3f6;
+  }
+
+  html[data-tt-appearance="dark"] .tt-app-navbar .bg-accent-soft {
+    background-color: rgb(78 196 224 / 0.12);
+    box-shadow: inset 0 0 0 1px #4ec4e0;
+  }
+
+  html[data-tt-appearance="dark"] .tt-app-navbar .text-info {
+    color: #f0f3f6;
+  }
+
+  html[data-tt-appearance="dark"] .tt-app-navbar .tt-nav-account {
+    background-color: #161b22;
+    border-color: #30363d;
+    color: #f0f3f6;
+  }
+}

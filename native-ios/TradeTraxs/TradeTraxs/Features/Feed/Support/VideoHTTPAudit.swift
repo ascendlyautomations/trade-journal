@@ -10,21 +10,35 @@ enum VideoHTTPAudit {
     }
 
     private static func runProbe(url: URL, clipID: String, surface: String, role: String) async {
+        let headResponse = await fetch(url: url, method: "HEAD", range: nil)
         await logResponse(
             clipID: clipID,
             surface: surface,
             role: role,
             label: "HEAD",
             requestedRange: nil,
-            response: await fetch(url: url, method: "HEAD", range: nil)
+            response: headResponse
         )
+        if let length = Int64(headResponse.contentLength.trimmingCharacters(in: .whitespaces)),
+           length > 0,
+           headResponse.contentLength != "none",
+           headResponse.contentLength != "error"
+        {
+            await ClipVideoDeliveryService.shared.noteKnownAssetBytes(
+                clipID: clipID,
+                remoteURL: url,
+                bytes: length
+            )
+        }
+        let rangeResponse = await fetch(url: url, method: "GET", range: "bytes=0-65535")
+        ClipVideoByteAccounting.recordDiagnosticProbe(bytes: Int64(rangeResponse.responseBytes))
         await logResponse(
             clipID: clipID,
             surface: surface,
             role: role,
             label: "RANGE",
             requestedRange: "bytes=0-65535",
-            response: await fetch(url: url, method: "GET", range: "bytes=0-65535")
+            response: rangeResponse
         )
     }
 

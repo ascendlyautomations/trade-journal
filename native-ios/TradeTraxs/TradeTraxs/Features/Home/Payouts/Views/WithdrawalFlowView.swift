@@ -101,8 +101,10 @@ struct WithdrawalFlowView: View {
                     "Record money taken out of a Live account or a funded prop-firm payout."
                 )
                 .experienceStyle(.footnote, color: colors.secondaryText)
+                .experienceDashboardListRow()
                 payoutHistoryLink
                     .padding(.top, ExperienceSpacing.xxs)
+                    .experienceDashboardListRow()
             }
 
             if viewModel.isLoading, withdrawalAccounts.isEmpty {
@@ -112,6 +114,7 @@ struct WithdrawalFlowView: View {
                         Text("Loading accounts…")
                             .experienceStyle(.footnote, color: colors.secondaryText)
                     }
+                    .experienceDashboardListRow()
                 }
             } else if withdrawalAccounts.isEmpty {
                 Section {
@@ -119,6 +122,7 @@ struct WithdrawalFlowView: View {
                         title: "No eligible accounts",
                         message: "Add a Live or Funded prop-firm account under Settings → Manage Accounts."
                     )
+                    .experienceDashboardListRow()
                 }
             } else {
                 Section("Account") {
@@ -139,12 +143,15 @@ struct WithdrawalFlowView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .experienceDashboardListRow()
                         .accessibilityIdentifier("withdrawal.account.\(account.id.rawValue)")
                     }
                 }
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
+        .listRowSeparatorTint(colors.separator)
         .listSectionSpacing(ExperienceSpacing.xs)
     }
 
@@ -153,7 +160,9 @@ struct WithdrawalFlowView: View {
             if let account = viewModel.accounts.first(where: { $0.id == accountID }) {
                 Section {
                     LabeledContent("Account", value: TradingAccountDisplay.title(for: account, audience: .owner))
+                        .experienceDashboardListRow()
                     LabeledContent("Mode", value: TradingAccountDisplay.ownerDropdownModeLabel(account.mode))
+                        .experienceDashboardListRow()
                 }
             }
             Section {
@@ -161,28 +170,35 @@ struct WithdrawalFlowView: View {
                     TextField("0", text: $draft.amountDigits.numericInput(.unsignedCurrency))
                         .keyboardType(.decimalPad)
                 }
+                .experienceDashboardListRow()
                 DatePicker("Date", selection: $draft.payoutDate, in: ...Date(), displayedComponents: .date)
+                    .experienceDashboardListRow()
                 SettingsLabeledField(title: "Note", helper: "Optional") {
                     TextField("Optional", text: $draft.note, axis: .vertical)
                         .lineLimit(2...3)
                 }
+                .experienceDashboardListRow()
             } header: {
                 Text("Withdrawal")
             }
 
             Section {
                 payoutHistoryLink
+                    .experienceDashboardListRow()
             }
 
             if let error = viewModel.payoutError {
                 Section {
                     Text(error)
                         .experienceStyle(.footnote, color: colors.loss)
+                        .experienceDashboardListRow()
                 }
             }
         }
+        .listRowSeparatorTint(colors.separator)
         .listSectionSpacing(ExperienceSpacing.xs)
         .scrollDismissesKeyboard(.interactively)
+        .experienceDashboardGroupedRows()
         .experienceArrowBackToolbarButton {
             selectedAccountID = nil
         }

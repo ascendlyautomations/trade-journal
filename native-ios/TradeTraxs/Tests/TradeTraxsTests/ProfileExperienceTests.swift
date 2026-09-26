@@ -220,6 +220,112 @@ final class ProfileExperienceTests: XCTestCase {
         XCTAssertNil(store.tabBarAvatarUIImage)
     }
 
+    func testOnboardingAvatarSurvivesStaleSessionBootstrap() async throws {
+        let viewerID = "11111111-1111-1111-1111-111111111111"
+        let newURL = "https://example.com/new-avatar.jpg"
+        let oldURL = "https://example.com/old-avatar.jpg"
+        defer {
+            SessionBootstrapStore.shared.clear()
+            BackendV2BootstrapDiskCache.clearAll(viewerID: viewerID)
+        }
+        SessionBootstrapStore.shared.clear()
+        BackendV2BootstrapDiskCache.clearAll(viewerID: viewerID)
+
+        let fixture = makeFixture(avatarURL: newURL)
+        let store = CurrentUserProfileStore(
+            profiles: fixture.repository,
+            session: fixture.session,
+            imagePipeline: fixture.imagePipeline
+        )
+        let profile = try await fixture.repository.profile(id: ProfileID(viewerID))
+        let stale = try Self.sessionBootstrap(viewerID: viewerID, avatarURL: oldURL)
+        SessionBootstrapStore.shared.seed(stale, source: "test")
+
+        store.applyBootstrapResult(profile: profile, stats: try await fixture.repository.stats(for: profile.id))
+        store.installLocalAvatar(Self.solidAvatarImage(), avatarID: newURL)
+        SessionBootstrapStore.shared.applyOnboardingCompletion(
+            profile: profile,
+            snapshot: ProfileOnboardingSnapshot(
+                profileID: profile.id,
+                username: profile.username,
+                displayName: profile.displayName,
+                onboardingCompleted: true,
+                avatarURL: newURL
+            )
+        )
+
+        XCTAssertEqual(SessionBootstrapStore.shared.last?.data.viewer.avatar_url, newURL)
+        XCTAssertEqual(SessionBootstrapStore.shared.last?.data.session_profile.avatar_url, newURL)
+
+        let applied = try await SessionBootstrapApplier.apply(
+            stale,
+            expectedViewerID: viewerID,
+            detailCache: nil,
+            serverAuthoritative: true
+        )
+        store.applyBootstrapResult(profile: applied.profile, stats: store.stats)
+
+        XCTAssertEqual(applied.profile.avatar?.id, newURL)
+        XCTAssertEqual(store.profile?.avatar?.id, newURL)
+        XCTAssertNotNil(store.tabBarAvatarUIImage)
+        XCTAssertEqual(SessionBootstrapStore.shared.last?.data.viewer.avatar_url, newURL)
+    }
+
+    func testDisplayedOwnerAvatarUpdatesTabAndRejectsPreviousURL() async throws {
+        let viewerID = "11111111-1111-1111-1111-111111111111"
+        let oldURL = "https://example.com/old-avatar.jpg"
+        let newURL = "https://example.com/edited-avatar.jpg"
+        defer {
+            SessionBootstrapStore.shared.clear()
+            BackendV2BootstrapDiskCache.clearAll(viewerID: viewerID)
+        }
+        SessionBootstrapStore.shared.clear()
+        BackendV2BootstrapDiskCache.clearAll(viewerID: viewerID)
+
+        let fixture = makeFixture(avatarURL: oldURL)
+        let store = CurrentUserProfileStore(
+            profiles: fixture.repository,
+            session: fixture.session,
+            imagePipeline: fixture.imagePipeline
+        )
+        let profile = try await fixture.repository.profile(id: ProfileID(viewerID))
+        SessionBootstrapStore.shared.seed(
+            try Self.sessionBootstrap(viewerID: viewerID, avatarURL: oldURL),
+            source: "test"
+        )
+        store.applyBootstrapResult(profile: profile, stats: try await fixture.repository.stats(for: profile.id))
+        for _ in 0..<40 {
+            if store.tabBarAvatarUIImage != nil { break }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+
+        var edited = profile
+        edited.avatar = MediaReference(id: newURL, kind: .image, altText: nil)
+        let revisionBeforeEdit = store.tabAvatarRevision
+        store.adoptDisplayedAvatar(from: edited)
+        for _ in 0..<40 {
+            if store.profile?.avatar?.id == newURL, store.tabAvatarRevision > revisionBeforeEdit {
+                break
+            }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+
+        XCTAssertEqual(store.profile?.avatar?.id, newURL)
+        XCTAssertGreaterThan(store.tabAvatarRevision, revisionBeforeEdit)
+        XCTAssertEqual(SessionBootstrapStore.shared.last?.data.viewer.avatar_url, newURL)
+
+        let applied = try await SessionBootstrapApplier.apply(
+            try Self.sessionBootstrap(viewerID: viewerID, avatarURL: oldURL),
+            expectedViewerID: viewerID,
+            detailCache: nil,
+            serverAuthoritative: true
+        )
+        store.applyBootstrapResult(profile: applied.profile, stats: store.stats)
+
+        XCTAssertEqual(store.profile?.avatar?.id, newURL)
+        XCTAssertNotNil(store.tabBarAvatarUIImage)
+    }
+
     func testHeaderViewModelFollowRoutesNoOpWithoutProfile() {
         let environment = CompositionRoot.bootstrapAppEnvironment()
         let content = ProfileContentStore(
@@ -718,6 +824,45 @@ final class ProfileExperienceTests: XCTestCase {
         let imagePipeline: StubImagePipeline
     }
 
+    private static func solidAvatarImage() -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 32))
+        return renderer.image { context in
+            UIColor.systemGreen.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+        }
+    }
+
+    private static func sessionBootstrap(viewerID: String, avatarURL: String?) throws -> SessionBootstrapV1 {
+        let avatar = avatarURL.map { "\"\($0)\"" } ?? "null"
+        let json = """
+        {
+          "meta": {"contract_version":"v1","server_time":"2026-01-01T00:00:00Z","viewer_id":"\(viewerID)"},
+          "data": {
+            "viewer": {
+              "id":"\(viewerID)",
+              "username":"tradetraxs",
+              "display_name":"Trade Traxs",
+              "avatar_url":\(avatar),
+              "is_private": false,
+              "onboarding_flags": {},
+              "entitlement": {"plan":"free","flags":{}}
+            },
+            "session_profile": {
+              "id":"\(viewerID)",
+              "username":"tradetraxs",
+              "avatar_url":\(avatar)
+            },
+            "accounts_summary": [],
+            "following_ids": [],
+            "badges": {"notifications_unread":0,"dm_unread":0},
+            "prefs_min": {"notifications_enabled_summary": true, "messaging_defaults": {}},
+            "realtime": {"channels": []}
+          }
+        }
+        """
+        return try JSONDecoder().decode(SessionBootstrapV1.self, from: Data(json.utf8))
+    }
+
     private func makeFixture(
         avatarURL: String? = nil,
         imageFails: Bool = false
@@ -792,7 +937,7 @@ private final class InMemoryProfileRepository: ProfileRepository, @unchecked Sen
     }
 
     func profile(id: ProfileID) async throws -> Profile {
-        lock.lock(); _profileFetchCount += 1; lock.unlock()
+        TestLock.withLock(lock) { _profileFetchCount += 1 }
         guard id == profile.id else {
             throw AppError.domain(.notFound(entity: "profile", id: id.rawValue))
         }
@@ -800,7 +945,7 @@ private final class InMemoryProfileRepository: ProfileRepository, @unchecked Sen
     }
 
     func profile(username: String) async throws -> Profile {
-        lock.lock(); _profileFetchCount += 1; lock.unlock()
+        TestLock.withLock(lock) { _profileFetchCount += 1 }
         guard username == profile.username else {
             throw AppError.domain(.notFound(entity: "profile", id: username))
         }
@@ -810,7 +955,7 @@ private final class InMemoryProfileRepository: ProfileRepository, @unchecked Sen
     func updateProfile(_ profile: Profile) async throws -> Profile { profile }
 
     func stats(for profileID: ProfileID) async throws -> ProfileStats {
-        lock.lock(); _statsFetchCount += 1; lock.unlock()
+        TestLock.withLock(lock) { _statsFetchCount += 1 }
         return statsValue
     }
 

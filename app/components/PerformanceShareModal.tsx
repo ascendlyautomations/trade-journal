@@ -320,6 +320,7 @@ export default function PerformanceShareModal({
         </div>
 
         <div
+          data-tt-share-export=""
           className="pointer-events-none fixed left-0 top-0 overflow-hidden"
           style={{
             width: 0,

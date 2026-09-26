@@ -1,5 +1,6 @@
 "use client"
 
+import "./../../socialDesktopTheme.css"
 import type { ChangeEvent } from "react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
@@ -8,7 +9,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
 import { fetchFeedEngagementMaps } from "@/lib/feedEngagementCounts"
 import {
-  buildRealtimeInFilter,
+  buildRealtimeInFilterChunks,
   stableIdKey,
 } from "@/lib/realtimeFilters"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
@@ -107,9 +108,10 @@ import { publishStory } from "@/lib/publishStory"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import {
   createStoryPreviewUrl,
-  prepareStoryImageFile,
   revokeStoryPreviewUrl,
 } from "@/lib/storyComposeHelpers"
+import ImageCropModal from "@/app/components/ImageCropModal"
+import { validateImageUpload } from "@/lib/uploadValidation"
 import {
   REEL_COMMENT_INSERT_SELECT,
   FEED_REELS_SELECT,
@@ -149,9 +151,14 @@ import {
 } from "@/lib/backendV2/feedBootstrapRepository"
 import {
   getSessionFollowingIds,
+  patchSessionFollowingIds,
   subscribeSessionBootstrapCache,
 } from "@/lib/backendV2/sessionBootstrapCache"
+import { patchExploreSession } from "@/lib/exploreSessionCache"
+import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
+import FeedRightRail from "@/app/components/feed/FeedRightRail"
 import { writeStoriesSession } from "@/lib/storiesSessionCache"
+import { excludeViewerOwnFeedItems } from "@/lib/feedViewerOwnership"
 
 const FeedPostOverlays = dynamic(
   () => import("../../components/feed/FeedPostOverlays")
@@ -200,6 +207,7 @@ function FeedPageContent() {
   const pathname = usePathname()
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user, profile, loading: profileLoading } = useUserProfile()
+  const { isNativeIos } = usePlatformPresentation()
   const authChecked = !!user?.id
   const [posts, setPosts] = useState<any[]>([])
   const [page, setPage] = useState(0)
@@ -275,6 +283,7 @@ function FeedPageContent() {
   const [activeStoryUser, setActiveStoryUser] = useState<string | null>(null)
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0)
   const [storyComposeOpen, setStoryComposeOpen] = useState(false)
+  const [storyCropFile, setStoryCropFile] = useState<File | null>(null)
   const [pendingStoryFile, setPendingStoryFile] = useState<File | null>(null)
   const [pendingStoryPreviewUrl, setPendingStoryPreviewUrl] = useState<
     string | null
@@ -424,9 +433,11 @@ function FeedPageContent() {
       }
       const key = feedInitKeyRef.current
       if (!key) return
+      const viewerId = userIdRef.current ?? key.split(":")[0] ?? null
+      const sanitizedPosts = excludeViewerOwnFeedItems(nextPosts, viewerId)
       writeFeedSession(
         key,
-        buildFeedSnapshot(nextPosts, nextLikes, nextComments, overrides)
+        buildFeedSnapshot(sanitizedPosts, nextLikes, nextComments, overrides)
       )
     },
     [buildFeedSnapshot]
@@ -593,26 +604,42 @@ function FeedPageContent() {
     setStoryComposeOpen(false)
   }, [pendingStoryPreviewUrl])
 
-  const setStoryDraft = useCallback(
-    async (file: File) => {
-      const prepared = await prepareStoryImageFile(file)
+  const openStoryCrop = useCallback(
+    (file: File) => {
+      const validationError = validateImageUpload(file)
+      if (validationError) {
+        showPopup({ type: "error", message: validationError })
+        return
+      }
+      setStoryCropFile(file)
+    },
+    [showPopup]
+  )
+
+  const handleStoryCropCancel = useCallback(() => {
+    setStoryCropFile(null)
+  }, [])
+
+  const handleStoryCropSave = useCallback(
+    (prepared: File) => {
       revokeStoryPreviewUrl(pendingStoryPreviewUrl)
       setPendingStoryFile(prepared)
       setPendingStoryPreviewUrl(createStoryPreviewUrl(prepared))
+      setStoryCropFile(null)
       setStoryComposeOpen(true)
     },
     [pendingStoryPreviewUrl]
   )
 
   const handleStoryFileSelect = useCallback(
-    async (e: ChangeEvent<HTMLInputElement>) => {
+    (e: ChangeEvent<HTMLInputElement>) => {
       const input = e.target
       const file = input.files?.[0]
       input.value = ""
       if (!file || !user?.id) return
-      await setStoryDraft(file)
+      openStoryCrop(file)
     },
-    [setStoryDraft, user?.id]
+    [openStoryCrop, user?.id]
   )
 
   useEffect(() => {
@@ -1141,6 +1168,29 @@ function FeedPageContent() {
           !isDemoUserId(userId) &&
           !isDemoModeActive()
         ) {
+          // Resolve Following before the first bootstrap so a user with
+          // follows does not pay for a Global page that is immediately discarded.
+          if (
+            currentPage === 0 &&
+            mode === "global" &&
+            !defaultModeResolvedRef.current &&
+            !userPickedModeRef.current
+          ) {
+            const sessionFollowing = getSessionFollowingIds(userId)
+            const knownFollowing =
+              sessionFollowing ?? (await fetchFollowingIds(supabase, userId))
+            if (!isActive()) return
+            setFollowingIds(knownFollowing)
+            defaultModeResolvedRef.current = true
+            if (knownFollowing.length > 0) {
+              setFollowingStoryUserIds([
+                ...new Set([...knownFollowing, userId]),
+              ])
+              setMode("following")
+              return
+            }
+          }
+
           if (currentPage === 0) {
             feedV2CursorRef.current = null
           }
@@ -1199,7 +1249,7 @@ function FeedPageContent() {
             return
           }
 
-          const list = feedBootstrapToFeedItems(bootstrap)
+          const list = feedBootstrapToFeedItems(bootstrap, userId)
           feedV2CursorRef.current = bootstrap.data.next_cursor
           const more = Boolean(bootstrap.data.page_meta.has_more)
           hasMoreRef.current = more
@@ -1450,13 +1500,19 @@ function FeedPageContent() {
 
         if (!isActive()) return
 
+        const viewerFiltered = excludeViewerOwnFeedItems(list, userId)
         const painted =
-          currentPage === 0 ? list : [...postsRef.current, ...list]
+          currentPage === 0
+            ? viewerFiltered
+            : excludeViewerOwnFeedItems(
+                [...postsRef.current, ...viewerFiltered],
+                userId
+              )
 
         postsRef.current = painted
         setPosts(painted)
 
-        if (currentPage === 0 && list.length === 0) {
+        if (currentPage === 0 && viewerFiltered.length === 0) {
           // Keep ref in sync so session snapshots never persist an empty feed
           // without an empty-state marker (which rendered as a blank All tab).
           if (feedEmptyStateRef.current == null) {
@@ -1563,7 +1619,10 @@ function FeedPageContent() {
 
   const restoreFeedSession = useCallback((key: string, cached: FeedSessionSnapshot) => {
     feedInitKeyRef.current = key
-    setPosts(cached.posts)
+    const viewerId = userIdRef.current ?? key.split(":")[0] ?? null
+    const posts = excludeViewerOwnFeedItems(cached.posts, viewerId)
+    postsRef.current = posts
+    setPosts(posts)
     setLikesByPost(cached.likesByPost)
     const cachedCommentCounts =
       cached.commentCountsByPost ??
@@ -1585,7 +1644,10 @@ function FeedPageContent() {
     setHasMore(cached.hasMore)
     pageRef.current = cached.page
     hasMoreRef.current = cached.hasMore
-    mergeBufferRef.current = [...cached.mergeBuffer]
+    mergeBufferRef.current = excludeViewerOwnFeedItems(
+      [...cached.mergeBuffer],
+      viewerId
+    )
     tradePageRef.current = cached.tradePage
     profilePageRef.current = cached.profilePage
     achievementPageRef.current = cached.achievementPage ?? 0
@@ -1640,38 +1702,24 @@ function FeedPageContent() {
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "trades") return
-    // Following feed: wait for follow graph; skip when empty (nothing to listen for).
-    if (mode === "following" && !followingRealtimeKey) return
+    // Global feed uses bootstrap, pagination, and refresh. No whole-table INSERT listen.
+    if (mode !== "following" || !followingRealtimeKey) return
+
+    const authorFilters = buildRealtimeInFilterChunks(
+      "user_id",
+      followingIdsRef.current
+    )
+    if (authorFilters.length === 0) return
 
     const userId = user.id
     const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-trade-posts-${userId}`)
-    const authorFilter =
-      mode === "following"
-        ? buildRealtimeInFilter("user_id", followingIdsRef.current)
-        : null
 
-    channel.on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "posts",
-        ...(authorFilter ? { filter: authorFilter } : {}),
-      },
-      async (payload) => {
+    const onInsert = async (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Record<string, unknown>
         const authorId = String(row.user_id ?? "")
         if (!authorId || authorId === userId) return
-        if (mode === "following" && !followingIdsRef.current.includes(authorId)) {
-          return
-        }
-        if (
-          mode === "global" &&
-          followingIdsRef.current.includes(authorId)
-        ) {
-          return
-        }
+        if (!followingIdsRef.current.includes(authorId)) return
 
         const { data } = await supabase
           .from("posts")
@@ -1716,7 +1764,19 @@ function FeedPageContent() {
           return next
         })
       }
-    )
+
+    for (const authorFilter of authorFilters) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "posts",
+          filter: authorFilter,
+        },
+        onInsert
+      )
+    }
 
     channel.subscribe()
     return () => {
@@ -1727,37 +1787,23 @@ function FeedPageContent() {
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "posts") return
-    if (mode === "following" && !followingRealtimeKey) return
+    if (mode !== "following" || !followingRealtimeKey) return
+
+    const authorFilters = buildRealtimeInFilterChunks(
+      "user_id",
+      followingIdsRef.current
+    )
+    if (authorFilters.length === 0) return
 
     const userId = user.id
     const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-profile-posts-${userId}`)
-    const authorFilter =
-      mode === "following"
-        ? buildRealtimeInFilter("user_id", followingIdsRef.current)
-        : null
 
-    channel.on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "profile_posts",
-        ...(authorFilter ? { filter: authorFilter } : {}),
-      },
-      async (payload) => {
+    const onInsert = async (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Record<string, unknown>
         const authorId = String(row.user_id ?? "")
         if (!authorId || authorId === userId) return
-        if (mode === "following" && !followingIdsRef.current.includes(authorId)) {
-          return
-        }
-        if (
-          mode === "global" &&
-          followingIdsRef.current.includes(authorId)
-        ) {
-          return
-        }
+        if (!followingIdsRef.current.includes(authorId)) return
 
         const { data } = await supabase
           .from("profile_posts")
@@ -1798,7 +1844,19 @@ function FeedPageContent() {
           return next
         })
       }
-    )
+
+    for (const authorFilter of authorFilters) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "profile_posts",
+          filter: authorFilter,
+        },
+        onInsert
+      )
+    }
 
     channel.subscribe()
     return () => {
@@ -1809,37 +1867,23 @@ function FeedPageContent() {
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "achievements") return
-    if (mode === "following" && !followingRealtimeKey) return
+    if (mode !== "following" || !followingRealtimeKey) return
+
+    const authorFilters = buildRealtimeInFilterChunks(
+      "user_id",
+      followingIdsRef.current
+    )
+    if (authorFilters.length === 0) return
 
     const userId = user.id
     const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-achievement-posts-${userId}`)
-    const authorFilter =
-      mode === "following"
-        ? buildRealtimeInFilter("user_id", followingIdsRef.current)
-        : null
 
-    channel.on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "achievement_posts",
-        ...(authorFilter ? { filter: authorFilter } : {}),
-      },
-      async (payload) => {
+    const onInsert = async (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Record<string, unknown>
         const authorId = String(row.user_id ?? "")
         if (!authorId || authorId === userId) return
-        if (mode === "following" && !followingIdsRef.current.includes(authorId)) {
-          return
-        }
-        if (
-          mode === "global" &&
-          followingIdsRef.current.includes(authorId)
-        ) {
-          return
-        }
+        if (!followingIdsRef.current.includes(authorId)) return
 
         const { data } = await supabase
           .from("achievement_posts")
@@ -1881,7 +1925,19 @@ function FeedPageContent() {
           return next
         })
       }
-    )
+
+    for (const authorFilter of authorFilters) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "achievement_posts",
+          filter: authorFilter,
+        },
+        onInsert
+      )
+    }
 
     channel.subscribe()
     return () => {
@@ -1892,37 +1948,23 @@ function FeedPageContent() {
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "reels") return
-    if (mode === "following" && !followingRealtimeKey) return
+    if (mode !== "following" || !followingRealtimeKey) return
+
+    const authorFilters = buildRealtimeInFilterChunks(
+      "user_id",
+      followingIdsRef.current
+    )
+    if (authorFilters.length === 0) return
 
     const userId = user.id
     const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-reels-${userId}`)
-    const authorFilter =
-      mode === "following"
-        ? buildRealtimeInFilter("user_id", followingIdsRef.current)
-        : null
 
-    channel.on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "reels",
-        ...(authorFilter ? { filter: authorFilter } : {}),
-      },
-      async (payload) => {
+    const onInsert = async (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Record<string, unknown>
         const authorId = String(row.user_id ?? "")
         if (!authorId || authorId === userId) return
-        if (mode === "following" && !followingIdsRef.current.includes(authorId)) {
-          return
-        }
-        if (
-          mode === "global" &&
-          followingIdsRef.current.includes(authorId)
-        ) {
-          return
-        }
+        if (!followingIdsRef.current.includes(authorId)) return
 
         const { data } = await supabase
           .from("reels")
@@ -1972,7 +2014,19 @@ function FeedPageContent() {
           return next
         })
       }
-    )
+
+    for (const authorFilter of authorFilters) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "reels",
+          filter: authorFilter,
+        },
+        onInsert
+      )
+    }
 
     channel.subscribe()
     return () => {
@@ -1996,7 +2050,8 @@ function FeedPageContent() {
       ? feedReelIdsKey.split(",").filter(Boolean)
       : []
 
-    if (reelIds.length === 0) return
+    const likeFilters = buildRealtimeInFilterChunks("reel_id", reelIds)
+    if (likeFilters.length === 0) return
 
     const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-reel-likes-${userId}`)
@@ -2027,16 +2082,23 @@ function FeedPageContent() {
       })()
     }
 
-    for (const reelId of reelIds) {
+    for (const likeFilter of likeFilters) {
       channel.on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "reel_likes",
-          filter: `reel_id=eq.${reelId}`,
+          filter: likeFilter,
         },
-        () => {
+        (payload) => {
+          const reelIdFrom = (value: unknown) => {
+            if (!value || typeof value !== "object") return ""
+            const reelId = (value as { reel_id?: unknown }).reel_id
+            return reelId == null ? "" : String(reelId).trim()
+          }
+          const reelId = reelIdFrom(payload.new) || reelIdFrom(payload.old)
+          if (!reelId) return
           refreshReelLike(reelId)
         }
       )
@@ -2947,9 +3009,23 @@ function FeedPageContent() {
     await loadPosts(0)
   }, [bumpFeedRequestGeneration, loadPosts])
 
+  const handleSuggestedFollowingChange = useCallback(
+    (targetUserId: string, following: boolean) => {
+      const current = followingIdsRef.current
+      const next = following
+        ? [...new Set([...current, targetUserId])]
+        : current.filter((id) => id !== targetUserId)
+      setFollowingIds(next)
+      const viewerId = userIdRef.current
+      if (viewerId) patchSessionFollowingIds(viewerId, next)
+      patchExploreSession({ followingIds: next })
+    },
+    [setFollowingIds]
+  )
+
   return (
     <NativeIosPullToRefresh onRefresh={handleNativePullToRefresh}>
-    <div data-tt-native-surface="feed" className="w-full text-white">
+    <div data-tt-native-surface="feed" className="tt-phase1-dark w-full text-white">
       <PlatformFeedHeader mode={mode} onModeChange={handleFeedModeChange} />
       {feedbackModalProps.isOpen ? (
         <FeedbackModal {...feedbackModalProps} />
@@ -2961,7 +3037,22 @@ function FeedPageContent() {
         data-tt-feed-column
         className="flex justify-center px-4 py-6 sm:py-8 pb-10"
       >
-        <div className="w-full max-w-xl space-y-6">
+        <div
+          data-tt-feed-workspace
+          className={
+            isNativeIos
+              ? "w-full max-w-xl"
+              : "flex w-full max-w-xl flex-col min-[1200px]:max-w-[720px]"
+          }
+        >
+        <div
+          data-tt-feed-main
+          className={
+            isNativeIos
+              ? "w-full space-y-6"
+              : "min-w-0 w-full space-y-6 xl:w-[720px] xl:max-w-[720px] xl:shrink-0"
+          }
+        >
           <PlatformFeedModeToggle
             mode={mode}
             onModeChange={handleFeedModeChange}
@@ -3065,6 +3156,14 @@ function FeedPageContent() {
             hasMore={hasMore}
             onLoadMore={loadPosts}
           />
+        </div>
+        {isNativeIos || !user?.id ? null : (
+          <FeedRightRail
+            viewerId={user.id}
+            followingIds={followingIdsRef.current}
+            onFollowingChange={handleSuggestedFollowingChange}
+          />
+        )}
         </div>
       </div>
 
@@ -3186,9 +3285,16 @@ function FeedPageContent() {
           previewUrl={pendingStoryPreviewUrl}
           onClose={closeStoryCompose}
           onPost={() => void handlePostStory()}
-          onReplaceImage={(file) => void setStoryDraft(file)}
+          onReplaceImage={openStoryCrop}
         />
       ) : null}
+      <ImageCropModal
+        open={storyCropFile != null}
+        file={storyCropFile}
+        preset="story"
+        onCancel={handleStoryCropCancel}
+        onSave={handleStoryCropSave}
+      />
     </div>
     </NativeIosPullToRefresh>
   )

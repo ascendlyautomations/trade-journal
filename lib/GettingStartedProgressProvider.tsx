@@ -70,6 +70,7 @@ const EMPTY_SIGNALS: GettingStartedChecklistSignals = {
   followCount: 0,
   hasEverJoinedOtherRoom: false,
   hasPublicTrade: false,
+  hasCompletedDailyCheckIn: false,
   firstPrivateTradeId: null,
 }
 
@@ -83,6 +84,7 @@ function computeRawProgress(
     followCount: signals.followCount,
     hasEverJoinedOtherRoom: signals.hasEverJoinedOtherRoom,
     hasPublicTrade: signals.hasPublicTrade,
+    hasCompletedDailyCheckIn: signals.hasCompletedDailyCheckIn,
   })
 }
 
@@ -604,6 +606,7 @@ export function GettingStartedProgressProvider({
         followCount: 0,
         hasEverJoinedOtherRoom: false,
         hasPublicTrade: false,
+        hasCompletedDailyCheckIn: false,
       })
     }
     // Before the signals resolve (fetch or session-cache hydration) the

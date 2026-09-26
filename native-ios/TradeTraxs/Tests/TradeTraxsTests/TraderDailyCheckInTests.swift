@@ -13,7 +13,7 @@ final class TraderDailyCheckInTests: XCTestCase {
     }
 
     func testValidationRequiresSleepHours() {
-        var draft = TraderDailyCheckInDraft.empty(for: "2026-09-02")
+        let draft = TraderDailyCheckInDraft.empty(for: "2026-09-02")
         XCTAssertEqual(
             TraderDailyCheckInValidation.validate(draft),
             "Enter hours of sleep between 0 and 24."

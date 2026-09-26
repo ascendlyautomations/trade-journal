@@ -37,7 +37,8 @@ enum VideoTransferAudit {
         role: String,
         item: AVPlayerItem,
         accounting: VideoAccessLogAccounting.DeltaResult,
-        reason: String
+        reason: String,
+        waitsToMinimizeStalling: Bool
     ) {
         guard let event = item.accessLog()?.events.last else { return }
 
@@ -85,11 +86,18 @@ enum VideoTransferAudit {
             transferDuration=\(String(format: "%.3f", event.transferDuration)) \
             preferredForwardBufferDuration=\(item.preferredForwardBufferDuration) \
             networkWhilePaused=\(item.canUseNetworkResourcesForLiveStreamingWhilePaused) \
-            automaticallyWaitsToMinimizeStalling=true \
+            automaticallyWaitsToMinimizeStalling=\(waitsToMinimizeStalling) \
+            preferredPeakBitRate=\(String(format: "%.0f", item.preferredPeakBitRate)) \
+            preferredMaximumResolution=\(resolutionText(item.preferredMaximumResolution)) \
             uriHost=\(event.uri.flatMap { URL(string: $0)?.host } ?? "unknown") \
             reason=\(reason)
             """
         )
+    }
+
+    private static func resolutionText(_ size: CGSize) -> String {
+        if size.width <= 0 || size.height <= 0 { return "unrestricted" }
+        return "\(Int(size.width))x\(Int(size.height))"
     }
 }
 #else
@@ -110,7 +118,8 @@ enum VideoTransferAudit {
         role: String,
         item: AVPlayerItem,
         accounting: VideoAccessLogAccounting.DeltaResult,
-        reason: String
+        reason: String,
+        waitsToMinimizeStalling: Bool
     ) {}
 }
 #endif

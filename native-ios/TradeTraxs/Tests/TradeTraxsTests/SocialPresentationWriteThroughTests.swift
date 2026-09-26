@@ -419,9 +419,9 @@ private final class WriteThroughStubInteractionRepository: InteractionRepository
     }
 
     func engagement(for targets: [InteractionTarget]) async throws -> [InteractionTarget: EngagementSnapshot] {
-        lock.lock()
-        _engagementFetchCount += 1
-        lock.unlock()
+        TestLock.withLock(lock) {
+            _engagementFetchCount += 1
+        }
         return Dictionary(uniqueKeysWithValues: targets.map { ($0, .empty) })
     }
 

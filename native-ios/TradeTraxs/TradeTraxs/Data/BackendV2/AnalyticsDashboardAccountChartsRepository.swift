@@ -8,8 +8,7 @@ nonisolated struct AnalyticsDashboardAccountChartsRepository {
     }
 
     func load(accountID: TradingAccountID) async throws -> AnalyticsDashboardAccountChartsV3 {
-        let args = ["p_account_id": accountID.rawValue]
-        let data = try JSONSerialization.data(withJSONObject: args)
+        let data = try SupabaseJSONEncoding.encode(["p_account_id": accountID.rawValue])
         let value = try await client.call(
             BackendV2Versioning.RPCName.analyticsDashboardAccountChartsV3.rawValue,
             argumentsJSON: data,
@@ -45,8 +44,10 @@ nonisolated struct AnalyticsDashboardAggregateChartsRepository {
 }
 
 enum DashboardAnalyticsAggregateChartsLoader {
-    private static func flightKey(revision: Int64) -> String {
-        "dashboard.v3.aggregateCharts|rev:\(revision)"
+    private static func flightKey(revision: Int64, viewerID: ProfileID?) -> String {
+        let owner = DashboardSessionIsolation.normalizedOwner(viewerID?.rawValue ?? "")
+        let scope = owner.isEmpty ? "unscoped" : owner
+        return "dashboard.v3.aggregateCharts|\(scope)|rev:\(revision)"
     }
 
     @MainActor
@@ -57,12 +58,19 @@ enum DashboardAnalyticsAggregateChartsLoader {
     ) async throws -> [String: AnalyticsDashboardChartsPresetV1] {
         let store = DashboardAnalyticsAggregateChartsStore.shared
         if let cached = store.charts(revision: revision),
-           store.availability(revision: revision).isLoaded
+           store.availability(revision: revision).isLoaded,
+           DashboardAnalyticsChartsSupport.chartsReadyForPresentation(cached)
         {
             return cached
         }
+        if let cached = store.charts(revision: revision),
+           DashboardAnalyticsChartsSupport.hasEquityPoints(cached),
+           !DashboardAnalyticsChartsSupport.hasVisualExpansionContract(cached)
+        {
+            store.dropCharts(revision: revision)
+        }
 
-        let key = flightKey(revision: revision)
+        let key = flightKey(revision: revision, viewerID: viewerID)
         let encoded = try await BackendV2SingleFlight.shared.coalesce(key: key) {
             let repo = AnalyticsDashboardAggregateChartsRepository(rpc: rpc)
             let response = try await repo.load()
@@ -70,27 +78,37 @@ enum DashboardAnalyticsAggregateChartsLoader {
         }
 
         let response = try JSONDecoder().decode(AnalyticsDashboardAccountChartsV3.self, from: encoded)
-        await MainActor.run {
+        let presets = response.data.presets
+        if let viewerID {
+            guard SessionViewerGate.shared.allowsDisplay(owner: viewerID.rawValue) else {
+                return presets
+            }
             DashboardAnalyticsAggregateChartsStore.shared.markLoaded(
                 revision: revision,
-                presets: response.data.presets
+                presets: presets,
+                viewerID: viewerID.rawValue
             )
-        }
-        if let viewerID {
             AnalyticsDashboardShadowWriter.ingestAggregateChartsIfNeeded(
                 viewerID: viewerID,
                 response: response,
                 revision: revision
             )
+        } else {
+            DashboardAnalyticsAggregateChartsStore.shared.markLoaded(
+                revision: revision,
+                presets: presets
+            )
         }
-        return response.data.presets
+        return presets
     }
 }
 
 enum DashboardAnalyticsAccountChartsLoader {
-    private static func flightKey(accountID: TradingAccountID, revision: Int64) -> String {
+    private static func flightKey(accountID: TradingAccountID, revision: Int64, viewerID: ProfileID?) -> String {
         let norm = DashboardAnalyticsAccountMetricsLookup.normalizedAccountID(accountID.rawValue)
-        return "dashboard.v3.accountCharts|\(norm)|rev:\(revision)"
+        let owner = DashboardSessionIsolation.normalizedOwner(viewerID?.rawValue ?? "")
+        let scope = owner.isEmpty ? "unscoped" : owner
+        return "dashboard.v3.accountCharts|\(scope)|\(norm)|rev:\(revision)"
     }
 
     @MainActor
@@ -102,12 +120,19 @@ enum DashboardAnalyticsAccountChartsLoader {
     ) async throws -> [String: AnalyticsDashboardChartsPresetV1] {
         let store = DashboardAnalyticsAccountChartsStore.shared
         if let cached = store.charts(accountID: accountID, revision: revision),
-           store.availability(accountID: accountID, revision: revision).isLoaded
+           store.availability(accountID: accountID, revision: revision).isLoaded,
+           DashboardAnalyticsChartsSupport.chartsReadyForPresentation(cached)
         {
             return cached
         }
+        if let cached = store.charts(accountID: accountID, revision: revision),
+           DashboardAnalyticsChartsSupport.hasEquityPoints(cached),
+           !DashboardAnalyticsChartsSupport.hasVisualExpansionContract(cached)
+        {
+            store.dropCharts(accountID: accountID, revision: revision)
+        }
 
-        let key = flightKey(accountID: accountID, revision: revision)
+        let key = flightKey(accountID: accountID, revision: revision, viewerID: viewerID)
         let encoded = try await BackendV2SingleFlight.shared.coalesce(key: key) {
             let repo = AnalyticsDashboardAccountChartsRepository(rpc: rpc)
             let response = try await repo.load(accountID: accountID)
@@ -115,22 +140,31 @@ enum DashboardAnalyticsAccountChartsLoader {
         }
 
         let response = try JSONDecoder().decode(AnalyticsDashboardAccountChartsV3.self, from: encoded)
-        await MainActor.run {
+        let presets = response.data.presets
+        if let viewerID {
+            guard SessionViewerGate.shared.allowsDisplay(owner: viewerID.rawValue) else {
+                return presets
+            }
             DashboardAnalyticsAccountChartsStore.shared.markLoaded(
                 accountID: accountID,
                 revision: revision,
-                presets: response.data.presets
+                presets: presets,
+                viewerID: viewerID.rawValue
             )
-        }
-        if let viewerID {
             AnalyticsDashboardShadowWriter.ingestAccountChartsIfNeeded(
                 viewerID: viewerID,
                 response: response,
                 accountID: accountID,
                 revision: revision
             )
+        } else {
+            DashboardAnalyticsAccountChartsStore.shared.markLoaded(
+                accountID: accountID,
+                revision: revision,
+                presets: presets
+            )
         }
-        return response.data.presets
+        return presets
     }
 
     @MainActor

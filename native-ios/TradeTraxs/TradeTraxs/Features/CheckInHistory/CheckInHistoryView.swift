@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CheckInHistoryView: View {
     @State private var viewModel: CheckInHistoryViewModel
+    @State private var contentFilter: CheckInHistoryContentFilter = .all
 
     @Environment(\.themeColors) private var colors
 
@@ -37,6 +38,10 @@ struct CheckInHistoryView: View {
         .accessibilityIdentifier("checkInHistory.list")
     }
 
+    private var filteredSummaries: [CheckInHistoryDaySummary] {
+        viewModel.summaries.filter { $0.matches(contentFilter: contentFilter) }
+    }
+
     private var listContent: some View {
         ScrollView {
             LazyVStack(spacing: ExperienceSpacing.sm) {
@@ -49,21 +54,59 @@ struct CheckInHistoryView: View {
                     .experienceScrollEmbeddedSectionFill(minHeight: 360)
                     .padding(.top, ExperienceSpacing.lg)
                 } else {
-                    ForEach(viewModel.summaries) { day in
-                        Button { viewModel.openDay(day) } label: {
-                            CheckInHistoryDayRow(summary: day)
+                    Picker("History filter", selection: $contentFilter) {
+                        ForEach(CheckInHistoryContentFilter.allCases) { filter in
+                            Text(filter.title).tag(filter)
                         }
-                        .buttonStyle(.plain)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("checkInHistory.contentFilter")
+
+                    if filteredSummaries.isEmpty {
+                        ExperienceEmptyState(
+                            icon: .calendar,
+                            title: emptyFilterTitle,
+                            message: emptyFilterMessage
+                        )
+                        .experienceScrollEmbeddedSectionFill(minHeight: 280)
+                        .padding(.top, ExperienceSpacing.md)
+                    } else {
+                        ForEach(filteredSummaries) { day in
+                            Button { viewModel.openDay(day) } label: {
+                                CheckInHistoryDayRow(summary: day, contentFilter: contentFilter)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
             }
             .padding(ExperienceSpacing.md)
         }
     }
+
+    private var emptyFilterTitle: String {
+        switch contentFilter {
+        case .all: return "No history yet"
+        case .trades: return "No trade days"
+        case .psychology: return "No check-in days"
+        }
+    }
+
+    private var emptyFilterMessage: String {
+        switch contentFilter {
+        case .all:
+            return "Log daily check-ins and trades to build your history."
+        case .trades:
+            return "No days with trades in this window. Try All or Psychology."
+        case .psychology:
+            return "No days with a daily check-in in this window. Try All or Trades."
+        }
+    }
 }
 
 struct CheckInHistoryDayRow: View {
     let summary: CheckInHistoryDaySummary
+    var contentFilter: CheckInHistoryContentFilter = .all
 
     @Environment(\.themeColors) private var colors
 
@@ -72,17 +115,27 @@ struct CheckInHistoryDayRow: View {
             Text(formattedDate(summary.dateKey))
                 .experienceStyle(.headline, color: colors.primaryText)
 
-            if let line = checkInLine {
-                Text(line)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
-
-            if summary.hasTrades {
+            switch contentFilter {
+            case .all:
+                if let line = legacyCheckInPreviewLine {
+                    Text(line)
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                }
+                if summary.hasTrades {
+                    Text(tradeLine)
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                } else if !summary.hasCheckIn {
+                    Text("No check-in or trades")
+                        .experienceStyle(.footnote, color: colors.tertiaryText)
+                }
+            case .trades:
                 Text(tradeLine)
                     .experienceStyle(.footnote, color: colors.secondaryText)
-            } else if !summary.hasCheckIn {
-                Text("No check-in or trades")
-                    .experienceStyle(.footnote, color: colors.tertiaryText)
+            case .psychology:
+                if let line = psychologyPreviewLine {
+                    Text(line)
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                }
             }
         }
         .padding(ExperienceSpacing.md)
@@ -94,7 +147,8 @@ struct CheckInHistoryDayRow: View {
         }
     }
 
-    private var checkInLine: String? {
+    /// Unchanged All-tab preview (sleep, focus, stress).
+    private var legacyCheckInPreviewLine: String? {
         guard let checkIn = summary.checkIn else { return nil }
         var parts: [String] = []
         if let hours = checkIn.sleepHours {
@@ -106,6 +160,12 @@ struct CheckInHistoryDayRow: View {
         if let stress = checkIn.stressLevel {
             parts.append("Stress \(TraderDailyCheckInStressScale.displayText(for: stress))")
         }
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+
+    private var psychologyPreviewLine: String? {
+        guard let checkIn = summary.checkIn else { return nil }
+        let parts = CheckInHistoryFieldClassification.psychologyPreviewParts(for: checkIn)
         return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 

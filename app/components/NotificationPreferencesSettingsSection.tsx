@@ -13,7 +13,6 @@ import {
 type ToggleItem = {
   key: NotificationPreferenceKey
   label: string
-  description?: string
 }
 
 type ToggleSection = {
@@ -25,113 +24,49 @@ const PREFERENCE_SECTIONS: ToggleSection[] = [
   {
     title: "Social Notifications",
     items: [
-      {
-        key: "likes_enabled",
-        label: "Likes",
-        description:
-          "Notify me when someone likes my trades, posts, or achievements.",
-      },
-      {
-        key: "comments_enabled",
-        label: "Comments",
-        description:
-          "Notify me when someone comments on my trades, posts, or achievements.",
-      },
-      {
-        key: "replies_enabled",
-        label: "Replies",
-        description: "Notify me when someone replies to my comment.",
-      },
-      {
-        key: "mentions_enabled",
-        label: "Mentions",
-        description: "Notify me when someone mentions me using @username.",
-      },
-      {
-        key: "reactions_enabled",
-        label: "Reactions",
-        description: "Notify me when someone reacts to my content.",
-      },
+      { key: "likes_enabled", label: "Likes" },
+      { key: "comments_enabled", label: "Comments" },
+      { key: "replies_enabled", label: "Replies" },
+      { key: "mentions_enabled", label: "Mentions" },
+      { key: "reactions_enabled", label: "Reactions" },
     ],
   },
   {
     title: "Followers",
     items: [
-      {
-        key: "followers_enabled",
-        label: "New Followers",
-        description: "Notify me when someone follows me.",
-      },
-      {
-        key: "follow_requests_enabled",
-        label: "Follow Requests",
-        description: "Notify me about private profile follow requests.",
-      },
+      { key: "followers_enabled", label: "New Followers" },
+      { key: "follow_requests_enabled", label: "Follow Requests" },
       {
         key: "follow_request_accepts_enabled",
         label: "Accepted Follow Requests",
-        description: "Notify me when someone accepts my follow request.",
       },
     ],
   },
   {
     title: "Messages",
     items: [
-      {
-        key: "direct_messages_enabled",
-        label: "Direct Messages",
-        description: "Notify me when someone sends a DM.",
-      },
-      {
-        key: "story_replies_enabled",
-        label: "Story Replies",
-        description: "Notify me when someone replies to one of my stories.",
-      },
-      {
-        key: "shares_enabled",
-        label: "Shared Trades / Posts",
-        description: "Notify me when someone shares content with me.",
-      },
+      { key: "direct_messages_enabled", label: "Direct Messages" },
+      { key: "story_replies_enabled", label: "Story Replies" },
+      { key: "shares_enabled", label: "Shared Trades / Posts" },
     ],
   },
   {
     title: "Trade Rooms",
     items: [
-      {
-        key: "room_messages_enabled",
-        label: "Room Messages",
-        description: "Notify me about new messages in Trade Rooms.",
-      },
-      {
-        key: "room_mentions_enabled",
-        label: "Room Mentions",
-        description: "Notify me when I'm mentioned in a Trade Room.",
-      },
-      {
-        key: "room_joins_enabled",
-        label: "Room Joins",
-        description: "Notify room owners when someone joins their room.",
-      },
+      { key: "room_messages_enabled", label: "Room Messages" },
+      { key: "room_mentions_enabled", label: "Room Mentions" },
+      { key: "room_joins_enabled", label: "Room Joins" },
     ],
   },
   {
     title: "Achievements",
     items: [
-      {
-        key: "achievement_likes_enabled",
-        label: "Achievement Likes",
-        description: "Notify me when someone likes my achievement posts.",
-      },
+      { key: "achievement_likes_enabled", label: "Achievement Likes" },
       {
         key: "achievement_comments_enabled",
         label: "Achievement Comments",
-        description: "Notify me when someone comments on my achievements.",
       },
-      {
-        key: "achievement_unlocks_enabled",
-        label: "New Achievements",
-        description: "Notify me when I unlock a new achievement.",
-      },
+      { key: "achievement_unlocks_enabled", label: "New Achievements" },
     ],
   },
   {
@@ -297,7 +232,6 @@ export default function NotificationPreferencesSettingsSection({
       <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
         <SettingsToggle
           label="Enable Notifications"
-          description="Turn off to stop all new notifications. Existing notifications stay in your inbox."
           checked={masterEnabled}
           disabled={savingKey === "notifications_enabled"}
           onChange={(next) => void handleToggle("notifications_enabled", next)}

@@ -1,13 +1,13 @@
 import Foundation
 
 /// Port of web `scoreActiveTrader` — completeness + optional activity signals, no ML.
-enum ExploreTraderRanking {
-    struct TradeSummary: Hashable, Sendable {
+nonisolated enum ExploreTraderRanking {
+    nonisolated struct TradeSummary: Hashable, Sendable {
         var tradeCount: Int
         var lastTradeAt: Date?
     }
 
-    struct PostSummary: Hashable, Sendable {
+    nonisolated struct PostSummary: Hashable, Sendable {
         var postCount: Int
         var lastPostAt: Date?
     }

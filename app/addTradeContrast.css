@@ -1,0 +1,194 @@
+/*
+ * Add Trade text contrast only. Matches the page wrapper `.tt-add-trade`.
+ * Does not change layout, surfaces, borders, or shared readable-text tokens.
+ * TradeTraxs OG never sets data-tt-appearance to dark or light, so these
+ * rules do not apply there.
+ *
+ * The leading :is() matches the appearance stylesheet, whose specificity
+ * includes the dialog branch even when the matched node is the app shell.
+ */
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  :is(.text-gray-300, .text-gray-400, .text-gray-500, .text-slate-300, .text-slate-400),
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  :is(.text-gray-300, .text-gray-400, .text-gray-500, .text-slate-300, .text-slate-400) {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  h3.text-gray-400,
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  h3.text-blue-300,
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  h3.text-gray-400 {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  :is(div, button).border-dashed.text-gray-400,
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  :is(div, button).border-dashed.text-gray-400 {
+  color: var(--tt-text);
+}
+
+/* Real disabled controls stay dim. */
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .cursor-not-allowed.text-gray-400,
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .cursor-not-allowed.text-gray-400 {
+  color: var(--tt-text-tertiary);
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  :is(input, textarea)::placeholder,
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .placeholder\:text-gray-400::placeholder,
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .placeholder\:text-gray-500::placeholder {
+  color: #8b949e;
+  opacity: 1;
+}
+
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  :is(input, textarea)::placeholder,
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .placeholder\:text-gray-400::placeholder,
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .placeholder\:text-gray-500::placeholder {
+  color: var(--tt-text-tertiary);
+  opacity: 1;
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  [role="combobox"]
+  > span.flex-1.text-gray-400 {
+  color: #8b949e;
+}
+
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  [role="combobox"]
+  > span.flex-1.text-gray-400 {
+  color: var(--tt-text-tertiary);
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .tt-date-field-input::-webkit-datetime-edit-day-field,
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .tt-date-field-input::-webkit-datetime-edit-month-field,
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .tt-date-field-input::-webkit-datetime-edit-year-field,
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .tt-date-field-input::-webkit-datetime-edit-day-field,
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .tt-date-field-input::-webkit-datetime-edit-month-field,
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  .tt-add-trade
+  .tt-date-field-input::-webkit-datetime-edit-year-field {
+  color: var(--tt-text);
+}

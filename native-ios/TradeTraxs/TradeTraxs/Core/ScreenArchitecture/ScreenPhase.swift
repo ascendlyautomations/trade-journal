@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Feature states may keep a local `Phase` enum for historical call sites; map into this
 /// type via ``ScreenStateModeling/screenPhase``.
-enum ScreenPhase: Equatable, Sendable {
+nonisolated enum ScreenPhase: Equatable, Sendable {
     case idle
     case loading
     case loaded
@@ -12,7 +12,7 @@ enum ScreenPhase: Equatable, Sendable {
 }
 
 /// Pagination fields that paginated screens expose through ``ScreenStateModeling``.
-struct ScreenPaginationSnapshot: Equatable, Sendable {
+nonisolated struct ScreenPaginationSnapshot: Equatable, Sendable {
     var nextCursor: String?
     var hasMore: Bool
     var isLoadingMore: Bool

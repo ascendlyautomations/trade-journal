@@ -23,7 +23,8 @@ import {
   tradeSelectForViewer,
 } from "@/lib/publicAccountPrivacy"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
-import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import ContentMediaPreview from "@/app/components/ContentMediaPreview"
+import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import TradeCopyTradingDetails from "@/app/components/trade/TradeCopyTradingDetails"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
 import { isCopyTradedTrade } from "@/lib/tradeCopyTrading"
@@ -61,6 +62,7 @@ export default function TradeDetailPageClient({
   const [loading, setLoading] = useState(!cached)
   const [commentsFocused, setCommentsFocused] = useState(false)
   const [attachedReel, setAttachedReel] = useState<ReelRow | null>(null)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [selectedReplay, setSelectedReplay] = useState<ReelRow | null>(null)
   const [ownerAccounts, setOwnerAccounts] = useState<any[]>([])
 
@@ -192,14 +194,12 @@ export default function TradeDetailPageClient({
   ) : null
 
   const tradeImage = imgSrc ? (
-    <div className="w-full bg-black/30">
-      <TradeScreenshotImage
-        src={imgSrc}
-        preset="feed-detail"
-        maxHeightPx={720}
-        logContext="trade-detail-page"
-      />
-    </div>
+    <ContentMediaPreview
+      src={imgSrc}
+      preset="feed-detail"
+      displayMode={trade?.image_display_mode as string | null | undefined}
+      onClick={setLightboxUrl}
+    />
   ) : null
 
   const tradeCollapsibleContent = trade ? (
@@ -396,6 +396,10 @@ export default function TradeDetailPageClient({
             : null
         }
         onClose={() => setSelectedReplay(null)}
+      />
+      <ImageLightbox
+        imageUrl={lightboxUrl}
+        onClose={() => setLightboxUrl(null)}
       />
     </>
   )

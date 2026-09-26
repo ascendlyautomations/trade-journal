@@ -27,13 +27,20 @@ enum VideoCompressionDiagnostics {
         mode: String,
         reason: String,
         targetFPS: Double,
-        targetVideoBitrate: Int
+        targetVideoBitratePolicy: Int,
+        targetRenderSize: CGSize,
+        exportUsesAVAssetExportSessionPreset: Bool
     ) {
+        let presetNote = exportUsesAVAssetExportSessionPreset
+            ? "exportBitrate=AVAssetExportSessionPreset-not-exact"
+            : "exportBitrate=n/a"
         print(
             """
             [VideoCompression] stage=decision mode=\(mode) reason=\(reason) \
             targetFPS=\(String(format: "%.2f", targetFPS)) \
-            targetVideoBitrate=\(targetVideoBitrate)
+            targetVideoBitratePolicy=\(targetVideoBitratePolicy) \
+            targetRenderSize=\(Int(targetRenderSize.width))x\(Int(targetRenderSize.height)) \
+            \(presetNote)
             """
         )
     }
@@ -46,10 +53,12 @@ enum VideoCompressionDiagnostics {
         outputDuration: Int,
         sourceBytes: Int,
         outputBytes: Int,
+        sourceBitrate: Double,
         outputBitrate: Double,
         outputFrameCount: Int? = nil
     ) {
-        let ratio = sourceBytes > 0 ? Double(outputBytes) / Double(sourceBytes) : 0
+        let byteRatio = sourceBytes > 0 ? Double(outputBytes) / Double(sourceBytes) : 0
+        let bitrateRatio = sourceBitrate > 0 ? outputBitrate / sourceBitrate : 0
         var extras = ""
         if let outputFrameCount {
             extras = " outputFrameCount=\(outputFrameCount)"
@@ -61,10 +70,13 @@ enum VideoCompressionDiagnostics {
             outputFPS=\(String(format: "%.2f", outputFPS)) \
             sourceDuration=\(sourceDuration) \
             outputDuration=\(outputDuration) \
+            sourceBitrate=\(Int(sourceBitrate)) \
             outputBitrate=\(Int(outputBitrate)) \
             sourceBytes=\(sourceBytes) \
             outputBytes=\(outputBytes) \
-            compressionRatio=\(String(format: "%.3f", ratio))\(extras)
+            byteRatio=\(String(format: "%.3f", byteRatio)) \
+            bitrateRatio=\(String(format: "%.3f", bitrateRatio)) \
+            compressionRatio=\(String(format: "%.3f", byteRatio))\(extras)
             """
         )
     }
@@ -84,7 +96,9 @@ enum VideoCompressionDiagnostics {
         mode: String,
         reason: String,
         targetFPS: Double,
-        targetVideoBitrate: Int
+        targetVideoBitratePolicy: Int,
+        targetRenderSize: CGSize,
+        exportUsesAVAssetExportSessionPreset: Bool
     ) {}
 
     static func logOutput(
@@ -95,6 +109,7 @@ enum VideoCompressionDiagnostics {
         outputDuration: Int,
         sourceBytes: Int,
         outputBytes: Int,
+        sourceBitrate: Double,
         outputBitrate: Double,
         outputFrameCount: Int? = nil
     ) {}

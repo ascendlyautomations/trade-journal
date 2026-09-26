@@ -1,6 +1,6 @@
 import Foundation
 
-enum CreateAchievementFixtures {
+nonisolated enum CreateAchievementFixtures {
     static let viewerID = ProfileID("dev.createachievement.viewer")
 
     static func accounts(owner: ProfileID = viewerID) -> [TradingAccount] {

@@ -458,19 +458,20 @@ private final class RecordingAnalyticsReconciliationExecutor: AnalyticsReconcili
         _ = viewerID
         _ = generation
         let revision = hintRevision ?? 0
-        lock.lock()
-        dashboardRevisions.append(revision)
-        let shouldBlock = blockRemaining > 0
-        if shouldBlock {
-            blockRemaining -= 1
+        let shouldBlock = TestLock.withLock(lock) {
+            dashboardRevisions.append(revision)
+            let shouldBlock = blockRemaining > 0
+            if shouldBlock {
+                blockRemaining -= 1
+            }
+            return shouldBlock
         }
-        lock.unlock()
 
         if shouldBlock {
             try await withCheckedThrowingContinuation { continuation in
-                lock.lock()
-                blockedContinuations.append(continuation)
-                lock.unlock()
+                TestLock.withLock(lock) {
+                    blockedContinuations.append(continuation)
+                }
             }
         }
         if failDashboardRevision == revision {
@@ -493,8 +494,8 @@ private final class RecordingAnalyticsReconciliationExecutor: AnalyticsReconcili
     }
 
     func reconcileAccountCharts(intent: AccountChartsReconcileIntent, generation: UInt64) async throws {
-        lock.lock()
-        accountChartAccounts.append(intent.normalizedAccountID)
-        lock.unlock()
+        TestLock.withLock(lock) {
+            accountChartAccounts.append(intent.normalizedAccountID)
+        }
     }
 }

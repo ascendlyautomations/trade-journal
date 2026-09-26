@@ -129,6 +129,11 @@ function FeedPostCard({
         imageSrc={imageSrc}
         priority={mediaPriority}
         fixedFrameClassName={screenshotFixedFrameClassName}
+        displayMode={
+          tradeRow && typeof tradeRow === "object"
+            ? (tradeRow as { image_display_mode?: string | null }).image_display_mode
+            : null
+        }
       />
 
       <FeedPostActions

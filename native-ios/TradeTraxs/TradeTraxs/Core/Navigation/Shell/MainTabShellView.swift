@@ -156,6 +156,7 @@ struct MainTabShellView: View {
                         showsStoryRing: viewerStoryStore.activeStory != nil
                     )
                 }
+                .id(currentUserProfile.tabAvatarRevision)
             }
         }
     }
@@ -322,7 +323,11 @@ struct HomeNavigationStack: View {
                 navigationHost: .home
             )
         case .affiliate:
-            SettingsAffiliateView(data: appEnvironment.data)
+            if IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled {
+                SettingsAffiliateView(data: appEnvironment.data)
+            } else {
+                SettingsHomeView(authenticationCoordinator: authenticationCoordinator)
+            }
         case .psychologyAnalytics:
             if let report = PsychologyAnalyticsSessionStore.shared.report {
                 PsychologyAnalyticsDetailView(
@@ -429,11 +434,13 @@ struct FeedNavigationStack: View {
                         coordinator.open(.feed(.explore))
                     }
                     .accessibilityIdentifier("feed.explore")
+                    .contextualTourTarget(.feedExplore)
 
                     Button("Trade Rooms", systemImage: "person.3") {
                         coordinator.open(.feed(.rooms))
                     }
                     .accessibilityIdentifier("feed.rooms")
+                    .contextualTourTarget(.feedTradeRooms)
                 }
             }
             .navigationDestination(for: FeedRoute.self) { route in
@@ -827,7 +834,11 @@ struct ProfileNavigationStack: View {
         case .help:
             SettingsSupportView()
         case .affiliate, .referrals:
-            SettingsAffiliateView(data: appEnvironment.data)
+            if IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled {
+                SettingsAffiliateView(data: appEnvironment.data)
+            } else {
+                SettingsHomeView(authenticationCoordinator: authenticationCoordinator)
+            }
         case .activity:
             ActivityHomeView(
                 data: appEnvironment.data,

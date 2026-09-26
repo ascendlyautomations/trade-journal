@@ -85,6 +85,101 @@ struct DashboardAnalyticsV3Tests {
         #expect(d90?.metrics.trade_count == 7)
     }
 
+    @Test("Expanded V3 distributions map into visual chart summary")
+    func expandedDistributionsSummary() throws {
+        let distributionsJSON = """
+        {
+          "sessions": [
+            {"label":"New York","count":5,"pct":50,"trade_count":5,"net_pnl":1200,"wins":3,"losses":2,"win_rate":60}
+          ],
+          "symbols": [
+            {"ticker":"MNQ","trades":8,"net_pnl":2840,"wins":5,"win_rate":62.5,"avg_rr":1.2}
+          ],
+          "daily": {
+            "best_day_pnl": 900,
+            "worst_day_pnl": -400,
+            "avg_day_pnl": 120,
+            "consistency_pct": 55,
+            "trading_days": 10
+          },
+          "streaks": {
+            "current_streak": 3,
+            "current_type": "win",
+            "max_win_streak": 5,
+            "max_loss_streak": 2
+          },
+          "weekday_bars": [],
+          "weekday_heatmap": [],
+          "hour_bars": [],
+          "hour_heatmap": [],
+          "hour_highlights": {"best_hour": 10, "worst_hour": 15, "best_pnl": 500, "worst_pnl": -200},
+          "hold_histogram": [],
+          "hold_extremes": {
+            "fastest_winner_seconds": 120,
+            "fastest_winner_pnl": 50,
+            "longest_winner_seconds": 3600,
+            "longest_winner_pnl": 200
+          },
+          "long_short": [],
+          "long_short_detail": {
+            "long": {"trades": 6, "net_pnl": 3240, "wins": 4, "losses": 2, "win_rate": 66.7},
+            "short": {"trades": 4, "net_pnl": 820, "wins": 2, "losses": 2, "win_rate": 50}
+          },
+          "long_trade_count": 6,
+          "short_trade_count": 4,
+          "strategies": {
+            "best": {"strategy":"Opening Drive","trades":5,"net_pnl":1100,"win_rate":80},
+            "worst": {"strategy":"Fade","trades":4,"net_pnl":-300,"win_rate":25}
+          }
+        }
+        """
+        let distributions = try JSONDecoder().decode(
+            AnalyticsDashboardDistributionsWireV1.self,
+            from: Data(distributionsJSON.utf8)
+        )
+        let metrics = AnalyticsDashboardMetricsWireV1(
+            trade_count: 10,
+            win_count: 6,
+            loss_count: 4,
+            breakeven_count: 0,
+            net_pnl: PostgresFlexibleDouble(4060),
+            gross_profit: PostgresFlexibleDouble(5000),
+            gross_loss: PostgresFlexibleDouble(-940),
+            long_count: 6,
+            long_pnl: PostgresFlexibleDouble(3240),
+            short_count: 4,
+            short_pnl: PostgresFlexibleDouble(820),
+            sum_rr: PostgresFlexibleDouble(0),
+            rr_count: 0,
+            sum_hold_seconds: PostgresFlexibleDouble(0),
+            hold_count: 0,
+            largest_win: nil,
+            largest_loss: nil
+        )
+        let bundle = AnalyticsDashboardPresetBundleV1(
+            preset: "d30",
+            start: "2026-08-01",
+            end: "2026-08-31",
+            metrics: metrics,
+            equity: AnalyticsDashboardEquityWireV1(
+                points: [],
+                max_drawdown: PostgresFlexibleDouble(0),
+                current_equity: PostgresFlexibleDouble(0)
+            ),
+            distributions: distributions,
+            insights: []
+        )
+        let summary = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: nil)
+        #expect(summary.sessionPerformance.first?.netPnL == 1200)
+        #expect(summary.symbolPerformance.first?.ticker == "MNQ")
+        #expect(summary.dailyPerformance?.consistencyPct == 55)
+        #expect(summary.streaks?.currentStreak == 3)
+        #expect(summary.hourHighlights?.bestHour == 10)
+        #expect(summary.longShortComparison?.long?.netPnL == 3240)
+        #expect(summary.holdExtremes.count == 2)
+        #expect(summary.strategyHighlights?.best?.strategy == "Opening Drive")
+    }
+
     @Test("Missing account metrics never falls back to aggregate")
     func missingAccountMetrics() throws {
         let bootstrap = try makeBootstrap()
@@ -204,6 +299,94 @@ struct DashboardAnalyticsV3Tests {
                 accountFilter: .account(accountA)
             ) == .ninetyDays
         )
+    }
+
+    @Test("User-selected preset is never auto-widened for equity chart")
+    func equityChartHonorsUserSelectedRange() throws {
+        let bootstrap = try makeBootstrapWithAggregateTradeCounts([
+            "d7": 0,
+            "d30": 0,
+            "d90": 4,
+            "ytd": 8,
+            "all": 8,
+        ])
+        #expect(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                analyticsBootstrap: bootstrap,
+                accountFilter: .all,
+                allowAutomaticWiden: false
+            ) == .thirtyDays
+        )
+    }
+
+    @Test("Empty user-selected range carries prior equity as flat chart")
+    func equityChartFlatCarryForwardForEmptySelectedRange() throws {
+        let bootstrap = try makeBootstrapWithAggregateTradeCounts([
+            "d30": 0,
+            "d90": 4,
+            "all": 4,
+        ])
+        let charts: [String: AnalyticsDashboardChartsPresetV1] = [
+            "d30": AnalyticsDashboardChartsPresetV1(
+                preset: "d30",
+                start: "2026-08-23",
+                end: "2026-09-21",
+                equity: AnalyticsDashboardEquityWireV1(
+                    points: [],
+                    max_drawdown: PostgresFlexibleDouble(0),
+                    current_equity: PostgresFlexibleDouble(0)
+                ),
+                distributions: Self.emptyDistributions,
+                insights: []
+            ),
+            "all": AnalyticsDashboardChartsPresetV1(
+                preset: "all",
+                start: "2020-01-01",
+                end: "2026-09-21",
+                equity: AnalyticsDashboardEquityWireV1(
+                    points: [
+                        AnalyticsDashboardEquityPointWireV1(
+                            t: "2026-06-01T12:00:00.000Z",
+                            v: PostgresFlexibleDouble(52_000),
+                            i: 0
+                        ),
+                        AnalyticsDashboardEquityPointWireV1(
+                            t: "2026-07-01T12:00:00.000Z",
+                            v: PostgresFlexibleDouble(53_500),
+                            i: 1
+                        ),
+                    ],
+                    max_drawdown: PostgresFlexibleDouble(0),
+                    current_equity: PostgresFlexibleDouble(53_500)
+                ),
+                distributions: Self.emptyDistributions,
+                insights: []
+            ),
+        ]
+        guard let bundle = DashboardAnalyticsMapper.bundle(
+            in: bootstrap,
+            accountFilter: .all,
+            dateRange: .thirtyDays,
+            accountCharts: charts
+        ) else {
+            Issue.record("Missing d30 bundle")
+            return
+        }
+        let base = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: nil)
+        #expect(base.tradeCount == 0)
+        #expect(base.equityData.isEmpty)
+        let chart = DashboardEquityChartSeries.carryForwardFlatIfNeeded(
+            summary: base,
+            presetBundle: bundle,
+            analyticsBootstrap: bootstrap,
+            accountFilter: .all,
+            accountCharts: charts
+        )
+        #expect(chart.equityData.count == 2)
+        #expect(chart.equityData[0].equity == 53_500)
+        #expect(chart.equityData[1].equity == 53_500)
+        #expect(chart.currentEquity == 53_500)
     }
 
     @Test("All Accounts charts overlay supplies equity without changing KPI metrics")

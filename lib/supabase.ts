@@ -1,8 +1,2 @@
-// /lib/supabase.ts
-import { createClient } from "@supabase/supabase-js"
-import type { Database } from "./database.types"
-
-export const supabase = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+/** @deprecated Import `@/lib/supabaseClient`. This module must not create a second browser client. */
+export { supabase } from "./supabaseClient"

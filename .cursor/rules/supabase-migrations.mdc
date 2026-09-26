@@ -1,0 +1,18 @@
+---
+description: Supabase migration filename timestamps must be valid calendar dates
+globs: supabase/migrations/**/*.sql
+alwaysApply: false
+---
+
+# Supabase migration filenames
+
+Use `YYYYMMDDHHMMSS_description.sql` where **YYYYMMDD is a real Gregorian date**.
+
+- Verify the date exists (e.g. **September has 30 days — never use day 31**).
+- Verify the timestamp is not already used in `supabase/migrations/`.
+- Filename must end in exactly `.sql`, never `.sql.sql`.
+- Prefer the actual current date when creating a migration.
+- Do not invent a future calendar day only to get a larger sort order.
+- Multiple migrations on the same day: increment **HHMMSS**, not the day.
+
+Do not edit already-applied migrations; add forward-only files with a new valid timestamp.

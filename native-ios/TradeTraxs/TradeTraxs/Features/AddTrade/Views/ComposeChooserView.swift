@@ -83,6 +83,7 @@ struct ComposeChooserView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .listSectionSpacing(ExperienceSpacing.xs)
         .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .scrollContentBackground(.hidden)

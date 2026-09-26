@@ -42,35 +42,17 @@ struct TradeJournalCard: View {
         return item.accountName
     }
 
+    private enum ThumbnailLayout {
+        static let side: CGFloat = 88
+    }
+
     var body: some View {
         Button(action: onOpen) {
             ExperienceCard {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    header
-                    metaLine
-
-                    if hasImage {
-                        screenshot
-                    } else {
-                        executionGrid
-                    }
-
-                    performanceRow
-
-                    if let strategy {
-                        strategyBlock(strategy)
-                    }
-
-                    if let notes {
-                        notesBlock(notes, lines: hasImage ? 3 : 4)
-                    }
-
-                    if !hasImage {
-                        HStack {
-                            Spacer(minLength: 0)
-                            visibilityLabel
-                        }
-                    }
+                if hasImage {
+                    imageCardBody
+                } else {
+                    compactCardBody
                 }
             }
         }
@@ -114,6 +96,51 @@ struct TradeJournalCard: View {
         .accessibilityIdentifier("trades.journalCard.\(item.id.rawValue)")
     }
 
+    // MARK: - Layout
+
+    private var compactCardBody: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            header
+            metaLine
+            executionGrid
+            performanceRow
+            if let strategy {
+                strategyBlock(strategy)
+            }
+            if let notes {
+                notesBlock(notes, lines: 4)
+            }
+            HStack {
+                Spacer(minLength: 0)
+                visibilityLabel
+            }
+        }
+    }
+
+    private var imageCardBody: some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                header
+                metaLine
+                executionGrid
+                performanceRow
+                if let strategy {
+                    strategyBlock(strategy)
+                }
+                if let notes {
+                    notesBlock(notes, lines: 2)
+                }
+                HStack {
+                    Spacer(minLength: 0)
+                    visibilityLabel
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            tradeThumbnail
+        }
+    }
+
     // MARK: - Sections
 
     private var header: some View {
@@ -139,9 +166,6 @@ struct TradeJournalCard: View {
                     )
                 )
                 .accessibilityLabel("P and L \(TradeDisplay.pnlText(summary.realizedPnL))")
-            if hasImage {
-                visibilityLabel
-            }
         }
     }
 
@@ -151,18 +175,13 @@ struct TradeJournalCard: View {
             .lineLimit(1)
     }
 
-    private var screenshot: some View {
-        GeometryReader { geo in
-            TradeImageView(
-                reference: summary.thumbnail,
-                imagePipeline: imagePipeline,
-                contentMode: summary.imageDisplayMode == .fill ? .fill : .fit,
-                side: 132,
-                width: geo.size.width,
-                height: 132
-            )
-        }
-        .frame(height: 132)
+    private var tradeThumbnail: some View {
+        TradeImageView(
+            reference: summary.thumbnail,
+            imagePipeline: imagePipeline,
+            contentMode: .fill,
+            side: ThumbnailLayout.side
+        )
         .accessibilityHidden(true)
     }
 
@@ -215,20 +234,7 @@ struct TradeJournalCard: View {
 
     private var performanceMetrics: [(label: String, value: String)] {
         var items: [(String, String)] = []
-        // With image: show compact RR / points / contracts (execution grid is hidden).
-        // Without image: those already appear in the execution grid — avoid duplicate.
-        if hasImage {
-            if let rr = TradeDisplay.journalRRText(summary.riskReward) {
-                items.append(("R:R", rr))
-            }
-            if let points = TradeDisplay.pointsText(summary.points) {
-                items.append(("Points", points))
-            }
-            items.append(("Contracts", TradeDisplay.contractsText(summary.quantity)))
-            if let duration = TradeDisplay.holdDuration(for: item) {
-                items.append(("Dur", duration))
-            }
-        } else if item.entryPrice == nil && item.exitPrice == nil {
+        if item.entryPrice == nil && item.exitPrice == nil {
             // Sparse trade — still surface whatever performance we have once.
             if let rr = TradeDisplay.journalRRText(summary.riskReward) {
                 items.append(("R:R", rr))

@@ -26,6 +26,7 @@ struct FeedClipsPagerView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.tabIsActive) private var tabIsActive
 
     private var clipEntries: [FeedTimelineEntry] {
         entries.filter {
@@ -99,7 +100,11 @@ struct FeedClipsPagerView: View {
             restoreActiveClipIndex()
         }
         .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active else { return }
+            guard newPhase == .active, tabIsActive else { return }
+            handlePageBecameActive(index: activeClipIndex, scrollDirection: 1)
+        }
+        .onChange(of: tabIsActive) { _, isActive in
+            guard isActive, scenePhase == .active, !clipEntries.isEmpty else { return }
             handlePageBecameActive(index: activeClipIndex, scrollDirection: 1)
         }
         .accessibilityIdentifier("feed.clips.pager")
@@ -165,16 +170,12 @@ struct FeedClipsPagerView: View {
         playbackCoordinator.prepareNeighborClip(reel, atIndex: neighborIndex)
     }
 
-    /// Current clip ± one neighbor — bounded Realtime retention for the clips pager.
+    /// Current clip ± one neighbor — prefetch engagement counts (no postgres_changes).
     private func syncClipEngagementRealtimeRetention(activeIndex: Int) {
         let indices = [activeIndex - 1, activeIndex, activeIndex + 1]
             .filter { clipEntries.indices.contains($0) }
         let targets = Set(indices.map { clipEntries[$0].interactionTarget })
         engagementStore.prefetch(Array(targets))
-        EngagementRealtimeSession.shared.updateRetention(
-            ownerKey: "feed-clips-pager",
-            targets: targets
-        )
     }
 
     private func presentCommentsSheet(for entry: FeedTimelineEntry) {

@@ -1,5 +1,6 @@
 "use client"
 
+import "../../../utilityDesktopTheme.css"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { syncAffiliateConnectStatus } from "@/lib/affiliateConnectSyncClient"
@@ -46,7 +47,7 @@ export default function AffiliatePayoutSetupReturnPage() {
 
   return (
     <>
-      <div className="flex min-h-[50vh] flex-col items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 text-center text-white">
+      <div className="tt-phase4-dark flex min-h-[50vh] flex-col items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 text-center text-white">
         <p className="text-sm text-gray-300">{message}</p>
       </div>
     </>

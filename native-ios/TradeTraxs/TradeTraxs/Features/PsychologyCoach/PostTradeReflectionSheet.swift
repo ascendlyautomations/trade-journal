@@ -34,8 +34,12 @@ struct PostTradeReflectionSheet: View {
                         .lineLimit(2 ... 4)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .experienceDashboardGroupedRows()
+            .experienceScreenBackground()
             .navigationTitle("Quick Reflection")
             .navigationBarTitleDisplayMode(.inline)
+            .tint(colors.accent)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Skip", action: onSkip)

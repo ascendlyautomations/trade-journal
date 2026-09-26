@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
+import "../../publicInformationalTheme.css"
 import { PAGE_HEADING_MARKETING_CLASS } from "@/lib/pageHeadingStyles"
 import {
   COMPANY_PAGE_HEADER_MARGIN,
@@ -91,7 +92,7 @@ export default function CompanyPageShell({
   heroActions,
 }: CompanyPageShellProps) {
   return (
-    <div className={`${COMPANY_PAGE_SHELL} ${COMPANY_PAGE_TOP}`}>
+    <div className={`tt-public-dark ${COMPANY_PAGE_SHELL} ${COMPANY_PAGE_TOP}`}>
       <div className={`mx-auto w-full ${maxWidthClass}`}>
         <header className={`${COMPANY_PAGE_HEADER_MARGIN} text-center`}>
           <h1 className={PAGE_HEADING_MARKETING_CLASS}>{title}</h1>

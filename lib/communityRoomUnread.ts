@@ -3,6 +3,8 @@ import { subscribeNotificationChanges } from "./notificationRealtime.ts"
 import {
   extractRoomIdFromNotification,
   isRoomNotificationType,
+  roomIdFromRoomMessageInsert,
+  roomUnreadMessageFilters,
   shouldSkipUnreadIncrement,
   stableSortedRoomIds,
   type RoomUnreadPatch,
@@ -75,21 +77,27 @@ export function subscribeCommunityRoomUnreadRealtime(
     ctx.patchUnread({ [roomId]: true })
   }
 
-  if (sortedRoomIds.length > 0) {
+  const roomFilters = roomUnreadMessageFilters(sortedRoomIds)
+  const allowedRoomIds = new Set(sortedRoomIds)
+
+  if (roomFilters.length > 0) {
     const channel = supabase.channel(`community-unread-${ctx.userId}`)
 
-    for (const roomId of sortedRoomIds) {
+    for (const roomFilter of roomFilters) {
       channel.on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "room_messages",
-          filter: `room_id=eq.${roomId}`,
+          filter: roomFilter,
         },
         (payload) => {
           if (cancelled) return
-          onMessageInsert(roomId, payload as { new?: Record<string, unknown> })
+          const row = (payload as { new?: Record<string, unknown> }).new
+          const roomId = roomIdFromRoomMessageInsert(row)
+          if (!roomId || !allowedRoomIds.has(roomId)) return
+          onMessageInsert(roomId, { new: row })
         }
       )
     }

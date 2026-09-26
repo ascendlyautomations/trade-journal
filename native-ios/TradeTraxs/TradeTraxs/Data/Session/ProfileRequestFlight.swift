@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Thin typed façade over ``RepositoryRequestFlight`` so existing call sites and tests
 /// keep a stable API. Concurrent callers for the same profile ID share one in-flight Task.
-final class ProfileRequestFlight: @unchecked Sendable {
+nonisolated final class ProfileRequestFlight: Sendable {
     static let shared = ProfileRequestFlight()
 
     private init() {}

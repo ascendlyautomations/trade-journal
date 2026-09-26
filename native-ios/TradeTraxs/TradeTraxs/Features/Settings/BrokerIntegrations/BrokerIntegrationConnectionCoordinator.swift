@@ -184,6 +184,7 @@ struct BrokerLinkExistingAccountSheet: View {
                     }
                 }
             }
+            .experienceDashboardGroupedRows()
             .experienceNavigationTitle("Link Account")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

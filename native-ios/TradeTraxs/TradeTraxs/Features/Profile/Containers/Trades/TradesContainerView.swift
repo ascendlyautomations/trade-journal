@@ -59,16 +59,6 @@ struct TradesContainerView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             ProfileTradesFilterBar(viewModel: viewModel)
 
-            if let paginationErrorMessage = viewModel.paginationErrorMessage {
-                ExperienceBanner(
-                    title: "Couldn’t load more trades",
-                    message: paginationErrorMessage,
-                    tone: .warning,
-                    actionTitle: "Try again",
-                    action: { viewModel.retryLoadMore() }
-                )
-            }
-
             if let message = viewModel.filterEmptyMessage {
                 Text(message)
                     .experienceStyle(.footnote, color: colors.secondaryText)
@@ -110,8 +100,29 @@ struct TradesContainerView: View {
                     viewModel.prefetchEngagement(for: viewModel.visibleItems.map(\.id))
                 }
                 .accessibilityIdentifier("profile.trades.list")
+
+                if viewModel.paginationErrorMessage != nil {
+                    loadMoreFailure
+                }
             }
         }
+    }
+
+    private var loadMoreFailure: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            Text("Couldn’t load more trades")
+                .experienceStyle(.footnote, color: colors.secondaryText)
+            Button {
+                viewModel.retryLoadMore()
+            } label: {
+                Text("Try again")
+                    .experienceStyle(.footnote, color: colors.accent)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, ExperienceSpacing.xs)
+        .accessibilityIdentifier("profile.trades.loadMoreError")
     }
 
     private func reportAction(for summary: TradeSummary) -> (() -> Void)? {

@@ -2,6 +2,23 @@ import XCTest
 @testable import TradeTraxs
 
 final class ImageCropMathTests: XCTestCase {
+    func testContentCropSelectorIsSquarePortraitAndLandscape() {
+        XCTAssertEqual(
+            ImageCropAspectOption.feedAspectOptions,
+            [.square, .portrait, .landscape]
+        )
+        XCTAssertFalse(ImageCropAspectOption.feedAspectOptions.contains(.original))
+        XCTAssertEqual(ImageCropEditorPreset.socialContent.defaultAspectOption, .portrait)
+        XCTAssertEqual(ImageCropEditorPreset.tradeScreenshot.defaultAspectOption, .portrait)
+        XCTAssertEqual(ImageCropEditorPreset.socialContent.allowedAspectOptions, ImageCropAspectOption.feedAspectOptions)
+        XCTAssertEqual(ImageCropEditorPreset.tradeScreenshot.allowedAspectOptions, ImageCropAspectOption.feedAspectOptions)
+        XCTAssertEqual(ImageCropEditorPreset.avatar.allowedAspectOptions, [.square])
+        XCTAssertEqual(ImageCropEditorPreset.room.allowedAspectOptions, [.square])
+        XCTAssertEqual(ImageCropAspectOption.square.title, "1:1")
+        XCTAssertEqual(ImageCropAspectOption.portrait.title, "4:5")
+        XCTAssertEqual(ImageCropAspectOption.landscape.title, "16:9")
+    }
+
     func testClampOffsetReturnsZeroWhenImageFits() {
         let offset = ImageCropMath.clampOffset(
             imageWidth: 800,

@@ -10,11 +10,11 @@ enum SessionScopedCaches {
         currentUserProfile: CurrentUserProfileStore,
         data: DataEnvironment
     ) {
-        if let viewerID = currentUserProfile.profile?.id {
-            Task {
-                await AnalyticsLocalStore.sharedStore().clearViewer(viewerID)
-            }
-        }
+        // In-memory dashboard presentation is dropped before any store clear so a
+        // surviving Home view cannot keep painting the previous account.
+        // Viewer-keyed Dashboard disk, Backend V2 bootstrap disk, and GRDB rows stay.
+        // Reads must reject a blob whose owner is not the active viewer.
+        DashboardSessionBoundary.resetInMemoryPresentation()
         currentUserProfile.clear()
         MessagesInboxStore.shared.invalidate()
         MessagingDomain.shared.invalidate()
@@ -35,8 +35,6 @@ enum SessionScopedCaches {
         CalendarMonthSessionStore.shared.invalidate()
         CalendarAnalyticsSessionStore.shared.invalidate()
         CalendarAnalyticsMonthDiskCache.clearAll()
-        DashboardAnalyticsDiskCache.clearAll()
-        DashboardAnalyticsAccountChartsStore.shared.invalidate()
         SessionAccountsStore.shared.invalidate()
         SessionPayoutCyclesStore.shared.invalidateAll()
         SessionPayoutEntriesStore.shared.invalidate()
@@ -52,16 +50,11 @@ enum SessionScopedCaches {
         RepositoryRequestFlight.shared.invalidate()
         Task { await SessionFollowingStore.shared.invalidate() }
         SessionBootstrapStore.shared.clear()
-        BackendV2BootstrapDiskCache.clearAll()
         ViewerSyncStateDiskCache.clear()
         ViewerSyncReconciliationCoordinator.shared.reset()
         ViewerSyncStateRuntime.reset()
         AnalyticsReconciliationRuntime.reset()
         Task { await AnalyticsReconciliationCoordinator.shared.reset() }
-        AnalyticsRevisionRealtimeSession.shared.invalidate()
-        EngagementRealtimeSession.shared.invalidate()
-        SocialEntityRealtimeSession.shared.invalidate()
-        RelationshipRealtimeSession.shared.invalidate()
         MessagingRealtimeDeliveryCoordinator.resetSession()
         Task { await SocialRealtimeReconciliationCoordinator.shared.reset() }
         Task { await AnalyticsRevisionRepairCoordinator.shared.reset() }

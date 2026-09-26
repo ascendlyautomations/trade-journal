@@ -18,6 +18,12 @@ export type ProfileSessionSnapshot = {
   allTrades: any[]
   wallPosts: any[]
   wallPostsReady?: boolean
+  wallPostsHasMore?: boolean
+  wallPostsCursor?: {
+    phase: "pinned" | "unpinned"
+    createdAt: string | null
+    id: string | null
+  } | null
   visibleTradeCount: number
   tradeHasMore?: boolean
   tradesReady?: boolean

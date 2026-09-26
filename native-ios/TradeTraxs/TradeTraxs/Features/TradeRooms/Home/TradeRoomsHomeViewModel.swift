@@ -22,6 +22,10 @@ final class TradeRoomsHomeViewModel {
 
     private(set) var discoveryMode: TradeRoomDiscoveryMode = .yourRooms
     private(set) var discoveryScope: TradeRoomDiscoveryScope = .all
+    /// Set when the user taps a scope chip. Later loads must not move the chip.
+    private var didUserSelectDiscoveryScope = false
+    /// Set once membership cache or the first home load can choose the opening chip.
+    private var didLatchInitialDiscoveryScope = false
     private var didApplyInitialDiscoveryMode = false
     private(set) var yourRoomsItems: [ExploreRoomSuggestion] = []
     private(set) var suggestedItems: [ExploreRoomSuggestion] = []
@@ -72,6 +76,12 @@ final class TradeRoomsHomeViewModel {
         self.domain = domain ?? .shared
         self.presentCreateOnAppear = presentCreateOnAppear
         self.joinCoordinator = joinCoordinator ?? .shared
+        if viewerID == nil {
+            viewerID = self.inboxStore.persistedViewerID ?? self.domain.state.viewerID
+        }
+        restoreCachedHomeBootstrap()
+        hydrateYourRoomsFromMembershipCache()
+        latchInitialDiscoveryScopeIfNeeded()
         self.domain.configure(
             messages: messages,
             rooms: rooms,
@@ -104,6 +114,17 @@ final class TradeRoomsHomeViewModel {
 
     var showsFilteredEmpty: Bool {
         phase == .loaded && !items.isEmpty && filteredItems.isEmpty
+    }
+
+    /// Chip on screen. Members open on Your Rooms from cache before the user picks a chip.
+    var activeDiscoveryScope: TradeRoomDiscoveryScope {
+        if didUserSelectDiscoveryScope || didLatchInitialDiscoveryScope {
+            return discoveryScope
+        }
+        if hasCachedJoinedRoom {
+            return .yourRooms
+        }
+        return discoveryScope
     }
 
     var joinedRoomIDs: Set<RoomID> {
@@ -193,6 +214,8 @@ final class TradeRoomsHomeViewModel {
     }
 
     func selectDiscoveryScope(_ scope: TradeRoomDiscoveryScope) {
+        didUserSelectDiscoveryScope = true
+        didLatchInitialDiscoveryScope = true
         guard discoveryScope != scope else { return }
         ExperienceHaptics.play(.selection)
         discoveryScope = scope
@@ -342,6 +365,9 @@ final class TradeRoomsHomeViewModel {
             await loadHomeBootstrap(forceNetwork: true)
             didApplyInitialDiscoveryMode = false
             applyInitialDiscoveryModeIfNeeded()
+            didUserSelectDiscoveryScope = true
+            didLatchInitialDiscoveryScope = true
+            discoveryScope = .yourRooms
             discoveryMode = .yourRooms
             openRoom(
                 TradeRoomInboxItem(
@@ -423,9 +449,10 @@ final class TradeRoomsHomeViewModel {
         if viewerID == nil {
             viewerID = domain.state.viewerID
         }
+        reconcileYourRoomsWithMembership()
+        latchInitialDiscoveryScopeIfNeeded()
         phase = domain.state.phase
         applyInitialDiscoveryModeIfNeeded()
-        reconcileYourRoomsWithMembership()
         logDisplayedRooms()
         await domain.retainRealtime()
         loadTask = nil
@@ -537,10 +564,73 @@ final class TradeRoomsHomeViewModel {
         logDisplayedRooms()
     }
 
+    private func restoreCachedHomeBootstrap() {
+        guard let viewerID else { return }
+        guard yourRoomsItems.isEmpty, suggestedItems.isEmpty, popularItems.isEmpty else { return }
+        guard let bootstrap = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewerID, scope: .all) else {
+            return
+        }
+        applyHomeBootstrap(bootstrap, viewerID: viewerID)
+        discoveryPhase = .loaded
+    }
+
+    /// Fills Your Rooms from the member-room cache when the inbox list is not in memory yet.
+    private func hydrateYourRoomsFromMembershipCache() {
+        guard let viewerID, inboxStore.rooms.isEmpty, yourRoomsItems.isEmpty else { return }
+        guard let cached = SessionMemberRoomsStore.shared.cached(for: viewerID), !cached.0.isEmpty else {
+            return
+        }
+        yourRoomsItems = cached.0.map { room in
+            ExploreRoomSuggestion.fromMembership(
+                room: room,
+                ownerName: nil,
+                ownerUsername: nil,
+                viewerID: viewerID,
+                isOwner: room.ownerProfileID == viewerID,
+                isMember: true
+            )
+        }
+    }
+
+    private var hasCachedJoinedRoom: Bool {
+        if !inboxStore.rooms.isEmpty || !yourRoomsItems.isEmpty {
+            return true
+        }
+        let viewer = viewerID ?? inboxStore.persistedViewerID ?? domain.state.viewerID
+        guard let viewer else { return false }
+        if let cached = SessionMemberRoomsStore.shared.cached(for: viewer), !cached.0.isEmpty {
+            return true
+        }
+        if let bootstrap = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewer, scope: .all),
+           !bootstrap.yourRooms.isEmpty {
+            return true
+        }
+        return false
+    }
+
+    private var membershipResolvedEmpty: Bool {
+        inboxStore.hasLoadedRooms
+            && inboxStore.rooms.isEmpty
+            && discoveryPhase == .loaded
+            && yourRoomsItems.isEmpty
+    }
+
+    /// Opening chip only. A later manual chip change sets ``didUserSelectDiscoveryScope``.
+    private func latchInitialDiscoveryScopeIfNeeded() {
+        guard !didUserSelectDiscoveryScope, !didLatchInitialDiscoveryScope else { return }
+        if hasCachedJoinedRoom {
+            didLatchInitialDiscoveryScope = true
+            discoveryScope = .yourRooms
+        } else if membershipResolvedEmpty {
+            didLatchInitialDiscoveryScope = true
+            discoveryScope = .all
+        }
+    }
+
     /// Web sidebar parity — inbox member rooms must appear in Your Rooms even when
     /// bootstrap RPC omits private/non-profile rooms.
     private func reconcileYourRoomsWithMembership() {
-        guard let viewerID else { return }
+        let resolvedViewer = viewerID
         var merged = yourRoomsItems
         var ids = Set(merged.map(\.id))
         for item in items {
@@ -549,8 +639,8 @@ final class TradeRoomsHomeViewModel {
                 room: item.room,
                 ownerName: item.ownerName,
                 ownerUsername: nil,
-                viewerID: viewerID,
-                isOwner: item.room.ownerProfileID == viewerID,
+                viewerID: resolvedViewer,
+                isOwner: resolvedViewer.map { item.room.ownerProfileID == $0 } ?? false,
                 isMember: true
             )
             merged.append(suggestion)

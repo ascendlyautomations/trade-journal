@@ -56,7 +56,6 @@ const DISALLOW_PATHS = [
   "/streaks",
   "/referrals",
   "/payouts",
-  "/beta",
   "/banned",
   "/feedback",
   "/support",

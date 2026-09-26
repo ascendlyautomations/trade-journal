@@ -1,7 +1,7 @@
 import Foundation
 
 /// Classifies broker account sync outcomes for UI (reconnect vs retry vs hard failure).
-enum BrokerSyncFailureResolution: Equatable, Sendable {
+nonisolated enum BrokerSyncFailureResolution: Equatable, Sendable {
     case success
     case reconnectRequired
     case retryable
@@ -29,9 +29,11 @@ enum BrokerSyncFailureResolution: Equatable, Sendable {
         if topCode == "reconnect_required"
             || topCode == "unauthorized"
             || topCode == "not_connected"
+            || topCode == "rithmic_password_required"
         {
             return true
         }
+        if summaryCode == "rithmic_password_required" { return true }
         return false
     }
 
@@ -49,7 +51,7 @@ enum BrokerSyncFailureResolution: Equatable, Sendable {
     }
 }
 
-extension TradovateAccountSyncResponse {
+nonisolated extension TradovateAccountSyncResponse {
     var resolvedClientCode: String? {
         if let code = code?.trimmingCharacters(in: .whitespacesAndNewlines), !code.isEmpty {
             return code
@@ -58,14 +60,22 @@ extension TradovateAccountSyncResponse {
     }
 }
 
-enum BrokerSyncPresentation {
+nonisolated enum BrokerSyncPresentation {
     static func reconnectRequiredMessage(provider: BrokerIntegrationProvider) -> String {
         switch provider {
         case .tradovate:
-            return "Tradovate needs to be reconnected to continue syncing your trades."
+            return "Your Tradovate connection needs to be reconnected to continue syncing trades."
         case .rithmic:
-            return "Rithmic needs to be reconnected to continue syncing your trades."
+            return "Your Rithmic connection needs to be reconnected to continue syncing trades."
         }
+    }
+
+    static func temporaryFailureMessage() -> String {
+        "Unable to import trades right now."
+    }
+
+    static func syncInProgressMessage() -> String {
+        "Sync already in progress."
     }
 
     static func reconnectPrimaryActionTitle() -> String {
@@ -81,26 +91,13 @@ enum BrokerSyncPresentation {
         case .success:
             return ""
         case .reconnectRequired:
-            if let detail = response.summary.error?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !detail.isEmpty,
-               detail.lowercased().contains("reconnect")
-            {
-                return detail
-            }
             return reconnectRequiredMessage(provider: provider)
         case .retryable:
-            if let detail = response.summary.error?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !detail.isEmpty
-            {
-                return detail
+            if BrokerSyncFailureResolution.isSyncInProgress(response) {
+                return syncInProgressMessage()
             }
-            return "Broker sync is temporarily unavailable. Try again in a moment."
+            return temporaryFailureMessage()
         case .importFailed:
-            if let detail = response.summary.error?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !detail.isEmpty
-            {
-                return detail
-            }
             return "Import did not complete."
         }
     }

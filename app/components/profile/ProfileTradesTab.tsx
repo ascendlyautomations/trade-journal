@@ -216,7 +216,7 @@ export default function ProfileTradesTab({
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 md:gap-y-8">
+          <div className="tt-profile-browse-grid tt-profile-trade-grid grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 md:gap-y-8">
             {Array.from({ length: 4 }).map((_, i) => (
               <SkeletonTradeCard key={i} />
             ))}
@@ -249,7 +249,7 @@ export default function ProfileTradesTab({
           className={
             isMobile
               ? "grid grid-cols-1 gap-y-4"
-              : "grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 md:gap-y-8"
+              : "tt-profile-browse-grid tt-profile-trade-grid grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 md:gap-y-8"
           }
         >
           {displayedTrades.map((trade, index) => (

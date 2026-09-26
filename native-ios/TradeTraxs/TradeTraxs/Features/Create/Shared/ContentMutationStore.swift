@@ -41,6 +41,7 @@ final class ContentMutationStore {
         latest = .post(post)
         latestPostID = post.id
         revision += 1
+        GettingStartedRefreshCenter.noteProfilePostCreated()
     }
 
     func noteAchievementCreated(_ achievement: Achievement) {

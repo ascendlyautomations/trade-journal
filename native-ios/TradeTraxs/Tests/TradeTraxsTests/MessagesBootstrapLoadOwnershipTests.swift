@@ -119,7 +119,7 @@ final class MessagesBootstrapLoadOwnershipTests: XCTestCase {
         BackendV2FeatureFlags.setFlagForTests(.messages, enabled: true)
         #if DEBUG
         let slowNs: UInt64 = 2_700_000_000
-        try await BootstrapTransportTimeout.withTestTimeout(45_000_000_000) {
+        await BootstrapTransportTimeout.withTestTimeout(45_000_000_000) {
             let rpc = SlowMessagingRPCClient(
                 json: BackendV2ContractFixtures.messages,
                 delayNanoseconds: slowNs

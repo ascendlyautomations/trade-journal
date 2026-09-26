@@ -312,6 +312,7 @@ final class MessagesInboxStore {
             convo.unreadCount = 0
         }
         applyConversationUpdate(convo)
+        MessageSyncLog.inboxPreviewUpdated(conversationID: message.conversationID, messageID: message.id)
 
 #if DEBUG
         let positionAfter = conversations.firstIndex(where: { $0.id == message.conversationID })

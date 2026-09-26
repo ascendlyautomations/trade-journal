@@ -181,7 +181,7 @@ function DashboardCharts({
   return (
     <div className="flex flex-col gap-2 max-md:gap-2 md:gap-3">
       {desktopEquity ? (
-        <div className="hidden md:block">{desktopEquity}</div>
+        <div className="tt-dash-hide-desktop-v1 hidden md:block">{desktopEquity}</div>
       ) : null}
       <div
         className={`grid gap-2 overflow-visible max-md:gap-2 md:gap-3 ${
@@ -212,7 +212,7 @@ function DashboardCharts({
         />
 
         {desktopSide ? (
-          <div className="hidden space-y-2 overflow-visible md:block md:space-y-3 lg:col-span-2">
+          <div className="tt-dash-hide-desktop-v1 hidden space-y-2 overflow-visible md:block md:space-y-3 lg:col-span-2">
             {desktopSide}
           </div>
         ) : null}

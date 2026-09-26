@@ -66,6 +66,9 @@ final class SessionBootstrapStore {
     private(set) var last: SessionBootstrapV1?
     private(set) var source: String?
 
+    /// Local avatar that must win over a session payload still carrying the previous URL.
+    private var adoptedAvatar: AdoptedAvatar?
+
     func seed(_ bootstrap: SessionBootstrapV1, source: String) {
         last = bootstrap
         self.source = source
@@ -89,6 +92,11 @@ final class SessionBootstrapStore {
     }
 
     func applyOnboardingCompletion(profile: Profile, snapshot: ProfileOnboardingSnapshot) {
+        let avatarURL = Self.normalizedAvatarURL(
+            session: snapshot.avatarURL ?? profile.avatar?.id,
+            viewer: nil
+        )
+        recordAdoptedAvatar(profileID: profile.id, avatarURL: avatarURL)
         guard var bootstrap = last else { return }
         bootstrap.data.session_profile.username = profile.username
         bootstrap.data.session_profile.bio = profile.bio
@@ -97,8 +105,10 @@ final class SessionBootstrapStore {
         bootstrap.data.session_profile.primary_market = profile.primaryMarket
         bootstrap.data.session_profile.started_trading = snapshot.startedTrading
         bootstrap.data.session_profile.onboarding_completed = true
+        bootstrap.data.session_profile.avatar_url = avatarURL
         bootstrap.data.viewer.username = profile.username
         bootstrap.data.viewer.display_name = profile.displayName
+        bootstrap.data.viewer.avatar_url = avatarURL
         bootstrap.data.viewer.onboarding_flags["onboarding_completed"] = true
         last = bootstrap
         if let viewerID = bootstrap.meta.viewer_id ?? Optional(bootstrap.data.viewer.id) {
@@ -107,9 +117,117 @@ final class SessionBootstrapStore {
         }
     }
 
+    /// Patches the cached session card when the owner avatar changes after onboarding.
+    func applyAvatarChange(profileID: ProfileID, avatarURL: String?) {
+        let normalized = Self.normalizedAvatarURL(session: avatarURL, viewer: nil)
+        recordAdoptedAvatar(profileID: profileID, avatarURL: normalized)
+        guard var bootstrap = last else { return }
+        guard bootstrap.data.session_profile.id == profileID.rawValue
+            || bootstrap.data.viewer.id == profileID.rawValue
+        else { return }
+        bootstrap.data.session_profile.avatar_url = normalized
+        bootstrap.data.viewer.avatar_url = normalized
+        last = bootstrap
+        if let viewerID = bootstrap.meta.viewer_id ?? Optional(bootstrap.data.viewer.id) {
+            BackendV2BootstrapDiskCache.saveSession(bootstrap, viewerID: viewerID)
+            ViewerSyncStateRuntime.noteLocalMutation(viewerID: profileID)
+        }
+    }
+
+    /// Keeps a locally chosen avatar when `bootstrap` still has a URL that choice replaced.
+    ///
+    /// A server payload that already contains the adopted URL clears the lock. Replaying
+    /// our own disk write must not — an in-flight session RPC can still carry the old URL.
+    @discardableResult
+    func reconcileAdoptedAvatar(
+        _ bootstrap: inout SessionBootstrapV1,
+        serverAuthoritative: Bool
+    ) -> Bool {
+        guard let adopted = adoptedAvatar else { return false }
+        guard adopted.profileID == bootstrap.data.session_profile.id
+            || adopted.profileID == bootstrap.data.viewer.id
+        else { return false }
+
+        let incoming = Self.normalizedAvatarURL(
+            session: bootstrap.data.session_profile.avatar_url,
+            viewer: bootstrap.data.viewer.avatar_url
+        )
+        if incoming == adopted.avatarURL {
+            if serverAuthoritative {
+                adoptedAvatar = nil
+            }
+            return false
+        }
+        if adopted.replacedURLs.contains(incoming) {
+            bootstrap.data.session_profile.avatar_url = adopted.avatarURL
+            bootstrap.data.viewer.avatar_url = adopted.avatarURL
+            return true
+        }
+        adoptedAvatar = nil
+        return false
+    }
+
+    /// Avatar URL to keep on the current-user profile when a bootstrap result arrives.
+    func preferredAvatarURL(profileID: ProfileID, incoming: String?) -> String? {
+        let incomingNorm = Self.normalizedAvatarURL(session: incoming, viewer: nil)
+        guard let adopted = adoptedAvatar, adopted.profileID == profileID.rawValue else {
+            return incomingNorm
+        }
+        if incomingNorm == adopted.avatarURL || adopted.replacedURLs.contains(incomingNorm) {
+            return adopted.avatarURL
+        }
+        adoptedAvatar = nil
+        return incomingNorm
+    }
+
+    nonisolated static func normalizedAvatarURL(session: String?, viewer: String?) -> String? {
+        for raw in [session, viewer] {
+            let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+        return nil
+    }
+
     func clear() {
         last = nil
         source = nil
+        adoptedAvatar = nil
+    }
+
+    private struct AdoptedAvatar {
+        var profileID: String
+        var avatarURL: String?
+        var replacedURLs: Set<String?>
+    }
+
+    private func recordAdoptedAvatar(profileID: ProfileID, avatarURL: String?) {
+        let previous: String? = last.flatMap {
+            Self.normalizedAvatarURL(
+                session: $0.data.session_profile.avatar_url,
+                viewer: $0.data.viewer.avatar_url
+            )
+        }
+        if adoptedAvatar == nil, previous == avatarURL {
+            return
+        }
+        if adoptedAvatar?.profileID == profileID.rawValue, adoptedAvatar?.avatarURL == avatarURL {
+            return
+        }
+        var replaced = adoptedAvatar?.profileID == profileID.rawValue
+            ? (adoptedAvatar?.replacedURLs ?? [])
+            : []
+        if let adoptedAvatar, adoptedAvatar.profileID == profileID.rawValue {
+            replaced.insert(adoptedAvatar.avatarURL)
+        }
+        replaced.insert(previous)
+        replaced.remove(avatarURL)
+        adoptedAvatar = AdoptedAvatar(
+            profileID: profileID.rawValue,
+            avatarURL: avatarURL,
+            replacedURLs: replaced
+        )
     }
 
     /// Authoritative platform admin flag from session bootstrap (`admin_users` → `entitlement.flags.is_admin`).
@@ -389,7 +507,8 @@ enum SessionBootstrapLoader {
         let applied = try await SessionBootstrapApplier.apply(
             bootstrap,
             expectedViewerID: uid,
-            detailCache: detailCache
+            detailCache: detailCache,
+            serverAuthoritative: true
         )
         BackendV2RpcStageTracer.trace(rpcName, stage: "state.apply.completed", correlation: uid.prefix(8).description)
         let stats = try await resolveHeaderStats(
@@ -399,7 +518,11 @@ enum SessionBootstrapLoader {
             detailCache: detailCache
         )
         BackendV2RpcStageTracer.trace(rpcName, stage: "cache.write.started", correlation: uid.prefix(8).description)
-        BackendV2BootstrapDiskCache.saveSession(bootstrap, viewerID: uid)
+        if let reconciled = SessionBootstrapStore.shared.last {
+            BackendV2BootstrapDiskCache.saveSession(reconciled, viewerID: uid)
+        } else {
+            BackendV2BootstrapDiskCache.saveSession(bootstrap, viewerID: uid)
+        }
         BackendV2RpcStageTracer.trace(rpcName, stage: "cache.write.completed", correlation: uid.prefix(8).description)
         ViewerSyncStateCapturer.captureAfterBootstrap(viewerID: uid, rpc: rpc)
         logPath(.v2_rpc)

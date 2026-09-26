@@ -15,7 +15,7 @@ nonisolated enum DashboardAnalyticsV3Applier {
         detailCache: DetailPresentationCache
     ) throws -> Applied {
         let viewer = bootstrap.meta.viewer_id ?? expectedViewerID
-        guard viewer == expectedViewerID else {
+        guard DashboardSessionIsolation.ownersMatch(viewer, expectedViewerID) else {
             throw BackendV2RPCError.decode("viewer_id mismatch")
         }
 

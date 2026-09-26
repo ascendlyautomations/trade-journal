@@ -4633,6 +4633,20 @@ export type Database = {
         Args: { p_room_id: string; p_user_id: string }
         Returns: boolean
       }
+      leaderboard_ranked_window: {
+        Args: {
+          p_account_type?: string
+          p_custom_end?: string
+          p_custom_end_ymd?: string
+          p_custom_start?: string
+          p_custom_start_ymd?: string
+          p_now?: string
+          p_rank_limit?: number
+          p_view: string
+          p_viewer_id?: string
+        }
+        Returns: Json
+      }
       leaderboard_trade_rows: {
         Args: { p_limit?: number; p_offset?: number }
         Returns: {

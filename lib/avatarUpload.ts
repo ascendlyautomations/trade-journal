@@ -1,4 +1,3 @@
-import { compressImage } from "./compressImage"
 import { supabase } from "./supabaseClient"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
@@ -21,10 +20,7 @@ export async function uploadAvatarFile(
     return null
   }
 
-  let uploadFile: File = file
-  if (file.type?.startsWith("image/")) {
-    uploadFile = await compressImage(file)
-  }
+  const uploadFile = file
   const fileName = `${userId}/${Date.now()}-${uploadFile.name}`
   const report = createMonotonicReporter(options?.onProgress)
 

@@ -338,6 +338,26 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         }
     }
 
+    func realtimePressureSnapshot() -> SupabasePressureRealtimeSnapshot {
+        withLocked {
+            var logicalConsumers = 0
+            for routeKey in specsByRouteKey.keys {
+                logicalConsumers += logicalConsumerCountLocked(routeKey: routeKey)
+            }
+            return SupabasePressureRealtimeSnapshot(
+                sessionGeneration: watchSessionGeneration,
+                activeRoutes: specsByRouteKey.count,
+                joinedTopics: joinedTopics.count,
+                logicalConsumers: logicalConsumers
+            )
+        }
+    }
+
+    func awaitReconnectCompletionIfInFlight() async {
+        let task = withLocked { reconnectTask }
+        await task?.value
+    }
+
     private func logicalConsumerCountLocked(routeKey: String) -> Int {
         if let consumers = messageConsumersByRoute[routeKey] {
             return consumers.count
@@ -392,10 +412,20 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         topic: String,
         consumerID: UUID
     ) -> RegistryJoinDecision {
-        guard let consumerEpoch = consumerRouteEpochLocked(routeKey: routeKey, consumerID: consumerID) else {
+        guard consumerRouteEpochLocked(routeKey: routeKey, consumerID: consumerID) != nil else {
             return .abandoned
         }
-        guard consumerEpoch == routeEpochByKey[routeKey, default: 0] else {
+        if var bucket = messageConsumersByRoute[routeKey],
+           var entry = bucket[consumerID],
+           entry.routeEpoch != routeEpochByKey[routeKey, default: 0]
+        {
+            entry.routeEpoch = routeEpochByKey[routeKey, default: 0]
+            bucket[consumerID] = entry
+            messageConsumersByRoute[routeKey] = bucket
+        }
+        guard let consumerEpoch = consumerRouteEpochLocked(routeKey: routeKey, consumerID: consumerID),
+              consumerEpoch == routeEpochByKey[routeKey, default: 0]
+        else {
             return .abandoned
         }
         let consumers = logicalConsumerCountLocked(routeKey: routeKey)
@@ -570,8 +600,9 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         withLocked {
             var out: [String: [AsyncStream<MessageRealtimeSignal>.Continuation]] = [:]
             for (routeKey, consumers) in messageConsumersByRoute {
+                let routeEpoch = routeEpochByKey[routeKey, default: 0]
                 let live = consumers.values
-                    .filter { $0.sessionGeneration == generation }
+                    .filter { $0.sessionGeneration == generation && $0.routeEpoch == routeEpoch }
                     .compactMap(\.continuation)
                 if !live.isEmpty {
                     out[routeKey] = live
@@ -1029,42 +1060,6 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         )
     }
 
-    /// Member room cards — `room_members` insert/update/delete for visible rooms.
-    func watchMemberRoomMembership(
-        roomIDs: [String],
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        let sorted = Array(Set(roomIDs)).sorted()
-        guard !sorted.isEmpty else {
-            return RealtimeMessageWatch(
-                events: AsyncStream { $0.finish() },
-                consumer: RealtimeRouteConsumerHandle(routeKey: "member-room-membership", debugOwner: debugOwner)
-            )
-        }
-        let filter: String
-        if sorted.count == 1 {
-            filter = "room_id=eq.\(sorted[0])"
-        } else {
-            filter = "room_id=in.(\(sorted.joined(separator: ",")))"
-        }
-        return watch(
-            WatchSpec(
-                topic: "realtime:member-room-membership",
-                routeKey: "member-room-membership",
-                bindings: [
-                    PostgresChangeBinding(
-                        table: "room_members",
-                        filter: filter,
-                        routeColumn: "room_id",
-                        emitsReactionEvents: false
-                    ),
-                ]
-            ),
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
 
     /// Inbox — `messages` for loaded DM conversations (preview + reorder when not in thread).
     func watchInboxConversationMessages(
@@ -1127,200 +1122,11 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         )
     }
 
-    /// Legacy Feed posts watch — Phase 10D uses ``watchSocialEntityChanges`` via ``SocialEntityRealtimeSession``.
-    func watchFeedPosts(accessToken: String?, debugOwner: String? = nil) -> RealtimeMessageWatch {
-        RealtimeMessageWatch(
-            events: AsyncStream { $0.finish() },
-            consumer: RealtimeRouteConsumerHandle(routeKey: "feed-posts-deprecated", debugOwner: debugOwner)
-        )
-    }
 
-    /// Phase 10D — bounded entity postgres_changes for one table + filter.
-    func watchSocialEntityChanges(
-        table: SocialEntityRealtimeTable,
-        filter: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeSocialEntityWatch {
-        guard !filter.contains("__invalid_empty__") else {
-            return RealtimeSocialEntityWatch(
-                events: AsyncStream { $0.finish() },
-                consumer: RealtimeRouteConsumerHandle(routeKey: "social-entity:empty", debugOwner: debugOwner)
-            )
-        }
 
-        let routeKey = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: table, key: filter))"
-        let topic = "realtime:\(routeKey)"
-        let consumerID = UUID()
-        let handle = RealtimeRouteConsumerHandle(
-            id: consumerID,
-            routeKey: routeKey,
-            debugOwner: debugOwner
-        )
 
-        let events = AsyncStream { continuation in
-            Task {
-                try? await self.ensureConnected()
-                let spec = SocialEntityWatchSpec(
-                    topic: topic,
-                    routeKey: routeKey,
-                    filter: filter,
-                    table: table
-                )
-                let joinSpec = WatchSpec(
-                    topic: topic,
-                    routeKey: routeKey,
-                    bindings: [
-                        PostgresChangeBinding(
-                            table: table.rawValue,
-                            filter: filter,
-                            routeColumn: table.idColumn,
-                            emitsReactionEvents: false,
-                            emitsSocialEntityEvents: true
-                        ),
-                    ]
-                )
-                let startState = self.withLocked { () -> RouteConsumerRetainState in
-                    let generation = self.watchSessionGeneration
-                    var bucket = self.socialEntityConsumersByRoute[routeKey, default: [:]]
-                    if bucket[consumerID] != nil {
-                        return RouteConsumerRetainState(
-                            isDuplicate: true,
-                            consumerCount: bucket.count,
-                            sessionGeneration: generation
-                        )
-                    }
-                    let routeEpoch = self.routeEpochByKey[routeKey, default: 0]
-                    bucket[consumerID] = SocialEntityRouteConsumer(
-                        sessionGeneration: generation,
-                        routeEpoch: routeEpoch,
-                        continuation: continuation
-                    )
-                    self.socialEntityConsumersByRoute[routeKey] = bucket
-                    self.socialEntitySpecsByRouteKey[routeKey] = spec
-                    self.specsByRouteKey[routeKey] = joinSpec
-                    self.accessTokensByRouteKey[routeKey] = accessToken
-                    let consumers = self.logicalConsumerCountLocked(routeKey: routeKey)
-                    return RouteConsumerRetainState(
-                        isDuplicate: false,
-                        consumerCount: consumers,
-                        sessionGeneration: generation
-                    )
-                }
-                await self.applyRegistryRetainAndJoin(
-                    routeKey: routeKey,
-                    topic: topic,
-                    consumerID: consumerID,
-                    owner: debugOwner,
-                    state: startState,
-                    spec: joinSpec,
-                    accessToken: accessToken
-                )
-                if !startState.isDuplicate {
-                    continuation.onTermination = { @Sendable _ in
-                        Task { await self.releaseWatch(handle) }
-                    }
-                }
-            }
-        }
-        return RealtimeSocialEntityWatch(events: events, consumer: handle)
-    }
 
-    /// Viewer outgoing follows — `followers.follower_id = viewer` (cross-device + echo).
-    func watchRelationshipOutgoingFollows(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        watch(
-            WatchSpec(
-                topic: "realtime:relationship-outgoing-\(userID)",
-                routeKey: "relationship:outgoing:\(userID)",
-                bindings: [
-                    PostgresChangeBinding(
-                        table: "followers",
-                        filter: "follower_id=eq.\(userID)",
-                        routeColumn: "follower_id",
-                        emitsReactionEvents: false
-                    ),
-                ]
-            ),
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
 
-    /// Someone follows/unfollows the viewer — `followers.following_id = viewer`.
-    func watchRelationshipIncomingFollows(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        watch(
-            WatchSpec(
-                topic: "realtime:relationship-incoming-\(userID)",
-                routeKey: "relationship:incoming:\(userID)",
-                bindings: [
-                    PostgresChangeBinding(
-                        table: "followers",
-                        filter: "following_id=eq.\(userID)",
-                        routeColumn: "following_id",
-                        emitsReactionEvents: false
-                    ),
-                ]
-            ),
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
-
-    /// Outgoing pending follow requests — `follow_requests.requester_id = viewer`.
-    func watchRelationshipOutgoingFollowRequests(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        watch(
-            WatchSpec(
-                topic: "realtime:relationship-requests-out-\(userID)",
-                routeKey: "relationship:requests-out:\(userID)",
-                bindings: [
-                    PostgresChangeBinding(
-                        table: "follow_requests",
-                        filter: "requester_id=eq.\(userID)",
-                        routeColumn: "requester_id",
-                        emitsReactionEvents: false
-                    ),
-                ]
-            ),
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
-
-    /// Incoming follow requests — `follow_requests.target_id = viewer`.
-    func watchRelationshipIncomingFollowRequests(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        watch(
-            WatchSpec(
-                topic: "realtime:relationship-requests-in-\(userID)",
-                routeKey: "relationship:requests-in:\(userID)",
-                bindings: [
-                    PostgresChangeBinding(
-                        table: "follow_requests",
-                        filter: "target_id=eq.\(userID)",
-                        routeColumn: "target_id",
-                        emitsReactionEvents: false
-                    ),
-                ]
-            ),
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
 
     /// Activity inbox — idle until `notifications` postgres_changes for the viewer.
     func watchNotifications(
@@ -1346,347 +1152,11 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         )
     }
 
-    /// Viewer profile row — cross-device onboarding completion.
-    func watchViewerProfile(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        watch(
-            WatchSpec(
-                topic: "realtime:viewer-profile-\(userID)",
-                routeKey: "viewer-profile:\(userID)",
-                bindings: [
-                    PostgresChangeBinding(
-                        table: "profiles",
-                        filter: "id=eq.\(userID)",
-                        routeColumn: "id",
-                        emitsReactionEvents: false
-                    ),
-                ]
-            ),
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
 
-    /// Daily psychology check-in — postgres_changes for the signed-in user.
-    func watchTraderDailyCheckIns(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        watch(
-            WatchSpec(
-                topic: "realtime:trader-daily-check-ins-\(userID)",
-                routeKey: "trader-daily-check-ins:\(userID)",
-                bindings: [
-                    PostgresChangeBinding(
-                        table: "trader_daily_check_ins",
-                        filter: "user_id=eq.\(userID)",
-                        routeColumn: "user_id",
-                        emitsReactionEvents: false
-                    ),
-                ]
-            ),
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
 
-    /// Phase 6D — analytical revision signal (`user_analytics_state` UPDATE for viewer).
-    func watchUserAnalyticsRevision(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        watch(
-            WatchSpec(
-                topic: "realtime:analytics-revision-\(userID)",
-                routeKey: "analytics-revision:\(userID)",
-                bindings: [
-                    PostgresChangeBinding(
-                        table: "user_analytics_state",
-                        filter: "user_id=eq.\(userID)",
-                        routeColumn: "user_id",
-                        emitsReactionEvents: false,
-                        postgresEvent: "UPDATE"
-                    ),
-                ]
-            ),
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
 
-    /// Web `useCommentLikes` — `comment_likes` postgres_changes for visible comment ids.
-    func watchCommentLikes(
-        source: CommentLikeSource,
-        commentIDs: [String],
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeCommentLikeWatch {
-        let unique = Array(Set(commentIDs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }))
-            .filter { !$0.isEmpty }
-        guard !unique.isEmpty else {
-            return RealtimeCommentLikeWatch(
-                events: AsyncStream { $0.finish() },
-                consumer: RealtimeRouteConsumerHandle(routeKey: "comment-likes:empty", debugOwner: debugOwner)
-            )
-        }
 
-        let filter = CommentLikeSemantics.realtimeFilter(source: source, commentIDs: unique)
-        let routeKey = "comment-likes:\(CommentLikeSemantics.stableRouteSuffix(source: source, commentIDs: unique))"
-        let topic = "realtime:\(routeKey)"
-        let consumerID = UUID()
-        let handle = RealtimeRouteConsumerHandle(
-            id: consumerID,
-            routeKey: routeKey,
-            debugOwner: debugOwner
-        )
 
-        let events = AsyncStream { continuation in
-            Task {
-                try? await self.ensureConnected()
-                let spec = CommentLikeWatchSpec(
-                    topic: topic,
-                    routeKey: routeKey,
-                    filter: filter,
-                    source: source.rawValue,
-                    visibleCommentIDs: Set(unique)
-                )
-                let joinSpec = WatchSpec(
-                    topic: topic,
-                    routeKey: routeKey,
-                    bindings: [
-                        PostgresChangeBinding(
-                            table: "comment_likes",
-                            filter: filter,
-                            routeColumn: "comment_id",
-                            emitsReactionEvents: false,
-                            emitsCommentLikeEvents: true
-                        ),
-                    ]
-                )
-                let startState = self.withLocked { () -> RouteConsumerRetainState in
-                    let generation = self.watchSessionGeneration
-                    var bucket = self.commentLikeConsumersByRoute[routeKey, default: [:]]
-                    if bucket[consumerID] != nil {
-                        return RouteConsumerRetainState(
-                            isDuplicate: true,
-                            consumerCount: bucket.count,
-                            sessionGeneration: generation
-                        )
-                    }
-                    let routeEpoch = self.routeEpochByKey[routeKey, default: 0]
-                    bucket[consumerID] = CommentLikeRouteConsumer(
-                        sessionGeneration: generation,
-                        routeEpoch: routeEpoch,
-                        continuation: continuation
-                    )
-                    self.commentLikeConsumersByRoute[routeKey] = bucket
-                    self.commentLikeSpecsByRouteKey[routeKey] = spec
-                    self.specsByRouteKey[routeKey] = joinSpec
-                    self.accessTokensByRouteKey[routeKey] = accessToken
-                    let consumers = self.logicalConsumerCountLocked(routeKey: routeKey)
-                    return RouteConsumerRetainState(
-                        isDuplicate: false,
-                        consumerCount: consumers,
-                        sessionGeneration: generation
-                    )
-                }
-                await self.applyRegistryRetainAndJoin(
-                    routeKey: routeKey,
-                    topic: topic,
-                    consumerID: consumerID,
-                    owner: debugOwner,
-                    state: startState,
-                    spec: joinSpec,
-                    accessToken: accessToken
-                )
-                if !startState.isDuplicate {
-                    continuation.onTermination = { @Sendable _ in
-                        Task { await self.releaseWatch(handle) }
-                    }
-                }
-            }
-        }
-        return RealtimeCommentLikeWatch(events: events, consumer: handle)
-    }
-
-    /// Phase 10C — bounded content-like postgres_changes (`reel_likes`, `trade_likes`, …).
-    func watchContentLikes(
-        table: ContentLikeTable,
-        contentIDs: [String],
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeContentLikeWatch {
-        let unique = Array(Set(contentIDs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }))
-            .filter { !$0.isEmpty }
-        guard !unique.isEmpty, unique.count <= ContentLikeSemantics.realtimeInFilterMaxIDs else {
-            return RealtimeContentLikeWatch(
-                events: AsyncStream { $0.finish() },
-                consumer: RealtimeRouteConsumerHandle(routeKey: "content-likes:empty", debugOwner: debugOwner)
-            )
-        }
-
-        let filter = ContentLikeSemantics.realtimeFilter(table: table, contentIDs: unique)
-        let routeKey = "content-likes:\(ContentLikeSemantics.stableRouteSuffix(table: table, contentIDs: unique))"
-        let topic = "realtime:\(routeKey)"
-        let consumerID = UUID()
-        let handle = RealtimeRouteConsumerHandle(
-            id: consumerID,
-            routeKey: routeKey,
-            debugOwner: debugOwner
-        )
-
-        let events = AsyncStream { continuation in
-            Task {
-                try? await self.ensureConnected()
-                let spec = ContentLikeWatchSpec(
-                    topic: topic,
-                    routeKey: routeKey,
-                    filter: filter,
-                    table: table,
-                    visibleContentIDs: Set(unique)
-                )
-                let joinSpec = WatchSpec(
-                    topic: topic,
-                    routeKey: routeKey,
-                    bindings: [
-                        PostgresChangeBinding(
-                            table: table.rawValue,
-                            filter: filter,
-                            routeColumn: table.foreignKeyColumn,
-                            emitsReactionEvents: false,
-                            emitsContentLikeEvents: true
-                        ),
-                    ]
-                )
-                let startState = self.withLocked { () -> RouteConsumerRetainState in
-                    let generation = self.watchSessionGeneration
-                    var bucket = self.contentLikeConsumersByRoute[routeKey, default: [:]]
-                    if bucket[consumerID] != nil {
-                        return RouteConsumerRetainState(
-                            isDuplicate: true,
-                            consumerCount: bucket.count,
-                            sessionGeneration: generation
-                        )
-                    }
-                    let routeEpoch = self.routeEpochByKey[routeKey, default: 0]
-                    bucket[consumerID] = ContentLikeRouteConsumer(
-                        sessionGeneration: generation,
-                        routeEpoch: routeEpoch,
-                        continuation: continuation
-                    )
-                    self.contentLikeConsumersByRoute[routeKey] = bucket
-                    self.contentLikeSpecsByRouteKey[routeKey] = spec
-                    self.specsByRouteKey[routeKey] = joinSpec
-                    self.accessTokensByRouteKey[routeKey] = accessToken
-                    let consumers = self.logicalConsumerCountLocked(routeKey: routeKey)
-                    return RouteConsumerRetainState(
-                        isDuplicate: false,
-                        consumerCount: consumers,
-                        sessionGeneration: generation
-                    )
-                }
-                await self.applyRegistryRetainAndJoin(
-                    routeKey: routeKey,
-                    topic: topic,
-                    consumerID: consumerID,
-                    owner: debugOwner,
-                    state: startState,
-                    spec: joinSpec,
-                    accessToken: accessToken
-                )
-                if !startState.isDuplicate {
-                    continuation.onTermination = { @Sendable _ in
-                        Task { await self.releaseWatch(handle) }
-                    }
-                }
-            }
-        }
-        return RealtimeContentLikeWatch(events: events, consumer: handle)
-    }
-
-    /// Web TradeSocialLayer — `UPDATE` on comment rows for `pinned` flips.
-    func watchCommentPinUpdates(
-        target: InteractionTarget,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeCommentPinWatch {
-        let table = Self.commentTable(for: target.kind)
-        let foreignKey = Self.commentForeignKey(for: target.kind)
-        let filter = "\(foreignKey)=eq.\(target.id)"
-        let routeKey = "comment-pin:\(target.kind.rawValue):\(target.id)"
-        let topic = "realtime:\(routeKey)"
-
-        let consumerID = UUID()
-        let handle = RealtimeRouteConsumerHandle(
-            id: consumerID,
-            routeKey: routeKey,
-            debugOwner: debugOwner
-        )
-        let events = AsyncStream<CommentPinRealtimeSignal>(bufferingPolicy: .unbounded) { continuation in
-            Task {
-                try? await self.ensureConnected()
-                let joinSpec = WatchSpec(
-                    topic: topic,
-                    routeKey: routeKey,
-                    bindings: [
-                        PostgresChangeBinding(
-                            table: table,
-                            filter: filter,
-                            routeColumn: foreignKey,
-                            emitsReactionEvents: false,
-                            emitsCommentPinEvents: true
-                        ),
-                    ]
-                )
-                let startState = self.withLocked { () -> RouteConsumerRetainState in
-                    let generation = self.watchSessionGeneration
-                    var bucket = self.commentPinConsumersByRoute[routeKey, default: [:]]
-                    if bucket[consumerID] != nil {
-                        return RouteConsumerRetainState(
-                            isDuplicate: true,
-                            consumerCount: bucket.count,
-                            sessionGeneration: generation
-                        )
-                    }
-                    let routeEpoch = self.routeEpochByKey[routeKey, default: 0]
-                    bucket[consumerID] = CommentPinRouteConsumer(
-                        sessionGeneration: generation,
-                        routeEpoch: routeEpoch,
-                        continuation: continuation
-                    )
-                    self.commentPinConsumersByRoute[routeKey] = bucket
-                    self.specsByRouteKey[routeKey] = joinSpec
-                    self.accessTokensByRouteKey[routeKey] = accessToken
-                    let consumers = self.logicalConsumerCountLocked(routeKey: routeKey)
-                    return RouteConsumerRetainState(
-                        isDuplicate: false,
-                        consumerCount: consumers,
-                        sessionGeneration: generation
-                    )
-                }
-                await self.applyRegistryRetainAndJoin(
-                    routeKey: routeKey,
-                    topic: topic,
-                    consumerID: consumerID,
-                    owner: debugOwner,
-                    state: startState,
-                    spec: joinSpec,
-                    accessToken: accessToken
-                )
-                if !startState.isDuplicate {
-                    continuation.onTermination = { @Sendable _ in
-                        Task { await self.releaseWatch(handle) }
-                    }
-                }
-            }
-        }
-        return RealtimeCommentPinWatch(events: events, consumer: handle)
-    }
 
     private static func commentTable(for kind: InteractionContentKind) -> String {
         switch kind {
@@ -2141,6 +1611,8 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             let tokens = snapshot.2
             guard !intentional, !specs.isEmpty else { return }
 
+            let startPressure = realtimePressureSnapshot()
+            SupabasePressureLog.reconnectStarted(startPressure)
             RealtimeLifecycleDebugLog.reconnectBegin(
                 activeRoutes: specs.count,
                 attempt: attempt
@@ -2170,23 +1642,17 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                         await trackRoomPresenceIfNeeded(routeKey: spec.routeKey, topic: spec.topic)
                     }
                 }
-                let endSnapshot = routeLifecycleSnapshot()
+                let endPressure = realtimePressureSnapshot()
                 RealtimeLifecycleDebugLog.reconnectEnd(
-                    activeRoutes: endSnapshot.activeRoutes,
-                    joinedTopics: endSnapshot.joinedTopics
+                    activeRoutes: endPressure.activeRoutes,
+                    joinedTopics: endPressure.joinedTopics
                 )
-                for spec in specs where spec.routeKey.hasPrefix("analytics-revision:") {
-                    let viewer = spec.routeKey.split(separator: ":", maxSplits: 1).dropFirst().first.map(String.init) ?? ""
-                    if !viewer.isEmpty {
-                        Task { @MainActor in
-                            AnalyticsRevisionRealtimeSession.shared.notifyReconnectIfBound()
-                        }
-                    }
-                }
                 Task {
+                    await SupabaseReconnectRepairCoordinator.shared.markRealtimeRejoinCompleted(endPressure)
                     await SocialRealtimeReconciliationCoordinator.shared.noteReconnectCompleted(
-                        activeRoutes: endSnapshot.activeRoutes
+                        activeRoutes: endPressure.activeRoutes
                     )
+                    await SupabaseReconnectRepairCoordinator.shared.enqueueRepair(.realtimeReconnect)
                 }
                 return
             } catch {
@@ -2228,14 +1694,6 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             specsByRouteKey.first(where: { $0.value.topic == topic })?.key
         }
         guard let routeKey else { return }
-
-        if topic.hasPrefix("realtime:analytics-revision-") {
-            let viewer = routeKey.split(separator: ":", maxSplits: 1).dropFirst().first.map(String.init) ?? ""
-            if !viewer.isEmpty {
-                AnalyticsReconciliationProbe.subscribed(viewer: viewer)
-            }
-            return
-        }
 
         guard topic.hasPrefix("realtime:room-live-") else { return }
         Task { await trackRoomPresenceIfNeeded(routeKey: routeKey, topic: topic) }
@@ -2372,76 +1830,8 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         }
 
         let generation = withLocked { watchSessionGeneration }
-        let snapshot = withLocked {
-            (
-                Array(specsByRouteKey.values),
-                commentLikeSpecsByRouteKey,
-                contentLikeSpecsByRouteKey,
-                socialEntitySpecsByRouteKey
-            )
-        }
-        let specs = snapshot.0
-        let likeSpecs = snapshot.1
-        let contentLikeSpecs = snapshot.2
-        let socialEntitySpecs = snapshot.3
+        let specs = withLocked { Array(specsByRouteKey.values) }
         let allContinuations = messageContinuationsSnapshot(generation: generation)
-        let allCommentLikeContinuations = commentLikeContinuationsSnapshot(generation: generation)
-        let allContentLikeContinuations = contentLikeContinuationsSnapshot(generation: generation)
-        let allSocialEntityContinuations = socialEntityContinuationsSnapshot(generation: generation)
-        let allCommentPinContinuations = commentPinContinuationsSnapshot(generation: generation)
-
-        if table == "user_analytics_state" {
-            handleUserAnalyticsRevisionChanges(
-                type: type,
-                record: record,
-                specs: specs,
-                continuations: allContinuations
-            )
-            return
-        }
-
-        if table == "comment_likes" {
-            handleCommentLikeChanges(
-                type: type,
-                record: record,
-                oldRecord: oldRecord,
-                likeSpecs: likeSpecs,
-                continuations: allCommentLikeContinuations
-            )
-            return
-        }
-
-        if let contentTable = ContentLikeTable(rawValue: table) {
-            handleContentLikeChanges(
-                table: contentTable,
-                type: type,
-                record: record,
-                oldRecord: oldRecord,
-                likeSpecs: contentLikeSpecs,
-                continuations: allContentLikeContinuations
-            )
-            return
-        }
-
-        if let entityTable = SocialEntityRealtimeTable(rawValue: table) {
-            handleSocialEntityChanges(
-                table: entityTable,
-                type: type,
-                record: record,
-                oldRecord: oldRecord,
-                specs: socialEntitySpecs,
-                continuations: allSocialEntityContinuations
-            )
-            return
-        }
-
-        if type.uppercased() == "UPDATE" {
-            handleCommentPinChanges(
-                record: record,
-                specs: specs,
-                continuations: allCommentPinContinuations
-            )
-        }
 
         for spec in specs {
             guard let binding = spec.bindings.first(where: { $0.table == table }) else { continue }
@@ -2456,11 +1846,8 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             if spec.routeKey.hasPrefix("dm-read:")
                 || spec.routeKey.hasPrefix("room-read:")
                 || spec.routeKey.hasPrefix("notifications:")
-                || spec.routeKey.hasPrefix("relationship:")
                 || spec.routeKey == "member-rooms"
                 || spec.routeKey == "inbox-dms"
-                || spec.routeKey == "member-room-membership"
-                || spec.routeKey == "feed-posts"
             {
                 scopedMatch = scope != nil
             } else {
@@ -2860,7 +2247,7 @@ nonisolated struct LiveSupabaseRPCProvider: SupabaseRPCProviding {
     }
 
     func invoke(functionName: String, parameters: [String: String]) async throws -> Data {
-        let data = try JSONSerialization.data(withJSONObject: parameters, options: [])
+        let data = try SupabaseJSONEncoding.encode(parameters)
         return try await database.rpcData(functionName: functionName, parametersJSON: data)
     }
 }

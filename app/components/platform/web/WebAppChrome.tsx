@@ -9,7 +9,7 @@ export default function WebAppChrome({ children }: { children: ReactNode }) {
   return (
     <>
       {/* Navbar mounted by PlatformChrome via PlatformNavbar */}
-      <div className="flex w-full flex-col pt-[var(--app-header-offset)]">
+      <div data-tt-app="" className="flex w-full flex-col pt-[var(--app-header-offset)]">
         {children}
       </div>
     </>

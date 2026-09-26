@@ -24,6 +24,7 @@ final class SettingsAccountViewModel {
     var confirmsLogout = false
     var showsDeleteAccountExplainer = false
     var showsDeleteAccountConfirmation = false
+    var showsDeleteAccountSuccess = false
     init(
         profiles: any ProfileRepository,
         billing: any BillingRepository,
@@ -159,6 +160,7 @@ final class SettingsAccountViewModel {
     func cancelDeleteAccountFlow() {
         showsDeleteAccountExplainer = false
         showsDeleteAccountConfirmation = false
+        showsDeleteAccountSuccess = false
         clearDeleteError()
     }
 
@@ -177,7 +179,8 @@ final class SettingsAccountViewModel {
         Task {
             defer { isDeletingAccount = false }
             do {
-                try await authenticationCoordinator.deleteAccount(using: account)
+                try await authenticationCoordinator.deleteAuthenticatedAccountOnServer(using: account)
+                showsDeleteAccountSuccess = true
                 ExperienceHaptics.play(.success)
 #if DEBUG
                 AccountDeletionDebugLog.completed()
@@ -206,6 +209,17 @@ final class SettingsAccountViewModel {
         }
     }
 
+    func returnToSignInAfterAccountDeletion() {
+        showsDeleteAccountSuccess = false
+        showsDeleteAccountExplainer = false
+        showsDeleteAccountConfirmation = false
+        deleteErrorMessage = nil
+        ExperienceHaptics.play(.selection)
+        Task {
+            await authenticationCoordinator.finishAccountDeletionAndReturnToSignIn()
+        }
+    }
+
     func logout() {
         confirmsLogout = false
         ExperienceHaptics.play(.selection)
@@ -219,10 +233,13 @@ final class SettingsAccountViewModel {
         guard billingStatus.hasTraxProAccess else { return nil }
 
         if billingStatus.entitlementSource == .apple {
+            let manageInApp = IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled
+                ? ", or use Manage Subscription in TradeTraxs Settings"
+                : ""
             return """
             You have an active TraxPro subscription through the Apple App Store. Deleting your TradeTraxs account \
             removes your profile and data here, but does not cancel your Apple subscription. Manage or cancel it in \
-            Settings → Apple ID → Subscriptions, or use Manage Subscription in TradeTraxs Settings.
+            Settings → Apple ID → Subscriptions\(manageInApp).
             """
         }
 

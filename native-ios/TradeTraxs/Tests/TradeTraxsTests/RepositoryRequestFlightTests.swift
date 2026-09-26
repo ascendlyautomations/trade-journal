@@ -1,3 +1,4 @@
+import Synchronization
 import XCTest
 @testable import TradeTraxs
 
@@ -18,13 +19,13 @@ final class RepositoryRequestFlightTests: XCTestCase {
 
     func testCoalesceSharesOneNetworkOperation() async throws {
         let key = "test.coalesce:\(UUID().uuidString)"
-        var fetchCount = 0
+        let fetchCount = Mutex(0)
 
         async let a: Int = RepositoryRequestFlight.shared.coalesce(
             key: key,
             resource: "test.coalesce"
         ) {
-            fetchCount += 1
+            fetchCount.withLock { $0 += 1 }
             try await Task.sleep(nanoseconds: 40_000_000)
             return 7
         }
@@ -32,7 +33,7 @@ final class RepositoryRequestFlightTests: XCTestCase {
             key: key,
             resource: "test.coalesce"
         ) {
-            fetchCount += 1
+            fetchCount.withLock { $0 += 1 }
             try await Task.sleep(nanoseconds: 40_000_000)
             return 7
         }
@@ -40,17 +41,17 @@ final class RepositoryRequestFlightTests: XCTestCase {
         let (left, right) = try await (a, b)
         XCTAssertEqual(left, 7)
         XCTAssertEqual(right, 7)
-        XCTAssertEqual(fetchCount, 1)
+        XCTAssertEqual(fetchCount.withLock { $0 }, 1)
     }
 
     func testDifferentKeysDoNotCoalesce() async throws {
-        var fetchCount = 0
+        let fetchCount = Mutex(0)
 
         async let a: Int = RepositoryRequestFlight.shared.coalesce(
             key: "test.a",
             resource: "test.split"
         ) {
-            fetchCount += 1
+            fetchCount.withLock { $0 += 1 }
             try await Task.sleep(nanoseconds: 20_000_000)
             return 1
         }
@@ -58,7 +59,7 @@ final class RepositoryRequestFlightTests: XCTestCase {
             key: "test.b",
             resource: "test.split"
         ) {
-            fetchCount += 1
+            fetchCount.withLock { $0 += 1 }
             try await Task.sleep(nanoseconds: 20_000_000)
             return 2
         }
@@ -66,12 +67,12 @@ final class RepositoryRequestFlightTests: XCTestCase {
         let (left, right) = try await (a, b)
         XCTAssertEqual(left, 1)
         XCTAssertEqual(right, 2)
-        XCTAssertEqual(fetchCount, 2)
+        XCTAssertEqual(fetchCount.withLock { $0 }, 2)
     }
 
     func testProfileFacadeStillCoalescesViaSharedFlight() async throws {
         let id = ProfileID("00000000-0000-4000-8000-000000000601")
-        var fetchCount = 0
+        let fetchCount = Mutex(0)
         let profile = Profile(
             id: id,
             userID: UserID(id.rawValue),
@@ -89,17 +90,17 @@ final class RepositoryRequestFlightTests: XCTestCase {
         )
 
         async let a = ProfileRequestFlight.shared.profile(id: id) {
-            fetchCount += 1
+            fetchCount.withLock { $0 += 1 }
             try await Task.sleep(nanoseconds: 40_000_000)
             return profile
         }
         async let b = ProfileRequestFlight.shared.profile(id: id) {
-            fetchCount += 1
+            fetchCount.withLock { $0 += 1 }
             try await Task.sleep(nanoseconds: 40_000_000)
             return profile
         }
         _ = try await (a, b)
-        XCTAssertEqual(fetchCount, 1)
+        XCTAssertEqual(fetchCount.withLock { $0 }, 1)
     }
 
     func testOwnedTradesPublicAndPrivateKeysDiffer() async throws {
@@ -111,13 +112,13 @@ final class RepositoryRequestFlightTests: XCTestCase {
             "trades.owned:\(profileID.rawValue):pub=false:acct=-:limit=500:cursor=-"
         XCTAssertNotEqual(publicKey, privateKey)
 
-        var publicFetches = 0
-        var privateFetches = 0
+        let publicFetches = Mutex(0)
+        let privateFetches = Mutex(0)
         async let pub: Int = RepositoryRequestFlight.shared.coalesce(
             key: publicKey,
             resource: "trades.owned"
         ) {
-            publicFetches += 1
+            publicFetches.withLock { $0 += 1 }
             try await Task.sleep(nanoseconds: 20_000_000)
             return 1
         }
@@ -125,12 +126,12 @@ final class RepositoryRequestFlightTests: XCTestCase {
             key: privateKey,
             resource: "trades.owned"
         ) {
-            privateFetches += 1
+            privateFetches.withLock { $0 += 1 }
             try await Task.sleep(nanoseconds: 20_000_000)
             return 2
         }
         _ = try await (pub, priv)
-        XCTAssertEqual(publicFetches, 1)
-        XCTAssertEqual(privateFetches, 1)
+        XCTAssertEqual(publicFetches.withLock { $0 }, 1)
+        XCTAssertEqual(privateFetches.withLock { $0 }, 1)
     }
 }

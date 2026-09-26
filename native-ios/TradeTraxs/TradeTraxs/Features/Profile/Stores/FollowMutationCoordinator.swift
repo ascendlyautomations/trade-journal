@@ -100,9 +100,6 @@ final class FollowMutationCoordinator {
             action: isFollowing ? "follow" : "unfollow"
         )
         revision += 1
-        Task {
-            await SocialEntityRealtimeSession.shared.syncFollowingAuthorsFromSession(viewerID: viewer)
-        }
     }
 
     /// Pending request presentation — does not insert into the complete following set.

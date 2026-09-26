@@ -94,7 +94,7 @@ enum ReelVideoImport {
         }
     }
 
-    static func cleanup(url: URL?) {
+    nonisolated static func cleanup(url: URL?) {
         guard let url else { return }
         try? FileManager.default.removeItem(at: url)
     }

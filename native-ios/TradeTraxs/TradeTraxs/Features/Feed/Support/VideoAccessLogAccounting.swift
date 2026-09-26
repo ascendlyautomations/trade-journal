@@ -10,6 +10,8 @@ enum VideoAccessLogAccounting {
         var eventBytes: Int64
         var previousEventBytes: Int64
         var sessionItemBytes: Int64
+        /// Sum of per-event `numberOfBytesTransferred` (can over-count overlapping requests).
+        var rawReportedSessionItemBytes: Int64
         var sessionVideoBytes: Int64
         var accessLogEventCount: Int
         var playerInstanceID: String?
@@ -75,7 +77,8 @@ enum VideoAccessLogAccounting {
         }
 
         state.bytesByEventIndex[eventIndex] = eventBytes
-        state.sessionItemBytes = state.bytesByEventIndex.values.reduce(0, +)
+        let rawSum = state.bytesByEventIndex.values.reduce(0, +)
+        state.sessionItemBytes = state.bytesByEventIndex.values.max() ?? 0
         sessionVideoBytes += newBytes
         items[key] = state
 
@@ -85,6 +88,7 @@ enum VideoAccessLogAccounting {
             eventBytes: eventBytes,
             previousEventBytes: previousEventBytes,
             sessionItemBytes: state.sessionItemBytes,
+            rawReportedSessionItemBytes: rawSum,
             sessionVideoBytes: sessionVideoBytes,
             accessLogEventCount: events.count,
             playerInstanceID: state.playerInstanceID.map { String(describing: $0) },
@@ -100,6 +104,7 @@ enum VideoAccessLogAccounting {
         var eventBytes: Int64 = 0
         var previousEventBytes: Int64 = 0
         var sessionItemBytes: Int64 = 0
+        var rawReportedSessionItemBytes: Int64 = 0
         var sessionVideoBytes: Int64 = 0
         var accessLogEventCount: Int = 0
         var playerInstanceID: String?

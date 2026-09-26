@@ -22,7 +22,12 @@ enum BrokerImportReconciliation {
         if !ids.isEmpty {
             hydrated = (try? await tradesRepository.trades(ids: ids)) ?? []
         }
-        TradeJournalMutationStore.shared.noteBulkImport(owner: owner, source: .tradovate)
+        let importCount = summary.authoritativeNewImportCount
+        TradeJournalMutationStore.shared.noteBulkImport(
+            owner: owner,
+            source: .tradovate,
+            persistedTradeCount: importCount
+        )
         for trade in hydrated {
             detailCache.seedAuthoritativeDetail(trade, authority: .authoritativeNetwork)
             SessionOwnerTradesStore.shared.upsert(trade, detailCache: detailCache)

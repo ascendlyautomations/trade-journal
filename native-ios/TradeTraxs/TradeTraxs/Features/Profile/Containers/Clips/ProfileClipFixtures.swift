@@ -31,6 +31,17 @@ nonisolated enum ProfileClipFixtures {
                 durationSeconds: 12,
                 createdAt: now.addingTimeInterval(-200_000)
             ),
+            Reel(
+                id: ReelID("dev-reel-3"),
+                authorProfileID: profileID,
+                video: MediaReference(id: sampleVideoURL, kind: .video, altText: nil),
+                thumbnail: nil,
+                caption: "Third fixture for prefetch budget tests",
+                visibility: .public,
+                linkedTradeID: nil,
+                durationSeconds: 10,
+                createdAt: now.addingTimeInterval(-300_000)
+            ),
         ]
     }
 

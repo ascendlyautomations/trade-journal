@@ -7,6 +7,10 @@ import GettingStartedChecklist from "../../components/dashboard/GettingStartedCh
 import TraxsProForLifeCard from "../../components/dashboard/TraxsProForLifeCard"
 import DashboardAnalytics from "../../components/dashboard/DashboardAnalytics"
 import DashboardCharts from "../../components/dashboard/DashboardCharts"
+import DashboardDesktopTerminal from "../../components/dashboard/DashboardDesktopTerminal"
+import DashboardPropFirmDetails from "../../components/dashboard/DashboardPropFirmDetails"
+import DashboardDesktopLower from "../../components/dashboard/DashboardDesktopLower"
+import { syncTimeframeDisplayLabel } from "../../components/dashboard/DashboardTimeframePicker"
 import DashboardInsights from "../../components/dashboard/DashboardInsights"
 import DashboardModals from "../../components/dashboard/DashboardModals"
 import DashboardRecentTrades from "../../components/dashboard/DashboardRecentTrades"
@@ -36,6 +40,7 @@ import {
   sanitizeDrawdownLimitInput,
   shouldShowPropFirmDashboardLink,
 } from "../../components/dashboard/dashboardGearUtils"
+import { resolveDashboardPropFirmAccount } from "@/lib/dashboardPropFirmContext"
 import {
   buildAccountFilterOptionsFromRows,
 } from "@/lib/tradeAccountDisplay"
@@ -146,7 +151,7 @@ export default function Dashboard() {
     refreshProfile,
   } = useUserProfile()
   const { trades, loading: tradesLoading } = useCachedTrades(user?.id, {
-    fullHistory: true,
+    analyticsHistory: true,
   })
   const { accounts: accountRows, loading: accountsLoading } =
     useCachedAccounts(user?.id)
@@ -246,6 +251,18 @@ export default function Dashboard() {
     [accountFilter, accountTypeFilter, accountById]
   )
 
+  const propFirmAccount = useMemo(
+    () => resolveDashboardPropFirmAccount(accountFilter, accountById),
+    [accountFilter, accountById]
+  )
+
+  const propFirmTrades = useMemo(() => {
+    if (!propFirmAccount) return []
+    return trades.filter(
+      (trade) => String(trade.account_id ?? "") === propFirmAccount.id
+    )
+  }, [trades, propFirmAccount])
+
   const tradesExcludingBacktest = useMemo(
     () => excludeBacktestTrades([...trades]),
     [trades]
@@ -291,7 +308,10 @@ export default function Dashboard() {
     ]
   )
 
-  // Refresh trades + accounts when data changes (import, checkout) — otherwise reuse cache.
+  // Pull-to-refresh, import completion, and Stripe reconciliation.
+  // Refreshes the recent rich window plus narrow analytics history.
+  // Does not download the full journal. If that journal cache already exists,
+  // numeric fields update in place and journal text on those rows is kept.
   const refreshDashboardData = useCallback(async () => {
     const currentUserId = user?.id
     if (!currentUserId) return
@@ -299,7 +319,7 @@ export default function Dashboard() {
     await Promise.all([
       ensureTradesLoaded(supabase, currentUserId, {
         force: true,
-        fullHistory: true,
+        analyticsHistory: true,
       }),
       ensureAccountsLoaded(supabase, currentUserId, { force: true }),
     ])
@@ -529,6 +549,8 @@ export default function Dashboard() {
     bestTrade,
     avgWin,
     avgLoss,
+    winCount,
+    lossCount,
     bestDay,
     worstDay,
     symbolPerformanceRows,
@@ -840,7 +862,62 @@ export default function Dashboard() {
     />
   )
 
+  const recentTradesJournal = (
+    <div className="tt-dash-desktop-v1">
+      <DashboardRecentTrades
+        presentation="journal"
+        trades={recentTradesList}
+        hasAnyTrades={tradesExcludingBacktest.length > 0}
+        onSelectTrade={handleSelectRecentTrade}
+      />
+    </div>
+  )
+
+  const timeframeLabel = syncTimeframeDisplayLabel(timeFilter, selectedDate)
   const dashboardUserIsPro = isProActive(profile)
+
+  const desktopTerminal = (
+    <DashboardDesktopTerminal
+      isPro={dashboardUserIsPro}
+      deferredSectionsReady={deferredSectionsReady}
+      timeframeLabel={timeframeLabel}
+      propFirmDetails={
+        dashboardUserIsPro && propFirmAccount ? (
+          <DashboardPropFirmDetails
+            account={propFirmAccount}
+            trades={propFirmTrades}
+            userId={user?.id ?? null}
+          />
+        ) : null
+      }
+      totalTrades={totalTrades}
+      totalPnL={totalPnL}
+      winRate={winRate}
+      winCount={winCount}
+      lossCount={lossCount}
+      profitFactor={profitFactor}
+      avgRR={avgRR}
+      expectancyData={expectancyData}
+      bestDay={bestDay}
+      bestTrade={bestTrade}
+      avgWin={avgWin}
+      avgLoss={avgLoss}
+      biggestLoss={biggestLoss}
+      worstDay={worstDay}
+      maxDrawdown={maxDrawdown}
+      showDrawdown={showDrawdown}
+      bestWinStreak={bestWinStreak}
+      streakData={streakData}
+      showEquity={showEquity}
+      equityData={equityDrawdownChartData}
+      showSessions={showSessions}
+      sessionBuckets={sessionBuckets}
+      weekdayData={weekdayData}
+      hourData={hourData}
+      longShortPerformance={longShortPerformance}
+      holdTimeStats={holdTimeStats}
+    />
+  )
 
   return (
     <>
@@ -850,10 +927,10 @@ export default function Dashboard() {
       <div
         data-tt-native-surface="dashboard"
         data-tt-dashboard-canvas=""
-        className="w-full px-2.5 pb-3 pt-4 text-white max-md:px-2 max-md:pb-2 max-md:pt-2 md:px-10 md:pb-10 md:pt-0 xl:px-8 2xl:px-12"
+        className="w-full min-w-0 max-w-full overflow-x-hidden px-2.5 pb-3 pt-4 text-white max-md:px-2 max-md:pb-2 max-md:pt-2 md:px-10 md:pb-10 md:pt-0 xl:px-8 2xl:px-12"
       >
 
-        <div className="relative z-50 mx-auto w-full max-w-[1600px] px-0 md:px-6 xl:max-w-[1900px] xl:px-0">
+        <div className="tt-dash-workspace relative z-50 mx-auto w-full max-w-[1600px] px-0 md:px-6 xl:max-w-[1900px] xl:px-0">
           {!hasNoTrades && !statsStillLoading ? (
             <DashboardFilters
               isPro={isPro}
@@ -912,7 +989,7 @@ export default function Dashboard() {
           />
         </div>
 
-          <div className="relative z-0 mx-auto flex w-full max-w-[1600px] flex-col gap-2 overflow-visible px-0 max-md:gap-2 md:gap-3 md:px-6 xl:max-w-[1900px] xl:px-0">
+          <div className="tt-dash-workspace tt-dash-stack relative z-0 mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-2 overflow-x-hidden px-0 max-md:gap-2 md:gap-3 md:px-6 xl:max-w-[1900px] xl:px-0">
 
   {/* Large Founding Challenge card only until the first trade; afterwards it
       stays reachable from the navbar Getting Started entry. */}
@@ -1000,13 +1077,16 @@ export default function Dashboard() {
       {dashboardUserIsPro ? (
         <>
       {user?.id && deferredSectionsReady ? (
+        <div className="contents">
         <DashboardTradingReports
           ref={tradingReportsRef}
           userId={user.id}
           trades={tradesExcludingBacktest}
           onViewTrade={handleSelectRecentTrade}
         />
+        </div>
       ) : null}
+      {desktopTerminal}
   <DashboardCharts
     isPro
     deferredSectionsReady={deferredSectionsReady}
@@ -1064,11 +1144,13 @@ export default function Dashboard() {
   />
 
   {!deferredSectionsReady ? (
-    <div className="hidden md:block">
+    <div className="tt-dash-hide-desktop-v1 hidden md:block">
       <DashboardDeferredSectionsSkeleton />
     </div>
   ) : (
+    <>
     <div className="hidden md:contents">
+      <div className="tt-dash-hide-desktop-v1">
       <DashboardAnalytics
         symbolPerformanceRows={symbolPerformanceRows}
         hasAnyTrades={tradesExcludingBacktest.length > 0}
@@ -1096,11 +1178,41 @@ export default function Dashboard() {
         insightBestWeekdayAvg={insightBestWeekdayAvg}
         bestSetup={bestSetup}
       />
+      </div>
     </div>
+    {user?.id ? (
+      <DashboardDesktopLower
+        userId={user.id}
+        reportTrades={tradesExcludingBacktest}
+        onOpenReportPeriod={(key) => tradingReportsRef.current?.openPeriod(key)}
+        symbolPerformanceRows={symbolPerformanceRows}
+        hasAnyTrades={tradesExcludingBacktest.length > 0}
+        longShortPerformance={longShortPerformance}
+        holdTimeStats={holdTimeStats}
+        totalTrades={totalTrades}
+        showInsights={showInsights}
+        showBestSetup={showBestSetup}
+        showWorstSetup={showWorstSetup}
+        showWarnings={showWarnings}
+        insights={insights}
+        combinedInsights={combinedInsights}
+        worstInsight={worstInsight}
+        warnings={warnings}
+        insightBestSymbol={insightBestSymbol}
+        insightBestSymbolAvg={insightBestSymbolAvg}
+        insightBestWeekday={insightBestWeekday}
+        insightBestWeekdayAvg={insightBestWeekdayAvg}
+        bestSetup={bestSetup}
+        recentTrades={recentTradesList}
+        onSelectTrade={handleSelectRecentTrade}
+      />
+    ) : null}
+    </>
   )}
         </>
       ) : (
         <>
+          {desktopTerminal}
           <DashboardCharts
             isPro={false}
             deferredSectionsReady={deferredSectionsReady}
@@ -1132,7 +1244,8 @@ export default function Dashboard() {
             showSessions={showSessions}
             bestWinStreak={bestWinStreak}
           />
-          {recentTradesSection}
+          <div className="tt-dash-hide-desktop-v1">{recentTradesSection}</div>
+          {recentTradesJournal}
           {deferredSectionsReady ? (
             <DashboardPremiumPreviewSection />
           ) : (

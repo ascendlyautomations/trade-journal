@@ -896,6 +896,8 @@ const biggestLoss = losses.length > 0
       bestTrade,
       avgWin,
       avgLoss,
+      winCount: winsOnly.length,
+      lossCount: lossesOnly.length,
       bestDay,
       worstDay,
       symbolPerformanceRows,

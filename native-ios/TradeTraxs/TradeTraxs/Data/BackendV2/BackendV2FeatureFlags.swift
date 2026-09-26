@@ -95,6 +95,12 @@ nonisolated enum BackendV2FeatureFlags {
         .calendar,
         .tradesList,
         .gettingStarted,
+        .dashboardAnalyticsV3,
+        .dashboardAnalyticsGRDB,
+        .calendarAnalyticsV2,
+        .calendarAnalyticsGRDB,
+        .analyticsRevisionRepair,
+        .viewerSyncState,
     ]
 
     nonisolated(unsafe) private static var testOverrides: [BackendV2FeatureFlag: Bool] = [:]
@@ -128,19 +134,7 @@ nonisolated enum BackendV2FeatureFlags {
         }
 #if DEBUG
         // Temporary Phase 3 device QA — not shipped in Release / productionShippedFlags.
-        if flag == .calendarAnalyticsV2 {
-            return (true, "debugDefault")
-        }
-        if flag == .calendarAnalyticsGRDB {
-            return (true, "debugDefault")
-        }
-        if flag == .dashboardAnalyticsGRDB {
-            return (true, "debugDefault")
-        }
         if flag == .analyticsRealtime {
-            return (true, "debugDefault")
-        }
-        if flag == .analyticsRevisionRepair {
             return (true, "debugDefault")
         }
         if flag == .profileAnalyticsV2Shadow {

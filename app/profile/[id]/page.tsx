@@ -1,5 +1,7 @@
 "use client"
 
+import "../../socialDesktopTheme.css"
+import "../../profileDesktopDensity.css"
 import { SkeletonProfilePage } from "../../components/ui/skeletons"
 import FeedProfilePostDetailModal from "../../components/feed/FeedProfilePostDetailModal"
 import type { ChangeEvent } from "react"
@@ -13,10 +15,14 @@ import {
 } from "react"
 import dynamic from "next/dynamic"
 import { supabase } from "../../../lib/supabaseClient"
+import {
+  buildRealtimeInFilterChunks,
+  stableIdKey,
+} from "@/lib/realtimeFilters"
 import { devLog, devWarn } from "@/lib/devLog"
 import { deleteUserTrade } from "@/lib/deleteTrade"
 import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
-import { compressImage } from "@/lib/compressImage"
+import { CONTENT_IMAGE_V2_PRESET } from "@/lib/contentImageV2"
 import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "@/lib/storageCacheControl"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
@@ -119,6 +125,20 @@ import {
   PROFILE_TRADES_PAGE_SIZE_MOBILE,
   resolveProfileTradesPageSize,
 } from "../../components/profile/profileTradesPagination"
+import {
+  canStartProfileWallPostsLoad,
+  PROFILE_WALL_POST_SELECT,
+  fetchProfileWallPostById,
+  fetchProfileWallPostsPage,
+  sliceProfileWallPostsPage,
+  isCurrentProfileWallPostsRequest,
+  mergeProfileWallPosts,
+  patchProfileWallPost,
+  removeProfileWallPost,
+  sortProfileWallPosts,
+  upsertProfileWallPost,
+  type ProfileWallPostsCursor,
+} from "@/lib/profileWallPosts"
 import TradeCard from "../../components/profile/ProfileTradeCard"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import PostCard from "../../components/profile/ProfilePostCard"
@@ -149,9 +169,9 @@ import { useActiveStories } from "@/lib/useActiveStories"
 import { readStoriesSession, writeStoriesSession } from "@/lib/storiesSessionCache"
 import {
   createStoryPreviewUrl,
-  prepareStoryImageFile,
   revokeStoryPreviewUrl,
 } from "@/lib/storyComposeHelpers"
+import { validateImageUpload } from "@/lib/uploadValidation"
 import { isProfileUuidSegment, profilePath } from "@/lib/profileRoutes"
 import {
   aliasProfileSession,
@@ -400,6 +420,12 @@ function ProfilePageContent() {
   const [showFollowing, setShowFollowing] = useState(false)
   const [wallPosts, setWallPosts] = useState<any[]>([])
   const [wallPostsReady, setWallPostsReady] = useState(false)
+  const [wallPostsHasMore, setWallPostsHasMore] = useState(false)
+  const [wallPostsLoadingMore, setWallPostsLoadingMore] = useState(false)
+  const wallPostsCursorRef = useRef<ProfileWallPostsCursor | null>(null)
+  const wallPostsHasMoreRef = useRef(false)
+  const wallPostsLoadingRef = useRef(false)
+  const wallPostsGenRef = useRef(0)
   const [profileReels, setProfileReels] = useState<ReelRow[]>([])
   const [profileReelsReady, setProfileReelsReady] = useState(false)
   const [tradeReelsByTradeId, setTradeReelsByTradeId] = useState<
@@ -419,6 +445,7 @@ function ProfilePageContent() {
   const [editingReel, setEditingReel] = useState<ReelRow | null>(null)
   const [selectedReelDetail, setSelectedReelDetail] = useState<any | null>(null)
   const [storyComposeOpen, setStoryComposeOpen] = useState(false)
+  const [storyCropFile, setStoryCropFile] = useState<File | null>(null)
   const [pendingStoryFile, setPendingStoryFile] = useState<File | null>(null)
   const [pendingStoryPreviewUrl, setPendingStoryPreviewUrl] = useState<
     string | null
@@ -427,7 +454,7 @@ function ProfilePageContent() {
   const [postContent, setPostContent] = useState("")
   const [postImage, setPostImage] = useState<File | null>(null)
   const postImageCrop = useImageCropUpload({
-    preset: "content",
+    preset: CONTENT_IMAGE_V2_PRESET,
     onCropped: setPostImage,
     onValidationError: (message) => showPopup({ type: "error", message }),
   })
@@ -719,26 +746,42 @@ function ProfilePageContent() {
     }
   }, [pendingStoryPreviewUrl])
 
-  const setStoryDraft = useCallback(
-    async (file: File) => {
-      const prepared = await prepareStoryImageFile(file)
+  const openStoryCrop = useCallback(
+    (file: File) => {
+      const validationError = validateImageUpload(file)
+      if (validationError) {
+        showPopup({ type: "error", message: validationError })
+        return
+      }
+      setStoryCropFile(file)
+    },
+    [showPopup]
+  )
+
+  const handleStoryCropCancel = useCallback(() => {
+    setStoryCropFile(null)
+  }, [])
+
+  const handleStoryCropSave = useCallback(
+    (prepared: File) => {
       revokeStoryPreviewUrl(pendingStoryPreviewUrl)
       setPendingStoryFile(prepared)
       setPendingStoryPreviewUrl(createStoryPreviewUrl(prepared))
+      setStoryCropFile(null)
       setStoryComposeOpen(true)
     },
     [pendingStoryPreviewUrl]
   )
 
   const handleStoryFileSelect = useCallback(
-    async (e: ChangeEvent<HTMLInputElement>) => {
+    (e: ChangeEvent<HTMLInputElement>) => {
       const input = e.target
       const file = input.files?.[0]
       input.value = ""
       if (!file || !currentUserId) return
-      await setStoryDraft(file)
+      openStoryCrop(file)
     },
-    [currentUserId, setStoryDraft]
+    [currentUserId, openStoryCrop]
   )
 
   const handlePostStory = useCallback(async () => {
@@ -970,6 +1013,12 @@ function ProfilePageContent() {
       setVisibleTradeCount(PAGE_SIZE)
       setTradeHasMore(false)
       setTradesReady(false)
+      setWallPosts([])
+      setWallPostsReady(false)
+      wallPostsCursorRef.current = null
+      wallPostsHasMoreRef.current = false
+      setWallPostsHasMore(false)
+      wallPostsGenRef.current += 1
       setSummaryTrades([])
       setSummaryReady(false)
       setBootstrapPublicStats(null)
@@ -997,6 +1046,9 @@ function ProfilePageContent() {
       setFollowsYou(cached.followsYou)
       setAllTrades(cached.allTrades)
       setWallPosts(cached.wallPosts)
+      wallPostsCursorRef.current = cached.wallPostsCursor ?? null
+      wallPostsHasMoreRef.current = cached.wallPostsHasMore ?? false
+      setWallPostsHasMore(cached.wallPostsHasMore ?? false)
       setVisibleTradeCount(cached.visibleTradeCount)
       setTradeHasMore(cached.tradeHasMore ?? false)
       setTradesReady(cached.tradesReady ?? cached.allTrades.length > 0)
@@ -1049,6 +1101,10 @@ function ProfilePageContent() {
     setTradesReady(false)
     setWallPosts([])
     setWallPostsReady(false)
+    wallPostsCursorRef.current = null
+    wallPostsHasMoreRef.current = false
+    setWallPostsHasMore(false)
+    wallPostsGenRef.current += 1
     setProfileReels([])
     setProfileReelsReady(false)
     setAchievements([])
@@ -1293,44 +1349,76 @@ function ProfilePageContent() {
     }
   }, [activeTab, trades, profile?.id, viewerUser?.id])
 
+  const rememberWallPostsPage = useCallback(
+    (
+      rows: any[],
+      hasMore: boolean,
+      cursor: ProfileWallPostsCursor | null,
+      ready: boolean
+    ) => {
+      wallPostsCursorRef.current = cursor
+      wallPostsHasMoreRef.current = hasMore
+      setWallPosts(rows)
+      setWallPostsHasMore(hasMore)
+      setWallPostsReady(ready)
+      patchProfileSession(profileId, {
+        wallPosts: rows,
+        wallPostsReady: ready,
+        wallPostsHasMore: hasMore,
+        wallPostsCursor: cursor,
+      })
+    },
+    [profileId]
+  )
+
   useEffect(() => {
     // Profile is null during the first commit on remount (before the session
     // cache restore applies); clearing here would wipe cached posts.
     if (!profile?.id) return
     if (!postsRequested || wallPostsReady) return
 
+    const requestProfileId = String(profile.id)
+    const generation = wallPostsGenRef.current
     let cancelled = false
-    setWallPostsReady(false)
+    wallPostsLoadingRef.current = true
 
     async function fetchWallPosts() {
-      if (isDemoModeActive() && isDemoProfileId(String(profile.id))) {
-        const data = getDemoProfileWallPosts(String(profile.id))
-        if (cancelled) return
-        setWallPosts(data)
-        setWallPostsReady(true)
-        patchProfileSession(profileId, { wallPosts: data, wallPostsReady: true })
-        return
-      }
+      try {
+        const page =
+          isDemoModeActive() && isDemoProfileId(requestProfileId)
+            ? sliceProfileWallPostsPage(
+                getDemoProfileWallPosts(requestProfileId) as Array<{
+                  id: string
+                  created_at?: string | null
+                  is_pinned?: boolean | null
+                }>,
+                null
+              )
+            : await fetchProfileWallPostsPage(supabase, requestProfileId, null)
 
-      const { data, error } = await supabase
-        .from("profile_posts")
-        .select("*")
-        .eq("user_id", profile.id)
-        .order("created_at", { ascending: false })
-
-      if (cancelled) return
-      if (error) {
+        if (
+          cancelled ||
+          generation !== wallPostsGenRef.current ||
+          !isCurrentProfileWallPostsRequest(requestProfileId, profile?.id)
+        ) {
+          return
+        }
+        rememberWallPostsPage(page.rows, page.hasMore, page.cursor, true)
+      } catch (error) {
         console.error("profile_posts fetch:", error)
-        setWallPosts([])
-        setWallPostsReady(true)
-        return
+        if (
+          cancelled ||
+          generation !== wallPostsGenRef.current ||
+          !isCurrentProfileWallPostsRequest(requestProfileId, profile?.id)
+        ) {
+          return
+        }
+        rememberWallPostsPage([], false, null, true)
+      } finally {
+        if (generation === wallPostsGenRef.current) {
+          wallPostsLoadingRef.current = false
+        }
       }
-      setWallPosts(data || [])
-      setWallPostsReady(true)
-      patchProfileSession(profileId, {
-        wallPosts: data || [],
-        wallPostsReady: true,
-      })
     }
 
     void fetchWallPosts()
@@ -1338,7 +1426,63 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [postsRequested, profile?.id, profileId, wallPostsReady])
+  }, [
+    postsRequested,
+    profile?.id,
+    profileId,
+    rememberWallPostsPage,
+    wallPostsReady,
+  ])
+
+  const loadMoreWallPosts = useCallback(async () => {
+    const requestProfileId = profile?.id ? String(profile.id) : ""
+    if (
+      !requestProfileId ||
+      !canStartProfileWallPostsLoad({
+        inFlight: wallPostsLoadingRef.current,
+        hasMore: wallPostsHasMoreRef.current,
+        mode: "more",
+      })
+    ) {
+      return
+    }
+
+    const generation = wallPostsGenRef.current
+    wallPostsLoadingRef.current = true
+    setWallPostsLoadingMore(true)
+    try {
+      const page =
+        isDemoModeActive() && isDemoProfileId(requestProfileId)
+          ? sliceProfileWallPostsPage(
+              getDemoProfileWallPosts(requestProfileId) as Array<{
+                id: string
+                created_at?: string | null
+                is_pinned?: boolean | null
+              }>,
+              wallPostsCursorRef.current
+            )
+          : await fetchProfileWallPostsPage(
+              supabase,
+              requestProfileId,
+              wallPostsCursorRef.current
+            )
+      if (
+        generation !== wallPostsGenRef.current ||
+        !isCurrentProfileWallPostsRequest(requestProfileId, profile?.id)
+      ) {
+        return
+      }
+      const merged = mergeProfileWallPosts(wallPosts, page.rows)
+      rememberWallPostsPage(merged, page.hasMore, page.cursor, true)
+    } catch (error) {
+      console.error("profile_posts page fetch:", error)
+    } finally {
+      if (generation === wallPostsGenRef.current) {
+        wallPostsLoadingRef.current = false
+        setWallPostsLoadingMore(false)
+      }
+    }
+  }, [profile?.id, rememberWallPostsPage, wallPosts])
 
   useEffect(() => {
     // See posts effect: don't clear cached reels while profile is restoring.
@@ -1386,7 +1530,7 @@ function ProfilePageContent() {
   ])
 
   const profileReelIdsKey = useMemo(
-    () => profileReels.map((row) => String(row.id)).sort().join(","),
+    () => stableIdKey(profileReels.map((row) => String(row.id))),
     [profileReels]
   )
 
@@ -1395,6 +1539,9 @@ function ProfilePageContent() {
     if (isDemoModeActive()) return
 
     const reelIds = profileReelIdsKey.split(",").filter(Boolean)
+    const likeFilters = buildRealtimeInFilterChunks("reel_id", reelIds)
+    if (likeFilters.length === 0) return
+
     const channel = supabase.channel(`profile-reel-likes-${profile.id}`)
 
     const refreshReelLike = (reelId: string) => {
@@ -1410,16 +1557,23 @@ function ProfilePageContent() {
       })()
     }
 
-    for (const reelId of reelIds) {
+    for (const likeFilter of likeFilters) {
       channel.on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "reel_likes",
-          filter: `reel_id=eq.${reelId}`,
+          filter: likeFilter,
         },
-        () => {
+        (payload) => {
+          const reelIdFrom = (value: unknown) => {
+            if (!value || typeof value !== "object") return ""
+            const reelId = (value as { reel_id?: unknown }).reel_id
+            return reelId == null ? "" : String(reelId).trim()
+          }
+          const reelId = reelIdFrom(payload.new) || reelIdFrom(payload.old)
+          if (!reelId) return
           refreshReelLike(reelId)
         }
       )
@@ -2097,10 +2251,7 @@ function ProfilePageContent() {
 
           if (snapshotImage) {
             report({ percent: 10, stage: "Processing image…" })
-            let uploadFile: File = snapshotImage
-            if (snapshotImage.type?.startsWith("image/")) {
-              uploadFile = await compressImage(snapshotImage)
-            }
+            const uploadFile: File = snapshotImage
             const fileName = `${currentUserId}/${Date.now()}-${uploadFile.name}`
 
             report({ percent: 18, stage: "Uploading media…" })
@@ -2155,24 +2306,40 @@ function ProfilePageContent() {
 
           report({ percent: 82, stage: "Publishing…" })
 
-          const { error } = await supabase
+          const { data: createdPost, error } = await supabase
             .from("profile_posts")
             .insert(insertPayload)
+            .select(PROFILE_WALL_POST_SELECT)
+            .single()
 
           if (error) {
             showPopup(supabaseMutationFeedback(error, "Post Failed"))
             throw new Error(handleSupabaseError(error))
           }
+          if (!createdPost) {
+            throw new Error("Post insert returned no row")
+          }
 
           if (currentUserId) invalidateUserStreaksCache(currentUserId)
 
-          const { data } = await supabase
-            .from("profile_posts")
-            .select("*")
-            .eq("user_id", profile.id)
-            .order("created_at", { ascending: false })
-
-          setWallPosts(data || [])
+          setWallPosts((prev) => {
+            const next = upsertProfileWallPost(prev, createdPost)
+            patchProfileSession(profileId, {
+              wallPosts: next,
+              wallPostsReady: true,
+              wallPostsHasMore: wallPostsHasMoreRef.current,
+              wallPostsCursor: wallPostsCursorRef.current,
+            })
+            return next
+          })
+          setLikesByPost((prev) => ({
+            ...prev,
+            [String(createdPost.id)]: { count: 0, liked: false },
+          }))
+          setCommentsByPost((prev) => ({
+            ...prev,
+            [String(createdPost.id)]: [],
+          }))
           showPopup(feedbackPresets.postPublished())
           notifyGettingStartedChecklistMaybeCompleted()
           report({ percent: 95, stage: "Finishing…" })
@@ -2358,11 +2525,10 @@ function ProfilePageContent() {
   } = useDeleteReelConfirmation(performDeleteReel)
 
   const posts = wallPosts
-  const sortedPosts = [...posts].sort((a, b) => {
-    if (a.is_pinned && !b.is_pinned) return -1
-    if (!a.is_pinned && b.is_pinned) return 1
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  })
+  const sortedPosts = useMemo(
+    () => sortProfileWallPosts(posts),
+    [posts]
+  )
 
   async function loadPostEngagement(postList: any[]) {
     if (!postList.length) {
@@ -2407,9 +2573,22 @@ function ProfilePageContent() {
     setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
   }
 
+  const wallPostIdsKey = useMemo(
+    () => posts.map((post) => String(post.id)).join(","),
+    [posts]
+  )
+
+  const wallEngagementViewerRef = useRef(currentUserId)
   useEffect(() => {
-    void loadPostEngagement(posts)
-  }, [currentUserId, posts.length])
+    if (!wallPostIdsKey) return
+    const viewerChanged = wallEngagementViewerRef.current !== currentUserId
+    wallEngagementViewerRef.current = currentUserId
+    const target = viewerChanged
+      ? posts
+      : posts.filter((post) => likesByPost[String(post.id)] == null)
+    if (target.length === 0) return
+    void loadPostEngagement(target)
+  }, [currentUserId, posts, wallPostIdsKey])
 
   useEffect(() => {
     const handleClick = () => {
@@ -2903,7 +3082,15 @@ function ProfilePageContent() {
       return
     }
 
-    setWallPosts((prev) => prev.filter((p) => String(p.id) !== String(postId)))
+    setWallPosts((prev) => {
+      const next = removeProfileWallPost(prev, postId)
+      patchProfileSession(profileId, {
+        wallPosts: next,
+        wallPostsHasMore: wallPostsHasMoreRef.current,
+        wallPostsCursor: wallPostsCursorRef.current,
+      })
+      return next
+    })
     setOpenMenuId(null)
   }
 
@@ -2919,11 +3106,17 @@ function ProfilePageContent() {
       return
     }
 
-    setWallPosts((prev) =>
-      prev.map((p) =>
-        String(p.id) === String(editingPost.id) ? { ...p, content: editContent } : p
-      )
-    )
+    setWallPosts((prev) => {
+      const next = patchProfileWallPost(prev, String(editingPost.id), {
+        content: editContent,
+      })
+      patchProfileSession(profileId, {
+        wallPosts: next,
+        wallPostsHasMore: wallPostsHasMoreRef.current,
+        wallPostsCursor: wallPostsCursorRef.current,
+      })
+      return next
+    })
     setEditingPost(null)
   }
 
@@ -2938,11 +3131,17 @@ function ProfilePageContent() {
       return
     }
 
-    setWallPosts((prev) =>
-      prev.map((p) =>
-        String(p.id) === String(post.id) ? { ...p, is_pinned: !p.is_pinned } : p
-      )
-    )
+    setWallPosts((prev) => {
+      const next = patchProfileWallPost(prev, String(post.id), {
+        is_pinned: !post.is_pinned,
+      })
+      patchProfileSession(profileId, {
+        wallPosts: next,
+        wallPostsHasMore: wallPostsHasMoreRef.current,
+        wallPostsCursor: wallPostsCursorRef.current,
+      })
+      return next
+    })
     setOpenMenuId(null)
   }
 
@@ -3349,9 +3548,30 @@ function ProfilePageContent() {
       }
 
       if (postParam) {
-        if (!openProfilePostDeepLink(postParam, openComments)) {
-          await openFeedPostDeepLink(postParam, openComments)
+        if (openProfilePostDeepLink(postParam, openComments)) return
+        if (profile?.id && canViewTrades) {
+          try {
+            const fetched = await fetchProfileWallPostById(
+              supabase,
+              String(profile.id),
+              postParam
+            )
+            if (
+              fetched &&
+              isCurrentProfileWallPostsRequest(String(fetched.user_id), profile.id)
+            ) {
+              setWallPosts((prev) => upsertProfileWallPost(prev, fetched))
+              setActiveTab("posts")
+              setPostDetailFocusComments(openComments)
+              setSelectedPostDetail(fetched)
+              clearProfileQueryParams()
+              return
+            }
+          } catch (error) {
+            console.error("profile_posts deep link:", error)
+          }
         }
+        await openFeedPostDeepLink(postParam, openComments)
         return
       }
 
@@ -3360,6 +3580,7 @@ function ProfilePageContent() {
       }
     })()
   }, [
+    canViewTrades,
     loading,
     openFeedPostDeepLink,
     openProfilePostDeepLink,
@@ -3656,7 +3877,7 @@ function ProfilePageContent() {
   if (!profileId) {
     return (
       <>
-        <div className="w-full flex items-center justify-center text-red-400">
+        <div className="tt-phase1-dark w-full flex items-center justify-center text-red-400">
           Invalid profile
         </div>
       </>
@@ -3665,9 +3886,9 @@ function ProfilePageContent() {
 
   if (loading && !profile) {
     return (
-      <>
+      <div className="tt-phase1-dark w-full">
         <SkeletonProfilePage />
-      </>
+      </div>
     )
   }
 
@@ -3675,7 +3896,7 @@ function ProfilePageContent() {
     if (bootstrapTransientError) {
       return (
         <>
-          <div className="mx-auto max-w-lg px-4 py-12 text-center">
+          <div className="tt-phase1-dark mx-auto max-w-lg px-4 py-12 text-center">
             <p className="text-sm text-gray-300">
               Profile is temporarily unavailable. The database may be reloading.
             </p>
@@ -3699,7 +3920,7 @@ function ProfilePageContent() {
     if (showFetchDebug) {
       return (
         <>
-          <div className="mx-auto max-w-lg px-4 py-8 text-center text-red-400">
+          <div className="tt-phase1-dark mx-auto max-w-lg px-4 py-8 text-center text-red-400">
             <div>Profile not found (debug)</div>
             {lastProfileFetchError ? (
               <p className="mt-3 text-left text-xs font-mono text-red-300/90 whitespace-pre-wrap break-all">
@@ -3718,7 +3939,7 @@ function ProfilePageContent() {
 
     return (
       <>
-        <div className="w-full flex items-center justify-center text-red-400">
+        <div className="tt-phase1-dark w-full flex items-center justify-center text-red-400">
           User not found
         </div>
       </>
@@ -3763,7 +3984,16 @@ function ProfilePageContent() {
           previewUrl={pendingStoryPreviewUrl}
           onClose={closeStoryCompose}
           onPost={() => void handlePostStory()}
-          onReplaceImage={(file) => void setStoryDraft(file)}
+          onReplaceImage={openStoryCrop}
+        />
+      ) : null}
+      {currentUserId === profile?.id ? (
+        <ImageCropModal
+          open={storyCropFile != null}
+          file={storyCropFile}
+          preset="story"
+          onCancel={handleStoryCropCancel}
+          onSave={handleStoryCropSave}
         />
       ) : null}
       {currentUserId === profile?.id ? (
@@ -3839,7 +4069,7 @@ function ProfilePageContent() {
         />
       ) : null}
 
-      <div className="w-full text-gray-100">
+      <div className="tt-phase1-dark w-full text-gray-100">
         <NativeIosPullToRefresh
           onRefresh={async () => {
             if (!profileId) return
@@ -3982,6 +4212,11 @@ function ProfilePageContent() {
                 ready={wallPostsReady}
                 isOwnProfile={isOwnProfile}
                 canView={canViewTrades}
+                hasMore={wallPostsHasMore}
+                loadingMore={wallPostsLoadingMore}
+                onLoadMore={() => {
+                  void loadMoreWallPosts()
+                }}
                 onCreateStory={openCreateStory}
                 onCreatePost={openCreatePostModal}
                 onCreateReel={openCreateReelModal}
@@ -4543,7 +4778,7 @@ function ProfilePageContent() {
       <ImageCropModal
         open={postImageCrop.cropSourceFile != null}
         file={postImageCrop.cropSourceFile}
-        preset="content"
+        preset={CONTENT_IMAGE_V2_PRESET}
         onCancel={postImageCrop.handleCropCancel}
         onSave={postImageCrop.handleCropSave}
       />
@@ -4555,9 +4790,9 @@ export default function ProfilePage() {
   return (
     <Suspense
       fallback={
-        <>
+        <div className="tt-phase1-dark w-full">
           <SkeletonProfilePage />
-        </>
+        </div>
       }
     >
       <ProfilePageContent />

@@ -6,12 +6,9 @@ struct ThemeConfiguration: Sendable, Equatable {
     var defaultTheme: ThemeIdentifier
     /// Animate theme switches with Experience motion.
     var animatesTransitions: Bool
-    /// Signature theme promoted in Settings.
-    var signatureTheme: ThemeIdentifier
 
     static let `default` = ThemeConfiguration(
         defaultTheme: .system,
-        animatesTransitions: true,
-        signatureTheme: .tradeTraxs
+        animatesTransitions: true
     )
 }

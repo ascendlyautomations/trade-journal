@@ -2,7 +2,10 @@
 
 import { useEffect } from "react"
 import { supabase } from "@/lib/supabaseClient"
-import { invalidateTradesCache, ensureTradesLoaded } from "@/lib/appDataCache"
+import {
+  applyBrokerImportedTradeToCache,
+  ensureTradesLoaded,
+} from "@/lib/appDataCache"
 import { queueBrokerEnrichment } from "@/lib/brokerEnrichment/queueBrokerEnrichment"
 import { invalidateBrokerEnrichmentPendingCount } from "@/lib/brokerEnrichment/brokerEnrichmentPendingCount"
 
@@ -25,23 +28,36 @@ export function useBrokerImportedTradesRealtime(userId: string | undefined) {
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          const row = payload.new as {
+          const nextRow = payload.new as {
             id?: string
             import_source?: string | null
             broker_enrichment_status?: string | null
           } | null
-          if (!row) return
-          const src = row.import_source
-          if (src !== "tradovate" && src !== "rithmic") return
-          invalidateTradesCache(userId)
-          void ensureTradesLoaded(supabase, userId, { force: true, fullHistory: true })
+          const previousRow = payload.old as {
+            id?: string
+            import_source?: string | null
+          } | null
+          const eventType = payload.eventType
+          if (eventType !== "DELETE") {
+            const src = nextRow?.import_source
+            if (src !== "tradovate" && src !== "rithmic") return
+          }
+          const applied = applyBrokerImportedTradeToCache(
+            userId,
+            eventType,
+            nextRow as Record<string, unknown> | null,
+            previousRow as Record<string, unknown> | null
+          )
+          if (applied.needsWindowLoad) {
+            void ensureTradesLoaded(supabase, userId)
+          }
           if (
-            payload.eventType === "INSERT" &&
-            row.broker_enrichment_status === "pending" &&
-            row.id
+            eventType === "INSERT" &&
+            nextRow?.broker_enrichment_status === "pending" &&
+            nextRow.id
           ) {
             invalidateBrokerEnrichmentPendingCount(userId)
-            queueBrokerEnrichment([String(row.id)])
+            queueBrokerEnrichment([String(nextRow.id)])
           }
         }
       )

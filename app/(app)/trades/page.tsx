@@ -1,5 +1,6 @@
 "use client"
 
+import "./tradesNativeTheme.css"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import { averageRrFromTrades } from "@/lib/tradeRr"
@@ -419,7 +420,7 @@ export default function TradesPage() {
       >
       <div
         data-tt-native-surface="trades"
-        className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10 xl:px-8 2xl:px-12"
+        className="trade-page-native-theme w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10 xl:px-8 2xl:px-12"
       >
         <PlatformTradesHeader
           accounts={accounts}

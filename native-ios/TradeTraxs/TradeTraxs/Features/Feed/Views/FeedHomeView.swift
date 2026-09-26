@@ -18,6 +18,7 @@ struct FeedHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.tabIsActive) private var tabIsActive
+    @Environment(\.navigationEnvironment) private var navigationEnvironment
     @State private var scrollViewportFrame: CGRect = .zero
     @State private var feedImageWarmGeneration: UInt64 = 0
 
@@ -146,11 +147,18 @@ struct FeedHomeView: View {
         })
         .task(id: tabIsActive) {
             guard tabIsActive else {
+                syncFeedPlaybackSurfaceActive(reason: "tabChanged")
                 ActiveScreenBootstrapPriorityGate.feed.setScreenActive(false)
                 SocialRealtimeRepairSurfaces.shared.feedViewModel = nil
                 viewModel.unsubscribeRealtime()
+                SupabasePressureLog.screenRealtimeTransition(
+                    screen: "feed",
+                    active: false,
+                    snapshot: appEnvironment.data.realtimeHub.realtimePressureSnapshot()
+                )
                 return
             }
+            syncFeedPlaybackSurfaceActive(reason: "tabActive")
             ActiveScreenBootstrapPriorityGate.feed.setScreenActive(true)
             defer { ActiveScreenBootstrapPriorityGate.feed.setScreenActive(false) }
             MainThreadWorkProbe.measure("feed.tab.activate", surface: "feed") {
@@ -159,6 +167,11 @@ struct FeedHomeView: View {
                 viewModel.loadIfNeeded()
                 viewModel.noteTabBecameActive()
                 viewModel.subscribeRealtime()
+                SupabasePressureLog.screenRealtimeTransition(
+                    screen: "feed",
+                    active: true,
+                    snapshot: appEnvironment.data.realtimeHub.realtimePressureSnapshot()
+                )
             }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-uitesting-feed-text-only") {
@@ -197,16 +210,22 @@ struct FeedHomeView: View {
             guard viewModel.scope == .following else { return }
             switch FollowMutationCoordinator.shared.latest {
             case .followed, .unfollowed, .followRequestApproved:
-                Task { await viewModel.syncSocialEntityRealtimeBindings() }
+                Task { await viewModel.reconcileFollowingAfterRelationshipChange() }
             default:
                 break
             }
         }
+        .onChange(of: navigationEnvironment.store.paths.feed.count) { _, _ in
+            syncFeedPlaybackSurfaceActive(reason: "navigatedAway")
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active {
-                playbackCoordinator.releaseAllPlayers()
-            } else if viewModel.contentFilter == .clips {
-                playbackCoordinator.beginClipsExperience()
+                playbackCoordinator.setSurfaceActive(false, reason: "appBackgrounded")
+            } else {
+                syncFeedPlaybackSurfaceActive(reason: "appForegrounded")
+                if tabIsActive, viewModel.contentFilter == .clips {
+                    playbackCoordinator.beginClipsExperience()
+                }
             }
         }
         .onChange(of: viewModel.contentFilter) { oldFilter, newFilter in
@@ -244,6 +263,7 @@ struct FeedHomeView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .accessibilityIdentifier("feed.header.contentFilter")
+        .contextualTourTarget(.feedContentFilters)
     }
 
     private var feedList: some View {
@@ -405,6 +425,14 @@ struct FeedHomeView: View {
             playbackCoordinator.releaseAllPlayers()
         }
         viewModel.open(entry)
+    }
+
+    private var isFeedPlaybackSurfaceActive: Bool {
+        tabIsActive && navigationEnvironment.store.paths.feed.isEmpty
+    }
+
+    private func syncFeedPlaybackSurfaceActive(reason: String) {
+        playbackCoordinator.setSurfaceActive(isFeedPlaybackSurfaceActive, reason: reason)
     }
 
     private func reportAction(for entry: FeedTimelineEntry) -> (() -> Void)? {

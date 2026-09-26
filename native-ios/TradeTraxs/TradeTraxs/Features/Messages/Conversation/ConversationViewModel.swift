@@ -91,6 +91,7 @@ final class ConversationViewModel {
     private var nextOlderCursor: String?
     private var realtimeTask: Task<Void, Never>?
     private var conversationRealtimeConsumer: RealtimeRouteConsumerHandle?
+    private var isConversationRealtimeActive = false
     private var loadTask: Task<Void, Never>?
     private var isApplyingRealtime = false
     private var didMarkReadThisOpen = false
@@ -235,7 +236,7 @@ final class ConversationViewModel {
 #endif
 
     func loadIfNeeded() {
-        guard loadTask == nil, phase != .loaded else { return }
+        guard loadTask == nil else { return }
         loadTask = Task { await performInitialLoad() }
     }
 
@@ -359,6 +360,11 @@ final class ConversationViewModel {
     }
 
     func startRealtime() {
+        guard realtimeHub != nil else { return }
+        if isConversationRealtimeActive, conversationRealtimeConsumer != nil, realtimeTask != nil {
+            MessageRealtimeLog.subscribed(conversationID: conversationID, reason: "already-active")
+            return
+        }
         realtimeTask?.cancel()
         realtimeTask = Task { [weak self] in
             guard let self else { return }
@@ -366,7 +372,12 @@ final class ConversationViewModel {
             ConversationOpenTrace.realtimeRetain(conversationID: conversationID.rawValue)
 #endif
             if let previous = conversationRealtimeConsumer {
+                MessageRealtimeLog.unsubscribed(
+                    conversationID: conversationID,
+                    reason: "replace-before-resubscribe"
+                )
                 await realtimeHub?.releaseWatch(previous)
+                conversationRealtimeConsumer = nil
             }
             // Register topic + join web-equivalent messages postgres_changes. Remain idle — no polling.
             let channel = RealtimeChannelID(
@@ -382,6 +393,8 @@ final class ConversationViewModel {
                 debugOwner: "ConversationThread"
             )
             conversationRealtimeConsumer = watch.consumer
+            isConversationRealtimeActive = true
+            MessageRealtimeLog.subscribed(conversationID: conversationID, reason: "thread-joined")
 #if DEBUG
             ConversationOpenTrace.realtimeJoined(conversationID: conversationID.rawValue)
 #endif
@@ -392,15 +405,18 @@ final class ConversationViewModel {
                 guard !Task.isCancelled else { break }
                 await applyRealtimeSignal(signal)
             }
+            isConversationRealtimeActive = false
         }
     }
 
     func stopRealtime() {
+        MessageRealtimeLog.unsubscribed(conversationID: conversationID, reason: "conversation-disappear")
         syncThreadSessionCache(context: "leave")
         VoiceMessagePlaybackController.shared.stopAll()
         stopOutboundSharedContentObserver()
         realtimeTask?.cancel()
         realtimeTask = nil
+        isConversationRealtimeActive = false
         if inboxStore.activeConversationID == conversationID {
             inboxStore.setActiveConversation(nil)
         }
@@ -427,8 +443,8 @@ final class ConversationViewModel {
     }
 
     func sendImage(_ image: UIImage) async {
-        guard !isSending else { return }
-        guard let data = image.jpegData(compressionQuality: 0.82) else { return }
+        guard !isMessagingBlocked else { return }
+        guard let data = MediaImagePreparation.chatJPEGData(from: image) else { return }
         await send(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), imageURL: nil, localImageData: data)
         draft = ""
     }
@@ -585,9 +601,21 @@ final class ConversationViewModel {
 
     func retry(_ item: ConversationBubbleItem) async {
         guard sendStates[item.id] == .failed else { return }
+        let tempID = item.id
+        if ConversationMessageMerge.isOptimisticMessageID(tempID),
+           let localData = OptimisticOutboundImageStore.shared.jpegData(for: tempID)
+        {
+            await resendFailedOptimisticImage(
+                tempID: tempID,
+                body: item.text ?? "",
+                localImageData: localData
+            )
+            return
+        }
         removeMessage(id: item.id)
         sendStates.removeValue(forKey: item.id)
         let imageURL = item.imageReference?.id
+        guard let imageURL, !OptimisticOutboundImageSupport.isOptimisticMediaID(imageURL) else { return }
         await send(body: item.text ?? "", imageURL: imageURL, localImageData: nil)
     }
 
@@ -909,6 +937,7 @@ final class ConversationViewModel {
         // Web optimistic clear on open — badge drops before history finishes loading.
         inboxStore.markRead(conversationID: conversationID)
         inboxStore.setActiveConversation(conversationID)
+        startRealtime()
 
         let current = await session.currentUserID
         let viewer = current.map { ProfileID($0.rawValue) }
@@ -935,9 +964,6 @@ final class ConversationViewModel {
             await markConversationSeenIfNeeded()
             if phase != .loaded {
                 phase = .loaded
-            }
-            if !paintedBeforeLoad || conversationRealtimeConsumer == nil {
-                startRealtime()
             }
             startOutboundSharedContentObserver()
         } catch ConversationThreadBootstrapLoader.LoaderError.rpcUnavailable {
@@ -1082,6 +1108,11 @@ final class ConversationViewModel {
         let cached = ConversationThreadSessionStore.shared.restore(key: cacheKey)
         let alreadyPainted = !messages.isEmpty
 
+        MessageSyncLog.conversationOpened(
+            conversationID: conversationID,
+            localNewestID: ConversationThreadSyncPolicy.localNewestMessageID(in: messages)
+        )
+
         if let cached, !forceNetwork, !alreadyPainted {
 #if DEBUG
             ConversationThreadDiagnostics.logCacheReopen(
@@ -1108,13 +1139,17 @@ final class ConversationViewModel {
                 source: "sessionOrDisk"
             )
 #endif
-            startRealtime()
             Task { [weak self] in
                 await self?.hydrateSharedContent(from: self?.messages ?? [])
             }
+            await reconcileInboxAheadIfNeeded(viewerID: viewerID)
+            let inboxAhead = ConversationThreadSyncPolicy.isInboxAheadOfThread(
+                inbox: inboxStore.conversations.first(where: { $0.id == conversationID }),
+                threadMessages: messages
+            )
             let needsWindowBackfill = cached.messages.count < ConversationThreadSessionStore.messageLimit
                 && cached.hasMoreMessages
-            if !cached.isSoftStale, unreadBeforeOpen == 0, !needsWindowBackfill {
+            if !cached.isSoftStale, unreadBeforeOpen == 0, !needsWindowBackfill, !inboxAhead {
                 logThreadStateDiagnostics(context: "cache.reopen.skip-network")
                 return
             }
@@ -1122,20 +1157,26 @@ final class ConversationViewModel {
                 viewerID: viewerID,
                 generation: generation,
                 unreadBeforeOpen: unreadBeforeOpen,
-                forceNetwork: forceNetwork,
+                forceNetwork: forceNetwork || inboxAhead,
                 cached: cached
             )
             return
         }
 
         if alreadyPainted, !forceNetwork {
+            await reconcileInboxAheadIfNeeded(viewerID: viewerID)
+            let inboxAhead = ConversationThreadSyncPolicy.isInboxAheadOfThread(
+                inbox: inboxStore.conversations.first(where: { $0.id == conversationID }),
+                threadMessages: messages
+            )
             let needsWindowBackfill = (cached?.messages.count ?? messages.count)
                 < ConversationThreadSessionStore.messageLimit
                 && (cached?.hasMoreMessages ?? hasMoreOlder)
             if let cached,
                !cached.isSoftStale,
                unreadBeforeOpen == 0,
-               !needsWindowBackfill
+               !needsWindowBackfill,
+               !inboxAhead
             {
                 logThreadStateDiagnostics(context: "cache.immediate.skip-network")
                 return
@@ -1144,7 +1185,7 @@ final class ConversationViewModel {
                 viewerID: viewerID,
                 generation: generation,
                 unreadBeforeOpen: unreadBeforeOpen,
-                forceNetwork: forceNetwork,
+                forceNetwork: forceNetwork || inboxAhead,
                 cached: cached
             )
             return
@@ -1418,7 +1459,9 @@ final class ConversationViewModel {
 
         if signal.kind == .insert, let rawID = signal.messageID {
             let messageID = MessageID(rawID)
+            MessageRealtimeLog.insertReceived(conversationID: conversationID, messageID: messageID)
             if messages.contains(where: { $0.id == messageID }) {
+                MessageRealtimeLog.dropped(reason: "duplicate-in-thread", messageID: messageID)
 #if DEBUG
                 MessagingRealtimeDebugLog.messageEchoIgnored(messageID: rawID, source: "thread")
 #endif
@@ -1427,11 +1470,14 @@ final class ConversationViewModel {
                 }
                 return
             }
-            if !MessagingRealtimeDeliveryCoordinator.claimMessageInsert(
+            let claimed = MessagingRealtimeDeliveryCoordinator.claimMessageInsert(
                 domain: "dm-thread",
                 messageID: rawID,
                 conversationID: conversationID.rawValue
-            ) {
+            )
+            if !claimed {
+                MessageRealtimeLog.dropped(reason: "claimed-by-inbox-route", messageID: messageID)
+                await hydrateThreadMessageIfMissing(messageID: messageID, source: "realtimeClaimedByInbox")
                 return
             }
         }
@@ -1455,10 +1501,16 @@ final class ConversationViewModel {
 #endif
             merged = try? await messagesRepo.message(id: MessageID(rawID), in: conversationID)
         }
-        guard let incoming = merged else { return }
+        guard let incoming = merged else {
+            if signal.kind == .insert, let rawID = signal.messageID {
+                MessageRealtimeLog.dropped(reason: "hydrate-failed", messageID: MessageID(rawID))
+            }
+            return
+        }
 
         commitMessages([incoming])
         syncThreadSessionCache(context: "realtimeV2.merge")
+        MessageRealtimeLog.persisted(messageID: incoming.id)
         await hydrateSharedContent(from: [incoming])
         inboxStore.patchFromMessage(
             incoming,
@@ -1468,12 +1520,96 @@ final class ConversationViewModel {
             fallbackConversation: conversation,
             source: "realtimeV2"
         )
+        MessageRealtimeLog.visibleThreadUpdated(messageID: incoming.id)
+        MessageSyncLog.realtimeApplied(conversationID: conversationID, messageID: incoming.id)
+        MessageSyncLog.visibleThreadUpdated(conversationID: conversationID, messageID: incoming.id)
+        MessageRealtimeLog.visibleThreadUpdated(messageID: incoming.id)
 #if DEBUG
         MessagingRealtimeDebugLog.threadPatch(
             conversationID: conversationID.rawValue,
             messageID: incoming.id.rawValue
         )
 #endif
+    }
+
+    /// Lightweight catch-up when inbox summary is ahead of the open thread (preview ≠ GRDB rows).
+    private func reconcileInboxAheadIfNeeded(viewerID: ProfileID) async {
+        guard let inboxRow = inboxStore.conversations.first(where: { $0.id == conversationID }) else {
+            return
+        }
+        guard ConversationThreadSyncPolicy.isInboxAheadOfThread(
+            inbox: inboxRow,
+            threadMessages: messages
+        ) else {
+            return
+        }
+        MessageSyncLog.reconcileStarted(
+            conversationID: conversationID,
+            after: ConversationThreadSyncPolicy.localNewestMessageID(in: messages)
+        )
+
+        if let headID = inboxRow.lastMessageID,
+           !messages.contains(where: { $0.id == headID }),
+           let fetched = try? await messagesRepo.message(id: headID, in: conversationID)
+        {
+            MessageSyncLog.missingMessageReceived(conversationID: conversationID, messageID: fetched.id)
+            commitMessages([fetched])
+            syncThreadSessionCache(context: "inboxAhead.single")
+            ConversationThreadSessionStore.shared.patchMessages(
+                viewerID: viewerID,
+                conversationID: conversationID,
+                incoming: [fetched],
+                conversation: inboxRow
+            )
+            MessageSyncLog.persisted(conversationID: conversationID, messageID: fetched.id)
+            MessageSyncLog.visibleThreadUpdated(conversationID: conversationID, messageID: fetched.id)
+            await hydrateSharedContent(from: [fetched])
+            return
+        }
+
+        guard let rpc else { return }
+        let result = try? await ConversationThreadBootstrapLoader.load(
+            viewerID: viewerID,
+            conversationID: conversationID,
+            cursor: nil,
+            markRead: false,
+            intent: .cacheRevalidation,
+            rpc: rpc,
+            detailCache: detailCache,
+            inboxStore: inboxStore,
+            loadGeneration: loadGeneration,
+            currentGeneration: { self.loadGeneration },
+            forceNetwork: true
+        )
+        guard let result, !result.cacheHit else { return }
+        applyBootstrapMessages(result.applied.messages)
+        syncThreadSessionCache(context: "inboxAhead.bootstrap")
+        if let newest = ConversationThreadSyncPolicy.localNewestMessageID(in: messages) {
+            MessageSyncLog.visibleThreadUpdated(conversationID: conversationID, messageID: newest)
+        }
+        await hydrateSharedContent(from: result.applied.messages)
+    }
+
+    private func hydrateThreadMessageIfMissing(messageID: MessageID, source: String) async {
+        guard !messages.contains(where: { $0.id == messageID }) else { return }
+        guard let viewerID else { return }
+        guard let incoming = try? await messagesRepo.message(id: messageID, in: conversationID) else { return }
+        MessageRealtimeLog.insertReceived(conversationID: conversationID, messageID: incoming.id)
+        MessageSyncLog.missingMessageReceived(conversationID: conversationID, messageID: incoming.id)
+        commitMessages([incoming])
+        syncThreadSessionCache(context: source)
+        MessageRealtimeLog.persisted(messageID: incoming.id)
+        ConversationThreadSessionStore.shared.patchMessages(
+            viewerID: viewerID,
+            conversationID: conversationID,
+            incoming: [incoming],
+            conversation: conversation
+        )
+        MessageSyncLog.persisted(conversationID: conversationID, messageID: incoming.id)
+        MessageSyncLog.realtimeApplied(conversationID: conversationID, messageID: incoming.id)
+        MessageSyncLog.visibleThreadUpdated(conversationID: conversationID, messageID: incoming.id)
+        MessageRealtimeLog.visibleThreadUpdated(messageID: incoming.id)
+        await hydrateSharedContent(from: [incoming])
     }
 
     /// Sole write path for thread rows — web `mergeMessages` semantics.
@@ -1875,19 +2011,23 @@ final class ConversationViewModel {
 
     private func send(body: String, imageURL: String?, localImageData: Data?) async {
         guard let viewerID, !isMessagingBlocked else { return }
-        isSending = true
-        defer { isSending = false }
+        let blocksComposer = localImageData == nil
+        if blocksComposer {
+            isSending = true
+        }
+        defer {
+            if blocksComposer { isSending = false }
+        }
 
         let tempID = MessageID("temp-\(UUID().uuidString)")
         var attachments: [MessageAttachment] = []
-        if let imageURL {
-            attachments = [
-                MessageAttachment(
-                    id: imageURL,
-                    media: MediaReference(id: imageURL, kind: .image, altText: nil),
-                    tradeID: nil
-                ),
-            ]
+        if let localImageData {
+            attachments = OptimisticOutboundImageSendSupport.prepareOptimisticAttachments(
+                tempID: tempID,
+                localImageData: localImageData
+            )
+        } else if let imageURL {
+            attachments = OptimisticOutboundImageSendSupport.imageAttachments(for: imageURL)
         }
 
         let optimistic = Message(
@@ -1916,39 +2056,52 @@ final class ConversationViewModel {
             return
         }
 
+        await completeOptimisticSend(
+            tempID: tempID,
+            body: body,
+            imageURL: imageURL,
+            localImageData: localImageData
+        )
+    }
+
+    private func resendFailedOptimisticImage(
+        tempID: MessageID,
+        body: String,
+        localImageData: Data
+    ) async {
+        guard let viewerID, !isMessagingBlocked else { return }
+        sendStates[tempID] = .sending
+        if ConversationThreadSupport.isLocalDevelopment(viewerID)
+            || ConversationThreadSupport.isLocalConversation(conversationID)
+        {
+            sendStates[tempID] = .sent
+            return
+        }
+        await completeOptimisticSend(
+            tempID: tempID,
+            body: body,
+            imageURL: nil,
+            localImageData: localImageData
+        )
+    }
+
+    private func completeOptimisticSend(
+        tempID: MessageID,
+        body: String,
+        imageURL: String?,
+        localImageData: Data?
+    ) async {
+        guard let viewerID else { return }
         do {
             var resolvedImageURL = imageURL
             if let localImageData {
                 let path = "\(viewerID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
-                let reference = try await uploadService.upload(
-                    UploadRequest(
-                        bucket: StorageBucket.screenshots.rawValue,
-                        path: path,
-                        data: localImageData,
-                        contentType: "image/jpeg",
-                        purpose: .tradeScreenshot
-                    )
+                resolvedImageURL = try await OptimisticOutboundImageSendSupport.uploadJPEG(
+                    localImageData: localImageData,
+                    storagePath: path,
+                    uploadService: uploadService,
+                    objectStorage: objectStorage
                 )
-                if let publicURL = objectStorage.publicURL(
-                    bucket: StorageBucket.screenshots.rawValue,
-                    path: reference.id
-                ) {
-                    resolvedImageURL = publicURL.absoluteString
-                } else {
-                    resolvedImageURL = reference.id
-                }
-                if let url = resolvedImageURL {
-                    var updated = optimistic
-                    updated.attachments = [
-                        MessageAttachment(
-                            id: url,
-                            media: MediaReference(id: url, kind: .image, altText: nil),
-                            tradeID: nil
-                        ),
-                    ]
-                    updated.kind = .media
-                    commitMessages([updated], recordScrollEvents: false)
-                }
             }
 
             let payload = Message(
@@ -1957,15 +2110,7 @@ final class ConversationViewModel {
                 senderProfileID: viewerID,
                 kind: resolvedImageURL == nil ? .text : .media,
                 body: body.isEmpty ? "" : body,
-                attachments: resolvedImageURL.map {
-                    [
-                        MessageAttachment(
-                            id: $0,
-                            media: MediaReference(id: $0, kind: .image, altText: nil),
-                            tradeID: nil
-                        ),
-                    ]
-                } ?? [],
+                attachments: resolvedImageURL.map(OptimisticOutboundImageSendSupport.imageAttachments(for:)) ?? [],
                 replyToMessageID: nil,
                 createdAt: .now,
                 isReadByViewer: true
@@ -1984,6 +2129,7 @@ final class ConversationViewModel {
                 conversationID: conversationID
             )
             commitMessages([saved], recordScrollEvents: false)
+            OptimisticOutboundImageStore.shared.remove(messageID: tempID)
             sendStates.removeValue(forKey: tempID)
             sendStates[saved.id] = .sent
             patchInbox(with: saved, source: "confirmedSend")

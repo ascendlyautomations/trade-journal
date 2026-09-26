@@ -1,5 +1,6 @@
 "use client"
 
+import "../utilityDesktopTheme.css"
 import { useState } from "react"
 import Link from "next/link"
 import BugReportModal from "@/app/components/BugReportModal"
@@ -138,7 +139,7 @@ export default function HelpCenterPage() {
 
   return (
     <>
-      <div className={submissionPageShell}>
+      <div className={`tt-phase4-dark ${submissionPageShell}`}>
         <div className="mx-auto w-full max-w-5xl space-y-8">
           <header className="text-center">
             <h1 className={submissionTitle}>Need Help?</h1>

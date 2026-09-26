@@ -91,13 +91,24 @@ enum MediaVideoPreparation {
             throw AppError.unknown(message: durationLimitMessage)
         }
 
-        let target = VideoDeliveryExporter.deliveryTarget(for: profile)
-        let (mode, reason) = VideoDeliveryExporter.decideDeliveryMode(profile: profile, target: target)
+        let assessmentTarget = VideoDeliveryExporter.deliveryTarget(for: profile)
+        let (mode, reason) = VideoDeliveryExporter.decideDeliveryMode(
+            profile: profile,
+            target: assessmentTarget
+        )
+        let target = VideoDeliveryExporter.deliveryTargetForExport(
+            profile: profile,
+            mode: mode,
+            decisionReason: reason,
+            assessmentTarget: assessmentTarget
+        )
         VideoCompressionDiagnostics.logDecision(
             mode: mode.rawValue,
             reason: reason,
             targetFPS: target.outputFrameRate,
-            targetVideoBitrate: target.videoBitrate
+            targetVideoBitratePolicy: target.videoBitrate,
+            targetRenderSize: target.outputSize,
+            exportUsesAVAssetExportSessionPreset: mode == .transcode
         )
 
         onProgress?(0.05)
@@ -121,10 +132,17 @@ enum MediaVideoPreparation {
             throw mapPreparationError(error, fallback: compressionFailedMessage)
         }
 
+        let deliveryFileInfo = VideoTranscodeFailureDiagnostics.outputFileInfo(at: deliveryURL)
+        VideoTranscodeDiagnostics.logExportWithSessionReturned(
+            outputURL: deliveryURL,
+            fileBytes: deliveryFileInfo.bytes
+        )
+
         try Task.checkCancellation()
 
         let deliveryAsset = AVURLAsset(url: deliveryURL)
         let outputProfile: VideoDeliveryExporter.SourceProfile
+        VideoPrepareDiagnostics.logValidationStarted(output: deliveryURL.lastPathComponent)
         do {
             outputProfile = try await VideoDeliveryExporter.validateOutput(
                 asset: deliveryAsset,
@@ -134,7 +152,17 @@ enum MediaVideoPreparation {
                 targetFrameRate: target.outputFrameRate,
                 transcodeMetrics: transcodeMetrics
             )
+            VideoPrepareDiagnostics.logValidationCompleted(
+                bytes: outputProfile.fileBytes,
+                durationSeconds: outputProfile.durationSeconds,
+                fps: outputProfile.frameRate
+            )
         } catch {
+            if case VideoPreparationFailure.outputValidationFailed = error {
+                // Detailed reason already logged inside validateOutput.
+            } else {
+                VideoPrepareDiagnostics.logValidationFailed(reason: "\(error)")
+            }
             try? FileManager.default.removeItem(at: stagedSource)
             try? FileManager.default.removeItem(at: deliveryURL)
             throw AppError.unknown(message: compressionFailedMessage)
@@ -146,22 +174,10 @@ enum MediaVideoPreparation {
             throw AppError.unknown(message: "Prepared video is still too large. Try a shorter clip.")
         }
 
-        do {
-            try VideoDeliveryExporter.validateTranscodeEffectiveness(
-                source: profile,
-                output: outputProfile,
-                decisionReason: reason
-            )
-        } catch {
-            try? FileManager.default.removeItem(at: stagedSource)
-            try? FileManager.default.removeItem(at: deliveryURL)
-            throw mapPreparationError(error, fallback: compressionFailedMessage)
-        }
-
         var finalURL = deliveryURL
         var finalProfile = outputProfile
         if outputProfile.fileBytes >= profile.fileBytes,
-           VideoDeliveryExporter.isDeliveryCompatibleVideo(profile: profile, target: target)
+           VideoDeliveryExporter.isDeliveryCompatibleVideo(profile: profile, target: assessmentTarget)
         {
             try? FileManager.default.removeItem(at: deliveryURL)
             if profile.isMP4Container {
@@ -186,6 +202,24 @@ enum MediaVideoPreparation {
                 )
             }
         } else {
+            VideoPrepareDiagnostics.logTranscodeEffectivenessValidationStarted()
+            do {
+                try VideoDeliveryExporter.validateTranscodeEffectiveness(
+                    source: profile,
+                    output: outputProfile,
+                    decisionReason: reason
+                )
+                VideoPrepareDiagnostics.logTranscodeEffectivenessValidationCompleted()
+            } catch {
+                if case VideoPreparationFailure.compressionFailed = error {
+                    // Detailed reason logged when effectiveness check fails.
+                } else {
+                    VideoPrepareDiagnostics.logTranscodeEffectivenessValidationFailed(reason: "\(error)")
+                }
+                try? FileManager.default.removeItem(at: stagedSource)
+                try? FileManager.default.removeItem(at: deliveryURL)
+                throw mapPreparationError(error, fallback: compressionFailedMessage)
+            }
             try? FileManager.default.removeItem(at: stagedSource)
         }
 
@@ -202,6 +236,7 @@ enum MediaVideoPreparation {
             outputDuration: outputProfile.durationSeconds,
             sourceBytes: profile.fileBytes,
             outputBytes: finalProfile.fileBytes,
+            sourceBitrate: VideoDeliveryExporter.effectiveBitrate(for: profile),
             outputBitrate: finalProfile.estimatedBitrate,
             outputFrameCount: transcodeMetrics?.outputVideoFrameCount
         )
@@ -251,7 +286,7 @@ enum MediaVideoPreparation {
         }
     }
 
-    static func cleanupTemporaryFile(at url: URL) {
+    nonisolated static func cleanupTemporaryFile(at url: URL) {
         try? FileManager.default.removeItem(at: url)
     }
 

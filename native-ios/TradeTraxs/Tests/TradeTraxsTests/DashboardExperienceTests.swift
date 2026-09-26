@@ -348,6 +348,38 @@ final class DashboardExperienceTests: XCTestCase {
             .sevenDays,
             "Two trades in 7D keeps 7D chart without widening"
         )
+
+        let olderOnly = [trade("older", dayOffset: -45)]
+        let emptyWindow = DashboardChartMetrics.compute(
+            from: olderOnly,
+            accountFilter: .all,
+            dateRange: .thirtyDays,
+            payoutTotal: nil,
+            now: now
+        )
+        XCTAssertEqual(emptyWindow.tradeCount, 0)
+        let flat = DashboardEquityChartSeries.carryForwardFlatIfNeeded(
+            summary: emptyWindow,
+            dateRange: .thirtyDays,
+            tradeInputs: olderOnly,
+            accountFilter: .all,
+            now: now
+        )
+        XCTAssertEqual(flat.equityData.count, 2)
+        XCTAssertEqual(flat.equityData[0].equity, 100)
+        XCTAssertEqual(flat.equityData[1].equity, 100)
+
+        XCTAssertEqual(
+            DashboardEquityChartRangeResolver.effectiveRange(
+                requested: .thirtyDays,
+                tradeInputs: olderOnly,
+                accountFilter: .all,
+                now: now,
+                allowAutomaticWiden: false
+            ),
+            .thirtyDays,
+            "Manual range selection must not widen when trades sit outside the window"
+        )
     }
 
     @MainActor

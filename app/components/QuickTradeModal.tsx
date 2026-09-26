@@ -78,7 +78,7 @@ import type { TradingAccountListItem } from "@/lib/tradingAccounts"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import ImageCropModal from "@/app/components/ImageCropModal"
-import { CONTENT_IMAGE_CROP_PRESET } from "@/lib/contentImagePipeline"
+import { CONTENT_IMAGE_V2_PRESET } from "@/lib/contentImageV2"
 import { useTradeImageCropUpload } from "@/lib/useTradeImageCropUpload"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
@@ -1435,7 +1435,7 @@ export default function QuickTradeModal({
       <ImageCropModal
         open={imageCrop.cropSourceFile != null}
         file={imageCrop.cropSourceFile}
-        preset={CONTENT_IMAGE_CROP_PRESET}
+        preset={CONTENT_IMAGE_V2_PRESET}
         onCancel={handleCropCancel}
         onSave={handleCropSave}
       />

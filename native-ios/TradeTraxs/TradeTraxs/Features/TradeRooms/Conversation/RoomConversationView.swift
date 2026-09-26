@@ -346,6 +346,7 @@ struct RoomConversationView: View {
                                 onLongPressForActionMenu: {
                                     actionMenuMessageID = bubble.id
                                 },
+                                isActionMenuAnchorActive: actionMenuMessageID == bubble.id,
                                 canDelete: viewModel.canDeleteMessage(bubble),
                                 deleteMenuTitle: "Delete Message",
                                 onRetry: {
@@ -402,10 +403,6 @@ struct RoomConversationView: View {
                             .animation(
                                 ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
                                 value: viewModel.highlightedMessageID
-                            )
-                            .messageBubbleActionMenuAnchor(
-                                messageID: bubble.id,
-                                isActive: actionMenuMessageID == bubble.id
                             )
                             .id(bubble.id.rawValue)
                             .onAppear {

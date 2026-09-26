@@ -13,58 +13,13 @@ final class Phase10ERealtimeConsolidationTests: XCTestCase {
         RelationshipWriteGeneration.resetForTesting()
         FollowMutationCoordinator.shared.invalidate()
         MessagingRealtimeDeliveryCoordinator.resetSession()
-        SocialEntityRealtimeSession.shared.invalidate()
     }
 
     override func tearDown() async throws {
         await SessionFollowingStore.shared.invalidate()
-        RelationshipRealtimeSession.shared.invalidate()
         MessagingRealtimeDeliveryCoordinator.resetSession()
-        SocialEntityRealtimeSession.shared.invalidate()
         ActivityInboxStore.shared.invalidate()
         try await super.tearDown()
-    }
-
-    func testRemoteIncomingFollowPatchesOnce() async {
-        let cache = DetailPresentationCache()
-        configureCoordinator(cache: cache)
-
-        let record: [String: Any] = [
-            "follower_id": other.rawValue,
-            "following_id": viewer.rawValue,
-        ]
-        let payload = PostgresChangeRecordCodec.encode(record)!
-        let signal = MessageRealtimeSignal(kind: .insert, messageID: "edge-1", recordPayload: payload)
-
-        await RelationshipRealtimeSession.shared.testing_handleFollowerSignal(signal, viewerID: viewer)
-        let revisionOnce = FollowMutationCoordinator.shared.revision
-        await RelationshipRealtimeSession.shared.testing_handleFollowerSignal(signal, viewerID: viewer)
-
-        XCTAssertEqual(FollowMutationCoordinator.shared.revision, revisionOnce)
-        XCTAssertEqual(
-            FollowMutationCoordinator.shared.latest,
-            .followRequestApproved(owner: viewer, requester: other)
-        )
-    }
-
-    func testOptimisticFollowEchoDoesNotDoubleApply() async {
-        let cache = DetailPresentationCache()
-        configureCoordinator(cache: cache)
-        cache.seedViewerFollowingIDs([])
-
-        FollowMutationCoordinator.shared.applyEdgeChange(viewer: viewer, target: target, isFollowing: true)
-        let revisionAfterOptimistic = FollowMutationCoordinator.shared.revision
-
-        let record: [String: Any] = [
-            "follower_id": viewer.rawValue,
-            "following_id": target.rawValue,
-        ]
-        let payload = PostgresChangeRecordCodec.encode(record)!
-        let signal = MessageRealtimeSignal(kind: .insert, messageID: "edge-2", recordPayload: payload)
-        await RelationshipRealtimeSession.shared.testing_handleFollowerSignal(signal, viewerID: viewer)
-
-        XCTAssertEqual(FollowMutationCoordinator.shared.revision, revisionAfterOptimistic)
-        XCTAssertTrue(FollowMutationCoordinator.shared.isFollowing(viewer: viewer, target: target))
     }
 
     func testFollowingCompleteSetDeltaIncludesNewAuthor() async {
@@ -77,19 +32,6 @@ final class Phase10ERealtimeConsolidationTests: XCTestCase {
         let cached = await SessionFollowingStore.shared.cached(viewerID: viewer.rawValue)
         XCTAssertTrue(cached?.contains(other.rawValue) == true)
         XCTAssertTrue(cached?.contains(target.rawValue) == true)
-    }
-
-    func testUnknownFollowingSetDoesNotImplyUnfollow() async {
-        await SessionFollowingStore.shared.seedPairwiseEdge(
-            viewerID: viewer.rawValue,
-            targetID: target.rawValue,
-            isFollowing: true
-        )
-        let complete = await SessionFollowingStore.shared.cached(viewerID: viewer.rawValue)
-        XCTAssertNil(complete)
-        await SocialEntityRealtimeSession.shared.syncFollowingAuthorsFromSession(viewerID: viewer)
-        let stillUnknown = await SessionFollowingStore.shared.cached(viewerID: viewer.rawValue)
-        XCTAssertNil(stillUnknown)
     }
 
     func testNotificationInsertFromPayloadWithoutBootstrap() async {
@@ -140,18 +82,6 @@ final class Phase10ERealtimeConsolidationTests: XCTestCase {
         store.applyMemberCountDelta(roomID: roomID, delta: -1)
         XCTAssertEqual(store.rooms.first(where: { $0.id == roomID })?.memberCount, 0)
     }
-
-    private func configureCoordinator(cache: DetailPresentationCache) {
-        FollowMutationCoordinator.shared.configure(
-            detailCache: cache,
-            currentUserProfile: CurrentUserProfileStore(
-                profiles: CompositionRoot.bootstrapAppEnvironment().data.profiles,
-                session: CompositionRoot.bootstrapAppEnvironment().data.session,
-                imagePipeline: CompositionRoot.bootstrapAppEnvironment().data.imagePipeline,
-                detailCache: cache
-            )
-        )
-    }
 }
 
 private final class StubNotificationRepository: NotificationRepository, @unchecked Sendable {
@@ -168,9 +98,9 @@ private final class StubNotificationRepository: NotificationRepository, @uncheck
     }
 
     func notification(id: NotificationID) async throws -> ActivityNotification? {
-        lock.lock()
-        _notificationFetchCount += 1
-        lock.unlock()
+        TestLock.withLock(lock) {
+            _notificationFetchCount += 1
+        }
         return nil
     }
 

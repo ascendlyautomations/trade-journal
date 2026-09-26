@@ -55,6 +55,15 @@ enum ReelPublishDiagnostics {
         )
     }
 
+    static func logUploadAssetResolved(publishID: String, byteCount: Int, assetState: String) {
+        print(
+            """
+            [ReelPublish] uploadAssetResolved publishID=\(publishID) \
+            bytes=\(byteCount) assetState=\(assetState)
+            """
+        )
+    }
+
     static func logPreflightStarted(publishID: String, tradeID: String?) {
         if let tradeID {
             print("[ReelPublish] preflightStarted publishID=\(publishID) tradeID=\(tradeID)")
@@ -279,6 +288,7 @@ enum ReelPublishDiagnostics {
     static func logValidationCompleted(publishID: String) {}
     static func logPreparationStarted(publishID: String) {}
     static func logPreparationCompleted(publishID: String, byteCount: Int, durationSeconds: Int) {}
+    static func logUploadAssetResolved(publishID: String, byteCount: Int, assetState: String) {}
     static func logPreflightStarted(publishID: String, tradeID: String?) {}
     static func logPreflightCompleted(publishID: String) {}
     static func logVideoUploadStarted(publishID: String, objectIdentity: String, byteCount: Int) {}

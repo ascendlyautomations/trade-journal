@@ -127,6 +127,7 @@ function asSessionProfile(row: Record<string, unknown>): SessionProfileV1 {
       typeof row.has_email_password === "boolean"
         ? row.has_email_password
         : null,
+    created_at: row.created_at != null ? String(row.created_at) : null,
   }
 }
 

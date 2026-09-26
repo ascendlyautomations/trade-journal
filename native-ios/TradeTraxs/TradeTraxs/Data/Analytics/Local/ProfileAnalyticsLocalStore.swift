@@ -2,14 +2,14 @@ import Foundation
 import GRDB
 
 extension AnalyticsLocalStore {
-    struct ProfileAnalyticsCacheKey: Sendable, Equatable {
+    nonisolated struct ProfileAnalyticsCacheKey: Sendable, Equatable {
         var viewerID: String
         var subjectProfileID: String
         var contractVersion: String
         var visibilityIdentity: String
     }
 
-    struct ProfileAnalyticsSnapshot: Sendable {
+    nonisolated struct ProfileAnalyticsSnapshot: Sendable {
         var publicRevision: Int64
         var fetchedAt: String
         var modeResults: [ProfileStatisticsMetrics.Mode: ProfileStatisticsMetrics.Result]

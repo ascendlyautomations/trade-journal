@@ -219,7 +219,8 @@ final class ScreenshotImportViewModel {
                 let count = try await trades.importCSVTrades(drafts, isInitialImport: true)
                 TradeJournalMutationStore.shared.noteBulkImport(
                     owner: account.ownerProfileID,
-                    source: .screenshot
+                    source: .screenshot,
+                    persistedTradeCount: count
                 )
                 let result = CSVImportResult(
                     importedCount: count,

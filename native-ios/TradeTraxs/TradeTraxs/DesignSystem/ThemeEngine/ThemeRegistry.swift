@@ -18,7 +18,6 @@ final class ThemeRegistry: @unchecked Sendable {
             SystemTheme(),
             LightTheme(),
             DarkTheme(),
-            TradeTraxsTheme(),
         ]
     }
 
@@ -35,7 +34,7 @@ final class ThemeRegistry: @unchecked Sendable {
 
     func allMetadata() -> [ThemeMetadata] {
         lock.lock(); defer { lock.unlock() }
-        let order: [ThemeIdentifier] = [.system, .light, .dark, .tradeTraxs]
+        let order: [ThemeIdentifier] = [.system, .light, .dark]
         var result: [ThemeMetadata] = []
         for id in order {
             if let theme = themes[id] {

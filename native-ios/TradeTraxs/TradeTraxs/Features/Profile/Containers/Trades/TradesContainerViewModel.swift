@@ -72,18 +72,8 @@ final class TradesContainerViewModel {
     /// Screen-owned engagement prefetch — views must not call the repository path.
     func prefetchEngagement(for tradeIDs: [TradeID]) {
         let targets = tradeIDs.map { InteractionTarget.trade($0) }
-        if targets.isEmpty {
-            EngagementRealtimeSession.shared.updateRetention(
-                ownerKey: "profile-trades:\(profileID.rawValue)",
-                targets: []
-            )
-            return
-        }
+        guard !targets.isEmpty else { return }
         engagementStore?.prefetch(targets)
-        EngagementRealtimeSession.shared.updateRetention(
-            ownerKey: "profile-trades:\(profileID.rawValue)",
-            targets: Set(targets)
-        )
     }
 
     var visibleItems: [TradeSummary] {
@@ -518,10 +508,9 @@ final class TradesContainerViewModel {
                 #endif
                 return
             }
-            let message = ProfileSectionSupport.message(for: error)
-            paginationErrorMessage = message
+            paginationErrorMessage = Self.loadMoreFailureMessage
             #if DEBUG
-            ProfileTradesPaginationDiagnostics.failed(message: message)
+            ProfileTradesPaginationDiagnostics.failed(message: ProfileSectionSupport.message(for: error))
             #endif
         }
     }
@@ -710,6 +699,8 @@ final class TradesContainerViewModel {
         }
         state = .loaded(itemCount: visibleItems.count)
     }
+
+    private static let loadMoreFailureMessage = "Please try again."
 
     private static func isBenignPaginationCancellation(_ error: Error) -> Bool {
         if error is CancellationError { return true }

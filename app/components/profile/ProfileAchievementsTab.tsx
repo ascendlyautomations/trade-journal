@@ -87,7 +87,7 @@ export default function ProfileAchievementsTab({
   return (
     <div className="space-y-4">
       {!ready ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="tt-profile-browse-grid tt-profile-achievement-grid grid gap-3 sm:grid-cols-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
@@ -108,14 +108,14 @@ export default function ProfileAchievementsTab({
           {achievements.some((achievement) => achievement.is_featured) ? (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-white">Featured</h3>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="tt-profile-browse-grid tt-profile-achievement-grid grid gap-3 sm:grid-cols-2">
                 {achievements
                   .filter((achievement) => achievement.is_featured)
                   .map((achievement) => renderAchievement(achievement, true))}
               </div>
             </div>
           ) : null}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="tt-profile-browse-grid tt-profile-achievement-grid grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {achievements
               .filter((achievement) => !achievement.is_featured)
               .map((achievement) => renderAchievement(achievement, false))}

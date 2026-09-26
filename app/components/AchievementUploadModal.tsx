@@ -4,7 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { supabase } from "@/lib/supabaseClient"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
-import { compressContentImage, CONTENT_IMAGE_CROP_PRESET, CONTENT_IMAGE_DISPLAY_PRESET } from "@/lib/contentImagePipeline"
+import { CONTENT_IMAGE_DISPLAY_PRESET } from "@/lib/contentImagePipeline"
+import { CONTENT_IMAGE_V2_PRESET } from "@/lib/contentImageV2"
 import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 import { validateImageUpload } from "@/lib/uploadValidation"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
@@ -177,7 +178,7 @@ export default function AchievementUploadModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
   const imageCrop = useImageCropUpload({
-    preset: CONTENT_IMAGE_CROP_PRESET,
+    preset: CONTENT_IMAGE_V2_PRESET,
     onCropped: (cropped) => {
       setRemoveImage(false)
       setFile(cropped)
@@ -530,10 +531,7 @@ export default function AchievementUploadModal({
               .replace(/[^a-z0-9-_]+/g, "-")
               .replace(/-+/g, "-")
               .replace(/^-|-$/g, "")
-            let uploadFile: File = snapshotFile
-            if (snapshotFile.type?.startsWith("image/")) {
-              uploadFile = await compressContentImage(snapshotFile)
-            }
+            const uploadFile: File = snapshotFile
             const uploadName = uploadFile.type?.startsWith("image/")
               ? uploadFile.name
               : `${safeBase || "image"}.${ext}`
@@ -1022,7 +1020,7 @@ export default function AchievementUploadModal({
       <ImageCropModal
         open={cropModalOpen}
         file={imageCrop.cropSourceFile}
-        preset={CONTENT_IMAGE_CROP_PRESET}
+        preset={CONTENT_IMAGE_V2_PRESET}
         onCancel={imageCrop.handleCropCancel}
         onSave={imageCrop.handleCropSave}
       />

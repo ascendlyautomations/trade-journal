@@ -1,4 +1,5 @@
 "use client"
+import "../analyticsDesktopTheme.css"
 import { SkeletonCalendarPage } from "../components/ui/skeletons"
 import TradesPageTradeCard from "../components/TradesPageTradeCard"
 import TradesPageOverlays from "../components/TradesPageOverlays"
@@ -13,7 +14,7 @@ import {
 import { formatDecimal, formatRR } from "@/lib/formatDisplay"
 import { averageRrFromTrades } from "@/lib/tradeRr"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
-import { useEffect, useMemo, useState, useCallback } from "react"
+import { useEffect, useMemo, useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
@@ -23,7 +24,7 @@ import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
-import { getCachedTrades } from "@/lib/appDataCache"
+import { ensureRichTradeRowsByIds, getCachedTrades } from "@/lib/appDataCache"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
@@ -40,7 +41,7 @@ export default function CalendarPage() {
   const { user, profile: shareProfile, loading: profileLoading } = useUserProfile()
   const { trades, loading: tradesLoading, refresh: refreshTrades } = useCachedTrades(
     user?.id,
-    { fullHistory: true }
+    { analyticsHistory: true }
   )
   const {
     accounts: accountRows,
@@ -96,6 +97,21 @@ export default function CalendarPage() {
       cancelled = true
     }
   }, [selectedTrades, user?.id])
+
+  const journalEnrichKey = useRef("")
+
+  useEffect(() => {
+    if (!selectedDate || !user?.id) return
+    const missingIds = selectedTrades
+      .filter((trade) => !("notes" in trade) && !("image_url" in trade))
+      .map((trade) => String(trade.id))
+      .filter((id) => id.trim() !== "")
+    if (missingIds.length === 0) return
+    const key = `${selectedDate}:${[...missingIds].sort().join(",")}`
+    if (journalEnrichKey.current === key) return
+    journalEnrichKey.current = key
+    void ensureRichTradeRowsByIds(supabase, user.id, missingIds)
+  }, [selectedDate, selectedTrades, user?.id])
 
   async function handleTradeFormSaved() {
     if (selectedDate) {
@@ -171,6 +187,56 @@ export default function CalendarPage() {
       trade.account_type?.toLowerCase() === m
     )
   })
+
+  useEffect(() => {
+    if (!selectedDate) return
+    const visible = trades.filter((trade) => {
+      if (accountFilter !== "all" && String(trade.account_id ?? "") !== accountFilter) {
+        return false
+      }
+      if (selectedMode !== "all") {
+        const mode = selectedMode.toLowerCase()
+        if (
+          trade.mode?.toLowerCase() !== mode &&
+          trade.account_type?.toLowerCase() !== mode
+        ) {
+          return false
+        }
+      }
+      return true
+    })
+    const list = visible.filter((trade) => {
+      const resolved = resolveTradingTimeSourceForKey(trade)
+      if (!resolved) return false
+      return getTradingDayKey(resolved) === selectedDate
+    })
+    setSelectedTrades((prev) => {
+      const prevById = new Map(prev.map((trade) => [String(trade.id), trade]))
+      let changed = prev.length !== list.length
+      const next = list.map((trade) => {
+        const previous = prevById.get(String(trade.id))
+        if (
+          previous &&
+          ("notes" in previous || "image_url" in previous) &&
+          !("notes" in trade) &&
+          !("image_url" in trade)
+        ) {
+          const merged = { ...previous, ...trade }
+          const same =
+            merged.pnl === previous.pnl &&
+            merged.rr === previous.rr &&
+            merged.entry_time === previous.entry_time &&
+            merged.exit_time === previous.exit_time &&
+            merged.created_at === previous.created_at
+          if (!same) changed = true
+          return same ? previous : merged
+        }
+        if (previous !== trade) changed = true
+        return trade
+      })
+      return changed ? next : prev
+    })
+  }, [selectedDate, trades, accountFilter, selectedMode])
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -388,7 +454,7 @@ export default function CalendarPage() {
       >
       <div
         data-tt-native-surface="calendar"
-        className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white pt-3 pb-6"
+        className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white pt-3 pb-6"
       >
         <PlatformCalendarHeader
           accountFilter={accountFilter}

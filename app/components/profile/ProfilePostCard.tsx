@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { scrollModalCommentsPane } from "@/app/components/ui/DetailModalShell"
 import DetailModalImage from "@/app/components/ui/DetailModalImage"
-import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import ContentMediaPreview from "@/app/components/ContentMediaPreview"
 import FeedCommentList from "@/app/components/feed/FeedCommentList"
 import { useCommentLikes } from "@/lib/useCommentLikes"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
@@ -260,7 +260,7 @@ export default function ProfilePostCard({
       }`
 
   const postAuthorHeader = (
-    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 px-3 py-2 md:p-4">
+    <div className="tt-profile-post-header flex shrink-0 items-center justify-between gap-3 border-b border-white/5 px-3 py-2 md:p-4">
       <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
         <ProfileAvatarImg
           src={profile.avatar_url}
@@ -417,16 +417,23 @@ export default function ProfilePostCard({
   ) : null
 
   const postContentBlock = (
-    <div className="shrink-0 space-y-2 px-3 py-2.5 md:space-y-3 md:p-4">
+    <div className="tt-profile-post-body shrink-0 space-y-2 px-3 py-2.5 md:space-y-3 md:p-4">
       {post.content ? (
-        <ExpandableText
-          className="min-w-0 text-sm leading-snug text-white md:leading-relaxed"
-          textClassName="break-words text-white"
-          collapsedLines={3}
-          stopPropagation
-        >
-          {post.content}
-        </ExpandableText>
+        <div className="tt-profile-post-caption-slot">
+          <div className="tt-profile-post-caption-full">
+            <ExpandableText
+              className="min-w-0 text-sm leading-snug text-white md:leading-relaxed"
+              textClassName="break-words text-white"
+              collapsedLines={3}
+              stopPropagation
+            >
+              {post.content}
+            </ExpandableText>
+          </div>
+          <p className="tt-profile-post-caption-browse text-sm leading-snug text-white">
+            {post.content}
+          </p>
+        </div>
       ) : null}
       {showInteractions ? (
         <div className="border-t border-white/10 pt-2 md:pt-3">
@@ -585,27 +592,18 @@ export default function ProfilePostCard({
           />
         </div>
       ) : imgSrc ? (
-        <>
-          <div className="relative h-[min(46dvh,280px)] w-full overflow-hidden md:hidden">
-            <TradeScreenshotImage
-              src={imgSrc}
-              preset="feed-thumb"
-              objectFit="cover"
-              className="h-full w-full rounded-none"
-              logContext="profile-post-card-mobile"
-              onClick={onImageClick}
-            />
-          </div>
-          <div className="hidden w-full md:block">
-            <TradeScreenshotImage
-              src={imgSrc}
-              preset="feed-thumb"
-              className="rounded-none"
-              logContext="profile-post-card"
-              onClick={onImageClick}
-            />
-          </div>
-        </>
+        <ContentMediaPreview
+          src={imgSrc}
+          preset="feed-thumb"
+          onClick={onImageClick}
+          className="tt-profile-post-media"
+        />
+      ) : post.content ? (
+        <div className="tt-profile-post-text-frame">
+          <p className="line-clamp-6 text-sm leading-snug text-white">
+            {post.content}
+          </p>
+        </div>
       ) : null}
 
       {postContentBlock}

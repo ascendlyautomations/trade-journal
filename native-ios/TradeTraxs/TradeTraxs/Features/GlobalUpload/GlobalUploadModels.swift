@@ -45,6 +45,19 @@ struct UploadJob: Identifiable, Sendable, Equatable {
     var showsSuccessFlash: Bool
 
     var displayLine: String {
+        if kind == .reel {
+            switch phase {
+            case .completed:
+                return "Clip posted ✓"
+            case .failed:
+                return "Clip post failed"
+            default:
+                if let progress {
+                    return "Posting Clip…                       \(Self.percentString(progress))"
+                }
+                return "Posting Clip…"
+            }
+        }
         switch phase {
         case .preparing:
             return "Preparing \(title)…"

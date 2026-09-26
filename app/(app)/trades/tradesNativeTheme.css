@@ -1,0 +1,685 @@
+/*
+ * Trades desktop dark-mode experiment. Applies only at >=1200px.
+ * Mobile and tablet keep the existing utility colors.
+ * Does not change global tokens. Portaled Trades dialogs are reached with
+ * body:has(.trade-page-native-theme) so shared modal files stay untouched.
+ * [data-tt-share-export] is excluded so performance-card captures stay as designed.
+ */
+
+@media (min-width: 1200px) {
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) {
+    --tt-page: #0d1117;
+    --tt-surface: #161b22;
+    --tt-surface-nested: #1c2128;
+    --tt-surface-raised: #21262d;
+    --tt-surface-hover: #292e36;
+    --tt-divider: #30363d;
+    --tt-border: #30363d;
+    --tt-border-strong: #3d444d;
+    --tt-text: #f0f3f6;
+    --tt-text-muted: #b1bac4;
+    --tt-text-tertiary: #7d8590;
+    --tt-accent: #4ec4e0;
+    --tt-on-accent: #041018;
+    --tt-positive: #3ddc97;
+    --tt-negative: #ff7b72;
+    --tt-warning: #e3b341;
+    --tt-selected: rgb(78 196 224 / 0.12);
+
+    --color-accent: var(--tt-accent);
+    --color-accent-hover: #7dd3f0;
+    --color-accent-foreground: var(--tt-on-accent);
+    --color-accent-soft: var(--tt-selected);
+    --color-positive: var(--tt-positive);
+    --color-negative: var(--tt-negative);
+    --color-warning: var(--tt-warning);
+    --color-card: var(--tt-surface);
+    --color-card-foreground: var(--tt-text);
+    --color-card-border: var(--tt-border);
+    --color-border: var(--tt-border);
+    --color-divider: var(--tt-divider);
+    --color-foreground: var(--tt-text);
+    --color-foreground-secondary: var(--tt-text-muted);
+    --color-muted-foreground: var(--tt-text-tertiary);
+    --color-placeholder: var(--tt-text-tertiary);
+    --color-input: var(--tt-surface-raised);
+    --color-surface-elevated: var(--tt-surface-raised);
+    --color-surface-secondary: var(--tt-surface-nested);
+    --color-ring: rgb(78 196 224 / 0.28);
+    --color-focus-ring: rgb(78 196 224 / 0.35);
+    --surface-blur: 0px;
+
+    color: var(--tt-text);
+  }
+
+  html[data-tt-appearance="dark"] .trade-page-native-theme,
+  html.tt-native-ios .trade-page-native-theme[data-tt-native-surface="trades"] {
+    background-color: var(--tt-page, #0d1117);
+    background-image: none;
+    /* Contain the filter bar's top margin so it cannot collapse into the
+       transparent chrome wrapper and expose the body gradient. */
+    display: flow-root;
+    min-height: calc(100dvh - var(--app-header-offset, 4rem));
+  }
+
+  /* The page sits inside a transparent offset wrapper (navbar spacer)
+     and a classless pull-to-refresh wrapper. Paint those shells only
+     while this desktop page is mounted. The navbar is a separate fixed
+     layer and is not either element. */
+  html[data-tt-appearance="dark"] body:has(.trade-page-native-theme) :is(
+    .pt-\[var\(--app-header-offset\)\],
+    :has(> .trade-page-native-theme)
+  ) {
+    background-color: #0d1117;
+    background-image: none;
+  }
+
+  html[data-tt-appearance="dark"] body:has(.trade-page-native-theme) .pt-\[var\(--app-header-offset\)\] {
+    min-height: 100dvh;
+  }
+
+  html[data-tt-appearance="dark"] body:has(.trade-page-native-theme) :is(
+    [aria-label="Edit Trade"],
+    [aria-label="Quick Trade"],
+    [aria-label="Delete Trade"],
+    [aria-label="Account Settings"],
+    [aria-labelledby="performance-share-title"]
+  ) {
+    background-color: #161b22;
+    background-image: none;
+    border-color: #30363d;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  html[data-tt-appearance="dark"] body:has(.trade-page-native-theme) .z-\[10070\] {
+    background-color: #161b22;
+    background-image: none;
+    border-color: #30363d;
+  }
+
+  /* Keep the captured performance card on the existing export palette. */
+  html[data-tt-appearance="dark"] body:has(.trade-page-native-theme) [data-tt-share-export] {
+    --color-accent: #3b82f6;
+    --color-accent-hover: #2563eb;
+    --color-accent-foreground: #ffffff;
+    --color-positive: #4ade80;
+    --color-negative: #f87171;
+    --color-card: #0f172a;
+    --color-foreground: #e5e7eb;
+    --color-border: rgb(255 255 255 / 0.1);
+    --surface-blur: 12px;
+    color: #e5e7eb;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(
+    .bg-white\/5,
+    .bg-white\/\[0\.03\],
+    .bg-surface-elevated\/50,
+    .bg-\[\#0b1f3a\]
+  ):not(:where([data-tt-share-export] *)) {
+    background-color: #161b22;
+    background-image: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(
+    .bg-\[\#0b1220\]\/60,
+    .bg-black\/20
+  ):not(:where([data-tt-share-export] *)) {
+    background-color: #1c2128;
+    background-image: none;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(
+    .bg-white\/10,
+    .bg-white\/15,
+    .bg-\[\#0f172a\],
+    .bg-\[\#0a1329\],
+    .bg-\[\#0b2345\]
+  ):not(:where([data-tt-share-export] *)) {
+    background-color: #21262d;
+    background-image: none;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(
+    .hover\:bg-white\/10:hover,
+    .hover\:bg-white\/20:hover,
+    .hover\:bg-\[\#1e293b\]:hover,
+    .hover\:bg-\[\#1f2937\]:hover
+  ):not(:where([data-tt-share-export] *)) {
+    background-color: #292e36;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(.bg-\[\#1f2937\], .bg-\[\#1f2937\]:hover):not(:where([data-tt-share-export] *)) {
+    background-color: rgb(78 196 224 / 0.12);
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(
+    .border-white\/10,
+    .border-white\/15,
+    .md\:border-white\/10,
+    .border-gray-600,
+    .border-blue-400\/20,
+    .border-blue-400\/30,
+    .border-blue-400\/40
+  ):not(:where([data-tt-share-export] *)) {
+    border-color: #30363d;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(
+    .border-t.border-white\/10,
+    .md\:border-l.md\:border-white\/10,
+    .border-white\/5
+  ):not(:where([data-tt-share-export] *)) {
+    border-color: #30363d;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) .hover\:border-white\/20:hover:not(:where([data-tt-share-export] *)) {
+    border-color: #3d444d;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(.backdrop-blur-md, .backdrop-blur-sm, .ui-theme-backdrop):not(
+    :where([data-tt-share-export] *)
+  ) {
+    /* Tailwind's utility is emitted later; keep these surfaces flat. */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(.text-white, .text-gray-100):not(:where([data-tt-share-export] *)) {
+    color: #f0f3f6;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) h2:not(.text-blue-300):not(:where([data-tt-share-export] *)) {
+    color: #f0f3f6;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(.text-gray-200, .text-gray-300):not(:where([data-tt-share-export] *)) {
+    color: #b1bac4;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) .text-gray-400:not(:where([data-tt-share-export] *)) {
+    color: #7d8590;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) .placeholder\:text-gray-400:not(:where([data-tt-share-export] *))::placeholder {
+    color: #7d8590;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(
+    .text-blue-100,
+    .text-blue-200,
+    .text-blue-300,
+    .text-blue-400
+  ):not(:where([data-tt-share-export] *)) {
+    color: #4ec4e0;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(.text-green-400, .text-emerald-400, .text-emerald-200):not(
+    :where([data-tt-share-export] *)
+  ) {
+    color: #3ddc97;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(.text-red-400, .hover\:text-red-400:hover):not(:where([data-tt-share-export] *)) {
+    color: #ff7b72;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) .text-yellow-400:not(:where([data-tt-share-export] *)) {
+    color: #e3b341;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(.bg-green-500\/20, .bg-emerald-500\/15, .bg-emerald-500\/20):not(
+    :where([data-tt-share-export] *)
+  ) {
+    background-color: rgb(61 220 151 / 0.14);
+    box-shadow: inset 0 0 0 1px rgb(61 220 151 / 0.2);
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(.bg-red-500\/10, .bg-red-500\/20):not(:where([data-tt-share-export] *)) {
+    background-color: rgb(255 123 114 / 0.14);
+    box-shadow: inset 0 0 0 1px rgb(255 123 114 / 0.2);
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) .bg-yellow-500\/20:not(:where([data-tt-share-export] *)) {
+    background-color: rgb(227 179 65 / 0.14);
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) .bg-emerald-500:not(:where([data-tt-share-export] *)) {
+    background-color: #3ddc97;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) .bg-red-500:not(:where([data-tt-share-export] *)) {
+    background-color: #ff7b72;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(.bg-blue-500, .bg-blue-600):not(:where([data-tt-share-export] *)) {
+    background-color: #4ec4e0;
+    color: #041018;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(.hover\:bg-blue-500:hover, .hover\:bg-blue-600:hover):not(
+    :where([data-tt-share-export] *)
+  ) {
+    background-color: #7dd3f0;
+    color: #041018;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) .disabled\:hover\:bg-blue-500:disabled:hover:not(:where([data-tt-share-export] *)) {
+    background-color: #4ec4e0;
+    color: #041018;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(
+    .bg-blue-500\/10,
+    .bg-blue-500\/15,
+    .bg-blue-500\/20,
+    .bg-blue-500\/25
+  ):not(:where([data-tt-share-export] *)) {
+    background-color: rgb(78 196 224 / 0.12);
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) .hover\:bg-green-500\/20:hover:not(:where([data-tt-share-export] *)) {
+    background-color: rgb(78 196 224 / 0.12);
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(
+    .tt-trades-chip-selected,
+    .tt-trades-chip-selected:hover
+  ):not(:where([data-tt-share-export] *)) {
+    background-color: rgb(78 196 224 / 0.12);
+    color: #4ec4e0;
+    box-shadow: inset 0 0 0 1px rgb(78 196 224 / 0.25);
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) .tt-trades-chip-selected:hover:not(:where([data-tt-share-export] *)) {
+    background-color: rgb(78 196 224 / 0.18);
+    color: #4ec4e0;
+    box-shadow: inset 0 0 0 1px rgb(78 196 224 / 0.25);
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(.tt-trades-action, .tt-trades-action:hover):not(:where([data-tt-share-export] *)) {
+    background-color: #4ec4e0;
+    color: #041018;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) .tt-trades-action:hover:not(:where([data-tt-share-export] *)) {
+    background-color: #7dd3f0;
+    color: #041018;
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(
+    .focus\:ring-blue-500:focus,
+    .focus\:ring-blue-500\/20:focus,
+    .focus\:ring-blue-500\/40:focus,
+    .focus-within\:ring-emerald-500\/30:focus-within
+  ):not(:where([data-tt-share-export] *)) {
+    --tw-ring-color: rgb(78 196 224 / 0.28);
+  }
+
+  html[data-tt-appearance="dark"] :is(
+    .trade-page-native-theme,
+    body:has(.trade-page-native-theme) :is(
+      [aria-label="Edit Trade"],
+      [aria-label="Quick Trade"],
+      [aria-label="Delete Trade"],
+      [aria-label="Account Settings"],
+      [aria-labelledby="performance-share-title"],
+      .z-\[10070\]
+    )
+  ) :is(
+    .focus\:border-blue-400\/60:focus,
+    .focus\:border-green-500:focus,
+    .focus-within\:border-emerald-400\/60:focus-within
+  ):not(:where([data-tt-share-export] *)) {
+    border-color: #4ec4e0;
+  }
+
+  html[data-tt-appearance="dark"] .trade-page-native-theme :is(.backdrop-blur-md, .backdrop-blur-sm, .ui-theme-backdrop) {
+    --tw-backdrop-blur: none;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}

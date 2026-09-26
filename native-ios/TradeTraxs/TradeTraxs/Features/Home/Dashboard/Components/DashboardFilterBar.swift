@@ -8,17 +8,22 @@ struct DashboardFilterBar: View {
 
     var body: some View {
         HStack(spacing: ExperienceSpacing.xs) {
-            accountMenu
-                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(0)
-            dateMenu
-                .layoutPriority(2)
-                .fixedSize(horizontal: true, vertical: false)
+            HStack(spacing: ExperienceSpacing.xs) {
+                accountMenu
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(0)
+                dateMenu
+                    .layoutPriority(2)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .layoutPriority(2)
+            .contextualTourTarget(.dashboardAccountAndDates)
             Spacer(minLength: ExperienceSpacing.xxs)
             dashboardToolButtons
                 .fixedSize(horizontal: true, vertical: false)
                 .layoutPriority(2)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("dashboard.filters")
     }
 
@@ -32,6 +37,7 @@ struct DashboardFilterBar: View {
                 ExperienceHaptics.play(.selection)
                 viewModel.openTradesList()
             }
+            .contextualTourTarget(.dashboardTrades)
             toolButton(
                 icon: .reports,
                 accessibilityLabel: "Reports",
@@ -39,6 +45,7 @@ struct DashboardFilterBar: View {
             ) {
                 viewModel.openReports()
             }
+            .contextualTourTarget(.dashboardReports)
             toolButton(
                 icon: .payouts,
                 accessibilityLabel: "Withdrawals",
@@ -46,6 +53,7 @@ struct DashboardFilterBar: View {
             ) {
                 viewModel.openWithdrawalsHistory()
             }
+            .contextualTourTarget(.dashboardWithdrawals)
         }
     }
 

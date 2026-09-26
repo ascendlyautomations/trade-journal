@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabaseClient"
-import { compressImage } from "@/lib/compressImage"
+import { prepareImageForUpload } from "@/lib/imagePreparation"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 import {
   toUserFacingErrorMessage,
@@ -79,9 +79,15 @@ export async function submitBugReport(
   let screenshotUrl: string | null = null
   const file = input.screenshotFile
   if (file) {
-    let uploadFile: File = file
-    if (file.type?.startsWith("image/")) {
-      uploadFile = await compressImage(file)
+    let uploadFile: File
+    try {
+      uploadFile = await prepareImageForUpload("attachment", file)
+    } catch (error) {
+      return {
+        ok: false,
+        message:
+          error instanceof Error ? error.message : "Couldn't prepare that image.",
+      }
     }
     const safeName = uploadFile.name.replace(/[^\w.\-()+]/g, "_")
     const filePath = `bug-reports/${userId}/${Date.now()}-${safeName}`

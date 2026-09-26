@@ -14,7 +14,14 @@ final class SettingsExperienceTests: XCTestCase {
         XCTAssertTrue(allRoutes.contains(.privacy))
         XCTAssertTrue(allRoutes.contains(.notifications))
         XCTAssertTrue(allRoutes.contains(.appearance))
-        XCTAssertTrue(allRoutes.contains(.subscription))
+        XCTAssertEqual(
+            allRoutes.contains(.subscription),
+            IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled
+        )
+        XCTAssertEqual(
+            allRoutes.contains(.affiliate),
+            IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled
+        )
         XCTAssertFalse(allRoutes.contains(.security))
         XCTAssertFalse(allRoutes.contains(.home))
     }
@@ -26,10 +33,10 @@ final class SettingsExperienceTests: XCTestCase {
         )
         manager.select(.system)
         let viewModel = SettingsAppearanceViewModel(themeManager: manager)
-        XCTAssertEqual(viewModel.model.options.map(\.id), [.system, .tradeTraxs])
-        viewModel.select(.tradeTraxs, reduceMotion: true)
-        XCTAssertEqual(manager.selectedIdentifier, .tradeTraxs)
-        XCTAssertEqual(viewModel.model.selectedTheme, .tradeTraxs)
+        XCTAssertEqual(viewModel.model.options.map(\.id), [.system, .light, .dark])
+        viewModel.select(.dark, reduceMotion: true)
+        XCTAssertEqual(manager.selectedIdentifier, .dark)
+        XCTAssertEqual(viewModel.model.selectedTheme, .dark)
     }
 
     func testProfileSettingsAppendSingleHomeRoute() {
@@ -80,7 +87,11 @@ final class SettingsExperienceTests: XCTestCase {
         guard case .settingsStack(let routes) = destination else {
             return XCTFail("Expected settingsStack")
         }
-        XCTAssertEqual(routes, [.home, .subscription])
+        if IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
+            XCTAssertEqual(routes, [.home, .subscription])
+        } else {
+            XCTAssertEqual(routes, [.home])
+        }
     }
 
     func testDeepLinkSettingsBrokerIntegrations() {

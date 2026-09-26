@@ -30,6 +30,9 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
     /// PostgREST insert with `return=minimal` — required for conversation shell before participants exist (RLS).
     func insert<Body: Encodable>(_ body: Body, into table: String) async throws
 
+    /// PostgREST insert using pre-validated JSON bytes (object or array top-level).
+    func insertJSON(_ data: Data, into table: String) async throws
+
     func update<Body: Encodable, T: Decodable>(
         _ body: Body,
         table: String,
@@ -198,6 +201,12 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
     func insert<Body: Encodable>(_ body: Body, into table: String) async throws {
         DatabaseRequestDebugLog.write(operation: "INSERT", target: table, reason: "insert-minimal")
         let data = try transport.encodeJSON(body)
+        try await insertJSON(data, into: table)
+    }
+
+    func insertJSON(_ data: Data, into table: String) async throws {
+        DatabaseRequestDebugLog.write(operation: "INSERT", target: table, reason: "insert-minimal")
+        try SupabaseJSONEncoding.assertPostgRESTBody(data)
         _ = try await transport.send(
             host: .supabase,
             path: "/rest/v1/\(table)",
@@ -379,6 +388,11 @@ nonisolated struct UnconfiguredSupabaseDatabaseClient: SupabaseDatabaseExecuting
 
     func insert<Body: Encodable>(_ body: Body, into table: String) async throws {
         _ = (body, table)
+        throw AppError.authentication(.notConfigured)
+    }
+
+    func insertJSON(_ data: Data, into table: String) async throws {
+        _ = (data, table)
         throw AppError.authentication(.notConfigured)
     }
 

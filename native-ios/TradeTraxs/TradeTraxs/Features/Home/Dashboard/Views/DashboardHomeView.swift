@@ -85,6 +85,7 @@ struct DashboardHomeView: View {
                 }
                 .accessibilityLabel("Calendar")
                 .accessibilityIdentifier("dashboard.calendar")
+                .contextualTourTarget(.dashboardCalendar)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -105,11 +106,15 @@ struct DashboardHomeView: View {
                     )
                 }
                 .accessibilityIdentifier("dashboard.activity")
+                .contextualTourTarget(.dashboardNotifications)
             }
         }
         .refreshable {
             await viewModel.refresh()
             await brokerImportEligibilityStore.refreshAndWait(fromUserAction: true)
+        }
+        .onChange(of: SessionViewerGate.shared.epoch) { _, _ in
+            viewModel.loadIfNeeded()
         }
         .task(id: tabIsActive) {
             guard tabIsActive else { return }
@@ -132,19 +137,9 @@ struct DashboardHomeView: View {
         }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
             viewModel.handleJournalMutation()
-            GettingStartedRefreshCenter.noteEligibleUserAction()
-        }
-        .onChange(of: FollowMutationCoordinator.shared.revision) { _, _ in
-            switch FollowMutationCoordinator.shared.latest {
-            case .followed, .unfollowed, .followRequestApproved:
-                GettingStartedRefreshCenter.noteEligibleUserAction()
-            default:
-                break
-            }
         }
         .onChange(of: ContentMutationStore.shared.revision) { _, _ in
             viewModel.handleContentMutation()
-            GettingStartedRefreshCenter.noteEligibleUserAction()
         }
         .onChange(of: TraderDailyCheckInStore.shared.todayCheckIn?.updatedAt) { _, _ in
             if let checkIn = TraderDailyCheckInStore.shared.todayCheckIn {
@@ -168,8 +163,30 @@ struct DashboardHomeView: View {
         }
         .onDisappear {
             viewModel.onDisappear()
+            ContextualTourCoordinator.shared.setDashboardAnalyticsReady(false)
+        }
+        .onAppear {
+            ContextualTourCoordinator.shared.setDashboardAnalyticsReady(dashboardTourAnalyticsReady)
+        }
+        .onChange(of: dashboardTourAnalyticsReady) { _, ready in
+            ContextualTourCoordinator.shared.setDashboardAnalyticsReady(ready)
+        }
+        .onChange(of: dashboardTourAnalyticsDebugLine, initial: true) { _, line in
+            ContextualTourDebug.log(line)
         }
         .accessibilityIdentifier("dashboard.home")
+    }
+
+    /// Dashboard chrome that owns the tour anchors is on screen.
+    /// A new account may still have zero trades and the Getting Started card.
+    private var dashboardTourAnalyticsReady: Bool {
+        tabIsActive && contentRevealed && viewModel.summary != nil
+    }
+
+    private var dashboardTourAnalyticsDebugLine: String {
+        let trades = viewModel.summary?.tradeCount
+        let summary = viewModel.summary != nil
+        return "analytics tab=\(tabIsActive) revealed=\(contentRevealed) summary=\(summary) trades=\(trades.map(String.init) ?? "nil") gettingStarted=\(gettingStartedStore.shouldShowDashboardCard) ready=\(dashboardTourAnalyticsReady)"
     }
 
     private var emptyDashboardContent: some View {
@@ -191,11 +208,13 @@ struct DashboardHomeView: View {
             }
             .padding(.top, ExperienceSpacing.sm)
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
     }
 
     private var scrollContent: some View {
+        ScrollViewReader { proxy in
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 DashboardFilterBar(viewModel: viewModel)
                     .padding(.horizontal, ExperienceSpacing.sm)
                     .padding(.top, ExperienceSpacing.xs)
@@ -213,16 +232,19 @@ struct DashboardHomeView: View {
 
                     dashboardQuickActionsGroup(includeBrokerImport: true)
 
-                    DashboardEquityHero(
-                        summary: viewModel.equityHeroSummary ?? summary,
-                        periodTitle: viewModel.effectiveEquityChartRange.title,
-                        title: viewModel.equityHeroTitle,
-                        displayEquity: viewModel.equityHeroDisplayValue,
-                        chartPoints: viewModel.equityHeroChartPoints
-                    )
+                    VStack(alignment: .leading, spacing: 0) {
+                        DashboardEquityHero(
+                            summary: viewModel.equityHeroSummary ?? summary,
+                            periodTitle: viewModel.dateRange.title,
+                            title: viewModel.equityHeroTitle,
+                            displayEquity: viewModel.equityHeroDisplayValue,
+                            chartPoints: viewModel.equityHeroChartPoints
+                        )
 
-                    DashboardMetricStrip(chips: viewModel.metricChips)
-                        .padding(.bottom, ExperienceSpacing.xl)
+                        DashboardMetricStrip(chips: viewModel.metricChips)
+                            .padding(.bottom, ExperienceSpacing.xl)
+                    }
+                    .contextualTourTarget(.dashboardPerformance)
 
                     if let propStatus = viewModel.propFirmStatus {
                         PropFirmStatusCard(
@@ -304,6 +326,19 @@ struct DashboardHomeView: View {
                 revealContentIfNeeded()
             }
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+        .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
+            guard let target else { return }
+            if reduceMotion {
+                proxy.scrollTo(target, anchor: .center)
+            } else {
+                withAnimation(ExperienceMotion.navigation) {
+                    proxy.scrollTo(target, anchor: .center)
+                }
+            }
+        }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func revealContentIfNeeded() {
@@ -436,3 +471,4 @@ struct DashboardHomeView: View {
         }
     }
 }
+

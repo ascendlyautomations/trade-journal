@@ -175,7 +175,7 @@ function TradesPageMainContent({
                 onClick={() => onResultFilterChange("all")}
                 className={`inline-flex h-[34px] items-center whitespace-nowrap rounded-md px-3 text-sm text-white ${
                   resultFilter === "all"
-                    ? "bg-blue-500 hover:bg-blue-600"
+                    ? "tt-trades-chip-selected bg-blue-500 hover:bg-blue-600"
                     : "bg-white/10 hover:bg-white/20"
                 }`}
               >
@@ -257,7 +257,7 @@ function TradesPageMainContent({
                 className={`order-2 flex-[0.8] h-10 px-2 rounded text-sm font-medium transition flex items-center justify-center md:order-1 md:h-[34px] md:flex-none md:rounded-xl md:px-4 md:py-0
                   ${
                     showPublicOnly
-                      ? "bg-blue-500 text-white"
+                      ? "tt-trades-chip-selected bg-blue-500 text-white"
                       : "bg-white/10 text-gray-300 hover:bg-white/20"
                   }`}
               >
@@ -338,7 +338,7 @@ function TradesPageMainContent({
                     <div className="flex flex-wrap items-center justify-center gap-3">
                       <Link
                         href="/app"
-                        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500"
+                        className="tt-trades-action rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500"
                       >
                         Add Trade
                       </Link>
@@ -380,7 +380,7 @@ function TradesPageMainContent({
               <button
                 type="button"
                 onClick={onLoadMore}
-                className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 transition"
+                className="tt-trades-action px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 transition"
               >
                 Load More
               </button>

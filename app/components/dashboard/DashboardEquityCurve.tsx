@@ -28,13 +28,15 @@ export type EquityChartPoint = {
 
 export type DashboardEquityCurveProps = {
   data: EquityChartPoint[]
-  variant: "mobile" | "desktop"
+  variant: "mobile" | "desktop" | "hero"
   isPro?: boolean
   profitFactor?: number
   currentStreak?: number
   avgDay?: number
   consistency?: number
   totalTrades?: number
+  /** Hero header context. Desktop terminal only. */
+  timeframeLabel?: string
 }
 
 function ChartEmptyState() {
@@ -56,6 +58,7 @@ export default function DashboardEquityCurve({
   avgDay = 0,
   consistency = 0,
   totalTrades = 0,
+  timeframeLabel,
 }: DashboardEquityCurveProps) {
   const showEmpty = totalTrades === 0 || data.length === 0
 
@@ -125,6 +128,87 @@ export default function DashboardEquityCurve({
             </LineChart>
           </ResponsiveContainer>
         </div>
+        )}
+      </div>
+    )
+  }
+
+  if (variant === "hero") {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h2 className="tt-dash-section-title">Equity Curve</h2>
+          <p className="tt-dash-section-subtitle">
+            {[timeframeLabel, `${totalTrades.toLocaleString()} ${totalTrades === 1 ? "trade" : "trades"}`]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+        {showEmpty ? (
+          <ChartEmptyState />
+        ) : (
+          <div className="tt-dash-equity-plot rounded-lg bg-black/20">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={data}
+                margin={{ top: 16, right: 12, left: 4, bottom: 8 }}
+              >
+                <CartesianGrid stroke="rgba(125,133,144,0.18)" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  {...chartAxisTick(11)}
+                  tickFormatter={(value) => {
+                    const d = new Date(String(value))
+                    if (Number.isNaN(d.getTime())) return String(value).slice(0, 10)
+                    return `${d.getMonth() + 1}/${d.getDate()}`
+                  }}
+                  interval="preserveStartEnd"
+                  minTickGap={28}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  {...chartAxisTick(11)}
+                  width={56}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(value) =>
+                    Number(value) < 0
+                      ? `-$${Math.abs(Number(value)).toLocaleString(undefined, {
+                          maximumFractionDigits: 0,
+                        })}`
+                      : `$${Number(value).toLocaleString(undefined, {
+                          maximumFractionDigits: 0,
+                        })}`
+                  }
+                />
+                <Tooltip
+                  formatter={(value) => {
+                    const n = Number(value)
+                    const formatted =
+                      n < 0
+                        ? `-$${Math.abs(n).toLocaleString()}`
+                        : `$${n.toLocaleString()}`
+                    return [formatted, "Equity"]
+                  }}
+                  labelFormatter={(label) => {
+                    const s = String(label)
+                    return formatEST(s) || s
+                  }}
+                  {...chartTooltipStyles}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="equity"
+                  name="Equity"
+                  stroke="#38bdf8"
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 3, strokeWidth: 0 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </div>
     )

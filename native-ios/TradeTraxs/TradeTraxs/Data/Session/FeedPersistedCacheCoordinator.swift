@@ -40,9 +40,13 @@ enum FeedPersistedCacheCoordinator {
                     contentFilter: filter,
                     cursor: nil
                 )
+                let entries = FeedViewerOwnershipFilter.filterEntries(
+                    blob.entries,
+                    viewerID: viewerID
+                )
                 let snapshot = FeedSessionStore.Snapshot(
                     cacheKey: key,
-                    entries: blob.entries,
+                    entries: entries,
                     stories: blob.stories,
                     nextCursor: blob.nextCursor,
                     loadedAt: blob.savedAt
@@ -229,6 +233,7 @@ enum FeedPersistedCacheCoordinator {
             generation: UInt64
         )? = nil
     ) {
+        let sanitizedEntries = FeedViewerOwnershipFilter.filterEntries(entries, viewerID: viewerID)
         let key = FeedSessionStore.cacheKey(
             viewerID: viewerID,
             scope: scope,
@@ -237,7 +242,7 @@ enum FeedPersistedCacheCoordinator {
         )
         let snapshot = FeedSessionStore.Snapshot(
             cacheKey: key,
-            entries: entries,
+            entries: sanitizedEntries,
             stories: stories,
             nextCursor: nextCursor,
             loadedAt: Date()
@@ -298,10 +303,49 @@ enum FeedPersistedCacheCoordinator {
         }
     }
 
+    /// Rewrites feed pages that still contain the viewer's own timeline rows (legacy cache).
+    static func pruneViewerOwnContent(viewerID: ProfileID) {
+        let viewerCopy = viewerID
+        Task.detached(priority: .utility) {
+            let patches = FeedDiskCache.pruneViewerOwnContentOnDisk(viewerID: viewerCopy)
+            guard !patches.isEmpty else { return }
+            await MainActor.run {
+                MainThreadWorkProbe.measure("feed.ownContentPrune.apply", surface: "feed") {
+                    for patch in patches {
+                        if var snapshot = FeedSessionStore.shared.restore(key: patch.cacheKey) {
+                            snapshot.entries = patch.entries
+                            FeedSessionStore.shared.save(snapshot)
+                        } else {
+                            FeedSessionStore.shared.save(
+                                FeedSessionStore.Snapshot(
+                                    cacheKey: patch.cacheKey,
+                                    entries: patch.entries,
+                                    stories: patch.stories,
+                                    nextCursor: patch.nextCursor,
+                                    loadedAt: patch.loadedAt
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     static func patchTrade(_ trade: Trade, viewerID: ProfileID) {
         let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
         guard trade.visibility == .public else {
             SocialEntityPersistedCacheCoordinator.removeTrade(id: trade.id, viewerID: viewerID)
+            removeEntry(viewerID: viewerID, entryID: trade.id.rawValue)
+            return
+        }
+        if trade.ownerProfileID == viewerID {
+            SocialEntityPersistedCacheCoordinator.saveTradeSummary(
+                summary,
+                viewerID: viewerID,
+                source: .mutation,
+                mergeMode: .merge
+            )
             removeEntry(viewerID: viewerID, entryID: trade.id.rawValue)
             return
         }
@@ -558,6 +602,7 @@ enum FeedPersistedCacheCoordinator {
         scope: FeedScope,
         contentFilter: FeedContentFilter
     ) {
+        let entries = FeedViewerOwnershipFilter.filterEntries(blob.entries, viewerID: viewerID)
         let key = FeedSessionStore.cacheKey(
             viewerID: viewerID,
             scope: scope,
@@ -567,7 +612,7 @@ enum FeedPersistedCacheCoordinator {
         FeedSessionStore.shared.save(
             FeedSessionStore.Snapshot(
                 cacheKey: key,
-                entries: blob.entries,
+                entries: entries,
                 stories: blob.stories,
                 nextCursor: blob.nextCursor,
                 loadedAt: blob.savedAt

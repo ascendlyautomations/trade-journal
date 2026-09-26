@@ -31,8 +31,14 @@ nonisolated enum SessionBootstrapApplier {
     static func apply(
         _ bootstrap: SessionBootstrapV1,
         expectedViewerID: String,
-        detailCache: DetailPresentationCache?
+        detailCache: DetailPresentationCache?,
+        serverAuthoritative: Bool = false
     ) async throws -> Applied {
+        var bootstrap = bootstrap
+        SessionBootstrapStore.shared.reconcileAdoptedAvatar(
+            &bootstrap,
+            serverAuthoritative: serverAuthoritative
+        )
         let applied = try mapApplied(bootstrap, expectedViewerID: expectedViewerID)
         detailCache?.seed(applied.profile)
         // Session RPC does not include overview stats — fetch via REST in SessionBootstrapLoader.
@@ -52,10 +58,10 @@ nonisolated enum SessionBootstrapApplier {
     private static func mapProfile(_ bootstrap: SessionBootstrapV1, viewerID: String) -> Profile {
         let card = bootstrap.data.viewer
         let session = bootstrap.data.session_profile
-        let avatarRef = card.avatar_url.flatMap { raw -> MediaReference? in
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : MediaReference(id: trimmed, kind: .image, altText: nil)
-        }
+        let avatarRef = SessionBootstrapStore.normalizedAvatarURL(
+            session: session.avatar_url,
+            viewer: card.avatar_url
+        ).map { MediaReference(id: $0, kind: .image, altText: nil) }
         return Profile(
             id: ProfileID(viewerID),
             userID: UserID(viewerID),
@@ -69,8 +75,18 @@ nonisolated enum SessionBootstrapApplier {
             startedTradingAt: ISO8601.date(from: session.started_trading ?? ""),
             isPrivate: session.is_private ?? card.is_private,
             isCreator: session.creator_access ?? false,
-            createdAt: Date()
+            createdAt: Self.accountCreatedAt(from: session.created_at)
         )
+    }
+
+    private static func accountCreatedAt(from raw: String?) -> Date {
+        if let parsed = ISO8601.date(from: raw) {
+            return parsed
+        }
+        ContextualTourDebug.log(
+            "session_profile.created_at missing or unparsed raw=\(raw ?? "nil"); not using a synthetic now"
+        )
+        return Date(timeIntervalSince1970: 0)
     }
 
     private static func mapStats(_ bootstrap: SessionBootstrapV1, profileID: ProfileID) -> ProfileStats {

@@ -29,12 +29,14 @@ export type ImageCropPreset = {
   fillHelp?: string
 }
 
-export const STORY_IMAGE_ASPECT = 400 / 700
+/** Story editor frame. Stored stories are 1080×1920. Viewer sizing is separate. */
+export const STORY_IMAGE_ASPECT = 9 / 16
 
 const sharedHelp =
   "Drag to reposition. Pinch or use the slider to zoom. Reset returns to full image (Fit)."
 
 export const IMAGE_CROP_PRESETS: Record<ImageCropPresetId, ImageCropPreset> = {
+  /** Legacy production preset. Content Image V2 is not this id. */
   content: {
     id: "content",
     title: "Adjust image",
@@ -64,7 +66,7 @@ export const IMAGE_CROP_PRESETS: Record<ImageCropPresetId, ImageCropPreset> = {
     subtitle: "Drag and zoom to position your story.",
     fillAspect: STORY_IMAGE_ASPECT,
     outputWidth: 1080,
-    outputHeight: Math.round(1080 / STORY_IMAGE_ASPECT),
+    outputHeight: 1920,
     maxZoom: ZOOM_PAN_MAX,
     letterboxColor: TRADE_IMAGE_LETTERBOX_COLOR,
     mask: "rounded",

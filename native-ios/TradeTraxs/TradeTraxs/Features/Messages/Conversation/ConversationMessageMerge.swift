@@ -115,6 +115,22 @@ nonisolated enum ConversationMessageMerge {
         guard isOptimisticMessageID(optimistic.id) else { return false }
         if let viewerID, optimistic.senderProfileID != viewerID { return false }
         if optimistic.senderProfileID != server.senderProfileID { return false }
+
+        if let mediaID = optimistic.attachments.first?.media.id,
+           OptimisticOutboundImageSupport.isOptimisticMediaID(mediaID)
+        {
+            let serverHasImage = server.attachments.contains { $0.media.kind == .image }
+                || server.kind == .media
+            guard serverHasImage else { return false }
+            if let caption = optimistic.body?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !caption.isEmpty
+            {
+                let serverCaption = server.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if caption != serverCaption { return false }
+            }
+            return abs(server.createdAt.timeIntervalSince(optimistic.createdAt)) < optimisticMatchWindow
+        }
+
         let incomingContent = contentKey(for: server)
         let sameContent = contentKey(for: optimistic) == incomingContent
         if !sameContent, !incomingContent.isEmpty { return false }
@@ -183,6 +199,11 @@ nonisolated enum ConversationMessageMerge {
            let duration = message.attachments.first?.durationSeconds
         {
             return "voice:\(Int(duration * 1_000))"
+        }
+        if let mediaID = message.attachments.first?.media.id,
+           OptimisticOutboundImageSupport.isOptimisticMediaID(mediaID)
+        {
+            return "optimistic-image:\(message.id.rawValue)"
         }
         if let mediaID = message.attachments.first?.media.id,
            !mediaID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

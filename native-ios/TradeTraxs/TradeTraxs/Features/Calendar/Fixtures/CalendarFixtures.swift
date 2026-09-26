@@ -1,6 +1,6 @@
 import Foundation
 
-enum CalendarFixtures {
+nonisolated enum CalendarFixtures {
     static let viewerID = ProfileID("dev.calendar.viewer")
 
     /// Mix of profitable / losing / breakeven days in the current NY trading month.

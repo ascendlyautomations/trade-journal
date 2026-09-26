@@ -55,16 +55,9 @@ struct ImageCropEditorView: View {
         MediaImageOrientation.aspectRatio(of: sourceImage)
     }
 
-    private var originalExceedsFeedLimit: Bool {
-        FeedMediaLayout.exceedsFeedPortraitLimit(imageAspect: imageAspect)
-    }
-
-    /// Aspect-fill pan/pinch — required for fixed ratios and Original when Feed caps portrait at 4:5.
+    /// Aspect-fill pan/pinch for the selected 1:1, 4:5, or 16:9 frame.
     private var usesInteractiveCrop: Bool {
-        if aspectOption == .original, originalExceedsFeedLimit {
-            return true
-        }
-        return FeedMediaLayout.requiresFillCrop(
+        FeedMediaLayout.requiresFillCrop(
             imageAspect: imageAspect,
             aspectOption: aspectOption
         )
@@ -79,10 +72,6 @@ struct ImageCropEditorView: View {
 
                 if preset.allowedAspectOptions.count > 1 {
                     aspectPicker
-                    if aspectOption == .original, originalExceedsFeedLimit {
-                        Text("Original is capped to 4:5 in the Feed.")
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                    }
                 }
 
                 cropViewport
@@ -139,7 +128,7 @@ struct ImageCropEditorView: View {
                         }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(option.pickerLabel(originalExceedsFeedLimit: originalExceedsFeedLimit))
+                .accessibilityLabel(option.title)
                 .accessibilityAddTraits(aspectOption == option ? .isSelected : [])
             }
         }

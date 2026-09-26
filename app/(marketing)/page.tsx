@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
-import LandingPageClient from "@/app/components/LandingPageClient"
+import ProductLedHome from "@/app/components/landing/productLed/ProductLedHome"
 import {
   SkeletonFeaturedTradesSection,
   SkeletonTestimonialsSection,
@@ -53,25 +53,25 @@ export const metadata: Metadata = {
   },
 }
 
-/** Static shell (hero, features, FAQ) — daily ISR; reviews/trades stream from Suspense loaders. */
+/** Product-led experiment. Restore the previous homepage by rendering LandingPageClient here. */
 export const revalidate = 86_400
 
 export default function HomePage() {
   return (
     <>
       <JsonLd data={homePageJsonLd()} />
-      <LandingPageClient
-      featuredTradesSection={
-        <Suspense fallback={<SkeletonFeaturedTradesSection />}>
-          <LandingFeaturedTradesSectionLoader />
-        </Suspense>
-      }
-      testimonialsSection={
-        <Suspense fallback={<SkeletonTestimonialsSection />}>
-          <LandingTestimonialsSectionLoader />
-        </Suspense>
-      }
-    />
+      <ProductLedHome
+        featuredTradesSection={
+          <Suspense fallback={<SkeletonFeaturedTradesSection />}>
+            <LandingFeaturedTradesSectionLoader />
+          </Suspense>
+        }
+        testimonialsSection={
+          <Suspense fallback={<SkeletonTestimonialsSection />}>
+            <LandingTestimonialsSectionLoader />
+          </Suspense>
+        }
+      />
     </>
   )
 }

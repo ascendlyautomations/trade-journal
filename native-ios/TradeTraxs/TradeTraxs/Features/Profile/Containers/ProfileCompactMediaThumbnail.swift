@@ -45,7 +45,7 @@ struct ProfileCompactMediaThumbnail: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                .fill(colors.fillPrimary)
+                .fill(displayImage == nil ? colors.fillPrimary : Color.clear)
 
             if let displayImage {
                 Image(uiImage: displayImage)

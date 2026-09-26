@@ -80,6 +80,14 @@ final class CreateAchievementViewModel {
         }
     }
 
+    /// Screenshot/proof required for payout and evaluation; optional for milestone.
+    var isProofRequired: Bool {
+        switch kind {
+        case .milestone: return false
+        case .propFirmPayout, .liveTradingPayout, .passedEvaluation: return true
+        }
+    }
+
     var kindTitle: String {
         Self.displayTitle(for: kind)
     }
@@ -101,7 +109,8 @@ final class CreateAchievementViewModel {
     /// Mirrors ``validate()`` without mutating ``formError`` — drives submit button state.
     var isFormCompleteForSubmit: Bool {
         let title = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, finalImageData != nil else { return false }
+        guard !title.isEmpty else { return false }
+        if isProofRequired, finalImageData == nil { return false }
         if isPayoutKind {
             guard let amount = Self.parsePayout(payoutAmountText), amount > 0 else { return false }
         }
@@ -198,12 +207,14 @@ final class CreateAchievementViewModel {
             formError = "Sign in to create an achievement."
             return
         }
-        guard let finalImage, let finalImageData else {
+        if isProofRequired, finalImageData == nil {
             formError = "An image is required."
             return
         }
 
-        PostImageUploadProbe.log(finalImage: finalImage, uploadData: finalImageData)
+        if let finalImage, let finalImageData {
+            PostImageUploadProbe.log(finalImage: finalImage, uploadData: finalImageData)
+        }
 
         let payout = isPayoutKind ? Self.parsePayout(payoutAmountText) : nil
         let trimmedTitle = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -293,7 +304,7 @@ final class CreateAchievementViewModel {
         if isPayoutKind, payoutAmountText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             missing.append("Payout Amount")
         }
-        if finalImageData == nil { missing.append("Image") }
+        if isProofRequired, finalImageData == nil { missing.append("Image") }
 
         if !missing.isEmpty {
             formError = "Please complete: \(missing.joined(separator: ", "))."

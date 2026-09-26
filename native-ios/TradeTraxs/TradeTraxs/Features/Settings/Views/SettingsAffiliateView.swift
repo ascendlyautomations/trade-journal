@@ -39,6 +39,7 @@ struct SettingsAffiliateView: View {
 
             Section {
                 SettingsInfoRow(title: "Code", value: viewModel.referral?.code ?? "—")
+                    .experienceDashboardListRow()
                 if let code = viewModel.referral?.code, !code.isEmpty {
                     Button {
                         UIPasteboard.general.string = code
@@ -51,6 +52,8 @@ struct SettingsAffiliateView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .tint(colors.accent)
+                    .experienceDashboardListRow()
                     .accessibilityIdentifier("settings.affiliate.copy")
                 }
                 if let link = viewModel.referralLink {
@@ -60,6 +63,9 @@ struct SettingsAffiliateView: View {
                             systemImage: "square.and.arrow.up"
                         )
                     }
+                    .buttonStyle(.plain)
+                    .tint(colors.accent)
+                    .experienceDashboardListRow()
                 }
             } header: {
                 Text("Your Referral")
@@ -75,6 +81,7 @@ struct SettingsAffiliateView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Referrals")

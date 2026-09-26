@@ -58,7 +58,6 @@ struct BrokerLinkedImportReminderView: View {
         .fullScreenCover(isPresented: $importFlow.isPresented) {
             BrokerImportProgressView(
                 model: importFlow,
-                data: data,
                 onReviewImportedTrades: { ids in
                     reviewTradeIDs = ids
                     showsReview = true

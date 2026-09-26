@@ -95,9 +95,12 @@ nonisolated enum SocialEntityRealtimeSemantics {
             payload.isPublic = isPublic.boolValue
         }
         if let crop = row["image_crop"] {
-            if let data = try? JSONSerialization.data(withJSONObject: crop),
+            if let dict = crop as? [String: Any],
+               let data = PostgresChangeRecordCodec.encode(dict),
                let text = String(data: data, encoding: .utf8)
             {
+                payload.imageCropJSON = text
+            } else if let text = crop as? String, !text.isEmpty {
                 payload.imageCropJSON = text
             }
         }

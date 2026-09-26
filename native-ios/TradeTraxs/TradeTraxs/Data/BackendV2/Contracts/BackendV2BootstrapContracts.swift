@@ -118,6 +118,8 @@ nonisolated struct SessionProfileV1: Codable, Sendable, Equatable {
     var max_drawdown_limit: Double?
     var is_private: Bool?
     var has_email_password: Bool?
+    /// `profiles.created_at`. Absent on older cached payloads — do not invent "now".
+    var created_at: String? = nil
 }
 
 nonisolated struct DashboardAccountV1: Codable, Sendable, Equatable {

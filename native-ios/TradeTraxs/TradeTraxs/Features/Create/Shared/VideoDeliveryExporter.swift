@@ -41,7 +41,7 @@ nonisolated enum VideoDeliveryExporter {
         var audioBitrate: Int
     }
 
-    /// Frame counts collected during reader/writer transcode (DEBUG validation + logging).
+    /// Output metrics after delivery transcode (frame estimate + high-FPS reduction flag).
     struct TranscodeMetrics: Sendable {
         var outputVideoFrameCount: Int = 0
         var intentionalHighFPSReduction: Bool = false
@@ -54,6 +54,9 @@ nonisolated enum VideoDeliveryExporter {
 
     static let maxDeliveryLongEdge: CGFloat = 1920
     static let maxDeliveryShortEdge: CGFloat = 1080
+    /// Max dimensions when transcode is required for bitrate/size (720p delivery export).
+    static let maxTranscodeCompressionLongEdge: CGFloat = 1280
+    static let maxTranscodeCompressionShortEdge: CGFloat = 720
     /// Delivery ceiling — sources above this are reduced to 60 FPS (e.g. 120/240 → 60).
     static let maxDeliveryFrameRate: Double = 60
     static let highFrameRateBitrateThreshold: Double = 30.5
@@ -124,8 +127,16 @@ nonisolated enum VideoDeliveryExporter {
 
     // MARK: - Decision
 
-    static func deliveryTarget(for profile: SourceProfile) -> DeliveryTarget {
-        let outputSize = targetOutputSize(for: profile.orientedSize)
+    static func deliveryTarget(
+        for profile: SourceProfile,
+        maxLongEdge: CGFloat = maxDeliveryLongEdge,
+        maxShortEdge: CGFloat = maxDeliveryShortEdge
+    ) -> DeliveryTarget {
+        let outputSize = targetOutputSize(
+            for: profile.orientedSize,
+            maxLongEdge: maxLongEdge,
+            maxShortEdge: maxShortEdge
+        )
         let outputFPS = targetFrameRate(sourceFPS: profile.frameRate)
         let longEdge = max(outputSize.width, outputSize.height)
         let videoBitrate = targetVideoBitrate(longEdge: longEdge, targetFPS: outputFPS)
@@ -134,6 +145,24 @@ nonisolated enum VideoDeliveryExporter {
             outputFrameRate: outputFPS,
             videoBitrate: videoBitrate,
             audioBitrate: 128_000
+        )
+    }
+
+    /// Passthrough/remux decisions use the 1080p assessment target; bitrate/size transcodes export at 720p.
+    static func deliveryTargetForExport(
+        profile: SourceProfile,
+        mode: DeliveryMode,
+        decisionReason: String,
+        assessmentTarget: DeliveryTarget
+    ) -> DeliveryTarget {
+        guard mode == .transcode else { return assessmentTarget }
+        guard decisionReason.contains("bitrate") || decisionReason.contains("size") else {
+            return assessmentTarget
+        }
+        return deliveryTarget(
+            for: profile,
+            maxLongEdge: maxTranscodeCompressionLongEdge,
+            maxShortEdge: maxTranscodeCompressionShortEdge
         )
     }
 
@@ -153,13 +182,17 @@ nonisolated enum VideoDeliveryExporter {
         return .hd1080
     }
 
-    static func targetOutputSize(for orientedSize: CGSize) -> CGSize {
+    static func targetOutputSize(
+        for orientedSize: CGSize,
+        maxLongEdge: CGFloat = maxDeliveryLongEdge,
+        maxShortEdge: CGFloat = maxDeliveryShortEdge
+    ) -> CGSize {
         let width = max(orientedSize.width, 1)
         let height = max(orientedSize.height, 1)
         let scale = min(
             1.0,
-            maxDeliveryLongEdge / max(width, height),
-            maxDeliveryShortEdge / min(width, height)
+            maxLongEdge / max(width, height),
+            maxShortEdge / min(width, height)
         )
         return CGSize(
             width: floor(width * scale),
@@ -303,6 +336,7 @@ nonisolated enum VideoDeliveryExporter {
                 asset: sourceAsset,
                 outputURL: outputURL,
                 presetName: AVAssetExportPresetPassthrough,
+                compatiblePresets: await compatibleExportPresets(for: sourceAsset),
                 videoComposition: nil,
                 onProgress: onProgress
             )
@@ -324,6 +358,163 @@ nonisolated enum VideoDeliveryExporter {
         }
     }
 
+    /// Preferred system export preset for delivery transcode (resolved against asset compatibility at export time).
+    static func deliveryExportPresetName(for target: DeliveryTarget) -> String {
+        deliveryExportPresetCandidates(for: target).first
+            ?? AVAssetExportPresetMediumQuality
+    }
+
+    /// Ordered export presets for max-1080 delivery (first compatible with the asset wins at export time).
+    static func deliveryExportPresetCandidates(for target: DeliveryTarget) -> [String] {
+        let longEdge = max(target.outputSize.width, target.outputSize.height)
+        switch resolutionClass(for: longEdge) {
+        case .small, .hd720:
+            return [
+                AVAssetExportPreset1280x720,
+                AVAssetExportPresetMediumQuality,
+                AVAssetExportPreset960x540,
+                AVAssetExportPresetHighestQuality,
+            ]
+        case .hd1080:
+            return [
+                AVAssetExportPreset1920x1080,
+                AVAssetExportPresetMediumQuality,
+                AVAssetExportPreset1280x720,
+                AVAssetExportPresetHighestQuality,
+            ]
+        }
+    }
+
+    struct ExportPresetResolution: Sendable {
+        var preferred: String
+        var resolved: String
+        var compatiblePresets: [String]
+    }
+
+    /// Presets that can export `asset`. Replaces deprecated `exportPresets(compatibleWith:)`.
+    static func compatibleExportPresets(for asset: AVAsset) async -> [String] {
+        var compatible: [String] = []
+        for preset in AVAssetExportSession.allExportPresets() {
+            let matches = await AVAssetExportSession.compatibility(
+                ofExportPreset: preset,
+                with: asset,
+                outputFileType: nil
+            )
+            if matches {
+                compatible.append(preset)
+            }
+        }
+        return compatible
+    }
+
+    /// Picks the first preset that is both compatible with the asset and instantiates a session.
+    static func resolveExportPreset(for asset: AVAsset, target: DeliveryTarget) async -> ExportPresetResolution {
+        let preferred = deliveryExportPresetName(for: target)
+        let compatible = await compatibleExportPresets(for: asset)
+        let compatibleSet = Set(compatible)
+        var seen = Set<String>()
+        var candidates: [String] = []
+        for preset in [preferred] + deliveryExportPresetCandidates(for: target) + compatible {
+            guard seen.insert(preset).inserted else { continue }
+            candidates.append(preset)
+        }
+        for preset in candidates {
+            guard compatibleSet.contains(preset) else { continue }
+            if AVAssetExportSession(asset: asset, presetName: preset) != nil {
+                return ExportPresetResolution(
+                    preferred: preferred,
+                    resolved: preset,
+                    compatiblePresets: compatible
+                )
+            }
+        }
+        for preset in compatible where AVAssetExportSession(asset: asset, presetName: preset) != nil {
+            return ExportPresetResolution(
+                preferred: preferred,
+                resolved: preset,
+                compatiblePresets: compatible
+            )
+        }
+        return ExportPresetResolution(
+            preferred: preferred,
+            resolved: preferred,
+            compatiblePresets: compatible
+        )
+    }
+
+    private static func exportCompositionRenderSizeDescription(_ composition: AVVideoComposition?) -> String {
+        guard let composition else { return "none" }
+        let size = composition.renderSize
+        return "\(Int(size.width))x\(Int(size.height))"
+    }
+
+    private static func isMP4Supported(in supportedFileTypes: [AVFileType]) -> Bool {
+        supportedFileTypes.contains { type in
+            type == .mp4 || type.rawValue == AVFileType.mp4.rawValue || type.rawValue.contains("mpeg-4")
+        }
+    }
+
+    private static func resolveExportOutputFileType(from supportedFileTypes: [AVFileType]) -> AVFileType? {
+        if isMP4Supported(in: supportedFileTypes) {
+            return .mp4
+        }
+        return supportedFileTypes.first
+    }
+
+    /// Requires a non-empty exported file after `export(to:as:)` finishes.
+    private static func acceptCompletedExportOutput(at outputURL: URL) throws {
+        let info = VideoTranscodeFailureDiagnostics.outputFileInfo(at: outputURL)
+        VideoTranscodeDiagnostics.logCompletedOutputCheck(
+            outputURL: outputURL,
+            exists: info.exists,
+            fileBytes: info.bytes
+        )
+        guard info.exists else {
+            VideoTranscodeDiagnostics.logCompletedOutputRejected(reason: "missingFile")
+            throw VideoPreparationFailure.compressionFailed
+        }
+        guard info.bytes > 0 else {
+            VideoTranscodeDiagnostics.logCompletedOutputRejected(reason: "zeroBytes")
+            throw VideoPreparationFailure.compressionFailed
+        }
+        VideoTranscodeDiagnostics.logCompletedOutputAccepted(fileBytes: info.bytes)
+    }
+
+    private static func logExportWithSessionReturnedIfPresent(at outputURL: URL) {
+        let info = VideoTranscodeFailureDiagnostics.outputFileInfo(at: outputURL)
+        VideoTranscodeDiagnostics.logExportWithSessionReturned(
+            outputURL: outputURL,
+            fileBytes: info.bytes
+        )
+    }
+
+    private static func logAndThrowExportFailure(
+        stage: String,
+        exportError: Error?,
+        statusLabel: String,
+        presetName: String,
+        outputURL: URL,
+        compositionSize: String
+    ) async throws -> Never {
+        let errorSummary = VideoTranscodeFailureDiagnostics.errorDetails(from: exportError)?
+            .description ?? "none"
+        VideoTranscodeDiagnostics.logExportSessionFinished(
+            status: statusLabel,
+            errorSummary: errorSummary
+        )
+        let failedOutput = await VideoTranscodeFailureDiagnostics.inspectFailedOutput(at: outputURL)
+        VideoTranscodeFailureDiagnostics.logFailedOutputInspection(failedOutput)
+        VideoTranscodeFailureDiagnostics.logExportFailure(
+            stage: stage,
+            presetName: presetName,
+            outputURL: outputURL,
+            sessionError: exportError,
+            extra: "status=\(statusLabel) compositionRenderSize=\(compositionSize)"
+        )
+        try? FileManager.default.removeItem(at: outputURL)
+        throw VideoPreparationFailure.compressionFailed
+    }
+
     static func validateOutput(
         asset: AVURLAsset,
         fileURL: URL,
@@ -333,21 +524,35 @@ nonisolated enum VideoDeliveryExporter {
         transcodeMetrics: TranscodeMetrics? = nil
     ) async throws -> SourceProfile {
         let profile = try await inspectSource(asset: asset, fileURL: fileURL)
-        guard profile.fileBytes > 0 else { throw VideoPreparationFailure.outputValidationFailed }
+        guard profile.fileBytes > 0 else {
+            VideoPrepareDiagnostics.logValidationFailed(reason: "emptyFile")
+            throw VideoPreparationFailure.outputValidationFailed
+        }
         guard profile.isMP4Container || fileURL.pathExtension.lowercased() == "mp4" else {
+            VideoPrepareDiagnostics.logValidationFailed(reason: "notMP4Container ext=\(fileURL.pathExtension)")
             throw VideoPreparationFailure.outputValidationFailed
         }
         guard abs(profile.durationSeconds - expectedDurationSeconds) <= 2 else {
+            VideoPrepareDiagnostics.logValidationFailed(
+                reason: "durationMismatch expected=\(expectedDurationSeconds) actual=\(profile.durationSeconds)"
+            )
             throw VideoPreparationFailure.outputValidationFailed
         }
         guard profile.orientedSize.width > 0, profile.orientedSize.height > 0 else {
+            VideoPrepareDiagnostics.logValidationFailed(reason: "invalidOrientedSize")
             throw VideoPreparationFailure.outputValidationFailed
         }
         let longEdge = max(profile.orientedSize.width, profile.orientedSize.height)
         guard longEdge <= maxDeliveryLongEdge + 2 else {
+            VideoPrepareDiagnostics.logValidationFailed(
+                reason: "resolutionTooLarge longEdge=\(longEdge)"
+            )
             throw VideoPreparationFailure.outputValidationFailed
         }
         guard profile.frameRate <= maxDeliveryFrameRate + 2 else {
+            VideoPrepareDiagnostics.logValidationFailed(
+                reason: "frameRateTooHigh fps=\(profile.frameRate)"
+            )
             throw VideoPreparationFailure.outputValidationFailed
         }
         try validateOutputFrameRate(
@@ -374,35 +579,52 @@ nonisolated enum VideoDeliveryExporter {
 
         if intentionalHighFPSReduction {
             guard outputFPS >= minAcceptable else {
+                VideoPrepareDiagnostics.logValidationFailed(
+                    reason: "outputFPSTooLowAfterHighFPSReduction outputFPS=\(outputFPS) min=\(minAcceptable)"
+                )
                 throw VideoPreparationFailure.outputValidationFailed
             }
             return
         }
 
         guard outputFPS >= minAcceptable else {
+            VideoPrepareDiagnostics.logValidationFailed(
+                reason: "outputFPSTooLow outputFPS=\(outputFPS) min=\(minAcceptable) cadenceFPS=\(cadenceFPS)"
+            )
             throw VideoPreparationFailure.outputValidationFailed
         }
 
         if let outputFrameCount, outputDurationSeconds > 0 {
             let measuredFPS = Double(outputFrameCount) / Double(outputDurationSeconds)
             guard measuredFPS >= minAcceptable else {
+                VideoPrepareDiagnostics.logValidationFailed(
+                    reason: "estimatedFrameCountTooLow measuredFPS=\(measuredFPS) min=\(minAcceptable) frames=\(outputFrameCount)"
+                )
                 throw VideoPreparationFailure.outputValidationFailed
             }
         }
     }
 
-    /// When transcode was chosen for excessive bitrate, output must be materially smaller.
+    /// When transcode was chosen for bitrate/size, accept any output strictly smaller than the source (ratios are diagnostic only).
     static func validateTranscodeEffectiveness(
         source: SourceProfile,
         output: SourceProfile,
         decisionReason: String
     ) throws {
-        guard decisionReason.contains("bitrate") else { return }
+        guard decisionReason.contains("bitrate") || decisionReason.contains("size") else { return }
         let byteRatio = Double(output.fileBytes) / Double(max(source.fileBytes, 1))
         let bitrateRatio = output.estimatedBitrate / max(source.estimatedBitrate, 1)
-        if byteRatio > 0.85 && bitrateRatio > 0.85 {
-            throw VideoPreparationFailure.compressionFailed
+        if output.fileBytes < source.fileBytes {
+            return
         }
+        VideoPrepareDiagnostics.logTranscodeEffectivenessValidationFailed(
+            reason: """
+            transcodeNotSmallerThanSource sourceBytes=\(source.fileBytes) \
+            outputBytes=\(output.fileBytes) byteRatio=\(String(format: "%.3f", byteRatio)) \
+            bitrateRatio=\(String(format: "%.3f", bitrateRatio))
+            """
+        )
+        throw VideoPreparationFailure.compressionFailed
     }
 
     // MARK: - Private export
@@ -412,222 +634,11 @@ nonisolated enum VideoDeliveryExporter {
         return max(2, rounded - (rounded % 2))
     }
 
+    /// Delivery transcode via AVAssetExportSession (orientation/scaling in video composition).
     private static func transcode(
         asset: AVURLAsset,
         outputURL: URL,
         profile: SourceProfile,
-        target: DeliveryTarget,
-        metrics: inout TranscodeMetrics,
-        onProgress: ((Double) -> Void)?
-    ) async throws {
-        try await transcodeWithReaderWriter(
-            asset: asset,
-            outputURL: outputURL,
-            profile: profile,
-            sourceFrameRate: profile.frameRate,
-            target: target,
-            metrics: &metrics,
-            onProgress: onProgress
-        )
-    }
-
-    /// Serializes `copyNextSampleBuffer` — AVAssetReader must not be read concurrently across outputs.
-    private final class ExportSessionHandle: @unchecked Sendable {
-        let session: AVAssetExportSession
-
-        init(_ session: AVAssetExportSession) {
-            self.session = session
-        }
-
-        func cancel() {
-            session.cancelExport()
-        }
-    }
-
-    private final class ReaderSampleGate: @unchecked Sendable {
-        private let lock = NSLock()
-
-        func copyNext(from output: AVAssetReaderOutput) -> CMSampleBuffer? {
-            lock.lock()
-            defer { lock.unlock() }
-            return output.copyNextSampleBuffer()
-        }
-    }
-
-    private enum TranscodeTrack: Sendable {
-        case video
-        case audio
-    }
-
-    private struct TranscodeProgressSnapshot: Sendable {
-        var videoSampleCount: Int
-        var audioSampleCount: Int
-        var lastVideoPTS: Double
-        var lastAudioPTS: Double
-        var secondsSinceProgress: TimeInterval
-        var videoFinished: Bool
-        var audioFinished: Bool
-    }
-
-    private final class TranscodeProgressTracker: @unchecked Sendable {
-        private let lock = NSLock()
-        private var lastProgressAt = Date()
-        private(set) var videoSampleCount = 0
-        private(set) var audioSampleCount = 0
-        private(set) var lastVideoPTS: Double = -1
-        private(set) var lastAudioPTS: Double = -1
-        private(set) var videoFinished = false
-        private(set) var audioFinished = false
-
-        func recordVideo(sampleCount: Int, pts: Double) {
-            lock.lock()
-            defer { lock.unlock() }
-            videoSampleCount = sampleCount
-            lastVideoPTS = pts
-            lastProgressAt = Date()
-        }
-
-        func recordAudio(sampleCount: Int, pts: Double) {
-            lock.lock()
-            defer { lock.unlock() }
-            audioSampleCount = sampleCount
-            lastAudioPTS = pts
-            lastProgressAt = Date()
-        }
-
-        func markVideoFinished(sampleCount: Int) {
-            lock.lock()
-            defer { lock.unlock() }
-            videoSampleCount = sampleCount
-            videoFinished = true
-            lastProgressAt = Date()
-        }
-
-        func markAudioFinished(sampleCount: Int) {
-            lock.lock()
-            defer { lock.unlock() }
-            audioSampleCount = sampleCount
-            audioFinished = true
-            lastProgressAt = Date()
-        }
-
-        func snapshot() -> TranscodeProgressSnapshot {
-            lock.lock()
-            defer { lock.unlock() }
-            return TranscodeProgressSnapshot(
-                videoSampleCount: videoSampleCount,
-                audioSampleCount: audioSampleCount,
-                lastVideoPTS: lastVideoPTS,
-                lastAudioPTS: lastAudioPTS,
-                secondsSinceProgress: Date().timeIntervalSince(lastProgressAt),
-                videoFinished: videoFinished,
-                audioFinished: audioFinished
-            )
-        }
-
-        func markPumpsStarted() {
-            lock.lock()
-            defer { lock.unlock() }
-            lastProgressAt = Date()
-        }
-    }
-
-    /// Holds AVFoundation writer/reader handles for `@Sendable` sample pump callbacks.
-    private final class WriterSamplePump: @unchecked Sendable {
-        let track: TranscodeTrack
-        let readerOutput: AVAssetReaderOutput
-        let writerInput: AVAssetWriterInput
-        private let readerSampleGate: ReaderSampleGate
-        private let totalSeconds: Double
-        private let progressTracker: TranscodeProgressTracker
-        private let onFrameAppended: (() -> Void)?
-        private let onProgress: ((Double) -> Void)?
-        private var sampleCount = 0
-
-        init(
-            track: TranscodeTrack,
-            readerOutput: AVAssetReaderOutput,
-            writerInput: AVAssetWriterInput,
-            readerSampleGate: ReaderSampleGate,
-            totalSeconds: Double,
-            progressTracker: TranscodeProgressTracker,
-            onFrameAppended: (() -> Void)?,
-            onProgress: ((Double) -> Void)?
-        ) {
-            self.track = track
-            self.readerOutput = readerOutput
-            self.writerInput = writerInput
-            self.readerSampleGate = readerSampleGate
-            self.totalSeconds = totalSeconds
-            self.progressTracker = progressTracker
-            self.onFrameAppended = onFrameAppended
-            self.onProgress = onProgress
-        }
-
-        func drain(continuation: CheckedContinuation<Void, Error>) {
-            while writerInput.isReadyForMoreMediaData {
-                if Task.isCancelled {
-                    writerInput.markAsFinished()
-                    continuation.resume(throwing: VideoPreparationFailure.cancelled)
-                    return
-                }
-
-                guard let sampleBuffer = readerSampleGate.copyNext(from: readerOutput) else {
-                    writerInput.markAsFinished()
-                    switch track {
-                    case .video:
-                        progressTracker.markVideoFinished(sampleCount: sampleCount)
-                        VideoTranscodeDiagnostics.logVideoPumpFinished(samples: sampleCount)
-                    case .audio:
-                        progressTracker.markAudioFinished(sampleCount: sampleCount)
-                        VideoTranscodeDiagnostics.logAudioPumpFinished(samples: sampleCount)
-                    }
-                    continuation.resume()
-                    return
-                }
-
-                if !writerInput.append(sampleBuffer) {
-                    continuation.resume(throwing: VideoPreparationFailure.compressionFailed)
-                    return
-                }
-
-                sampleCount += 1
-                onFrameAppended?()
-
-                let pts = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
-                switch track {
-                case .video:
-                    progressTracker.recordVideo(sampleCount: sampleCount, pts: pts)
-                    if sampleCount == 1 || sampleCount % 30 == 0 {
-                        VideoTranscodeDiagnostics.logVideoProgress(
-                            samples: sampleCount,
-                            pts: pts,
-                            writerReady: writerInput.isReadyForMoreMediaData
-                        )
-                    }
-                case .audio:
-                    progressTracker.recordAudio(sampleCount: sampleCount, pts: pts)
-                    if sampleCount == 1 || sampleCount % 50 == 0 {
-                        VideoTranscodeDiagnostics.logAudioProgress(
-                            samples: sampleCount,
-                            pts: pts,
-                            writerReady: writerInput.isReadyForMoreMediaData
-                        )
-                    }
-                }
-
-                if let onProgress, totalSeconds > 0, track == .video {
-                    onProgress(min(1, pts / totalSeconds))
-                }
-            }
-        }
-    }
-
-    private static func transcodeWithReaderWriter(
-        asset: AVURLAsset,
-        outputURL: URL,
-        profile: SourceProfile,
-        sourceFrameRate: Double,
         target: DeliveryTarget,
         metrics: inout TranscodeMetrics,
         onProgress: ((Double) -> Void)?
@@ -642,233 +653,85 @@ nonisolated enum VideoDeliveryExporter {
         let preferredTransform = try await videoTrack.load(.preferredTransform)
         let oriented = orientedSize(naturalSize: naturalSize, transform: preferredTransform)
 
-        let videoComposition = makeTranscodeVideoComposition(
+        let videoFormatDescriptions = try await videoTrack.load(.formatDescriptions)
+        let videoSourceFormatHint = codecFourCC(from: videoFormatDescriptions.first) ?? "unknown"
+        var audioSourceFormatHint = "none"
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        if let audioTrack = audioTracks.first {
+            let audioFormatDescriptions = try await audioTrack.load(.formatDescriptions)
+            audioSourceFormatHint = codecFourCC(from: audioFormatDescriptions.first) ?? "unknown"
+        }
+
+        let composition = makeTranscodeVideoComposition(
             videoTrack: videoTrack,
             duration: duration,
             naturalSize: naturalSize,
             preferredTransform: preferredTransform,
             oriented: oriented,
-            sourceFrameRate: sourceFrameRate,
+            sourceFrameRate: profile.frameRate,
             target: target
         )
 
-        try? FileManager.default.removeItem(at: outputURL)
-
-        let reader = try AVAssetReader(asset: asset)
-        let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
-        writer.shouldOptimizeForNetworkUse = true
-
-        let readerSampleGate = ReaderSampleGate()
-
-        let readerVideoOutput = AVAssetReaderVideoCompositionOutput(
-            videoTracks: [videoTrack],
-            videoSettings: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-            ]
+        let presetResolution = await resolveExportPreset(for: asset, target: target)
+        VideoTranscodeDiagnostics.logExportCompatiblePresets(
+            presetResolution.compatiblePresets,
+            preferred: presetResolution.preferred
         )
-        readerVideoOutput.videoComposition = videoComposition
-        readerVideoOutput.alwaysCopiesSampleData = false
-        guard reader.canAdd(readerVideoOutput) else {
-            throw VideoPreparationFailure.compressionFailed
-        }
-        reader.add(readerVideoOutput)
-
-        let outputWidth = evenDimension(target.outputSize.width)
-        let outputHeight = evenDimension(target.outputSize.height)
-        let encoderFPS = encoderHintFrameRate(
-            for: compositionOutputFrameRate(sourceFPS: sourceFrameRate, targetFPS: target.outputFrameRate)
-        )
-        let encodeBitrate = transcodeVideoBitrate(
-            profile: profile,
-            ceiling: target.videoBitrate
-        )
-        let videoSettings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: outputWidth,
-            AVVideoHeightKey: outputHeight,
-            AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: encodeBitrate,
-                AVVideoMaxKeyFrameIntervalKey: max(1, encoderFPS) * 2,
-                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
-                AVVideoExpectedSourceFrameRateKey: max(1, encoderFPS),
-                AVVideoAllowFrameReorderingKey: true,
-            ],
-        ]
-
-        let writerVideoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-        writerVideoInput.expectsMediaDataInRealTime = false
-        guard writer.canAdd(writerVideoInput) else {
-            throw VideoPreparationFailure.compressionFailed
-        }
-        writer.add(writerVideoInput)
-
-        var readerAudioOutput: AVAssetReaderTrackOutput?
-        var writerAudioInput: AVAssetWriterInput?
-
-        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
-        if let audioTrack = audioTracks.first {
-            let decompressedAudioSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatLinearPCM,
-                AVLinearPCMIsBigEndianKey: false,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMBitDepthKey: 16,
-            ]
-            let audioReaderOutput = AVAssetReaderTrackOutput(
-                track: audioTrack,
-                outputSettings: decompressedAudioSettings
+        if presetResolution.resolved != presetResolution.preferred {
+            VideoTranscodeDiagnostics.logExportSetup(
+                stage: "presetFallback",
+                detail: "preferred=\(presetResolution.preferred) resolved=\(presetResolution.resolved)"
             )
-            audioReaderOutput.alwaysCopiesSampleData = false
-            if reader.canAdd(audioReaderOutput) {
-                reader.add(audioReaderOutput)
-                readerAudioOutput = audioReaderOutput
-            }
-
-            let audioWriterSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVSampleRateKey: 44_100,
-                AVNumberOfChannelsKey: 2,
-                AVEncoderBitRateKey: target.audioBitrate,
-            ]
-            let audioWriterInput = AVAssetWriterInput(
-                mediaType: .audio,
-                outputSettings: audioWriterSettings
-            )
-            audioWriterInput.expectsMediaDataInRealTime = false
-            if writer.canAdd(audioWriterInput) {
-                writer.add(audioWriterInput)
-                writerAudioInput = audioWriterInput
-            }
         }
+        let preset = presetResolution.resolved
+        VideoTranscodeSessionAudit.logWriterConfiguration(
+            outputFileType: AVFileType.mp4.rawValue,
+            videoCodec: "h264-exportSession",
+            videoWidth: Int(target.outputSize.width.rounded()),
+            videoHeight: Int(target.outputSize.height.rounded()),
+            videoBitrate: target.videoBitrate,
+            videoBitrateIsExportPolicyOnly: true,
+            expectedFPS: target.outputFrameRate,
+            audioFormat: audioTracks.isEmpty ? "none" : "aac-exportSession",
+            audioSampleRate: 0,
+            audioChannels: 0,
+            audioBitrate: target.audioBitrate,
+            videoSourceFormatHint: "\(videoSourceFormatHint)-diagnosticOnly",
+            audioSourceFormatHint: "\(audioSourceFormatHint)-diagnosticOnly",
+            writerShouldOptimizeForNetworkUse: true
+        )
+        VideoTranscodeDiagnostics.logExportSessionStarted(
+            preset: preset,
+            outputURL: outputURL,
+            targetSize: target.outputSize,
+            targetFrameRate: target.outputFrameRate
+        )
 
-        guard reader.startReading() else {
-            throw VideoPreparationFailure.compressionFailed
-        }
-        VideoTranscodeDiagnostics.logReaderStarted()
+        try await exportWithSession(
+            asset: asset,
+            outputURL: outputURL,
+            presetName: preset,
+            compatiblePresets: presetResolution.compatiblePresets,
+            videoComposition: composition,
+            onProgress: onProgress
+        )
 
-        guard writer.startWriting() else {
-            throw VideoPreparationFailure.compressionFailed
-        }
-        VideoTranscodeDiagnostics.logWriterStarted()
-        writer.startSession(atSourceTime: .zero)
-
-        let durationSeconds = CMTimeGetSeconds(duration)
-        let progressTracker = TranscodeProgressTracker()
-        let hasAudio = readerAudioOutput != nil && writerAudioInput != nil
-        progressTracker.markPumpsStarted()
-
-        do {
-            try await withThrowingTaskGroup(of: Void.self) { group in
-                group.addTask {
-                    try await runTranscodeWatchdog(
-                        tracker: progressTracker,
-                        reader: reader,
-                        writer: writer,
-                        videoInput: writerVideoInput,
-                        audioInput: writerAudioInput,
-                        hasAudio: hasAudio,
-                        durationSeconds: durationSeconds
-                    )
-                }
-                group.addTask {
-                    VideoTranscodeDiagnostics.logVideoPumpStarted()
-                    try await pumpSamples(
-                        track: .video,
-                        from: readerVideoOutput,
-                        to: writerVideoInput,
-                        readerSampleGate: readerSampleGate,
-                        duration: duration,
-                        progressTracker: progressTracker,
-                        onFrameAppended: nil,
-                        onProgress: { value in
-                            onProgress?(value * 0.95)
-                        }
-                    )
-                }
-                if let readerAudioOutput, let writerAudioInput {
-                    group.addTask {
-                        VideoTranscodeDiagnostics.logAudioPumpStarted()
-                        try await pumpSamples(
-                            track: .audio,
-                            from: readerAudioOutput,
-                            to: writerAudioInput,
-                            readerSampleGate: readerSampleGate,
-                            duration: duration,
-                            progressTracker: progressTracker,
-                            onFrameAppended: nil,
-                            onProgress: nil
-                        )
-                    }
-                }
-                try await group.waitForAll()
-            }
-        } catch {
-            reader.cancelReading()
-            writer.cancelWriting()
-            try? FileManager.default.removeItem(at: outputURL)
-            throw error
-        }
-
-        metrics.outputVideoFrameCount = progressTracker.snapshot().videoSampleCount
-        VideoTranscodeDiagnostics.logInputsMarkedFinished()
-
-        if Task.isCancelled {
-            reader.cancelReading()
-            writer.cancelWriting()
-            try? FileManager.default.removeItem(at: outputURL)
-            throw VideoPreparationFailure.cancelled
-        }
-
-        if reader.status == .failed || writer.status == .failed {
-            try? FileManager.default.removeItem(at: outputURL)
-            throw VideoPreparationFailure.compressionFailed
-        }
-
-        VideoTranscodeDiagnostics.logWriterFinishStarted()
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            writer.finishWriting {
-                continuation.resume()
-            }
-        }
-        VideoTranscodeDiagnostics.logWriterFinishCompleted(status: "\(writer.status)")
-
-        if writer.status != .completed {
-            try? FileManager.default.removeItem(at: outputURL)
-            throw VideoPreparationFailure.compressionFailed
-        }
-
-        onProgress?(1)
+        let durationSeconds = max(CMTimeGetSeconds(duration), 1)
+        metrics.outputVideoFrameCount = max(
+            1,
+            Int((durationSeconds * target.outputFrameRate).rounded())
+        )
     }
 
-    private static func runTranscodeWatchdog(
-        tracker: TranscodeProgressTracker,
-        reader: AVAssetReader,
-        writer: AVAssetWriter,
-        videoInput: AVAssetWriterInput,
-        audioInput: AVAssetWriterInput?,
-        hasAudio: Bool,
-        durationSeconds: Double
-    ) async throws {
-        let stallLimit = max(30.0, durationSeconds * 2.5)
-        while !Task.isCancelled {
-            try await Task.sleep(nanoseconds: 2_000_000_000)
-            let snap = tracker.snapshot()
-            if snap.videoFinished && (!hasAudio || snap.audioFinished) {
-                return
-            }
-            if snap.secondsSinceProgress >= stallLimit {
-                VideoTranscodeDiagnostics.logStall(
-                    readerStatus: "\(reader.status)",
-                    writerStatus: "\(writer.status)",
-                    videoReady: videoInput.isReadyForMoreMediaData,
-                    audioReady: audioInput?.isReadyForMoreMediaData ?? false,
-                    videoSamples: snap.videoSampleCount,
-                    audioSamples: snap.audioSampleCount,
-                    lastVideoPTS: snap.lastVideoPTS,
-                    lastAudioPTS: snap.lastAudioPTS,
-                    secondsSinceProgress: snap.secondsSinceProgress
-                )
-                throw VideoPreparationFailure.compressionFailed
-            }
+    private final class ExportSessionHandle: @unchecked Sendable {
+        let session: AVAssetExportSession
+
+        init(_ session: AVAssetExportSession) {
+            self.session = session
+        }
+
+        func cancel() {
+            session.cancelExport()
         }
     }
 
@@ -905,82 +768,156 @@ nonisolated enum VideoDeliveryExporter {
         return composition
     }
 
-    private static func pumpSamples(
-        track: TranscodeTrack,
-        from readerOutput: AVAssetReaderOutput,
-        to writerInput: AVAssetWriterInput,
-        readerSampleGate: ReaderSampleGate,
-        duration: CMTime,
-        progressTracker: TranscodeProgressTracker,
-        onFrameAppended: (() -> Void)?,
-        onProgress: ((Double) -> Void)?
-    ) async throws {
-        let totalSeconds = CMTimeGetSeconds(duration)
-        let pump = WriterSamplePump(
-            track: track,
-            readerOutput: readerOutput,
-            writerInput: writerInput,
-            readerSampleGate: readerSampleGate,
-            totalSeconds: totalSeconds,
-            progressTracker: progressTracker,
-            onFrameAppended: onFrameAppended,
-            onProgress: onProgress
-        )
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let label = track == .video ? "video" : "audio"
-            let queue = DispatchQueue(label: "com.tradetraxs.video-transcode.\(label).\(UUID().uuidString)")
-            pump.writerInput.requestMediaDataWhenReady(on: queue) {
-                pump.drain(continuation: continuation)
-            }
-        }
-    }
-
     private static func exportWithSession(
         asset: AVAsset,
         outputURL: URL,
         presetName: String,
+        compatiblePresets: [String],
         videoComposition: AVVideoComposition?,
         onProgress: ((Double) -> Void)?
     ) async throws {
+        VideoTranscodeDiagnostics.logExportSetup(
+            stage: "begin",
+            detail: "preset=\(presetName) output=\(outputURL.lastPathComponent) hasComposition=\(videoComposition != nil)"
+        )
         try? FileManager.default.removeItem(at: outputURL)
 
-        guard let session = AVAssetExportSession(asset: asset, presetName: presetName) else {
+        VideoTranscodeDiagnostics.logExportCompatiblePresets(compatiblePresets, preferred: presetName)
+
+        guard compatiblePresets.contains(presetName) else {
+            VideoTranscodeDiagnostics.logExportSetup(
+                stage: "presetNotCompatible",
+                detail: "preset=\(presetName) not in compatiblePresets"
+            )
+            VideoTranscodeFailureDiagnostics.logExportFailure(
+                stage: "presetNotCompatible",
+                presetName: presetName,
+                outputURL: outputURL,
+                sessionError: nil,
+                extra: "compatibleCount=\(compatiblePresets.count)"
+            )
             throw VideoPreparationFailure.compressionFailed
         }
 
+        guard let session = AVAssetExportSession(asset: asset, presetName: presetName) else {
+            VideoTranscodeDiagnostics.logExportSetup(
+                stage: "sessionInitNil",
+                detail: "AVAssetExportSession(asset:presetName:) returned nil preset=\(presetName)"
+            )
+            VideoTranscodeFailureDiagnostics.logExportFailure(
+                stage: "sessionInitNil",
+                presetName: presetName,
+                outputURL: outputURL,
+                sessionError: nil,
+                extra: "compatibleCount=\(compatiblePresets.count)"
+            )
+            throw VideoPreparationFailure.compressionFailed
+        }
+
+        let supportedFileTypes = session.supportedFileTypes
+        let supportedTypeNames = supportedFileTypes.map(\.rawValue)
+        let mp4Supported = isMP4Supported(in: supportedFileTypes)
+        let compositionSize = exportCompositionRenderSizeDescription(videoComposition)
+
+        VideoTranscodeDiagnostics.logExportSessionCreated(
+            preset: presetName,
+            status: "unknown",
+            supportedFileTypes: supportedTypeNames,
+            mp4Supported: mp4Supported,
+            compositionRenderSize: compositionSize
+        )
+
+        guard let outputFileType = resolveExportOutputFileType(from: supportedFileTypes) else {
+            VideoTranscodeDiagnostics.logExportSetup(
+                stage: "noSupportedFileTypes",
+                detail: "supportedFileTypes empty"
+            )
+            VideoTranscodeFailureDiagnostics.logExportFailure(
+                stage: "noSupportedFileTypes",
+                presetName: presetName,
+                outputURL: outputURL,
+                sessionError: nil,
+                extra: "compositionRenderSize=\(compositionSize)"
+            )
+            throw VideoPreparationFailure.compressionFailed
+        }
+
+        if !mp4Supported {
+            VideoTranscodeDiagnostics.logExportSetup(
+                stage: "mp4UnsupportedUsingFallback",
+                detail: "using outputFileType=\(outputFileType.rawValue)"
+            )
+        }
+
         session.outputURL = outputURL
-        session.outputFileType = .mp4
+        session.outputFileType = outputFileType
         session.shouldOptimizeForNetworkUse = true
         session.videoComposition = videoComposition
 
-        let progressTask: Task<Void, Never>? = onProgress.map { callback in
-            Task {
-                for await state in session.states(updateInterval: 0.1) {
-                    guard !Task.isCancelled else { break }
-                    if case .exporting(let progress) = state {
-                        callback(Double(progress.fractionCompleted))
-                    }
-                }
-            }
-        }
+        VideoTranscodeDiagnostics.logExportStarting(
+            status: "unknown",
+            outputFileType: outputFileType.rawValue
+        )
 
         let exportSession = ExportSessionHandle(session)
 
         do {
             try await withTaskCancellationHandler {
-                try await exportSession.session.export(to: outputURL, as: .mp4)
+                let progressTask: Task<Void, Never>? = onProgress.map { callback in
+                    Task {
+                        for await state in exportSession.session.states(updateInterval: 0.1) {
+                            guard !Task.isCancelled else { break }
+                            if case .exporting(let progress) = state {
+                                callback(Double(progress.fractionCompleted))
+                            }
+                        }
+                    }
+                }
+                defer { progressTask?.cancel() }
+                try await exportSession.session.export(to: outputURL, as: outputFileType)
             } onCancel: {
+                VideoTranscodeDiagnostics.logExportCancelled()
                 exportSession.cancel()
             }
-            progressTask?.cancel()
+            try acceptCompletedExportOutput(at: outputURL)
+            VideoTranscodeDiagnostics.logExportSessionFinished(
+                status: "completed",
+                errorSummary: "none"
+            )
             onProgress?(1)
+            logExportWithSessionReturnedIfPresent(at: outputURL)
+        } catch let failure as VideoPreparationFailure {
+            throw failure
         } catch {
-            progressTask?.cancel()
-            try? FileManager.default.removeItem(at: outputURL)
-            if Task.isCancelled {
+            if Task.isCancelled || error is CancellationError {
+                VideoTranscodeDiagnostics.logExportCancelled()
+                let failedOutput = await VideoTranscodeFailureDiagnostics.inspectFailedOutput(at: outputURL)
+                VideoTranscodeFailureDiagnostics.logFailedOutputInspection(failedOutput)
+                try? FileManager.default.removeItem(at: outputURL)
                 throw VideoPreparationFailure.cancelled
             }
-            throw VideoPreparationFailure.compressionFailed
+            let info = VideoTranscodeFailureDiagnostics.outputFileInfo(at: outputURL)
+            if info.exists, info.bytes > 0 {
+                VideoTranscodeDiagnostics.logExportSetup(
+                    stage: "exportThrowWithCompletedStatus",
+                    detail: "exportAPIError=\(error)"
+                )
+                VideoTranscodeDiagnostics.logExportSessionFinished(
+                    status: "completed",
+                    errorSummary: "none"
+                )
+                onProgress?(1)
+                logExportWithSessionReturnedIfPresent(at: outputURL)
+                return
+            }
+            try await logAndThrowExportFailure(
+                stage: "exportSessionFailed",
+                exportError: error,
+                statusLabel: "failed",
+                presetName: presetName,
+                outputURL: outputURL,
+                compositionSize: compositionSize
+            )
         }
     }
 

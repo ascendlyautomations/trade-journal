@@ -144,7 +144,7 @@ function ProfileStatisticsTab({
                   onClick={() => onModeChange(id)}
                   className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
                     selectedMode === id
-                      ? "bg-blue-500 text-white"
+                      ? "tt-phase1-selected bg-blue-500 text-white"
                       : "bg-white/5 text-white/70 hover:bg-white/10"
                   }`}
                 >

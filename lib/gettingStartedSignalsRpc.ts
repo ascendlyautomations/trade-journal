@@ -13,6 +13,7 @@ export type GettingStartedSignalsRpcWire = {
   follow_count: number
   has_ever_joined_other_room: boolean
   has_public_trade: boolean
+  has_completed_daily_check_in: boolean
   first_private_trade_id: string | null
 }
 
@@ -42,6 +43,7 @@ export function decodeGettingStartedSignalsRpc(
         : 0,
     hasEverJoinedOtherRoom: row.has_ever_joined_other_room === true,
     hasPublicTrade: row.has_public_trade === true,
+    hasCompletedDailyCheckIn: row.has_completed_daily_check_in === true,
     firstPrivateTradeId:
       typeof row.first_private_trade_id === "string"
         ? row.first_private_trade_id

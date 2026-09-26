@@ -3,8 +3,8 @@
 import IntentPrefetchLink from "@/lib/IntentPrefetchLink"
 import { useEffect, useRef, useState } from "react"
 import DropdownMenu from "@/app/components/ui/DropdownMenu"
+import ContentMediaPreview from "@/app/components/ContentMediaPreview"
 import DetailModalImage from "@/app/components/ui/DetailModalImage"
-import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 import {
   TradeSocialProvider,
   TradeSocialEngagementBar,
@@ -199,21 +199,30 @@ export default function ProfileTradeCard({
         </div>
       </div>
       {desc ? (
-        <ExpandableText
-          className="min-w-0 px-0.5 text-xs leading-snug text-white md:px-1 md:leading-relaxed md:text-sm"
-          textClassName="break-words text-white"
-          collapsedLines={3}
-          stopPropagation
-        >
-          {desc}
-        </ExpandableText>
+        <div className="tt-profile-trade-description">
+          <div className="tt-profile-trade-description-full">
+            <ExpandableText
+              className="min-w-0 px-0.5 text-xs leading-snug text-white md:px-1 md:leading-relaxed md:text-sm"
+              textClassName="break-words text-white"
+              collapsedLines={3}
+              stopPropagation
+            >
+              {desc}
+            </ExpandableText>
+          </div>
+          <p className="tt-profile-trade-description-browse px-0.5 text-xs leading-snug text-white">
+            {desc}
+          </p>
+        </div>
       ) : null}
-      <TradeCardTimingBlock
-        trade={trade}
-        onViewReel={
-          attachedReel && onOpenReplay ? onOpenReplay : undefined
-        }
-      />
+      <div className="tt-profile-trade-timing">
+        <TradeCardTimingBlock
+          trade={trade}
+          onViewReel={
+            attachedReel && onOpenReplay ? onOpenReplay : undefined
+          }
+        />
+      </div>
     </>
   )
 
@@ -226,7 +235,7 @@ export default function ProfileTradeCard({
       }`
 
   const tradeAuthorHeader = (
-    <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-3 py-2 md:px-4 md:py-3">
+    <div className="tt-profile-trade-header flex shrink-0 items-center justify-between border-b border-white/5 px-3 py-2 md:px-4 md:py-3">
       <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
         <ProfileAvatarImg
           src={profile.avatar_url}
@@ -294,39 +303,28 @@ export default function ProfileTradeCard({
   )
 
   const tradeImageBlock = imageSrc ? (
-    <DetailModalImage src={imageSrc} onClick={onImageClick} />
+    <DetailModalImage
+      src={imageSrc}
+      onClick={onImageClick}
+      displayMode={trade.image_display_mode as string | null | undefined}
+    />
   ) : (
     <div className="flex min-h-[80px] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-400">
       No screenshot
     </div>
   )
 
-  /** Mobile feed: ~35% shorter media frame with cover crop. Desktop unchanged. */
   const tradeFeedImage = imageSrc ? (
-    <>
-      <div className="relative h-[min(46dvh,280px)] w-full overflow-hidden md:hidden">
-        <TradeScreenshotImage
-          src={imageSrc}
-          preset="feed-thumb"
-          objectFit="cover"
-          priority={screenshotPriority}
-          onClick={onImageClick}
-          logContext="profile-trade-card-mobile"
-          className="h-full w-full"
-        />
-      </div>
-      <div className="hidden md:block">
-        <TradeScreenshotImage
-          src={imageSrc}
-          preset="feed-thumb"
-          priority={screenshotPriority}
-          onClick={onImageClick}
-          logContext="profile-trade-card"
-        />
-      </div>
-    </>
+    <ContentMediaPreview
+      src={imageSrc}
+      preset="feed-thumb"
+      displayMode={trade.image_display_mode as string | null | undefined}
+      priority={screenshotPriority}
+      onClick={onImageClick}
+      className="tt-profile-trade-media"
+    />
   ) : (
-    <div className="flex min-h-[4rem] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] py-6 text-xs text-gray-400 md:min-h-[5rem] md:py-8">
+    <div className="tt-profile-trade-media flex min-h-[4rem] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] py-6 text-xs text-gray-400 md:min-h-[5rem] md:py-8">
       No screenshot
     </div>
   )
@@ -444,7 +442,7 @@ export default function ProfileTradeCard({
             <div className="border-t border-white/10 px-3 py-1.5 md:px-4 md:py-2">
               <TradeSocialEngagementBar />
             </div>
-            <div className="space-y-2 px-3 pb-2 md:space-y-3 md:px-4 md:pb-3">
+            <div className="tt-profile-trade-body space-y-2 px-3 pb-2 md:space-y-3 md:px-4 md:pb-3">
               {tradeDetails}
             </div>
             {commentsExpanded ? (
@@ -453,7 +451,7 @@ export default function ProfileTradeCard({
           </TradeSocialProvider>
         </div>
       ) : (
-        <div className="space-y-2 p-3 md:space-y-3 md:p-4">{tradeDetails}</div>
+        <div className="tt-profile-trade-body space-y-2 p-3 md:space-y-3 md:p-4">{tradeDetails}</div>
       )}
     </article>
   )

@@ -212,7 +212,6 @@ final class TradeDetailExperienceTests: XCTestCase {
     }
 
     func testTradeDetailAnalyticsComparesAgainstOwnerHistory() {
-        let owner = ProfileID("user-analytics")
         let current = makeAnalyticsTrade(id: "current", ticker: "MNQ", pnl: 437, rr: 7.1, dayOffset: 0)
         let history = (1...12).map { index in
             makeAnalyticsTrade(
@@ -238,7 +237,7 @@ final class TradeDetailExperienceTests: XCTestCase {
         win.ownerProfileID = owner
         var loss = makeAnalyticsTrade(id: "l1", ticker: "MNQ", pnl: -100, rr: -1, dayOffset: 2)
         loss.ownerProfileID = owner
-        var duplicate = win
+        let duplicate = win
 
         let result = TradeDetailAnalytics.analyze(
             trade: current,

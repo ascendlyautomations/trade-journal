@@ -123,7 +123,6 @@ struct AppRootView: View {
                     await authenticationLifecycle.applicationWillEnterForeground()
                     if !launchController.isDemoExperienceActive {
                         appEnvironment.data.realtimeHub.resumeIfNeeded()
-                        await AnalyticsRevisionRepairCoordinator.shared.requestRepair(.foreground)
                         GettingStartedStore.shared.onForeground()
                     }
                 }
@@ -294,7 +293,33 @@ struct AppRootView: View {
             authenticationCoordinator: authenticationCoordinator,
             currentUserProfile: currentUserProfile
         )
+        .id(authenticationManager.state.session?.userID.rawValue ?? "signed-out")
         .ownerAccountFilterDropdownOverlay()
+        .contextualTourHost(
+            ContextualTourShellInput(
+                userID: currentUserProfile.profile?.id.rawValue,
+                accountCreatedAt: currentUserProfile.profile?.createdAt,
+                gates: ContextualTourGates(
+                    homeRootActive: navigation.store.selectedTab == .home
+                        && navigation.store.paths.home.isEmpty,
+                    feedRootActive: navigation.store.selectedTab == .feed
+                        && navigation.store.paths.feed.isEmpty,
+                    profileRootActive: navigation.store.selectedTab == .profile
+                        && navigation.store.paths.profile.isEmpty,
+                    settingsHomeActive: navigation.store.selectedTab == .profile
+                        && navigation.store.paths.profile == [.settings(.home)],
+                    sceneActive: scenePhase != .background,
+                    unobstructed: navigation.store.presentedSheet == nil
+                        && navigation.store.presentedFullScreen == nil
+                        && contentReportPresenter.activeRequest == nil
+                        && !thirdPartyAIConsentPresenter.isPresented
+                )
+            )
+        )
+        .onChange(of: ContextualTourCoordinator.shared.navigationRequest) { _, request in
+            guard let request else { return }
+            applyAppWalkthroughNavigation(request)
+        }
         .onChange(of: navigation.store.selectedTab) { _, _ in
             OwnerAccountFilterDropdownController.shared.dismiss()
         }
@@ -566,13 +591,33 @@ struct AppRootView: View {
         case .composeChooser:
             return [.fraction(0.60)]
         case .dailyCheckIn:
-            return [.fraction(0.65)]
+            return [.fraction(0.65), .large]
         case .tradeImportReminder:
             return [.fraction(0.55)]
         case .quickTrade, .accountSwitcher:
             return [.medium, .large]
         default:
             return [.medium, .large]
+        }
+    }
+
+    /// Moves the walkthrough to the screen that owns the next spotlight.
+    private func applyAppWalkthroughNavigation(_ surface: ContextualTourSurface) {
+        switch surface {
+        case .dashboard:
+            navigation.coordinator.selectTab(.home)
+            navigation.coordinator.popToRoot(.home)
+        case .feed:
+            navigation.coordinator.selectTab(.feed)
+            navigation.coordinator.popToRoot(.feed)
+        case .profile:
+            navigation.coordinator.selectTab(.profile)
+            navigation.coordinator.popToRoot(.profile)
+        case .settings:
+            navigation.coordinator.selectTab(.profile)
+            if navigation.store.paths.profile != [.settings(.home)] {
+                navigation.store.paths.profile = [.settings(.home)]
+            }
         }
     }
 

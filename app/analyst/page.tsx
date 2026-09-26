@@ -1,5 +1,6 @@
 "use client"
 
+import "../analyticsDesktopTheme.css"
 import Link from "next/link"
 import LockedFeature from "../components/LockedFeature"
 import { useCallback, useEffect, useRef, useState, Suspense, type Dispatch, type ReactNode, type SetStateAction } from "react"
@@ -484,7 +485,7 @@ export default function AnalystPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
+        <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
           <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 md:gap-3">
             <h1 className="shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:text-xl">
               AI Analyst
@@ -759,7 +760,7 @@ function AnalystPageContent() {
         status={progressLabel}
       />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
+      <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
         <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 md:gap-3">
           <h1 className="shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:text-xl">
             AI Analyst

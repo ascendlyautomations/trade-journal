@@ -25,7 +25,8 @@ import {
 } from "@/lib/formatMessageTimestamp"
 import { supabase } from "@/lib/supabaseClient"
 import { devLog } from "@/lib/devLog"
-import { compressImage, compressScreenshot } from "@/lib/compressImage"
+import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { validateImageUpload } from "@/lib/uploadValidation"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { LOADING_COPY } from "@/lib/loadingCopy"
 import { logSupabaseError } from "@/lib/logSupabaseError"
@@ -325,7 +326,7 @@ function DmMessageActionMenu({
 
       {menuOpen ? (
         <div
-          className={`absolute top-7 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
+          className={`absolute top-7 z-50 w-40 rounded-lg border border-white/10 bg-[#0b1f3a] shadow-lg ${
             alignRight ? "right-1" : "left-1"
           }`}
         >
@@ -639,7 +640,7 @@ function PostMessageBubble({
   if (postLoading) {
     return (
       <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-        <div className="max-w-xs rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400">
+        <div className="max-w-xs rounded-lg border border-white/10 bg-white/10 p-3 text-sm text-gray-300">
           Loading post…
         </div>
       </div>
@@ -649,7 +650,7 @@ function PostMessageBubble({
   if (!post) {
     return (
       <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-        <div className="max-w-xs rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400">
+        <div className="max-w-xs rounded-lg border border-white/10 bg-white/10 p-3 text-sm italic text-gray-300">
           {SHARED_POST_UNAVAILABLE}
         </div>
       </div>
@@ -740,7 +741,7 @@ function PostMessageBubble({
               <FeedPostScreenshot
                 imageSrc={imageSrc}
                 variant="message"
-                wrapperClassName="mb-3 w-full overflow-hidden rounded-lg border border-gray-700 bg-black/30"
+                wrapperClassName="mb-3 w-full overflow-hidden rounded-lg border border-white/10 bg-black/30"
                 onImageClick={setLightboxImageUrl}
               />
             ) : null}
@@ -759,7 +760,7 @@ function PostMessageBubble({
 
             {showTradeStats ? (
               <div className="mb-3 flex justify-between text-xs">
-                <span className={isWin ? "text-emerald-400" : "text-red-400"}>
+                <span className={isWin ? "text-green-400" : "text-red-400"}>
                   {formatSignedPnlDisplay(pnl)}
                 </span>
                 <span className="text-gray-400">
@@ -944,7 +945,7 @@ function StoryReplyMessageBubble({
         />
 
         <div
-          className={`overflow-hidden rounded-2xl border border-white/10 bg-[#1e293b] shadow-lg shadow-black/20 ${
+          className={`overflow-hidden rounded-2xl border border-white/10 bg-white/10 shadow-lg shadow-black/20 ${
             isMe ? "rounded-br-md" : "rounded-bl-md"
           }`}
         >
@@ -1109,11 +1110,7 @@ export default function DMPage() {
       if (pageAccess !== "allowed" || !user?.id || !conversation?.id) return
 
       setGroupImage(file)
-      let uploadFile: File = file
-      if (file.type?.startsWith("image/")) {
-        uploadFile = await compressImage(file)
-      }
-
+      const uploadFile = file
       const fileName = `${conversation.id}-${Date.now()}-${uploadFile.name}`
       const { error: uploadError } = await supabase.storage
         .from("group-avatars")
@@ -1145,15 +1142,7 @@ export default function DMPage() {
     [conversation, pageAccess, user?.id]
   )
 
-  const dmImageCrop = useImageCropUpload({
-    preset: "content",
-    onCropped: (file) => {
-      setSelectedImage(file)
-      setSelectedFile(file)
-      setPreviewUrl(URL.createObjectURL(file))
-    },
-    onValidationError: (message) => showPopup({ type: "error", message }),
-  })
+  const fileRef = useRef<HTMLInputElement | null>(null)
   const groupImageCrop = useImageCropUpload({
     preset: "avatar",
     onCropped: (file) => {
@@ -1161,8 +1150,6 @@ export default function DMPage() {
     },
     onValidationError: (message) => showPopup({ type: "error", message }),
   })
-  const fileRef = dmImageCrop.fileInputRef
-
   useEffect(() => {
     if (!previewUrl?.startsWith("blob:")) return
     return () => URL.revokeObjectURL(previewUrl)
@@ -2622,13 +2609,24 @@ export default function DMPage() {
     setSelectedFile(null)
     setSelectedImage(null)
     setPreviewUrl(null)
-    dmImageCrop.resetFileInput()
+    if (fileRef.current) fileRef.current.value = ""
   }
 
   function handleImageChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
+    e.target.value = ""
     if (!file) return
-    dmImageCrop.handleFileSelected(file)
+    const validationError = validateImageUpload(file)
+    if (validationError) {
+      showPopup({ type: "error", message: validationError })
+      return
+    }
+    setSelectedImage(file)
+    setSelectedFile(file)
+    setPreviewUrl((current) => {
+      if (current?.startsWith("blob:")) URL.revokeObjectURL(current)
+      return URL.createObjectURL(file)
+    })
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -2727,9 +2725,26 @@ export default function DMPage() {
       let imageUrl = opts?.retryImageUrl ?? null
 
       if (selected) {
-        let uploadFile: File = selected
-        if (selected.type?.startsWith("image/")) {
-          uploadFile = await compressScreenshot(selected)
+        let uploadFile: File
+        try {
+          uploadFile = await prepareImageForUpload("chat", selected)
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Couldn't prepare that image."
+          setMessagesWithCache((prev) =>
+            markOptimisticMessageFailed(prev, tempId)
+          )
+          if (!isRetry) {
+            setInput(prevInput)
+            setReplyTarget(prevReply)
+            setSelectedFile(prevFile)
+            setPreviewUrl(prevPreview)
+            setSelectedImage(prevSelectedImage)
+          }
+          showPopup({ type: "error", message })
+          sendingMessageRef.current = false
+          setSendingMessage(false)
+          return
         }
         const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
 
@@ -3369,13 +3384,6 @@ export default function DMPage() {
   return (
     <>
       <ImageCropModal
-        open={dmImageCrop.cropSourceFile != null}
-        file={dmImageCrop.cropSourceFile}
-        preset="content"
-        onCancel={dmImageCrop.handleCropCancel}
-        onSave={dmImageCrop.handleCropSave}
-      />
-      <ImageCropModal
         open={groupImageCrop.cropSourceFile != null}
         file={groupImageCrop.cropSourceFile}
         preset="avatar"
@@ -3389,7 +3397,7 @@ export default function DMPage() {
           className={`flex min-h-0 w-full flex-col items-center justify-center gap-4 px-4 text-white ${
             nativeIos
               ? "h-dvh bg-[var(--tt-surface)] pt-[var(--safe-area-top)] pb-[max(var(--safe-area-bottom),var(--keyboard-height,0px))]"
-              : "h-[var(--app-viewport-height)] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46]"
+              : "h-[var(--app-viewport-height)]"
           }`}
         >
           <button
@@ -3419,13 +3427,13 @@ export default function DMPage() {
         className={`flex min-h-0 w-full flex-col overflow-hidden text-white ${
           nativeIos
             ? "h-dvh bg-[var(--tt-surface)]"
-            : "h-[var(--app-viewport-height)] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-4 pt-2 xl:h-full xl:min-h-0"
+            : "h-[var(--app-viewport-height)] px-4 pb-4 pt-2 xl:h-full xl:min-h-0"
         }`}
       >
 
         <div
           className={`mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden xl:max-w-none ${
-            nativeIos ? "" : "rounded-xl border border-white/10 bg-black/30"
+            nativeIos ? "" : "rounded-xl border border-white/10 bg-white/5 backdrop-blur-md"
           }`}
         >
 
@@ -3837,7 +3845,7 @@ export default function DMPage() {
                             isVoice
                               ? ""
                               : `p-3 rounded-xl ${
-                                  isMe ? "bg-blue-500" : "bg-gray-700"
+                                  isMe ? "bg-blue-500 text-white" : "border border-white/10 bg-white/10 text-white"
                                 }`
                           } ${
                             !isVoice &&
@@ -3871,7 +3879,7 @@ export default function DMPage() {
                                 ) : (
                                   <div
                                     className={`inline-flex min-w-[180px] items-center gap-2 rounded-xl px-3 py-2 text-xs opacity-80 ${
-                                      isMe ? "bg-blue-500" : "bg-gray-700"
+                                      isMe ? "bg-blue-500 text-white" : "border border-white/10 bg-white/10 text-white"
                                     }`}
                                   >
                                     Sending voice message…
@@ -4025,7 +4033,7 @@ export default function DMPage() {
                       <p className="text-xs text-gray-400">Seen</p>
                     ) : null}
                     {groupSettingsSuccess ? (
-                      <p className="mt-1 text-xs text-emerald-400">{groupSettingsSuccess}</p>
+                      <p className="mt-1 text-xs text-green-400">{groupSettingsSuccess}</p>
                     ) : null}
                     {selectedFile ? (
                       <div className="mt-1 text-xs text-gray-400">
@@ -4076,7 +4084,7 @@ export default function DMPage() {
                     <p className="text-xs text-gray-400">Seen</p>
                   ) : null}
                   {groupSettingsSuccess ? (
-                    <p className="mt-1 text-xs text-emerald-400">{groupSettingsSuccess}</p>
+                    <p className="mt-1 text-xs text-green-400">{groupSettingsSuccess}</p>
                   ) : null}
                   {selectedFile ? (
                     <div className="mt-1 text-xs text-gray-400">
@@ -4201,7 +4209,7 @@ export default function DMPage() {
           }}
         >
           <div
-            className="bg-[#0f172a] border border-gray-600 rounded-2xl p-6 w-full max-w-md shadow-2xl"
+            className="bg-[#0b1f3a] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-white text-xl font-semibold mb-2">
@@ -4222,7 +4230,7 @@ export default function DMPage() {
                     className={`flex w-full items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
                       selected
                         ? "bg-blue-500/20"
-                        : "hover:bg-[#1e293b]"
+                        : "hover:bg-white/10"
                     }`}
                   >
                     <ProfileAvatarImg
@@ -4251,7 +4259,7 @@ export default function DMPage() {
                 setShowAddMembers(false)
                 setSelectedUsers([])
               }}
-              className="w-full mt-2 rounded-lg bg-gray-700 px-4 py-2 text-white hover:bg-gray-600"
+              className="w-full mt-2 rounded-lg bg-white/10 px-4 py-2 text-white hover:bg-white/20"
             >
               Cancel
             </button>
@@ -4265,7 +4273,7 @@ export default function DMPage() {
           onClick={() => setShowTradePicker(false)}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-gray-600 bg-[#0f172a] p-6 shadow-2xl"
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0b1f3a] p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="mb-3 text-xl font-semibold text-white">
@@ -4289,7 +4297,7 @@ export default function DMPage() {
                         handleSendTrade(trade)
                       }
                     }}
-                    className="cursor-pointer rounded-lg bg-[#1e293b] p-3 hover:bg-[#334155]"
+                    className="cursor-pointer rounded-lg border border-white/10 bg-white/10 p-3 hover:bg-white/20"
                   >
                     <p className="font-medium text-white">
                       {trade.ticker} • {trade.direction}
@@ -4304,7 +4312,7 @@ export default function DMPage() {
             <button
               type="button"
               onClick={() => setShowTradePicker(false)}
-              className="mt-4 w-full rounded-lg bg-gray-700 px-4 py-2 text-white hover:bg-gray-600"
+              className="mt-4 w-full rounded-lg bg-white/10 px-4 py-2 text-white hover:bg-white/20"
             >
               Close
             </button>

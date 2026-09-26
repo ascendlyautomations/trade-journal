@@ -172,6 +172,10 @@ nonisolated enum BackendV2FlightKeys {
         return "\(viewerID)|\(BackendV2Versioning.RPCName.messaging.rawValue)|\(c)"
     }
 
+    static func messagingCatchUp(viewerID: String) -> String {
+        "\(viewerID)|\(BackendV2Versioning.RPCName.messagingCatchUp.rawValue)|catchUp"
+    }
+
     static func conversationThread(
         viewerID: String,
         conversationID: String,

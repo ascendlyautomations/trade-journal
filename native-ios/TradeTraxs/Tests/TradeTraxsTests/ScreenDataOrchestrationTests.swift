@@ -193,13 +193,13 @@ private final class CountingMemberRoomsRepository: RoomRepository, @unchecked Se
     }
 
     func memberRooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
-        lock.lock(); _memberRoomsCalls += 1; lock.unlock()
+        TestLock.withLock(lock) { _memberRoomsCalls += 1 }
         try await Task.sleep(nanoseconds: 30_000_000)
         return CursorPage(items: rooms, nextCursor: nil)
     }
 
     func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] {
-        lock.lock(); _unreadCalls += 1; lock.unlock()
+        TestLock.withLock(lock) { _unreadCalls += 1 }
         return Dictionary(uniqueKeysWithValues: roomIDs.map { ($0, 0) })
     }
 

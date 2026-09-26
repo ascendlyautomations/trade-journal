@@ -36,7 +36,7 @@ nonisolated enum CSVNumericParser {
         if s.hasPrefix("+") { s.removeFirst() }
         if s.isEmpty || s == "." { return nil }
 
-        guard let value = Decimal(string: s) else { return nil }
+        guard let value = Decimal(string: s, locale: Locale(identifier: "en_US_POSIX")) else { return nil }
         let magnitude = abs(value)
         return neg ? -magnitude : magnitude
     }

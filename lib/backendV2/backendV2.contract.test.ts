@@ -3,7 +3,7 @@ import { decodeSessionBootstrapV1, decodeFeedBootstrapV1, decodeDashboardBootstr
 import { sessionBootstrapFixture, dashboardBootstrapFixture, feedBootstrapFixture, profileBootstrapFixture, messagesBootstrapFixture, roomsBootstrapFixture, activityBootstrapFixture, exploreBootstrapFixture, leaderboardBootstrapFixture, calendarBootstrapFixture, tradeDetailBootstrapFixture, settingsBootstrapFixture, } from "./fixtures.ts"
 import { BackendV2RpcClient, BackendV2RpcError } from "./rpcClient.ts"
 import { BackendV2RpcNames } from "./versioning.ts"
-import { isBackendV2Enabled, listBackendV2Flags, __setBackendV2FlagForTests, __resetBackendV2FlagsForTests, } from "./flags.ts"
+import { isBackendV2Enabled, listBackendV2Flags, resolveBackendV2Flag, __setBackendV2FlagForTests, __resetBackendV2FlagsForTests, } from "./flags.ts"
 import { __withBackendV2EnvIsolatedForTests, } from "./flags.testIsolation.ts"
 import {
   setBackendV2TelemetryEnabled,
@@ -66,13 +66,14 @@ describe("Backend V2 feature flags", () => {
     __resetBackendV2FlagsForTests()
   })
 
-  it("defaults all flags OFF", () => {
+  it("defaults only the feed and messages flags ON", () => {
     __withBackendV2EnvIsolatedForTests(() => {
       const flags = listBackendV2Flags()
       assert.equal(flags.length, 15)
       for (const flag of flags) {
-        assert.equal(flag.enabled, false, flag.name)
-        assert.equal(isBackendV2Enabled(flag.key), false)
+        const expected = flag.key === "feed" || flag.key === "messages"
+        assert.equal(flag.enabled, expected, flag.name)
+        assert.equal(isBackendV2Enabled(flag.key), expected)
       }
     })
   })
@@ -82,7 +83,8 @@ describe("Backend V2 feature flags", () => {
     process.env.NEXT_PUBLIC_BACKEND_V2_FEED = "1"
     try {
       __withBackendV2EnvIsolatedForTests(() => {
-        assert.equal(isBackendV2Enabled("feed"), false)
+        assert.equal(isBackendV2Enabled("feed"), true)
+        assert.equal(resolveBackendV2Flag("feed").source, "default")
       })
     } finally {
       if (prev === undefined) delete process.env.NEXT_PUBLIC_BACKEND_V2_FEED
@@ -94,7 +96,12 @@ describe("Backend V2 feature flags", () => {
     __setBackendV2FlagForTests("feed", true)
     assert.equal(isBackendV2Enabled("feed"), true)
     __resetBackendV2FlagsForTests()
-    assert.equal(isBackendV2Enabled("feed"), false)
+    assert.equal(isBackendV2Enabled("feed"), true)
+    assert.equal(isBackendV2Enabled("messages"), true)
+    assert.equal(isBackendV2Enabled("session"), false)
+    assert.equal(isBackendV2Enabled("profile"), false)
+    assert.equal(isBackendV2Enabled("rooms"), false)
+    assert.equal(isBackendV2Enabled("dashboard"), false)
   })
 })
 

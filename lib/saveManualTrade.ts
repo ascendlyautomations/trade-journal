@@ -69,6 +69,7 @@ async function uploadTradeScreenshot(
     processingPercent: 12,
     uploadingPercent: 18,
     uploadProgressRange: { start: 20, end: 65 },
+    prepared: true,
   })
 }
 

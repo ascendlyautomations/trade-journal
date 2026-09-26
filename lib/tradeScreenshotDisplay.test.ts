@@ -14,7 +14,7 @@ describe("tradeScreenshotDisplay", () => {
     assert.equal(TRADE_SCREENSHOT_MAX_HEIGHT_PX, 440)
   })
 
-  it("uses a max-height class for Trades-page previews", () => {
+  it("keeps the previous trades-page height token", () => {
     assert.equal(TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS, "max-h-[396px]")
     assert.equal(TRADE_PAGE_SCREENSHOT_PREVIEW_HEIGHT_PX, 396)
   })

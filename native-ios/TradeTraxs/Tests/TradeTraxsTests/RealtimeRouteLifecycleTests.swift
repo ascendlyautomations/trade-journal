@@ -21,24 +21,22 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
         _ = await provider.testing_waitForConsumerCount(routeKey: routeKey, minimum: count)
     }
 
+    private func watchNotifications(
+        provider: LiveSupabaseRealtimeProvider,
+        userID: String,
+        owner: String
+    ) -> RealtimeMessageWatch {
+        provider.watchNotifications(userID: userID, accessToken: nil, debugOwner: owner)
+    }
+
     func testTwoConsumersShareOneRouteUntilFinalRelease() async {
         let provider = makeProvider()
-        let filter = "user_id=eq.shared-route-author"
-        let routeKey = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: .posts, key: filter))"
+        let userID = "shared-route-viewer"
+        let routeKey = "notifications:\(userID)"
 
-        let watchA = provider.watchSocialEntityChanges(
-            table: .posts,
-            filter: filter,
-            accessToken: nil,
-            debugOwner: "FeedA"
-        )
+        let watchA = watchNotifications(provider: provider, userID: userID, owner: "ActivityA")
         await waitForConsumers(on: provider, routeKey: routeKey, count: 1)
-        let watchB = provider.watchSocialEntityChanges(
-            table: .posts,
-            filter: filter,
-            accessToken: nil,
-            debugOwner: "FeedB"
-        )
+        let watchB = watchNotifications(provider: provider, userID: userID, owner: "ActivityB")
         await waitForConsumers(on: provider, routeKey: routeKey, count: 2)
 
         let both = provider.testing_routeSnapshot(routeKey: routeKey)
@@ -52,14 +50,7 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
         XCTAssertEqual(afterA.consumerCount, 1)
         XCTAssertTrue(afterA.isJoined)
 
-        let signal = SocialEntityRealtimeEvent(
-            table: .posts,
-            mutation: .update,
-            entityID: "post-shared",
-            authorID: "shared-route-author",
-            eventRowID: "post-shared",
-            payload: .init()
-        )
+        let signal = MessageRealtimeSignal(kind: .insert, messageID: "n-1")
         let received = expectation(description: "consumer B receives event")
         let drain = Task {
             for await _ in watchB.events {
@@ -67,7 +58,7 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
                 break
             }
         }
-        provider.testing_injectSocialEntitySignal(routeKey: routeKey, signal: signal)
+        provider.testing_injectMessageSignal(routeKey: routeKey, signal: signal)
         await fulfillment(of: [received], timeout: 2.0)
         drain.cancel()
 
@@ -83,22 +74,12 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
     func testReconnectSpecStaysSingleRouteWithMultipleConsumers() async {
         let provider = makeProvider()
         provider.testing_resetRegistryLifecycleCounters()
-        let filter = "user_id=eq.lifecycle-test-author"
-        let routeKey = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: .posts, key: filter))"
+        let userID = "lifecycle-test-viewer"
+        let routeKey = "notifications:\(userID)"
 
-        let watchA = provider.watchSocialEntityChanges(
-            table: .posts,
-            filter: filter,
-            accessToken: nil,
-            debugOwner: "FeedA"
-        )
+        let watchA = watchNotifications(provider: provider, userID: userID, owner: "A")
         await waitForConsumers(on: provider, routeKey: routeKey, count: 1)
-        let watchB = provider.watchSocialEntityChanges(
-            table: .posts,
-            filter: filter,
-            accessToken: nil,
-            debugOwner: "FeedB"
-        )
+        let watchB = watchNotifications(provider: provider, userID: userID, owner: "B")
         await waitForConsumers(on: provider, routeKey: routeKey, count: 2)
 
         let snapshot = provider.testing_routeSnapshot(routeKey: routeKey)
@@ -111,39 +92,13 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
         _ = watchB
     }
 
-    func testDuplicateRetainSameHandleIsNoOp() async {
-        let provider = makeProvider()
-        provider.testing_resetRegistryLifecycleCounters()
-        let filter = "user_id=eq.duplicate-retain-author"
-        let routeKey = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: .posts, key: filter))"
-
-        let watch = provider.watchSocialEntityChanges(
-            table: .posts,
-            filter: filter,
-            accessToken: nil,
-            debugOwner: "Once"
-        )
-        await waitForConsumers(on: provider, routeKey: routeKey, count: 1)
-        XCTAssertEqual(provider.testing_registryJoinCount(), 1)
-
-        await provider.testing_simulateDuplicateSocialEntityRetain(watch.consumer)
-        let snapshot = provider.testing_routeSnapshot(routeKey: routeKey)
-        XCTAssertEqual(snapshot.consumerCount, 1)
-        XCTAssertEqual(provider.testing_registryJoinCount(), 1)
-    }
-
     func testDuplicateReleaseSameHandleIsNoOp() async {
         let provider = makeProvider()
         provider.testing_resetRegistryLifecycleCounters()
-        let filter = "user_id=eq.duplicate-release-author"
-        let routeKey = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: .posts, key: filter))"
+        let userID = "duplicate-release-viewer"
+        let routeKey = "notifications:\(userID)"
 
-        let watch = provider.watchSocialEntityChanges(
-            table: .posts,
-            filter: filter,
-            accessToken: nil,
-            debugOwner: "Once"
-        )
+        let watch = watchNotifications(provider: provider, userID: userID, owner: "Once")
         await waitForConsumers(on: provider, routeKey: routeKey, count: 1)
 
         await provider.releaseWatch(watch.consumer)
@@ -159,24 +114,14 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
     func testTwoDifferentConsumersOnePhysicalJoinAndLeave() async {
         let provider = makeProvider()
         provider.testing_resetRegistryLifecycleCounters()
-        let filter = "user_id=eq.two-consumer-author"
-        let routeKey = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: .posts, key: filter))"
+        let userID = "two-consumer-viewer"
+        let routeKey = "notifications:\(userID)"
 
-        let watchA = provider.watchSocialEntityChanges(
-            table: .posts,
-            filter: filter,
-            accessToken: nil,
-            debugOwner: "A"
-        )
+        let watchA = watchNotifications(provider: provider, userID: userID, owner: "A")
         await waitForConsumers(on: provider, routeKey: routeKey, count: 1)
         XCTAssertEqual(provider.testing_registryJoinCount(), 1)
 
-        let watchB = provider.watchSocialEntityChanges(
-            table: .posts,
-            filter: filter,
-            accessToken: nil,
-            debugOwner: "B"
-        )
+        let watchB = watchNotifications(provider: provider, userID: userID, owner: "B")
         await waitForConsumers(on: provider, routeKey: routeKey, count: 2)
         XCTAssertEqual(provider.testing_registryJoinCount(), 1)
 
@@ -191,46 +136,38 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
 
     func testDisconnectClearsAllRoutesAndConsumers() async {
         let provider = makeProvider()
-        let filter = "user_id=eq.disconnect-test-author"
-        let entityRoute = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: .posts, key: filter))"
-        _ = provider.watchSocialEntityChanges(table: .posts, filter: filter, accessToken: nil, debugOwner: "Feed")
-        _ = provider.watchNotifications(userID: "viewer-1", accessToken: nil, debugOwner: "Activity")
-        await waitForConsumers(on: provider, routeKey: entityRoute, count: 1)
+        let userID = "disconnect-test-viewer"
+        let routeKey = "notifications:\(userID)"
+        _ = watchNotifications(provider: provider, userID: userID, owner: "Activity")
+        await waitForConsumers(on: provider, routeKey: routeKey, count: 1)
 
         let beforeGen = provider.testing_sessionGeneration()
         await provider.disconnect()
         await settleRegistration()
 
         XCTAssertGreaterThan(provider.testing_sessionGeneration(), beforeGen)
-        XCTAssertEqual(provider.testing_routeSnapshot(routeKey: entityRoute).activeRouteCount, 0)
-        XCTAssertEqual(provider.testing_routeSnapshot(routeKey: "notifications:viewer-1").consumerCount, 0)
+        XCTAssertEqual(provider.testing_routeSnapshot(routeKey: routeKey).activeRouteCount, 0)
+        XCTAssertEqual(provider.testing_routeSnapshot(routeKey: routeKey).consumerCount, 0)
     }
 
     func testSessionGenerationInvalidatesStaleConsumers() async {
         let provider = makeProvider()
-        let routeKey = "viewer-profile:viewer-z"
-        let watch = provider.watchViewerProfile(
-            userID: "viewer-z",
-            accessToken: nil,
-            debugOwner: "BeforeLogout"
-        )
+        let userID = "session-gen-viewer"
+        let routeKey = "notifications:\(userID)"
+        let watch = watchNotifications(provider: provider, userID: userID, owner: "BeforeLogout")
         await settleRegistration()
         let generationBefore = provider.testing_sessionGeneration()
 
         await provider.disconnect()
         await settleRegistration()
 
-        let watchAfter = provider.watchViewerProfile(
-            userID: "viewer-z",
-            accessToken: nil,
-            debugOwner: "AfterLogin"
-        )
+        let watchAfter = watchNotifications(provider: provider, userID: userID, owner: "AfterLogin")
         await settleRegistration()
         XCTAssertGreaterThan(provider.testing_sessionGeneration(), generationBefore)
 
         provider.testing_injectMessageSignal(
             routeKey: routeKey,
-            signal: MessageRealtimeSignal(kind: .update, messageID: "viewer-z")
+            signal: MessageRealtimeSignal(kind: .insert, messageID: "n-after")
         )
 
         let received = expectation(description: "new session consumer receives")
@@ -247,16 +184,11 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
 
     func testRepeatedStartStopDoesNotLeakConsumers() async {
         let provider = makeProvider()
-        let filter = "user_id=eq.cycle-test-author"
-        let routeKey = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: .posts, key: filter))"
+        let userID = "cycle-test-viewer"
+        let routeKey = "notifications:\(userID)"
 
         for index in 0 ..< 4 {
-            let watch = provider.watchSocialEntityChanges(
-                table: .posts,
-                filter: filter,
-                accessToken: nil,
-                debugOwner: "Cycle\(index)"
-            )
+            let watch = watchNotifications(provider: provider, userID: userID, owner: "Cycle\(index)")
             await waitForConsumers(on: provider, routeKey: routeKey, count: 1)
             await provider.releaseWatch(watch.consumer)
             await waitForConsumers(on: provider, routeKey: routeKey, count: 0)
@@ -270,15 +202,10 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
     func testRegistryAndTransportJoinLeaveCountsMatch() async {
         let provider = makeProvider()
         provider.testing_resetRegistryLifecycleCounters()
-        let filter = "user_id=eq.transport-count-author"
-        let routeKey = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: .posts, key: filter))"
+        let userID = "transport-count-viewer"
+        let routeKey = "notifications:\(userID)"
 
-        let watch = provider.watchSocialEntityChanges(
-            table: .posts,
-            filter: filter,
-            accessToken: nil,
-            debugOwner: "Transport"
-        )
+        let watch = watchNotifications(provider: provider, userID: userID, owner: "Transport")
         await waitForConsumers(on: provider, routeKey: routeKey, count: 1)
         XCTAssertEqual(provider.testing_registryJoinCount(), 1)
         XCTAssertGreaterThanOrEqual(provider.testing_transportJoinCount(), 1)
@@ -292,15 +219,10 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
     func testStaleRegistryJoinAttemptDoesNotDuplicateJoin() async {
         let provider = makeProvider()
         provider.testing_resetRegistryLifecycleCounters()
-        let filter = "user_id=eq.stale-join-author"
-        let routeKey = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: .posts, key: filter))"
+        let userID = "stale-join-viewer"
+        let routeKey = "notifications:\(userID)"
 
-        let watch = provider.watchSocialEntityChanges(
-            table: .posts,
-            filter: filter,
-            accessToken: nil,
-            debugOwner: "Stale"
-        )
+        let watch = watchNotifications(provider: provider, userID: userID, owner: "Stale")
         await waitForConsumers(on: provider, routeKey: routeKey, count: 1)
         let transportBefore = provider.testing_transportJoinCount()
         await provider.testing_simulateStaleRegistryJoinAttempt(watch.consumer)
@@ -311,16 +233,11 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
     func testRapidReleaseAndRetainSameRouteOneJoinOneLeavePerCycle() async {
         let provider = makeProvider()
         provider.testing_resetRegistryLifecycleCounters()
-        let filter = "user_id=eq.rapid-cycle-author"
-        let routeKey = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: .posts, key: filter))"
+        let userID = "rapid-cycle-viewer"
+        let routeKey = "notifications:\(userID)"
 
         for _ in 0 ..< 3 {
-            let watch = provider.watchSocialEntityChanges(
-                table: .posts,
-                filter: filter,
-                accessToken: nil,
-                debugOwner: "Cycle"
-            )
+            let watch = watchNotifications(provider: provider, userID: userID, owner: "Cycle")
             await waitForConsumers(on: provider, routeKey: routeKey, count: 1)
             await provider.releaseWatch(watch.consumer)
             await waitForConsumers(on: provider, routeKey: routeKey, count: 0)
@@ -331,15 +248,10 @@ final class RealtimeRouteLifecycleTests: XCTestCase {
 
     func testExplicitReleaseThenDuplicateReleaseIgnored() async {
         let provider = makeProvider()
-        let filter = "user_id=eq.explicit-dup-release"
-        let routeKey = "social-entity:\(SocialEntityRealtimeTable.stableRouteSuffix(table: .posts, key: filter))"
+        let userID = "explicit-dup-release"
+        let routeKey = "notifications:\(userID)"
 
-        let watch = provider.watchSocialEntityChanges(
-            table: .posts,
-            filter: filter,
-            accessToken: nil,
-            debugOwner: "Once"
-        )
+        let watch = watchNotifications(provider: provider, userID: userID, owner: "Once")
         await waitForConsumers(on: provider, routeKey: routeKey, count: 1)
         await provider.releaseWatch(watch.consumer)
         provider.testing_resetRegistryLifecycleCounters()

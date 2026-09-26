@@ -4,7 +4,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import type { TableUpdate } from "@/lib/supabaseTypes"
-import { uploadContentImageToStorage, CONTENT_IMAGE_CROP_PRESET } from "@/lib/contentImagePipeline"
+import { uploadContentImageToStorage } from "@/lib/contentImagePipeline"
+import { CONTENT_IMAGE_V2_PRESET } from "@/lib/contentImageV2"
 import { consumeAppRateLimit } from "@/lib/consumeAppRateLimit"
 import { devLog } from "@/lib/devLog"
 import {
@@ -68,6 +69,7 @@ import { buildCommunitySharePreviewPost } from "@/lib/buildCommunitySharePreview
 import CommunitySharePreviewModal from "@/app/components/CommunitySharePreviewModal"
 import TradePublicShareToggle from "@/app/components/TradePublicShareToggle"
 import TradeReelAttachment from "@/app/components/TradeReelAttachment"
+import ContentMediaPreview from "@/app/components/ContentMediaPreview"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import { useTradeImageCropUpload } from "@/lib/useTradeImageCropUpload"
 import {
@@ -77,7 +79,6 @@ import {
 import {
   DEFAULT_TRADE_SCREENSHOT_DISPLAY_MODE,
   resolveTradeScreenshotDisplayMode,
-  tradeScreenshotObjectFitClass,
 } from "@/lib/tradeScreenshotDisplay"
 import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
 import {
@@ -921,6 +922,7 @@ export default function InputTradeForm({
       const uploaded = await uploadContentImageToStorage(supabase, userId, image, {
         onProgress: report,
         uploadProgressRange: { start: 20, end: 62 },
+        prepared: true,
       })
       if (uploaded.error) {
         const safeMessage = handleSupabaseError(
@@ -1971,9 +1973,6 @@ export default function InputTradeForm({
   ])
 
   const editScreenshotHasImage = Boolean(editScreenshotPreviewSrc)
-  const editScreenshotPreviewObjectClass = tradeScreenshotObjectFitClass(
-    screenshotDisplayMode
-  )
 
   const communityPreviewPost = useMemo(() => {
     if (!userId) return null
@@ -2715,15 +2714,15 @@ export default function InputTradeForm({
               <div className="mt-2 space-y-2">
                 {editScreenshotHasImage ? (
                   <div
-                    className="relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-white/10 bg-[#0f172a]"
+                    className="relative overflow-hidden rounded-lg border border-white/10"
                     onDrop={handleDrop}
                     onDragOver={(e) => e.preventDefault()}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={editScreenshotPreviewSrc ?? undefined}
+                    <ContentMediaPreview
+                      src={editScreenshotPreviewSrc!}
+                      preset="trade-thumb"
                       alt="Trade screenshot preview"
-                      className={`h-full w-full ${editScreenshotPreviewObjectClass}`}
+                      displayMode={screenshotDisplayMode}
                     />
                     {screenshotModeBusy ? (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-sm text-white">
@@ -3131,7 +3130,7 @@ export default function InputTradeForm({
         <ImageCropModal
           open={imageCrop.cropSourceFile != null}
           file={imageCrop.cropSourceFile}
-          preset={CONTENT_IMAGE_CROP_PRESET}
+          preset={CONTENT_IMAGE_V2_PRESET}
           onCancel={handleCropCancel}
           onSave={handleCropSave}
         />
@@ -3174,7 +3173,7 @@ export default function InputTradeForm({
       <ImageCropModal
         open={imageCrop.cropSourceFile != null}
         file={imageCrop.cropSourceFile}
-        preset={CONTENT_IMAGE_CROP_PRESET}
+        preset={CONTENT_IMAGE_V2_PRESET}
         onCancel={handleCropCancel}
         onSave={handleCropSave}
       />

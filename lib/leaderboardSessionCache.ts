@@ -53,6 +53,17 @@ export function clearAllLeaderboardSessions() {
   sessions.clear()
 }
 
+const aggregateSessions = new Map<string, { payload: unknown; fetchedAt: number }>()
+
+export function readLeaderboardAggregate(cacheKey: string): unknown | null {
+  const entry = aggregateSessions.get(cacheKey)
+  return entry?.payload ?? null
+}
+
+export function writeLeaderboardAggregate(cacheKey: string, payload: unknown) {
+  aggregateSessions.set(cacheKey, { payload, fetchedAt: Date.now() })
+}
+
 export function isLeaderboardSessionFresh(userId: string, softTtlMs = 5 * 60_000) {
   const entry = readLeaderboardSession(userId)
   if (!entry) return false

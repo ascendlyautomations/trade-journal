@@ -1,5 +1,6 @@
 "use client"
 
+import "../utilityDesktopTheme.css"
 import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
@@ -164,7 +165,7 @@ function CsvSupportForm() {
 export default function CsvSupportPage() {
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 md:px-6 text-white">
+      <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 md:px-6 text-white">
         <div className="mx-auto w-full max-w-2xl">
           <Suspense
             fallback={

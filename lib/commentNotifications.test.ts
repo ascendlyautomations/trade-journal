@@ -1,5 +1,9 @@
 import { describe, it } from "node:test"
-import { buildCommentNotificationInsertPayload, resolveCommentNotificationRecipients, } from "./commentNotifications.ts"
+import {
+  buildCommentNotificationInsertPayload,
+  ensureCommentNotification,
+  resolveCommentNotificationRecipients,
+} from "./commentNotifications.ts"
 import assert from "node:assert/strict"
 
 describe("resolveCommentNotificationRecipients", () => {
@@ -55,6 +59,45 @@ describe("buildCommentNotificationInsertPayload", () => {
         trade_id: "trade-1",
       }
     )
+  })
+
+  it("sends the current session and does not refresh it", async () => {
+    const calls: string[] = []
+    const supabase = {
+      auth: {
+        getSession: async () => {
+          calls.push("getSession")
+          return {
+            data: { session: { access_token: "access-token" } },
+            error: null,
+          }
+        },
+        refreshSession: async () => {
+          calls.push("refreshSession")
+          return { data: { session: null }, error: { message: "refresh" } }
+        },
+      },
+    }
+    const originalFetch = globalThis.fetch
+    let authorization: string | null = null
+    globalThis.fetch = async (_input, init) => {
+      const headers = new Headers(init?.headers)
+      authorization = headers.get("authorization")
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+    try {
+      await ensureCommentNotification(supabase as never, {
+        recipientUserId: "owner-1",
+        senderUserId: "commenter-1",
+        commentId: "comment-1",
+        content: "Nice trade",
+        target: { kind: "trade", tradeId: "trade-1" },
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+    assert.deepEqual(calls, ["getSession"])
+    assert.equal(authorization, "Bearer access-token")
   })
 
   it("requires commentId", () => {

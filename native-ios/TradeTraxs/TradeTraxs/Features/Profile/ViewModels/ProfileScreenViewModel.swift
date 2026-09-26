@@ -17,6 +17,7 @@ final class ProfileScreenViewModel {
     private let navigationCoordinator: NavigationCoordinator
     private let showsOwnerChrome: Bool
     private let target: ProfileContentStore.Target
+    private let currentUserProfile: CurrentUserProfileStore
 
     private var bootstrapTask: Task<Void, Never>?
     private var isReconcilingFromDisk = false
@@ -30,13 +31,14 @@ final class ProfileScreenViewModel {
 
     init(
         target: ProfileContentStore.Target,
-        currentUserProfile _: CurrentUserProfileStore,
+        currentUserProfile: CurrentUserProfileStore,
         navigationCoordinator: NavigationCoordinator,
         authenticationCoordinator _: AuthenticationCoordinator?,
         data: DataEnvironment,
         showsOwnerChrome: Bool
     ) {
         self.target = target
+        self.currentUserProfile = currentUserProfile
         self.data = data
         self.navigationCoordinator = navigationCoordinator
         self.showsOwnerChrome = showsOwnerChrome
@@ -103,81 +105,9 @@ final class ProfileScreenViewModel {
         bindProfileEntityRealtime()
     }
 
-    func onDisappearProfileEntityRealtime() {
-        SocialEntityRealtimeSession.shared.updateProfileBinding(nil)
-        SocialEntityRealtimeProcessor.shared.bindProfile(nil)
-    }
+    func onDisappearProfileEntityRealtime() {}
 
-    private func bindProfileEntityRealtime() {
-        let profileID: ProfileID? = {
-            if let id = state.profileID { return id }
-            if case .profile(let id) = target { return id }
-            return contentStore.resolvedProfileID
-        }()
-        guard let profileID else { return }
-        Task {
-            guard let userID = await data.session.currentUserID else { return }
-            let viewerID = ProfileID(userID.rawValue)
-            SocialEntityRealtimeSession.shared.updateProfileBinding(
-                SocialEntityRealtimeSession.ProfileBinding(
-                    viewerID: viewerID,
-                    profileID: profileID
-                )
-            )
-            SocialEntityRealtimeProcessor.shared.bindProfile(
-                SocialEntityRealtimeProcessor.ProfileContext(
-                    viewerID: viewerID,
-                    profileID: profileID,
-                    onPatch: { [weak self] event in
-                        self?.applyProfileEntityPatch(event)
-                    },
-                    onDelete: { [weak self] event in
-                        self?.applyProfileEntityDelete(event)
-                    }
-                )
-            )
-        }
-    }
-
-    private func applyProfileEntityPatch(_ event: SocialEntityRealtimeEvent) {
-        var next = state
-        switch event.table {
-        case .profilePosts:
-            if let index = next.posts.firstIndex(where: { $0.id.rawValue == event.entityID }) {
-                var post = next.posts[index]
-                if let caption = event.payload.caption { post.body = caption }
-                next.posts[index] = post
-            }
-        case .trades:
-            break
-        case .reels:
-            break
-        case .achievementPosts:
-            break
-        case .posts:
-            break
-        }
-        applyLocalState(next)
-        Task { await persistProfileStateIfPossible(next, source: .network) }
-    }
-
-    private func applyProfileEntityDelete(_ event: SocialEntityRealtimeEvent) {
-        var next = state
-        switch event.table {
-        case .profilePosts:
-            next.posts.removeAll { $0.id.rawValue == event.entityID }
-        case .trades:
-            next.trades.removeAll { $0.id.rawValue == event.entityID }
-        case .reels:
-            next.clips.removeAll { $0.id.rawValue == event.entityID }
-        case .achievementPosts:
-            next.achievements.removeAll { $0.id.rawValue == event.entityID }
-        case .posts:
-            break
-        }
-        applyLocalState(next)
-        Task { await persistProfileStateIfPossible(next, source: .network) }
-    }
+    private func bindProfileEntityRealtime() {}
 
     /// FollowMutationCoordinator — keep ProfileState aligned with shared caches.
     func applyExternalFollowState(isFollowing: Bool, stats: ProfileStats?) {
@@ -1002,6 +932,9 @@ final class ProfileScreenViewModel {
         next.isRefreshing = state.isRefreshing
         state = next
         contentStore.applyBootstrap(next)
+        if source == .network {
+            syncOwnerAvatar(next.profile)
+        }
         syncShellIfNeeded()
         activateShellForLaunch()
 
@@ -1071,6 +1004,11 @@ final class ProfileScreenViewModel {
             prefetched.tradesNextCursor = prefetched.trades.count >= 30 ? "disk" : nil
         }
         return prefetched
+    }
+
+    private func syncOwnerAvatar(_ profile: Profile?) {
+        guard isOwnerTarget, let profile else { return }
+        currentUserProfile.adoptDisplayedAvatar(from: profile)
     }
 
     private func seedOwnerCacheIfNeeded(from currentUserProfile: CurrentUserProfileStore) {

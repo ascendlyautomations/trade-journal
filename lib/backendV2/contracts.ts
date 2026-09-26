@@ -100,6 +100,8 @@ export type SessionProfileV1 = {
   max_drawdown_limit: number | null
   is_private: boolean | null
   has_email_password: boolean | null
+  /** profiles.created_at. Optional so older cached payloads still decode. */
+  created_at?: string | null
 }
 
 export type SessionBootstrapV1 = {

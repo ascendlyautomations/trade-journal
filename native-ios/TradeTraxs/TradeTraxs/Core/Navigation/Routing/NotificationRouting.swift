@@ -67,6 +67,9 @@ nonisolated struct NotificationRouter: NotificationRouting {
                 return .profile(.activity)
             }
             if type == "affiliate_referral" || type == "affiliate_commission_earned" {
+                guard IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled else {
+                    return .profile(.activity)
+                }
                 return .profile(.affiliate)
             }
             if type == "like" || type == "like_milestone" || type == "like_batch" || type == "comment" {

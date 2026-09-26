@@ -54,6 +54,77 @@ enum ClipBandwidthLogger {
             """
         )
     }
+
+    static func logTransferSnapshot(
+        clipID: String,
+        event: String,
+        role: String,
+        lifecycle: String,
+        assetBytes: Int64?,
+        bytesTransferred: Int64,
+        rawBytesTransferred: Int64,
+        playbackSeconds: Double,
+        networkClass: String,
+        startReason: String?,
+        stopReason: String?,
+        forwardBufferSeconds: TimeInterval,
+        waitsToMinimizeStalling: Bool,
+        bufferedAheadSeconds: Double?,
+        mediaRequests: Int?,
+        indicatedBitrate: Double?,
+        observedBitrate: Double?,
+        preferredPeakBitRate: Double?,
+        preferredMaximumResolution: String,
+        playWallSeconds: Double?
+    ) {
+        let bytesPerPlaybackSecond = ClipPlaybackTransferMetrics.bytesPerPlaybackSecond(
+            bytesTransferred: bytesTransferred,
+            playbackSeconds: playbackSeconds
+        )
+        let assetFraction = ClipPlaybackTransferMetrics.assetFraction(
+            bytesTransferred: bytesTransferred,
+            assetBytes: assetBytes
+        )
+        print(
+            """
+            [ClipBandwidth] clipID=\(clipID) event=\(event) role=\(role) lifecycle=\(lifecycle) \
+            assetBytes=\(Self.intText(assetBytes)) bytesTransferred=\(bytesTransferred) \
+            rawBytesTransferred=\(rawBytesTransferred) playbackSeconds=\(Self.secondsText(playbackSeconds)) \
+            playWallSeconds=\(Self.optionalSecondsText(playWallSeconds)) \
+            bytesPerPlaybackSecond=\(Self.optionalSecondsText(bytesPerPlaybackSecond)) \
+            assetFraction=\(Self.optionalSecondsText(assetFraction)) \
+            networkClass=\(networkClass) startReason=\(startReason ?? "none") \
+            stopReason=\(stopReason ?? "none") forwardBufferSeconds=\(Self.secondsText(forwardBufferSeconds)) \
+            waitsToMinimizeStalling=\(waitsToMinimizeStalling) \
+            bufferedAheadSeconds=\(Self.optionalSecondsText(bufferedAheadSeconds)) \
+            mediaRequests=\(mediaRequests.map(String.init) ?? "none") \
+            indicatedBitrate=\(Self.optionalBitrateText(indicatedBitrate)) \
+            observedBitrate=\(Self.optionalBitrateText(observedBitrate)) \
+            preferredPeakBitRate=\(Self.optionalBitrateText(preferredPeakBitRate)) \
+            preferredMaximumResolution=\(preferredMaximumResolution)
+            """
+        )
+    }
+
+    private static func intText(_ value: Int64?) -> String {
+        value.map(String.init) ?? "unknown"
+    }
+
+    private static func secondsText(_ value: Double) -> String {
+        guard value.isFinite else { return "unknown" }
+        return String(format: "%.3f", value)
+    }
+
+    private static func optionalSecondsText(_ value: Double?) -> String {
+        guard let value else { return "unknown" }
+        return secondsText(value)
+    }
+
+    private static func optionalBitrateText(_ value: Double?) -> String {
+        guard let value, value.isFinite else { return "unknown" }
+        if value <= 0 { return "0" }
+        return String(format: "%.0f", value)
+    }
 }
 
 enum ClipPlaybackLogger {
@@ -92,6 +163,29 @@ enum ClipBandwidthLogger {
         mediaRequests: Int,
         transferDuration: TimeInterval,
         observedBitrate: Double
+    ) {}
+
+    static func logTransferSnapshot(
+        clipID: String,
+        event: String,
+        role: String,
+        lifecycle: String,
+        assetBytes: Int64?,
+        bytesTransferred: Int64,
+        rawBytesTransferred: Int64,
+        playbackSeconds: Double,
+        networkClass: String,
+        startReason: String?,
+        stopReason: String?,
+        forwardBufferSeconds: TimeInterval,
+        waitsToMinimizeStalling: Bool,
+        bufferedAheadSeconds: Double?,
+        mediaRequests: Int?,
+        indicatedBitrate: Double?,
+        observedBitrate: Double?,
+        preferredPeakBitRate: Double?,
+        preferredMaximumResolution: String,
+        playWallSeconds: Double?
     ) {}
 }
 

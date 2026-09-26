@@ -140,6 +140,7 @@ struct AccountPayoutEditorSheet: View {
                         .lineLimit(2...3)
                 }
             }
+            .experienceDashboardGroupedRows()
             .experienceNavigationTitle(
                 editingEntryID == nil ? copy.addTitle : copy.editTitle
             )

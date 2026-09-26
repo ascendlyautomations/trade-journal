@@ -19,6 +19,7 @@ nonisolated struct DefaultAIRepository: AIRepository {
             throw AppError.unknown(message: "Network transport unavailable")
         }
 
+        TradeAITrace.analysisStarted()
         let body = AnalyzeTradeBFFBody(
             trade: request.context.tradePayload,
             messages: request.messages.map {
@@ -33,6 +34,7 @@ nonisolated struct DefaultAIRepository: AIRepository {
             body: data,
             requiresAuthentication: true
         )
+        TradeAITrace.analysisResponse(status: response.statusCode, byteCount: response.data.count)
 
         let decoded = try? JSONDecoder().decode(AnalyzeTradeBFFResponse.self, from: response.data)
         let reply = decoded?.reply?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -43,6 +45,7 @@ nonisolated struct DefaultAIRepository: AIRepository {
             guard let reply, !reply.isEmpty else {
                 throw AppError.unknown(message: "No response generated")
             }
+            TradeAITrace.analysisDecoded()
             return TradeAIAnalyzeResponse(reply: AIGeneratedTextNormalizer.normalize(reply))
         case 401:
             throw AppError.domain(.permission(.notAuthenticated))
@@ -91,22 +94,27 @@ nonisolated struct DefaultAIRepository: AIRepository {
         guard !messages.isEmpty else { return }
         guard let userID = await session.currentUserID else { return }
 
-        let bodies = messages.map {
-            TradeAIMessageInsertDTO(
-                id: $0.id,
-                trade_id: tradeID.rawValue,
-                user_id: userID.rawValue,
-                role: $0.role.rawValue,
-                content: $0.content,
-                prompt_key: $0.promptKey,
-                created_at: ISO8601.string(from: $0.createdAt)
-            )
+        let rows = TradeAIMessagePersistence.makeInsertRows(
+            messages: messages,
+            tradeID: tradeID,
+            userID: userID
+        )
+        TradeAITrace.persistenceStarted(rowCount: rows.count, payloadType: "TradeAIMessageInsertRow[]")
+
+        let payload: Data
+        do {
+            payload = try TradeAIMessagePersistence.encodeInsertPayload(rows)
+        } catch {
+            TradeAITrace.persistenceFailed(error: error)
+            throw AppError.unknown(message: "Could not prepare analysis save.")
         }
 
         do {
-            try await supabase.database.insert(bodies, into: Self.table)
+            try await supabase.database.insertJSON(payload, into: Self.table)
+            TradeAITrace.persistenceCompleted(rowCount: rows.count)
         } catch {
             if Self.isMissingTableError(error) { return }
+            TradeAITrace.persistenceFailed(error: error)
             throw error
         }
     }
@@ -288,12 +296,3 @@ private nonisolated struct TradeAIMessageDTO: Decodable {
     }
 }
 
-private nonisolated struct TradeAIMessageInsertDTO: Encodable {
-    var id: String
-    var trade_id: String
-    var user_id: String
-    var role: String
-    var content: String
-    var prompt_key: String?
-    var created_at: String
-}

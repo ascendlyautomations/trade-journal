@@ -88,7 +88,7 @@ final class GlobalUploadCoordinator {
             UploadJob(
                 id: jobID,
                 kind: .reel,
-                title: "Reel",
+                title: "Clip",
                 phase: .preparing,
                 progress: nil,
                 errorMessage: nil,
@@ -441,15 +441,55 @@ final class GlobalUploadCoordinator {
         runGeneration: UInt64
     ) async {
         guard jobRunIsLive(jobID: jobID, generation: runGeneration, stage: "runReel.entry") else { return }
-        await registerProgress(jobID: jobID, phase: .encoding) { [weak self] fraction in
-            self?.updateJob(jobID) { job in
-                job.phase = .encoding
-                job.progress = fraction * 0.45
-            }
-        }
 
-        let draft = spec.snapshot.asDraft
+        var publishDraft = spec.snapshot.asDraft
+        let preparationTaskID = spec.preparationTaskID
+
         do {
+            if spec.snapshot.videoAssetState != .preparedDelivery,
+               let preparationTaskID
+            {
+                updateJob(jobID) { job in
+                    job.phase = .preparing
+                    job.progress = nil
+                }
+                let package = try await ReelBackgroundPreparationRegistry.shared.awaitPrepared(
+                    preparationTaskID: preparationTaskID
+                )
+                ClipPublishDiagnostics.logPreparationResolved(
+                    publishID: jobID,
+                    preparationTaskID: preparationTaskID,
+                    bytes: package.prepared.byteCount
+                )
+
+                var merged = spec.snapshot.asDraft
+                merged.ownedSourceURL = package.ownedSourceURL
+                merged.localVideoURL = package.prepared.fileURL
+                merged.videoAssetState = .preparedDelivery
+                merged.contentType = package.prepared.contentType
+                merged.byteCount = package.prepared.byteCount
+                merged.durationSeconds = package.prepared.durationSeconds
+                if merged.thumbnailJPEG == nil {
+                    merged.thumbnailJPEG = package.prepared.thumbnailJPEG
+                }
+
+                let uploadSnapshot = try ReelEncodingPipeline.captureUploadSnapshot(
+                    from: merged,
+                    publishID: jobID,
+                    captionOverride: nil
+                )
+                publishDraft = uploadSnapshot.asDraft
+            }
+
+            ClipPublishDiagnostics.logPostingStarted(publishID: jobID)
+
+            await registerProgress(jobID: jobID, phase: .encoding) { [weak self] fraction in
+                self?.updateJob(jobID) { job in
+                    job.phase = .encoding
+                    job.progress = fraction * 0.45
+                }
+            }
+
             if let tradeID = spec.snapshot.linkedTradeID {
                 updateJob(jobID) { $0.phase = .preparing }
                 if try await services.feed.tradeHasAttachedReel(tradeID) {
@@ -467,7 +507,7 @@ final class GlobalUploadCoordinator {
                 reel = try await UploadProgressContext.$jobID.withValue(jobID) {
                     try await ReelPublishPipeline.publish(
                         publishID: jobID,
-                        draft: draft,
+                        draft: publishDraft,
                         authorID: spec.authorID,
                         tradeID: spec.snapshot.linkedTradeID,
                         tradeIsPublic: spec.tradeIsPublic,
@@ -496,8 +536,12 @@ final class GlobalUploadCoordinator {
 
             services.detailCache.seed(reel)
             OwnerProfileOptimisticStore.shared.noteReelCreated(reel)
-            cleanupReelFiles(draft)
-            MediaVideoPreparation.cleanupTemporaryFile(at: draft.localVideoURL)
+            cleanupReelFiles(publishDraft)
+            if let preparationTaskID {
+                await ReelBackgroundPreparationRegistry.shared.releaseAfterUpload(
+                    preparationTaskID: preparationTaskID
+                )
+            }
             await completeJob(jobID: jobID, kind: .reel, runGeneration: runGeneration)
         } catch {
             await failJob(jobID: jobID, error: error, runGeneration: runGeneration)
@@ -710,12 +754,14 @@ final class GlobalUploadCoordinator {
                 throw AppError.unknown(message: "Achievements service unavailable.")
             }
 
-            let imageRef: MediaReference
+            let imageRef: MediaReference?
             if spec.authorID.rawValue.hasPrefix("dev.") {
-                imageRef = MediaReference(id: "dev/create-achievement.jpg", kind: .image, altText: nil)
+                imageRef = spec.imageData != nil
+                    ? MediaReference(id: "dev/create-achievement.jpg", kind: .image, altText: nil)
+                    : nil
             } else if let publicURL = checkpoint.uploadedImagePublicURL {
                 imageRef = MediaReference(id: publicURL, kind: .image, altText: nil)
-            } else {
+            } else if let imageData = spec.imageData, !imageData.isEmpty {
                 updateJob(jobID) { $0.phase = .uploading; $0.progress = 0.05 }
                 let path = "achievements/\(spec.authorID.rawValue)/\(spec.jobID).jpg"
                 let reference = try await UploadProgressContext.$jobID.withValue(jobID) {
@@ -723,7 +769,7 @@ final class GlobalUploadCoordinator {
                         UploadRequest(
                             bucket: StorageBucket.screenshots.rawValue,
                             path: path,
-                            data: spec.imageData,
+                            data: imageData,
                             contentType: "image/jpeg",
                             purpose: .postImage
                         )
@@ -743,6 +789,8 @@ final class GlobalUploadCoordinator {
                     event: .storageCompleted,
                     taskCancelled: Task.isCancelled
                 )
+            } else {
+                imageRef = nil
             }
 
             updateJob(jobID) { $0.phase = .publishing; $0.progress = nil }

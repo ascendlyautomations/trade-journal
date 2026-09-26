@@ -656,10 +656,10 @@ private final class CountingInteractionRepository: InteractionRepository, @unche
     func engagement(
         for targets: [InteractionTarget]
     ) async throws -> [InteractionTarget: EngagementSnapshot] {
-        lock.lock()
-        engagementCallCount += 1
-        lastEngagementBatchSize = targets.count
-        lock.unlock()
+        TestLock.withLock(lock) {
+            engagementCallCount += 1
+            lastEngagementBatchSize = targets.count
+        }
         if delayNanoseconds > 0 {
             try? await Task.sleep(nanoseconds: delayNanoseconds)
         }
@@ -749,9 +749,9 @@ private final class InMemoryInteractionRepository: InteractionRepository, @unche
     }
 
     func setLiked(_ liked: Bool, on target: InteractionTarget) async throws {
-        lock.lock()
-        setLikedCalls.append((liked, target))
-        lock.unlock()
+        TestLock.withLock(lock) {
+            setLikedCalls.append((liked, target))
+        }
         if likeDelayNanoseconds > 0 {
             try? await Task.sleep(nanoseconds: likeDelayNanoseconds)
         }
@@ -805,9 +805,7 @@ private final class InMemoryInteractionRepository: InteractionRepository, @unche
         for commentIDs: [CommentID],
         source: CommentLikeSource
     ) async throws -> [CommentID: CommentLikeSnapshot] {
-        lock.lock()
-        let stored = commentLikeMeta
-        lock.unlock()
+        let stored = TestLock.withLock(lock) { commentLikeMeta }
         var meta: [CommentID: CommentLikeSnapshot] = [:]
         for id in commentIDs {
             meta[id] = stored[id] ?? .empty
@@ -820,23 +818,22 @@ private final class InMemoryInteractionRepository: InteractionRepository, @unche
         commentID: CommentID,
         source: CommentLikeSource
     ) async throws {
-        lock.lock()
-        if shouldFailCommentLike {
-            lock.unlock()
-            throw AppError.unknown(message: "comment like failed")
-        }
-        var snap = commentLikeMeta[commentID] ?? .empty
-        if liked {
-            if !snap.liked {
-                snap.liked = true
-                snap.count += 1
+        try TestLock.withLock(lock) {
+            if shouldFailCommentLike {
+                throw AppError.unknown(message: "comment like failed")
             }
-        } else if snap.liked {
-            snap.liked = false
-            snap.count = max(0, snap.count - 1)
+            var snap = commentLikeMeta[commentID] ?? .empty
+            if liked {
+                if !snap.liked {
+                    snap.liked = true
+                    snap.count += 1
+                }
+            } else if snap.liked {
+                snap.liked = false
+                snap.count = max(0, snap.count - 1)
+            }
+            commentLikeMeta[commentID] = snap
         }
-        commentLikeMeta[commentID] = snap
-        lock.unlock()
     }
 
     func setCommentPinned(
@@ -844,18 +841,17 @@ private final class InMemoryInteractionRepository: InteractionRepository, @unche
         commentID: CommentID,
         on target: InteractionTarget
     ) async throws {
-        lock.lock()
-        if shouldFailCommentPin {
-            lock.unlock()
-            throw AppError.unknown(message: "comment pin failed")
+        try TestLock.withLock(lock) {
+            if shouldFailCommentPin {
+                throw AppError.unknown(message: "comment pin failed")
+            }
+            let items = commentsByTarget[target] ?? []
+            commentsByTarget[target] = CommentPinSemantics.applyPinnedState(
+                items,
+                commentID: commentID,
+                pinned: pinned
+            )
         }
-        let items = commentsByTarget[target] ?? []
-        commentsByTarget[target] = CommentPinSemantics.applyPinnedState(
-            items,
-            commentID: commentID,
-            pinned: pinned
-        )
-        lock.unlock()
     }
 }
 

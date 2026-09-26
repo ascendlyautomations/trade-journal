@@ -73,7 +73,7 @@ struct TradeEntryHubView: View {
         .accessibilityIdentifier("tradeEntry.modePicker")
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.top, ExperienceSpacing.sm)
-        .padding(.bottom, ExperienceSpacing.xxs)
+        .padding(.bottom, ExperienceSpacing.md)
         .background(colors.groupedBackground)
     }
 }

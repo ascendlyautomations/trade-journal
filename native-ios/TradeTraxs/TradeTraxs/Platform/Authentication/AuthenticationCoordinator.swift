@@ -169,8 +169,8 @@ final class AuthenticationCoordinator {
         )
     }
 
-    /// Deletes the authenticated account on the server, then clears all local session state.
-    func deleteAccount(using repository: any AccountRepository) async throws {
+    /// Server-side account deletion only — local teardown runs after the user confirms on the success screen.
+    func deleteAuthenticatedAccountOnServer(using repository: any AccountRepository) async throws {
         let correlation = AuthFlowTracer.beginCorrelation()
         AuthFlowTracer.trace(
             "accountDeletion.started",
@@ -185,11 +185,20 @@ final class AuthenticationCoordinator {
             phase: authenticationManager.state.authFlowPhase,
             correlation: correlation
         )
+    }
 
+    /// Clears session, caches, and routes to Sign In after account deletion success.
+    func finishAccountDeletionAndReturnToSignIn() async {
         await performLocalSessionTeardown(
             correlationLabel: "accountDeletion",
             useAccountDeletionTeardown: true
         )
+    }
+
+    /// Deletes the authenticated account on the server, then clears all local session state.
+    func deleteAccount(using repository: any AccountRepository) async throws {
+        try await deleteAuthenticatedAccountOnServer(using: repository)
+        await finishAccountDeletionAndReturnToSignIn()
     }
 
     private func performLocalSessionTeardown(
@@ -341,7 +350,11 @@ final class AuthenticationCoordinator {
             navigation.clearDeferredAuthenticatedSnapshot()
             if boundUserID != nil {
                 boundUserID = nil
-                Task { invalidateCachesForSessionChange() }
+                let epoch = SessionViewerGate.shared.epoch
+                Task { @MainActor in
+                    guard SessionViewerGate.shared.epoch == epoch else { return }
+                    invalidateCachesForSessionChange()
+                }
             }
             if case .unauthenticated = state {
                 navigation.clearPersistedState()
@@ -453,6 +466,9 @@ final class AuthenticationCoordinator {
         let switchedAccounts = boundUserID != nil && newID != nil && boundUserID != newID
         if switchedAccounts {
             invalidateCachesForSessionChange()
+        }
+        if let newID {
+            SessionViewerGate.shared.bind(newID.rawValue)
         }
         let isNewBind = boundUserID == nil && newID != nil
         boundUserID = newID

@@ -26,7 +26,7 @@ struct TradeImageView: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                .fill(colors.fillPrimary)
+                .fill(image == nil ? colors.fillPrimary : Color.clear)
 
             if let image {
                 image

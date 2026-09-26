@@ -91,6 +91,18 @@ final class TradeAIExperienceTests: XCTestCase {
         XCTAssertEqual(context.mediaAttachments.first?.kind, .screenshot)
     }
 
+    func testPersistenceFailureKeepsAnalysisVisible() async {
+        let trade = makeTrade()
+        let repo = MockAIRepository(reply: coachReply, persistShouldFail: true)
+        let vm = TradeAISectionViewModel(tradeID: trade.id, ai: repo)
+        vm.updateContext(trade: trade, notes: [])
+        vm.selectedPrompt = TradeAISuggestedPrompts.default
+        await vm.analyzeSelected()
+        XCTAssertEqual(vm.messages.count, 2)
+        XCTAssertNotNil(vm.persistErrorMessage)
+        XCTAssertEqual(repo.persistedBatches.count, 0)
+    }
+
     func testAnalyzeSelectedUsesSpecializedPromptAndPersists() async {
         let trade = makeTrade()
         let repo = MockAIRepository(reply: coachReply)
@@ -204,6 +216,32 @@ final class TradeAIExperienceTests: XCTestCase {
         context.linkedClipIDs = [ReelID("clip-1")]
         XCTAssertNotNil(context.accountStatisticsSummary)
         XCTAssertEqual(context.linkedClipIDs.count, 1)
+    }
+
+    func testTradeAIMessageInsertPayloadIsJSONArray() throws {
+        let rows = TradeAIMessagePersistence.makeInsertRows(
+            messages: [
+                TradeAIMessage(role: .user, content: "Analyze this trade", promptKey: "analyze"),
+                TradeAIMessage(role: .assistant, content: "## Verdict\n🟡 Good\n\n## Key Improvements\n- Hold plan"),
+            ],
+            tradeID: TradeID("11111111-1111-4111-8111-111111111111"),
+            userID: UserID("22222222-2222-4222-8222-222222222222")
+        )
+        let data = try TradeAIMessagePersistence.encodeInsertPayload(rows)
+        let top = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        XCTAssertEqual(top.count, 2)
+        XCTAssertEqual(top[0]["role"] as? String, "user")
+        XCTAssertEqual(top[1]["role"] as? String, "assistant")
+    }
+
+    func testSupabaseJSONEncodingRejectsStringTopLevel() {
+        let scalarJSON = Data("\"not-a-document\"".utf8)
+        XCTAssertThrowsError(try SupabaseJSONEncoding.assertPostgRESTBody(scalarJSON)) { error in
+            guard case SupabaseJSONEncoding.Error.invalidTopLevelType(let kind) = error else {
+                return XCTFail("Expected invalidTopLevelType, got \(error)")
+            }
+            XCTAssertEqual(kind, "String")
+        }
     }
 
     func testAppConfigurationResolvesBFFBaseURLForAnalyzeTrade() throws {
@@ -338,14 +376,16 @@ final class TradeAIExperienceTests: XCTestCase {
 private final class MockAIRepository: AIRepository, @unchecked Sendable {
     var reply: String
     var history: [TradeAIMessage]
+    var persistShouldFail: Bool
     private(set) var analyzeCallCount = 0
     private(set) var loadCallCount = 0
     private(set) var lastRequest: TradeAIAnalyzeRequest?
     private(set) var persistedBatches: [[TradeAIMessage]] = []
 
-    init(reply: String, history: [TradeAIMessage] = []) {
+    init(reply: String, history: [TradeAIMessage] = [], persistShouldFail: Bool = false) {
         self.reply = reply
         self.history = history
+        self.persistShouldFail = persistShouldFail
     }
 
     func analyzeTrade(_ request: TradeAIAnalyzeRequest) async throws -> TradeAIAnalyzeResponse {
@@ -360,6 +400,9 @@ private final class MockAIRepository: AIRepository, @unchecked Sendable {
     }
 
     func persistMessages(_ messages: [TradeAIMessage], tradeID: TradeID) async throws {
+        if persistShouldFail {
+            throw AppError.unknown(message: "persist failed")
+        }
         persistedBatches.append(messages)
     }
 

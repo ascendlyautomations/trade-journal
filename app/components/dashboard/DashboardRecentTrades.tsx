@@ -14,13 +14,75 @@ type DashboardRecentTradesProps = {
   trades: DashboardTradeRow[]
   hasAnyTrades: boolean
   onSelectTrade: (trade: DashboardTradeRow) => void
+  /** Desktop terminal uses a single journal surface. Default keeps the card list. */
+  presentation?: "cards" | "journal"
+  /** Subtle link on the journal header. Cards presentation ignores this. */
+  viewAllHref?: string
 }
 
 function DashboardRecentTrades({
   trades,
   hasAnyTrades,
   onSelectTrade,
+  presentation = "cards",
+  viewAllHref,
 }: DashboardRecentTradesProps) {
+  if (presentation === "journal") {
+    return (
+      <div className="overflow-hidden rounded-xl border border-white/10 bg-white/10">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+          <h3 className="tt-dash-section-title">Recent Trades</h3>
+          {viewAllHref ? (
+            <Link
+              href={viewAllHref}
+              className="text-xs text-blue-300 hover:text-blue-200"
+            >
+              View all trades
+            </Link>
+          ) : null}
+        </div>
+        {trades.length === 0 ? (
+          <EmptyState
+            icon="📋"
+            title="No recent trades"
+            description="Your latest trades will appear here once you log activity."
+            className="border-0 bg-transparent py-6"
+          />
+        ) : (
+          <div>
+            {trades.map((trade) => {
+              const pnl = Number(trade.pnl) || 0
+              return (
+                <button
+                  key={trade.id}
+                  type="button"
+                  onClick={() => onSelectTrade(trade)}
+                  className="flex w-full items-center gap-4 border-b border-white/10 px-4 py-2.5 text-left text-sm last:border-b-0 hover:bg-white/10"
+                >
+                  <span className="w-24 shrink-0 truncate font-semibold text-white">
+                    {trade.ticker}
+                  </span>
+                  <span className="w-16 shrink-0 truncate text-xs text-gray-400">
+                    {trade.direction || "—"}
+                  </span>
+                  <span className={`w-28 shrink-0 font-semibold tabular-nums ${pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {formatCurrency(pnl)}
+                  </span>
+                  <span className="w-16 shrink-0 text-xs text-gray-400">
+                    {trade.rr != null && trade.rr !== "" ? formatRR(trade.rr) : "—"}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-gray-400">
+                    {formatEST(String(trade.created_at ?? ""))}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className={`h-full ${dashboardInsightCardClass}`}>
       <h3 className={dashboardInsightTitleClass}>Recent Trades</h3>

@@ -62,7 +62,8 @@ struct ActivityRowView: View {
                         FollowListAvatarView(
                             profile: profile,
                             imagePipeline: imagePipeline,
-                            size: 40
+                            size: 40,
+                            debugSurface: "activity"
                         )
                     }
                     .buttonStyle(.plain)
@@ -71,7 +72,8 @@ struct ActivityRowView: View {
                     FollowListAvatarView(
                         profile: profile,
                         imagePipeline: imagePipeline,
-                        size: 40
+                        size: 40,
+                        debugSurface: "activity"
                     )
                 }
             }

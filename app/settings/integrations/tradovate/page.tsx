@@ -1,5 +1,6 @@
 "use client"
 
+import "../../../utilityDesktopTheme.css"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Suspense, useMemo } from "react"
@@ -38,7 +39,7 @@ function TradovateIntegrationResultInner() {
   const isSuccess = searchParams.get("status") === "success"
 
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-6 py-16 text-center text-white">
+    <div className="tt-phase4-dark flex min-h-[50vh] flex-col items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-6 py-16 text-center text-white">
       <h1 className="mb-3 text-xl font-semibold tracking-tight">
         {isSuccess ? "Tradovate" : "Connection issue"}
       </h1>
@@ -57,7 +58,7 @@ export default function TradovateIntegrationResultPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-[50vh] items-center justify-center bg-[#0f172a] text-sm text-gray-400">
+        <div className="tt-phase4-dark flex min-h-[50vh] items-center justify-center bg-[#0f172a] text-sm text-gray-400">
           Loading…
         </div>
       }

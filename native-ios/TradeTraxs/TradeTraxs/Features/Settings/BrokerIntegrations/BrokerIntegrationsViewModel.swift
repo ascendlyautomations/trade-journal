@@ -93,9 +93,12 @@ final class BrokerIntegrationsViewModel {
         var provider: BrokerIntegrationProvider
         var connectionId: String
         var mappingId: String
+        /// Rithmic password entry on the existing mapping. Other reconnects use the connection reconnect flow.
+        var usesImportPasswordReauth: Bool = false
     }
 
     private(set) var importReconnectPrompt: ImportReconnectPrompt?
+    private(set) var importRetryPrompt: ImportReconnectPrompt?
 
     var isRithmicConnectUIAvailable: Bool {
         rithmicConnectCapabilitiesPhase == .loaded
@@ -416,19 +419,22 @@ final class BrokerIntegrationsViewModel {
                     connectionId: connectionId,
                     mappingId: mappingId
                 )
-            } else if response.summary.errorCode == "rithmic_password_required" {
-                presentMessage(
-                    response.summary.error ?? "Enter your Rithmic password to import.",
-                    error: true
-                )
             } else {
-                presentMessage(
-                    BrokerIntegrationDisplay.importFailureMessage(serverSummary: response.summary.error),
-                    error: true
+                handleImportSyncFailure(
+                    response,
+                    provider: .rithmic,
+                    connectionId: connectionId,
+                    mappingId: mappingId
                 )
             }
         } catch {
-            presentMessage(BrokerIntegrationDisplay.importFailureMessage(for: error), error: true)
+            importReconnectPrompt = nil
+            importRetryPrompt = ImportReconnectPrompt(
+                provider: .rithmic,
+                connectionId: connectionId,
+                mappingId: mappingId
+            )
+            presentMessage(BrokerSyncPresentation.temporaryFailureMessage(), error: true)
         }
     }
 
@@ -565,6 +571,7 @@ final class BrokerIntegrationsViewModel {
                 )
                 if response.summary.ok {
                     importReconnectPrompt = nil
+                    importRetryPrompt = nil
                     let previews = response.summary.importPreviewTrades
                     if previews.isEmpty {
                         presentMessage("No new trades to import.", error: false)
@@ -605,7 +612,12 @@ final class BrokerIntegrationsViewModel {
             }
         } catch {
             importReconnectPrompt = nil
-            presentMessage(BrokerIntegrationDisplay.importFailureMessage(for: error), error: true)
+            importRetryPrompt = ImportReconnectPrompt(
+                provider: provider,
+                connectionId: connectionId,
+                mappingId: mappingId
+            )
+            presentMessage(BrokerSyncPresentation.temporaryFailureMessage(), error: true)
         }
     }
 
@@ -638,7 +650,13 @@ final class BrokerIntegrationsViewModel {
                 mappingId: pending.mappingId
             )
         } catch {
-            presentMessage(BrokerIntegrationDisplay.importFailureMessage(for: error), error: true)
+            importReconnectPrompt = nil
+            importRetryPrompt = ImportReconnectPrompt(
+                provider: .tradovate,
+                connectionId: pending.connectionId,
+                mappingId: pending.mappingId
+            )
+            presentMessage(BrokerSyncPresentation.temporaryFailureMessage(), error: true)
         }
     }
 
@@ -689,9 +707,9 @@ final class BrokerIntegrationsViewModel {
         if !response.accounts.isEmpty {
             accountsByConnection[connectionId] = response.accounts
         }
-        let resolution = BrokerSyncFailureResolution.from(response)
         if response.summary.ok {
             importReconnectPrompt = nil
+            importRetryPrompt = nil
             if let userID = await session.currentUserID {
                 let owner = ProfileID(userID.rawValue)
                 let reconciliation = await BrokerImportReconciliation.apply(
@@ -733,36 +751,34 @@ final class BrokerIntegrationsViewModel {
         mappingId: String
     ) {
         let resolution = BrokerSyncFailureResolution.from(response)
-        if provider == .rithmic, response.summary.errorCode == "rithmic_password_required" {
-            importReconnectPrompt = nil
-            presentRithmicImportReauth(connectionId: connectionId, mappingId: mappingId)
-            return
-        }
-        if resolution == .reconnectRequired, provider == .tradovate {
+        let message = BrokerSyncPresentation.message(
+            for: response,
+            provider: provider,
+            resolution: resolution
+        )
+        switch resolution {
+        case .reconnectRequired:
+            importRetryPrompt = nil
             importReconnectPrompt = ImportReconnectPrompt(
+                provider: provider,
+                connectionId: connectionId,
+                mappingId: mappingId,
+                usesImportPasswordReauth: response.summary.errorCode == "rithmic_password_required"
+            )
+            presentMessage(message, error: true)
+        case .retryable:
+            importReconnectPrompt = nil
+            importRetryPrompt = ImportReconnectPrompt(
                 provider: provider,
                 connectionId: connectionId,
                 mappingId: mappingId
             )
-            presentMessage(
-                BrokerSyncPresentation.message(
-                    for: response,
-                    provider: provider,
-                    resolution: resolution
-                ),
-                error: true
-            )
-            return
+            presentMessage(message, error: true)
+        case .success, .importFailed:
+            importReconnectPrompt = nil
+            importRetryPrompt = nil
+            presentMessage(message, error: true)
         }
-        importReconnectPrompt = nil
-        presentMessage(
-            BrokerSyncPresentation.message(
-                for: response,
-                provider: provider,
-                resolution: resolution
-            ),
-            error: true
-        )
     }
 
     func isImportingTrades(mappingId: String) -> Bool {

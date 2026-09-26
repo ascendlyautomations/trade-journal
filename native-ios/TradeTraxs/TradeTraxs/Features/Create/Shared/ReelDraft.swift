@@ -8,6 +8,8 @@ struct ReelDraft: Equatable {
     var ownedSourceURL: URL?
     /// Transcoded delivery file used for upload + preview.
     var localVideoURL: URL
+    /// When `.preparedDelivery`, global upload must upload this file as-is (no re-encode eligibility).
+    var videoAssetState: ReelUploadVideoAssetState = .sourceMedia
     var contentType: String
     var byteCount: Int
     var durationSeconds: Int
@@ -28,7 +30,8 @@ struct ReelDraft: Equatable {
     static func == (lhs: ReelDraft, rhs: ReelDraft) -> Bool {
         lhs.selectionID == rhs.selectionID
             && lhs.ownedSourceURL == rhs.ownedSourceURL
-            && lhs.localVideoURL == rhs.localVideoURL
+            &&         lhs.localVideoURL == rhs.localVideoURL
+            && lhs.videoAssetState == rhs.videoAssetState
             && lhs.contentType == rhs.contentType
             && lhs.byteCount == rhs.byteCount
             && lhs.durationSeconds == rhs.durationSeconds

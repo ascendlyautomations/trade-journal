@@ -213,6 +213,7 @@ final class DataEnvironment {
         if configuration.enablesRealtime, supabase.client.isConfigured {
             realtimeHub.start()
         }
+        RealtimePressureSnapshotProvider.bind(realtimeHub: realtimeHub)
 
         AppLog.application.info(
             "DataEnvironment ready — Supabase configured=\(supabase.client.isConfigured, privacy: .public)"
@@ -265,10 +266,6 @@ final class DataEnvironment {
             session: session,
             realtimeHub: realtimeHub
         )
-        AnalyticsRevisionRealtimeSession.shared.configure(
-            realtimeHub: realtimeHub,
-            session: session
-        )
         AnalyticsRevisionRepairNetworkObserver.shared.configure(
             reachability: networking.reachability
         )
@@ -289,22 +286,6 @@ final class DataEnvironment {
         )
 
         let engagementStore = makeEngagementStore(interactions: interactions, session: session)
-        EngagementRealtimeSession.shared.configure(
-            realtimeHub: realtimeHub,
-            session: session,
-            database: supabase.database,
-            engagementStore: engagementStore
-        )
-        SocialEntityRealtimeSession.shared.configure(realtimeHub: realtimeHub, session: session)
-        RelationshipRealtimeSession.shared.configure(realtimeHub: realtimeHub, session: session)
-        SocialEntityRealtimeProcessor.shared.configure(
-            feed: DefaultFeedRepository(supabase: supabase, cache: cache, session: session),
-            trades: tradesRepository,
-            profiles: profiles,
-            achievements: DefaultAchievementRepository(supabase: supabase, cache: cache),
-            detailCache: detailCache
-        )
-
         return DataEnvironment(
             configuration: configuration,
             supabase: supabase,

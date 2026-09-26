@@ -161,7 +161,11 @@ export async function syncRithmicBrokerAccount(
     connectionId,
   })
   if (!locked) {
-    return emptySummary({ status: "syncing", error: "Sync already in progress." })
+    return emptySummary({
+      status: "syncing",
+      error: "Sync already in progress.",
+      errorCode: "sync_in_progress",
+    })
   }
 
   const { data: syncRow } = await supabase
@@ -189,6 +193,7 @@ export async function syncRithmicBrokerAccount(
       lastSyncErrorMessage: sessionResolved.userMessage,
     })
     return emptySummary({
+      status: "reconnect_required",
       error: sessionResolved.userMessage,
       errorCode: sessionResolved.code,
     })
@@ -395,23 +400,64 @@ export async function syncRithmicBrokerAccount(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not import Rithmic trades."
-    if (
-      message.includes("rithmic_login_failed") ||
-      message.includes("rithmic_login_info_failed") ||
-      message.includes("rithmic_system_info_failed") ||
-      message.includes("rithmic_system_name_required")
-    ) {
+    const contract = rithmicSyncFailureContract(message)
+    if (contract.errorCode === "reconnect_required") {
       await markBrokerConnectionReconnectRequired(supabase, connectionId, userId)
     }
     await releaseBrokerSyncLock(supabase, brokerIntegrationAccountId, {
-      lastSyncStatus: "error",
-      lastSyncErrorCode: "rithmic_import_failed",
-      lastSyncErrorMessage: message.slice(0, 500),
+      lastSyncStatus: contract.status === "reconnect_required" ? "reconnect_required" : "error",
+      lastSyncErrorCode: contract.errorCode,
+      lastSyncErrorMessage: contract.error.slice(0, 500),
     })
     logRithmicDiagnostic("rithmic_error", { message: message.slice(0, 120) })
     return emptySummary({
-      error: message,
+      status: contract.status,
+      error: contract.error,
+      errorCode: contract.errorCode,
       durationMs: Date.now() - started,
     })
+  }
+}
+
+/** Maps stable Rithmic operation tokens onto the shared broker sync contract. */
+function rithmicSyncFailureContract(message: string): {
+  status: "reconnect_required" | "error"
+  errorCode: "reconnect_required" | "provider_unavailable" | "sync_failed"
+  error: string
+} {
+  const reconnectToken =
+    message.includes("rithmic_login_failed") ||
+    message.includes("rithmic_login_info_failed") ||
+    message.includes("rithmic_system_info_failed") ||
+    message.includes("rithmic_system_name_required") ||
+    message.includes("rithmic_agreement_required")
+  if (reconnectToken) {
+    return {
+      status: "reconnect_required",
+      errorCode: "reconnect_required",
+      error: "Rithmic authorization needs to be reconnected.",
+    }
+  }
+
+  const transientToken =
+    message.includes("rithmic_socket_not_open") ||
+    message.includes("rithmic_socket_closed") ||
+    message.includes("rithmic_recv_timeout") ||
+    message.includes("rithmic_wss_connect_failed") ||
+    message.includes("rithmic_fill_history_rp_code") ||
+    message.includes("ECONNREFUSED") ||
+    message.includes("ETIMEDOUT")
+  if (transientToken) {
+    return {
+      status: "error",
+      errorCode: "provider_unavailable",
+      error: "Rithmic is temporarily unavailable.",
+    }
+  }
+
+  return {
+    status: "error",
+    errorCode: "sync_failed",
+    error: "Could not import Rithmic trades.",
   }
 }

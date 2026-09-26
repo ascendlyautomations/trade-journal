@@ -38,6 +38,7 @@ struct ManageRoomChannelEditorSheet: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .scrollContentBackground(.hidden)
+            .experienceDashboardGroupedRows()
             .experienceScreenBackground()
             .experienceNavigationTitle(channel == nil ? "New Channel" : "Edit Channel")
             .toolbar {

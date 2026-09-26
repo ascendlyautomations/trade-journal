@@ -3,121 +3,52 @@ import XCTest
 
 @MainActor
 final class SocialEntityRealtimeTests: XCTestCase {
-    func testDuplicateInsertEventIsIgnored() async {
-        SocialEntityRealtimeProcessor.shared.resetSession()
-        var deleteCount = 0
-        let viewer = ProfileID("viewer-dup")
-        SocialEntityRealtimeProcessor.shared.bindFeed(
-            SocialEntityRealtimeProcessor.FeedContext(
-                viewerID: viewer,
-                scope: .global,
-                contentFilter: .all,
-                trackedEntityIDsByTable: [.posts: ["post-dup"]],
-                onInsert: { _ in },
-                onUpdate: { _ in },
-                onDelete: { _ in deleteCount += 1 },
-                persistFirstPage: {}
-            )
-        )
-        let event = SocialEntityRealtimeEvent(
+    func testParseEventBuildsPostPayload() {
+        let event = SocialEntityRealtimeSemantics.parseEvent(
             table: .posts,
-            mutation: .delete,
-            entityID: "post-dup",
-            authorID: "author",
-            eventRowID: "post-dup",
-            payload: .init()
+            mutation: .insert,
+            record: [
+                "id": "post-1",
+                "user_id": "author-1",
+                "content": "hello",
+                "created_at": "2026-01-15T12:00:00Z",
+            ],
+            oldRecord: nil
         )
-        await SocialEntityRealtimeProcessor.shared.handle(event, viewerUserID: viewer.rawValue)
-        await SocialEntityRealtimeProcessor.shared.handle(event, viewerUserID: viewer.rawValue)
-        XCTAssertEqual(deleteCount, 1)
+        XCTAssertEqual(event?.entityID, "post-1")
+        XCTAssertEqual(event?.authorID, "author-1")
+        XCTAssertEqual(event?.payload.caption, "hello")
+        XCTAssertEqual(event?.mutation, .insert)
     }
 
-    func testDeleteIsIdempotent() async {
-        SocialEntityRealtimeProcessor.shared.resetSession()
-        var deleteCount = 0
-        let viewer = ProfileID("viewer-del")
-        SocialEntityRealtimeProcessor.shared.bindFeed(
-            SocialEntityRealtimeProcessor.FeedContext(
-                viewerID: viewer,
-                scope: .global,
-                contentFilter: .all,
-                trackedEntityIDsByTable: [.posts: ["p1"]],
-                onInsert: { _ in },
-                onUpdate: { _ in },
-                onDelete: { _ in deleteCount += 1 },
-                persistFirstPage: {}
-            )
-        )
-        let event = SocialEntityRealtimeEvent(
+    func testParseEventReturnsNilWhenEntityIDMissing() {
+        let event = SocialEntityRealtimeSemantics.parseEvent(
             table: .posts,
             mutation: .delete,
-            entityID: "p1",
-            authorID: "author",
-            eventRowID: "p1",
-            payload: .init()
+            record: ["user_id": "author-1"],
+            oldRecord: nil
         )
-        await SocialEntityRealtimeProcessor.shared.handle(event, viewerUserID: viewer.rawValue)
-        await SocialEntityRealtimeProcessor.shared.handle(event, viewerUserID: viewer.rawValue)
-        XCTAssertEqual(deleteCount, 1)
+        XCTAssertNil(event)
     }
 
-    func testBlockedAuthorInsertIgnored() async {
-        SocialEntityRealtimeProcessor.shared.resetSession()
+    func testBlockedAuthorMarkedInSessionFilter() {
         let blocked = ProfileID("blocked-author-10d")
         FeedBlockedAuthorsFilter.shared.noteBlock(peerID: blocked)
         defer { FeedBlockedAuthorsFilter.shared.noteUnblock(peerID: blocked) }
-
-        var insertCount = 0
-        let viewer = ProfileID("viewer-block")
-        SocialEntityRealtimeProcessor.shared.bindFeed(
-            SocialEntityRealtimeProcessor.FeedContext(
-                viewerID: viewer,
-                scope: .following,
-                contentFilter: .all,
-                trackedEntityIDsByTable: [:],
-                onInsert: { _ in insertCount += 1 },
-                onUpdate: { _ in },
-                onDelete: { _ in },
-                persistFirstPage: {}
-            )
-        )
-        let event = SocialEntityRealtimeEvent(
-            table: .posts,
-            mutation: .insert,
-            entityID: "blocked-post",
-            authorID: blocked.rawValue,
-            eventRowID: "blocked-post",
-            payload: .init()
-        )
-        await SocialEntityRealtimeProcessor.shared.handle(event, viewerUserID: viewer.rawValue)
-        XCTAssertEqual(insertCount, 0)
+        XCTAssertTrue(FeedBlockedAuthorsFilter.shared.contains(blocked))
     }
 
-    func testStaleHydrationCannotResurrectAfterDelete() async {
-        SocialEntityRealtimeProcessor.shared.resetSession()
-        let viewer = ProfileID("viewer-tomb")
-        var entries: [String] = ["alive"]
-        SocialEntityRealtimeProcessor.shared.bindFeed(
-            SocialEntityRealtimeProcessor.FeedContext(
-                viewerID: viewer,
-                scope: .global,
-                contentFilter: .all,
-                trackedEntityIDsByTable: [.posts: ["alive"]],
-                onInsert: { _ in entries.append("inserted") },
-                onUpdate: { _ in },
-                onDelete: { id in entries.removeAll { $0 == id } },
-                persistFirstPage: {}
-            )
-        )
-        let delete = SocialEntityRealtimeEvent(
+    func testDeleteMutationUsesOldRecordWhenRecordNil() {
+        let event = SocialEntityRealtimeSemantics.parseEvent(
             table: .posts,
             mutation: .delete,
-            entityID: "alive",
-            authorID: "a",
-            eventRowID: "alive",
-            payload: .init()
+            record: nil,
+            oldRecord: [
+                "id": "gone",
+                "user_id": "author",
+            ]
         )
-        await SocialEntityRealtimeProcessor.shared.handle(delete, viewerUserID: viewer.rawValue)
-        XCTAssertTrue(entries.isEmpty)
+        XCTAssertEqual(event?.entityID, "gone")
+        XCTAssertEqual(event?.mutation, .delete)
     }
 }

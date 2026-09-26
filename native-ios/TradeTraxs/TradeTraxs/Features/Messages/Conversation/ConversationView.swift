@@ -341,6 +341,7 @@ struct ConversationView: View {
                                 onLongPressForActionMenu: {
                                     actionMenuMessageID = bubble.id
                                 },
+                                isActionMenuAnchorActive: actionMenuMessageID == bubble.id,
                                 canDelete: viewModel.canDeleteMessage(bubble),
                                 onRetry: {
                                     Task { await viewModel.retry(bubble) }
@@ -371,10 +372,6 @@ struct ConversationView: View {
                                     viewModel.toggleMessageSelection(bubble.id)
                                 },
                                 onReport: incomingMessageReportAction(for: bubble)
-                            )
-                            .messageBubbleActionMenuAnchor(
-                                messageID: bubble.id,
-                                isActive: actionMenuMessageID == bubble.id
                             )
                             .id(bubble.id.rawValue)
                             .onAppear {

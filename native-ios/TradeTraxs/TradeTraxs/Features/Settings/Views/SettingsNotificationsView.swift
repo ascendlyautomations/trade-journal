@@ -47,6 +47,7 @@ struct SettingsNotificationsView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .listSectionSpacing(ExperienceSpacing.sm)
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
@@ -70,7 +71,7 @@ struct SettingsNotificationsView: View {
         Section {
             SettingsToggleRow(
                 title: NotificationPreferenceKey.notificationsEnabled.title,
-                subtitle: NotificationPreferenceKey.notificationsEnabled.subtitle,
+                subtitle: nil,
                 isOn: Binding(
                     get: { viewModel.binding(for: .notificationsEnabled) },
                     set: { viewModel.set(.notificationsEnabled, enabled: $0) }
@@ -160,7 +161,7 @@ struct SettingsNotificationsView: View {
             ForEach(category.keys, id: \.self) { key in
                 SettingsToggleRow(
                     title: key.title,
-                    subtitle: key.subtitle,
+                    subtitle: nil,
                     isOn: Binding(
                         get: { viewModel.binding(for: key) },
                         set: { viewModel.set(key, enabled: $0) }
@@ -171,8 +172,6 @@ struct SettingsNotificationsView: View {
         } footer: {
             if !viewModel.masterEnabled {
                 Text("Turn on Allow Notifications to deliver these categories.")
-            } else {
-                Text(category.sectionFooter)
             }
         }
     }

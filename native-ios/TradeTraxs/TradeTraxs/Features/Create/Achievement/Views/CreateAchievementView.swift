@@ -19,9 +19,7 @@ struct CreateAchievementView: View {
         case payout
     }
 
-    private var usesTradeTraxsFormSurfaces: Bool {
-        themeEnvironment.identifier == .tradeTraxs
-    }
+    private var usesTradeTraxsFormSurfaces: Bool { false }
 
     init(
         data: DataEnvironment,
@@ -107,7 +105,7 @@ struct CreateAchievementView: View {
 
     private var composerContent: some View {
         Form {
-            Section("Achievement Details") {
+            Section {
                 accountField
                     .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
                 kindField
@@ -121,10 +119,12 @@ struct CreateAchievementView: View {
                     .lineLimit(2...5)
                     .textInputAutocapitalization(.sentences)
                     .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
+            } header: {
+                addAchievementSectionHeader("Achievement Details")
             }
 
-            Section("Achievement Value") {
-                if viewModel.isPayoutKind {
+            if viewModel.isPayoutKind {
+                Section {
                     HStack(spacing: ExperienceSpacing.xxs) {
                         Text("$")
                             .experienceStyle(.body, color: colors.secondaryText)
@@ -134,15 +134,21 @@ struct CreateAchievementView: View {
                             .accessibilityIdentifier("createAchievement.payout")
                     }
                     .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
+                } header: {
+                    addAchievementSectionHeader("Achievement Value")
                 }
+            }
 
+            Section {
                 DatePicker(
-                    "Date Achieved",
+                    "Date",
                     selection: $viewModel.achievedAt,
                     in: ...Date(),
                     displayedComponents: [.date]
                 )
                 .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
+            } header: {
+                addAchievementSectionHeader("Date Achieved")
             }
 
             Section {
@@ -190,9 +196,9 @@ struct CreateAchievementView: View {
                     )
                     .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
             } header: {
-                Text("Media")
+                addAchievementSectionHeader("Media")
             } footer: {
-                if viewModel.finalImage == nil {
+                if viewModel.isProofRequired, viewModel.finalImage == nil {
                     Text("Screenshot or proof image required.")
                         .foregroundStyle(colors.tertiaryText)
                 }
@@ -231,7 +237,9 @@ struct CreateAchievementView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
-        .listSectionSpacing(ExperienceSpacing.xs)
+        .experienceDashboardGroupedRows()
+        .listSectionSpacing(AddAchievementFormLayout.sectionSpacing)
+        .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .disabled(viewModel.phase == .publishing)
         .experienceFormKeyboard(focus: $focusedField)
         .onAppear { viewModel.loadAccountsIfNeeded() }
@@ -308,6 +316,12 @@ struct CreateAchievementView: View {
         cropSourceImage = image
     }
 
+    @ViewBuilder
+    private func addAchievementSectionHeader(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .padding(.top, -ExperienceSpacing.xxs)
+    }
+
     #if DEBUG
     private func applyScreenshotPrefillIfNeeded() {
         guard !didApplyScreenshotPrefill else { return }
@@ -321,6 +335,10 @@ struct CreateAchievementView: View {
         viewModel.applyScreenshotImageFixture()
     }
     #endif
+}
+
+private enum AddAchievementFormLayout {
+    static let sectionSpacing = ExperienceSpacing.xxs
 }
 
 private extension View {

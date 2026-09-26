@@ -72,6 +72,15 @@ final class ActivityExperienceTests: XCTestCase {
         )
     }
 
+    func testProfileAvatarDisplayCacheKeyUsesMediaReferenceNotNotificationRow() {
+        var profile = ActivityFixtures.profiles()[0]
+        profile.avatar = MediaReference(id: "avatars/user-abc/v3.jpg", kind: .image, altText: nil)
+        let key = ProfileAvatarDisplayCache.cacheKey(profile: profile, maxPixelSize: 128)
+        XCTAssertNotNil(key)
+        XCTAssertTrue(key?.contains("avatars/user-abc/v3.jpg") == true)
+        XCTAssertFalse(key?.contains("act-like") == true)
+    }
+
     func testTimeSectionsGroupTodayAndEarlier() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let sections = ActivityPresentation.sections(
@@ -363,7 +372,9 @@ final class ActivityExperienceTests: XCTestCase {
         affiliate.kind = .affiliateReferral
         XCTAssertEqual(
             ActivityNotificationRouting.appDestination(for: affiliate),
-            .profile(.affiliate)
+            IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled
+                ? .profile(.affiliate)
+                : .profile(.activity)
         )
     }
 

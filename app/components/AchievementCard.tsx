@@ -10,8 +10,8 @@ import {
   tierClassName,
 } from "../../lib/achievements"
 import { achievementImagePublicUrl } from "../../lib/storagePublicUrl"
+import ContentMediaPreview from "@/app/components/ContentMediaPreview"
 import { CONTENT_IMAGE_DISPLAY_PRESET } from "@/lib/contentImagePipeline"
-import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 
 type AchievementCardProps = {
   achievement: Achievement
@@ -21,6 +21,10 @@ type AchievementCardProps = {
   onEdit?: () => void
   onDelete?: () => void
   mediaPriority?: boolean
+  /** Feed uses its own non-cropping derivative. Profile keeps the shared card preset. */
+  mediaContext?: "card" | "feed"
+  /** Compact /achievements gallery. Does not apply on Profile or Feed. */
+  gallery?: boolean
   /** @deprecated Prefer onOpenDetail — opens the full achievement modal. */
   onImageClick?: (imageSrc: string, achievement: Achievement) => void
 }
@@ -33,6 +37,8 @@ export default function AchievementCard({
   onEdit,
   onDelete,
   mediaPriority = false,
+  mediaContext = "card",
+  gallery = false,
   onImageClick,
 }: AchievementCardProps) {
   const imageSrc = achievementImagePublicUrl(achievement.image_url)
@@ -50,19 +56,25 @@ export default function AchievementCard({
       : undefined
 
   const imageNode = imageSrc ? (
-    <TradeScreenshotImage
+    <ContentMediaPreview
       src={imageSrc}
-      preset={CONTENT_IMAGE_DISPLAY_PRESET}
+      preset={
+        mediaContext === "feed"
+          ? "feed-card"
+          : gallery
+            ? "achievement-card"
+            : CONTENT_IMAGE_DISPLAY_PRESET
+      }
+      context={mediaContext}
       alt={achievement.title}
       priority={mediaPriority}
-      className="rounded-md border border-white/10"
-      logContext="achievement-card"
+      imageClassName="rounded-md"
     />
   ) : null
 
   return (
     <article
-      className={`rounded-xl border p-4 ${tierClassName(achievement.tier ?? null)} ${
+      className={`rounded-xl border p-4 ${gallery ? "tt-ach-card--gallery" : ""} ${tierClassName(achievement.tier ?? null)} ${
         openDetail
           ? "cursor-pointer transition hover:border-white/20 hover:bg-white/[0.03]"
           : ""
@@ -88,7 +100,7 @@ export default function AchievementCard({
           </p>
           <h3 className="truncate text-sm font-semibold text-white">{achievement.title}</h3>
           {featured ? (
-            <p className="text-xs text-gray-300">{achievement.description || "Achievement unlocked"}</p>
+            <p className="tt-ach-desc text-xs text-gray-300">{achievement.description || "Achievement unlocked"}</p>
           ) : null}
         </div>
         <span className="text-lg leading-none">
@@ -97,7 +109,7 @@ export default function AchievementCard({
       </div>
 
       {!featured ? (
-        <p className="mt-1 text-xs text-gray-300">
+        <p className="tt-ach-desc mt-1 text-xs text-gray-300">
           {achievement.description || "Achievement unlocked"}
         </p>
       ) : null}
@@ -134,7 +146,7 @@ export default function AchievementCard({
 
       {onEdit || onDelete ? (
         <div
-          className="mt-3 flex gap-2"
+          className="tt-ach-actions mt-3 flex gap-2"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >

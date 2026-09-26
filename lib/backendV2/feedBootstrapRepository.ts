@@ -16,6 +16,7 @@ import {
   filterActiveStories,
   type ActiveStoryRow,
 } from "@/lib/activeStories"
+import { excludeViewerOwnFeedItems } from "@/lib/feedViewerOwnership"
 import {
   FEED_PAGE_SIZE,
   fetchAchievementFeedBatch,
@@ -103,9 +104,11 @@ export function feedItemV1ToFeedItem(item: FeedItemV1): FeedItem {
 }
 
 export function feedBootstrapToFeedItems(
-  bootstrap: FeedBootstrapV1
+  bootstrap: FeedBootstrapV1,
+  viewerUserId?: string | null
 ): FeedItem[] {
-  return bootstrap.data.items.map(feedItemV1ToFeedItem)
+  const items = bootstrap.data.items.map(feedItemV1ToFeedItem)
+  return excludeViewerOwnFeedItems(items, viewerUserId)
 }
 
 function engagementMapsFromBootstrap(bootstrap: FeedBootstrapV1): {

@@ -105,6 +105,11 @@ struct MessagesHomeView: View {
             guard tabIsActive else {
                 viewModel.setHomeScreenVisible(false)
                 viewModel.releaseRealtime()
+                SupabasePressureLog.screenRealtimeTransition(
+                    screen: "messages",
+                    active: false,
+                    snapshot: data.realtimeHub.realtimePressureSnapshot()
+                )
                 return
             }
 #if DEBUG
@@ -116,8 +121,18 @@ struct MessagesHomeView: View {
                 ActiveScreenBootstrapPriorityGate.messages.setScreenActive(false)
                 viewModel.setHomeScreenVisible(false)
                 viewModel.releaseRealtime()
+                SupabasePressureLog.screenRealtimeTransition(
+                    screen: "messages",
+                    active: false,
+                    snapshot: data.realtimeHub.realtimePressureSnapshot()
+                )
             }
             await viewModel.bootstrapIfNeeded()
+            SupabasePressureLog.screenRealtimeTransition(
+                screen: "messages",
+                active: true,
+                snapshot: data.realtimeHub.realtimePressureSnapshot()
+            )
         }
         .sheet(isPresented: $viewModel.showsNewChat) {
             NewChatPickerView(data: data) { conversation in
@@ -253,9 +268,6 @@ struct MessagesHomeView: View {
                         ExperienceIcon(icon: .rooms, size: .sm, color: colors.accent)
                         Text("Trade Rooms")
                     }
-                } footer: {
-                    Text("Trade Rooms stay separate from your direct messages.")
-                        .experienceStyle(.caption2, color: colors.tertiaryText)
                 }
             }
         }

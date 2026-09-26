@@ -156,6 +156,33 @@ nonisolated enum FeedDiskCache {
         return patches
     }
 
+    static func pruneViewerOwnContentOnDisk(viewerID: ProfileID) -> [PrunedPageSnapshot] {
+        var patches: [PrunedPageSnapshot] = []
+        for blob in allPages(for: viewerID) {
+            guard let scope = FeedScope(rawValue: blob.scope),
+                  let filter = contentFilter(fromRPC: blob.contentFilter)
+            else { continue }
+            let filteredEntries = blob.entries.filter { $0.authorProfileID != viewerID }
+            guard filteredEntries.count != blob.entries.count else { continue }
+
+            var updated = blob
+            updated.entries = filteredEntries
+            savePage(updated)
+
+            let cacheKey = "\(viewerID.rawValue)|\(scope.rawValue)|\(filter.rpcValue)|-"
+            patches.append(
+                PrunedPageSnapshot(
+                    cacheKey: cacheKey,
+                    entries: filteredEntries,
+                    stories: blob.stories,
+                    nextCursor: blob.nextCursor,
+                    loadedAt: blob.savedAt
+                )
+            )
+        }
+        return patches
+    }
+
     private static func contentFilter(fromRPC value: String) -> FeedContentFilter? {
         switch value {
         case "all": return .all

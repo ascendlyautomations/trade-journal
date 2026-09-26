@@ -1,7 +1,7 @@
 import Foundation
 
 /// Deterministic prop-firm account + trades for DEBUG / screenshots / tests.
-enum PropFirmFixtures {
+nonisolated enum PropFirmFixtures {
     static let accountID = TradingAccountID("dev-account")
 
     static func accounts(owner profileID: ProfileID) -> [TradingAccount] {

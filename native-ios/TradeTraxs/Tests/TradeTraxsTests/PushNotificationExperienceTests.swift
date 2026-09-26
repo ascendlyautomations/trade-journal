@@ -31,14 +31,22 @@ final class PushNotificationExperienceTests: XCTestCase {
             ]
         )
         let routed = NotificationRouter().destination(for: destination)
-        XCTAssertEqual(routed, .profile(.affiliate))
+        if IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled {
+            XCTAssertEqual(routed, .profile(.affiliate))
+        } else {
+            XCTAssertEqual(routed, .profile(.activity))
+        }
     }
 
     func testDeepLinkParserMapsAffiliateAndAchievement() {
         let affiliate = DeepLinkParser().parse(
             url: URL(string: "https://www.tradetraxs.com/affiliate/dashboard")!
         )
-        XCTAssertEqual(affiliate, .profile(.affiliate))
+        if IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled {
+            XCTAssertEqual(affiliate, .profile(.affiliate))
+        } else {
+            XCTAssertEqual(affiliate, .settingsStack([.home]))
+        }
         let achievement = DeepLinkParser().parse(
             url: URL(string: "https://www.tradetraxs.com/feed?achievement=ach-1")!
         )

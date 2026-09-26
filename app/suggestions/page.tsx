@@ -1,10 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import ImageCropModal from "@/app/components/ImageCropModal"
-import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { supabase } from "../../lib/supabaseClient"
-import { compressImage } from "@/lib/compressImage"
+import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { validateImageUpload } from "@/lib/uploadValidation"
 import { useToast } from "@/app/components/ui"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
@@ -17,11 +16,6 @@ export default function SuggestionsPage() {
   const [note, setNote] = useState("")
   const [image, setImage] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
-  const imageCrop = useImageCropUpload({
-    preset: "content",
-    onCropped: setImage,
-    onValidationError: (message) => toast.error(message),
-  })
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -35,9 +29,17 @@ export default function SuggestionsPage() {
       return
     }
 
-    let uploadFile: File = image
-    if (image.type?.startsWith("image/")) {
-      uploadFile = await compressImage(image)
+    let uploadFile: File
+    try {
+      uploadFile = await prepareImageForUpload("attachment", image)
+    } catch (prepareError) {
+      toast.error(
+        prepareError instanceof Error
+          ? prepareError.message
+          : "Couldn't prepare that image."
+      )
+      setLoading(false)
+      return
     }
     const fileName = `${user.id}-${Date.now()}-${uploadFile.name}`
 
@@ -103,7 +105,21 @@ export default function SuggestionsPage() {
             <input
               type="file"
               accept="image/*"
-              onChange={(e) => imageCrop.handleFileSelected(e.target.files?.[0])}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) {
+                  setImage(null)
+                  return
+                }
+                const validationError = validateImageUpload(file)
+                if (validationError) {
+                  toast.error(validationError)
+                  e.target.value = ""
+                  setImage(null)
+                  return
+                }
+                setImage(file)
+              }}
               className="mb-4 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-black"
             />
 
@@ -128,13 +144,6 @@ export default function SuggestionsPage() {
           </form>
         </div>
       </div>
-      <ImageCropModal
-        open={imageCrop.cropSourceFile != null}
-        file={imageCrop.cropSourceFile}
-        preset="content"
-        onCancel={imageCrop.handleCropCancel}
-        onSave={imageCrop.handleCropSave}
-      />
     </>
   )
 }

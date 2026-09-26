@@ -48,18 +48,8 @@ final class PostsContainerViewModel {
 
     func prefetchEngagement(for postIDs: [PostID]) {
         let targets = postIDs.map { InteractionTarget.profilePost($0) }
-        if targets.isEmpty {
-            EngagementRealtimeSession.shared.updateRetention(
-                ownerKey: "profile-posts:\(profileOwnerID.rawValue)",
-                targets: []
-            )
-            return
-        }
+        guard !targets.isEmpty else { return }
         engagementStore?.prefetch(targets)
-        EngagementRealtimeSession.shared.updateRetention(
-            ownerKey: "profile-posts:\(profileOwnerID.rawValue)",
-            targets: Set(targets)
-        )
     }
 
     func applyBootstrap(_ snapshot: ProfileState) {

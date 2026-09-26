@@ -58,6 +58,7 @@ struct ProfileHeaderView: View {
 
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             identityBlock(profile, stats: stats)
+                .contextualTourTarget(.profileIdentity)
 
             ProfileStatisticsRow(metrics: ProfileDisplay.headerMetrics(from: stats))
 
@@ -91,6 +92,7 @@ struct ProfileHeaderView: View {
                         : "profile.createTradeRoom",
                     action: store.hasTradeRoom ? viewModel.openTradeRoom : viewModel.createTradeRoom
                 )
+                .contextualTourTarget(.profileTradeRoom)
             } else if store.canShowVisitorTradeRoomCTA {
                 ProfileTradeRoomDestinationRow(action: viewModel.openTradeRoom)
             }

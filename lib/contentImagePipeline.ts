@@ -11,7 +11,12 @@ import { validateImageUpload } from "./uploadValidation"
 import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "./userFacingError"
 import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "./storageCacheControl"
 
-/** Shared crop preset for trades, posts, achievements, and other content images. */
+/**
+ * Legacy crop preset (`content` = 4:3 at 1200×900 WebP).
+ * Trades, posts, and achievements use Content Image V2.
+ * Avatars, stories, chat, rooms, and support uploads still use this preset.
+ */
+/** Legacy crop preset still used by avatars, stories, chat, rooms, and support. */
 export const CONTENT_IMAGE_CROP_PRESET: ImageCropPresetId = "content"
 
 /** Storage transform preset used when rendering content images in cards and modals. */
@@ -27,6 +32,22 @@ export type ContentImageUploadOptions = {
   processingPercent?: number
   uploadingPercent?: number
   uploadProgressRange?: { start: number; end: number }
+  /**
+   * File is already the final Content V2 JPEG.
+   * Skip the legacy WebP compression pass.
+   */
+  prepared?: boolean
+}
+
+/** Legacy callers recompress. Prepared Content V2 files upload as-is. */
+export async function resolveContentUploadFile(
+  file: File,
+  prepared: boolean | undefined,
+  compress: (file: File) => Promise<File>
+): Promise<File> {
+  if (prepared) return file
+  if (file.type?.startsWith("image/")) return compress(file)
+  return file
 }
 
 /** Validate, compress, and upload a content image to the screenshots bucket. */
@@ -50,10 +71,11 @@ export async function uploadContentImageToStorage(
     stage: "Processing image…",
   })
 
-  let uploadFile: File = file
-  if (file.type?.startsWith("image/")) {
-    uploadFile = await compressContentImage(file)
-  }
+  const uploadFile = await resolveContentUploadFile(
+    file,
+    options?.prepared,
+    compressContentImage
+  )
   const fileName = `${userId}/${Date.now()}-${uploadFile.name}`
 
   report?.({

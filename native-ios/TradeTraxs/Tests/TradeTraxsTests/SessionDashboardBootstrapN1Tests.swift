@@ -190,21 +190,21 @@ private final class CountingProfileRepository: ProfileRepository, @unchecked Sen
     }
 
     private func incrementProfile() {
-        lock.lock()
-        _profileCallCount += 1
-        lock.unlock()
+        TestLock.withLock(lock) {
+            _profileCallCount += 1
+        }
     }
 
     private func incrementStats() {
-        lock.lock()
-        _statsCallCount += 1
-        lock.unlock()
+        TestLock.withLock(lock) {
+            _statsCallCount += 1
+        }
     }
 
     private func incrementOnboardingSnapshot() {
-        lock.lock()
-        _onboardingSnapshotCallCount += 1
-        lock.unlock()
+        TestLock.withLock(lock) {
+            _onboardingSnapshotCallCount += 1
+        }
     }
 
     func currentUser() async throws -> User {

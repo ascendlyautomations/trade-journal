@@ -1,5 +1,11 @@
 import Foundation
 
+/// How the upload pipeline should treat `localVideoURL` (prepared delivery vs raw source).
+enum ReelUploadVideoAssetState: String, Sendable, Equatable {
+    case sourceMedia
+    case preparedDelivery
+}
+
 struct ReelDraftSnapshot: Sendable, Equatable {
     var selectionID: String
     var ownedSourceURL: URL?
@@ -10,6 +16,7 @@ struct ReelDraftSnapshot: Sendable, Equatable {
     var thumbnailJPEG: Data?
     var caption: String
     var linkedTradeID: TradeID?
+    var videoAssetState: ReelUploadVideoAssetState
 
     init(
         selectionID: String,
@@ -20,7 +27,8 @@ struct ReelDraftSnapshot: Sendable, Equatable {
         durationSeconds: Int,
         thumbnailJPEG: Data?,
         caption: String,
-        linkedTradeID: TradeID?
+        linkedTradeID: TradeID?,
+        videoAssetState: ReelUploadVideoAssetState = .sourceMedia
     ) {
         self.selectionID = selectionID
         self.ownedSourceURL = ownedSourceURL
@@ -31,6 +39,7 @@ struct ReelDraftSnapshot: Sendable, Equatable {
         self.thumbnailJPEG = thumbnailJPEG
         self.caption = caption
         self.linkedTradeID = linkedTradeID
+        self.videoAssetState = videoAssetState
     }
 
     init(draft: ReelDraft, captionOverride: String?) {
@@ -43,7 +52,8 @@ struct ReelDraftSnapshot: Sendable, Equatable {
             durationSeconds: draft.durationSeconds,
             thumbnailJPEG: draft.thumbnailJPEG,
             caption: captionOverride ?? draft.caption,
-            linkedTradeID: draft.linkedTradeID
+            linkedTradeID: draft.linkedTradeID,
+            videoAssetState: draft.videoAssetState
         )
     }
 
@@ -52,6 +62,7 @@ struct ReelDraftSnapshot: Sendable, Equatable {
             selectionID: selectionID,
             ownedSourceURL: ownedSourceURL,
             localVideoURL: localVideoURL,
+            videoAssetState: videoAssetState,
             contentType: contentType,
             byteCount: byteCount,
             durationSeconds: durationSeconds,
@@ -69,6 +80,8 @@ struct ReelUploadSpec: Sendable {
     var snapshot: ReelDraftSnapshot
     var authorID: ProfileID
     var tradeIsPublic: Bool?
+    /// When set, upload waits for this in-flight background preparation (no second transcode).
+    var preparationTaskID: String?
 }
 
 struct PostUploadSpec: Sendable {
@@ -111,7 +124,7 @@ struct AchievementUploadSpec: Sendable {
     var payoutText: String?
     var firm: String?
     var accountID: TradingAccountID?
-    var imageData: Data
+    var imageData: Data?
     var isPublic: Bool
     var achievedAt: Date
 }

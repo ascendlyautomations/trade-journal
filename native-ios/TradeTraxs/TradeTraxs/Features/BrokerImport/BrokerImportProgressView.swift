@@ -2,7 +2,6 @@ import SwiftUI
 
 struct BrokerImportProgressView: View {
     @Bindable var model: BrokerImportFlowModel
-    let data: DataEnvironment
     var onReviewImportedTrades: ([TradeID]) -> Void
     var onEditSingleImportedTrade: (TradeID) -> Void
     var onClose: () -> Void
@@ -24,8 +23,8 @@ struct BrokerImportProgressView: View {
                     successContent(count: count, tradeIDs: ids)
                 case .upToDate:
                     upToDateContent
-                case .failed(let message, let canRetry):
-                    failedContent(message: message, canRetry: canRetry)
+                case .failed(let message, let action):
+                    failedContent(message: message, action: action)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -148,22 +147,49 @@ struct BrokerImportProgressView: View {
         .padding(ExperienceSpacing.md)
     }
 
-    private func failedContent(message: String, canRetry: Bool) -> some View {
-        outcomeScaffold(
+    private func failedContent(
+        message: String,
+        action: BrokerImportFlowModel.BrokerImportFailureAction
+    ) -> some View {
+        let title: String
+        let primaryTitle: String
+        let showsClose: Bool
+        switch action {
+        case .retry:
+            title = "Couldn't import trades"
+            primaryTitle = "Retry"
+            showsClose = true
+        case .syncInProgress:
+            title = "Sync in progress"
+            primaryTitle = "Retry"
+            showsClose = true
+        case .reconnect:
+            title = "Reconnect account"
+            primaryTitle = BrokerSyncPresentation.reconnectPrimaryActionTitle()
+            showsClose = true
+        case .dismiss:
+            title = "Couldn't import trades"
+            primaryTitle = "Close"
+            showsClose = false
+        }
+        return outcomeScaffold(
             symbol: "exclamationmark.triangle.fill",
-            title: "Import Failed",
+            title: title,
             message: message,
-            primaryTitle: canRetry ? "Retry" : "Close",
+            primaryTitle: primaryTitle,
             primaryAction: {
-                if canRetry {
+                switch action {
+                case .retry, .syncInProgress:
                     model.retryImport()
-                } else {
+                case .reconnect:
+                    model.reconnectFromFailure()
+                case .dismiss:
                     model.close(reset: true)
                     onClose()
                 }
             },
-            secondaryTitle: canRetry ? "Close" : nil,
-            secondaryAction: canRetry ? { model.close(reset: true); onClose() } : nil
+            secondaryTitle: showsClose ? "Close" : nil,
+            secondaryAction: showsClose ? { model.close(reset: true); onClose() } : nil
         )
     }
 

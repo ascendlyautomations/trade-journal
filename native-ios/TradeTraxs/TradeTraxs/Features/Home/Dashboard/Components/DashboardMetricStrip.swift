@@ -27,6 +27,7 @@ struct DashboardMetricStrip: View {
             style: .continuous
         ))
         .padding(.horizontal, ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .animation(
             ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
             value: numbersReady

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 /// Resolves session bootstrap onboarding state before the authenticated shell appears.
 @Observable
@@ -28,8 +29,6 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
 
     private var resolveTask: Task<Void, Never>?
     private var connectivityRetryTask: Task<Void, Never>?
-    private var realtimeTask: Task<Void, Never>?
-    private var viewerProfileRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var loadGeneration: UInt64 = 0
     /// True until the first successful gate resolve for this authenticated session.
     private var requiresAuthoritativeResolve = true
@@ -63,10 +62,8 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     func reset() {
         resolveTask?.cancel()
         connectivityRetryTask?.cancel()
-        realtimeTask?.cancel()
         resolveTask = nil
         connectivityRetryTask = nil
-        realtimeTask = nil
         phase = .idle
         snapshot = nil
         loadGeneration &+= 1
@@ -77,9 +74,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     /// Explore / Demo Mode — skip onboarding gates without touching Supabase auth.
     func markCompleteForDemoExperience() {
         resolveTask?.cancel()
-        realtimeTask?.cancel()
         resolveTask = nil
-        realtimeTask = nil
         phase = .complete
         snapshot = nil
         requiresAuthoritativeResolve = false
@@ -99,16 +94,27 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         }
     }
 
-    func markCompleted(with profile: Profile, snapshot: ProfileOnboardingSnapshot) {
+    func markCompleted(
+        with profile: Profile,
+        snapshot: ProfileOnboardingSnapshot,
+        avatarPreview: UIImage? = nil
+    ) {
         self.snapshot = snapshot
         OAuthProfileOnboardingNameStore.discard(for: UserID(snapshot.profileID.rawValue))
-        stopRealtime()
+        var profile = profile
+        if let avatarURL = SessionBootstrapStore.normalizedAvatarURL(session: snapshot.avatarURL, viewer: nil),
+           profile.avatar?.id != avatarURL {
+            profile.avatar = MediaReference(id: avatarURL, kind: .image, altText: nil)
+        }
         profileStore.applyBootstrapResult(profile: profile, stats: profileStore.stats)
+        if let avatarPreview, let avatarID = profile.avatar?.id {
+            profileStore.installLocalAvatar(avatarPreview, avatarID: avatarID)
+        }
         SessionBootstrapStore.shared.applyOnboardingCompletion(
             profile: profile,
             snapshot: snapshot
         )
-        GettingStartedRefreshCenter.noteEligibleUserAction()
+        GettingStartedRefreshCenter.noteProfileOnboardingCompleted()
         BrokerOnboardingPersistence.markPending(snapshot.profileID)
         phase = .brokerOnboarding
     }
@@ -241,10 +247,8 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
             }
             if ProfileOnboardingPolicy.profileNeedsOnboarding(onboardingSnapshot) {
                 phase = .required(onboardingSnapshot)
-                startRealtime(viewerID: userID.rawValue)
             } else {
                 phase = brokerOnboardingPhase(for: profileID)
-                stopRealtime()
             }
             _ = profile
         } catch is CancellationError {
@@ -273,7 +277,12 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     private func applyPhaseFromSessionDiskCache(profileID: ProfileID, uid: String) -> Bool {
         guard let cached = BackendV2BootstrapDiskCache.loadSession(viewerID: uid) else { return false }
         do {
-            let applied = try SessionBootstrapApplier.mapApplied(cached.bootstrap, expectedViewerID: uid)
+            var cachedBootstrap = cached.bootstrap
+            SessionBootstrapStore.shared.reconcileAdoptedAvatar(
+                &cachedBootstrap,
+                serverAuthoritative: false
+            )
+            let applied = try SessionBootstrapApplier.mapApplied(cachedBootstrap, expectedViewerID: uid)
             snapshot = applied.onboardingSnapshot
             let stats = profileStore.stats?.profileID == applied.profile.id
                 ? (profileStore.stats ?? applied.stats)
@@ -299,9 +308,6 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         if ProfileOnboardingPolicy.profileNeedsOnboarding(result.onboardingSnapshot) {
             if case .complete = phase {
                 phase = .required(result.onboardingSnapshot)
-                if let userID = await session.currentUserID {
-                    startRealtime(viewerID: userID.rawValue)
-                }
             }
         } else if case .required = phase {
             if let profileID = snapshot?.profileID {
@@ -309,7 +315,6 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
             } else {
                 phase = .complete
             }
-            stopRealtime()
         }
     }
 
@@ -330,49 +335,4 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         return userID.rawValue.hasPrefix("dev.")
     }
 
-    private func startRealtime(viewerID: String) {
-        guard let realtimeHub else { return }
-        stopRealtime()
-        realtimeTask = Task { [weak self] in
-            guard let self else { return }
-            let token = await self.session.accessToken
-            let watch = realtimeHub.watchViewerProfile(
-                userID: viewerID,
-                accessToken: token,
-                debugOwner: "ProfileOnboarding"
-            )
-            viewerProfileRealtimeConsumer = watch.consumer
-            for await _ in watch.events {
-                guard !Task.isCancelled else { break }
-                await self.handleExternalProfileUpdate()
-            }
-        }
-    }
-
-    private func stopRealtime() {
-        realtimeTask?.cancel()
-        realtimeTask = nil
-        let consumer = viewerProfileRealtimeConsumer
-        viewerProfileRealtimeConsumer = nil
-        Task {
-            await realtimeHub?.releaseWatch(consumer)
-        }
-    }
-
-    private func handleExternalProfileUpdate() async {
-        guard let userID = await session.currentUserID else { return }
-        do {
-            let fresh = try await profiles.onboardingSnapshot(
-                for: ProfileID(userID.rawValue),
-                authoritative: true
-            )
-            snapshot = fresh
-            if !ProfileOnboardingPolicy.profileNeedsOnboarding(fresh) {
-                let profile = try await profiles.profile(id: ProfileID(userID.rawValue))
-                markCompleted(with: profile, snapshot: fresh)
-            }
-        } catch {
-            // Preserve current onboarding UI on transient failures.
-        }
-    }
 }

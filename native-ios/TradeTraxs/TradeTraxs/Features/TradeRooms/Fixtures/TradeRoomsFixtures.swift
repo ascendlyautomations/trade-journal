@@ -1,6 +1,6 @@
 import Foundation
 
-enum TradeRoomsFixtures {
+nonisolated enum TradeRoomsFixtures {
     static let viewerID = ProfileID("dev.messages.viewer")
     static let deskRoomID = RoomID("dev-room-desk")
     static let riskRoomID = RoomID("dev-room-risk")
@@ -221,6 +221,7 @@ enum TradeRoomsFixtures {
         return users
     }
 
+    @MainActor
     static func seedInbox(_ store: MessagesInboxStore, viewerID: ProfileID = viewerID) {
         MessagesInboxFixtures.seedStore(store, viewerID: viewerID)
     }
@@ -266,7 +267,7 @@ enum TradeRoomsFixtures {
     }
 }
 
-struct RoomMemberItem: Identifiable, Hashable, Sendable {
+nonisolated struct RoomMemberItem: Identifiable, Hashable, Sendable {
     var id: ProfileID { profile.id }
     var profile: Profile
     var role: RoomMemberRole

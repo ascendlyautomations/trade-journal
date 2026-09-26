@@ -34,6 +34,8 @@ final class ClipDetailViewModel {
     private let navigationCoordinator: NavigationCoordinator
     private var loadTask: Task<Void, Never>?
     private var endObserver: NSObjectProtocol?
+    private var consumptionTimeObserverToken: (player: AVPlayer, token: Any)?
+    private var playerConfigurationGeneration: UInt64 = 0
 
     init(
         reelID: ReelID,
@@ -60,11 +62,31 @@ final class ClipDetailViewModel {
     var authorInitials: String { DetailAuthorPresentation.initials(for: author) }
 
     func tearDown() {
+        playerConfigurationGeneration &+= 1
         if let endObserver {
             NotificationCenter.default.removeObserver(endObserver)
             self.endObserver = nil
         }
-        player?.pause()
+        if let consumptionTimeObserverToken {
+            consumptionTimeObserverToken.player.removeTimeObserver(consumptionTimeObserverToken.token)
+            self.consumptionTimeObserverToken = nil
+        }
+        if let player {
+            player.pause()
+            ClipShortFormPlayerFactory.stopNetworkLoading(player)
+            self.player = nil
+        }
+    }
+
+    func suspendPlayback(reason: String) {
+        guard let player else { return }
+        player.pause()
+        player.isMuted = true
+        player.volume = 0
+        ClipShortFormPlayerFactory.stopNetworkLoading(player)
+        #if DEBUG
+        print("[VIDEO_PLAYBACK] owner=clipDetail action=stop reason=\(reason)")
+        #endif
     }
 
     func loadIfNeeded() {
@@ -82,7 +104,7 @@ final class ClipDetailViewModel {
         ExperienceHaptics.play(.selection)
         didReachEnd = false
         player.seek(to: .zero)
-        player.play()
+        player.playImmediately(atRate: 1)
     }
 
     func deleteReel() async -> Bool {
@@ -173,39 +195,88 @@ final class ClipDetailViewModel {
             NotificationCenter.default.removeObserver(endObserver)
             self.endObserver = nil
         }
-        player?.pause()
-
-        let item = AVPlayerItem(url: url)
-        let newPlayer = AVPlayer(playerItem: item)
-        player = newPlayer
-        didReachEnd = false
-        #if DEBUG
-        MediaEgressTracker.installVideoAccessLog(
-            on: item,
-            mediaID: reel.id.rawValue,
-            surface: "clips"
-        )
-        #endif
-
-        endObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: item,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.didReachEnd = true
-            }
+        if let consumptionTimeObserverToken {
+            consumptionTimeObserverToken.player.removeTimeObserver(consumptionTimeObserverToken.token)
+            self.consumptionTimeObserverToken = nil
+        }
+        if let player {
+            player.pause()
+            ClipShortFormPlayerFactory.stopNetworkLoading(player)
+            self.player = nil
         }
 
-        newPlayer.play()
+        playerConfigurationGeneration &+= 1
+        let configurationGeneration = playerConfigurationGeneration
 
-        Task {
-            guard let info = await VideoPresentationInfo.load(url: url) else { return }
-            videoPresentation = info
-            VideoPresentationProbe.log(
-                surface: .clipsPager,
-                info: info
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let resolved = await ClipVideoDeliveryService.shared.playbackURL(
+                remoteURL: url,
+                clipID: reel.id.rawValue,
+                role: .detail
             )
+            ClipVideoDeliveryTelemetry.record(.clipStart)
+            let bufferSeconds = ClipPlaybackBufferConfiguration.make(
+                for: ClipPlaybackLiveNetworkPosture().currentPosture()
+            ).activeForwardBufferSeconds
+            let built = ClipShortFormPlayerFactory.makePlayer(
+                url: resolved.url,
+                forwardBufferSeconds: bufferSeconds
+            )
+            guard self.playerConfigurationGeneration == configurationGeneration else {
+                ClipShortFormPlayerFactory.stopNetworkLoading(built.player)
+                return
+            }
+            let item = built.item
+            let newPlayer = built.player
+            self.player = newPlayer
+            self.didReachEnd = false
+            #if DEBUG
+            MediaEgressTracker.installVideoAccessLog(
+                on: item,
+                mediaID: reel.id.rawValue,
+                surface: "detail"
+            )
+            #endif
+
+            self.endObserver = NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: item,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.didReachEnd = true
+                    ClipVideoDeliveryTelemetry.record(.clipCompletedView)
+                }
+            }
+
+            newPlayer.playImmediately(atRate: 1)
+            #if DEBUG
+            print("[VIDEO_PLAYBACK] owner=clipDetail action=play")
+            #endif
+
+            let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
+            let duration = reel.durationSeconds.map(Double.init)
+            let consumptionToken = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
+                let watched = max(0, time.seconds)
+                Task {
+                    await ClipVideoDeliveryService.shared.updateConsumption(
+                        clipID: reel.id.rawValue,
+                        remoteURL: url,
+                        watchedSeconds: watched,
+                        durationSeconds: duration
+                    )
+                }
+            }
+            self.consumptionTimeObserverToken = (newPlayer, consumptionToken)
+
+            if let info = await VideoPresentationInfo.load(url: resolved.url) {
+                self.videoPresentation = info
+                VideoPresentationProbe.log(
+                    surface: .clipsPager,
+                    info: info
+                )
+            }
         }
     }
 }

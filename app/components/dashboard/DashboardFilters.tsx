@@ -204,7 +204,7 @@ export default function DashboardFilters({
             variant="primary"
             size="md"
             onClick={onOpenQuickInput}
-            className="h-[34px] shrink-0 whitespace-nowrap py-0"
+            className="tt-dash-hide-desktop-v1 h-[34px] shrink-0 whitespace-nowrap py-0"
           >
             Quick Trade
           </Button>
@@ -260,6 +260,30 @@ export default function DashboardFilters({
         beforeTimeframe={<PlatformDashboardTradesButton />}
         trailing={
           <>
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              onClick={onOpenQuickInput}
+              className="tt-dash-desktop-only h-[34px] shrink-0 whitespace-nowrap py-0"
+            >
+              Quick Trade
+            </Button>
+            <Link
+              href="/calendar"
+              className="tt-dash-desktop-only h-[34px] shrink-0 rounded-md bg-white/10 px-3 text-sm text-white hover:bg-white/20"
+            >
+              Calendar
+            </Link>
+            {showTradingReportButton && onOpenTradingReport ? (
+              <button
+                type="button"
+                onClick={onOpenTradingReport}
+                className="tt-dash-desktop-only h-[34px] shrink-0 rounded-md bg-white/10 px-3 text-sm text-white hover:bg-white/20"
+              >
+                Reports
+              </button>
+            ) : null}
             {showTradingReportButton && onOpenTradingReport ? (
               <button
                 type="button"
@@ -281,7 +305,7 @@ export default function DashboardFilters({
                 onClick={onTogglePublicOnly}
                 className={`hidden md:inline-flex h-[34px] items-center shrink-0 whitespace-nowrap rounded-md px-3 text-sm ${
                   showPublicOnly
-                    ? "bg-blue-500 text-white hover:bg-blue-600"
+                    ? "tt-dash-selected bg-blue-500 text-white hover:bg-blue-600"
                     : "bg-white/10 text-white hover:bg-white/20"
                 }`}
               >
@@ -296,7 +320,7 @@ export default function DashboardFilters({
         }
       />
       {showPropFirmLink ? (
-        <div className="-mt-1 mb-2 flex justify-end md:justify-start md:mb-3">
+        <div className="tt-dash-hide-desktop-v1 -mt-1 mb-2 flex justify-end md:justify-start md:mb-3">
           <Link
             href="/analytics/propfirm"
             className="text-xs text-blue-300 transition hover:text-blue-200"

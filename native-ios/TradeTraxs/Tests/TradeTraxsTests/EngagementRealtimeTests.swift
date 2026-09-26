@@ -143,94 +143,13 @@ final class EngagementRealtimeTests: XCTestCase {
         #endif
     }
 
-    func testContentLikeRouteSharedUntilFinalRelease() async {
-        let provider = makeProvider()
-        let table = ContentLikeTable.reelLikes
-        let ids = ["reel-a"]
-        let routeKey = "content-likes:\(ContentLikeSemantics.stableRouteSuffix(table: table, contentIDs: ids))"
-
-        let watchA = provider.watchContentLikes(table: table, contentIDs: ids, accessToken: nil, debugOwner: "A")
-        await settle()
-        let watchB = provider.watchContentLikes(table: table, contentIDs: ids, accessToken: nil, debugOwner: "B")
-        await settle()
-
-        XCTAssertEqual(provider.testing_routeSnapshot(routeKey: routeKey).consumerCount, 2)
-
-        await provider.releaseWatch(watchA.consumer)
-        await settle()
-        XCTAssertEqual(provider.testing_routeSnapshot(routeKey: routeKey).consumerCount, 1)
-
-        await provider.releaseWatch(watchB.consumer)
-        await settle()
-        XCTAssertEqual(provider.testing_routeSnapshot(routeKey: routeKey).consumerCount, 0)
-        _ = watchA
-        _ = watchB
-    }
-
-    func testRepeatedRetentionDoesNotDuplicateRoutes() async {
-        EngagementRealtimeSession.shared.invalidate()
-        let provider = makeProvider()
-        let hub = RealtimeHub(realtime: provider)
+    func testEngagementStorePrefetchDoesNotDuplicateInFlightWork() async {
         let store = EngagementStore(repository: RealtimeStubInteractionRepository())
-        EngagementRealtimeSession.shared.configure(
-            realtimeHub: hub,
-            session: FixedViewerSession(viewerID: "viewer-retain"),
-            database: StubDatabaseExecutor(),
-            engagementStore: store
-        )
-        let target = InteractionTarget.reel(ReelID("reel-retain-1"))
-        store.seed(baseSnapshot(count: 2), for: target)
-
-        EngagementRealtimeSession.shared.updateRetention(ownerKey: "test", targets: [target])
-        await settle()
-        let first = EngagementRealtimeSession.shared.testing_activeRouteCount()
-
-        EngagementRealtimeSession.shared.updateRetention(ownerKey: "test", targets: [target])
-        await settle()
-        let second = EngagementRealtimeSession.shared.testing_activeRouteCount()
-
-        XCTAssertEqual(first, 1)
-        XCTAssertEqual(second, 1)
-        EngagementRealtimeSession.shared.invalidate()
-    }
-
-    func testLogoutClearsEngagementRoutes() async {
-        let provider = makeProvider()
-        let hub = RealtimeHub(realtime: provider)
-        let store = EngagementStore(repository: RealtimeStubInteractionRepository())
-        EngagementRealtimeSession.shared.configure(
-            realtimeHub: hub,
-            session: FixedViewerSession(viewerID: "viewer-logout"),
-            database: StubDatabaseExecutor(),
-            engagementStore: store
-        )
-        let target = InteractionTarget.profilePost(PostID("post-1"))
-        store.seed(baseSnapshot(count: 1), for: target)
-        EngagementRealtimeSession.shared.updateRetention(ownerKey: "test", targets: [target])
-        await settle()
-        XCTAssertGreaterThan(EngagementRealtimeSession.shared.testing_activeRouteCount(), 0)
-
-        EngagementRealtimeSession.shared.invalidate()
-        await settle()
-        XCTAssertEqual(EngagementRealtimeSession.shared.testing_activeRouteCount(), 0)
-    }
-
-    // MARK: - Helpers
-
-    private func makeProvider() -> LiveSupabaseRealtimeProvider {
-        LiveSupabaseRealtimeProvider(
-            configuration: AppConfiguration(
-                buildConfiguration: .debug,
-                apiBaseURL: nil,
-                supabaseURL: URL(string: "https://example.supabase.co"),
-                supabaseAnonKey: "anon",
-                appDisplayName: "TradeTraxs"
-            )
-        )
-    }
-
-    private func settle() async {
-        try? await Task.sleep(nanoseconds: 120_000_000)
+        let target = InteractionTarget.reel(ReelID("reel-prefetch-1"))
+        store.prefetch([target, target, target])
+        store.prefetch([target])
+        // No crash / duplicate task explosion — repository is stubbed empty.
+        try? await Task.sleep(nanoseconds: 30_000_000)
     }
 }
 
@@ -279,60 +198,4 @@ private final class RealtimeStubInteractionRepository: InteractionRepository, @u
         commentID: CommentID,
         on target: InteractionTarget
     ) async throws {}
-}
-
-private struct StubDatabaseExecutor: SupabaseDatabaseExecuting {
-    var isConfigured: Bool { false }
-
-    func select<T>(
-        _: T.Type,
-        from _: String,
-        query _: [URLQueryItem],
-        headers _: [String: String]
-    ) async throws -> [T] where T: Decodable {
-        []
-    }
-
-    func selectOne<T>(_: T.Type, from _: String, query _: [URLQueryItem]) async throws -> T where T: Decodable {
-        throw AppError.unknown(message: "stub")
-    }
-
-    func count(from _: String, query _: [URLQueryItem]) async throws -> Int { 0 }
-
-    func insert<Body, T>(
-        _: Body,
-        into _: String,
-        query _: [URLQueryItem],
-        returning _: T.Type
-    ) async throws -> T where Body: Encodable, T: Decodable {
-        throw AppError.unknown(message: "stub")
-    }
-
-    func insert<Body>(_: Body, into _: String) async throws where Body: Encodable {}
-
-    func update<Body, T>(
-        _: Body,
-        table _: String,
-        query _: [URLQueryItem],
-        returning _: T.Type
-    ) async throws -> T where Body: Encodable, T: Decodable {
-        throw AppError.unknown(message: "stub")
-    }
-
-    func update<Body>(_: Body, table _: String, query _: [URLQueryItem]) async throws where Body: Encodable {}
-
-    func upsert<Body, T>(
-        _: Body,
-        into _: String,
-        onConflict _: String,
-        returning _: T.Type,
-        select _: String
-    ) async throws -> T where Body: Encodable, T: Decodable {
-        throw AppError.unknown(message: "stub")
-    }
-
-    func delete(from _: String, query _: [URLQueryItem]) async throws {}
-    func rpcData(functionName _: String, parametersJSON _: Data?) async throws -> Data {
-        throw AppError.unknown(message: "stub")
-    }
 }

@@ -1,10 +1,26 @@
-import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import {
+  getRouteUserAuth,
+  supabaseServiceRole,
+  type RouteAuthFailure,
+} from "@/app/api/_lib/getRouteUser"
 import { notify } from "@/lib/server/notifications/NotificationService"
 
+function unauthorized(authError: RouteAuthFailure | null) {
+  return Response.json(
+    {
+      error: "Unauthorized",
+      authErrorCode: authError?.code ?? null,
+      authErrorMessage: authError?.message ?? null,
+      authErrorStatus: authError?.status ?? null,
+    },
+    { status: 401 }
+  )
+}
+
 export async function POST(req: Request) {
-  const user = await getRouteUser(req)
+  const { user, authError } = await getRouteUserAuth(req)
   if (!user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
+    return unauthorized(authError)
   }
 
   let commentId: string | undefined
@@ -40,9 +56,9 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const user = await getRouteUser(req)
+  const { user, authError } = await getRouteUserAuth(req)
   if (!user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
+    return unauthorized(authError)
   }
 
   let body: {

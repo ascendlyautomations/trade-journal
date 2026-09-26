@@ -1,7 +1,9 @@
 "use client"
 
+import "../../../analyticsDesktopTheme.css"
+import "../../../propFirmDesktop.css"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   CartesianGrid,
@@ -46,6 +48,7 @@ import {
   dashboardInsightMetricNegativeClass,
   dashboardInsightMetricPositiveClass,
 } from "@/app/components/dashboard/dashboardInsightStyles"
+import { propFirmModeAccountIdFromQuery } from "@/lib/dashboardPropFirmContext"
 import { isProActive } from "@/lib/subscription"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 import {
@@ -70,6 +73,11 @@ import PayoutSetupModal, {
 } from "@/app/components/PayoutSetupModal"
 import PropFirmPayoutHistoryModal from "@/app/components/propfirm/PropFirmPayoutHistoryModal"
 import PropfirmProfitTargetProgressBar from "@/app/components/propfirm/PropfirmProfitTargetProgressBar"
+import PropFirmDesktopView, {
+  PropFirmDesktopHeader,
+  PropFirmDesktopSkeleton,
+  type PropFirmDesktopModel,
+} from "@/app/components/propfirm/PropFirmDesktopView"
 import { useUserProfile } from "@/lib/useUserProfile"
 import {
   buildPayoutCycleContext,
@@ -83,6 +91,7 @@ import {
   summarizeAccountPayouts,
   applyRecordedPayoutToHistory,
   selectCompletedPayoutHistory,
+  formatPayoutHistoryDate,
   selectRecordedPayoutEquityEvents,
   type AccountPayoutCycle,
   type PayoutHistoryEntry,
@@ -220,7 +229,7 @@ const PROPFIRM_EQUITY_CURVE_SCOPE: PropfirmEquityCurveScope = "lifetime"
 
 function PropfirmPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="w-full px-3 pb-3 pt-0 text-white md:px-4 md:pb-10">
+    <div className="tt-phase3-dark w-full px-3 pb-3 pt-0 text-white md:px-4 md:pb-10">
       <div className="relative z-0 mx-auto mt-4 flex w-full max-w-[1600px] flex-col gap-4 px-1 md:px-6">
         {children}
       </div>
@@ -229,9 +238,23 @@ function PropfirmPageShell({ children }: { children: ReactNode }) {
 }
 
 function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
+  const plotRef = useRef<HTMLDivElement>(null)
+  const [plotReady, setPlotReady] = useState(false)
   const values = data.map((point) => point.balance)
   const yAxisDomain = computePropfirmEquityCurveYDomain(values)
   const yAxisTicks = computePropfirmEquityCurveYTicks(yAxisDomain)
+
+  useEffect(() => {
+    const node = plotRef.current
+    if (!node) return
+    const update = () => {
+      setPlotReady(node.clientWidth > 0 && node.clientHeight > 0)
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [data.length])
 
   return (
     <div className={SECTION_PANEL}>
@@ -247,7 +270,11 @@ function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
       </div>
 
       {data.length > 1 ? (
-        <div className="h-[240px] w-full overflow-hidden sm:h-[280px] md:h-[300px]">
+        <div
+          ref={plotRef}
+          className="h-[240px] w-full overflow-hidden sm:h-[280px] md:h-[300px]"
+        >
+          {plotReady ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={data}
@@ -300,6 +327,7 @@ function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
               />
             </LineChart>
           </ResponsiveContainer>
+          ) : null}
         </div>
       ) : (
         <EmptyState
@@ -349,6 +377,8 @@ function tradingListItemToPropfirmAccount(
 
 export default function PropFirmPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const accountFromUrl = searchParams.get("account")
   const { user, profile } = useUserProfile()
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [planChecked, setPlanChecked] = useState(false)
@@ -391,6 +421,7 @@ export default function PropFirmPage() {
   const propFirmV2Active = propFirmV2Enabled && !propFirmUseLegacy
   const propFirmBootstrapRef = useRef<PropFirmBootstrapV1 | null>(null)
   const propFirmLoadGenerationRef = useRef(0)
+  const appliedPropFirmAccountRef = useRef<string | null>(null)
 
   const isAllAccountsView = accountFilter === PROPFIRM_ALL_ACCOUNTS_VALUE
 
@@ -400,6 +431,15 @@ export default function PropFirmPage() {
       accounts.find((account) => String(account.id) === accountFilter) ?? null
     )
   }, [accounts, accountFilter, isAllAccountsView])
+
+  useEffect(() => {
+    if (!accountsLoaded) return
+    const requested = String(accountFromUrl ?? "").trim()
+    if (!requested || appliedPropFirmAccountRef.current === requested) return
+    appliedPropFirmAccountRef.current = requested
+    const nextId = propFirmModeAccountIdFromQuery(requested, accounts)
+    if (nextId) setAccountFilter(nextId)
+  }, [accountsLoaded, accounts, accountFromUrl])
 
   const fundedAccounts = useMemo(
     () => accounts.filter((account) => isFundedPropfirmAccount(account.mode)),
@@ -497,6 +537,7 @@ export default function PropFirmPage() {
     cyclePnL,
     cycleProgress,
     displayCurrentBalance,
+    lifetimeTotalPnL,
   } = accountMetrics
   const { winningDays, worstDailyLossUsed } = cycleDailyMetrics
   const lifetimeDailyRows = lifetimeDailyMetrics.dailyRows
@@ -1180,9 +1221,160 @@ export default function PropFirmPage() {
     ? computePropfirmFundedDisplayStatus(payoutQualificationInput)
     : null
 
+  const desktopWarnings: string[] = []
+  if (
+    showAccountDashboard &&
+    maxDdLimit > 0 &&
+    cycleTrailingMetrics.breachedTrailingDD
+  ) {
+    desktopWarnings.push(
+      "Trailing max drawdown breached (balance below drawdown floor)"
+    )
+  }
+  if (showAccountDashboard && dailyDrawdownBreached) {
+    desktopWarnings.push("Daily drawdown exceeded")
+  }
+
+  let desktopStatusLabel = "Active"
+  let desktopStatusTone: PropFirmDesktopModel["statusTone"] = "warn"
+  if (isEvalAccountSelected && evalDisplayStatus) {
+    desktopStatusLabel = evalDisplayStatus
+    desktopStatusTone =
+      evalDisplayStatus === "PASSED"
+        ? "good"
+        : evalDisplayStatus === "FAILED"
+          ? "bad"
+          : "warn"
+  } else if (isFundedAccountSelected) {
+    if (fundedDisplayStatus === "FAILED") {
+      desktopStatusLabel = "Failed"
+      desktopStatusTone = "bad"
+    } else if (fundedDisplayStatus === "PAYOUT_READY") {
+      desktopStatusLabel = "Payout Ready"
+      desktopStatusTone = "good"
+    } else {
+      desktopStatusLabel = "Active"
+      desktopStatusTone = "neutral"
+    }
+  }
+
+  const desktopModel: PropFirmDesktopModel | null =
+    showAccountDashboard && selectedAccount
+      ? {
+          accountName: selectedAccount.name?.trim() || "Account",
+          sizeLabel:
+            startingBalance > 0 ? formatPropfirmUsd(startingBalance) : "—",
+          phase: isFundedAccountSelected ? "Funded" : "Eval",
+          balanceLabel: formatPropfirmUsd(displayCurrentBalance),
+          cyclePnl: cyclePnL,
+          lifetimePnl: lifetimeTotalPnL,
+          statusLabel: desktopStatusLabel,
+          statusTone: desktopStatusTone,
+          profitTarget: Number(selectedAccount.profit_target) || 0,
+          progressPercent,
+          profitPassed: cycleProgress.isPassed,
+          maxDdLimit,
+          drawdownUsed,
+          distanceToDD: cycleTrailingMetrics.distanceToDD,
+          ddPercent,
+          distanceDanger: cycleProgress.distanceDanger,
+          trailingBreached: cycleTrailingMetrics.breachedTrailingDD,
+          drawdownFloor: cycleTrailingMetrics.drawdownFloor,
+          dailyLimit: Number(selectedAccount.daily_drawdown) || 0,
+          dailyBreached: dailyDrawdownBreached,
+          worstDailyLossUsed,
+          todayPnl: lifetimeDailyMetrics.todayPnL,
+          worstDay: lifetimeDailyMetrics.worstDay,
+          consistencyRequired,
+          consistencyMet: cycleConsistencyMetrics.isConsistent,
+          consistencyRuleLabel: consistencyRequired
+            ? `${selectedAccount.consistency}%`
+            : null,
+          biggestWin: cycleConsistencyMetrics.biggestWin,
+          allowedMax: cycleConsistencyMetrics.allowedMax,
+          winningDaysRequired,
+          winningDays,
+          winningDaysTarget: Number(selectedAccount.winning_days) || 0,
+          winningDaysMet: winningDaysTargetMet,
+          winningDayThresholdLabel:
+            selectedAccount.winning_days != null &&
+            selectedAccount.winning_days !== ""
+              ? selectedAccount.winning_day_threshold
+                ? `$${selectedAccount.winning_day_threshold}`
+                : "Any positive day"
+              : null,
+          isFunded: isFundedAccountSelected,
+          payoutReady: fundedDisplayStatus === "PAYOUT_READY",
+          payoutFailed: fundedDisplayStatus === "FAILED",
+          payoutCount: payoutSummary.count,
+          payoutTotalLabel: formatPropfirmUsd(payoutSummary.totalAmount),
+          payoutHistory: completedPayoutHistory.map((payout) => ({
+            id: payout.id,
+            dateLabel: formatPayoutHistoryDate(payout.ended_at),
+            amountLabel: formatPropfirmUsd(payout.payout_amount ?? 0),
+          })),
+          dailyRows: lifetimeDailyRows,
+          warnings: desktopWarnings,
+        }
+      : null
+
+  const renderAccountSelector = () => (
+    <CustomSelect
+      value={accountFilter}
+      onChange={(value) => {
+        if (value === MANAGE_ACCOUNTS_VALUE) {
+          if (isDemoModeActive()) {
+            requestDemoSignup("save")
+            return
+          }
+          navigateToManageAccounts(router)
+          return
+        }
+        if (value === "__divider__") return
+        setAccountFilter(value)
+      }}
+      placeholder="Select Account"
+      options={accountSelectOptions}
+      triggerClassName={ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS}
+    />
+  )
+
+  const renderDesktopActions = () => (
+    <>
+      {!isEvalAccountSelected && showPayoutHistoryButton ? (
+        <button
+          type="button"
+          onClick={openPayoutHistory}
+          className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-gray-200 transition hover:bg-white/10 md:px-3 md:text-sm"
+        >
+          Payouts
+        </button>
+      ) : null}
+      {showPassEvalControls ? (
+        <button
+          type="button"
+          onClick={openPassEvalWorkflow}
+          className="shrink-0 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-300 transition hover:bg-blue-500/20 md:px-3.5 md:text-sm"
+        >
+          Pass Evaluation
+        </button>
+      ) : null}
+      {showPayoutControls ? (
+        <button
+          type="button"
+          onClick={openPayoutWorkflow}
+          className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20 md:px-3.5 md:text-sm"
+        >
+          Record Payout
+        </button>
+      ) : null}
+    </>
+  )
+
   return (
     <PropfirmPageShell>
       <FeedbackModal {...feedbackModalProps} />
+        <div className="tt-propfirm-legacy">
         <div className={SECTION_PANEL}>
             <div
               className={
@@ -1283,6 +1475,7 @@ export default function PropFirmPage() {
               </div>
             </div>
           </div>
+        </div>
 
         <PropFirmPayoutHistoryModal
           open={payoutHistoryOpen}
@@ -1423,9 +1616,21 @@ export default function PropFirmPage() {
         />
 
         {loadingTrades ? (
-          <SkeletonAnalyticsPage />
+          <>
+            <div className="tt-propfirm-legacy">
+              <SkeletonAnalyticsPage />
+            </div>
+            <div className="tt-propfirm-desktop">
+              <PropFirmDesktopHeader
+                selector={renderAccountSelector()}
+                actions={renderDesktopActions()}
+              />
+              <PropFirmDesktopSkeleton />
+            </div>
+          </>
         ) : (
-          <div className="flex flex-col gap-4">
+          <>
+          <div className="tt-propfirm-legacy flex flex-col gap-4">
         {showAccountDashboard && (
           <div
             className={`grid gap-3 ${
@@ -1877,6 +2082,96 @@ export default function PropFirmPage() {
           />
         ) : null}
           </div>
+          {desktopModel ? (
+            <PropFirmDesktopView
+              model={desktopModel}
+              selector={renderAccountSelector()}
+              actions={renderDesktopActions()}
+              equity={<PropfirmEquityCurve data={equityCurveData} />}
+            />
+          ) : (
+            <div className="tt-propfirm-desktop">
+              <PropFirmDesktopHeader
+                selector={renderAccountSelector()}
+                actions={renderDesktopActions()}
+              />
+              {isAllAccountsView ? (
+                <div className={SECTION_PANEL}>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div>
+                      <h2 className={PROPFIRM_SECTION_TITLE_CLASS}>Daily Performance</h2>
+                      <p className={`mt-0.5 text-xs md:text-sm ${PROPFIRM_SECONDARY_CLASS}`}>
+                        Lifetime, aggregated by trading day
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-white/15 bg-white/[0.07] px-2.5 py-0.5 text-xs font-medium tabular-nums text-gray-200">
+                      {lifetimeDailyRows.length} days
+                    </span>
+                  </div>
+                  <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1 text-xs md:text-sm">
+                    {lifetimeDailyRows.length > 0 ? (
+                      lifetimeDailyRows.map(([date, pnl]) => (
+                        <div key={date} className={INNER_ROW_CLASS}>
+                          <span className={`font-medium ${PROPFIRM_SECONDARY_CLASS}`}>{date}</span>
+                          <span
+                            className={
+                              pnl >= 0
+                                ? dashboardInsightMetricPositiveClass
+                                : dashboardInsightMetricNegativeClass
+                            }
+                          >
+                            {formatPnlCurrency(pnl, {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className={`rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-5 text-center text-xs md:py-6 md:text-sm ${PROPFIRM_SECONDARY_CLASS}`}>
+                        No daily performance yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+              {showAccountsLoadError ? (
+                <EmptyState
+                  title="Unable to Load Accounts"
+                  description={accountsLoadError ?? undefined}
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => void loadAccounts()}
+                      className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                    >
+                      Retry
+                    </button>
+                  }
+                />
+              ) : isEmptyAccounts ? (
+                <EmptyState
+                  title="No Prop Firm Accounts"
+                  description="You don't have any Prop Firm accounts yet. Create one in Settings to start tracking rule progress."
+                  action={
+                    <Link
+                      href="/settings#trading-accounts"
+                      className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500"
+                    >
+                      Create Prop Firm Account
+                    </Link>
+                  }
+                />
+              ) : !showAccountDashboard && !isAllAccountsView ? (
+                <EmptyState
+                  title="Select an Account"
+                  description="Choose a prop firm account above to view drawdown room, rule status, and daily performance."
+                  className="py-8"
+                />
+              ) : null}
+            </div>
+          )}
+          </>
         )}
     </PropfirmPageShell>
   )

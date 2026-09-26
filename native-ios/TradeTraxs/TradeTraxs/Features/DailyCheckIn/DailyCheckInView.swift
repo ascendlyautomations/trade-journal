@@ -69,6 +69,7 @@ struct DailyCheckInView: View {
             }
             .padding(ExperienceSpacing.md)
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Daily Check-In")
         .toolbar {

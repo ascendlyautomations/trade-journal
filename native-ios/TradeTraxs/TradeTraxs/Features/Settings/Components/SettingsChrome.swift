@@ -144,6 +144,7 @@ struct SettingsPrimaryActionLabel: View {
             if let systemImage {
                 Image(systemName: systemImage)
                     .font(.body.weight(.semibold))
+                    .foregroundStyle(colors.accent)
             }
             Text(title)
                 .experienceStyle(.body, color: colors.accent)

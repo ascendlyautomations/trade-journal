@@ -30,12 +30,10 @@ final class MessagingDomain {
     private var readCursorTask: Task<Void, Never>?
     private var roomUnreadTask: Task<Void, Never>?
     private var roomReadCursorTask: Task<Void, Never>?
-    private var roomMemberCountTask: Task<Void, Never>?
     private var inboxMessagesTask: Task<Void, Never>?
     private var readCursorRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var roomUnreadRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var roomReadCursorRealtimeConsumer: RealtimeRouteConsumerHandle?
-    private var roomMemberCountRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var inboxMessagesRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var realtimeRetainCount = 0
     private var isConfigured = false
@@ -328,7 +326,8 @@ final class MessagingDomain {
                         loadGeneration: generation,
                         currentGeneration: { [weak self] in self?.loadGeneration ?? 0 },
                         owner: owner,
-                        viewVisible: homeScreenVisible
+                        viewVisible: homeScreenVisible,
+                        intent: forceNetwork ? .softRevalidate : .coldBootstrap
                     )
                     guard generation == loadGeneration else { return }
                     async let roomsTask = SessionMemberRoomsStore.shared.memberRooms(
@@ -407,16 +406,30 @@ final class MessagingDomain {
         guard generation == loadGeneration else { return }
         guard let rooms else { return }
         do {
-            _ = try await MessagingBootstrapLoader.loadInbox(
-                viewerID: viewerID,
-                rpc: rpc,
-                inboxStore: inboxStore,
-                detailCache: detailCache!,
-                forceNetwork: false,
-                loadGeneration: generation,
-                currentGeneration: { [weak self] in self?.loadGeneration ?? 0 },
-                owner: "\(owner).catchUp"
-            )
+            do {
+                _ = try await MessagingBootstrapLoader.loadInboxCatchUp(
+                    viewerID: viewerID,
+                    rpc: rpc,
+                    inboxStore: inboxStore,
+                    detailCache: detailCache!,
+                    loadGeneration: generation,
+                    currentGeneration: { [weak self] in self?.loadGeneration ?? 0 },
+                    owner: owner,
+                    reason: "inboxCatchUp"
+                )
+            } catch {
+                _ = try await MessagingBootstrapLoader.loadInbox(
+                    viewerID: viewerID,
+                    rpc: rpc,
+                    inboxStore: inboxStore,
+                    detailCache: detailCache!,
+                    forceNetwork: false,
+                    loadGeneration: generation,
+                    currentGeneration: { [weak self] in self?.loadGeneration ?? 0 },
+                    owner: "\(owner).catchUpFallback",
+                    intent: .catchUp
+                )
+            }
             guard generation == loadGeneration else { return }
             let (memberRooms, roomUnread, roomActivityAt) = try await SessionMemberRoomsStore.shared.memberRooms(
                 for: viewerID,
@@ -573,7 +586,6 @@ final class MessagingDomain {
         await startReadCursorRealtimeIfNeeded(viewerID: viewerID, session: session)
         await startRoomUnreadRealtimeIfNeeded(viewerID: viewerID, session: session)
         await startRoomReadCursorRealtimeIfNeeded(viewerID: viewerID, session: session)
-        await startRoomMemberCountRealtimeIfNeeded(viewerID: viewerID, session: session)
         await startInboxMessagesRealtimeIfNeeded(viewerID: viewerID, session: session)
 #if DEBUG
         SocialCacheProbe.setRealtimeSubscribed(true)
@@ -584,22 +596,18 @@ final class MessagingDomain {
         readCursorTask?.cancel()
         roomUnreadTask?.cancel()
         roomReadCursorTask?.cancel()
-        roomMemberCountTask?.cancel()
         inboxMessagesTask?.cancel()
         readCursorTask = nil
         roomUnreadTask = nil
         roomReadCursorTask = nil
-        roomMemberCountTask = nil
         inboxMessagesTask = nil
         let readConsumer = readCursorRealtimeConsumer
         let roomUnreadConsumer = roomUnreadRealtimeConsumer
         let roomReadConsumer = roomReadCursorRealtimeConsumer
-        let memberCountConsumer = roomMemberCountRealtimeConsumer
         let inboxConsumer = inboxMessagesRealtimeConsumer
         readCursorRealtimeConsumer = nil
         roomUnreadRealtimeConsumer = nil
         roomReadCursorRealtimeConsumer = nil
-        roomMemberCountRealtimeConsumer = nil
         inboxMessagesRealtimeConsumer = nil
         Task { [realtimeHub] in
             try? await realtimeHub?.subscriptions.unsubscribe(
@@ -611,7 +619,6 @@ final class MessagingDomain {
             await realtimeHub?.releaseWatch(readConsumer)
             await realtimeHub?.releaseWatch(roomReadConsumer)
             await realtimeHub?.releaseWatch(roomUnreadConsumer)
-            await realtimeHub?.releaseWatch(memberCountConsumer)
             await realtimeHub?.releaseWatch(inboxConsumer)
         }
     }
@@ -710,57 +717,6 @@ final class MessagingDomain {
 #endif
             }
             roomUnreadTask = nil
-        }
-    }
-
-    private func startRoomMemberCountRealtimeIfNeeded(
-        viewerID: ProfileID,
-        session: any SessionProviding
-    ) async {
-        guard let realtimeHub, let rooms else { return }
-        guard roomMemberCountTask == nil else { return }
-        let roomIDs = inboxStore.rooms.map(\.id.rawValue)
-        guard !roomIDs.isEmpty else { return }
-
-        roomMemberCountTask = Task { [weak self] in
-            guard let self else { return }
-            let token = await session.accessToken
-            let watch = realtimeHub.watchMemberRoomMembership(
-                roomIDs: roomIDs,
-                accessToken: token,
-                debugOwner: "MessagingDomain.roomMembership"
-            )
-            roomMemberCountRealtimeConsumer = watch.consumer
-            for await signal in watch.events {
-                guard !Task.isCancelled else { break }
-                guard let payload = signal.recordPayload,
-                      let record = PostgresChangeRecordCodec.dictionary(from: payload),
-                      let rawRoomID = record["room_id"] as? String
-                else { continue }
-                let roomID = RoomID(rawRoomID)
-                guard inboxStore.rooms.contains(where: { $0.id == roomID }) else { continue }
-                if let delta = RoomMemberCountRealtimeSemantics.membershipDelta(
-                    kind: signal.kind,
-                    record: record,
-                    oldRecord: nil
-                ) {
-                    inboxStore.applyMemberCountDelta(roomID: roomID, delta: delta)
-                    SessionMemberRoomsStore.shared.applyMemberCountDelta(
-                        roomID: roomID,
-                        delta: delta,
-                        for: viewerID
-                    )
-                } else if let counts = try? await rooms.activeMemberCounts(for: [roomID]),
-                          let count = counts[roomID]
-                {
-#if DEBUG
-                    MessagingRealtimeDebugLog.networkFallback(reason: "room_member_bounded_reconcile")
-#endif
-                    inboxStore.updateRoomMemberCount(roomID: roomID, count: count)
-                    SessionMemberRoomsStore.shared.applyMemberCounts(counts, for: viewerID)
-                }
-            }
-            roomMemberCountTask = nil
         }
     }
 
@@ -895,6 +851,13 @@ final class MessagingDomain {
             conversationOpen: false,
             policy: policy,
             source: "inboxRealtime"
+        )
+        let inboxConversation = inboxStore.conversations.first(where: { $0.id == conversationID })
+        ConversationThreadSessionStore.shared.patchMessages(
+            viewerID: viewerID,
+            conversationID: conversationID,
+            incoming: [newest],
+            conversation: inboxConversation
         )
 #if DEBUG
         MessagingRealtimeDebugLog.messageInsert(

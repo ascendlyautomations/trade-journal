@@ -153,8 +153,10 @@ nonisolated enum DashboardEquityChartRangeResolver {
         requested: DashboardDateRange,
         analyticsBootstrap: AnalyticsDashboardBootstrapV3,
         accountFilter: DashboardAccountFilter,
-        accountCharts: [String: AnalyticsDashboardChartsPresetV1]? = nil
+        accountCharts: [String: AnalyticsDashboardChartsPresetV1]? = nil,
+        allowAutomaticWiden: Bool = true
     ) -> DashboardDateRange {
+        guard allowAutomaticWiden else { return requested }
         for range in widenOrder(from: requested) {
             if hasUsableEquityData(
                 in: analyticsBootstrap,
@@ -172,8 +174,10 @@ nonisolated enum DashboardEquityChartRangeResolver {
         requested: DashboardDateRange,
         tradeInputs: [DashboardChartMetrics.Input],
         accountFilter: DashboardAccountFilter,
-        now: Date = Date()
+        now: Date = Date(),
+        allowAutomaticWiden: Bool = true
     ) -> DashboardDateRange {
+        guard allowAutomaticWiden else { return requested }
         for range in widenOrder(from: requested) {
             let tradeCount = DashboardChartMetrics.filteredTrades(
                 from: tradeInputs,
@@ -204,6 +208,147 @@ nonisolated enum DashboardEquityChartRangeResolver {
             return false
         }
         return bundle.metrics.trade_count >= minimumTradeCountForEquityCurve
+    }
+}
+
+/// Builds drawable equity series for user-selected presets with zero in-range trades.
+nonisolated enum DashboardEquityChartSeries {
+    static func carryForwardFlatIfNeeded(
+        summary: DashboardChartMetrics.Summary,
+        presetBundle: AnalyticsDashboardPresetBundleV1,
+        analyticsBootstrap: AnalyticsDashboardBootstrapV3,
+        accountFilter: DashboardAccountFilter,
+        accountCharts: [String: AnalyticsDashboardChartsPresetV1]? = nil
+    ) -> DashboardChartMetrics.Summary {
+        guard summary.tradeCount == 0, summary.equityData.count < 2 else { return summary }
+        guard let rangeStart = parseCalendarDay(presetBundle.start),
+              let rangeEnd = parseCalendarDay(presetBundle.end, endOfDay: true)
+        else { return summary }
+
+        let prior = priorRealizedEquity(
+            before: rangeStart,
+            analyticsBootstrap: analyticsBootstrap,
+            accountFilter: accountFilter,
+            accountCharts: accountCharts
+        )
+        let points = [
+            ProfileStatisticsMetrics.EquityPoint(index: 0, equity: prior, date: rangeStart),
+            ProfileStatisticsMetrics.EquityPoint(index: 1, equity: prior, date: rangeEnd),
+        ]
+        return summaryWithChartEquity(summary, points: points, currentEquity: prior)
+    }
+
+    static func carryForwardFlatIfNeeded(
+        summary: DashboardChartMetrics.Summary,
+        dateRange: DashboardDateRange,
+        tradeInputs: [DashboardChartMetrics.Input],
+        accountFilter: DashboardAccountFilter,
+        now: Date = Date()
+    ) -> DashboardChartMetrics.Summary {
+        guard summary.tradeCount == 0, summary.equityData.count < 2 else { return summary }
+        guard let interval = dateRangeInterval(dateRange, now: now) else { return summary }
+
+        let prior = priorRealizedEquity(
+            tradeInputs: tradeInputs,
+            accountFilter: accountFilter,
+            before: interval.start,
+            now: now
+        )
+        let points = [
+            ProfileStatisticsMetrics.EquityPoint(index: 0, equity: prior, date: interval.start),
+            ProfileStatisticsMetrics.EquityPoint(index: 1, equity: prior, date: interval.end),
+        ]
+        return summaryWithChartEquity(summary, points: points, currentEquity: prior)
+    }
+
+    private static func priorRealizedEquity(
+        before rangeStart: Date,
+        analyticsBootstrap: AnalyticsDashboardBootstrapV3,
+        accountFilter: DashboardAccountFilter,
+        accountCharts: [String: AnalyticsDashboardChartsPresetV1]?
+    ) -> Decimal {
+        guard let allBundle = DashboardAnalyticsMapper.bundle(
+            in: analyticsBootstrap,
+            accountFilter: accountFilter,
+            dateRange: .all,
+            accountCharts: accountCharts
+        ) else { return 0 }
+        let history = DashboardAnalyticsMapper.summary(from: allBundle, payoutTotal: nil).equityData
+        let ordered = ProfileStatisticsMetrics.chartOrderedEquityPoints(history)
+        if let lastBefore = ordered.last(where: { ($0.date ?? .distantPast) < rangeStart }) {
+            return lastBefore.equity
+        }
+        return 0
+    }
+
+    private static func priorRealizedEquity(
+        tradeInputs: [DashboardChartMetrics.Input],
+        accountFilter: DashboardAccountFilter,
+        before rangeStart: Date,
+        now: Date
+    ) -> Decimal {
+        let beforeRange = DashboardChartMetrics.filteredTrades(
+            from: tradeInputs,
+            accountFilter: accountFilter,
+            dateRange: .all,
+            now: now
+        ).filter { ($0.exitAt ?? $0.entryAt) < rangeStart }
+        return beforeRange.reduce(Decimal(0)) { $0 + ($1.realizedPnL?.amount ?? 0) }
+    }
+
+    private static func summaryWithChartEquity(
+        _ summary: DashboardChartMetrics.Summary,
+        points: [ProfileStatisticsMetrics.EquityPoint],
+        currentEquity: Decimal
+    ) -> DashboardChartMetrics.Summary {
+        var next = summary
+        next.equityData = ProfileStatisticsMetrics.chartOrderedEquityPoints(points)
+        next.currentEquity = currentEquity
+        next.maxDrawdown = 0
+        next.drawdownSeries = points.map {
+            DashboardDrawdownPoint(index: $0.index, depth: 0)
+        }
+        return next
+    }
+
+    private static func dateRangeInterval(
+        _ dateRange: DashboardDateRange,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> DateInterval? {
+        switch dateRange {
+        case .all:
+            return DateInterval(start: .distantPast, end: now)
+        case .sevenDays:
+            guard let start = calendar.date(byAdding: .day, value: -7, to: now) else { return nil }
+            return DateInterval(start: start, end: now)
+        case .thirtyDays:
+            guard let start = calendar.date(byAdding: .day, value: -30, to: now) else { return nil }
+            return DateInterval(start: start, end: now)
+        case .ninetyDays:
+            guard let start = calendar.date(byAdding: .day, value: -90, to: now) else { return nil }
+            return DateInterval(start: start, end: now)
+        case .ytd:
+            let year = calendar.component(.year, from: now)
+            var comps = DateComponents()
+            comps.year = year
+            comps.month = 1
+            comps.day = 1
+            guard let start = calendar.date(from: comps) else { return nil }
+            return DateInterval(start: start, end: now)
+        }
+    }
+
+    private static func parseCalendarDay(_ string: String, endOfDay: Bool = false) -> Date? {
+        let dayPart = String(string.prefix(10))
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let day = formatter.date(from: dayPart) else { return nil }
+        guard endOfDay else { return day }
+        return formatter.calendar.date(byAdding: DateComponents(day: 1, second: -1), to: day)
     }
 }
 
@@ -274,6 +419,83 @@ nonisolated enum DashboardInsightKind: String, Hashable, Sendable {
     case session
     case symbol
     case direction
+}
+
+nonisolated struct DashboardSessionPerformanceRow: Identifiable, Hashable, Sendable {
+    var id: String { label }
+    var label: String
+    var tradeCount: Int
+    var netPnL: Double
+    var wins: Int
+    var losses: Int
+    var winRate: Double?
+}
+
+nonisolated struct DashboardSymbolPerformanceRow: Identifiable, Hashable, Sendable {
+    var id: String { ticker }
+    var ticker: String
+    var trades: Int
+    var netPnL: Double
+    var winRate: Double?
+    var avgRR: Double?
+}
+
+nonisolated struct DashboardDailyPerformanceSnapshot: Hashable, Sendable {
+    var bestDayPnL: Double
+    var worstDayPnL: Double
+    var avgDayPnL: Double
+    var consistencyPct: Double
+    var tradingDays: Int
+}
+
+nonisolated struct DashboardStreakSnapshot: Hashable, Sendable {
+    var currentStreak: Int
+    var currentType: String?
+    var maxWinStreak: Int
+    var maxLossStreak: Int
+}
+
+nonisolated struct DashboardHourHighlights: Hashable, Sendable {
+    var bestHour: Int?
+    var worstHour: Int?
+    var bestPnL: Double?
+    var worstPnL: Double?
+}
+
+nonisolated struct DashboardDirectionSideSnapshot: Hashable, Sendable {
+    var trades: Int
+    var netPnL: Double
+    var wins: Int
+    var losses: Int
+    var winRate: Double?
+    var profitFactor: Double?
+    var expectancy: Double?
+    var avgRR: Double?
+    var bestTrade: Double?
+    var worstTrade: Double?
+}
+
+nonisolated struct DashboardLongShortComparison: Hashable, Sendable {
+    var long: DashboardDirectionSideSnapshot?
+    var short: DashboardDirectionSideSnapshot?
+}
+
+nonisolated struct DashboardHoldExtremeSnapshot: Hashable, Sendable {
+    var label: String
+    var durationSeconds: Double
+    var pnl: Double
+}
+
+nonisolated struct DashboardStrategyHighlight: Hashable, Sendable {
+    var strategy: String
+    var trades: Int
+    var netPnL: Double
+    var winRate: Double?
+}
+
+nonisolated struct DashboardStrategyHighlights: Hashable, Sendable {
+    var best: DashboardStrategyHighlight?
+    var worst: DashboardStrategyHighlight?
 }
 
 nonisolated struct DashboardInsightItem: Identifiable, Hashable, Sendable {

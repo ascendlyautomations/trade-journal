@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import TradeTraxs
 
@@ -13,6 +14,7 @@ final class FeedVideoPlaybackCoordinatorTests: XCTestCase {
         let second = samples[1]
 
         coordinator.setClipVisible(first, visible: true)
+        await coordinator.testing_drainClipVideoPreparation()
         XCTAssertTrue(coordinator.isActive(first.id))
         XCTAssertFalse(coordinator.isActive(second.id))
 
@@ -22,6 +24,7 @@ final class FeedVideoPlaybackCoordinatorTests: XCTestCase {
         coordinator.updateInlineClipVisibility(reel: first, fraction: 0.2)
         coordinator.updateInlineClipVisibility(reel: second, fraction: 1.0)
         await coordinator.testing_drainInlineOwnership()
+        await coordinator.testing_drainClipVideoPreparation()
 
         XCTAssertFalse(coordinator.isActive(first.id))
         XCTAssertTrue(coordinator.isActive(second.id))
@@ -41,22 +44,24 @@ final class FeedVideoPlaybackCoordinatorTests: XCTestCase {
         XCTAssertLessThanOrEqual(coordinator.retainedPlayerCount, 1)
     }
 
-    func testReleaseAllPlayersClearsActiveClipAndRetainedPlayers() {
+    func testReleaseAllPlayersClearsActiveClipAndRetainedPlayers() async {
         let coordinator = FeedVideoPlaybackCoordinator(storage: FeedClipStubStorage())
         let reel = samples[0]
 
         coordinator.setClipVisible(reel, visible: true)
+        await coordinator.testing_drainClipVideoPreparation()
         coordinator.releaseAllPlayers()
 
         XCTAssertFalse(coordinator.isActive(reel.id))
         XCTAssertEqual(coordinator.retainedPlayerCount, 0)
     }
 
-    func testManualPauseShowsPlayIndicatorWhileActive() {
+    func testManualPauseShowsPlayIndicatorWhileActive() async {
         let coordinator = FeedVideoPlaybackCoordinator(storage: FeedClipStubStorage())
         let reel = samples[0]
 
         coordinator.setClipVisible(reel, visible: true)
+        await coordinator.testing_drainClipVideoPreparation(expectedPlayers: 1)
         coordinator.togglePlayPause(for: reel)
 
         XCTAssertTrue(coordinator.isActive(reel.id))
@@ -64,7 +69,7 @@ final class FeedVideoPlaybackCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.retainedPlayerCount, 1)
     }
 
-    func testClipsExperienceStartsUnmutedAndSingleActiveClip() {
+    func testClipsExperienceStartsUnmutedAndSingleActiveClip() async {
         let coordinator = FeedVideoPlaybackCoordinator(storage: FeedClipStubStorage())
         let first = samples[0]
         let second = samples[1]
@@ -73,17 +78,47 @@ final class FeedVideoPlaybackCoordinatorTests: XCTestCase {
         XCTAssertFalse(coordinator.isMuted)
 
         coordinator.setActiveClip(first)
+        await coordinator.testing_drainClipVideoPreparation()
         XCTAssertTrue(coordinator.isActive(first.id))
         XCTAssertEqual(coordinator.retainedPlayerCount, 1)
 
         coordinator.setActiveClip(second)
+        await coordinator.testing_drainClipVideoPreparation()
         XCTAssertFalse(coordinator.isActive(first.id))
         XCTAssertTrue(coordinator.isActive(second.id))
         XCTAssertEqual(coordinator.retainedPlayerCount, 1)
     }
 
-    func testClipsNeighborPrefetchRetainsAtMostTwoPlayers() {
-        let coordinator = FeedVideoPlaybackCoordinator(storage: FeedClipStubStorage())
+    func testPrefetchPromoteReusesSamePlayerAndItem() async {
+        let coordinator = FeedVideoPlaybackCoordinator(
+            storage: FeedClipStubStorage(),
+            networkPosture: ClipPlaybackFixedNetworkPosture(posture: .wifi)
+        )
+        let first = samples[0]
+        let second = samples[1]
+
+        coordinator.beginClipsExperience()
+        coordinator.setActiveClip(first, atIndex: 0)
+        coordinator.prepareNeighborClip(second, atIndex: 1)
+        await coordinator.testing_drainClipVideoPreparation(expectedPlayers: 2)
+
+        let prefetchedID = coordinator.testing_playerInstanceID(for: second.id)
+        XCTAssertNotNil(prefetchedID)
+
+        coordinator.setActiveClip(second, atIndex: 1)
+        await coordinator.testing_drainClipVideoPreparation()
+
+        XCTAssertEqual(coordinator.testing_playerInstanceID(for: second.id), prefetchedID)
+        let counts = ClipPlayerIdentityTrace.counts(for: second.id.rawValue)
+        XCTAssertEqual(counts.players, 1)
+        XCTAssertEqual(counts.items, 1)
+    }
+
+    func testClipsNeighborPrefetchRetainsAtMostTwoPlayers() async {
+        let coordinator = FeedVideoPlaybackCoordinator(
+            storage: FeedClipStubStorage(),
+            networkPosture: ClipPlaybackFixedNetworkPosture(posture: .wifi)
+        )
         let first = samples[0]
         let second = samples[1]
         let third = samples[2]
@@ -91,22 +126,26 @@ final class FeedVideoPlaybackCoordinatorTests: XCTestCase {
         coordinator.beginClipsExperience()
         coordinator.setActiveClip(first, atIndex: 0)
         coordinator.prepareNeighborClip(second, atIndex: 1)
+        await coordinator.testing_drainClipVideoPreparation(expectedPlayers: 2)
 
         XCTAssertEqual(coordinator.retainedPlayerCount, 2)
 
         coordinator.setActiveClip(second, atIndex: 1)
+        await coordinator.testing_drainClipVideoPreparation()
         XCTAssertTrue(coordinator.isActive(second.id))
         XCTAssertLessThanOrEqual(coordinator.retainedPlayerCount, 2)
 
         coordinator.prepareNeighborClip(third, atIndex: 2)
+        await coordinator.testing_drainClipVideoPreparation()
         XCTAssertLessThanOrEqual(coordinator.retainedPlayerCount, 2)
         XCTAssertNil(coordinator.player(for: first.id))
     }
 
-    func testClipsExperienceEndReleasesPlayersAndRestoresMutedDefault() {
+    func testClipsExperienceEndReleasesPlayersAndRestoresMutedDefault() async {
         let coordinator = FeedVideoPlaybackCoordinator(storage: FeedClipStubStorage())
         coordinator.beginClipsExperience()
         coordinator.setActiveClip(samples[0])
+        await coordinator.testing_drainClipVideoPreparation()
         XCTAssertFalse(coordinator.isMuted)
         XCTAssertEqual(coordinator.retainedPlayerCount, 1)
 
@@ -129,11 +168,13 @@ final class FeedVideoPlaybackCoordinatorTests: XCTestCase {
         let second = samples[1]
 
         coordinator.setClipVisible(first, visible: true)
+        await coordinator.testing_drainClipVideoPreparation()
         XCTAssertEqual(coordinator.retainedPlayerCount, 1)
 
         coordinator.updateInlineClipVisibility(reel: first, fraction: 0.2)
         coordinator.setClipVisible(second, visible: true)
         await coordinator.testing_drainInlineOwnership()
+        await coordinator.testing_drainClipVideoPreparation()
 
         XCTAssertTrue(coordinator.isActive(second.id))
         XCTAssertEqual(coordinator.retainedPlayerCount, 1)
@@ -165,6 +206,7 @@ final class FeedVideoPlaybackCoordinatorTests: XCTestCase {
         coordinator.updateInlineClipVisibility(reel: first, fraction: 0.2)
         coordinator.updateInlineClipVisibility(reel: second, fraction: 0.95)
         await coordinator.testing_drainInlineOwnership()
+        await coordinator.testing_drainClipVideoPreparation()
 
         XCTAssertTrue(coordinator.isActive(second.id))
         XCTAssertEqual(coordinator.retainedPlayerCount, 1)
@@ -182,6 +224,65 @@ final class FeedVideoPlaybackCoordinatorTests: XCTestCase {
             coordinator.shouldHidePoster(for: reel.id),
             "Poster remains until live player is showing"
         )
+    }
+
+    func testActivePlayerUsesShortForwardBufferWithoutStallMinimization() async {
+        let coordinator = FeedVideoPlaybackCoordinator(
+            storage: FeedClipStubStorage(),
+            networkPosture: ClipPlaybackFixedNetworkPosture(posture: .wifi)
+        )
+        let reel = samples[0]
+        coordinator.beginClipsExperience()
+        coordinator.setActiveClip(reel, atIndex: 0)
+        await coordinator.testing_drainClipVideoPreparation(expectedPlayers: 1)
+
+        let player = coordinator.player(for: reel.id)
+        XCTAssertEqual(player?.automaticallyWaitsToMinimizeStalling, false)
+        XCTAssertEqual(player?.currentItem?.preferredForwardBufferDuration, 2)
+        XCTAssertEqual(player?.currentItem?.canUseNetworkResourcesForLiveStreamingWhilePaused, false)
+        XCTAssertEqual(player?.currentItem?.preferredPeakBitRate, 0)
+    }
+
+    func testCellularNetworkDoesNotCreateNeighborPlayer() async {
+        let coordinator = FeedVideoPlaybackCoordinator(
+            storage: FeedClipStubStorage(),
+            networkPosture: ClipPlaybackFixedNetworkPosture(posture: .cellular)
+        )
+        let first = samples[0]
+        let second = samples[1]
+        coordinator.beginClipsExperience()
+        coordinator.setActiveClip(first, atIndex: 0)
+        coordinator.prepareNeighborClip(second, atIndex: 1)
+        await coordinator.testing_drainClipVideoPreparation(expectedPlayers: 1)
+
+        XCTAssertEqual(coordinator.retainedPlayerCount, 1)
+        XCTAssertNotNil(coordinator.player(for: first.id))
+        XCTAssertNil(coordinator.testing_playerInstanceID(for: second.id))
+        XCTAssertEqual(coordinator.player(for: first.id)?.currentItem?.preferredForwardBufferDuration, 1)
+        XCTAssertEqual(coordinator.player(for: first.id)?.automaticallyWaitsToMinimizeStalling, false)
+    }
+
+    func testCellularNetworkReleasesExistingWarmPlayer() async {
+        let posture = ClipPlaybackFixedNetworkPosture(posture: .wifi)
+        let coordinator = FeedVideoPlaybackCoordinator(
+            storage: FeedClipStubStorage(),
+            networkPosture: posture
+        )
+        let first = samples[0]
+        let second = samples[1]
+        coordinator.beginClipsExperience()
+        coordinator.setActiveClip(first, atIndex: 0)
+        coordinator.prepareNeighborClip(second, atIndex: 1)
+        await coordinator.testing_drainClipVideoPreparation(expectedPlayers: 2)
+        XCTAssertNotNil(coordinator.testing_playerInstanceID(for: second.id))
+
+        posture.posture = .cellular
+        coordinator.prepareNeighborClip(second, atIndex: 1)
+        await coordinator.testing_drainClipVideoPreparation(expectedPlayers: 1)
+
+        XCTAssertEqual(coordinator.retainedPlayerCount, 1)
+        XCTAssertNil(coordinator.testing_playerInstanceID(for: second.id))
+        XCTAssertNotNil(coordinator.player(for: first.id))
     }
 }
 

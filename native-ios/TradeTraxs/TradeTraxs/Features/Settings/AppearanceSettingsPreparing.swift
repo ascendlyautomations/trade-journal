@@ -22,8 +22,7 @@ final class AppearanceSettingsController: AppearanceSettingsPreparing {
     }
 
     func selectTheme(_ identifier: ThemeIdentifier, reduceMotion: Bool) {
-        // Launch picker only exposes System + TradeTraxs.
-        let allowed: Set<ThemeIdentifier> = [.system, .tradeTraxs]
+        let allowed: Set<ThemeIdentifier> = [.system, .light, .dark]
         guard allowed.contains(identifier) else { return }
         themeManager.select(identifier, reduceMotion: reduceMotion)
     }

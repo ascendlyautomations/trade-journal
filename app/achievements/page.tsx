@@ -1,5 +1,7 @@
 "use client"
 
+import "../analyticsDesktopTheme.css"
+import "../achievementsDesktopDensity.css"
 import { useCallback, useMemo, useState } from "react"
 import AchievementCard from "../components/AchievementCard"
 import AchievementsPageDetailModal from "../components/AchievementsPageDetailModal"
@@ -126,8 +128,8 @@ export default function AchievementsPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6 xl:px-8 2xl:px-12">
-        <div className="mx-auto max-w-6xl space-y-5 xl:max-w-[1500px]">
+      <div className="tt-ach-page tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6 xl:px-8 2xl:px-12">
+        <div className="tt-ach-workspace mx-auto max-w-6xl space-y-5">
           <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-blue-300">
@@ -191,11 +193,12 @@ export default function AchievementsPage() {
                 loading={profileLoading || streaksLoading}
               />
               {!pageLoading && visible.length > 0 ? (
-                <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <section className="tt-ach-grid">
                   {visible.map((a) => (
                     <AchievementCard
                       key={a.id}
                       achievement={a}
+                      gallery
                       onOpenDetail={setSelectedAchievementDetail}
                       onEdit={() => openEdit(a)}
                       onDelete={() => requestDelete(a.id)}
@@ -212,11 +215,12 @@ export default function AchievementsPage() {
                 <h2 className="text-lg font-semibold text-white">Featured</h2>
                 <span className="text-xs text-gray-400">{unreadFeatured} highlighted</span>
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="tt-ach-grid tt-ach-grid--featured">
                 {featured.map((a) => (
                   <AchievementCard
                     key={a.id}
                     achievement={a}
+                    gallery
                     featured
                     showVisibility={false}
                     onOpenDetail={setSelectedAchievementDetail}
@@ -259,11 +263,12 @@ export default function AchievementsPage() {
               className="py-10"
             />
           ) : (
-            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <section className="tt-ach-grid">
               {visible.map((a) => (
                 <AchievementCard
                   key={a.id}
                   achievement={a}
+                  gallery
                   onOpenDetail={setSelectedAchievementDetail}
                   onEdit={() => openEdit(a)}
                   onDelete={() => requestDelete(a.id)}

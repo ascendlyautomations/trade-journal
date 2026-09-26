@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { isDemoUserId } from "./demo/constants"
-import { ensureFullTradesHistory, getTradesSnapshot } from "./appDataCache"
+import { ensureAnalyticsTradesHistory, getTradesSnapshot } from "./appDataCache"
 import type { MilestoneSignals } from "./userMilestones"
 import {
   buildStreakStats,
@@ -383,8 +383,9 @@ export async function ensureUserStreaksLoaded(
   })
   notify()
 
-  // Streak trade counts must match full journal history (not the 120 warm window).
-  await ensureFullTradesHistory(supabase, userId).catch(() => [])
+  // Journal and winning streaks only need analytics fields (pnl, is_public, times).
+  // Post and reel streak queries below stay unbounded and unchanged.
+  await ensureAnalyticsTradesHistory(supabase, userId).catch(() => [])
   const trades = [...getTradesSnapshot(userId)]
   const { signals: milestoneSignals, postingTimestamps } =
     await fetchStreakMilestoneBundle(supabase, userId, trades, {

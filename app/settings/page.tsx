@@ -1,5 +1,6 @@
 "use client"
 
+import "../utilityDesktopTheme.css"
 import { SkeletonSettingsPage } from "../components/ui/skeletons"
 
 import { ProfileAvatarImg } from "../components/SafeProfileAvatar"
@@ -9,7 +10,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import type { TableUpdate } from "@/lib/supabaseTypes"
-import { compressImage } from "@/lib/compressImage"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import ActionButton from "@/app/components/ui/ActionButton"
@@ -92,6 +92,7 @@ import {
   sliceDateInput,
 } from "@/lib/settingsProfileSync"
 import { recordedAffiliateEarnings } from "@/lib/affiliateEarnings"
+import AppearanceSettingsSection from "../components/AppearanceSettingsSection"
 import { readSettingsProfileCache } from "@/lib/settingsProfileCache"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
@@ -108,6 +109,7 @@ type TabId =
   | "subscription"
   | "trading-accounts"
   | "notifications"
+  | "appearance"
 
 function resolveSettingsTabFromHash(hash: string): TabId | null {
   const requested = hash.replace("#", "").toLowerCase().trim()
@@ -116,7 +118,8 @@ function resolveSettingsTabFromHash(hash: string): TabId | null {
     requested === "affiliate" ||
     requested === "account" ||
     requested === "subscription" ||
-    requested === "notifications"
+    requested === "notifications" ||
+    requested === "appearance"
   ) {
     return requested
   }
@@ -200,6 +203,11 @@ const TABS: {
     id: "account",
     label: "Account",
     description: "Login, security, and data",
+  },
+  {
+    id: "appearance",
+    label: "Appearance",
+    description: "Dark, light, or TradeTraxs OG",
   },
   {
     id: "subscription",
@@ -452,10 +460,7 @@ export default function SettingsPage() {
   async function uploadAvatar(): Promise<string | null> {
     if (!avatarFile || !user) return null
 
-    let uploadFile: File = avatarFile
-    if (avatarFile.type?.startsWith("image/")) {
-      uploadFile = await compressImage(avatarFile)
-    }
+    const uploadFile = avatarFile
     const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
 
     const { error: uploadError } = await supabase.storage
@@ -943,7 +948,7 @@ export default function SettingsPage() {
   if (showFullSkeleton) {
     return (
       <>
-        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
+        <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
           <SkeletonSettingsPage />
         </div>
       </>
@@ -966,7 +971,7 @@ export default function SettingsPage() {
   return (
     <>
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
+      <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-start">
           {/* LEFT — tabs */}
           <aside className="w-full shrink-0 md:w-64">
@@ -1013,6 +1018,8 @@ export default function SettingsPage() {
                   : activeMeta.description}
               </p>
             </div>
+
+            {activeTab === "appearance" && <AppearanceSettingsSection />}
 
             {activeTab === "profile" && (
               <div className="space-y-3.5 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">

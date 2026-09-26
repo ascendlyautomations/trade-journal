@@ -24,6 +24,8 @@ nonisolated enum BackendV2Versioning {
         case profileUnpinContent = "rpc_v1_profile_unpin_content"
         case profileReorderPinned = "rpc_v1_profile_reorder_pinned"
         case messaging = "rpc_v2_messaging_bootstrap"
+        /// Lighter inbox reconcile — denormalized conversation rows, no notification writes.
+        case messagingCatchUp = "rpc_v1_messaging_bootstrap"
         case conversation = "rpc_v1_conversation_bootstrap"
         case conversationThread = "rpc_v1_conversation_thread_bootstrap"
         case room = "rpc_v1_room_bootstrap"

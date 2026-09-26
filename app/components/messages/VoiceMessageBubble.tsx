@@ -44,7 +44,7 @@ export default function VoiceMessageBubble({
 
   const bubbleClass = isOutgoing
     ? "bg-blue-500 text-white"
-    : "bg-gray-700 text-white"
+    : "border border-white/10 bg-white/10 text-white"
   const barActiveClass = isOutgoing ? "bg-white" : "bg-blue-400"
   const barIdleClass = isOutgoing ? "bg-white/35" : "bg-blue-400/30"
 

@@ -1,0 +1,213 @@
+/*
+ * Dark color system for public informational pages only.
+ * Applies at every width. Homepage is unchanged because it never
+ * mounts .tt-public-dark.
+ */
+
+.tt-public-dark,
+.tt-public-dark.bg-gradient-to-br {
+  background-color: #0d1117;
+  background-image: none;
+  min-height: 100dvh;
+  color: #f0f3f6;
+}
+
+body:has(.tt-public-dark) {
+  background-color: #0d1117;
+  background-image: none;
+}
+
+body:has(.tt-public-dark) .tt-public-navbar,
+body:has(.tt-public-dark) .tt-public-navbar .bg-chrome {
+  background-color: #0b1016;
+  background-image: none;
+}
+
+body:has(.tt-public-dark) .tt-public-navbar .border-border-subtle,
+body:has(.tt-public-dark) .tt-public-navbar .border-chrome-border,
+body:has(.tt-public-dark) .tt-public-navbar .border-border {
+  border-color: #30363d;
+}
+
+body:has(.tt-public-dark) .tt-public-navbar .text-foreground-secondary,
+body:has(.tt-public-dark) .tt-public-navbar .text-muted-foreground {
+  color: #b1bac4;
+}
+
+body:has(.tt-public-dark) .tt-public-navbar .hover\:text-chrome-foreground:hover,
+body:has(.tt-public-dark) .tt-public-navbar .hover\:text-nav-link-hover:hover,
+body:has(.tt-public-dark) .tt-public-navbar .text-chrome-foreground {
+  color: #f0f3f6;
+}
+
+body:has(.tt-public-dark) .tt-public-navbar .bg-accent-soft {
+  background-color: rgb(78 196 224 / 0.12);
+  box-shadow: inset 0 0 0 1px #4ec4e0;
+}
+
+body:has(.tt-public-dark) .tt-public-navbar .text-info {
+  color: #f0f3f6;
+}
+
+body:has(.tt-public-dark) .tt-public-navbar .bg-accent {
+  background-color: #4ec4e0;
+  color: #041018;
+}
+
+body:has(.tt-public-dark) .tt-public-navbar .hover\:bg-accent-hover:hover {
+  background-color: #7dd3f0;
+}
+
+body:has(.tt-public-dark) .tt-public-navbar .border-chrome-border.rounded {
+  background-color: #161b22;
+  border-color: #30363d;
+  color: #f0f3f6;
+}
+
+.tt-public-dark :is(
+  .bg-white\/5,
+  .bg-white\/\[0\.03\],
+  .bg-white\/\[0\.04\],
+  .bg-white\/\[0\.06\],
+  .bg-white\/\[0\.08\],
+  .bg-white\/\[0\.10\],
+  .bg-\[\#1e293b\]\/60,
+  .bg-\[\#1e293b\]\/90
+) {
+  background-color: #161b22;
+  background-image: none;
+}
+
+.tt-public-dark .tt-faq-open,
+.tt-public-dark .bg-white\/10 {
+  background-color: #1c2128;
+  background-image: none;
+}
+
+.tt-public-dark :is(
+  input,
+  textarea,
+  select,
+  .bg-white\/10,
+  .bg-white\/15
+) {
+  background-color: #21262d;
+  color: #f0f3f6;
+}
+
+.tt-public-dark :is(
+  .border-white\/10,
+  .border-white\/15,
+  .border-white\/20
+) {
+  border-color: #30363d;
+}
+
+.tt-public-dark .border-blue-500,
+.tt-public-dark .border-2.border-blue-500 {
+  border-color: #4ec4e0;
+}
+
+.tt-public-dark :is(.text-white, .text-gray-100, h1, h2) {
+  color: #f0f3f6;
+}
+
+.tt-public-dark :is(.text-gray-200, .text-gray-300) {
+  color: #b1bac4;
+}
+
+.tt-public-dark :is(.text-gray-400, .placeholder\:text-gray-400)::placeholder,
+.tt-public-dark .placeholder\:text-gray-400::placeholder {
+  color: #7d8590;
+}
+
+.tt-public-dark .text-gray-400 {
+  color: #7d8590;
+}
+
+.tt-public-dark :is(
+  .text-blue-100,
+  .text-blue-200,
+  .text-blue-300,
+  .text-blue-400,
+  .text-teal-300,
+  .text-teal-300\/90,
+  .text-teal-400,
+  .text-teal-400\/70,
+  .text-emerald-400,
+  .text-emerald-400\/90,
+  a
+) {
+  color: #4ec4e0;
+}
+
+.tt-public-dark :is(.bg-blue-500, .bg-blue-600, .from-blue-500.to-teal-400) {
+  background-color: #4ec4e0;
+  background-image: none;
+  color: #041018;
+}
+
+.tt-public-dark :is(.hover\:bg-blue-500:hover, .hover\:bg-blue-600:hover) {
+  background-color: #7dd3f0;
+}
+
+.tt-public-dark button.bg-white {
+  background-color: #21262d;
+  color: #f0f3f6;
+  border: 1px solid #30363d;
+}
+
+.tt-public-dark button.bg-white:hover {
+  background-color: #292e36;
+}
+
+.tt-public-dark .from-emerald-500\/10 {
+  background-color: #161b22;
+  background-image: none;
+  border-color: rgb(78 196 224 / 0.45);
+}
+
+.tt-public-dark .backdrop-blur-md,
+.tt-public-dark .backdrop-blur-sm,
+.tt-public-dark .backdrop-blur-xl {
+  --tw-backdrop-blur: blur(0px);
+}
+
+body:has(.tt-public-dark) [role="dialog"] {
+  background-color: #161b22;
+  background-image: none;
+  border-color: #30363d;
+  color: #f0f3f6;
+}
+
+body:has(.tt-public-dark) [role="dialog"] :is(
+  .bg-white\/5,
+  .bg-white\/10,
+  .bg-\[\#0f172a\],
+  .bg-\[\#0f172a\]\/95,
+  .bg-\[\#1e293b\]\/90
+) {
+  background-color: #21262d;
+  background-image: none;
+}
+
+body:has(.tt-public-dark) [role="dialog"] :is(.border-white\/10, .border-white\/15) {
+  border-color: #30363d;
+}
+
+body:has(.tt-public-dark) [role="dialog"] :is(.text-white, .text-gray-100) {
+  color: #f0f3f6;
+}
+
+body:has(.tt-public-dark) [role="dialog"] :is(.text-gray-300, .text-gray-400) {
+  color: #b1bac4;
+}
+
+body:has(.tt-public-dark) [role="dialog"] :is(.bg-blue-500, .bg-blue-600) {
+  background-color: #4ec4e0;
+  color: #041018;
+}
+
+.tt-public-dark :is(h1, h2).text-blue-300 {
+  color: #f0f3f6;
+}

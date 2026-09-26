@@ -63,6 +63,7 @@ final class TradeRoomJoinActionCoordinator {
             _ = try await rooms.join(roomID: room.id, profileID: viewerID)
             mutationStates[room.id] = .joined
             SessionMemberRoomsStore.shared.invalidate(viewerID: viewerID)
+            GettingStartedRefreshCenter.noteJoinedOtherTradeRoom(from: room, viewer: viewerID)
             await onDirectJoinSucceeded?()
             ExperienceHaptics.play(.success)
             return .joined

@@ -26,6 +26,8 @@ final class CurrentUserProfileStore {
     private(set) var avatarUIImage: UIImage?
     /// Pre-clipped circular tab icon (`alwaysOriginal`) for native `Tab` labels.
     private(set) var tabBarAvatarUIImage: UIImage?
+    /// Bumped when the tab bitmap appears or clears so the native tab item rebuilds.
+    private(set) var tabAvatarRevision: UInt64 = 0
     private(set) var errorMessage: String?
 
     private let profiles: any ProfileRepository
@@ -84,7 +86,35 @@ final class CurrentUserProfileStore {
 
     /// Seeds profile header from session bootstrap without a duplicate fetch.
     func applyBootstrapResult(profile: Profile, stats: ProfileStats?) {
-        profileStoreSeed(profile: profile, stats: stats)
+        profileStoreSeed(profile: applyingPreferredAvatar(profile), stats: stats)
+        ensureTabAvatarLoaded()
+    }
+
+    /// Installs the onboarding crop immediately so the tab does not wait on a second download.
+    func installLocalAvatar(_ image: UIImage, avatarID: String) {
+        assignAvatarImage(image, key: avatarID)
+    }
+
+    /// Owner profile screen / Edit Profile published a new `avatar_url`.
+    /// Reuses the shared session profile and the existing image pipeline (cache hit when warm).
+    func adoptDisplayedAvatar(from profile: Profile) {
+        if let existing = self.profile, existing.id != profile.id {
+            return
+        }
+        let incoming = SessionBootstrapStore.normalizedAvatarURL(session: profile.avatar?.id, viewer: nil)
+        let current = SessionBootstrapStore.normalizedAvatarURL(session: self.profile?.avatar?.id, viewer: nil)
+        if incoming != current {
+            if var existing = self.profile {
+                existing.avatar = incoming.map { MediaReference(id: $0, kind: .image, altText: nil) }
+                self.profile = existing
+                detailCache?.seed(existing)
+            } else {
+                var seeded = profile
+                seeded.avatar = incoming.map { MediaReference(id: $0, kind: .image, altText: nil) }
+                profileStoreSeed(profile: seeded, stats: stats)
+            }
+            SessionBootstrapStore.shared.applyAvatarChange(profileID: profile.id, avatarURL: incoming)
+        }
         ensureTabAvatarLoaded()
     }
 
@@ -116,6 +146,7 @@ final class CurrentUserProfileStore {
         errorMessage = nil
         loadedProfileID = nil
         loadedAvatarKey = nil
+        tabAvatarRevision = 0
     }
 
     /// Patches owner following count after FollowMutationCoordinator edge changes.
@@ -201,12 +232,13 @@ final class CurrentUserProfileStore {
                 return
             }
 
-            profile = result.profile
+            let loadedProfile = applyingPreferredAvatar(result.profile)
+            profile = loadedProfile
             stats = result.stats
             loadedProfileID = profileID
             phase = .loaded
 
-            await loadAvatarIfNeeded(for: result.profile, force: force)
+            await loadAvatarIfNeeded(for: loadedProfile, force: force)
         } catch is CancellationError {
             if profile == nil { phase = .idle }
         } catch {
@@ -228,10 +260,7 @@ final class CurrentUserProfileStore {
         }
 
         if let uiImage = DemoExploreBundledAvatar.uiImage(for: reference) {
-            avatarUIImage = uiImage
-            avatarImage = Image(uiImage: uiImage)
-            tabBarAvatarUIImage = Self.makeTabBarAvatar(from: uiImage)
-            loadedAvatarKey = reference.id
+            assignAvatarImage(uiImage, key: reference.id)
             return
         }
 
@@ -244,25 +273,53 @@ final class CurrentUserProfileStore {
                 )
             )
             guard !Task.isCancelled else { return }
+            guard self.profile?.avatar?.id == reference.id else { return }
             guard let uiImage = UIImage(data: data) else {
-                clearAvatarImages()
+                if loadedAvatarKey != reference.id {
+                    clearAvatarImages()
+                }
                 return
             }
-            avatarUIImage = uiImage
-            avatarImage = Image(uiImage: uiImage)
-            tabBarAvatarUIImage = Self.makeTabBarAvatar(from: uiImage)
-            loadedAvatarKey = reference.id
+            assignAvatarImage(uiImage, key: reference.id)
         } catch {
-            // Keep initials / default tab symbol — never block the header on image failure.
+            // A local preview for this URL stays. Only drop a bitmap that belonged to a failed fetch.
+            guard self.profile?.avatar?.id == reference.id, loadedAvatarKey != reference.id else { return }
             clearAvatarImages()
         }
     }
 
+    private func applyingPreferredAvatar(_ profile: Profile) -> Profile {
+        let preferred = SessionBootstrapStore.shared.preferredAvatarURL(
+            profileID: profile.id,
+            incoming: profile.avatar?.id
+        )
+        let current = SessionBootstrapStore.normalizedAvatarURL(session: profile.avatar?.id, viewer: nil)
+        guard preferred != current else { return profile }
+        var copy = profile
+        copy.avatar = preferred.map { MediaReference(id: $0, kind: .image, altText: nil) }
+        return copy
+    }
+
+    private func assignAvatarImage(_ image: UIImage, key: String) {
+        let changed = loadedAvatarKey != key || tabBarAvatarUIImage == nil
+        avatarUIImage = image
+        avatarImage = Image(uiImage: image)
+        tabBarAvatarUIImage = Self.makeTabBarAvatar(from: image)
+        loadedAvatarKey = key
+        if changed {
+            tabAvatarRevision &+= 1
+        }
+    }
+
     private func clearAvatarImages() {
+        let hadImage = tabBarAvatarUIImage != nil || avatarUIImage != nil
         avatarImage = nil
         avatarUIImage = nil
         tabBarAvatarUIImage = nil
         loadedAvatarKey = nil
+        if hadImage {
+            tabAvatarRevision &+= 1
+        }
     }
 
     /// Circular, tab-sized bitmap so SwiftUI `Tab` keeps native chrome / selection.

@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { isDemoUserId } from "./demo/constants"
 import { DEMO_ACCOUNTS, DEMO_TRADES } from "./demo/fixtures"
-import { TRADES_APP_SELECT } from "./publicAccountPrivacy"
+import {
+  TRADES_ANALYTICS_SELECT,
+  TRADES_APP_SELECT,
+} from "./publicAccountPrivacy"
 import { isNativeIos } from "./nativePlatform"
 import {
   persistDashboardAccounts,
@@ -33,15 +36,35 @@ type CacheEntry<T> = {
 }
 
 type TradesEntry = CacheEntry<any[]> & {
-  /** False while only the recent window is loaded; true after full history fetch. */
+  /**
+   * True only when every cached trade row is a full journal row
+   * (`TRADES_APP_SELECT`). A complete narrow analytics history must not set this.
+   */
   historyComplete: boolean
+  /**
+   * True when every trade required for Dashboard/Calendar analytics is cached.
+   * Independent from `historyComplete`. Full journal history implies this.
+   */
+  analyticsHistoryComplete: boolean
 }
 type AccountsEntry = CacheEntry<any[]>
 
 const tradesByUser = new Map<string, TradesEntry>()
 const accountsByUser = new Map<string, AccountsEntry>()
 const tradesHistoryInFlight = new Map<string, Promise<any[]>>()
+const analyticsHistoryInFlight = new Map<string, Promise<any[]>>()
+const richRowsByIdInFlight = new Map<string, number>()
 const listeners = new Set<() => void>()
+
+type BrokerTradePatch =
+  | { op: "upsert"; row: Record<string, unknown> }
+  | { op: "delete"; id: string }
+
+/**
+ * Patches that arrived while a window or full-history read was in flight.
+ * Applied onto the server result so that read cannot drop a just-imported row.
+ */
+const brokerPatchesByUser = new Map<string, Map<string, BrokerTradePatch>>()
 
 /** Stable empty snapshots — never allocate new arrays inside getSnapshot(). */
 export const EMPTY_TRADES: readonly any[] = Object.freeze([])
@@ -64,6 +87,199 @@ function isStale(fetchedAt: number, staleMs = DEFAULT_STALE_MS): boolean {
 
 function tradeIdKey(id: unknown): string {
   return String(id)
+}
+
+function compareTradesNewestFirst(a: { created_at?: string | null; id?: unknown }, b: { created_at?: string | null; id?: unknown }) {
+  const aMs = new Date(a.created_at ?? 0).getTime()
+  const bMs = new Date(b.created_at ?? 0).getTime()
+  if (aMs !== bMs) return bMs - aMs
+  const aId = tradeIdKey(a.id)
+  const bId = tradeIdKey(b.id)
+  if (aId < bId) return -1
+  if (aId > bId) return 1
+  return 0
+}
+
+function waitForTradeWindowIdle(userId: string): Promise<void> {
+  if (tradesByUser.get(userId)?.loading !== true) return Promise.resolve()
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      unsub()
+      resolve()
+    }
+    const unsub = subscribeAppDataCache(() => {
+      if (tradesByUser.get(userId)?.loading) return
+      finish()
+    })
+    if (tradesByUser.get(userId)?.loading !== true) finish()
+  })
+}
+
+function tradeReadInFlight(userId: string): boolean {
+  return (
+    tradesHistoryInFlight.has(userId) ||
+    analyticsHistoryInFlight.has(userId) ||
+    (richRowsByIdInFlight.get(userId) ?? 0) > 0 ||
+    tradesByUser.get(userId)?.loading === true
+  )
+}
+
+/** Last in-flight read may consume queued broker patches. `self` is still running. */
+function otherTradeReadsInFlight(
+  userId: string,
+  self: "analytics" | "full" | "ids" | "window"
+): boolean {
+  const analytics = analyticsHistoryInFlight.has(userId)
+  const full = tradesHistoryInFlight.has(userId)
+  const idReads = richRowsByIdInFlight.get(userId) ?? 0
+  const window = tradesByUser.get(userId)?.loading === true
+  if (self === "analytics") return full || idReads > 0 || window
+  if (self === "full") return analytics || idReads > 0 || window
+  if (self === "ids") return analytics || full || window || idReads > 1
+  return analytics || full || idReads > 0
+}
+
+export function mergeTradeRowsById(
+  existing: readonly any[],
+  incoming: readonly any[]
+): any[] {
+  const byId = new Map(
+    existing.map((trade) => [tradeIdKey(trade.id), { ...trade }])
+  )
+  for (const row of incoming) {
+    const id = tradeIdKey(row.id)
+    const prev = byId.get(id)
+    byId.set(id, prev ? { ...prev, ...row } : { ...row })
+  }
+  return Array.from(byId.values()).sort(compareTradesNewestFirst)
+}
+
+/** Complete snapshot: ids missing from `incoming` are removed. Rich fields on survivors stay. */
+export function mergeAnalyticsSnapshot(
+  existing: readonly any[],
+  incoming: readonly any[]
+): any[] {
+  const existingById = new Map(
+    existing.map((trade) => [tradeIdKey(trade.id), trade])
+  )
+  return incoming
+    .map((row) => {
+      const prev = existingById.get(tradeIdKey(row.id))
+      return prev ? { ...prev, ...row } : { ...row }
+    })
+    .sort(compareTradesNewestFirst)
+}
+
+/** A complete full-journal cache stays complete unless the snapshot adds an id. */
+export function fullJournalRemainsComplete(
+  existing: readonly any[],
+  incoming: readonly any[],
+  wasComplete: boolean
+): boolean {
+  if (!wasComplete) return false
+  const ids = new Set(existing.map((trade) => tradeIdKey(trade.id)))
+  return incoming.every((row) => ids.has(tradeIdKey(row.id)))
+}
+
+function queueBrokerPatch(userId: string, patch: BrokerTradePatch) {
+  const id = patch.op === "delete" ? patch.id : tradeIdKey(patch.row.id)
+  if (!id || id === "undefined" || id === "null") return
+  let bucket = brokerPatchesByUser.get(userId)
+  if (!bucket) {
+    bucket = new Map()
+    brokerPatchesByUser.set(userId, bucket)
+  }
+  bucket.set(id, patch.op === "delete" ? patch : { op: "upsert", row: patch.row })
+}
+
+function overlayBrokerPatches(userId: string, rows: any[], consume: boolean): any[] {
+  const bucket = brokerPatchesByUser.get(userId)
+  if (!bucket || bucket.size === 0) return rows
+  const byId = new Map(rows.map((trade) => [tradeIdKey(trade.id), { ...trade }]))
+  for (const [id, patch] of bucket) {
+    if (patch.op === "delete") {
+      byId.delete(id)
+      continue
+    }
+    byId.set(id, { ...byId.get(id), ...patch.row })
+  }
+  if (consume) brokerPatchesByUser.delete(userId)
+  return Array.from(byId.values()).sort(compareTradesNewestFirst)
+}
+
+function brokerImportSource(row: { import_source?: unknown } | null | undefined): string {
+  return String(row?.import_source ?? "")
+}
+
+function isBrokerImportSource(source: string): boolean {
+  return source === "tradovate" || source === "rithmic"
+}
+
+/**
+ * Apply one broker-import realtime row to the session trade cache.
+ * Does not mark history complete, and does not start a full-journal read.
+ * Returns needsWindowLoad when there is no cache yet (caller fetches the 120-row window).
+ */
+export function applyBrokerImportedTradeToCache(
+  userId: string,
+  eventType: string,
+  nextRow: Record<string, unknown> | null | undefined,
+  previousRow?: Record<string, unknown> | null
+): { needsWindowLoad: boolean } {
+  const isDelete = eventType === "DELETE"
+  const sourceRow = isDelete ? previousRow : nextRow
+  const id = tradeIdKey(sourceRow?.id)
+  if (!userId || !id || id === "undefined" || id === "null") {
+    return { needsWindowLoad: false }
+  }
+
+  const entry = tradesByUser.get(userId)
+  const cachedRow = entry?.data.find((trade) => tradeIdKey(trade.id) === id)
+  const payloadSource = brokerImportSource(sourceRow as { import_source?: unknown } | null | undefined)
+  const source = isBrokerImportSource(payloadSource)
+    ? payloadSource
+    : brokerImportSource(cachedRow as { import_source?: unknown } | undefined)
+  if (!isBrokerImportSource(source)) {
+    return { needsWindowLoad: false }
+  }
+
+  const historyInFlight = tradeReadInFlight(userId)
+  const windowLoading = entry?.loading === true
+
+  if (isDelete) {
+    if (historyInFlight || windowLoading) {
+      queueBrokerPatch(userId, { op: "delete", id })
+    }
+    if (entry && !windowLoading) {
+      removeTradeFromCache(userId, id)
+    }
+    return { needsWindowLoad: false }
+  }
+
+  const row = { ...(nextRow as Record<string, unknown>) }
+  if (historyInFlight || windowLoading || !entry) {
+    queueBrokerPatch(userId, { op: "upsert", row })
+  }
+  if (!entry) {
+    return { needsWindowLoad: true }
+  }
+  if (windowLoading) {
+    return { needsWindowLoad: false }
+  }
+
+  const current = entry.data ?? EMPTY_TRADES
+  const index = current.findIndex((trade) => tradeIdKey(trade.id) === id)
+  const next =
+    index >= 0
+      ? current.map((trade, i) => (i === index ? { ...trade, ...row } : trade))
+      : [...current, row]
+  setTradesCache(userId, next.slice().sort(compareTradesNewestFirst))
+  notifyStreaksInvalidated(userId)
+  notifyTradingReportsInvalidated(userId)
+  return { needsWindowLoad: false }
 }
 
 export function getCachedTrades(userId: string | null | undefined): any[] | null {
@@ -180,23 +396,31 @@ export function clearAppDataCache() {
   tradesByUser.clear()
   accountsByUser.clear()
   tradesHistoryInFlight.clear()
+  analyticsHistoryInFlight.clear()
+  richRowsByIdInFlight.clear()
+  brokerPatchesByUser.clear()
   notify()
 }
 
 export function setTradesCache(
   userId: string,
   trades: any[],
-  options?: { historyComplete?: boolean }
+  options?: { historyComplete?: boolean; analyticsHistoryComplete?: boolean }
 ) {
   const prev = tradesByUser.get(userId)
   const historyComplete =
     options?.historyComplete ?? prev?.historyComplete ?? true
+  const analyticsHistoryComplete =
+    options?.analyticsHistoryComplete ??
+    prev?.analyticsHistoryComplete ??
+    historyComplete
   if (
     prev &&
     prev.data === trades &&
     !prev.loading &&
     !prev.invalidated &&
-    prev.historyComplete === historyComplete
+    prev.historyComplete === historyComplete &&
+    prev.analyticsHistoryComplete === analyticsHistoryComplete
   ) {
     return
   }
@@ -207,6 +431,10 @@ export function setTradesCache(
     invalidated: false,
     loading: false,
     historyComplete,
+    analyticsHistoryComplete:
+      historyComplete && options?.analyticsHistoryComplete !== false
+        ? true
+        : analyticsHistoryComplete,
   })
   persistDashboardTrades(userId, trades)
   notify()
@@ -238,18 +466,21 @@ export function seedTradesCache(
   userId: string,
   trades: any[],
   fetchedAt: number,
-  options?: { historyComplete?: boolean }
+  options?: { historyComplete?: boolean; analyticsHistoryComplete?: boolean }
 ) {
   if (!userId) return
   const prev = tradesByUser.get(userId)
   if (prev && !prev.invalidated && prev.fetchedAt >= fetchedAt) return
+  const historyComplete = options?.historyComplete ?? true
   tradesByUser.set(userId, {
     userId,
     data: trades,
     fetchedAt,
     invalidated: false,
     loading: false,
-    historyComplete: options?.historyComplete ?? true,
+    historyComplete,
+    analyticsHistoryComplete:
+      options?.analyticsHistoryComplete ?? historyComplete,
   })
   notify()
 }
@@ -452,10 +683,19 @@ export function isTradesHistoryComplete(
   return tradesByUser.get(userId)?.historyComplete === true
 }
 
+export function isAnalyticsHistoryComplete(
+  userId: string | null | undefined
+): boolean {
+  if (!userId) return false
+  const entry = tradesByUser.get(userId)
+  if (!entry) return false
+  return entry.analyticsHistoryComplete === true || entry.historyComplete === true
+}
+
 /**
- * Full-history fetch for screens that need every trade (dashboard metrics,
- * journal, calendar, analyst, streaks). Does not flip `loading`, so the
- * recent window stays interactive while history catches up.
+ * Full journal history (`TRADES_APP_SELECT`) for Trades, Analyst, and any
+ * surface that needs notes, screenshots, or other journal fields.
+ * Does not flip `loading`. A complete analytics history does not satisfy this.
  *
  * Auth warm / generic prefetch must NOT call this — only explicit consumers.
  */
@@ -465,7 +705,12 @@ export async function ensureFullTradesHistory(
 ): Promise<any[]> {
   if (isDemoUserId(userId)) {
     const cached = getCachedTrades(userId)
-    if (!cached) setTradesCache(userId, DEMO_TRADES, { historyComplete: true })
+    if (!cached) {
+      setTradesCache(userId, DEMO_TRADES, {
+        historyComplete: true,
+        analyticsHistoryComplete: true,
+      })
+    }
     return getCachedTrades(userId) ?? DEMO_TRADES
   }
 
@@ -489,8 +734,18 @@ export async function ensureFullTradesHistory(
       return getCachedTrades(userId) ?? (EMPTY_TRADES as any[])
     }
 
-    const next = data?.length ? data : (EMPTY_TRADES as any[])
-    setTradesCache(userId, next, { historyComplete: true })
+    const fetched = data?.length ? data : (EMPTY_TRADES as any[])
+    const current = tradesByUser.get(userId)?.data ?? []
+    const merged = mergeAnalyticsSnapshot(current, fetched)
+    const next = overlayBrokerPatches(
+      userId,
+      merged,
+      !otherTradeReadsInFlight(userId, "full")
+    )
+    setTradesCache(userId, next, {
+      historyComplete: true,
+      analyticsHistoryComplete: true,
+    })
     return next
   })().finally(() => {
     tradesHistoryInFlight.delete(userId)
@@ -500,14 +755,153 @@ export async function ensureFullTradesHistory(
   return promise
 }
 
+/**
+ * Every trade, narrow analytics columns only.
+ * Merges by id so an existing rich row keeps notes, screenshots, and other
+ * fields this projection does not return.
+ */
+export async function ensureAnalyticsTradesHistory(
+  supabase: SupabaseClient,
+  userId: string,
+  options?: { force?: boolean }
+): Promise<any[]> {
+  if (isDemoUserId(userId)) {
+    const cached = getCachedTrades(userId)
+    if (!cached) {
+      setTradesCache(userId, DEMO_TRADES, {
+        historyComplete: true,
+        analyticsHistoryComplete: true,
+      })
+    }
+    return getCachedTrades(userId) ?? DEMO_TRADES
+  }
+
+  const entry = tradesByUser.get(userId)
+  if (
+    !options?.force &&
+    entry &&
+    !entry.invalidated &&
+    (entry.analyticsHistoryComplete || entry.historyComplete) &&
+    !entry.loading
+  ) {
+    return entry.data
+  }
+
+  const existing = analyticsHistoryInFlight.get(userId)
+  if (existing) return existing
+
+  const promise = (async () => {
+    const { data, error } = await supabase
+      .from("trades")
+      .select(TRADES_ANALYTICS_SELECT)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      return getCachedTrades(userId) ?? (EMPTY_TRADES as any[])
+    }
+
+    const fetched = data?.length ? data : (EMPTY_TRADES as any[])
+    const currentEntry = tradesByUser.get(userId)
+    const current = currentEntry?.data ?? []
+    const merged = mergeAnalyticsSnapshot(current, fetched)
+    const next = overlayBrokerPatches(
+      userId,
+      merged,
+      !otherTradeReadsInFlight(userId, "analytics")
+    )
+    const historyComplete = fullJournalRemainsComplete(
+      current,
+      fetched,
+      currentEntry?.historyComplete === true
+    )
+    setTradesCache(userId, next, {
+      historyComplete,
+      analyticsHistoryComplete: true,
+    })
+    return next
+  })().finally(() => {
+    analyticsHistoryInFlight.delete(userId)
+  })
+
+  analyticsHistoryInFlight.set(userId, promise)
+  return promise
+}
+
+function tradeHasJournalProjection(trade: { notes?: unknown; image_url?: unknown; psychology_notes?: unknown }): boolean {
+  return (
+    trade != null &&
+    ("notes" in trade || "image_url" in trade || "psychology_notes" in trade)
+  )
+}
+
+/**
+ * One batched full-journal read for specific ids (a selected calendar day or
+ * a handful of recent cards). Does not mark the full journal complete.
+ */
+export async function ensureRichTradeRowsByIds(
+  supabase: SupabaseClient,
+  userId: string,
+  ids: readonly string[]
+): Promise<void> {
+  if (!userId || isDemoUserId(userId)) return
+  const unique = [...new Set(ids.map((id) => String(id)).filter((id) => id && id !== "undefined"))]
+  if (unique.length === 0) return
+
+  const entry = tradesByUser.get(userId)
+  const missing = unique.filter((id) => {
+    const row = entry?.data.find((trade) => tradeIdKey(trade.id) === id)
+    return !row || !tradeHasJournalProjection(row)
+  })
+  if (missing.length === 0) return
+
+  richRowsByIdInFlight.set(userId, (richRowsByIdInFlight.get(userId) ?? 0) + 1)
+  try {
+    const chunkSize = 100
+    const richRows: any[] = []
+    for (let i = 0; i < missing.length; i += chunkSize) {
+      const chunk = missing.slice(i, i + chunkSize)
+      const { data, error } = await supabase
+        .from("trades")
+        .select(TRADES_APP_SELECT)
+        .in("id", chunk)
+      if (error || !data?.length) continue
+      richRows.push(...data)
+    }
+    const latest = tradesByUser.get(userId)
+    const merged = mergeTradeRowsById(latest?.data ?? [], richRows)
+    const next = overlayBrokerPatches(
+      userId,
+      merged,
+      !otherTradeReadsInFlight(userId, "ids")
+    )
+    setTradesCache(userId, next, {
+      historyComplete: latest?.historyComplete ?? false,
+      analyticsHistoryComplete: latest?.analyticsHistoryComplete ?? false,
+    })
+  } finally {
+    const left = (richRowsByIdInFlight.get(userId) ?? 1) - 1
+    if (left <= 0) richRowsByIdInFlight.delete(userId)
+    else richRowsByIdInFlight.set(userId, left)
+  }
+}
+
 export type EnsureTradesLoadedOptions = {
   force?: boolean
   isRetry?: boolean
   /**
-   * When true, also load full trade history after the recent window.
+   * When true, also load full journal history after the recent window.
    * Default false — auth warm and unrelated screens stay on the 120-trade window.
+   * Independent from `analyticsHistory`. Narrow analytics completeness does not
+   * satisfy this.
    */
   fullHistory?: boolean
+  /**
+   * When true, load every trade with the narrow analytics projection after the
+   * recent rich window. Does not download the full journal.
+   * Ignored when `fullHistory` is also set — the journal select is a superset.
+   */
+  analyticsHistory?: boolean
 }
 
 export async function ensureTradesLoaded(
@@ -517,13 +911,54 @@ export async function ensureTradesLoaded(
 ): Promise<any[]> {
   if (isDemoUserId(userId)) {
     const cached = getCachedTrades(userId)
-    if (!cached) setTradesCache(userId, DEMO_TRADES, { historyComplete: true })
+    if (!cached) {
+      setTradesCache(userId, DEMO_TRADES, {
+        historyComplete: true,
+        analyticsHistoryComplete: true,
+      })
+    }
     return getCachedTrades(userId) ?? DEMO_TRADES
   }
 
   const wantFullHistory = options?.fullHistory === true
+  const wantAnalyticsHistory =
+    options?.analyticsHistory === true && !wantFullHistory
+  let entry = tradesByUser.get(userId)
+
+  // A weaker in-flight read must not satisfy a stronger caller.
+  // Window < analytics history < full journal.
+  if (entry?.loading) {
+    await waitForTradeWindowIdle(userId)
+    const afterWindow = tradesByUser.get(userId)
+    if (!afterWindow || afterWindow.invalidated) {
+      return (afterWindow?.data ?? EMPTY_TRADES) as any[]
+    }
+    return ensureTradesLoaded(supabase, userId, options)
+  }
+
+  if (!options?.force && tradesHistoryInFlight.has(userId)) {
+    const fullTask = tradesHistoryInFlight.get(userId)!
+    if (!wantFullHistory && !wantAnalyticsHistory) {
+      const ready = tradesByUser.get(userId)
+      if (ready?.data) return ready.data
+    }
+    await fullTask
+    return ensureTradesLoaded(supabase, userId, options)
+  }
+
+  if (!options?.force && analyticsHistoryInFlight.has(userId)) {
+    const analyticsTask = analyticsHistoryInFlight.get(userId)!
+    if (wantFullHistory) {
+      await analyticsTask
+      return ensureTradesLoaded(supabase, userId, options)
+    }
+    if (wantAnalyticsHistory) return analyticsTask
+    const ready = tradesByUser.get(userId)
+    if (ready?.data) return ready.data
+  }
+
   const cached = getCachedTrades(userId)
-  const entry = tradesByUser.get(userId)
+  entry = tradesByUser.get(userId)
 
   // Dashboard RPC owns trade window when flag ON — one network path.
   if (isBackendV2Enabled("dashboard") && !options?.force) {
@@ -547,6 +982,12 @@ export async function ensureTradesLoaded(
     if (after) {
       if (wantFullHistory && !afterEntry?.historyComplete) {
         void ensureFullTradesHistory(supabase, userId)
+      } else if (
+        wantAnalyticsHistory &&
+        !afterEntry?.analyticsHistoryComplete &&
+        !afterEntry?.historyComplete
+      ) {
+        void ensureAnalyticsTradesHistory(supabase, userId)
       }
       return after
     }
@@ -562,27 +1003,27 @@ export async function ensureTradesLoaded(
       void ensureTradesLoaded(supabase, userId, {
         force: true,
         fullHistory: wantFullHistory,
+        analyticsHistory: wantAnalyticsHistory,
       })
     }
-    // Recent window is enough for warm/prefetch; full history only on demand.
+    // Recent window is enough for warm/prefetch. A caller that asked for a
+    // stronger history waits for that read instead of returning the window.
     if (wantFullHistory && !entry?.historyComplete) {
-      void ensureFullTradesHistory(supabase, userId)
+      return ensureFullTradesHistory(supabase, userId)
+    }
+    if (
+      wantAnalyticsHistory &&
+      !entry?.analyticsHistoryComplete &&
+      !entry?.historyComplete
+    ) {
+      return ensureAnalyticsTradesHistory(supabase, userId)
     }
     return cached
-  }
-  if (entry?.loading) {
-    return new Promise((resolve) => {
-      const unsub = subscribeAppDataCache(() => {
-        const mem = tradesByUser.get(userId)
-        if (mem?.loading) return
-        unsub()
-        resolve(getCachedTrades(userId) ?? ((mem?.data ?? EMPTY_TRADES) as any[]))
-      })
-    })
   }
 
   const previousData = (entry?.data ?? EMPTY_TRADES) as any[]
   const previousHistoryComplete = entry?.historyComplete ?? false
+  const previousAnalyticsComplete = entry?.analyticsHistoryComplete ?? false
   const wasLoading = entry?.loading === true
 
   tradesByUser.set(userId, {
@@ -592,6 +1033,7 @@ export async function ensureTradesLoaded(
     invalidated: true,
     loading: true,
     historyComplete: previousHistoryComplete,
+    analyticsHistoryComplete: previousAnalyticsComplete,
   })
   if (!wasLoading) notify()
 
@@ -613,6 +1055,7 @@ export async function ensureTradesLoaded(
       invalidated: true,
       loading: false,
       historyComplete: previousHistoryComplete,
+      analyticsHistoryComplete: previousAnalyticsComplete,
     })
     notify()
     // One delayed retry recovers transient startup failures (token refresh).
@@ -621,19 +1064,48 @@ export async function ensureTradesLoaded(
         void ensureTradesLoaded(supabase, userId, {
           isRetry: true,
           fullHistory: wantFullHistory,
+          analyticsHistory: wantAnalyticsHistory,
         })
       }, 4000)
     }
     return previousData
   }
 
-  const next = data?.length ? data : (EMPTY_TRADES as any[])
-  const historyComplete = next.length < INITIAL_TRADES_LIMIT
-  setTradesCache(userId, next, { historyComplete })
+  const fetched = data?.length ? data : (EMPTY_TRADES as any[])
+  const windowCoversAll = fetched.length < INITIAL_TRADES_LIMIT
+  const willFetchFull = wantFullHistory && !windowCoversAll
+  const analyticsAlready =
+    previousAnalyticsComplete || previousHistoryComplete
+  const shouldFetchAnalytics =
+    wantAnalyticsHistory &&
+    !windowCoversAll &&
+    (options?.force === true || !analyticsAlready)
+  const willContinue = willFetchFull || shouldFetchAnalytics
+  const windowRows = windowCoversAll
+    ? mergeAnalyticsSnapshot(previousData, fetched)
+    : mergeTradeRowsById(previousData, fetched)
+  const next = overlayBrokerPatches(
+    userId,
+    windowRows,
+    !willContinue && !otherTradeReadsInFlight(userId, "window")
+  )
+  setTradesCache(userId, next, {
+    historyComplete: windowCoversAll ? true : previousHistoryComplete,
+    analyticsHistoryComplete: windowCoversAll ? true : analyticsAlready,
+  })
 
-  // Stage 2: only when a consumer explicitly needs complete history.
-  if (wantFullHistory && !historyComplete) {
-    void ensureFullTradesHistory(supabase, userId)
+  // Stage 2: full journal, or narrow analytics. Never both.
+  // Explicit refresh waits for that history. First paint does not.
+  if (willFetchFull) {
+    const fullTask = ensureFullTradesHistory(supabase, userId)
+    if (options?.force) await fullTask
+    else void fullTask
+  } else if (shouldFetchAnalytics) {
+    const analyticsTask = ensureAnalyticsTradesHistory(supabase, userId, {
+      force: options?.force === true,
+    })
+    if (options?.force) await analyticsTask
+    else void analyticsTask
   }
 
   return next

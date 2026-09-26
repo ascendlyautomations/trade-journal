@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "./authenticatedAppearance.css";
 import BannedAccountShell from "./components/BannedAccountShell"
 import OnboardingGateShell from "./components/OnboardingGateShell"
 import ReferralPersistence from "./components/ReferralPersistence"
@@ -42,6 +43,8 @@ import {
 import JsonLd from "./components/JsonLd"
 import { organizationJsonLd, websiteJsonLd } from "@/lib/structuredData"
 import { DEFAULT_WEB_THEME } from "@/lib/webTheme"
+import { webAppearanceBootScript } from "@/lib/webAppearance"
+import WebAppearanceController from "./components/WebAppearanceController"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -143,8 +146,13 @@ export default async function RootLayout({
       lang="en"
       className={htmlClassName}
       data-theme={DEFAULT_WEB_THEME}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: webAppearanceBootScript() }} />
+      </head>
       <body className="flex flex-col">
+        <WebAppearanceController />
         <JsonLd data={[organizationJsonLd(), websiteJsonLd()]} />
         <ScrollLockRouteReset />
         <ToastRoot>

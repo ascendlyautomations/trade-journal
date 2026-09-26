@@ -107,6 +107,7 @@ export async function fetchGettingStartedChecklistSignalsLegacy(
     roomMembersRes,
     publicTradesRes,
     privateTradeRes,
+    dailyCheckInsRes,
   ] = await Promise.all([
     overrides.profile
       ? Promise.resolve({
@@ -177,6 +178,21 @@ export async function fetchGettingStartedChecklistSignalsLegacy(
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
+    supabase
+      .from("trader_daily_check_ins")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .not("sleep_hours", "is", null)
+      .gte("sleep_quality", 1)
+      .lte("sleep_quality", 5)
+      .gte("morning_rating", 1)
+      .lte("morning_rating", 5)
+      .gte("stress_level", 1)
+      .lte("stress_level", 5)
+      .gte("energy_level", 1)
+      .lte("energy_level", 5)
+      .gte("focus_level", 1)
+      .lte("focus_level", 5),
   ])
 
   if (profileRes.error) {
@@ -213,6 +229,7 @@ export async function fetchGettingStartedChecklistSignalsLegacy(
     followCount: followRes.count ?? 0,
     hasEverJoinedOtherRoom,
     hasPublicTrade: (publicTradesRes.count ?? 0) > 0,
+    hasCompletedDailyCheckIn: (dailyCheckInsRes.count ?? 0) > 0,
     firstPrivateTradeId:
       privateTradeRes.data?.id != null
         ? String(privateTradeRes.data.id)
@@ -239,6 +256,7 @@ export async function fetchGettingStartedChecklistSignals(
         followCount: 8,
         hasEverJoinedOtherRoom: true,
         hasPublicTrade: true,
+        hasCompletedDailyCheckIn: true,
         firstPrivateTradeId: DEMO_TRADES[0]?.id ?? null,
       }
     }

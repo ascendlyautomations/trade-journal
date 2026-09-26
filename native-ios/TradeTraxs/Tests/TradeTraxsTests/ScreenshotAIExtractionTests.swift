@@ -2,10 +2,10 @@ import XCTest
 @testable import TradeTraxs
 
 final class ScreenshotAIExtractionTests: XCTestCase {
-    private func aiField<T: LosslessStringConvertible>(
-        _ value: T?,
+    private func aiField(
+        _ value: String?,
         provenance: ScreenshotAIField<String>.Provenance = .observed
-    ) -> ScreenshotAIField<String> where T == String {
+    ) -> ScreenshotAIField<String> {
         ScreenshotAIField(value: value, provenance: provenance)
     }
 

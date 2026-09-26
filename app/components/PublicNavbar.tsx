@@ -1,5 +1,6 @@
 "use client"
 
+import "./publicNavbarTheme.css"
 import IntentPrefetchLink from "@/lib/IntentPrefetchLink"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState, type MouseEvent } from "react"
@@ -150,7 +151,7 @@ export default function PublicNavbar() {
   }
 
   return (
-    <div className={`${NAV_CHROME_FIXED_ROOT} overflow-visible`}>
+    <div className={`${NAV_CHROME_FIXED_ROOT} tt-public-navbar overflow-visible`}>
       <div className={NAV_CHROME_BAR_SUBTLE_BORDER}>
         <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
           <div className="flex min-w-0 items-center gap-2 whitespace-nowrap sm:gap-3">
@@ -173,7 +174,7 @@ export default function PublicNavbar() {
               <button
                 type="button"
                 onClick={handleReturnToApp}
-                className={`hidden px-3 sm:px-4 md:inline-flex ${NAV_CTA_PRIMARY}`}
+                className={`hidden items-center whitespace-nowrap px-3 py-1.5 sm:px-4 md:inline-flex ${NAV_CTA_PRIMARY}`}
               >
                 Return to App
               </button>
@@ -187,7 +188,7 @@ export default function PublicNavbar() {
                 </IntentPrefetchLink>
                 <IntentPrefetchLink
                   href="/login?tab=signup"
-                  className={`rounded px-3 sm:px-4 ${NAV_CTA_PRIMARY}`}
+                  className={`inline-flex items-center whitespace-nowrap px-3 py-1.5 sm:px-4 ${NAV_CTA_PRIMARY}`}
                 >
                   Sign Up
                 </IntentPrefetchLink>

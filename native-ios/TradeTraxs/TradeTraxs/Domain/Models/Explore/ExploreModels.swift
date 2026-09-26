@@ -214,10 +214,11 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
         }
     }
 
-    /// Scope key for bootstrap cache coalescing (Popular shares All network payload).
+    /// Scope key for bootstrap cache coalescing.
+    /// Popular and Your Rooms both request the `all` payload, so they share that cache.
     var bootstrapCacheScope: TradeRoomDiscoveryScope {
         switch self {
-        case .popular: return .all
+        case .popular, .yourRooms: return .all
         default: return self
         }
     }

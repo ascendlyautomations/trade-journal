@@ -208,6 +208,23 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
 
     var isConnected: Bool { realtime.isConnected }
 
+    func realtimePressureSnapshot() -> SupabasePressureRealtimeSnapshot {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return SupabasePressureRealtimeSnapshot(
+                sessionGeneration: 0,
+                activeRoutes: 0,
+                joinedTopics: 0,
+                logicalConsumers: 0
+            )
+        }
+        return live.realtimePressureSnapshot()
+    }
+
+    func awaitReconnectCompletionIfInFlight() async {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
+        await live.awaitReconnectCompletionIfInFlight()
+    }
+
     /// Release one Realtime consumer without affecting peers on the same route.
     func releaseWatch(_ consumer: RealtimeRouteConsumerHandle?) async {
         guard let live = realtime as? LiveSupabaseRealtimeProvider else { return }
@@ -265,7 +282,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
-    /// Inbox — idle until `conversation_member_preferences` changes for the viewer.
+    /// Inbox read cursors — `conversation_member_preferences` (publication candidate; watch retained).
     func watchConversationReadCursors(
         userID: String,
         accessToken: String?,
@@ -297,21 +314,6 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
-    func watchMemberRoomMembership(
-        roomIDs: [String],
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return Self.emptyMessageWatch(routeKey: "member-room-membership")
-        }
-        return live.watchMemberRoomMembership(
-            roomIDs: roomIDs,
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
-
     /// Inbox — idle until `messages` arrive for loaded DM conversations.
     func watchInboxConversationMessages(
         conversationIDs: [String],
@@ -328,7 +330,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
-    /// Inbox — idle until `room_members` read-cursor changes for the viewer.
+    /// Inbox room read cursors — `room_members` (publication candidate; watch retained).
     func watchRoomReadCursors(
         userID: String,
         accessToken: String?,
@@ -338,94 +340,6 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
             return Self.emptyMessageWatch(routeKey: "room-read:\(userID)")
         }
         return live.watchRoomReadCursors(
-            userID: userID,
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
-
-    /// Home Feed — idle until `posts` postgres_changes arrive.
-    func watchFeedPosts(accessToken: String?, debugOwner: String? = nil) -> RealtimeMessageWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return Self.emptyMessageWatch(routeKey: "feed-posts")
-        }
-        return live.watchFeedPosts(accessToken: accessToken, debugOwner: debugOwner)
-    }
-
-    func watchSocialEntityChanges(
-        table: SocialEntityRealtimeTable,
-        filter: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeSocialEntityWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return RealtimeSocialEntityWatch(
-                events: AsyncStream { $0.finish() },
-                consumer: RealtimeRouteConsumerHandle(routeKey: "social-entity:disconnected")
-            )
-        }
-        return live.watchSocialEntityChanges(
-            table: table,
-            filter: filter,
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
-
-    func watchRelationshipOutgoingFollows(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return Self.emptyMessageWatch(routeKey: "relationship:outgoing:\(userID)")
-        }
-        return live.watchRelationshipOutgoingFollows(
-            userID: userID,
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
-
-    func watchRelationshipIncomingFollows(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return Self.emptyMessageWatch(routeKey: "relationship:incoming:\(userID)")
-        }
-        return live.watchRelationshipIncomingFollows(
-            userID: userID,
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
-
-    func watchRelationshipOutgoingFollowRequests(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return Self.emptyMessageWatch(routeKey: "relationship:requests-out:\(userID)")
-        }
-        return live.watchRelationshipOutgoingFollowRequests(
-            userID: userID,
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
-
-    func watchRelationshipIncomingFollowRequests(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return Self.emptyMessageWatch(routeKey: "relationship:requests-in:\(userID)")
-        }
-        return live.watchRelationshipIncomingFollowRequests(
             userID: userID,
             accessToken: accessToken,
             debugOwner: debugOwner
@@ -444,98 +358,4 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         return live.watchNotifications(userID: userID, accessToken: accessToken, debugOwner: debugOwner)
     }
 
-    func watchViewerProfile(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return Self.emptyMessageWatch(routeKey: "viewer-profile:\(userID)")
-        }
-        return live.watchViewerProfile(userID: userID, accessToken: accessToken, debugOwner: debugOwner)
-    }
-
-    func watchTraderDailyCheckIns(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return Self.emptyMessageWatch(routeKey: "trader-daily-check-ins:\(userID)")
-        }
-        return live.watchTraderDailyCheckIns(userID: userID, accessToken: accessToken, debugOwner: debugOwner)
-    }
-
-    /// Phase 6D — shared analytical revision watch for the authenticated viewer.
-    func watchAnalyticsRevision(
-        userID: String,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeMessageWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return Self.emptyMessageWatch(routeKey: "analytics-revision:\(userID)")
-        }
-        return live.watchUserAnalyticsRevision(userID: userID, accessToken: accessToken, debugOwner: debugOwner)
-    }
-
-    /// Phase 10C — content likes for bounded engagement targets.
-    func watchContentLikes(
-        table: ContentLikeTable,
-        contentIDs: [String],
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeContentLikeWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return RealtimeContentLikeWatch(
-                events: AsyncStream { $0.finish() },
-                consumer: RealtimeRouteConsumerHandle(routeKey: "content-likes:disconnected")
-            )
-        }
-        return live.watchContentLikes(
-            table: table,
-            contentIDs: contentIDs,
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
-
-    /// Detail comments — `comment_likes` postgres_changes for visible ids.
-    func watchCommentLikes(
-        source: CommentLikeSource,
-        commentIDs: [String],
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeCommentLikeWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return RealtimeCommentLikeWatch(
-                events: AsyncStream { $0.finish() },
-                consumer: RealtimeRouteConsumerHandle(routeKey: "comment-likes:disconnected")
-            )
-        }
-        return live.watchCommentLikes(
-            source: source,
-            commentIDs: commentIDs,
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
-
-    /// Detail comments — `UPDATE` postgres_changes for `pinned` on the content's comment table.
-    func watchCommentPinUpdates(
-        target: InteractionTarget,
-        accessToken: String?,
-        debugOwner: String? = nil
-    ) -> RealtimeCommentPinWatch {
-        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
-            return RealtimeCommentPinWatch(
-                events: AsyncStream { $0.finish() },
-                consumer: RealtimeRouteConsumerHandle(routeKey: "comment-pin:disconnected")
-            )
-        }
-        return live.watchCommentPinUpdates(
-            target: target,
-            accessToken: accessToken,
-            debugOwner: debugOwner
-        )
-    }
 }

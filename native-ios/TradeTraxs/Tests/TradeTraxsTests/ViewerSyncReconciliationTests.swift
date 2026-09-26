@@ -244,9 +244,9 @@ private final class SyncStateRoutingRPCClient: RPCClient, @unchecked Sendable {
     }
 
     func call(functionName: String, jsonBody: Data) async throws -> Data {
-        lock.lock()
-        counts[functionName, default: 0] += 1
-        lock.unlock()
+        TestLock.withLock(lock) {
+            counts[functionName, default: 0] += 1
+        }
         switch functionName {
         case BackendV2Versioning.RPCName.viewerSyncState.rawValue:
             return Data(syncStateJSON.utf8)

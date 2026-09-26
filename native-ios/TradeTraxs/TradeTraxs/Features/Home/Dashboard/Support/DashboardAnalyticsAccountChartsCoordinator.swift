@@ -25,8 +25,22 @@ enum DashboardAnalyticsAccountChartsCoordinator {
         rpc: any RPCClient
     ) async -> Bool {
         let store = DashboardAnalyticsAccountChartsStore.shared
+        if let cached = store.charts(accountID: selectedAccountID, revision: revision),
+           store.availability(accountID: selectedAccountID, revision: revision).isLoaded,
+           DashboardAnalyticsChartsSupport.hasEquityPoints(cached),
+           !DashboardAnalyticsChartsSupport.hasVisualExpansionContract(cached)
+        {
+            #if DEBUG
+            DashboardVisualExpansionDebug.logStaleChartsCache(
+                scope: "account:\(selectedAccountID.rawValue)",
+                revision: revision
+            )
+            #endif
+            store.dropCharts(accountID: selectedAccountID, revision: revision)
+        }
         if store.availability(accountID: selectedAccountID, revision: revision).isLoaded,
-           store.charts(accountID: selectedAccountID, revision: revision) != nil
+           let cached = store.charts(accountID: selectedAccountID, revision: revision),
+           DashboardAnalyticsChartsSupport.chartsReadyForPresentation(cached)
         {
             return token == selectionToken
         }

@@ -76,6 +76,18 @@ struct BrokerIntegrationsView: View {
                 Section {
                     Text(message)
                         .experienceStyle(.footnote, color: viewModel.actionIsError ? colors.primaryText : colors.secondaryText)
+                    if let retry = viewModel.importRetryPrompt, !viewModel.isImportingTrades(mappingId: retry.mappingId) {
+                        Button("Retry") {
+                            Task {
+                                await viewModel.importTrades(
+                                    provider: retry.provider,
+                                    connectionId: retry.connectionId,
+                                    mappingId: retry.mappingId
+                                )
+                            }
+                        }
+                        .font(.footnote.weight(.semibold))
+                    }
                 }
             }
 
@@ -86,6 +98,7 @@ struct BrokerIntegrationsView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Broker Integrations")
@@ -497,13 +510,9 @@ struct BrokerIntegrationsView: View {
         onReconnect: @escaping () -> Void
     ) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text(
-                provider == .tradovate
-                    ? "Tradovate authorization needs refreshing. Your linked accounts stay saved on TradeTraxs."
-                    : "Rithmic authorization needs refreshing. Your linked accounts stay saved on TradeTraxs."
-            )
-            .experienceStyle(.caption, color: colors.secondaryText)
-            Button("Reconnect", action: onReconnect)
+            Text(BrokerSyncPresentation.reconnectRequiredMessage(provider: provider))
+                .experienceStyle(.caption, color: colors.secondaryText)
+            Button(BrokerSyncPresentation.reconnectPrimaryActionTitle(), action: onReconnect)
                 .font(.footnote)
                 .buttonStyle(.borderless)
                 .disabled(viewModel.isBrokerConnectionMutationActive)
@@ -562,7 +571,9 @@ struct BrokerIntegrationsView: View {
                     .experienceStyle(.caption, color: colors.secondaryText)
             }
 
-            if account.hasTradetraxsMapping, connection.connected {
+            if account.hasTradetraxsMapping,
+               connection.connected || viewModel.importReconnectPrompt?.mappingId == account.id
+            {
                 if let prompt = viewModel.importReconnectPrompt,
                    prompt.mappingId == account.id,
                    prompt.provider == provider
@@ -572,13 +583,20 @@ struct BrokerIntegrationsView: View {
                             .experienceStyle(.caption, color: colors.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                         Button {
-                            Task {
-                                if provider == .tradovate {
+                            if provider == .tradovate {
+                                Task {
                                     await viewModel.reconnectTradovateAndImport(
                                         connectionId: prompt.connectionId,
                                         mappingId: prompt.mappingId
                                     )
                                 }
+                            } else if prompt.usesImportPasswordReauth || !viewModel.isRithmicConnectUIAvailable {
+                                viewModel.presentRithmicImportReauth(
+                                    connectionId: prompt.connectionId,
+                                    mappingId: prompt.mappingId
+                                )
+                            } else {
+                                viewModel.presentRithmicConnect(reconnectConnectionId: prompt.connectionId)
                             }
                         } label: {
                             if viewModel.isImportingTrades(mappingId: account.id) {

@@ -34,11 +34,8 @@ struct DashboardEquityHero: View {
             header
                 .padding(.horizontal, ExperienceSpacing.md)
 
-            ProfileEquityCurveView(points: chartPoints)
-                .frame(height: 280)
+            equityCurve
                 .padding(.horizontal, ExperienceSpacing.sm)
-                .accessibilityLabel(title == "Account Value" ? "Account value curve" : "Equity curve")
-                .accessibilityHint("Drag to inspect date and \(title.lowercased())")
         }
         .padding(.bottom, ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -61,6 +58,34 @@ struct DashboardEquityHero: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("dashboard.equity")
+    }
+
+    /// A curve needs two trades in the resolved dashboard dataset. Fewer than that
+    /// stays a short message instead of reserving the chart frame.
+    private var showsCompactEquityEmpty: Bool {
+        summary.tradeCount < 2
+    }
+
+    @ViewBuilder
+    private var equityCurve: some View {
+        if showsCompactEquityEmpty {
+            VStack(spacing: ExperienceSpacing.xxs) {
+                Text("No equity data")
+                    .experienceStyle(.footnote, color: colors.primaryText)
+                Text("Chart will show with 2 trades")
+                    .experienceStyle(.caption2, color: colors.secondaryText)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, ExperienceSpacing.sm)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("No equity data. Chart will show with 2 trades")
+        } else {
+            ProfileEquityCurveView(points: chartPoints)
+                .frame(height: 280)
+                .accessibilityLabel(title == "Account Value" ? "Account value curve" : "Equity curve")
+                .accessibilityHint("Drag to inspect date and \(title.lowercased())")
+        }
     }
 
     private var header: some View {

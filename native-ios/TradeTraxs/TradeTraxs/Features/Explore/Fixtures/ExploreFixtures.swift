@@ -1,6 +1,6 @@
 import Foundation
 
-enum ExploreFixtures {
+nonisolated enum ExploreFixtures {
     static let viewerID = ProfileID("dev.explore.viewer")
 
     static func traders(excluding viewer: ProfileID = viewerID) -> [ExploreTraderSuggestion] {
@@ -65,6 +65,7 @@ enum ExploreFixtures {
         ]
     }
 
+    @MainActor
     static func seedDetailCache(_ cache: DetailPresentationCache, viewer: ProfileID = viewerID) {
         for trader in traders(excluding: viewer) {
             cache.seed(trader.profile)

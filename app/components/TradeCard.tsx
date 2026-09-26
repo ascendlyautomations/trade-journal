@@ -12,7 +12,7 @@ import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/li
 import { formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
-import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import ContentMediaPreview from "@/app/components/ContentMediaPreview"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
 import ExpandableText from "@/app/components/ui/ExpandableText"
 import { isCopyTradedTrade } from "@/lib/tradeCopyTrading"
@@ -322,12 +322,13 @@ export default function TradeCard({
       </div>
 
       {screenshotUrl ? (
-        <TradeScreenshotImage
+        <ContentMediaPreview
           src={screenshotUrl}
           preset="trade-thumb"
-          className="mt-4 rounded-lg border border-white/10"
-          onClick={() => onImageClick?.(screenshotUrl)}
-          logContext="trade-card"
+          displayMode={trade.image_display_mode}
+          className="mt-4"
+          imageClassName="rounded-lg"
+          onClick={onImageClick ? () => onImageClick(screenshotUrl) : undefined}
         />
       ) : null}
 

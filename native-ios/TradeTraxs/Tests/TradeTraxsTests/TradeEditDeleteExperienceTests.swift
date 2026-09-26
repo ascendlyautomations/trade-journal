@@ -323,7 +323,7 @@ private struct EditTradeStubSession: SessionProviding {
     var accessToken: String? { get async { userID == nil ? nil : "token" } }
 }
 
-private final class DeleteTrackingTradeRepository: EditTradeStubRepository {
+private final class DeleteTrackingTradeRepository: EditTradeStubRepository, @unchecked Sendable {
     private(set) var deleteCalls: [TradeID] = []
 
     override func delete(id: TradeID) async throws {

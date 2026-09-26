@@ -3,9 +3,8 @@
 import { formatEST } from "@/lib/formatEST"
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
-import { compressScreenshot } from "@/lib/compressImage"
-import ImageCropModal from "@/app/components/ImageCropModal"
-import { useImageCropUpload } from "@/lib/useImageCropUpload"
+import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { validateImageUpload } from "@/lib/uploadValidation"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
@@ -21,11 +20,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const imageCrop = useImageCropUpload({
-    preset: "content",
-    onCropped: setSelectedFile,
-  })
-  const fileRef = imageCrop.fileInputRef
+  const fileRef = useRef<HTMLInputElement | null>(null)
   const [channel, setChannel] = useState<"random" | "trades">("random")
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [newMessages, setNewMessages] = useState(0)
@@ -87,9 +82,16 @@ export default function ChatPage() {
     let imageUrl = null
 
     if (selectedFile) {
-      let uploadFile: File = selectedFile
-      if (selectedFile.type?.startsWith("image/")) {
-        uploadFile = await compressScreenshot(selectedFile)
+      let uploadFile: File
+      try {
+        uploadFile = await prepareImageForUpload("chat", selectedFile)
+      } catch (error) {
+        showPopup({
+          type: "error",
+          message:
+            error instanceof Error ? error.message : "Couldn't prepare that image.",
+        })
+        return
       }
       const fileName = `${Date.now()}-${uploadFile.name}`
 
@@ -132,7 +134,6 @@ export default function ChatPage() {
     setInput("")
     setSelectedFile(null)
     if (fileRef.current) fileRef.current.value = ""
-    imageCrop.resetFileInput()
   }
 
   async function react(messageId: string, type: string) {
@@ -179,13 +180,6 @@ export default function ChatPage() {
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
-      <ImageCropModal
-        open={imageCrop.cropSourceFile != null}
-        file={imageCrop.cropSourceFile}
-        preset="content"
-        onCancel={imageCrop.handleCropCancel}
-        onSave={imageCrop.handleCropSave}
-      />
 
       <div className="h-screen w-full flex flex-col md:flex-row overflow-hidden">
         {/* SIDEBAR (ROOM LIST) */}
@@ -343,7 +337,17 @@ export default function ChatPage() {
                 ref={fileRef}
                 type="file"
                 accept="image/*"
-                onChange={(e) => imageCrop.handleFileSelected(e.target.files?.[0])}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  const validationError = validateImageUpload(file)
+                  if (validationError) {
+                    showPopup({ type: "error", message: validationError })
+                    e.target.value = ""
+                    return
+                  }
+                  setSelectedFile(file)
+                }}
                 className="text-sm"
               />
 

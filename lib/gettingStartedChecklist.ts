@@ -1,6 +1,7 @@
 export type GettingStartedChecklistItemId =
   | "profile"
   | "trade"
+  | "dailyCheckIn"
   | "post"
   | "follow"
   | "room"
@@ -21,6 +22,7 @@ export type GettingStartedSignals = {
   /** Ever joined a room the user does not own (includes left memberships). */
   hasEverJoinedOtherRoom: boolean
   hasPublicTrade: boolean
+  hasCompletedDailyCheckIn: boolean
 }
 
 export type GettingStartedItemHelp = {
@@ -38,6 +40,10 @@ export const GETTING_STARTED_ITEM_HELP: Record<
   trade: {
     body:
       "Click Add Trade and enter your entry, exit, and result. Your dashboard analytics unlock after your first trade.",
+  },
+  dailyCheckIn: {
+    body:
+      "Open Daily Check-In from the dashboard and log sleep, mood, and focus. It takes about a minute and helps correlate mindset with your results.",
   },
   follow: {
     body:
@@ -64,7 +70,7 @@ export type GettingStartedProgress = {
   allComplete: boolean
 }
 
-const TOTAL_ITEMS = 6
+const TOTAL_ITEMS = 7
 
 export const GETTING_STARTED_COLLAPSED_STORAGE_KEY =
   "tradetraxs_getting_started_collapsed_v1"
@@ -212,6 +218,11 @@ export function computeGettingStartedProgress(
       id: "trade",
       label: "Add your first trade",
       complete: signals.tradeCount > 0,
+    },
+    {
+      id: "dailyCheckIn",
+      label: "Complete your first daily check-in",
+      complete: signals.hasCompletedDailyCheckIn,
     },
     {
       id: "follow",

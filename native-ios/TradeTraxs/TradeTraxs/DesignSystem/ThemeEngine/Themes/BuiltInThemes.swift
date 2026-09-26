@@ -29,14 +29,3 @@ struct DarkTheme: AppThemeProtocol {
         return ThemePalettes.darkFixed
     }
 }
-
-struct TradeTraxsTheme: AppThemeProtocol {
-    var metadata: ThemeMetadata { .tradeTraxs }
-    /// Signature look stays fixed regardless of system light/dark.
-    var colorSchemeOverride: ColorScheme? { .dark }
-
-    func palette(for colorScheme: ColorScheme) -> SemanticColorPalette {
-        _ = colorScheme
-        return ThemePalettes.tradeTraxsSignature
-    }
-}

@@ -65,7 +65,7 @@ struct InteractiveImageView: View {
                     feedPresentationForWidth: nil,
                     renderSurface: "detail-parity",
                     renderMediaID: mediaID,
-                    background: colors.fillSecondary
+                    background: Color.clear
                 ) { metrics in
                     InteractiveImageRepresentable(
                         mediaID: mediaID,

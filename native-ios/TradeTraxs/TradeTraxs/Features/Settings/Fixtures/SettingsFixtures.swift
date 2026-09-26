@@ -1,6 +1,6 @@
 import Foundation
 
-enum SettingsFixtures {
+nonisolated enum SettingsFixtures {
     static let viewerID = ProfileID("dev.settings.viewer")
 
     static func profile(owner: ProfileID = viewerID) -> Profile {

@@ -80,15 +80,19 @@ final class AccountDeletionExperienceTests: XCTestCase {
         XCTAssertTrue(viewModel.showsDeleteAccountConfirmation)
     }
 
-    func testConfirmDeleteAccountSignsOutAfterServerSuccess() async {
+    func testConfirmDeleteAccountShowsSuccessBeforeSignIn() async {
         let context = await makeContext(billing: freeBillingStatus())
         let viewModel = context.viewModel
         await viewModel.refresh()
 
         viewModel.confirmDeleteAccount()
         await waitFor { context.account.deleteCallCount == 1 }
-        await waitFor { context.navigation.store.sessionPhase == .unauthenticated }
+        await waitFor { viewModel.showsDeleteAccountSuccess }
         XCTAssertEqual(context.account.deleteCallCount, 1)
+        XCTAssertTrue(context.auth.manager.state.isAuthenticated)
+
+        viewModel.returnToSignInAfterAccountDeletion()
+        await waitFor { context.navigation.store.sessionPhase == .unauthenticated }
         XCTAssertEqual(context.navigation.store.sessionPhase, .unauthenticated)
         XCTAssertFalse(context.auth.manager.state.isAuthenticated)
     }

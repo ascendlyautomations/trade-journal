@@ -523,6 +523,7 @@ enum CompositionRoot {
             )
             appBootstrapState.reset()
             profileOnboardingGate.reset()
+            ContextualTourCoordinator.shared.resetForSessionBoundary()
         }
         Task {
             await NetworkUnauthorizedRecovery.shared.configure { @Sendable in
@@ -553,8 +554,6 @@ enum CompositionRoot {
             if let userID = sessionManager.currentSession?.userID {
                 let profileID = ProfileID(userID.rawValue)
                 Task { await AnalyticsReconciliationCoordinator.shared.bindViewer(profileID) }
-                AnalyticsRevisionRealtimeSession.shared.bindAuthenticatedViewer(profileID)
-                RelationshipRealtimeSession.shared.bindAuthenticatedViewer(profileID)
                 Task { await SocialRealtimeReconciliationCoordinator.shared.bindViewer(profileID) }
                 Task { await AnalyticsRevisionRepairCoordinator.shared.bindViewer(profileID) }
             }

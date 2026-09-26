@@ -1,5 +1,6 @@
 "use client"
 
+import "../socialDesktopTheme.css"
 import Link from "next/link"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import FollowButton from "../components/FollowButton"
@@ -473,7 +474,7 @@ export default function ExplorePage() {
   }
 
   return (
-    <div className="w-full px-2 pb-3 pt-0 text-white md:px-4 md:pb-10">
+    <div className="tt-phase1-dark w-full px-2 pb-3 pt-0 text-white md:px-4 md:pb-10">
       <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-7xl flex-col gap-3 px-1 md:gap-4 md:px-6">
         <header className="hidden md:block">
           <h1 className="text-lg font-semibold text-white md:text-xl">

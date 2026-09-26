@@ -393,72 +393,10 @@ final class CommentsViewModel {
 
     private func restartCommentLikeRealtime(for loaded: [InteractionComment]) {
         stopCommentLikeRealtime()
-        guard let realtimeHub else { return }
-        let ids = loaded.map(\.id.rawValue).filter { !$0.hasPrefix("local-") }
-        guard !ids.isEmpty, !target.id.hasPrefix("dev-") else { return }
-
-        trackedCommentIDs = ids
-        commentLikeRealtimeTask = Task { [weak self] in
-            guard let self else { return }
-            let token = await session.accessToken
-            let watch = realtimeHub.watchCommentLikes(
-                source: commentLikeSource,
-                commentIDs: ids,
-                accessToken: token,
-                debugOwner: "CommentsLike"
-            )
-            commentLikeRealtimeConsumer = watch.consumer
-            for await signal in watch.events {
-                guard !Task.isCancelled else { break }
-                applyCommentLikeRealtime(signal)
-            }
-        }
+        trackedCommentIDs = loaded.map(\.id.rawValue).filter { !$0.hasPrefix("local-") }
     }
 
     private func restartCommentPinRealtime() {
         stopCommentPinRealtime()
-        guard let realtimeHub else { return }
-        guard !target.id.hasPrefix("dev-") else { return }
-
-        commentPinRealtimeTask = Task { [weak self] in
-            guard let self else { return }
-            let token = await session.accessToken
-            let watch = realtimeHub.watchCommentPinUpdates(
-                target: target,
-                accessToken: token,
-                debugOwner: "CommentsPin"
-            )
-            commentPinRealtimeConsumer = watch.consumer
-            for await signal in watch.events {
-                guard !Task.isCancelled else { break }
-                applyCommentPinRealtime(signal)
-            }
-        }
-    }
-
-    private func applyCommentPinRealtime(_ signal: CommentPinRealtimeSignal) {
-        let commentID = CommentID(signal.commentID)
-        guard comments.contains(where: { $0.id == commentID }) else { return }
-        guard !busyPinCommentIDs.contains(commentID) else { return }
-        comments = CommentPinSemantics.applyPinnedState(
-            comments,
-            commentID: commentID,
-            pinned: signal.pinned
-        )
-    }
-
-    private func applyCommentLikeRealtime(_ signal: CommentLikeRealtimeSignal) {
-        guard signal.commentSource == commentLikeSource.rawValue else { return }
-        let commentID = CommentID(signal.commentID)
-        guard comments.contains(where: { $0.id == commentID }) else { return }
-        guard !busyCommentIDs.contains(commentID) else { return }
-
-        let previous = likesByCommentID[commentID] ?? .empty
-        likesByCommentID[commentID] = CommentLikeSemantics.applyRealtimeEvent(
-            previous,
-            event: signal.kind,
-            actorUserID: signal.userID,
-            currentUserID: viewerUserID
-        )
     }
 }

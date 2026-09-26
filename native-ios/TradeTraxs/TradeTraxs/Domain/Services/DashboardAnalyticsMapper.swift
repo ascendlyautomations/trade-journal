@@ -110,17 +110,24 @@ nonisolated enum DashboardAnalyticsMapper {
 
     private static let emptyDistributions = AnalyticsDashboardDistributionsWireV1(
         sessions: [],
+        symbols: [],
+        daily: nil,
+        streaks: nil,
         weekday_bars: [],
         weekday_heatmap: [],
         hour_bars: [],
         hour_heatmap: [],
+        hour_highlights: nil,
         avg_hold_seconds: nil,
         avg_winner_hold_seconds: nil,
         avg_loser_hold_seconds: nil,
         hold_histogram: [],
+        hold_extremes: nil,
         long_short: [],
+        long_short_detail: nil,
         long_trade_count: 0,
-        short_trade_count: 0
+        short_trade_count: 0,
+        strategies: nil
     )
 
     static func summary(
@@ -168,7 +175,15 @@ nonisolated enum DashboardAnalyticsMapper {
             drawdownSeries: drawdownSeries(from: equityPoints),
             weekdayHeatmap: mapBars(dist.weekday_heatmap),
             hourHeatmap: mapBars(dist.hour_heatmap),
-            insights: mapInsights(bundle.insights)
+            insights: mapInsights(bundle.insights),
+            sessionPerformance: mapSessionPerformance(dist.sessions),
+            symbolPerformance: mapSymbolPerformance(dist.symbols ?? []),
+            dailyPerformance: mapDaily(dist.daily),
+            streaks: mapStreaks(dist.streaks),
+            hourHighlights: mapHourHighlights(dist.hour_highlights),
+            longShortComparison: mapLongShortDetail(dist.long_short_detail),
+            holdExtremes: mapHoldExtremes(dist.hold_extremes),
+            strategyHighlights: mapStrategies(dist.strategies)
         )
     }
 
@@ -194,10 +209,156 @@ nonisolated enum DashboardAnalyticsMapper {
         rows.map { row in
             ProfileStatisticsMetrics.SessionRow(
                 label: row.label,
-                count: row.count,
+                count: row.trade_count ?? row.count,
                 pct: row.pct.value ?? 0
             )
         }
+    }
+
+    private static func mapSessionPerformance(
+        _ rows: [AnalyticsDashboardSessionWireV1]
+    ) -> [DashboardSessionPerformanceRow] {
+        rows.map { row in
+            DashboardSessionPerformanceRow(
+                label: row.label,
+                tradeCount: row.trade_count ?? row.count,
+                netPnL: row.net_pnl?.value ?? 0,
+                wins: row.wins ?? 0,
+                losses: row.losses ?? 0,
+                winRate: row.win_rate?.value
+            )
+        }
+    }
+
+    private static func mapSymbolPerformance(
+        _ rows: [AnalyticsDashboardSymbolWireV1]
+    ) -> [DashboardSymbolPerformanceRow] {
+        rows.map { row in
+            DashboardSymbolPerformanceRow(
+                ticker: row.ticker,
+                trades: row.trades,
+                netPnL: row.net_pnl.value ?? 0,
+                winRate: row.win_rate?.value,
+                avgRR: row.avg_rr?.value
+            )
+        }
+    }
+
+    private static func mapDaily(_ wire: AnalyticsDashboardDailyWireV1?) -> DashboardDailyPerformanceSnapshot? {
+        guard let wire else { return nil }
+        return DashboardDailyPerformanceSnapshot(
+            bestDayPnL: wire.best_day_pnl.value ?? 0,
+            worstDayPnL: wire.worst_day_pnl.value ?? 0,
+            avgDayPnL: wire.avg_day_pnl.value ?? 0,
+            consistencyPct: wire.consistency_pct.value ?? 0,
+            tradingDays: wire.trading_days
+        )
+    }
+
+    private static func mapStreaks(_ wire: AnalyticsDashboardStreaksWireV1?) -> DashboardStreakSnapshot? {
+        guard let wire else { return nil }
+        return DashboardStreakSnapshot(
+            currentStreak: wire.current_streak,
+            currentType: wire.current_type,
+            maxWinStreak: wire.max_win_streak,
+            maxLossStreak: wire.max_loss_streak
+        )
+    }
+
+    private static func mapHourHighlights(
+        _ wire: AnalyticsDashboardHourHighlightsWireV1?
+    ) -> DashboardHourHighlights? {
+        guard let wire else { return nil }
+        return DashboardHourHighlights(
+            bestHour: wire.best_hour,
+            worstHour: wire.worst_hour,
+            bestPnL: wire.best_pnl?.value,
+            worstPnL: wire.worst_pnl?.value
+        )
+    }
+
+    private static func mapLongShortDetail(
+        _ wire: AnalyticsDashboardLongShortDetailWireV1?
+    ) -> DashboardLongShortComparison? {
+        guard let wire else { return nil }
+        return DashboardLongShortComparison(
+            long: wire.long.map(mapDirectionSide),
+            short: wire.short.map(mapDirectionSide)
+        )
+    }
+
+    private static func mapDirectionSide(
+        _ side: AnalyticsDashboardDirectionSideWireV1
+    ) -> DashboardDirectionSideSnapshot {
+        DashboardDirectionSideSnapshot(
+            trades: side.trades,
+            netPnL: side.net_pnl.value ?? 0,
+            wins: side.wins,
+            losses: side.losses,
+            winRate: side.win_rate?.value,
+            profitFactor: side.profit_factor?.value,
+            expectancy: side.expectancy?.value,
+            avgRR: side.avg_rr?.value,
+            bestTrade: side.best_trade?.value,
+            worstTrade: side.worst_trade?.value
+        )
+    }
+
+    private static func mapHoldExtremes(
+        _ wire: AnalyticsDashboardHoldExtremesWireV1?
+    ) -> [DashboardHoldExtremeSnapshot] {
+        guard let wire else { return [] }
+        var rows: [DashboardHoldExtremeSnapshot] = []
+        if let seconds = wire.fastest_winner_seconds?.value, seconds > 0 {
+            rows.append(DashboardHoldExtremeSnapshot(
+                label: "Fastest winner",
+                durationSeconds: seconds,
+                pnl: wire.fastest_winner_pnl?.value ?? 0
+            ))
+        }
+        if let seconds = wire.longest_winner_seconds?.value, seconds > 0 {
+            rows.append(DashboardHoldExtremeSnapshot(
+                label: "Longest winner",
+                durationSeconds: seconds,
+                pnl: wire.longest_winner_pnl?.value ?? 0
+            ))
+        }
+        if let seconds = wire.fastest_loser_seconds?.value, seconds > 0 {
+            rows.append(DashboardHoldExtremeSnapshot(
+                label: "Fastest loser",
+                durationSeconds: seconds,
+                pnl: wire.fastest_loser_pnl?.value ?? 0
+            ))
+        }
+        if let seconds = wire.longest_loser_seconds?.value, seconds > 0 {
+            rows.append(DashboardHoldExtremeSnapshot(
+                label: "Longest loser",
+                durationSeconds: seconds,
+                pnl: wire.longest_loser_pnl?.value ?? 0
+            ))
+        }
+        return rows
+    }
+
+    private static func mapStrategies(
+        _ wire: AnalyticsDashboardStrategiesWireV1?
+    ) -> DashboardStrategyHighlights? {
+        guard let wire else { return nil }
+        return DashboardStrategyHighlights(
+            best: wire.best.map(mapStrategyHighlight),
+            worst: wire.worst.map(mapStrategyHighlight)
+        )
+    }
+
+    private static func mapStrategyHighlight(
+        _ wire: AnalyticsDashboardStrategyHighlightWireV1
+    ) -> DashboardStrategyHighlight {
+        DashboardStrategyHighlight(
+            strategy: wire.strategy,
+            trades: wire.trades,
+            netPnL: wire.net_pnl.value ?? 0,
+            winRate: wire.win_rate?.value
+        )
     }
 
     private static func mapBars(_ rows: [AnalyticsDashboardBarWireV1]) -> [DashboardBarPoint] {

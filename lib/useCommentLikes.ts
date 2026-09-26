@@ -13,6 +13,7 @@ import {
   type CommentLikeSource,
 } from "@/lib/commentLikes"
 import { buildRealtimeInFilter } from "@/lib/realtimeFilters"
+import { isUuidLike } from "@/lib/tradeAccountDisplay"
 
 export function useCommentLikes(args: {
   source: CommentLikeSource | null
@@ -35,17 +36,22 @@ export function useCommentLikes(args: {
     () => comments.map((comment) => String(comment.id)),
     [comments]
   )
-  const commentIdsKey = commentIds.join(",")
-  const hasComments = commentIds.length > 0
+  const persistedCommentIds = useMemo(
+    () => commentIds.filter((id) => isUuidLike(id)),
+    [commentIds]
+  )
+  const persistedIdsKey = persistedCommentIds.join(",")
+  const hasPersistedComments = persistedCommentIds.length > 0
 
   const visibleIdsRef = useRef(new Set<string>())
-  visibleIdsRef.current = new Set(commentIds)
+  visibleIdsRef.current = new Set(persistedCommentIds)
 
   const currentUserIdRef = useRef(currentUserId)
   currentUserIdRef.current = currentUserId
 
   useEffect(() => {
-    if (!source || commentIds.length === 0 || isDemoModeActive()) {
+    const ids = persistedIdsKey.split(",").filter(Boolean)
+    if (!source || ids.length === 0 || isDemoModeActive()) {
       setLikesByCommentId({})
       return
     }
@@ -54,7 +60,7 @@ export function useCommentLikes(args: {
     void fetchCommentLikeMetaByIds(
       supabase,
       source,
-      commentIds,
+      ids,
       currentUserId
     ).then((meta) => {
       if (!cancelled) setLikesByCommentId(meta)
@@ -63,19 +69,19 @@ export function useCommentLikes(args: {
     return () => {
       cancelled = true
     }
-  }, [source, commentIdsKey, currentUserId, commentIds])
+  }, [source, persistedIdsKey, currentUserId])
 
   useEffect(() => {
-    if (!source || !hasComments || isDemoModeActive()) return
+    if (!source || !hasPersistedComments || isDemoModeActive()) return
 
-    const ids = commentIdsKey.split(",").filter(Boolean)
+    const ids = persistedIdsKey.split(",").filter(Boolean)
     const idFilter = buildRealtimeInFilter("comment_id", ids)
     // Too many visible comments: keep source-scoped filter (client still gates).
     const filter = idFilter
       ? idFilter
       : `comment_source=eq.${source}`
 
-    const topic = `comment-likes-${source}-${commentIdsKey.slice(0, 48) || "empty"}`
+    const topic = `comment-likes-${source}-${persistedIdsKey.slice(0, 48) || "empty"}`
     const channel = supabase.channel(topic)
 
     channel.on(
@@ -126,7 +132,7 @@ export function useCommentLikes(args: {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [source, hasComments, commentIdsKey])
+  }, [source, hasPersistedComments, persistedIdsKey])
 
   const isCommentLikeBusy = useCallback(
     (commentId: string) => Boolean(busyCommentIds[commentId]),

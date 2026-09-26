@@ -9,10 +9,12 @@ const STORAGE_RENDER_PUBLIC = "/storage/v1/render/image/public/"
 export type StorageImagePreset =
   | "avatar"
   | "feed-thumb"
+  | "feed-card"
   | "feed-detail"
   | "story"
   | "reel-thumb"
   | "achievement"
+  | "achievement-card"
   | "trade-thumb"
   | "message-preview"
   | "message-thumb"
@@ -33,12 +35,22 @@ const PRESET_TRANSFORMS: Record<
     Pick<TransformOptions, "width" | "height" | "resize">
 > = {
   avatar: { width: 96, height: 96, quality: 80, resize: "cover" },
-  /** Shared Feed + Profile trade-card screenshot transform (640px @ q75). */
+  /** Shared Profile / non-feed card transform. Width-only uses Storage's default cover crop. */
   "feed-thumb": { width: 640, quality: 75 },
+  /**
+   * Feed cards only. Fit inside a 2× desktop frame without cropping or stretching.
+   * Sources smaller than the box are not upscaled.
+   */
+  "feed-card": { width: 1440, height: 1080, quality: 75, resize: "contain" },
   "feed-detail": { width: 1280, quality: 82 },
   story: { width: 1080, quality: 80, resize: "contain" },
   "reel-thumb": { width: 560, height: 996, quality: 75, resize: "cover" },
   achievement: { width: 800, quality: 75 },
+  /**
+   * /achievements gallery cards only. Fit inside a compact 2× card box
+   * without cropping or stretching. Smaller originals are not upscaled.
+   */
+  "achievement-card": { width: 960, height: 720, quality: 75, resize: "contain" },
   "trade-thumb": { width: 800, quality: 75 },
   "message-preview": { width: 720, quality: 72, resize: "contain" },
   "message-thumb": { width: 320, height: 320, quality: 70, resize: "cover" },

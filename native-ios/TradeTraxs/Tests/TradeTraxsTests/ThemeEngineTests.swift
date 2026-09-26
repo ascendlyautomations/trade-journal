@@ -6,14 +6,14 @@ final class ThemeEngineTests: XCTestCase {
     func testBuiltInThemesAreRegistered() {
         let registry = ThemeRegistry()
         let ids = registry.allMetadata().map(\.identifier)
-        XCTAssertEqual(ids, [.system, .light, .dark, .tradeTraxs])
+        XCTAssertEqual(ids, [.system, .light, .dark])
     }
 
     func testPersistenceRoundTrip() {
         let defaults = UserDefaults(suiteName: "theme.engine.tests.\(UUID().uuidString)")!
         let persistence = UserDefaultsThemePersistence(defaults: defaults)
-        persistence.saveSelectedTheme(.tradeTraxs)
-        XCTAssertEqual(persistence.loadSelectedTheme(), .tradeTraxs)
+        persistence.saveSelectedTheme(.dark)
+        XCTAssertEqual(persistence.loadSelectedTheme(), .dark)
     }
 
     func testThemeManagerRestoresPersistedSelection() {
@@ -24,6 +24,16 @@ final class ThemeEngineTests: XCTestCase {
         let manager = ThemeManager(persistence: persistence)
         XCTAssertEqual(manager.selectedIdentifier, .dark)
         XCTAssertEqual(manager.preferredColorScheme, .dark)
+    }
+
+    func testLegacyTradeTraxsPersistedValueMigratesToSystem() {
+        let defaults = UserDefaults(suiteName: "theme.engine.tests.\(UUID().uuidString)")!
+        let persistence = UserDefaultsThemePersistence(defaults: defaults)
+        defaults.set(ThemeIdentifier.legacyTradeTraxsPersistedValue, forKey: "theme.selectedIdentifier")
+
+        let manager = ThemeManager(persistence: persistence)
+        XCTAssertEqual(manager.selectedIdentifier, .system)
+        XCTAssertEqual(persistence.loadSelectedTheme(), .system)
     }
 
     func testSystemThemeFollowsInterfaceStyle() {
@@ -38,28 +48,8 @@ final class ThemeEngineTests: XCTestCase {
         manager.updateInterfaceStyle(.light)
         let lightAccent = manager.colors.accent
         manager.updateInterfaceStyle(.dark)
-        // Adaptive palette objects differ by construction; ensure resolver stays system.
         XCTAssertEqual(manager.selectedIdentifier, .system)
         _ = lightAccent
-    }
-
-    func testTradeTraxsIsFixedSignature() {
-        let manager = ThemeManager(
-            persistence: UserDefaultsThemePersistence(
-                defaults: UserDefaults(suiteName: "theme.engine.tests.\(UUID().uuidString)")!
-            )
-        )
-        manager.select(.tradeTraxs)
-        XCTAssertEqual(manager.preferredColorScheme, .dark)
-        XCTAssertTrue(manager.activeTheme.metadata.isPremiumSignature)
-
-        let before = manager.colors.backgroundPrimary
-        manager.updateInterfaceStyle(.light)
-        // Signature palette ignores system interface style changes.
-        XCTAssertEqual(
-            String(describing: manager.colors.backgroundPrimary),
-            String(describing: before)
-        )
     }
 
     func testAppearanceSettingsModelPrepared() {
@@ -71,28 +61,29 @@ final class ThemeEngineTests: XCTestCase {
         manager.select(.light)
         let model = manager.appearanceSettings
         XCTAssertEqual(model.selectedTheme, .light)
-        XCTAssertEqual(model.options.count, 4)
+        XCTAssertEqual(model.options.count, 3)
         XCTAssertTrue(model.options.contains(where: \.isSelected))
     }
 
-    func testUserFacingAppearanceExposesOnlySystemAndTradeTraxs() {
+    func testUserFacingAppearanceExposesSystemLightDark() {
         let registry = ThemeRegistry()
         let model = AppearanceSettingsModel.makeUserFacing(
             selected: .dark,
             registry: registry
         )
-        XCTAssertEqual(model.options.map(\.id), [.system, .tradeTraxs])
-        XCTAssertEqual(model.selectedTheme, .system)
-        XCTAssertTrue(model.options.first { $0.id == .system }?.isSelected == true)
+        XCTAssertEqual(model.options.map(\.id), [.system, .light, .dark])
+        XCTAssertEqual(model.selectedTheme, .dark)
+        XCTAssertTrue(model.options.first { $0.id == .dark }?.isSelected == true)
 
-        let branded = AppearanceSettingsModel.makeUserFacing(
-            selected: .tradeTraxs,
+        let legacy = AppearanceSettingsModel.makeUserFacing(
+            selected: ThemeIdentifier(rawValue: ThemeIdentifier.legacyTradeTraxsPersistedValue),
             registry: registry
         )
-        XCTAssertEqual(branded.selectedTheme, .tradeTraxs)
+        XCTAssertEqual(legacy.selectedTheme, .system)
+        XCTAssertTrue(legacy.options.first { $0.id == .system }?.isSelected == true)
     }
 
-    func testAppearanceControllerRejectsHiddenThemes() {
+    func testAppearanceControllerAllowsSystemLightDark() {
         let defaults = UserDefaults(suiteName: "theme.engine.tests.\(UUID().uuidString)")!
         let manager = ThemeManager(
             persistence: UserDefaultsThemePersistence(defaults: defaults)
@@ -100,9 +91,9 @@ final class ThemeEngineTests: XCTestCase {
         manager.select(.system)
         let controller = AppearanceSettingsController(themeManager: manager)
         controller.selectTheme(.dark, reduceMotion: true)
-        XCTAssertEqual(manager.selectedIdentifier, .system)
-        controller.selectTheme(.tradeTraxs, reduceMotion: true)
-        XCTAssertEqual(manager.selectedIdentifier, .tradeTraxs)
+        XCTAssertEqual(manager.selectedIdentifier, .dark)
+        controller.selectTheme(.light, reduceMotion: true)
+        XCTAssertEqual(manager.selectedIdentifier, .light)
     }
 
     func testRegisterFutureThemeWithoutEngineChanges() {
@@ -132,7 +123,7 @@ final class ThemeEngineTests: XCTestCase {
     }
 
     func testSemanticAliasesExist() {
-        let palette = ThemePalettes.tradeTraxsSignature
+        let palette = ThemePalettes.darkFixed
         XCTAssertNotNil(palette.primaryBackground)
         XCTAssertNotNil(palette.positivePnL)
         XCTAssertNotNil(palette.skeleton)

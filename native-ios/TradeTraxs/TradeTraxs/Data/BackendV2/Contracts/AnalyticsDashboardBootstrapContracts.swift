@@ -114,17 +114,24 @@ nonisolated struct AnalyticsDashboardAggregatePresetV1: Codable, Sendable, Equat
 
     private static let emptyDistributions = AnalyticsDashboardDistributionsWireV1(
         sessions: [],
+        symbols: [],
+        daily: nil,
+        streaks: nil,
         weekday_bars: [],
         weekday_heatmap: [],
         hour_bars: [],
         hour_heatmap: [],
+        hour_highlights: nil,
         avg_hold_seconds: nil,
         avg_winner_hold_seconds: nil,
         avg_loser_hold_seconds: nil,
         hold_histogram: [],
+        hold_extremes: nil,
         long_short: [],
+        long_short_detail: nil,
         long_trade_count: 0,
-        short_trade_count: 0
+        short_trade_count: 0,
+        strategies: nil
     )
 }
 
@@ -197,23 +204,149 @@ nonisolated struct AnalyticsDashboardEquityPointWireV1: Codable, Sendable, Equat
 
 nonisolated struct AnalyticsDashboardDistributionsWireV1: Codable, Sendable, Equatable {
     var sessions: [AnalyticsDashboardSessionWireV1]
+    var symbols: [AnalyticsDashboardSymbolWireV1]?
+    var daily: AnalyticsDashboardDailyWireV1?
+    var streaks: AnalyticsDashboardStreaksWireV1?
     var weekday_bars: [AnalyticsDashboardBarWireV1]
     var weekday_heatmap: [AnalyticsDashboardBarWireV1]
     var hour_bars: [AnalyticsDashboardBarWireV1]
     var hour_heatmap: [AnalyticsDashboardBarWireV1]
+    var hour_highlights: AnalyticsDashboardHourHighlightsWireV1?
     var avg_hold_seconds: PostgresFlexibleDouble?
     var avg_winner_hold_seconds: PostgresFlexibleDouble?
     var avg_loser_hold_seconds: PostgresFlexibleDouble?
     var hold_histogram: [AnalyticsDashboardHistogramWireV1]
+    var hold_extremes: AnalyticsDashboardHoldExtremesWireV1?
     var long_short: [AnalyticsDashboardBarWireV1]
+    var long_short_detail: AnalyticsDashboardLongShortDetailWireV1?
     var long_trade_count: Int
     var short_trade_count: Int
+    var strategies: AnalyticsDashboardStrategiesWireV1?
+
+    init(
+        sessions: [AnalyticsDashboardSessionWireV1],
+        symbols: [AnalyticsDashboardSymbolWireV1]? = nil,
+        daily: AnalyticsDashboardDailyWireV1? = nil,
+        streaks: AnalyticsDashboardStreaksWireV1? = nil,
+        weekday_bars: [AnalyticsDashboardBarWireV1],
+        weekday_heatmap: [AnalyticsDashboardBarWireV1],
+        hour_bars: [AnalyticsDashboardBarWireV1],
+        hour_heatmap: [AnalyticsDashboardBarWireV1],
+        hour_highlights: AnalyticsDashboardHourHighlightsWireV1? = nil,
+        avg_hold_seconds: PostgresFlexibleDouble? = nil,
+        avg_winner_hold_seconds: PostgresFlexibleDouble? = nil,
+        avg_loser_hold_seconds: PostgresFlexibleDouble? = nil,
+        hold_histogram: [AnalyticsDashboardHistogramWireV1],
+        hold_extremes: AnalyticsDashboardHoldExtremesWireV1? = nil,
+        long_short: [AnalyticsDashboardBarWireV1],
+        long_short_detail: AnalyticsDashboardLongShortDetailWireV1? = nil,
+        long_trade_count: Int,
+        short_trade_count: Int,
+        strategies: AnalyticsDashboardStrategiesWireV1? = nil
+    ) {
+        self.sessions = sessions
+        self.symbols = symbols
+        self.daily = daily
+        self.streaks = streaks
+        self.weekday_bars = weekday_bars
+        self.weekday_heatmap = weekday_heatmap
+        self.hour_bars = hour_bars
+        self.hour_heatmap = hour_heatmap
+        self.hour_highlights = hour_highlights
+        self.avg_hold_seconds = avg_hold_seconds
+        self.avg_winner_hold_seconds = avg_winner_hold_seconds
+        self.avg_loser_hold_seconds = avg_loser_hold_seconds
+        self.hold_histogram = hold_histogram
+        self.hold_extremes = hold_extremes
+        self.long_short = long_short
+        self.long_short_detail = long_short_detail
+        self.long_trade_count = long_trade_count
+        self.short_trade_count = short_trade_count
+        self.strategies = strategies
+    }
 }
 
 nonisolated struct AnalyticsDashboardSessionWireV1: Codable, Sendable, Equatable {
     var label: String
     var count: Int
     var pct: PostgresFlexibleDouble
+    var trade_count: Int?
+    var net_pnl: PostgresFlexibleDouble?
+    var wins: Int?
+    var losses: Int?
+    var win_rate: PostgresFlexibleDouble?
+}
+
+nonisolated struct AnalyticsDashboardSymbolWireV1: Codable, Sendable, Equatable {
+    var ticker: String
+    var trades: Int
+    var net_pnl: PostgresFlexibleDouble
+    var wins: Int
+    var win_rate: PostgresFlexibleDouble?
+    var avg_rr: PostgresFlexibleDouble?
+}
+
+nonisolated struct AnalyticsDashboardDailyWireV1: Codable, Sendable, Equatable {
+    var best_day_pnl: PostgresFlexibleDouble
+    var worst_day_pnl: PostgresFlexibleDouble
+    var avg_day_pnl: PostgresFlexibleDouble
+    var consistency_pct: PostgresFlexibleDouble
+    var trading_days: Int
+}
+
+nonisolated struct AnalyticsDashboardStreaksWireV1: Codable, Sendable, Equatable {
+    var current_streak: Int
+    var current_type: String?
+    var max_win_streak: Int
+    var max_loss_streak: Int
+}
+
+nonisolated struct AnalyticsDashboardHourHighlightsWireV1: Codable, Sendable, Equatable {
+    var best_hour: Int?
+    var worst_hour: Int?
+    var best_pnl: PostgresFlexibleDouble?
+    var worst_pnl: PostgresFlexibleDouble?
+}
+
+nonisolated struct AnalyticsDashboardHoldExtremesWireV1: Codable, Sendable, Equatable {
+    var fastest_winner_seconds: PostgresFlexibleDouble?
+    var fastest_winner_pnl: PostgresFlexibleDouble?
+    var longest_winner_seconds: PostgresFlexibleDouble?
+    var longest_winner_pnl: PostgresFlexibleDouble?
+    var fastest_loser_seconds: PostgresFlexibleDouble?
+    var fastest_loser_pnl: PostgresFlexibleDouble?
+    var longest_loser_seconds: PostgresFlexibleDouble?
+    var longest_loser_pnl: PostgresFlexibleDouble?
+}
+
+nonisolated struct AnalyticsDashboardDirectionSideWireV1: Codable, Sendable, Equatable {
+    var trades: Int
+    var net_pnl: PostgresFlexibleDouble
+    var wins: Int
+    var losses: Int
+    var win_rate: PostgresFlexibleDouble?
+    var profit_factor: PostgresFlexibleDouble?
+    var expectancy: PostgresFlexibleDouble?
+    var avg_rr: PostgresFlexibleDouble?
+    var best_trade: PostgresFlexibleDouble?
+    var worst_trade: PostgresFlexibleDouble?
+}
+
+nonisolated struct AnalyticsDashboardLongShortDetailWireV1: Codable, Sendable, Equatable {
+    var long: AnalyticsDashboardDirectionSideWireV1?
+    var short: AnalyticsDashboardDirectionSideWireV1?
+}
+
+nonisolated struct AnalyticsDashboardStrategyHighlightWireV1: Codable, Sendable, Equatable {
+    var strategy: String
+    var trades: Int
+    var net_pnl: PostgresFlexibleDouble
+    var win_rate: PostgresFlexibleDouble?
+}
+
+nonisolated struct AnalyticsDashboardStrategiesWireV1: Codable, Sendable, Equatable {
+    var best: AnalyticsDashboardStrategyHighlightWireV1?
+    var worst: AnalyticsDashboardStrategyHighlightWireV1?
 }
 
 nonisolated struct AnalyticsDashboardBarWireV1: Codable, Sendable, Equatable {

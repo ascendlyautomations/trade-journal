@@ -49,6 +49,7 @@ struct AddTradePsychologySheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .experienceDashboardGroupedRows()
             .background(colors.groupedBackground.ignoresSafeArea())
             .experienceNavigationTitle("Trade Psychology")
             .toolbar {

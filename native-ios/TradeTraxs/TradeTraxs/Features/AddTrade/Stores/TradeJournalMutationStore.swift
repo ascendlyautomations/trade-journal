@@ -53,6 +53,7 @@ final class TradeJournalMutationStore {
             scope: AnalyticsLocalMutationScopeBuilder.create(trade: trade)
         )
         ProfileAnalyticsOwnerInvalidation.submitTradeMutation(old: nil, new: trade)
+        GettingStartedRefreshCenter.noteTradePersisted(trade)
     }
 
     func noteUpdated(_ trade: Trade, previous: Trade? = nil) {
@@ -67,6 +68,7 @@ final class TradeJournalMutationStore {
         }
         AnalyticsLocalMutationRouter.submit(kind: .update, scope: scope)
         ProfileAnalyticsOwnerInvalidation.submitTradeMutation(old: previous, new: trade)
+        GettingStartedRefreshCenter.noteTradeVisibilityUpdated(trade, previous: previous)
     }
 
     private func propagateUpsert(_ trade: Trade, resource: String) {
@@ -112,7 +114,8 @@ final class TradeJournalMutationStore {
     /// CSV / bulk import — bounded invalidation; authoritative reload via mounted observers.
     func noteBulkImport(
         owner: ProfileID,
-        source: AnalyticsBulkImportSource = .unknown
+        source: AnalyticsBulkImportSource = .unknown,
+        persistedTradeCount: Int = 0
     ) {
         latest = .bulkImport
         detailCache?.invalidateJournalLists()
@@ -131,6 +134,7 @@ final class TradeJournalMutationStore {
             )
             AnalyticsLocalMutationRouter.submit(kind: .bulk, scope: scope, bulkSource: source)
         }
+        GettingStartedRefreshCenter.noteTradesBulkPersisted(count: persistedTradeCount)
     }
 
     func invalidate() {

@@ -563,8 +563,9 @@ extension AnalyticsLocalStore {
         let chartKeysOK = keys.allSatisfy { key in
             chartsAtR.contains(where: { $0.preset_key == key })
         }
+        let metricsOnlySnapshot = aggregateKeysOK && !chartKeysOK && chartsAtR.isEmpty
 
-        if aggregateKeysOK, chartKeysOK {
+        if aggregateKeysOK, chartKeysOK || metricsOnlySnapshot {
             let revisionMismatch = metrics.contains { $0.ingested_revision != requiredRevision }
                 || aggregateCharts.contains { $0.ingested_revision != requiredRevision }
             if revisionMismatch {
@@ -610,20 +611,29 @@ extension AnalyticsLocalStore {
             guard
                 let metric = metricsAtR.first(where: {
                     $0.scope == AnalyticsLocalSchema.scopeAggregate && $0.preset_key == key
-                }),
-                let chart = chartsAtR.first(where: { $0.preset_key == key }),
-                let charts = try? chart.decodedCharts()
+                })
             else { continue }
             let metricsPreset = metric.toMetricsPreset()
-            aggregatePresets[key] = AnalyticsDashboardPresetBundleV1(
-                preset: metricsPreset.preset,
-                start: metricsPreset.start,
-                end: metricsPreset.end,
-                metrics: metricsPreset.metrics,
-                equity: charts.equity,
-                distributions: charts.distributions,
-                insights: charts.insights
-            )
+            if let chart = chartsAtR.first(where: { $0.preset_key == key }),
+               let charts = try? chart.decodedCharts()
+            {
+                aggregatePresets[key] = AnalyticsDashboardPresetBundleV1(
+                    preset: metricsPreset.preset,
+                    start: metricsPreset.start,
+                    end: metricsPreset.end,
+                    metrics: metricsPreset.metrics,
+                    equity: charts.equity,
+                    distributions: charts.distributions,
+                    insights: charts.insights
+                )
+            } else {
+                aggregatePresets[key] = AnalyticsDashboardAggregatePresetV1(
+                    preset: metricsPreset.preset,
+                    start: metricsPreset.start,
+                    end: metricsPreset.end,
+                    metrics: metricsPreset.metrics
+                ).presetBundle()
+            }
         }
 
         var accountGroups: [String: [String: AnalyticsDashboardMetricsPresetV1]] = [:]

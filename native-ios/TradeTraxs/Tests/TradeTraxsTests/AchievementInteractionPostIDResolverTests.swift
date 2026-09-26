@@ -122,6 +122,11 @@ private final class StubAchievementPostDatabase: SupabaseDatabaseExecuting, @unc
         throw AppError.unknown(message: "not implemented")
     }
 
+    func insertJSON(_ data: Data, into table: String) async throws {
+        _ = (data, table)
+        throw AppError.unknown(message: "not implemented")
+    }
+
     func update<Body, T>(
         _ body: Body,
         table: String,

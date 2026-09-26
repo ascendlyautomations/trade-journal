@@ -182,17 +182,6 @@ final class EngagementStore {
         viewerUserID: String
     ) async {
         guard hasLoaded(target) || snapshots[target] != nil else { return }
-        if inFlightLikes.contains(target) {
-            #if DEBUG
-            if signal.userID == viewerUserID {
-                EngagementRealtimeDebugLog.viewerEcho(
-                    table: signal.table.rawValue,
-                    contentID: signal.contentID,
-                    kind: signal.kind == .insert ? "insert" : "delete"
-                )
-            }
-            #endif
-        }
 
         let previous = snapshot(for: target)
         let next = ContentLikeSemantics.applyRealtimeEvent(
@@ -205,20 +194,6 @@ final class EngagementStore {
 
         snapshots[target] = next
         loadedTargets.insert(target)
-        #if DEBUG
-        if signal.userID != viewerUserID {
-            EngagementRealtimeDebugLog.remotePatch(
-                targetKind: target.kind.rawValue,
-                targetID: target.id,
-                likeCount: next.likeCount,
-                isLiked: next.viewerHasLiked
-            )
-        }
-        EngagementRealtimeDebugLog.writeThrough(
-            targetKind: target.kind.rawValue,
-            targetID: target.id
-        )
-        #endif
         await presentationWriteThrough?.propagateEngagement(
             target: target,
             snapshot: next,

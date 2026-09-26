@@ -12,7 +12,6 @@ final class SettingsAppearanceViewModel {
         let controller = AppearanceSettingsController(themeManager: themeManager)
         self.controller = controller
         self.model = controller.makeAppearanceModel()
-        normalizeLegacySelectionIfNeeded(themeManager: themeManager)
     }
 
     init(controller: AppearanceSettingsPreparing) {
@@ -32,11 +31,4 @@ final class SettingsAppearanceViewModel {
         model = controller.makeAppearanceModel()
     }
 
-    /// Light / Dark remain in the registry but are not user-facing — map to System.
-    private func normalizeLegacySelectionIfNeeded(themeManager: ThemeManager) {
-        let current = themeManager.selectedIdentifier
-        guard current != .system, current != .tradeTraxs else { return }
-        themeManager.select(.system, reduceMotion: true)
-        model = controller.makeAppearanceModel()
-    }
 }

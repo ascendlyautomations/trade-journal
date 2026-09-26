@@ -1,12 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import ImageCropModal from "@/app/components/ImageCropModal"
+import "../utilityDesktopTheme.css"
+import { useCallback, useEffect, useRef, useState } from "react"
 import CustomSelect from "@/app/components/CustomSelect"
-import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
-import { compressImage } from "@/lib/compressImage"
+import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { validateImageUpload } from "@/lib/uploadValidation"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
@@ -56,11 +56,7 @@ export default function SupportPage() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState("")
   const [error, setError] = useState("")
-  const imageCrop = useImageCropUpload({
-    preset: "content",
-    onCropped: setImage,
-    onValidationError: setError,
-  })
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
   const [history, setHistory] = useState<SupportRow[]>([])
   const [historyLoading, setHistoryLoading] = useState(true)
 
@@ -108,9 +104,17 @@ export default function SupportPage() {
 
     let screenshotUrl: string | null = null
     if (image) {
-      let uploadFile: File = image
-      if (image.type?.startsWith("image/")) {
-        uploadFile = await compressImage(image)
+      let uploadFile: File
+      try {
+        uploadFile = await prepareImageForUpload("attachment", image)
+      } catch (prepareError) {
+        setError(
+          prepareError instanceof Error
+            ? prepareError.message
+            : "Couldn't prepare that image."
+        )
+        setLoading(false)
+        return
       }
       const filePath = `support/${user.id}/${Date.now()}-${uploadFile.name}`
       const { error: uploadError } = await supabase.storage
@@ -170,7 +174,7 @@ export default function SupportPage() {
 
   return (
     <>
-      <div className={submissionPageShell}>
+      <div className={`tt-phase4-dark ${submissionPageShell}`}>
         <div className={submissionPageContainer}>
           <form onSubmit={handleSubmit} className={submissionFormCard}>
             <h1 className={submissionTitle}>Need Help?</h1>
@@ -214,7 +218,23 @@ export default function SupportPage() {
               <input
                 type="file"
                 accept="image/*"
-                onChange={(e) => imageCrop.handleFileSelected(e.target.files?.[0])}
+                ref={imageInputRef}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) {
+                    setImage(null)
+                    return
+                  }
+                  const validationError = validateImageUpload(file)
+                  if (validationError) {
+                    setError(validationError)
+                    e.target.value = ""
+                    setImage(null)
+                    return
+                  }
+                  setError("")
+                  setImage(file)
+                }}
                 className="hidden"
               />
             </label>
@@ -260,13 +280,6 @@ export default function SupportPage() {
           </section>
         </div>
       </div>
-      <ImageCropModal
-        open={imageCrop.cropSourceFile != null}
-        file={imageCrop.cropSourceFile}
-        preset="content"
-        onCancel={imageCrop.handleCropCancel}
-        onSave={imageCrop.handleCropSave}
-      />
     </>
   )
 }

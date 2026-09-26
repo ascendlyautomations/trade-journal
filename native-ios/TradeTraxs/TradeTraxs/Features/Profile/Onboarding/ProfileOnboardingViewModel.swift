@@ -189,7 +189,11 @@ final class ProfileOnboardingViewModel {
                 bio: profile.bio,
                 avatarURL: avatarURL
             )
-            gateStore.markCompleted(with: profile, snapshot: completedSnapshot)
+            gateStore.markCompleted(
+                with: profile,
+                snapshot: completedSnapshot,
+                avatarPreview: avatarPreview
+            )
             ExperienceHaptics.play(.success)
         } catch {
             ProfileOnboardingErrorMapping.debugStage("completeProfileOnboarding", error: error)
@@ -203,41 +207,13 @@ final class ProfileOnboardingViewModel {
     }
 
     private func uploadAvatar(_ data: Data) async throws -> String {
-        let jpegPayload = try Self.jpegUploadPayload(from: data)
-        let path = "\(snapshot.profileID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
-        let reference = try await uploadService.upload(
-            UploadRequest(
-                bucket: StorageBucket.avatars.rawValue,
-                path: path,
-                data: jpegPayload,
-                contentType: "image/jpeg",
-                purpose: .profileAvatar
-            )
+        try await ProfileAvatarUpload.upload(
+            jpegData: data,
+            profileID: snapshot.profileID,
+            uploadService: uploadService,
+            objectStorage: objectStorage,
+            supabaseURL: appConfiguration.supabaseURL
         )
-        if let url = objectStorage.publicURL(
-            bucket: StorageBucket.avatars.rawValue,
-            path: reference.id
-        )?.absoluteString {
-            return url
-        }
-        if let base = appConfiguration.supabaseURL?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
-            return "\(base)/storage/v1/object/public/avatars/\(reference.id)"
-        }
-        return reference.id
-    }
-
-    /// Avatars are always stored as JPEG — never upload Live Photo video/HEIC payloads as-is.
-    private static func jpegUploadPayload(from data: Data) throws -> Data {
-        if data.starts(with: [0xFF, 0xD8]) {
-            return data
-        }
-        guard let image = UIImage(data: data),
-              let jpeg = MediaImagePreparation.jpegData(from: image, maxDimension: 1200, quality: 0.92)
-        else {
-            struct InvalidAvatarPayload: Error {}
-            throw InvalidAvatarPayload()
-        }
-        return jpeg
     }
 }
 

@@ -117,10 +117,13 @@ enum FeedBootstrapLoader {
             if !guestPublicMode {
                 await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
             }
+            let cachedEntries = guestPublicMode
+                ? cached.entries
+                : FeedViewerOwnershipFilter.filterEntries(cached.entries, viewerID: viewerID)
             let engagement = guestPublicMode
                 ? [:]
-                : FeedEngagementCacheRestore.engagementMap(from: cached.entries)
-            return (cached.entries, cached.nextCursor, cached.stories, engagement, [], [])
+                : FeedEngagementCacheRestore.engagementMap(from: cachedEntries)
+            return (cachedEntries, cached.nextCursor, cached.stories, engagement, [], [])
         }
 
         #if DEBUG
@@ -217,10 +220,13 @@ enum FeedBootstrapLoader {
                 if !guestPublicMode {
                     await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
                 }
+                let cachedEntries = guestPublicMode
+                    ? cached.entries
+                    : FeedViewerOwnershipFilter.filterEntries(cached.entries, viewerID: viewerID)
                 let engagement = guestPublicMode
                     ? [:]
-                    : FeedEngagementCacheRestore.engagementMap(from: cached.entries)
-                return (cached.entries, cached.nextCursor, cached.stories, engagement, [], [])
+                    : FeedEngagementCacheRestore.engagementMap(from: cachedEntries)
+                return (cachedEntries, cached.nextCursor, cached.stories, engagement, [], [])
             }
             if BackendV2RpcCompat.isRpcUnavailable(error, rpcName: rpcName) {
                 await BackendV2RpcAvailability.shared.markUnavailable(rpcName: rpcName, viewerID: viewerID.rawValue)
@@ -248,9 +254,12 @@ enum FeedBootstrapLoader {
         #endif
 
         let feedItemOrder = applied.items.filter { $0.kind != .story }.map(\.id)
-        let entries = FeedSupport.sortDescending(
+        var entries = FeedSupport.sortDescending(
             FeedBootstrap.buildEntriesFromSeededItems(applied.items, detailCache: detailCache)
         )
+        if !guestPublicMode {
+            entries = FeedViewerOwnershipFilter.filterEntries(entries, viewerID: viewerID)
+        }
 
         #if DEBUG
         FeedProgressiveRenderProbe.recordRowsPublished(count: entries.count)

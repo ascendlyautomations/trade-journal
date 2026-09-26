@@ -1,5 +1,6 @@
 "use client"
 
+import "../utilityDesktopTheme.css"
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -163,7 +164,7 @@ export default function ReferralsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-white sm:px-6 lg:px-8">
+      <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-white sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl">
@@ -180,7 +181,7 @@ export default function ReferralsPage() {
   return (
     <>
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-white sm:px-6 lg:px-8">
+      <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-white sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
           <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>

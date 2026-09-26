@@ -302,6 +302,8 @@ nonisolated enum AnalyticsShadowReadParity {
             return false
         }
         var ok = true
+        let expectsEquityFromBootstrap = !bootstrap.data.isCompactPayload
+            && bootstrap.data.aggregatePresets.values.contains { !$0.equity.points.isEmpty }
         for (key, bundle) in bootstrap.data.aggregatePresets {
             guard let local = snapshot.aggregatePresets[key] else {
                 AnalyticsGRDBProbe.logShadowMismatch("dashboardRead missing aggregate \(key)")
@@ -311,6 +313,7 @@ nonisolated enum AnalyticsShadowReadParity {
             if !metricsWireMatch(bundle.metrics, local.metrics) {
                 ok = false
             }
+            guard expectsEquityFromBootstrap else { continue }
             if bundle.equity.points.count != local.equity.points.count {
                 AnalyticsGRDBProbe.logShadowMismatch("dashboardRead equity \(key)")
                 ok = false

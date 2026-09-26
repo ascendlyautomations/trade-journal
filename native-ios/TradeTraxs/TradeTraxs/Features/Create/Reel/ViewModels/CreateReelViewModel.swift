@@ -16,7 +16,16 @@ final class CreateReelViewModel {
         case failed(String)
     }
 
+    enum BackgroundPreparationState: Equatable {
+        case idle
+        case preparing
+        case ready
+        case failed(String)
+    }
+
     private(set) var phase: Phase = .idle
+    private(set) var backgroundPreparationState: BackgroundPreparationState = .idle
+    private(set) var isFullVideoImportInProgress = false
     var formError: String?
     private(set) var uploadProgress: Double = 0
     private(set) var pickerTrades: [Trade] = []
@@ -35,8 +44,8 @@ final class CreateReelViewModel {
 
     private var viewerID: ProfileID?
     private var videoPipelineTask: Task<Void, Never>?
+    private var backgroundPrepObservationTask: Task<Void, Never>?
     private var publishTask: Task<Void, Never>?
-    private var activePublishID: String?
     private var didHandOffBackgroundPublish = false
     private var hasPrepared = false
     private var hasLoadedTrades = false
@@ -69,19 +78,43 @@ final class CreateReelViewModel {
     }
 
     var isPreparingVideo: Bool {
-        phase == .importingVideo || phase == .preparingVideo
+        phase == .importingVideo
+    }
+
+    var isBackgroundPreparing: Bool {
+        backgroundPreparationState == .preparing
+    }
+
+    var previewVideoURL: URL? {
+        guard let draft else { return nil }
+        let url: URL
+        if draft.videoAssetState == .preparedDelivery {
+            url = draft.localVideoURL
+        } else {
+            url = draft.ownedSourceURL ?? draft.localVideoURL
+        }
+        guard ReelVideoImport.fileIsReadable(at: url) else { return nil }
+        return url
     }
 
     var isPublishing: Bool {
-        phase == .publishing || activePublishID != nil || publishTask != nil
+        publishTask != nil || didHandOffBackgroundPublish
+    }
+
+    var isCommittingPublish: Bool {
+        publishTask != nil
     }
 
     var canPublish: Bool {
-        phase == .ready
-            && draft != nil
-            && videoPipelineTask == nil
-            && activePublishID == nil
-            && publishTask == nil
+        guard phase == .ready,
+              draft != nil,
+              !didHandOffBackgroundPublish,
+              !isFullVideoImportInProgress,
+              videoPipelineTask == nil,
+              publishTask == nil
+        else { return false }
+        if case .failed = backgroundPreparationState { return false }
+        return true
     }
 
     var linkedTradeSummary: String? {
@@ -111,11 +144,11 @@ final class CreateReelViewModel {
     func importFromPhotosPicker(_ item: PhotosPickerItem) {
         let itemID = item.itemIdentifier ?? UUID().uuidString
         if itemID == lastImportedItemIdentifier {
-            if videoPipelineTask != nil || isPreparingVideo {
+            if videoPipelineTask != nil || isFullVideoImportInProgress {
                 VideoPrepareDiagnostics.logReusedExisting(id: currentSelectionID ?? itemID)
                 return
             }
-            if draft != nil, phase == .ready {
+            if draft != nil, phase == .ready, !isFullVideoImportInProgress {
                 VideoPrepareDiagnostics.logReusedExisting(id: currentSelectionID ?? itemID)
                 return
             }
@@ -125,21 +158,39 @@ final class CreateReelViewModel {
         selectionGeneration &+= 1
         let generation = selectionGeneration
         let selectionID = UUID().uuidString
+        let previousSelectionID = currentSelectionID
+        let preservedLinkedTradeID = draft?.linkedTradeID
+        let preservedLinkedTradeSummary = draft?.linkedTradeSummary
+        let previousDraft = draft
+
         currentSelectionID = selectionID
+        let fastOpenStarted = ContinuousClock.now
+        ClipFastOpenDiagnostics.logSelectionReceived(selectionID: selectionID)
         VideoImportDiagnostics.logSelectionReceived(id: selectionID)
 
         videoPipelineTask?.cancel()
-        phase = .importingVideo
+        cancelBackgroundPreparation(for: previousSelectionID)
         formError = nil
         uploadProgress = 0
+        backgroundPreparationState = .idle
+
+        cleanupDraftFiles(previousDraft)
+        presentComposerShell(
+            selectionID: selectionID,
+            preservedLinkedTradeID: preservedLinkedTradeID,
+            preservedLinkedTradeSummary: preservedLinkedTradeSummary
+        )
+        ClipFastOpenDiagnostics.logComposerPresented(
+            selectionID: selectionID,
+            elapsedMs: Self.elapsedMilliseconds(since: fastOpenStarted)
+        )
 
         videoPipelineTask = Task {
-            await runVideoPipeline(
+            await runPhotosPickerImportPipeline(
                 generation: generation,
                 selectionID: selectionID,
                 photosItem: item,
-                localFileURL: nil,
-                localContentType: nil
+                fastOpenStarted: fastOpenStarted
             )
         }
     }
@@ -149,22 +200,41 @@ final class CreateReelViewModel {
         selectionGeneration &+= 1
         let generation = selectionGeneration
         let selectionID = UUID().uuidString
+        let previousSelectionID = currentSelectionID
+        let preservedLinkedTradeID = draft?.linkedTradeID
+        let preservedLinkedTradeSummary = draft?.linkedTradeSummary
+        let previousDraft = draft
+
         currentSelectionID = selectionID
         lastImportedItemIdentifier = nil
+        let fastOpenStarted = ContinuousClock.now
+        ClipFastOpenDiagnostics.logSelectionReceived(selectionID: selectionID)
         VideoImportDiagnostics.logSelectionReceived(id: selectionID)
 
         videoPipelineTask?.cancel()
-        phase = .importingVideo
+        cancelBackgroundPreparation(for: previousSelectionID)
         formError = nil
         uploadProgress = 0
+        backgroundPreparationState = .idle
+
+        cleanupDraftFiles(previousDraft)
+        presentComposerShell(
+            selectionID: selectionID,
+            preservedLinkedTradeID: preservedLinkedTradeID,
+            preservedLinkedTradeSummary: preservedLinkedTradeSummary
+        )
+        ClipFastOpenDiagnostics.logComposerPresented(
+            selectionID: selectionID,
+            elapsedMs: Self.elapsedMilliseconds(since: fastOpenStarted)
+        )
 
         videoPipelineTask = Task {
-            await runVideoPipeline(
+            await runLocalFileImportPipeline(
                 generation: generation,
                 selectionID: selectionID,
-                photosItem: nil,
                 localFileURL: url,
-                localContentType: contentType
+                localContentType: contentType,
+                fastOpenStarted: fastOpenStarted
             )
         }
     }
@@ -173,10 +243,13 @@ final class CreateReelViewModel {
         guard !isPublishing else { return }
         videoPipelineTask?.cancel()
         videoPipelineTask = nil
+        cancelBackgroundPreparation(for: currentSelectionID)
         cleanupDraftFiles(draft)
         draft = nil
         currentSelectionID = nil
         lastImportedItemIdentifier = nil
+        backgroundPreparationState = .idle
+        isFullVideoImportInProgress = false
         uploadProgress = 0
         if case .failed = phase {
             // Keep failed shell state.
@@ -211,39 +284,21 @@ final class CreateReelViewModel {
     }
 
     func publish() {
-        ReelPublishDiagnostics.logTapReceived(selectionID: draft?.selectionID)
-
-        if didHandOffBackgroundPublish || activePublishID != nil || publishTask != nil {
-            ReelPublishDiagnostics.logDuplicateInvocationIgnored(
-                publishID: activePublishID ?? "in-flight"
-            )
+        if didHandOffBackgroundPublish || publishTask != nil {
             return
         }
 
+        guard validate() else { return }
+
         guard let draft else {
-            ReelPublishDiagnostics.logRejected(reason: "noDraft")
             formError = "Choose a video to continue."
             return
         }
 
-        if videoPipelineTask != nil || isPreparingVideo {
-            ReelPublishDiagnostics.logRejected(reason: "videoPreparing")
-            formError = "Wait for video preparation to finish."
-            return
-        }
+        guard phase == .ready, videoPipelineTask == nil else { return }
 
-        guard phase == .ready else {
-            ReelPublishDiagnostics.logRejected(reason: "phaseNotReady")
-            return
-        }
-
-        let preparedExists = ReelVideoImport.fileIsReadable(at: draft.localVideoURL)
-        ReelPublishDiagnostics.logUsingPreparedVideo(
-            selectionID: draft.selectionID,
-            exists: preparedExists
-        )
-        guard preparedExists else {
-            ReelPublishDiagnostics.logRejected(reason: "preparedVideoMissing")
+        let sourceURL = draft.ownedSourceURL ?? draft.localVideoURL
+        guard ReelVideoImport.fileIsReadable(at: sourceURL) else {
             formError = "Video is no longer available. Please select it again."
             cleanupDraftFiles(self.draft)
             self.draft = nil
@@ -251,80 +306,22 @@ final class CreateReelViewModel {
         }
 
         let publishID = UUID().uuidString
-        ReelPublishDiagnostics.logAccepted(
-            publishID: publishID,
-            selectionID: draft.selectionID
+        ClipPublishDiagnostics.logTapReceived(
+            selectionID: draft.selectionID,
+            preparationState: preparationStateLabel,
+            publishID: publishID
         )
-        formError = nil
 
-        guard let viewerID else {
-            formError = "Sign in to publish."
-            return
+        publishTask = Task { @MainActor in
+            defer { publishTask = nil }
+            await commitPublish(publishID: publishID)
         }
-
-        var publishDraft = draft
-        publishDraft.caption = captionText
-
-        let tradeIsPublic: Bool? = {
-            guard let id = publishDraft.linkedTradeID else { return nil }
-            if let match = pickerTrades.first(where: { $0.id == id }) {
-                return match.visibility == .public
-            }
-            if let cached = detailCache.trade(id: id) {
-                return cached.visibility == .public
-            }
-            return nil
-        }()
-
-        let snapshot: ReelDraftSnapshot
-        do {
-            snapshot = try ReelEncodingPipeline.captureUploadSnapshot(
-                from: publishDraft,
-                publishID: publishID,
-                captionOverride: nil
-            )
-        } catch {
-            formError = Self.userMessage(for: error)
-            return
-        }
-
-        let spec = ReelUploadSpec(
-            publishID: publishID,
-            snapshot: snapshot,
-            authorID: viewerID,
-            tradeIsPublic: tradeIsPublic
-        )
-        let jobID = GlobalUploadCoordinator.shared.enqueueReel(
-            spec: spec,
-            services: GlobalUploadServices(
-                feed: feed,
-                profiles: nil,
-                trades: trades,
-                achievements: nil,
-                uploadService: uploadService,
-                objectStorage: objectStorage,
-                detailCache: detailCache
-            )
-        )
-        didHandOffBackgroundPublish = true
-
-        cleanupDraftFiles(publishDraft)
-        self.draft = nil
-        currentSelectionID = nil
-        lastImportedItemIdentifier = nil
-        phase = .ready
-        GlobalUploadJobDiagnostics.log(
-            id: jobID,
-            kind: .reel,
-            event: .composerDismissed,
-            taskCancelled: Task.isCancelled
-        )
-        onDismiss()
     }
 
     func dismissRequested() {
-        guard !isPublishing else { return }
+        guard !isPublishing, !didHandOffBackgroundPublish else { return }
         videoPipelineTask?.cancel()
+        cancelBackgroundPreparation(for: currentSelectionID)
         cleanupDraftFiles(draft)
         onDismiss()
     }
@@ -380,36 +377,45 @@ final class CreateReelViewModel {
         }
     }
 
-    private func runVideoPipeline(
+    private func runPhotosPickerImportPipeline(
         generation: UInt64,
         selectionID: String,
-        photosItem: PhotosPickerItem?,
-        localFileURL: URL?,
-        localContentType: String?
+        photosItem: PhotosPickerItem,
+        fastOpenStarted: ContinuousClock.Instant
     ) async {
         defer {
             if selectionGeneration == generation {
                 videoPipelineTask = nil
+                isFullVideoImportInProgress = false
             }
         }
 
-        let preservedLinkedTradeID = draft?.linkedTradeID
-        let preservedLinkedTradeSummary = draft?.linkedTradeSummary
-        let previousDraft = draft
-
         do {
-            let owned: ReelVideoImport.OwnedSource
-            if let photosItem {
-                owned = try await ReelVideoImport.importFromPhotosPicker(photosItem, selectionID: selectionID)
-            } else if let localFileURL {
-                owned = try ReelVideoImport.importFromLocalFile(
-                    localFileURL,
-                    contentType: localContentType,
-                    selectionID: selectionID
-                )
-            } else {
-                throw AppError.unknown(message: "Missing video import source.")
+            let posterStarted = ContinuousClock.now
+            let importStarted = ContinuousClock.now
+
+            let lightweightPosterTask = Task {
+                ClipFastOpenDiagnostics.logLightweightPosterStarted(selectionID: selectionID)
+                let poster = await ReelPhotosLightweightPoster.fetch(from: photosItem)
+                if let poster {
+                    ClipFastOpenDiagnostics.logLightweightPosterReady(
+                        selectionID: selectionID,
+                        elapsedMs: Self.elapsedMilliseconds(since: posterStarted)
+                    )
+                    await MainActor.run {
+                        guard selectionGeneration == generation else { return }
+                        applyLightweightPoster(poster, selectionID: selectionID)
+                    }
+                }
+                return poster
             }
+
+            ClipFastOpenDiagnostics.logFullVideoImportStarted(selectionID: selectionID)
+            let owned = try await ReelVideoImport.importFromPhotosPicker(
+                photosItem,
+                selectionID: selectionID
+            )
+            let resolvedPoster = await lightweightPosterTask.value
 
             guard selectionGeneration == generation else {
                 VideoImportDiagnostics.logStaleImportDropped(
@@ -421,64 +427,26 @@ final class CreateReelViewModel {
                 return
             }
 
-            phase = .preparingVideo
-            VideoPrepareDiagnostics.logStarted(id: selectionID)
-
-            let prepared = try await ReelEncodingPipeline.prepareForUpload(
-                from: owned.url,
-                contentType: owned.contentType,
-                onProgress: { [weak self] value in
-                    Task { @MainActor in self?.uploadProgress = value * 0.9 }
-                }
-            )
-
-            guard selectionGeneration == generation else {
-                VideoPrepareDiagnostics.logStalePrepareDropped(
-                    id: selectionID,
-                    generation: generation,
-                    current: selectionGeneration
-                )
-                MediaVideoPreparation.cleanupTemporaryFile(at: prepared.fileURL)
-                ReelVideoImport.cleanup(selectionID: selectionID)
-                return
-            }
-
-            cleanupDraftFiles(previousDraft)
-
-            let next = ReelDraft(
+            ClipFastOpenDiagnostics.logFullVideoImportCompleted(
                 selectionID: selectionID,
-                ownedSourceURL: owned.url,
-                localVideoURL: prepared.fileURL,
-                contentType: prepared.contentType,
-                byteCount: prepared.byteCount,
-                durationSeconds: prepared.durationSeconds,
-                thumbnailJPEG: prepared.thumbnailJPEG,
-                thumbnailPreview: prepared.thumbnailImage,
-                caption: captionText,
-                linkedTradeID: preservedLinkedTradeID,
-                linkedTradeSummary: preservedLinkedTradeSummary
+                elapsedMs: Self.elapsedMilliseconds(since: importStarted),
+                bytes: owned.byteCount
             )
-            draft = next
-            phase = .ready
-            uploadProgress = 0
-            VideoPrepareDiagnostics.logCompleted(id: selectionID, bytes: prepared.byteCount)
+
+            try await finishOwnedVideoImport(
+                generation: generation,
+                selectionID: selectionID,
+                owned: owned,
+                fastOpenStarted: fastOpenStarted,
+                posterFallbackReason: resolvedPoster == nil ? "photosLightweightUnavailable" : nil
+            )
         } catch is CancellationError {
             guard selectionGeneration == generation else { return }
-            phase = draft == nil ? .ready : .ready
-            VideoPrepareDiagnostics.logFailed(
-                id: selectionID,
-                stage: "cancelled",
-                message: "Video preparation was cancelled."
-            )
         } catch {
             guard selectionGeneration == generation else { return }
-            phase = .ready
             formError = Self.userMessage(for: error)
-            VideoPrepareDiagnostics.logFailed(
-                id: selectionID,
-                stage: "pipeline",
-                message: error.localizedDescription
-            )
+            backgroundPreparationState = .idle
+            isFullVideoImportInProgress = false
             VideoImportDiagnostics.logImportFailed(
                 id: selectionID,
                 stage: "pipeline",
@@ -487,68 +455,188 @@ final class CreateReelViewModel {
         }
     }
 
-    private func performPublish(publishID: String) async {
-        var didFinish = false
+    private func runLocalFileImportPipeline(
+        generation: UInt64,
+        selectionID: String,
+        localFileURL: URL,
+        localContentType: String?,
+        fastOpenStarted: ContinuousClock.Instant
+    ) async {
         defer {
-            publishTask = nil
-            if activePublishID == publishID {
-                activePublishID = nil
-                if !didFinish, case .publishing = phase {
-                    phase = .ready
-                }
+            if selectionGeneration == generation {
+                videoPipelineTask = nil
+                isFullVideoImportInProgress = false
             }
         }
 
-        guard activePublishID == publishID else {
-            ReelPublishDiagnostics.logDuplicateInvocationIgnored(publishID: publishID)
+        ClipFastOpenDiagnostics.logFullVideoImportStarted(selectionID: selectionID)
+        let importStarted = ContinuousClock.now
+
+        do {
+            let owned = try ReelVideoImport.importFromLocalFile(
+                localFileURL,
+                contentType: localContentType,
+                selectionID: selectionID
+            )
+
+            guard selectionGeneration == generation else {
+                VideoImportDiagnostics.logStaleImportDropped(
+                    id: selectionID,
+                    generation: generation,
+                    current: selectionGeneration
+                )
+                ReelVideoImport.cleanup(selectionID: selectionID)
+                return
+            }
+
+            ClipFastOpenDiagnostics.logFullVideoImportCompleted(
+                selectionID: selectionID,
+                elapsedMs: Self.elapsedMilliseconds(since: importStarted),
+                bytes: owned.byteCount
+            )
+
+            try await finishOwnedVideoImport(
+                generation: generation,
+                selectionID: selectionID,
+                owned: owned,
+                fastOpenStarted: fastOpenStarted,
+                posterFallbackReason: "localFileNoPhotoKitPoster"
+            )
+        } catch is CancellationError {
+            guard selectionGeneration == generation else { return }
+        } catch {
+            guard selectionGeneration == generation else { return }
+            formError = Self.userMessage(for: error)
+            backgroundPreparationState = .idle
+            isFullVideoImportInProgress = false
+            VideoImportDiagnostics.logImportFailed(
+                id: selectionID,
+                stage: "pipeline",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    private func presentComposerShell(
+        selectionID: String,
+        preservedLinkedTradeID: TradeID?,
+        preservedLinkedTradeSummary: String?
+    ) {
+        let pendingURL = (
+            try? ReelVideoImport.ownedSourceURL(selectionID: selectionID, fileExtension: "mov")
+        ) ?? URL(fileURLWithPath: NSTemporaryDirectory())
+
+        draft = ReelDraft(
+            selectionID: selectionID,
+            ownedSourceURL: nil,
+            localVideoURL: pendingURL,
+            videoAssetState: .sourceMedia,
+            contentType: "video/quicktime",
+            byteCount: 0,
+            durationSeconds: 0,
+            thumbnailJPEG: nil,
+            thumbnailPreview: nil,
+            caption: captionText,
+            linkedTradeID: preservedLinkedTradeID,
+            linkedTradeSummary: preservedLinkedTradeSummary
+        )
+        phase = .ready
+        isFullVideoImportInProgress = true
+    }
+
+    private func applyLightweightPoster(
+        _ poster: ReelPhotosLightweightPoster.Result,
+        selectionID: String
+    ) {
+        guard var current = draft, current.selectionID == selectionID else { return }
+        current.thumbnailPreview = poster.image
+        current.thumbnailJPEG = poster.jpegData
+        if poster.durationSeconds > 0 {
+            current.durationSeconds = poster.durationSeconds
+        }
+        draft = current
+    }
+
+    private func finishOwnedVideoImport(
+        generation: UInt64,
+        selectionID: String,
+        owned: ReelVideoImport.OwnedSource,
+        fastOpenStarted: ContinuousClock.Instant,
+        posterFallbackReason: String?
+    ) async throws {
+        if draft?.thumbnailPreview == nil, let posterFallbackReason {
+            ClipFastOpenDiagnostics.logPosterFallbackToOwnedCopy(
+                selectionID: selectionID,
+                reason: posterFallbackReason
+            )
+            ClipComposeDiagnostics.logPosterFrameStarted(selectionID: selectionID)
+            let posterStarted = ContinuousClock.now
+            let poster = try await ReelPosterFrameExtractor.extractPoster(from: owned.url)
+            ClipComposeDiagnostics.logPosterFrameReady(
+                selectionID: selectionID,
+                elapsedMs: Self.elapsedMilliseconds(since: posterStarted)
+            )
+            await MainActor.run {
+                guard selectionGeneration == generation else { return }
+                applyLightweightPoster(
+                    ReelPhotosLightweightPoster.Result(
+                        image: poster.image,
+                        jpegData: poster.jpegData,
+                        durationSeconds: poster.durationSeconds
+                    ),
+                    selectionID: selectionID
+                )
+            }
+        }
+
+        guard selectionGeneration == generation else {
+            ReelVideoImport.cleanup(selectionID: selectionID)
             return
         }
 
-        ReelPublishDiagnostics.logValidationStarted(publishID: publishID)
+        await MainActor.run {
+            guard var current = draft, current.selectionID == selectionID else { return }
+            current.ownedSourceURL = owned.url
+            current.localVideoURL = owned.url
+            current.contentType = owned.contentType
+            current.byteCount = owned.byteCount
+            draft = current
+            isFullVideoImportInProgress = false
+            uploadProgress = 0
+
+            let interactiveMs = Self.elapsedMilliseconds(since: fastOpenStarted)
+            ClipComposeDiagnostics.logComposerInteractive(selectionID: selectionID, elapsedMs: interactiveMs)
+        }
+
+        startBackgroundPreparationObservation(
+            generation: generation,
+            selectionID: selectionID,
+            ownedSourceURL: owned.url,
+            contentType: owned.contentType
+        )
+    }
+
+    private func commitPublish(publishID: String) async {
+        guard !didHandOffBackgroundPublish, let publishDraftBase = draft else { return }
+        guard let viewerID else {
+            formError = "Sign in to publish."
+            return
+        }
+
+        didHandOffBackgroundPublish = true
         formError = nil
-        guard validate() else {
-            ReelPublishDiagnostics.logFailed(
-                publishID: publishID,
-                stage: "validation",
-                error: AppError.unknown(message: formError ?? "Validation failed.")
-            )
-            didFinish = true
-            phase = .ready
-            return
-        }
-        ReelPublishDiagnostics.logValidationCompleted(publishID: publishID)
 
-        guard let viewerID, var publishDraft = draft else {
-            formError = "Choose a video to publish."
-            ReelPublishDiagnostics.logFailed(
-                publishID: publishID,
-                stage: "validation",
-                error: AppError.unknown(message: "Missing draft.")
-            )
-            didFinish = true
-            phase = .ready
-            return
-        }
-
-        guard ReelVideoImport.fileIsReadable(at: publishDraft.localVideoURL) else {
-            formError = "Video is no longer available. Please select it again."
-            ReelPublishDiagnostics.logFailed(
-                publishID: publishID,
-                stage: "validation",
-                error: AppError.unknown(message: "Prepared video missing.")
-            )
-            cleanupDraftFiles(publishDraft)
-            draft = nil
-            didFinish = true
-            phase = .ready
-            return
-        }
-
+        var publishDraft = publishDraftBase
         publishDraft.caption = captionText
+        let preparationTaskID = publishDraft.selectionID
+        let queuedWhilePreparing = publishDraft.videoAssetState != .preparedDelivery
 
-        let linkedTradeID = publishDraft.linkedTradeID
+        await ReelBackgroundPreparationRegistry.shared.adoptForUpload(
+            preparationTaskID: preparationTaskID
+        )
+
         let tradeIsPublic: Bool? = {
-            guard let id = linkedTradeID else { return nil }
+            guard let id = publishDraft.linkedTradeID else { return nil }
             if let match = pickerTrades.first(where: { $0.id == id }) {
                 return match.visibility == .public
             }
@@ -558,102 +646,199 @@ final class CreateReelViewModel {
             return nil
         }()
 
+        let snapshot: ReelDraftSnapshot
         do {
-            if let tradeID = linkedTradeID {
-                ReelPublishDiagnostics.logPreflightStarted(
+            if publishDraft.videoAssetState == .preparedDelivery {
+                snapshot = try ReelEncodingPipeline.captureUploadSnapshot(
+                    from: publishDraft,
                     publishID: publishID,
-                    tradeID: tradeID.rawValue
-                )
-                if try await feed.tradeHasAttachedReel(tradeID) {
-                    let error = AppError.domain(
-                        .conflict(message: "This trade already has a clip attached.")
-                    )
-                    ReelPublishDiagnostics.logFailed(
-                        publishID: publishID,
-                        stage: "preflight",
-                        error: error
-                    )
-                    throw error
-                }
-                ReelPublishDiagnostics.logPreflightCompleted(publishID: publishID)
-            } else {
-                ReelPublishDiagnostics.logPreflightStarted(publishID: publishID, tradeID: nil)
-                ReelPublishDiagnostics.logPreflightCompleted(publishID: publishID)
-            }
-
-            guard activePublishID == publishID else {
-                ReelPublishDiagnostics.logDuplicateInvocationIgnored(publishID: publishID)
-                return
-            }
-
-            let reel: Reel
-            if viewerID.rawValue.hasPrefix("dev.") {
-                reel = CreateReelFixtures.sampleReel(
-                    author: viewerID,
-                    tradeID: linkedTradeID
+                    captionOverride: nil
                 )
             } else {
-                reel = try await ReelPublishPipeline.publish(
-                    publishID: publishID,
-                    draft: publishDraft,
-                    authorID: viewerID,
-                    tradeID: linkedTradeID,
-                    tradeIsPublic: tradeIsPublic,
-                    feed: feed,
-                    uploadService: uploadService,
-                    objectStorage: objectStorage,
-                    onProgress: { [weak self] value in
-                        Task { @MainActor in self?.uploadProgress = value }
-                    }
+                snapshot = try ReelEncodingPipeline.freezeCommittedSnapshot(
+                    from: publishDraft,
+                    captionOverride: nil
                 )
             }
-
-            guard activePublishID == publishID else {
-                ReelPublishDiagnostics.logDuplicateInvocationIgnored(publishID: publishID)
-                return
-            }
-
-            ReelPublishDiagnostics.logCacheRefreshStarted(publishID: publishID)
-            detailCache.seed(reel)
-            OwnerProfileOptimisticStore.shared.noteReelCreated(reel)
-            cleanupDraftFiles(publishDraft)
-            draft = nil
-            currentSelectionID = nil
-            lastImportedItemIdentifier = nil
-            ExperienceHaptics.play(.success)
-            didFinish = true
-            phase = .ready
-            onDismiss()
-        } catch is CancellationError {
-            guard activePublishID == publishID else { return }
-            didFinish = true
-            phase = .ready
-            formError = "Publish was cancelled."
-            ReelPublishDiagnostics.logFailed(
-                publishID: publishID,
-                stage: "cancelled",
-                error: AppError.cancelled
-            )
         } catch {
-            guard activePublishID == publishID else { return }
-            didFinish = true
-            phase = .ready
+            didHandOffBackgroundPublish = false
             formError = Self.userMessage(for: error)
-            ReelPublishDiagnostics.logFailed(
-                publishID: publishID,
-                stage: "viewModel",
-                error: error
+            return
+        }
+
+        ClipPublishDiagnostics.logCommitted(
+            publishID: publishID,
+            selectionID: publishDraft.selectionID,
+            preparationTaskID: preparationTaskID,
+            queuedWhilePreparing: queuedWhilePreparing
+        )
+
+        let spec = ReelUploadSpec(
+            publishID: publishID,
+            snapshot: snapshot,
+            authorID: viewerID,
+            tradeIsPublic: tradeIsPublic,
+            preparationTaskID: preparationTaskID
+        )
+        let jobID = GlobalUploadCoordinator.shared.enqueueReel(
+            spec: spec,
+            services: GlobalUploadServices(
+                feed: feed,
+                profiles: nil,
+                trades: trades,
+                achievements: nil,
+                uploadService: uploadService,
+                objectStorage: objectStorage,
+                detailCache: detailCache
             )
+        )
+
+        var preservedURLs: Set<URL> = [snapshot.localVideoURL]
+        if let owned = publishDraft.ownedSourceURL {
+            preservedURLs.insert(owned)
+        }
+        if publishDraft.videoAssetState == .preparedDelivery {
+            preservedURLs.insert(publishDraft.localVideoURL)
+        }
+
+        backgroundPrepObservationTask?.cancel()
+        backgroundPrepObservationTask = nil
+        cleanupDraftFiles(publishDraft, preservingVideoURLs: preservedURLs)
+        draft = nil
+        currentSelectionID = nil
+        lastImportedItemIdentifier = nil
+        backgroundPreparationState = .idle
+        phase = .ready
+
+        ClipPublishDiagnostics.logComposerDismissed(publishID: publishID)
+        GlobalUploadJobDiagnostics.log(
+            id: jobID,
+            kind: .reel,
+            event: .composerDismissed,
+            taskCancelled: Task.isCancelled
+        )
+        onDismiss()
+    }
+
+    private func startBackgroundPreparationObservation(
+        generation: UInt64,
+        selectionID: String,
+        ownedSourceURL: URL,
+        contentType: String
+    ) {
+        backgroundPrepObservationTask?.cancel()
+        backgroundPreparationState = .preparing
+        let prepStarted = ContinuousClock.now
+
+        ClipPrepareDiagnostics.logBackgroundStarted(
+            selectionID: selectionID,
+            preparationTaskID: selectionID
+        )
+
+        Task {
+            await ReelBackgroundPreparationRegistry.shared.startIfNeeded(
+                preparationTaskID: selectionID,
+                selectionID: selectionID,
+                ownedSourceURL: ownedSourceURL,
+                contentType: contentType
+            )
+        }
+
+        backgroundPrepObservationTask = Task {
+            do {
+                let package = try await ReelBackgroundPreparationRegistry.shared.awaitPrepared(
+                    preparationTaskID: selectionID
+                )
+                let adopted = await ReelBackgroundPreparationRegistry.shared.isAdoptedForUpload(
+                    preparationTaskID: selectionID
+                )
+                let prepMs = Self.elapsedMilliseconds(since: prepStarted)
+                await MainActor.run {
+                    guard selectionGeneration == generation else {
+                        if !adopted {
+                            MediaVideoPreparation.cleanupTemporaryFile(at: package.prepared.fileURL)
+                        }
+                        return
+                    }
+                    if adopted { return }
+                    guard var current = draft, current.selectionID == selectionID else { return }
+
+                    ClipPrepareDiagnostics.logBackgroundCompleted(
+                        selectionID: selectionID,
+                        preparationTaskID: selectionID,
+                        bytes: package.prepared.byteCount,
+                        elapsedMs: prepMs
+                    )
+
+                    cleanupDraftFiles(
+                        current,
+                        preservingVideoURLs: [package.prepared.fileURL, ownedSourceURL]
+                    )
+                    current.localVideoURL = package.prepared.fileURL
+                    current.videoAssetState = .preparedDelivery
+                    current.contentType = package.prepared.contentType
+                    current.byteCount = package.prepared.byteCount
+                    current.durationSeconds = package.prepared.durationSeconds
+                    if current.thumbnailJPEG == nil {
+                        current.thumbnailJPEG = package.prepared.thumbnailJPEG
+                    }
+                    if current.thumbnailPreview == nil {
+                        current.thumbnailPreview = package.prepared.thumbnailImage
+                    }
+                    draft = current
+                    backgroundPreparationState = .ready
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                let adopted = await ReelBackgroundPreparationRegistry.shared.isAdoptedForUpload(
+                    preparationTaskID: selectionID
+                )
+                await MainActor.run {
+                    guard selectionGeneration == generation, !adopted else { return }
+                    guard draft?.selectionID == selectionID else { return }
+                    let message = Self.userMessage(for: error)
+                    backgroundPreparationState = .failed(message)
+                    formError = message
+                    ClipPrepareDiagnostics.logBackgroundFailed(
+                        selectionID: selectionID,
+                        preparationTaskID: selectionID,
+                        reason: error.localizedDescription
+                    )
+                }
+            }
         }
     }
 
-    private func cleanupDraftFiles(_ draft: ReelDraft?) {
+    private func cancelBackgroundPreparation(for selectionID: String?) {
+        backgroundPrepObservationTask?.cancel()
+        backgroundPrepObservationTask = nil
+        guard let selectionID else { return }
+        Task {
+            await ReelBackgroundPreparationRegistry.shared.cancel(preparationTaskID: selectionID)
+        }
+    }
+
+    private var preparationStateLabel: String {
+        switch backgroundPreparationState {
+        case .idle: return "idle"
+        case .preparing: return "preparing"
+        case .ready: return "ready"
+        case .failed: return "failed"
+        }
+    }
+
+    private func cleanupDraftFiles(_ draft: ReelDraft?, preservingVideoURLs: Set<URL> = []) {
         guard let draft else { return }
-        MediaVideoPreparation.cleanupTemporaryFile(at: draft.localVideoURL)
-        if let ownedSourceURL = draft.ownedSourceURL {
+        if !preservingVideoURLs.contains(draft.localVideoURL) {
+            MediaVideoPreparation.cleanupTemporaryFile(at: draft.localVideoURL)
+        }
+        if let ownedSourceURL = draft.ownedSourceURL, !preservingVideoURLs.contains(ownedSourceURL) {
             ReelVideoImport.cleanup(url: ownedSourceURL)
         }
-        ReelVideoImport.cleanup(selectionID: draft.selectionID)
+        if preservingVideoURLs.isEmpty {
+            ReelVideoImport.cleanup(selectionID: draft.selectionID)
+        }
     }
 
     private func validate() -> Bool {
@@ -667,6 +852,12 @@ final class CreateReelViewModel {
             return false
         }
         return true
+    }
+
+    private static func elapsedMilliseconds(since start: ContinuousClock.Instant) -> Double {
+        let elapsed = ContinuousClock.now - start
+        return Double(elapsed.components.seconds) * 1000
+            + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000
     }
 
     private static func summary(for trade: Trade) -> String {

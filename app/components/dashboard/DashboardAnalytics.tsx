@@ -106,7 +106,7 @@ function DashboardAnalytics({
           )}
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden md:block tt-dash-hide-desktop-v1">
           {deferredSectionsReady ? (
             <DashboardWeekdayChart data={weekdayData} totalTrades={totalTrades} />
           ) : (

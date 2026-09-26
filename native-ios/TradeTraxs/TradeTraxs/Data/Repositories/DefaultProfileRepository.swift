@@ -277,7 +277,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             name: ProfileDisplayNamePolicy.normalized(update.displayName),
             bio: update.bio,
             avatar_url: nil,
-            trader_type: nil,
+            trader_type: update.traderType?.rawValue,
             trading_style: update.tradingStyle,
             primary_market: update.primaryMarket,
             is_private: update.isPrivate,
@@ -548,6 +548,9 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         RepositoryRequestFlight.shared.invalidate(
             prefix: "profiles.followState:\(viewer.rawValue)->\(target.rawValue)"
         )
+        await MainActor.run {
+            GettingStartedRefreshCenter.noteFollowSucceeded(viewer: viewer, target: target)
+        }
     }
 
     func unfollow(from viewer: ProfileID, to target: ProfileID) async throws {

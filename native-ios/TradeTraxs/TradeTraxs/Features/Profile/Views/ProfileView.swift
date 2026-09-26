@@ -63,6 +63,7 @@ struct ProfileView: View {
         let contentStore = screen.contentStore
         let headerViewModel = screen.headerViewModel
 
+        ScrollViewReader { tourProxy in
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
                 ProfileHeaderView(
@@ -113,7 +114,6 @@ struct ProfileView: View {
         .scrollDismissesKeyboard(.interactively)
         .experienceScreenBackground()
         .experienceNavigationTitle(navigationTitle)
-        .toolbar(.visible, for: .tabBar)
         .toolbar {
             if screen.showsSettingsToolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -239,6 +239,17 @@ struct ProfileView: View {
             )
         }
         .accessibilityIdentifier(contentStore.isOwner ? "profile.root.owner" : "profile.root.other")
+        .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
+            guard let target else { return }
+            if reduceMotion {
+                tourProxy.scrollTo(target, anchor: .center)
+            } else {
+                withAnimation(ExperienceMotion.navigation) {
+                    tourProxy.scrollTo(target, anchor: .center)
+                }
+            }
+        }
+        }
     }
 
     private var navigationTitle: String {

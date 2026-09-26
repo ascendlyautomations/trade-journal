@@ -29,6 +29,7 @@ type TradingReportsSectionProps = {
 
 export type TradingReportsSectionHandle = {
   openReport: () => void
+  openPeriod: (key: TradingReportPeriodKey) => void
 }
 
 const TradingReportsSection = forwardRef<
@@ -81,9 +82,14 @@ const TradingReportsSection = forwardRef<
     )
   }, [newBadge, openModal])
 
-  useImperativeHandle(ref, () => ({ openReport: openDefaultReport }), [
-    openDefaultReport,
-  ])
+  useImperativeHandle(
+    ref,
+    () => ({
+      openReport: openDefaultReport,
+      openPeriod: (key: TradingReportPeriodKey) => openModal(key),
+    }),
+    [openDefaultReport, openModal]
+  )
 
   useEffect(() => {
     const fromUrl = parsePeriodKey(searchParams.get("report"))
@@ -103,7 +109,7 @@ const TradingReportsSection = forwardRef<
 
   return (
     <>
-      <div className="hidden md:block">
+      <div className="tt-dash-hide-desktop-v1 hidden md:block">
         <TradingReportsDashboardCard
           onOpen={openDefaultReport}
           loading={loading && !snapshot}

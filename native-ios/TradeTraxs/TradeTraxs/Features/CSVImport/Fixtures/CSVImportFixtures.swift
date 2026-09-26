@@ -1,6 +1,6 @@
 import Foundation
 
-enum CSVImportFixtures {
+nonisolated enum CSVImportFixtures {
     /// Synthetic Tradovate-shaped export (web detection headers).
     static let tradovateCSV = """
     symbol,buyPrice,sellPrice,qty,pnl,boughtTimestamp,soldTimestamp,side

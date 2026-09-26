@@ -199,7 +199,7 @@ export default function ConversationSettingsModal({
               value={groupName}
               onChange={(e) => onGroupNameChange(e.target.value)}
               placeholder="Group name"
-              className="w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500/40"
+              className="w-full rounded-lg border border-white/10 bg-white/10 p-2.5 text-sm text-white outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500/40"
             />
           ) : null}
           {onSaveGroupDetails ? (
@@ -225,7 +225,7 @@ export default function ConversationSettingsModal({
             <button
               type="button"
               onClick={() => setShowMembers((v) => !v)}
-              className="w-full rounded-lg bg-[#1e293b] px-3 py-2.5 text-left text-sm text-white hover:bg-[#334155]"
+              className="w-full rounded-lg bg-white/10 px-3 py-2.5 text-left text-sm text-white hover:bg-white/20"
             >
               {showMembers
                 ? "Hide Members"
@@ -238,7 +238,7 @@ export default function ConversationSettingsModal({
                     key={m.user_id}
                     userId={m.profiles?.id ?? m.user_id}
                     username={m.profiles?.username}
-                    className="flex items-center gap-2 rounded-lg bg-[#1e293b] px-3 py-2 text-sm text-white hover:bg-[#334155]"
+                    className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20"
                   >
                     <ProfileAvatarImg
                       src={m.profiles?.avatar_url}
@@ -253,7 +253,7 @@ export default function ConversationSettingsModal({
               <button
                 type="button"
                 onClick={onInviteMembers}
-                className="w-full rounded-lg bg-[#1e293b] px-3 py-2.5 text-left text-sm text-white hover:bg-[#334155]"
+                className="w-full rounded-lg bg-white/10 px-3 py-2.5 text-left text-sm text-white hover:bg-white/20"
               >
                 Invite Members
               </button>
@@ -264,7 +264,7 @@ export default function ConversationSettingsModal({
         <button
           type="button"
           onClick={onViewSharedMedia}
-          className="w-full rounded-lg bg-[#1e293b] px-3 py-2.5 text-left text-sm text-white hover:bg-[#334155]"
+          className="w-full rounded-lg bg-white/10 px-3 py-2.5 text-left text-sm text-white hover:bg-white/20"
         >
           View Shared Media
           <span className="mt-0.5 block text-xs text-gray-400">

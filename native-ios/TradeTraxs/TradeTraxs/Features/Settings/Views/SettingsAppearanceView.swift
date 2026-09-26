@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Apple Settings–style Appearance picker (System / TradeTraxs).
+/// Apple Settings–style Appearance picker (System / Light / Dark).
 struct SettingsAppearanceView: View {
     @State private var viewModel: SettingsAppearanceViewModel
 
@@ -50,10 +50,11 @@ struct SettingsAppearanceView: View {
             } header: {
                 Text("Theme")
             } footer: {
-                Text("System matches Light and Dark with iOS. TradeTraxs uses our brand colors.")
+                Text("System follows your iPhone. Light and Dark stay fixed regardless of iOS appearance.")
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Appearance")

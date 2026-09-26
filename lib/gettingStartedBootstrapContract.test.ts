@@ -19,7 +19,7 @@ describe("gettingStartedContractFixtures", () => {
       assert.deepEqual(decoded, fixture.expected)
       const progress = computeGettingStartedProgress(decoded)
       assert.equal(typeof progress.completedCount, "number")
-      assert.equal(progress.totalCount, 6)
+      assert.equal(progress.totalCount, 7)
     })
   }
 })

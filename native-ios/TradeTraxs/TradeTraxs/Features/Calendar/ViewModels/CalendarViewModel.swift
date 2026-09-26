@@ -35,7 +35,6 @@ final class CalendarViewModel {
     /// Session cache: calendar year → trades across all month fetch windows.
     private var yearTradeCache: [Int: [Trade]] = [:]
     private var loadTask: Task<Void, Never>?
-    private var watchedChannel: RealtimeChannelID?
     private var hasLoadedAccounts = false
     /// Calendar V2 — full-granularity month payloads (account buckets); filter client-side.
     var analyticsV2Memory: [String: AnalyticsDailyRangeBootstrapV1] = [:]
@@ -484,6 +483,12 @@ final class CalendarViewModel {
         }
     }
 
+    /// When analytical calendar RPC/GRDB is authoritative, never fall through to raw trade SELECT.
+    private var blocksLegacyRawTradeNetworkFetch: Bool {
+        usesCalendarAnalyticsV2
+            || (BackendV2FeatureFlags.isEnabled(.calendar) && rpc != nil)
+    }
+
     private func loadVisibleMonth(forceNetwork: Bool = false) async {
         if usesCalendarAnalyticsV2 {
             await loadVisibleMonthAnalyticsV2(forceNetwork: forceNetwork)
@@ -619,8 +624,17 @@ final class CalendarViewModel {
             return
         }
 
+        if blocksLegacyRawTradeNetworkFetch {
+#if DEBUG
+            SupabaseEfficiencyProbe.calendarSource(.analytics)
+#endif
+            recompute()
+            return
+        }
+
         do {
             #if DEBUG
+            SupabaseEfficiencyProbe.calendarSource(.legacyRawTrades)
             if !CalendarCacheProbe.networkRequired {
                 CalendarCacheProbe.recordNetworkRequired(month: cacheKey, reason: "repositoryFetch")
             }
@@ -763,7 +777,18 @@ final class CalendarViewModel {
             return
         }
 
+        if blocksLegacyRawTradeNetworkFetch {
+#if DEBUG
+            SupabaseEfficiencyProbe.calendarSource(.analytics)
+#endif
+            recomputeYearOverview()
+            return
+        }
+
         do {
+            #if DEBUG
+            SupabaseEfficiencyProbe.calendarSource(.legacyRawTrades)
+            #endif
             SessionNetworkProbe.record(.networkFetch, resource: "calendar.year", detail: "\(year)")
             let fetched = try await trades.trades(
                 ownedBy: profileID,
@@ -782,24 +807,13 @@ final class CalendarViewModel {
         }
     }
 
-    // MARK: - Realtime
-
     private func startRealtime(profileID: ProfileID) async {
-        guard let realtimeHub else { return }
-        let channel = RealtimeChannelID(kind: .profile, topic: "calendar:\(profileID.rawValue)")
-        if watchedChannel == channel { return }
-        await stopRealtime()
-        watchedChannel = channel
-        try? await realtimeHub.subscriptions.subscribe(channel)
+        _ = profileID
     }
 
-    private func stopRealtime() async {
-        guard let realtimeHub, let channel = watchedChannel else { return }
-        try? await realtimeHub.subscriptions.unsubscribe(channel)
-        watchedChannel = nil
-    }
+    private func stopRealtime() async {}
 
-    // MARK: - Incremental updates (for tests / future postgres_changes)
+    // MARK: - Incremental updates (local journal mutations)
 
     private func calendarAccountFilterID() -> TradingAccountID? {
         if case .account(let id) = accountFilter { return id }

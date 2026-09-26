@@ -13,7 +13,6 @@ import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/li
 import { safeAccountNumberLabel, formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import TradeScreenshotPreview from "@/app/components/ui/TradeScreenshotPreview"
-import { TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS } from "@/lib/tradeScreenshotDisplay"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
 import TradeCopyTradingDetails from "@/app/components/trade/TradeCopyTradingDetails"
 import ExpandableText from "@/app/components/ui/ExpandableText"
@@ -462,8 +461,8 @@ function TradesPageTradeCard({
         <TradeScreenshotPreview
           src={screenshotUrl}
           fullSrc={screenshotUrl}
-          maxHeightClassName={TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS}
-          className="mx-auto mt-4 block rounded-lg"
+          displayMode={trade.image_display_mode}
+          className="rounded-lg"
           onOpenFull={onImageClick}
         />
       ) : null}

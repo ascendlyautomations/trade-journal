@@ -10,6 +10,7 @@ nonisolated struct GettingStartedSignals: Sendable, Equatable {
     var followCount: Int
     var hasEverJoinedOtherRoom: Bool
     var hasPublicTrade: Bool
+    var hasCompletedDailyCheckIn: Bool
     var firstPrivateTradeID: TradeID?
 
     static let empty = GettingStartedSignals(
@@ -21,6 +22,7 @@ nonisolated struct GettingStartedSignals: Sendable, Equatable {
         followCount: 0,
         hasEverJoinedOtherRoom: false,
         hasPublicTrade: false,
+        hasCompletedDailyCheckIn: false,
         firstPrivateTradeID: nil
     )
 }
@@ -28,6 +30,7 @@ nonisolated struct GettingStartedSignals: Sendable, Equatable {
 nonisolated enum GettingStartedTaskID: String, CaseIterable, Sendable, Identifiable {
     case profile
     case trade
+    case dailyCheckIn
     case follow
     case room
     case post
@@ -39,6 +42,7 @@ nonisolated enum GettingStartedTaskID: String, CaseIterable, Sendable, Identifia
         switch self {
         case .profile: return "Complete your profile"
         case .trade: return "Add your first trade"
+        case .dailyCheckIn: return "Complete your first daily check-in"
         case .follow: return "Follow another trader"
         case .room: return "Join a trade room"
         case .publicTrade: return "Make your first trade public"
@@ -54,7 +58,7 @@ nonisolated struct GettingStartedTask: Sendable, Equatable, Identifiable {
 }
 
 nonisolated struct GettingStartedProgress: Sendable, Equatable {
-    static let totalCount = 6
+    static let totalCount = 7
 
     var tasks: [GettingStartedTask]
     var completedCount: Int
@@ -77,6 +81,7 @@ nonisolated struct GettingStartedSignalsWire: Codable, Sendable {
     var follow_count: Int?
     var has_ever_joined_other_room: Bool?
     var has_public_trade: Bool?
+    var has_completed_daily_check_in: Bool?
     var first_private_trade_id: String?
 }
 
@@ -96,6 +101,7 @@ nonisolated enum GettingStartedSignalsDecoder {
             followCount: max(0, wire.follow_count ?? 0),
             hasEverJoinedOtherRoom: wire.has_ever_joined_other_room == true,
             hasPublicTrade: wire.has_public_trade == true,
+            hasCompletedDailyCheckIn: wire.has_completed_daily_check_in == true,
             firstPrivateTradeID: wire.first_private_trade_id.flatMap { TradeID($0) }
         )
     }

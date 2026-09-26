@@ -77,9 +77,6 @@ enum ThemePalettes {
         accessibilityLoss: Color(hex: 0xFCA5A5)
     )
 
-    /// Signature TradeTraxs — lighter muted-blue canvas, neutral gray surfaces,
-    /// restrained cyan accent. See ``TradeTraxsThemeTokens``.
-    static let tradeTraxsSignature = TradeTraxsThemeTokens.semanticPalette
 }
 
 extension Color {

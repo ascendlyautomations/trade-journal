@@ -41,7 +41,7 @@ struct TradeTraxsContentImage: View {
     @ViewBuilder
     private func renderedImage(_ image: UIImage) -> some View {
         let aspect = MediaImageOrientation.aspectRatio(of: image)
-        let bg = backgroundColor ?? colors.fillSecondary
+        let bg = backgroundColor ?? Color.clear
 
         if let fixedSize {
             let legacyCrop = explicitLegacyCropPresentation

@@ -1,6 +1,6 @@
 import Foundation
 
-enum TradeShareFixtures {
+nonisolated enum TradeShareFixtures {
     static func sampleTrades(ownerID: ProfileID) -> [Trade] {
         [
             Trade(

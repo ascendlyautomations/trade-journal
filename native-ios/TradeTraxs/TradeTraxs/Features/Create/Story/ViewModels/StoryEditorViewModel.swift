@@ -92,10 +92,16 @@ final class StoryEditorViewModel {
 
     func deleteSelectedText() {
         guard let id = canvas.selectedTextID else { return }
+        deleteOverlay(id: id)
+    }
+
+    func deleteOverlay(id: UUID) {
         canvas.textOverlays.removeAll { $0.id == id }
-        canvas.selectedTextID = nil
-        isEditingText = false
-        draftText = ""
+        if canvas.selectedTextID == id {
+            canvas.selectedTextID = nil
+            isEditingText = false
+            draftText = ""
+        }
     }
 
     func updateImageScale(_ scale: CGFloat) {

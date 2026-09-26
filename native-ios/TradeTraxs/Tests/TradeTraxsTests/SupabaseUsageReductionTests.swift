@@ -1,3 +1,4 @@
+import Synchronization
 import XCTest
 @testable import TradeTraxs
 
@@ -26,19 +27,19 @@ final class SupabaseUsageReductionTests: XCTestCase {
     }
 
     func testFollowingStoreFetchesOnceAcrossConsumers() async throws {
-        var fetchCount = 0
+        let fetchCount = Mutex(0)
         let viewer = "viewer-1"
         let first = try await SessionFollowingStore.shared.followingIDs(viewerID: viewer) {
-            fetchCount += 1
+            fetchCount.withLock { $0 += 1 }
             return ["a", "b", "c"]
         }
         let second = try await SessionFollowingStore.shared.followingIDs(viewerID: viewer) {
-            fetchCount += 1
+            fetchCount.withLock { $0 += 1 }
             return ["should-not-run"]
         }
         XCTAssertEqual(Set(first), Set(["a", "b", "c"]))
         XCTAssertEqual(Set(second), Set(["a", "b", "c"]))
-        XCTAssertEqual(fetchCount, 1)
+        XCTAssertEqual(fetchCount.withLock { $0 }, 1)
     }
 
     func testOwnerTradesCacheHitSkipsNetwork() async throws {

@@ -62,7 +62,8 @@ nonisolated struct UserFacingError: Sendable, Equatable {
             return "Please try again."
         }
         let lowered = trimmed.lowercased()
-        if trimmed.hasPrefix("Transport:")
+        if trimmed.contains("BackendV2RPCError")
+            || trimmed.hasPrefix("Transport:")
             || trimmed.hasPrefix("Authentication:")
             || trimmed.hasPrefix("Not implemented:")
             || trimmed.hasPrefix("{")

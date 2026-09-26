@@ -43,6 +43,7 @@ struct RecordPayoutFlowView: View {
                     stepContent
                 }
             }
+            .experienceScreenBackground()
             .experienceNavigationTitle("Record Payout")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -71,7 +72,9 @@ struct RecordPayoutFlowView: View {
         Form {
             Section {
                 LabeledContent("Account", value: viewModel.accountName)
+                    .experienceDashboardListRow()
                 LabeledContent("Balance before payout", value: viewModel.balanceBeforeDisplay)
+                    .experienceDashboardListRow()
             } header: {
                 Text("Account")
             }
@@ -83,10 +86,13 @@ struct RecordPayoutFlowView: View {
                         onEditingChange: { viewModel.syncBalanceAfterFromPayoutAmount() }
                     )
                 }
+                .experienceDashboardListRow()
                 SettingsLabeledField(title: "Balance after payout", helper: "USD") {
                     RecordPayoutCurrencyField(amountText: $viewModel.balanceAfterDigits)
                 }
+                .experienceDashboardListRow()
                 DatePicker("Payout date", selection: $viewModel.payoutDate, in: ...Date(), displayedComponents: .date)
+                    .experienceDashboardListRow()
             } header: {
                 Text("Payout")
             }
@@ -97,17 +103,23 @@ struct RecordPayoutFlowView: View {
                         Text(behavior.title).tag(behavior)
                     }
                 }
+                .experienceDashboardListRow()
                 Text(viewModel.drawdownBehavior.subtitle)
                     .font(.footnote)
                     .foregroundStyle(colors.secondaryText)
+                    .experienceDashboardListRow()
                 Toggle("Remember this drawdown choice", isOn: $viewModel.rememberDrawdownBehavior)
+                    .experienceDashboardListRow()
             } header: {
                 Text("Drawdown")
             }
 
             if let formError = viewModel.formError {
                 Section {
-                    Text(formError).foregroundStyle(colors.loss).font(.footnote)
+                    Text(formError)
+                        .foregroundStyle(colors.loss)
+                        .font(.footnote)
+                        .experienceDashboardListRow()
                 }
             }
 
@@ -115,10 +127,14 @@ struct RecordPayoutFlowView: View {
                 Button("Continue") {
                     viewModel.advanceToConfirm()
                 }
+                .tint(colors.accent)
                 .disabled(!viewModel.canAdvanceFromSetup || viewModel.phase == .recording)
+                .experienceDashboardListRow()
             }
         }
+        .listRowSeparatorTint(colors.separator)
         .scrollDismissesKeyboard(.interactively)
+        .experienceDashboardGroupedRows()
     }
 
     private var confirmStep: some View {

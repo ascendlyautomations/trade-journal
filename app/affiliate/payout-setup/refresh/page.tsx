@@ -1,11 +1,12 @@
 "use client"
 
+import "../../../utilityDesktopTheme.css"
 import Link from "next/link"
 
 export default function AffiliatePayoutSetupRefreshPage() {
   return (
     <>
-      <div className="mx-auto max-w-lg px-4 py-16 text-center text-white">
+      <div className="tt-phase4-dark mx-auto max-w-lg px-4 py-16 text-center text-white">
         <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-6 py-8">
           <h1 className="text-lg font-semibold text-amber-100">Onboarding link expired</h1>
           <p className="mt-2 text-sm text-amber-100/90">

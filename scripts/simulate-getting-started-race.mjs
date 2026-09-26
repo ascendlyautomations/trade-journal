@@ -13,7 +13,7 @@ function computeProgress(signals) {
     { id: "public", complete: signals.hasPublicTrade },
   ]
   const completedCount = items.filter((i) => i.complete).length
-  return { items, completedCount, totalCount: 6, allComplete: completedCount === 6 }
+  return { items, completedCount, totalCount: 7, allComplete: completedCount === 7 }
 }
 
 function detectNewlyCompleted(previous, next) {

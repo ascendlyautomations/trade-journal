@@ -1,6 +1,6 @@
 "use client"
 
-import { CONTENT_IMAGE_CROP_PRESET } from "./contentImagePipeline"
+import { CONTENT_IMAGE_V2_PRESET } from "./contentImageV2"
 import {
   useImageCropUpload,
   type UseImageCropUploadResult,
@@ -16,7 +16,7 @@ export function useTradeImageCropUpload(
   options: UseTradeImageCropUploadOptions
 ): UseImageCropUploadResult {
   return useImageCropUpload({
-    preset: CONTENT_IMAGE_CROP_PRESET,
+    preset: CONTENT_IMAGE_V2_PRESET,
     onCropped: options.onCropped,
     onValidationError: options.onValidationError,
   })

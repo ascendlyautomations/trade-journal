@@ -106,10 +106,15 @@ nonisolated struct SupabaseTransport: Sendable {
     }
 
     func encodeJSON<T: Encodable>(_ value: T) throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
         do {
-            return try encoder.encode(value)
+            return try SupabaseJSONEncoding.encode(value)
+        } catch let error as SupabaseJSONEncoding.Error {
+            switch error {
+            case .invalidTopLevelType(let kind):
+                throw AppError.unknown(message: "Invalid Supabase JSON body (\(kind))")
+            case .invalidJSONObjectGraph, .encodeFailed:
+                throw AppError.unknown(message: "Failed to encode Supabase request")
+            }
         } catch {
             throw AppError.unknown(message: "Failed to encode Supabase request")
         }

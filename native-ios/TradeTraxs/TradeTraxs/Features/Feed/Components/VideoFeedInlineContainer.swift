@@ -10,11 +10,9 @@ struct VideoFeedInlineContainer<Overlay: View>: View {
     let playbackCoordinator: FeedVideoPlaybackCoordinator
     @ViewBuilder let overlay: () -> Overlay
 
-    @Environment(\.themeColors) private var colors
-
     var body: some View {
         ZStack {
-            colors.fillPrimary
+            Color.clear
 
             FeedClipPosterImage(
                 thumbnail: reel.thumbnail,
@@ -44,7 +42,7 @@ struct VideoFeedInlineContainer<Overlay: View>: View {
                 FeedInlineVideoSurface(
                     clipID: reel.id.rawValue,
                     player: player,
-                    containerSize: layoutMetrics,
+                    containerSize: fittedMediaSize,
                     videoGravity: resolvedGravity,
                     onReadyForDisplayChange: { ready in
                         if ready {
@@ -54,7 +52,7 @@ struct VideoFeedInlineContainer<Overlay: View>: View {
                         }
                     }
                 )
-                .frame(width: layoutMetrics.width, height: layoutMetrics.height)
+                .frame(width: fittedMediaSize.width, height: fittedMediaSize.height)
                 .allowsHitTesting(false)
             }
 
@@ -73,6 +71,20 @@ struct VideoFeedInlineContainer<Overlay: View>: View {
 
     private var resolvedGravity: AVLayerVideoGravity {
         presentation?.playerGravity(for: .feedInline) ?? .resizeAspect
+    }
+
+    /// Aspect-fit video box inside the capped inline region.
+    /// The container stays `layoutMetrics`; only the player layer hugs the video
+    /// so letterbox area is the parent card instead of the player’s black fill.
+    private var fittedMediaSize: CGSize {
+        let container = layoutMetrics
+        let aspect = presentation?.aspectRatio ?? FeedInlineClipLayout.placeholderAspectRatio
+        let safeAspect = max(aspect, 0.01)
+        let containerAspect = container.width / max(container.height, 1)
+        if safeAspect >= containerAspect {
+            return CGSize(width: container.width, height: container.width / safeAspect)
+        }
+        return CGSize(width: container.height * safeAspect, height: container.height)
     }
 
     private var layoutMetrics: CGSize {

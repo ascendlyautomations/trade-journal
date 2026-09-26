@@ -22,8 +22,20 @@ final class ViewerSyncReconciliationCoordinator {
     private init() {}
 
     func schedule(_ context: ViewerSyncReconcileContext) {
+        let hadPending = pending != nil
+        let hadTask = reconcileTask != nil
         pending = merge(pending, context)
+        if hadPending || hadTask {
+#if DEBUG
+            SupabaseEfficiencyProbe.softStaleFlight(domain: "viewerSync", mode: .joined)
+#endif
+        }
         guard reconcileTask == nil else { return }
+#if DEBUG
+        if !hadPending, !hadTask {
+            SupabaseEfficiencyProbe.softStaleFlight(domain: "viewerSync", mode: .new)
+        }
+#endif
         reconcileTask = Task { @MainActor in
             defer { reconcileTask = nil }
             repeat {
@@ -144,23 +156,36 @@ final class ViewerSyncReconciliationCoordinator {
             let needsSession = changed.contains(.profile)
 
             if needsDashboard, let detailCache = context.detailCache {
-                if DashboardAuthoritativeRefreshCoordinator.shared.hasInFlight(viewerID: context.viewerID) {
-                    await DashboardAuthoritativeRefreshCoordinator.shared.awaitInFlightIfNeeded(
-                        viewerID: context.viewerID
-                    )
-                } else if !DashboardAuthoritativeRefreshCoordinator.shared.shouldSkipViewerSyncDashboardLoad(
-                    viewerID: context.viewerID
-                ) {
-                    _ = try await DashboardBootstrapLoader.load(
+                if usesDashboardV3AnalyticsAuthority {
+#if DEBUG
+                    SupabaseEfficiencyProbe.viewerSyncAuthority(.v3)
+#endif
+                    await reconcileDashboardViaAnalyticsAuthority(
                         viewerID: context.viewerID,
-                        rpc: context.rpc,
-                        detailCache: detailCache,
-                        forceNetwork: true,
-                        trigger: .viewerSync,
-                        loadGeneration: context.loadGeneration,
-                        currentGeneration: context.currentGeneration,
-                        skipSoftStaleReconcile: true
+                        rpc: context.rpc
                     )
+                } else {
+#if DEBUG
+                    SupabaseEfficiencyProbe.viewerSyncAuthority(.v2)
+#endif
+                    if DashboardAuthoritativeRefreshCoordinator.shared.hasInFlight(viewerID: context.viewerID) {
+                        await DashboardAuthoritativeRefreshCoordinator.shared.awaitInFlightIfNeeded(
+                            viewerID: context.viewerID
+                        )
+                    } else if !DashboardAuthoritativeRefreshCoordinator.shared.shouldSkipViewerSyncDashboardLoad(
+                        viewerID: context.viewerID
+                    ) {
+                        _ = try await DashboardBootstrapLoader.load(
+                            viewerID: context.viewerID,
+                            rpc: context.rpc,
+                            detailCache: detailCache,
+                            forceNetwork: true,
+                            trigger: .viewerSync,
+                            loadGeneration: context.loadGeneration,
+                            currentGeneration: context.currentGeneration,
+                            skipSoftStaleReconcile: true
+                        )
+                    }
                 }
             }
 
@@ -188,6 +213,42 @@ final class ViewerSyncReconciliationCoordinator {
             // Network failure with usable cache — keep displaying cached data.
             SyncStateProbe.logFallback("sync_rpc_error_preserved_cache")
             preserveStaleCache(context, reason: "sync_rpc_error_preserved_cache")
+        }
+    }
+
+    private var usesDashboardV3AnalyticsAuthority: Bool {
+        BackendV2FeatureFlags.isEnabled(.dashboardAnalyticsV3)
+            && AnalyticsReconciliationGate.isEnabled
+    }
+
+    /// Viewer-sync trade/account drift — reconcile via analytics revision, not V2 dashboard bootstrap.
+    private func reconcileDashboardViaAnalyticsAuthority(
+        viewerID: ProfileID,
+        rpc: any RPCClient
+    ) async {
+        if DashboardAuthoritativeRefreshCoordinator.shared.hasInFlight(viewerID: viewerID) {
+            await DashboardAuthoritativeRefreshCoordinator.shared.awaitInFlightIfNeeded(viewerID: viewerID)
+        }
+
+        let snap = await AnalyticsReconciliationCoordinator.shared.snapshotForTesting()
+        if snap.reconcilingRevision != nil || snap.dashboardIntent != nil {
+            return
+        }
+
+        let uid = viewerID.rawValue
+        let flightKey = BackendV2FlightKeys.analyticsRevision(viewerID: uid)
+        do {
+            let encoded = try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
+                let repo = AnalyticsRevisionRepository(rpc: rpc)
+                let response = try await repo.loadRevision()
+                return try JSONEncoder().encode(response)
+            }
+            let server = try JSONDecoder().decode(AnalyticsRevisionV1.self, from: encoded)
+            await AnalyticsReconciliationCoordinator.shared.receive(
+                .remoteRevision(serverRevision: server.revisionInt)
+            )
+        } catch {
+            SyncStateProbe.logFallback("viewer_sync_v3_revision_failed")
         }
     }
 

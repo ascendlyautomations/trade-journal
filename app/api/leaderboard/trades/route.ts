@@ -2,6 +2,16 @@ import { NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
 import { supabaseServiceRole } from "../../_lib/getRouteUser"
 import type { TradeForLeaderboard } from "@/lib/leaderboardChart"
+import {
+  buildLeaderboardPayloadFromTrades,
+  leaderboardCacheNowBucket,
+  leaderboardCustomInstants,
+  normalizeLeaderboardPayload,
+  parseLeaderboardAccount,
+  parseLeaderboardView,
+  type LeaderboardPayload,
+  type LeaderboardQuery,
+} from "@/lib/leaderboardAggregate"
 
 const PAGE_SIZE = 1000
 /** Soft TTL — rankings refresh on next miss; filter UX stays client-side. */
@@ -139,14 +149,67 @@ async function loadLeaderboardTradesUncached(): Promise<TradeForLeaderboard[]> {
   )
 }
 
-const getCachedLeaderboardTrades = unstable_cache(
-  loadLeaderboardTradesUncached,
-  ["leaderboard-trade-rows-v1"],
+function isMissingRankedRpc(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  return (
+    error.code === "PGRST202" ||
+    (error.message ?? "").includes("leaderboard_ranked_window")
+  )
+}
+
+async function loadRankedPayload(query: LeaderboardQuery): Promise<LeaderboardPayload> {
+  const custom =
+    query.customStartIso && query.customEndIso
+      ? { startIso: query.customStartIso, endIso: query.customEndIso }
+      : leaderboardCustomInstants(query.customStartYmd ?? "", query.customEndYmd ?? "")
+  const { data, error } = await supabaseServiceRole.rpc("leaderboard_ranked_window", {
+    p_view: query.view,
+    p_account_type: query.accountType,
+    p_now: query.nowIso,
+    p_custom_start: custom?.startIso,
+    p_custom_end: custom?.endIso,
+    p_custom_start_ymd: query.customStartYmd || undefined,
+    p_custom_end_ymd: query.customEndYmd || undefined,
+    p_viewer_id: query.viewerId || undefined,
+    p_rank_limit: 25,
+  })
+
+  if (!error) {
+    const payload = normalizeLeaderboardPayload(data)
+    if (payload) return payload
+  } else if (!isMissingRankedRpc(error)) {
+    console.error("[api/leaderboard/trades] ranked rpc error:", error)
+    throw new Error(error.message)
+  }
+
+  // Migration not applied yet: aggregate on the server. Still do not return raw trades.
+  const trades = await loadLeaderboardTradesUncached()
+  return buildLeaderboardPayloadFromTrades(trades, query)
+}
+
+const getCachedRankedPayload = unstable_cache(
+  async (serializedQuery: string) =>
+    loadRankedPayload(JSON.parse(serializedQuery) as LeaderboardQuery),
+  ["leaderboard-ranked-v2"],
   { revalidate: LEADERBOARD_TRADES_REVALIDATE_SECONDS }
 )
 
-/** Aggregated leaderboard inputs: public trades from public-profile users only. */
-export async function GET() {
-  const trades = await getCachedLeaderboardTrades()
-  return NextResponse.json(trades)
+/** Ranked leaderboard window. The browser does not receive raw trades. */
+export async function GET(req: Request) {
+  const url = new URL(req.url)
+  const nowIso = url.searchParams.get("now") || new Date().toISOString()
+  const query: LeaderboardQuery = {
+    view: parseLeaderboardView(url.searchParams.get("view")),
+    accountType: parseLeaderboardAccount(url.searchParams.get("account")),
+    nowIso: new Date(
+      Number(leaderboardCacheNowBucket(nowIso)) * 60_000
+    ).toISOString(),
+    customStartYmd: url.searchParams.get("customStart") ?? "",
+    customEndYmd: url.searchParams.get("customEnd") ?? "",
+    customStartIso: url.searchParams.get("customStartAt") ?? "",
+    customEndIso: url.searchParams.get("customEndAt") ?? "",
+    viewerId: url.searchParams.get("viewer") || null,
+  }
+  const payload = await getCachedRankedPayload(JSON.stringify(query))
+  return NextResponse.json(payload)
 }

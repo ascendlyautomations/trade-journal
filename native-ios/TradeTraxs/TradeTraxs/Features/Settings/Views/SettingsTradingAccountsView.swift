@@ -210,6 +210,7 @@ struct SettingsTradingAccountsView: View {
             }
             }
             .listStyle(.insetGrouped)
+            .experienceDashboardGroupedRows()
             .listSectionSpacing(ExperienceSpacing.xxs)
             .contentMargins(.top, viewModel.accounts.isEmpty ? ExperienceSpacing.xs : 0, for: .scrollContent)
             .scrollContentBackground(.hidden)

@@ -1,5 +1,6 @@
 "use client"
 
+import "../utilityDesktopTheme.css"
 import { useState } from "react"
 import CsvImportPanel from "../components/CsvImportPanel"
 import QuickTradeModal from "../components/QuickTradeModal"
@@ -14,7 +15,7 @@ export default function ImportPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-[#0f172a] p-6 text-white">
+      <div className="tt-phase4-dark min-h-screen bg-[#0f172a] p-6 text-white">
         <div className="mx-auto max-w-4xl">
           <h1 className="mb-4 text-2xl text-blue-300">Import Trades</h1>
           <CsvImportPanel

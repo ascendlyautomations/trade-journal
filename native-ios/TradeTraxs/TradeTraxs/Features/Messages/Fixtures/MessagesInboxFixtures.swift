@@ -1,7 +1,7 @@
 import Foundation
 
 /// Deterministic Messages home content for DEBUG / development sessions.
-enum MessagesInboxFixtures {
+nonisolated enum MessagesInboxFixtures {
     static let viewerID = ProfileID("dev.messages.viewer")
 
     static func conversations(viewerID: ProfileID) -> [Conversation] {
@@ -112,6 +112,7 @@ enum MessagesInboxFixtures {
         ]
     }
 
+    @MainActor
     static func seedStore(_ store: MessagesInboxStore, viewerID: ProfileID = viewerID) {
         let conversations = conversations(viewerID: viewerID)
         store.replaceConversations(conversations)

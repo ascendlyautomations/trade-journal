@@ -35,13 +35,22 @@ enum DashboardAnalyticsV3Loader {
         rpc: any RPCClient,
         forceNetwork: Bool
     ) async throws -> LoadResult {
+        guard SessionViewerGate.shared.allowsDisplay(owner: viewerID.rawValue) else {
+            throw CancellationError()
+        }
         if !forceNetwork, let cached = DashboardAnalyticsDiskCache.load(viewerID: viewerID) {
             return LoadResult(bootstrap: cached.payload, source: "disk", payloadBytes: nil)
         }
 
         let started = CFAbsoluteTimeGetCurrent()
-        let repo = AnalyticsDashboardBootstrapRepository(rpc: rpc)
-        let bootstrap = try await repo.load()
+        let bootstrap = try await DashboardAnalyticsV3AuthoritativeFetch.fetchNetwork(
+            viewerID: viewerID,
+            rpc: rpc,
+            reason: forceNetwork ? "dashboardLoad.authoritative" : "dashboardLoad.miss"
+        )
+        guard SessionViewerGate.shared.allowsDisplay(owner: viewerID.rawValue) else {
+            throw CancellationError()
+        }
         let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
         let encoded = try? JSONEncoder().encode(bootstrap)
         let bytes = encoded?.count

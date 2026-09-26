@@ -19,21 +19,13 @@ nonisolated enum ImageCropAspectOption: String, CaseIterable, Identifiable, Hash
         }
     }
 
-    /// Feed / trade / achievement crop editor order — Original first.
+    /// New trade, post, and achievement uploads. Original stays on the enum for existing content.
     static let feedAspectOptions: [ImageCropAspectOption] = [
-        .original, .square, .portrait, .landscape
+        .square, .portrait, .landscape
     ]
 
     /// Compact segmented-control label (always short — no truncation on iPhone).
     var segmentTitle: String { title }
-
-    /// Picker label — clarifies when Original is capped to the Feed 4:5 maximum.
-    func pickerLabel(originalExceedsFeedLimit: Bool) -> String {
-        if self == .original, originalExceedsFeedLimit {
-            return "Original · 4:5 max"
-        }
-        return title
-    }
 
     /// `nil` uses the source image's natural aspect ratio (subject to Feed 4:5 cap).
     func aspectRatio(for imageSize: CGSize) -> CGFloat {
@@ -58,7 +50,7 @@ nonisolated enum ImageCropMask: Sendable {
 nonisolated enum ImageCropEditorPreset: Sendable {
     /// Feed posts, achievements, and general social uploads.
     case socialContent
-    /// Trade screenshots — defaults to original aspect.
+    /// Trade screenshots.
     case tradeScreenshot
     /// Profile onboarding avatar.
     case avatar
@@ -79,7 +71,7 @@ nonisolated enum ImageCropEditorPreset: Sendable {
         case .socialContent:
             return "Drag and zoom to choose what appears in your post."
         case .tradeScreenshot:
-            return "Drag and zoom to frame your chart. Original aspect is recommended."
+            return "Drag and zoom to frame your chart."
         case .avatar:
             return "Drag and zoom to position your photo."
         case .room:
@@ -98,8 +90,7 @@ nonisolated enum ImageCropEditorPreset: Sendable {
 
     var defaultAspectOption: ImageCropAspectOption {
         switch self {
-        case .socialContent: return .original
-        case .tradeScreenshot: return .original
+        case .socialContent, .tradeScreenshot: return .portrait
         case .avatar, .room: return .square
         }
     }

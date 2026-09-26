@@ -77,6 +77,7 @@ final class RoomConversationViewModel {
     private var nextOlderCursor: String?
     private var realtimeTask: Task<Void, Never>?
     private var roomLiveRealtimeConsumer: RealtimeRouteConsumerHandle?
+    private var isRoomLiveRealtimeActive = false
     private var loadTask: Task<Void, Never>?
     private var channelLoadTasks: [RoomChannelID: Task<Void, Never>] = [:]
     private var channelCaches: [RoomChannelID: ChannelThreadCache] = [:]
@@ -479,25 +480,40 @@ final class RoomConversationViewModel {
 
     func startRealtime() {
         guard !ExploreModeSupport.isActive else { return }
-        inboxStore.setActiveRoom(roomID)
+        guard realtimeHub != nil else { return }
+        if isRoomLiveRealtimeActive,
+           roomLiveRealtimeConsumer != nil,
+           realtimeTask != nil,
+           roomLiveRealtimeConsumer?.routeKey == "room:\(resolvedRoomID.rawValue)"
+        {
+            RoomRealtimeLog.subscribed(roomID: resolvedRoomID, reason: "already-active")
+            inboxStore.setActiveRoom(resolvedRoomID)
+            return
+        }
+        inboxStore.setActiveRoom(resolvedRoomID)
         realtimeTask?.cancel()
         realtimeTask = Task { [weak self] in
             guard let self else { return }
             if let previous = roomLiveRealtimeConsumer {
+                RoomRealtimeLog.unsubscribed(roomID: self.resolvedRoomID, reason: "replace-before-resubscribe")
                 await realtimeHub?.releaseWatch(previous)
+                roomLiveRealtimeConsumer = nil
             }
-            let channel = RealtimeChannelID(kind: .room, topic: roomID.rawValue)
+            let activeRoomID = self.resolvedRoomID
+            let channel = RealtimeChannelID(kind: .room, topic: activeRoomID.rawValue)
             try? await realtimeHub?.subscriptions.subscribe(channel)
             let token = await session.accessToken
             guard let realtimeHub else { return }
 
             let streams = realtimeHub.watchRoomLive(
-                roomID: roomID,
+                roomID: activeRoomID,
                 accessToken: token,
                 presenceTrack: nil,
                 debugOwner: "RoomConversation"
             )
             roomLiveRealtimeConsumer = streams.consumer
+            isRoomLiveRealtimeActive = true
+            RoomRealtimeLog.subscribed(roomID: activeRoomID, reason: "room-joined")
             SocialRealtimeRepairSurfaces.shared.repairOpenRoom = { [weak self] in
                 await self?.repairMissedRoomMessagesAfterReconnect()
             }
@@ -506,19 +522,22 @@ final class RoomConversationViewModel {
                 guard !Task.isCancelled else { break }
                 await applyRealtimeSignal(signal)
             }
+            isRoomLiveRealtimeActive = false
         }
     }
 
     func stopRealtime() {
+        RoomRealtimeLog.unsubscribed(roomID: resolvedRoomID, reason: "room-disappear")
         VoiceMessagePlaybackController.shared.stopAll()
         activePresenceMembers = []
         stopOutboundSharedContentObserver()
-        if inboxStore.activeRoomID == roomID {
+        if inboxStore.activeRoomID == resolvedRoomID {
             inboxStore.setActiveRoom(nil)
         }
         SocialRealtimeRepairSurfaces.shared.repairOpenRoom = nil
         realtimeTask?.cancel()
         realtimeTask = nil
+        isRoomLiveRealtimeActive = false
         let consumer = roomLiveRealtimeConsumer
         roomLiveRealtimeConsumer = nil
         Task { [roomID, realtimeHub, consumer] in
@@ -537,8 +556,8 @@ final class RoomConversationViewModel {
     }
 
     func sendImage(_ image: UIImage) async {
-        guard !isSending, canPostInSelectedChannel else { return }
-        guard let data = image.jpegData(compressionQuality: 0.82) else { return }
+        guard canPostInSelectedChannel else { return }
+        guard let data = MediaImagePreparation.chatJPEGData(from: image) else { return }
         await send(
             body: draft.trimmingCharacters(in: .whitespacesAndNewlines),
             imageURL: nil,
@@ -786,6 +805,20 @@ final class RoomConversationViewModel {
         retryingMessageIDs.insert(item.id)
         defer { retryingMessageIDs.remove(item.id) }
 
+        if ConversationMessageMerge.isOptimisticMessageID(item.id),
+           let localData = OptimisticOutboundImageStore.shared.jpegData(for: item.id),
+           let channelID = selectedChannelID
+        {
+            await resendFailedOptimisticImage(
+                tempID: item.id,
+                body: item.text ?? "",
+                localImageData: localData,
+                channelID: channelID,
+                optimisticCreatedAt: item.message.createdAt
+            )
+            return
+        }
+
         if let channelID = selectedChannelID,
            let reconciled = await reconcileOptimisticSend(
                tempID: item.id,
@@ -795,6 +828,7 @@ final class RoomConversationViewModel {
            )
         {
             commitMessages([reconciled])
+            OptimisticOutboundImageStore.shared.remove(messageID: item.id)
             sendStates.removeValue(forKey: item.id)
             sendStates[reconciled.id] = .sent
             persistActiveChannelCache(scrollAnchor: reconciled.id)
@@ -805,6 +839,7 @@ final class RoomConversationViewModel {
         removeMessage(id: item.id)
         sendStates.removeValue(forKey: item.id)
         let imageURL = item.imageReference?.id
+        guard let imageURL, !OptimisticOutboundImageSupport.isOptimisticMediaID(imageURL) else { return }
         await send(body: item.text ?? "", imageURL: imageURL, localImageData: nil)
     }
 
@@ -893,6 +928,11 @@ final class RoomConversationViewModel {
                         if status == .approved {
                             membership = try? await rooms.membership(roomID: roomID, profileID: viewerID)
                             TradeRoomJoinActionCoordinator.shared.patchJoined(resolvedRoomID)
+                            GettingStartedRefreshCenter.noteJoinedOtherTradeRoom(
+                                viewer: viewerID,
+                                roomOwnerProfileID: room?.ownerProfileID,
+                                isViewerRoomOwner: isOwner
+                            )
                             await reconcileMemberCount(source: .mutation)
                             try? await reloadMessagesAfterMembershipGranted()
                         }
@@ -912,7 +952,11 @@ final class RoomConversationViewModel {
                     }
                 }
                 membership = try await rooms.join(roomID: roomID, profileID: viewerID)
-                GettingStartedRefreshCenter.noteEligibleUserAction()
+                GettingStartedRefreshCenter.noteJoinedOtherTradeRoom(
+                    viewer: viewerID,
+                    roomOwnerProfileID: room?.ownerProfileID,
+                    isViewerRoomOwner: isOwner
+                )
                 TradeRoomJoinActionCoordinator.shared.patchJoined(resolvedRoomID)
                 await reconcileMemberCount(source: .mutation)
             } else {
@@ -1926,19 +1970,23 @@ final class RoomConversationViewModel {
 
     private func send(body: String, imageURL: String?, localImageData: Data?) async {
         guard let viewerID, canPostInSelectedChannel, let channelID = selectedChannelID else { return }
-        isSending = true
-        defer { isSending = false }
+        let blocksComposer = localImageData == nil
+        if blocksComposer {
+            isSending = true
+        }
+        defer {
+            if blocksComposer { isSending = false }
+        }
 
         let tempID = MessageID("temp-\(UUID().uuidString)")
         var attachments: [MessageAttachment] = []
-        if let imageURL {
-            attachments = [
-                MessageAttachment(
-                    id: imageURL,
-                    media: MediaReference(id: imageURL, kind: .image, altText: nil),
-                    tradeID: nil
-                ),
-            ]
+        if let localImageData {
+            attachments = OptimisticOutboundImageSendSupport.prepareOptimisticAttachments(
+                tempID: tempID,
+                localImageData: localImageData
+            )
+        } else if let imageURL {
+            attachments = OptimisticOutboundImageSendSupport.imageAttachments(for: imageURL)
         }
 
         let optimistic = Message(
@@ -1962,40 +2010,73 @@ final class RoomConversationViewModel {
             return
         }
 
+        await completeOptimisticRoomImageSend(
+            tempID: tempID,
+            body: body,
+            imageURL: imageURL,
+            localImageData: localImageData,
+            channelID: channelID,
+            optimistic: optimistic
+        )
+    }
+
+    private func resendFailedOptimisticImage(
+        tempID: MessageID,
+        body: String,
+        localImageData: Data,
+        channelID: RoomChannelID,
+        optimisticCreatedAt: Date
+    ) async {
+        guard let viewerID, canPostInSelectedChannel else { return }
+        sendStates[tempID] = .sending
+        let optimistic = Message(
+            id: tempID,
+            conversationID: conversationID,
+            senderProfileID: viewerID,
+            kind: .media,
+            body: body.isEmpty ? nil : body,
+            attachments: OptimisticOutboundImageSendSupport.prepareOptimisticAttachments(
+                tempID: tempID,
+                localImageData: localImageData
+            ),
+            replyToMessageID: nil,
+            createdAt: optimisticCreatedAt,
+            isReadByViewer: true
+        )
+        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
+            sendStates[tempID] = .sent
+            return
+        }
+        await completeOptimisticRoomImageSend(
+            tempID: tempID,
+            body: body,
+            imageURL: nil,
+            localImageData: localImageData,
+            channelID: channelID,
+            optimistic: optimistic
+        )
+    }
+
+    private func completeOptimisticRoomImageSend(
+        tempID: MessageID,
+        body: String,
+        imageURL: String?,
+        localImageData: Data?,
+        channelID: RoomChannelID,
+        optimistic: Message
+    ) async {
+        guard let viewerID else { return }
         var reconcileContent = body
         do {
             var resolvedImageURL = imageURL
             if let localImageData {
                 let path = "\(viewerID.rawValue)/rooms/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
-                let reference = try await uploadService.upload(
-                    UploadRequest(
-                        bucket: StorageBucket.screenshots.rawValue,
-                        path: path,
-                        data: localImageData,
-                        contentType: "image/jpeg",
-                        purpose: .tradeScreenshot
-                    )
+                resolvedImageURL = try await OptimisticOutboundImageSendSupport.uploadJPEG(
+                    localImageData: localImageData,
+                    storagePath: path,
+                    uploadService: uploadService,
+                    objectStorage: objectStorage
                 )
-                if let publicURL = objectStorage.publicURL(
-                    bucket: StorageBucket.screenshots.rawValue,
-                    path: reference.id
-                ) {
-                    resolvedImageURL = publicURL.absoluteString
-                } else {
-                    resolvedImageURL = reference.id
-                }
-                if let url = resolvedImageURL {
-                    var updated = optimistic
-                    updated.attachments = [
-                        MessageAttachment(
-                            id: url,
-                            media: MediaReference(id: url, kind: .image, altText: nil),
-                            tradeID: nil
-                        ),
-                    ]
-                    updated.kind = .media
-                    commitMessages([updated])
-                }
             }
 
             let content: String = {
@@ -2030,6 +2111,7 @@ final class RoomConversationViewModel {
             let savedRoom = try await rooms.send(payload)
             let saved = RoomMessageMapping.displayMessage(from: savedRoom)
             commitMessages([saved])
+            OptimisticOutboundImageStore.shared.remove(messageID: tempID)
             sendStates.removeValue(forKey: tempID)
             sendStates[saved.id] = .sent
             persistActiveChannelCache(scrollAnchor: saved.id)
@@ -2119,6 +2201,7 @@ final class RoomConversationViewModel {
             channelID: channelID
         ) {
             commitMessages([reconciled])
+            OptimisticOutboundImageStore.shared.remove(messageID: tempID)
             sendStates.removeValue(forKey: tempID)
             sendStates[reconciled.id] = .sent
             persistActiveChannelCache(scrollAnchor: reconciled.id)

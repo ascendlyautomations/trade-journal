@@ -28,6 +28,8 @@ final class ActivityInboxStore {
     private var notificationsRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var activeRealtimeUserID: String?
     private weak var activeRealtimeHub: RealtimeHub?
+    private var realtimeWatchSessionGeneration: UInt64 = 0
+    private var realtimeWatchBoundGeneration: UInt64?
     private var startedForUserID: String?
     private var isStarting = false
     private var isBootstrappingUnread = false
@@ -386,6 +388,7 @@ final class ActivityInboxStore {
         }
 
         if startedForUserID != userID {
+            realtimeWatchSessionGeneration &+= 1
             invalidateRealtimeOnly()
             items = []
             unreadCount = 0
@@ -520,6 +523,7 @@ final class ActivityInboxStore {
         defer { isBootstrappingUnread = false }
 
         if startedForUserID != userID {
+            realtimeWatchSessionGeneration &+= 1
             invalidateRealtimeOnly()
             items = []
             unreadCount = 0
@@ -635,6 +639,7 @@ final class ActivityInboxStore {
     }
 
     func invalidate() {
+        realtimeWatchSessionGeneration &+= 1
         invalidateRealtimeOnly()
         items = []
         unreadCount = 0
@@ -719,6 +724,31 @@ final class ActivityInboxStore {
         }
     }
 
+    /// Unread-only reconnect repair — bell/badge correctness without full feed bootstrap.
+    func repairUnreadAfterReconnect(
+        viewerID: ProfileID,
+        notifications: any NotificationRepository,
+        detailCache: DetailPresentationCache?,
+        rpc: (any RPCClient)?
+    ) async {
+        if let applied = await loadRpcBootstrapIfAvailable(
+            viewerID: viewerID,
+            detailCache: detailCache,
+            rpc: rpc,
+            limit: 0,
+            cursor: nil
+        ) {
+            setUnreadCount(applied.unreadCount)
+            if !hasLoaded {
+                pendingFollowRequestCount = applied.pendingFollowRequestCount
+            }
+            return
+        }
+        if let unread = try? await notifications.unreadCount() {
+            setUnreadCount(unread)
+        }
+    }
+
     /// Bounded Activity catch-up after Realtime reconnect — merge only, no wipe.
     func repairAfterReconnect(
         viewerID: ProfileID,
@@ -786,6 +816,7 @@ final class ActivityInboxStore {
         activeRealtimeHub = nil
         let consumer = notificationsRealtimeConsumer
         notificationsRealtimeConsumer = nil
+        realtimeWatchBoundGeneration = nil
         guard let userID, let hub else { return }
         Task {
             await hub.releaseWatch(consumer)
@@ -802,9 +833,17 @@ final class ActivityInboxStore {
         realtimeHub: RealtimeHub?
     ) {
         guard let realtimeHub else { return }
+        if activeRealtimeUserID == userID,
+           realtimeTask != nil,
+           notificationsRealtimeConsumer != nil,
+           realtimeWatchBoundGeneration == realtimeWatchSessionGeneration
+        {
+            return
+        }
         invalidateRealtimeOnly()
         activeRealtimeUserID = userID
         activeRealtimeHub = realtimeHub
+        realtimeWatchBoundGeneration = realtimeWatchSessionGeneration
 #if DEBUG
         SocialCacheProbe.setRealtimeSubscribed(true)
 #endif
@@ -822,6 +861,7 @@ final class ActivityInboxStore {
             for await signal in watch.events {
                 await self.applyRealtime(signal: signal, notifications: notifications)
             }
+            self.realtimeTask = nil
         }
     }
 

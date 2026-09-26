@@ -1,12 +1,14 @@
 "use client"
 
 import { memo } from "react"
+import ContentMediaPreview from "@/app/components/ContentMediaPreview"
 import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 import {
   TRADE_IMAGE_ASPECT,
   TRADE_IMAGE_MEDIA_FRAME_IMG_CLASS,
 } from "@/lib/tradeImageAspect"
 import { TRADE_SCREENSHOT_MAX_HEIGHT_PX } from "@/lib/tradeScreenshotDisplay"
+import type { TradeScreenshotDisplayMode } from "@/lib/tradeScreenshotDisplay"
 
 const DETAIL_MAX_HEIGHT_PX = 720
 
@@ -22,6 +24,8 @@ type FeedPostScreenshotProps = {
   wrapperClassName?: string
   onImageClick?: (url: string) => void
   priority?: boolean
+  /** Trade Fit/Fill. Posts and achievements omit this and stay contained. */
+  displayMode?: TradeScreenshotDisplayMode | string | null
 }
 
 function FeedPostScreenshot({
@@ -32,6 +36,7 @@ function FeedPostScreenshot({
   wrapperClassName,
   onImageClick,
   priority = false,
+  displayMode,
 }: FeedPostScreenshotProps) {
   const preset =
     variant === "detail"
@@ -64,6 +69,23 @@ function FeedPostScreenshot({
   }
 
   if (!imageSrc) return null
+
+  if (variant === "thumbnail") {
+    // Feed preview ignores trade Fit/Fill. That setting still applies in detail.
+    void displayMode
+    const image = (
+      <ContentMediaPreview
+        src={imageSrc}
+        preset="feed-card"
+        context="feed"
+        priority={priority}
+        onClick={onImageClick}
+      />
+    )
+    if (wrapperClassName === "") return image
+    if (wrapperClassName) return <div className={wrapperClassName}>{image}</div>
+    return image
+  }
 
   const image = (
     <TradeScreenshotImage

@@ -37,6 +37,9 @@ struct FeedInlineVideoSurface: UIViewRepresentable {
         let view = FeedPlayerLayerView()
         view.playerLayer.videoGravity = videoGravity
         view.backgroundColor = .clear
+        view.isOpaque = false
+        view.playerLayer.isOpaque = false
+        view.playerLayer.backgroundColor = UIColor.clear.cgColor
         view.playerLayer.player = player
         context.coordinator.bindReadyForDisplayObservation(to: view.playerLayer)
         view.onDidLayout = { [weak coordinator = context.coordinator] layerView in
@@ -60,6 +63,10 @@ struct FeedInlineVideoSurface: UIViewRepresentable {
         if uiView.playerLayer.videoGravity != videoGravity {
             uiView.playerLayer.videoGravity = videoGravity
         }
+        uiView.backgroundColor = .clear
+        uiView.isOpaque = false
+        uiView.playerLayer.isOpaque = false
+        uiView.playerLayer.backgroundColor = UIColor.clear.cgColor
         uiView.onDidLayout = { [weak coordinator = context.coordinator] layerView in
             coordinator?.logLayoutIfNeeded(
                 layerView: layerView,

@@ -63,6 +63,35 @@ nonisolated enum VideoPrepareDiagnostics {
     static func logStalePrepareDropped(id: String, generation: UInt64, current: UInt64) {
         log("stalePrepareDropped id=\(id) generation=\(generation) current=\(current)")
     }
+
+    static func logValidationStarted(output: String) {
+        log("validationStarted output=\(output)")
+    }
+
+    static func logValidationCompleted(bytes: Int, durationSeconds: Int, fps: Double) {
+        log(
+            """
+            validationCompleted bytes=\(bytes) durationSeconds=\(durationSeconds) \
+            fps=\(String(format: "%.3f", fps))
+            """
+        )
+    }
+
+    static func logValidationFailed(reason: String) {
+        log("validationFailed reason=\(reason)")
+    }
+
+    static func logTranscodeEffectivenessValidationStarted() {
+        log("transcodeEffectivenessValidationStarted")
+    }
+
+    static func logTranscodeEffectivenessValidationCompleted() {
+        log("transcodeEffectivenessValidationCompleted")
+    }
+
+    static func logTranscodeEffectivenessValidationFailed(reason: String) {
+        log("transcodeEffectivenessValidationFailed reason=\(reason)")
+    }
 }
 #else
 nonisolated enum VideoImportDiagnostics {
@@ -82,5 +111,12 @@ nonisolated enum VideoPrepareDiagnostics {
     static func logCompleted(id: String, bytes: Int) {}
     static func logFailed(id: String, stage: String, message: String) {}
     static func logStalePrepareDropped(id: String, generation: UInt64, current: UInt64) {}
+
+    static func logValidationStarted(output: String) {}
+    static func logValidationCompleted(bytes: Int, durationSeconds: Int, fps: Double) {}
+    static func logValidationFailed(reason: String) {}
+    static func logTranscodeEffectivenessValidationStarted() {}
+    static func logTranscodeEffectivenessValidationCompleted() {}
+    static func logTranscodeEffectivenessValidationFailed(reason: String) {}
 }
 #endif

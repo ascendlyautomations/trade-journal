@@ -82,6 +82,49 @@ export const TRADES_APP_SELECT = [
   "last_broker_sync_at",
 ].join(", ")
 
+/**
+ * Narrow owner projection for Dashboard and Calendar analytics.
+ * Every field here is read by those calculations. Journal text, screenshots,
+ * and detail-only columns stay on {@link TRADES_APP_SELECT}.
+ * `public_description` stays because the dashboard public-only filter treats a
+ * non-empty description as public even when `is_public` is not true.
+ */
+export const TRADES_ANALYTICS_FIELDS = [
+  "id",
+  "user_id",
+  "created_at",
+  "date",
+  "entry_time",
+  "exit_time",
+  "pnl",
+  "rr",
+  "direction",
+  "ticker",
+  "strategy",
+  "session",
+  "account_id",
+  "account_name",
+  "account_size",
+  "account_type",
+  "mode",
+  "is_public",
+  "public_description",
+  "duration_seconds",
+  "points",
+  "contracts",
+  "entry_price",
+  "exit_price",
+] as const
+
+export const TRADES_ANALYTICS_SELECT = TRADES_ANALYTICS_FIELDS.join(", ")
+
+/** Journal / media columns the analytics projection deliberately omits. */
+export const TRADES_ANALYTICS_EXCLUDED_HEAVY_FIELDS = [
+  "notes",
+  "psychology_notes",
+  "image_url",
+] as const
+
 export function tradeSelectForViewer(isOwner: boolean): string {
   return isOwner ? TRADES_APP_SELECT : PUBLIC_TRADE_SELECT
 }

@@ -33,8 +33,14 @@ struct FeedState: Equatable {
     /// Filter cache keys confirmed empty by an authoritative first-page load this session.
     var knownEmptyFilterKeys: Set<String> = []
 
-    mutating func rebuildVisibleEntries(blockedPeerIDs: Set<ProfileID>) {
-        let filtered = entries.filter { $0.matches(filter: contentFilter) }
+    mutating func rebuildVisibleEntries(
+        blockedPeerIDs: Set<ProfileID>,
+        viewerID: ProfileID? = nil
+    ) {
+        var filtered = entries.filter { $0.matches(filter: contentFilter) }
+        if let viewerID {
+            filtered = filtered.filter { $0.authorProfileID != viewerID }
+        }
         if blockedPeerIDs.isEmpty {
             cachedVisibleEntries = filtered
         } else {

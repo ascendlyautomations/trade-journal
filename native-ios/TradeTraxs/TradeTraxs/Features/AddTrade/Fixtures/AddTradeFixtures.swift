@@ -1,6 +1,6 @@
 import Foundation
 
-enum AddTradeFixtures {
+nonisolated enum AddTradeFixtures {
     static let viewerID = ProfileID("dev.addtrade.viewer")
 
     static func accounts(owner: ProfileID = viewerID) -> [TradingAccount] {

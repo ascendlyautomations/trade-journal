@@ -14,13 +14,12 @@ final class GettingStartedStore {
 
     private var rpc: (any RPCClient)?
     private var session: (any SessionProviding)?
-    private var realtimeHub: RealtimeHub?
     private var viewerID: ProfileID?
     private var refreshTask: Task<Void, Never>?
-    private var realtimeTask: Task<Void, Never>?
-    private var viewerProfileRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var loadGeneration: UInt64 = 0
     private var pendingUserActionRefresh = false
+    /// Monotonic checklist hints applied before first RPC load or merged after refresh.
+    private var pendingLocalPatches = GettingStartedLocalPatches.empty
 
     var isCollapsed = false
 
@@ -38,7 +37,7 @@ final class GettingStartedStore {
     ) {
         self.rpc = rpc
         self.session = session
-        self.realtimeHub = realtimeHub
+        _ = realtimeHub
     }
 
     var shouldShowDashboardCard: Bool {
@@ -76,9 +75,7 @@ final class GettingStartedStore {
 
     func invalidate() {
         refreshTask?.cancel()
-        realtimeTask?.cancel()
         refreshTask = nil
-        realtimeTask = nil
         signals = .empty
         progress = GettingStartedChecklistPolicy.computeProgress(from: .empty)
         signalsReady = false
@@ -86,7 +83,21 @@ final class GettingStartedStore {
         viewerID = nil
         loadGeneration &+= 1
         pendingUserActionRefresh = false
+        pendingLocalPatches = .empty
         isCollapsed = false
+    }
+
+    /// Apply monotonic checklist signal updates immediately (no RPC).
+    func patchSignals(_ patch: GettingStartedLocalPatches) {
+        guard BackendV2FeatureFlags.isEnabled(.gettingStarted) else { return }
+        pendingLocalPatches.merge(patch)
+        guard signalsReady else { return }
+        let merged = pendingLocalPatches.apply(to: signals)
+        pendingLocalPatches = .empty
+        guard merged != signals else { return }
+        signals = merged
+        progress = GettingStartedChecklistPolicy.computeProgress(from: merged)
+        reconcileServerCompletionIfNeeded()
     }
 
     func dismissForSession() {
@@ -124,7 +135,6 @@ final class GettingStartedStore {
         if viewerID != profileID {
             viewerID = profileID
             isCollapsed = GettingStartedPreferences.readCollapsed(userID: profileID.rawValue)
-            startRealtimeIfNeeded(viewerID: userID.rawValue)
         }
 
         loadGeneration &+= 1
@@ -151,9 +161,11 @@ final class GettingStartedStore {
         isRefreshing = false
     }
 
-    private func apply(signals: GettingStartedSignals) {
-        self.signals = signals
-        progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
+    private func apply(signals loaded: GettingStartedSignals) {
+        let merged = pendingLocalPatches.apply(to: loaded)
+        pendingLocalPatches = .empty
+        signals = merged
+        progress = GettingStartedChecklistPolicy.computeProgress(from: merged)
         signalsReady = true
         reconcileServerCompletionIfNeeded()
     }
@@ -178,34 +190,6 @@ final class GettingStartedStore {
         }
     }
 
-    private func startRealtimeIfNeeded(viewerID: String) {
-        guard let realtimeHub, progress.allComplete == false else { return }
-        stopRealtime()
-        realtimeTask = Task { [weak self] in
-            guard let self else { return }
-            let token = await self.session?.accessToken
-            let watch = realtimeHub.watchViewerProfile(
-                userID: viewerID,
-                accessToken: token,
-                debugOwner: "GettingStarted"
-            )
-            viewerProfileRealtimeConsumer = watch.consumer
-            for await _ in watch.events {
-                guard !Task.isCancelled else { break }
-                await MainActor.run {
-                    self.refresh(fromUserAction: false)
-                }
-            }
-        }
-    }
-
-    private func stopRealtime() {
-        realtimeTask?.cancel()
-        realtimeTask = nil
-        let consumer = viewerProfileRealtimeConsumer
-        viewerProfileRealtimeConsumer = nil
-        Task { await realtimeHub?.releaseWatch(consumer) }
-    }
 }
 
 /// Device-local presentation preferences — not synchronized across platforms.
@@ -239,10 +223,152 @@ enum GettingStartedPreferences {
     }
 }
 
+/// Monotonic local checklist hints — merged with RPC/bootstrap (never regress).
+struct GettingStartedLocalPatches: Sendable, Equatable {
+    var onboardingCompleted: Bool?
+    var tradeCountDelta: Int = 0
+    var profilePostCountDelta: Int = 0
+    var markFollowed: Bool = false
+    var markJoinedOtherRoom: Bool = false
+    var markPublicTrade: Bool = false
+    var markDailyCheckInCompleted: Bool = false
+
+    static let empty = GettingStartedLocalPatches()
+
+    mutating func merge(_ other: GettingStartedLocalPatches) {
+        if other.onboardingCompleted == true { onboardingCompleted = true }
+        tradeCountDelta += other.tradeCountDelta
+        profilePostCountDelta += other.profilePostCountDelta
+        if other.markFollowed { markFollowed = true }
+        if other.markJoinedOtherRoom { markJoinedOtherRoom = true }
+        if other.markPublicTrade { markPublicTrade = true }
+        if other.markDailyCheckInCompleted { markDailyCheckInCompleted = true }
+    }
+
+    func apply(to base: GettingStartedSignals) -> GettingStartedSignals {
+        var next = base
+        if onboardingCompleted == true { next.onboardingCompleted = true }
+        if tradeCountDelta > 0 {
+            next.tradeCount = max(next.tradeCount, next.tradeCount + tradeCountDelta)
+        }
+        if profilePostCountDelta > 0 {
+            next.profilePostCount = max(next.profilePostCount, next.profilePostCount + profilePostCountDelta)
+        }
+        if markFollowed {
+            next.followCount = max(next.followCount, 1)
+        }
+        if markJoinedOtherRoom {
+            next.hasEverJoinedOtherRoom = true
+        }
+        if markPublicTrade {
+            next.hasPublicTrade = true
+        }
+        if markDailyCheckInCompleted {
+            next.hasCompletedDailyCheckIn = true
+        }
+        return next
+    }
+}
+
 /// Call after checklist-eligible native mutations succeed.
 @MainActor
 enum GettingStartedRefreshCenter {
+    static func noteProfileOnboardingCompleted() {
+        GettingStartedStore.shared.patchSignals(
+            GettingStartedLocalPatches(onboardingCompleted: true)
+        )
+    }
+
+    static func noteTradePersisted(_ trade: Trade) {
+        var patch = GettingStartedLocalPatches(tradeCountDelta: 1)
+        if trade.visibility == .public {
+            patch.markPublicTrade = true
+        }
+        GettingStartedStore.shared.patchSignals(patch)
+    }
+
+    static func noteTradesBulkPersisted(count: Int) {
+        guard count > 0 else { return }
+        GettingStartedStore.shared.patchSignals(
+            GettingStartedLocalPatches(tradeCountDelta: count)
+        )
+    }
+
+    static func noteTradeVisibilityUpdated(_ trade: Trade, previous: Trade?) {
+        guard trade.visibility == .public else { return }
+        if previous?.visibility == .public { return }
+        GettingStartedStore.shared.patchSignals(
+            GettingStartedLocalPatches(markPublicTrade: true)
+        )
+    }
+
+    static func noteFollowSucceeded(viewer: ProfileID, target: ProfileID) {
+        guard viewer != target else { return }
+        GettingStartedStore.shared.patchSignals(
+            GettingStartedLocalPatches(markFollowed: true)
+        )
+    }
+
+    static func noteJoinedOtherTradeRoom(
+        viewer: ProfileID,
+        roomOwnerProfileID: ProfileID?,
+        isViewerRoomOwner: Bool
+    ) {
+        guard GettingStartedRoomJoinEligibility.isJoiningOtherRoom(
+            viewer: viewer,
+            roomOwnerProfileID: roomOwnerProfileID,
+            isViewerRoomOwner: isViewerRoomOwner
+        ) else { return }
+        GettingStartedStore.shared.patchSignals(
+            GettingStartedLocalPatches(markJoinedOtherRoom: true)
+        )
+    }
+
+    static func noteJoinedOtherTradeRoom(from room: ExploreRoomSuggestion, viewer: ProfileID) {
+        noteJoinedOtherTradeRoom(
+            viewer: viewer,
+            roomOwnerProfileID: room.ownerProfileID,
+            isViewerRoomOwner: room.isOwner == true
+        )
+    }
+
+    static func noteProfilePostCreated() {
+        GettingStartedStore.shared.patchSignals(
+            GettingStartedLocalPatches(profilePostCountDelta: 1)
+        )
+    }
+
+    static func noteDailyCheckInCompleted() {
+        GettingStartedStore.shared.patchSignals(
+            GettingStartedLocalPatches(markDailyCheckInCompleted: true)
+        )
+    }
+
+    /// Debounced RPC reconcile — not used for instant UI.
     static func noteEligibleUserAction() {
-        GettingStartedStore.shared.refresh(fromUserAction: true)
+        scheduleDebouncedReconcile()
+    }
+
+    private static var reconcileTask: Task<Void, Never>?
+
+    private static func scheduleDebouncedReconcile() {
+        reconcileTask?.cancel()
+        reconcileTask = Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            GettingStartedStore.shared.refresh(fromUserAction: true)
+        }
+    }
+}
+
+enum GettingStartedRoomJoinEligibility {
+    static func isJoiningOtherRoom(
+        viewer: ProfileID,
+        roomOwnerProfileID: ProfileID?,
+        isViewerRoomOwner: Bool
+    ) -> Bool {
+        if isViewerRoomOwner { return false }
+        if let roomOwnerProfileID, roomOwnerProfileID == viewer { return false }
+        return true
     }
 }

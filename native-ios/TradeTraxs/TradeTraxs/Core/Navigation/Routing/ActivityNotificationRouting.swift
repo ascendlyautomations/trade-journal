@@ -243,7 +243,11 @@ enum ActivityNotificationRouting {
                 coordinator.pushHome(.report(reportID))
             }
         case .affiliateReferral, .affiliateCommissionEarned:
-            coordinator.pushHome(.affiliate)
+            if IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled {
+                coordinator.pushHome(.affiliate)
+            } else {
+                coordinator.pushHome(.activity)
+            }
         case .message, .system:
             pushExternalDestination(
                 router.destination(for: notificationDestination(for: notification)),
@@ -305,7 +309,11 @@ enum ActivityNotificationRouting {
                 coordinator.pushHome(.report(reportID))
             }
         case .affiliateReferral, .affiliateCommissionEarned:
-            coordinator.pushProfile(.affiliate)
+            if IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled {
+                coordinator.pushProfile(.affiliate)
+            } else {
+                coordinator.pushProfile(.activity)
+            }
         case .message, .system:
             pushExternalDestination(
                 router.destination(for: notificationDestination(for: notification)),
@@ -408,6 +416,9 @@ enum ActivityNotificationRouting {
             return .tab(.home)
 
         case .affiliateReferral, .affiliateCommissionEarned:
+            guard IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled else {
+                return .profile(.activity)
+            }
             return .profile(.affiliate)
 
         case .message:

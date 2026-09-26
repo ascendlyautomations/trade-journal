@@ -325,6 +325,7 @@ final class DataLayerTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testAuthenticationRepositoryHasNoSession() async throws {
         let auth = CompositionRoot.bootstrapAuthenticationForTests()
         _ = auth.manager.prepareColdLaunch()

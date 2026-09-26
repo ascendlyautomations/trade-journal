@@ -106,6 +106,7 @@ final class SupabaseIntegrationTests: XCTestCase {
         XCTAssertEqual(state, .unauthenticated)
     }
 
+    @MainActor
     func testTokenRefreshCoordinatorExistsOnManager() async throws {
         let auth = CompositionRoot.bootstrapAuthenticationForTests()
         _ = auth.manager.prepareColdLaunch()

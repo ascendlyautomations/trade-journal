@@ -28,9 +28,16 @@ nonisolated enum CSVHeaderAliases {
     }
 
     static func cell(in row: [String: String], aliases: [String]) -> String? {
-        let normalizedToRaw = Dictionary(
-            uniqueKeysWithValues: row.keys.map { (normalizeHeaderKey($0), $0) }
-        )
+        // First header wins. `uniqueKeysWithValues` traps when two columns
+        // normalize to the same key (P/L and P&L, buyPrice and Buy Price).
+        var normalizedToRaw: [String: String] = [:]
+        normalizedToRaw.reserveCapacity(row.count)
+        for key in row.keys {
+            let normalized = normalizeHeaderKey(key)
+            if normalizedToRaw[normalized] == nil {
+                normalizedToRaw[normalized] = key
+            }
+        }
         for alias in aliases {
             guard let rawKey = normalizedToRaw[normalizeHeaderKey(alias)],
                   let value = row[rawKey]?.trimmingCharacters(in: .whitespacesAndNewlines),

@@ -167,6 +167,7 @@ struct ManageRoomView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
     }
 
@@ -263,6 +264,7 @@ struct ManageRoomView: View {
         .listSectionSpacing(ExperienceSpacing.xs)
         .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
+        .experienceDashboardGroupedRows()
         .experienceNavigationTitle("Edit Room Details")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -342,6 +344,7 @@ struct ManageRoomView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .experienceNavigationTitle("Members")
         .refreshable { await viewModel.refreshMembersAndBans() }
@@ -390,6 +393,7 @@ struct ManageRoomView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .experienceNavigationTitle("Join Requests")
         .refreshable { await viewModel.refreshJoinRequests() }
@@ -428,6 +432,7 @@ struct ManageRoomView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .experienceNavigationTitle("Banned Members")
         .refreshable { await viewModel.refreshMembersAndBans() }

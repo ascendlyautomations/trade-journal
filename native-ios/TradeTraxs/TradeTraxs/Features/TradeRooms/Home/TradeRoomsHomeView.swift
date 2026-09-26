@@ -238,24 +238,24 @@ struct TradeRoomsHomeView: View {
     private var discoverySection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             TradeRoomDiscoveryScopeToggle(
-                scope: viewModel.discoveryScope,
+                scope: viewModel.activeDiscoveryScope,
                 onSelect: { viewModel.selectDiscoveryScope($0) }
             )
             .padding(.bottom, ExperienceSpacing.xxs)
 
             if viewModel.discoveryPhase == .loading,
-               viewModel.discoveryScope.showsDiscoverableLists,
+               viewModel.activeDiscoveryScope.showsDiscoverableLists,
                viewModel.suggestedDiscoverableRooms.isEmpty,
                viewModel.popularDiscoverableRooms.isEmpty
             {
                 discoverySkeleton
             } else if viewModel.discoveryPhase == .loading,
-                      viewModel.discoveryScope.showsYourRoomsDiscovery,
+                      viewModel.activeDiscoveryScope.showsYourRoomsDiscovery,
                       viewModel.yourRooms.isEmpty
             {
                 discoverySkeleton
             } else if let message = viewModel.discoveryErrorMessage,
-                      viewModel.discoveryScope.showsDiscoverableLists,
+                      viewModel.activeDiscoveryScope.showsDiscoverableLists,
                       viewModel.suggestedDiscoverableRooms.isEmpty,
                       viewModel.popularDiscoverableRooms.isEmpty
             {
@@ -269,7 +269,7 @@ struct TradeRoomsHomeView: View {
                 }
                 .padding(.vertical, ExperienceSpacing.xs)
             } else {
-                if viewModel.discoveryScope.showsSuggestedDiscovery {
+                if viewModel.activeDiscoveryScope.showsSuggestedDiscovery {
                     discoveryRoomSection(
                         title: TradeRoomDiscoveryMode.suggested.title,
                         rooms: viewModel.suggestedDiscoverableRooms,
@@ -277,7 +277,7 @@ struct TradeRoomsHomeView: View {
                     )
                 }
 
-                if viewModel.discoveryScope.showsPopularDiscovery {
+                if viewModel.activeDiscoveryScope.showsPopularDiscovery {
                     discoveryRoomSection(
                         title: TradeRoomDiscoveryMode.popular.title,
                         rooms: viewModel.popularDiscoverableRooms,
@@ -285,7 +285,7 @@ struct TradeRoomsHomeView: View {
                     )
                 }
 
-                if viewModel.discoveryScope.showsYourRoomsDiscovery {
+                if viewModel.activeDiscoveryScope.showsYourRoomsDiscovery {
                     yourRoomsDiscoverySection(showsSectionHeader: false)
                 }
             }

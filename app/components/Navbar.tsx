@@ -39,6 +39,7 @@ import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import { isStandaloneFlowRoute } from "@/lib/authRoutes"
 import { clearSignupFlow } from "@/lib/signupFlow"
 import { NAVBAR_BRAND_LINK_CLASS } from "@/lib/navbarBrand"
+import "./navbarDesktopTheme.css"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import {
   DESKTOP_NAV_MORE_DISPLAY_ORDER,
@@ -108,11 +109,13 @@ export default function Navbar() {
   const showMobileNav = !!user || demoActive
   const showReturnToApp = isAuthenticatedUser && isHomePage
   const returnToAppButtonClassName = isHomePage
-    ? `inline-flex shrink-0 ${NAV_CTA_PRIMARY_MD}`
-    : `hidden shrink-0 md:inline-flex ${NAV_CTA_PRIMARY_MD}`
+    ? `inline-flex w-fit shrink-0 items-center whitespace-nowrap ${NAV_CTA_PRIMARY_MD}`
+    : `hidden w-fit shrink-0 items-center whitespace-nowrap md:inline-flex ${NAV_CTA_PRIMARY_MD}`
   const isActive = (path: string) => pathname === path
   const isGroupActive = (paths: string[]) =>
     paths.some((p) => pathname.startsWith(p))
+  const isMessagesSectionActive =
+    pathname === "/messages" || pathname.startsWith("/messages/")
 
   function handleLogoClick(e: ReactMouseEvent<HTMLAnchorElement>) {
     e.preventDefault()
@@ -702,7 +705,6 @@ export default function Navbar() {
     </div>
   )
 
-  const betaEligible = Boolean(profile?.is_beta_tester)
   const desktopNavEnabled = !isHomePage && !!user
   const {
     containerRef: desktopNavContainerRef,
@@ -715,10 +717,8 @@ export default function Navbar() {
     enabled: desktopNavEnabled,
     measureKey: [
       unreadMessagesCount,
-      betaEligible ? "beta" : "no-beta",
       profileHref ?? "no-profile",
     ].join("|"),
-    betaEligible,
   })
 
   const overflowDisplayIds = DESKTOP_NAV_MORE_DISPLAY_ORDER.filter((id) =>
@@ -727,7 +727,7 @@ export default function Navbar() {
 
   const moreMenuActive =
     overflowIds.some((id) => {
-      if (id === "messages") return isActive("/messages")
+      if (id === "messages") return isMessagesSectionActive
       if (id === "analytics") {
         return isGroupActive([
           "/analytics",
@@ -746,7 +746,6 @@ export default function Navbar() {
           "/explore",
         ])
       }
-      if (id === "beta") return isActive("/beta")
       return false
     }) || activeMenu === "more"
 
@@ -764,7 +763,7 @@ export default function Navbar() {
           key="messages"
           href="/messages"
           className={`flex items-center justify-between gap-2 rounded px-3 py-2 ${
-            isActive("/messages")
+            isMessagesSectionActive
               ? NAV_ITEM_ACTIVE
               : NAV_ITEM_INACTIVE_HOVER_SURFACE
           }`}
@@ -780,26 +779,6 @@ export default function Navbar() {
               {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
             </span>
           ) : null}
-        </IntentPrefetchLink>
-      )
-    }
-
-    if (id === "beta") {
-      return (
-        <IntentPrefetchLink
-          key="beta"
-          href="/beta"
-          className={`block rounded px-3 py-2 ${
-            isActive("/beta")
-              ? NAV_ITEM_ACTIVE
-              : NAV_ITEM_INACTIVE_HOVER_SURFACE
-          }`}
-          onClick={() => {
-            setActiveMenu(null)
-            setMoreSubmenu(null)
-          }}
-        >
-          Beta
         </IntentPrefetchLink>
       )
     }
@@ -888,7 +867,7 @@ export default function Navbar() {
   const navbar = (
     <div
       ref={navRef}
-      className={`${NAV_CHROME_FIXED_ROOT} transition-transform duration-200 ease-out will-change-transform ${
+      className={`tt-app-navbar ${NAV_CHROME_FIXED_ROOT} transition-transform duration-200 ease-out will-change-transform ${
         mobileNavbarHidden ? "max-md:-translate-y-full md:translate-y-0" : "translate-y-0"
       } ${
         mobileMenuOpen
@@ -982,14 +961,6 @@ export default function Navbar() {
                 >
                   Community ▾
                 </span>
-                {betaEligible ? (
-                  <span
-                    ref={setItemMeasureRef("beta")}
-                    className="shrink-0 rounded border px-3 py-1.5 text-sm font-medium border-yellow-400/30"
-                  >
-                    Beta
-                  </span>
-                ) : null}
               </div>
 
               <span ref={setPinnedRef("add-trade")} className="shrink-0">
@@ -1043,7 +1014,7 @@ export default function Navbar() {
                 <IntentPrefetchLink
                   href="/messages"
                   className={`inline-flex shrink-0 items-center gap-2 rounded px-2 py-1 transition ${
-                    isActive("/messages")
+                    isMessagesSectionActive
                       ? NAV_ITEM_ACTIVE
                       : NAV_ITEM_INACTIVE
                   }`}
@@ -1217,26 +1188,13 @@ export default function Navbar() {
 
                 <GettingStartedMobileEntry placement="desktop-nav" />
 
-                {profile?.is_beta_tester && !isOverflowing("beta") ? (
-                  <IntentPrefetchLink
-                    href="/beta"
-                    className={`shrink-0 rounded border px-3 py-1.5 text-sm font-medium transition ${
-                      isActive("/beta")
-                        ? "border-yellow-400/50 bg-yellow-500/30 text-yellow-200"
-                        : "border-yellow-400/30 bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30"
-                    }`}
-                  >
-                    Beta
-                  </IntentPrefetchLink>
-                ) : null}
-
                 <div className="profile-menu relative">
                   <button
                     type="button"
                     onClick={() => {
                       void handleToggleAccountMenu()
                     }}
-                    className="flex items-center gap-2 rounded border px-3 py-1"
+                    className="tt-nav-account flex items-center gap-2 rounded border px-3 py-1"
                   >
                     {!profileChromePending ? (
                       <ProfileAvatarImg
@@ -1605,34 +1563,18 @@ export default function Navbar() {
                 Terms of Service
               </IntentPrefetchLink>
 
-              {(profile?.is_beta_tester || isAdmin) ? (
+              {isAdmin ? (
                 <>
                   <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Developer
                   </p>
-                  {profile?.is_beta_tester ? (
-                    <IntentPrefetchLink
-                      href="/beta"
-                      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition ${
-                        isActive("/beta")
-                          ? "border border-yellow-400/40 bg-yellow-500/25 text-yellow-200"
-                          : "border border-yellow-400/25 bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25"
-                      }`}
-                      onClick={closeMobile}
-                    >
-                      <span>Beta Hub</span>
-                      {betaBadge}
-                    </IntentPrefetchLink>
-                  ) : null}
-                  {isAdmin ? (
-                    <IntentPrefetchLink
-                      href="/admin"
-                      className="rounded-lg px-3 py-1.5 text-chrome-foreground hover:text-nav-link-hover"
-                      onClick={closeMobile}
-                    >
-                      Admin
-                    </IntentPrefetchLink>
-                  ) : null}
+                  <IntentPrefetchLink
+                    href="/admin"
+                    className="rounded-lg px-3 py-1.5 text-chrome-foreground hover:text-nav-link-hover"
+                    onClick={closeMobile}
+                  >
+                    Admin
+                  </IntentPrefetchLink>
                 </>
               ) : null}
 
@@ -1654,7 +1596,7 @@ export default function Navbar() {
             <button
               type="button"
               onClick={handleReturnToApp}
-              className={`rounded-lg px-3 py-1.5 font-medium ${NAV_CTA_PRIMARY}`}
+              className={`w-fit self-start whitespace-nowrap rounded-lg px-3 py-1.5 font-medium ${NAV_CTA_PRIMARY}`}
             >
               Return to App
             </button>
@@ -1811,21 +1753,6 @@ export default function Navbar() {
               </div>
             ) : null}
           </div>
-
-          {profile?.is_beta_tester ? (
-            <IntentPrefetchLink
-              href="/beta"
-              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition ${
-                isActive("/beta")
-                  ? "border border-yellow-400/40 bg-yellow-500/25 text-yellow-200"
-                  : "border border-yellow-400/25 bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25"
-              }`}
-              onClick={closeMobile}
-            >
-              <span>Beta Hub</span>
-              {betaBadge}
-            </IntentPrefetchLink>
-          ) : null}
 
           <div className="flex flex-col gap-1 border-t border-border pt-1.5">
             {isAdmin ? (

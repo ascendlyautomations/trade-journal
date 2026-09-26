@@ -1,6 +1,7 @@
 import { PAGE_HEADING_MARKETING_CLASS } from "@/lib/pageHeadingStyles"
 import Link from "next/link"
 import type { ReactNode } from "react"
+import "../publicInformationalTheme.css"
 import LegalPageBackButton from "./LegalPageBackButton"
 import { LEGAL_LAST_UPDATED } from "@/lib/legal/contact"
 
@@ -25,7 +26,7 @@ export default function LegalDocumentLayout({
 }: LegalDocumentLayoutProps) {
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-16 pt-12 text-gray-100 md:px-6 md:pt-[calc(var(--navbar-height)+var(--safe-area-top)+7px)]">
+      <div className="tt-public-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-16 pt-12 text-gray-100 md:px-6 md:pt-[calc(var(--navbar-height)+var(--safe-area-top)+7px)]">
         <article className="mx-auto max-w-3xl">
           <LegalPageBackButton />
           <header className="mb-10 text-center md:mb-6">
@@ -60,7 +61,7 @@ export default function LegalDocumentLayout({
               <section
                 key={section.id}
                 id={section.id}
-                className="scroll-mt-28 rounded-xl border border-white/10 bg-[#1e293b]/60 p-6 shadow-lg shadow-black/10 md:p-8"
+                className="scroll-mt-28 border-b border-white/10 pb-8"
               >
                 <h2 className="text-xl font-semibold text-white">{section.title}</h2>
                 <div className="prose-legal mt-4 space-y-4 text-sm leading-relaxed text-gray-300 [&_a]:text-blue-300 [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-blue-200 [&_li]:ml-4 [&_li]:list-disc [&_strong]:font-semibold [&_strong]:text-gray-200 [&_ul]:space-y-2">
@@ -70,7 +71,7 @@ export default function LegalDocumentLayout({
             ))}
           </div>
 
-          <footer className="mt-12 rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-gray-400">
+          <footer className="mt-12 border-t border-white/10 pt-6 text-center text-sm text-gray-400">
             <p>
               See also:{" "}
               <Link href={relatedHref.href} className="text-blue-300 hover:text-blue-200">

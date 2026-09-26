@@ -105,9 +105,14 @@ enum ConversationThreadBootstrapLoader {
             conversationID: conversationID
         )
 
+        let inboxRow = inboxStore.conversations.first(where: { $0.id == conversationID })
         if cursor == nil, !forceNetwork,
            let cached = ConversationThreadSessionStore.shared.restore(key: cacheKey),
-           !cached.isSoftStale
+           !cached.isSoftStale,
+           !ConversationThreadSyncPolicy.isInboxAheadOfThread(
+               inbox: inboxRow,
+               threadMessages: cached.messages
+           )
         {
             return LoadResult(
                 applied: ConversationThreadBootstrapApplier.Applied(

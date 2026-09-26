@@ -1,5 +1,6 @@
 "use client"
 
+import "../utilityDesktopTheme.css"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
@@ -94,7 +95,7 @@ export default function ReviewPage() {
   if (loading) {
     return (
       <>
-        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-10">
+        <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-10">
           Loading trades...
         </div>
       </>
@@ -104,7 +105,7 @@ export default function ReviewPage() {
   if (!trades.length) {
     return (
       <>
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
+        <div className="tt-phase4-dark min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-blue-300">No trades left to review 🎉</h1>
             <button
@@ -123,7 +124,7 @@ export default function ReviewPage() {
   return (
     <>
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
+      <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
         <div className="max-w-6xl mx-auto p-4 md:p-8">
           <div className="mb-6 md:flex md:items-center md:justify-between md:gap-3">
             <div className="md:hidden">

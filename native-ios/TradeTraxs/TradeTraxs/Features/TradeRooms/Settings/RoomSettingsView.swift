@@ -113,6 +113,7 @@ struct RoomSettingsView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
     }
 }

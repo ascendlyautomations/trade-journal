@@ -1,17 +1,14 @@
 "use client"
 
-import type { ComponentPropsWithoutRef } from "react"
-import StorageImage from "@/app/components/ui/StorageImage"
-import { SAVED_IMAGE_FIT_CLASS } from "@/app/components/ui/SavedImage"
-import { TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS } from "@/lib/tradeScreenshotDisplay"
+import ContentMediaPreview from "@/app/components/ContentMediaPreview"
+import type { TradeScreenshotDisplayMode } from "@/lib/tradeScreenshotDisplay"
 
-type TradeScreenshotPreviewProps = Omit<
-  ComponentPropsWithoutRef<"img">,
-  "src" | "width" | "height"
-> & {
+type TradeScreenshotPreviewProps = {
   src: string
   fullSrc: string
-  maxHeightClassName?: string
+  displayMode?: TradeScreenshotDisplayMode | string | null
+  className?: string
+  alt?: string
   onOpenFull: (fullSrc: string) => void
 }
 
@@ -19,23 +16,20 @@ type TradeScreenshotPreviewProps = Omit<
 export default function TradeScreenshotPreview({
   src,
   fullSrc,
-  maxHeightClassName = TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS,
+  displayMode,
   className = "",
   onOpenFull,
   alt = "",
-  ...rest
 }: TradeScreenshotPreviewProps) {
   return (
-    <StorageImage
+    <ContentMediaPreview
       src={src}
-      originalSrc={fullSrc}
       preset="trade-thumb"
-      transformWidth={640}
+      displayMode={displayMode}
       alt={alt}
-      fallbackToOriginal={false}
-      className={`${maxHeightClassName} ${SAVED_IMAGE_FIT_CLASS} mx-auto mt-4 block cursor-pointer rounded-lg ${className}`}
+      className={`mt-4 ${className}`}
+      imageClassName="rounded-lg"
       onClick={() => onOpenFull(fullSrc)}
-      {...rest}
     />
   )
 }

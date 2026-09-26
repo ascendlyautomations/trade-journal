@@ -126,6 +126,7 @@ struct CreateRoomView: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .experienceDashboardGroupedRows()
             .disabled(viewModel.isSubmitting)
             .scrollDismissesKeyboard(.interactively)
         }

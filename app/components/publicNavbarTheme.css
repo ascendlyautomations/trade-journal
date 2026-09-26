@@ -1,0 +1,58 @@
+/*
+ * Public navbar only. Matches app/components/navbarDesktopTheme.css.
+ * Does not style page bodies, the homepage image, or .tt-app-navbar.
+ */
+
+.tt-public-navbar,
+.tt-public-navbar .bg-chrome {
+  background-color: #0b1016;
+  background-image: none;
+}
+
+.tt-public-navbar .border-chrome-border,
+.tt-public-navbar .border-border-subtle,
+.tt-public-navbar .border-border {
+  border-color: #30363d;
+}
+
+.tt-public-navbar .text-foreground-secondary,
+.tt-public-navbar .text-muted-foreground {
+  color: #b1bac4;
+}
+
+.tt-public-navbar .text-chrome-foreground,
+.tt-public-navbar .hover\:text-chrome-foreground:hover,
+.tt-public-navbar .hover\:text-nav-link-hover:hover,
+.tt-public-navbar .text-info {
+  color: #f0f3f6;
+}
+
+.tt-public-navbar .bg-accent-soft {
+  background-color: rgb(78 196 224 / 0.12);
+  box-shadow: inset 0 0 0 1px #4ec4e0;
+}
+
+.tt-public-navbar .border-chrome-border.rounded {
+  background-color: #161b22;
+  border-color: #30363d;
+  color: #f0f3f6;
+}
+
+.tt-public-navbar .border-chrome-border.rounded:hover,
+.tt-public-navbar .hover\:bg-surface-elevated:hover {
+  background-color: #292e36;
+}
+
+.tt-public-navbar .bg-accent {
+  background-color: #4ec4e0;
+  color: #041018;
+}
+
+.tt-public-navbar .text-accent-foreground {
+  color: #041018;
+}
+
+.tt-public-navbar .hover\:bg-accent-hover:hover {
+  background-color: #7dd3f0;
+  color: #041018;
+}

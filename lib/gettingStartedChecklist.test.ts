@@ -10,6 +10,7 @@ const EMPTY = {
   followCount: 0,
   hasEverJoinedOtherRoom: false,
   hasPublicTrade: false,
+  hasCompletedDailyCheckIn: false,
 }
 
 function itemComplete(
@@ -92,7 +93,7 @@ describe("computeGettingStartedProgress", () => {
       hasPublicTrade: true,
     })
     assert.equal(p.completedCount, 6)
-    assert.equal(p.totalCount, 6)
+    assert.equal(p.totalCount, 7)
     assert.equal(p.allComplete, true)
   })
 
@@ -100,7 +101,7 @@ describe("computeGettingStartedProgress", () => {
     const p = computeGettingStartedProgress(EMPTY)
     assert.equal(p.items[0]?.id, "profile")
     assert.equal(p.items[0]?.label, "Complete your profile")
-    assert.equal(p.totalCount, 6)
+    assert.equal(p.totalCount, 7)
   })
 
   it("profile task completes when onboarding is finished", () => {
@@ -244,6 +245,7 @@ describe("applyStickyGettingStartedProgress", () => {
       followCount: 0,
       hasEverJoinedOtherRoom: false,
       hasPublicTrade: false,
+      hasCompletedDailyCheckIn: false,
     })
 
     const merged = applyStickyGettingStartedProgress(serverProgress, userId, {

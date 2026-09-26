@@ -558,10 +558,8 @@ export default function TradeAccountPicker({
           aria-haspopup="listbox"
           aria-expanded={open}
           onClick={() => {
-            setOpen((prev) => {
-              if (!prev) onPickerOpen?.()
-              return !prev
-            })
+            if (!open) onPickerOpen?.()
+            setOpen((prev) => !prev)
           }}
           className={resolvedTriggerClassName}
         >

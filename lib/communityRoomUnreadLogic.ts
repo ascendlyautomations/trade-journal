@@ -1,4 +1,23 @@
+import { buildRealtimeInFilterChunks } from "./realtimeFilters.ts"
+
 export type RoomUnreadPatch = Record<string, boolean>
+
+/**
+ * Filtered `room_id=in.(...)` bindings for joined rooms.
+ * Empty input returns none. Oversized input is chunked. Never an unfiltered subscription.
+ */
+export function roomUnreadMessageFilters(roomIds: readonly string[]): string[] {
+  return buildRealtimeInFilterChunks("room_id", stableSortedRoomIds(roomIds)).filter(
+    (filter) => filter.startsWith("room_id=in.(") && filter.endsWith(")")
+  )
+}
+
+export function roomIdFromRoomMessageInsert(
+  row: Record<string, unknown> | null | undefined
+): string {
+  if (!row || row.room_id == null) return ""
+  return String(row.room_id).trim()
+}
 
 export function isRoomNotificationType(type: unknown): boolean {
   const t = String(type ?? "")

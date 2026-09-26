@@ -49,19 +49,9 @@ struct AchievementDetailView: View {
             viewModel.loadIfNeeded()
             let target = engagementTarget(forRouteID: viewModel.achievementID)
             data.engagementStore.prefetch([target])
-            EngagementRealtimeSession.shared.updateRetention(
-                ownerKey: "detail-achievement:\(viewModel.achievementID.rawValue)",
-                targets: [target]
-            )
             data.vaultStore.prefetch([
                 VaultContentRef(contentType: .achievement, contentID: viewModel.achievementID.rawValue),
             ])
-        }
-        .onDisappear {
-            EngagementRealtimeSession.shared.updateRetention(
-                ownerKey: "detail-achievement:\(viewModel.achievementID.rawValue)",
-                targets: []
-            )
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {

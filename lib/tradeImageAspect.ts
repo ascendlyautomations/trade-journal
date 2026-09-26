@@ -1,3 +1,9 @@
+/**
+ * Legacy production contract: fixed 4:3 at 1200×900.
+ * Current trade upload and display still depend on these values.
+ * Content Image V2 does not use them. Do not delete until later phases
+ * migrate those call sites and the 4:3 display frames.
+ */
 /** Fixed 4:3 frame used across trade cards (profile, feed, journal). */
 export const TRADE_IMAGE_ASPECT = 4 / 3
 

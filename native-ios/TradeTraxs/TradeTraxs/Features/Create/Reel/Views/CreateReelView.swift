@@ -101,7 +101,7 @@ struct CreateReelView: View {
             .ignoresSafeArea()
         }
         .sheet(isPresented: $showsPreview) {
-            if let url = viewModel.draft?.localVideoURL {
+            if let url = viewModel.previewVideoURL {
                 NavigationStack {
                     VideoPlayer(player: AVPlayer(url: url))
                         .ignoresSafeArea(edges: .bottom)
@@ -164,7 +164,7 @@ struct CreateReelView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollDismissesKeyboard(.interactively)
-        .disabled(viewModel.phase == .publishing || viewModel.isPreparingVideo)
+        .disabled(viewModel.isCommittingPublish)
     }
 
     private var videoPickerPrompt: some View {
@@ -172,7 +172,7 @@ struct CreateReelView: View {
             if viewModel.isPreparingVideo {
                 HStack(spacing: ExperienceSpacing.sm) {
                     ProgressView()
-                    Text(viewModel.phase == .importingVideo ? "Importing video…" : "Preparing video…")
+                    Text("Importing video…")
                         .experienceStyle(.body, color: colors.secondaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -212,46 +212,23 @@ struct CreateReelView: View {
 
     @ViewBuilder
     private var selectedVideoPreview: some View {
-        if let draft = viewModel.draft, let thumb = draft.thumbnailPreview {
+        if let draft = viewModel.draft {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 ZStack(alignment: .topTrailing) {
-                    Button {
-                        showsPreview = true
-                    } label: {
-                        ZStack(alignment: .bottomLeading) {
-                            Image(uiImage: thumb)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(maxWidth: .infinity)
-                                .frame(maxHeight: 240)
-                                .clipped()
-                                .clipShape(
-                                    RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
-                                )
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
-                                        .stroke(
-                                            colors.border.opacity(ExperienceOpacity.subtle),
-                                            lineWidth: ExperienceBorder.hairline
-                                        )
-                                }
-                                .overlay {
-                                    Image(systemName: "play.circle.fill")
-                                        .font(.system(size: 44))
-                                        .foregroundStyle(.white.opacity(0.92))
-                                        .shadow(radius: 4)
-                                }
-
-                            Text(draft.formattedDuration)
-                                .experienceStyle(.caption, color: .white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.black.opacity(0.55), in: Capsule())
-                                .padding(ExperienceSpacing.sm)
+                    Group {
+                        if viewModel.previewVideoURL != nil {
+                            Button {
+                                showsPreview = true
+                            } label: {
+                                clipPreviewContent(draft: draft, thumb: draft.thumbnailPreview)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Play clip preview")
+                        } else {
+                            clipPreviewContent(draft: draft, thumb: draft.thumbnailPreview)
+                                .accessibilityLabel("Clip preview")
                         }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Play clip preview")
 
                     CreateComposerPreviewDismissButton(accessibilityLabel: "Remove video") {
                         viewModel.clearVideo()
@@ -270,6 +247,62 @@ struct CreateReelView: View {
                     .disabled(viewModel.isPublishing)
                     Spacer(minLength: 0)
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func clipPreviewContent(draft: ReelDraft, thumb: UIImage?) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            Group {
+                if let thumb {
+                    Image(uiImage: thumb)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    ZStack {
+                        colors.surfaceSecondary
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 36))
+                            .foregroundStyle(colors.tertiaryText)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(maxHeight: 240)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+                    .stroke(
+                        colors.border.opacity(ExperienceOpacity.subtle),
+                        lineWidth: ExperienceBorder.hairline
+                    )
+            }
+            .overlay {
+                if thumb != nil {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .shadow(radius: 4)
+                }
+            }
+            .overlay {
+                if viewModel.isFullVideoImportInProgress || viewModel.isBackgroundPreparing {
+                    RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+                        .fill(.black.opacity(thumb == nil ? 0.08 : 0.22))
+                    ProgressView()
+                        .tint(thumb == nil ? colors.accent : .white)
+                }
+            }
+
+            if draft.durationSeconds > 0 {
+                Text(draft.formattedDuration)
+                    .experienceStyle(.caption, color: .white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.55), in: Capsule())
+                    .padding(ExperienceSpacing.sm)
             }
         }
     }
@@ -351,10 +384,10 @@ struct CreateReelView: View {
     private var publishBar: some View {
         CreateComposerPublishBar(
             title: "Post Clip",
-            loadingTitle: "Publishing…",
-            progress: viewModel.phase == .publishing ? viewModel.uploadProgress : nil,
+            loadingTitle: "Posting…",
+            progress: nil,
             isEnabled: viewModel.canPublish && viewModel.draft != nil,
-            isLoading: viewModel.phase == .publishing || viewModel.isPreparingVideo,
+            isLoading: viewModel.isCommittingPublish,
             accessibilityIdentifier: "createReel.publish"
         ) {
             viewModel.publish()

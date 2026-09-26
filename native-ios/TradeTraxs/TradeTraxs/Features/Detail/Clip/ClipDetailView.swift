@@ -9,6 +9,8 @@ struct ClipDetailView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.tabIsActive) private var tabIsActive
     @State private var showLikeHeart = false
     @State private var contentRevealed = false
     @State private var showsDeleteConfirm = false
@@ -64,19 +66,9 @@ struct ClipDetailView: View {
             viewModel.loadIfNeeded()
             let target = InteractionTarget.reel(viewModel.reelID)
             data.engagementStore.prefetch([target])
-            EngagementRealtimeSession.shared.updateRetention(
-                ownerKey: "detail-reel:\(viewModel.reelID.rawValue)",
-                targets: [target]
-            )
             data.vaultStore.prefetch([
                 VaultContentRef(contentType: .reel, contentID: viewModel.reelID.rawValue),
             ])
-        }
-        .onDisappear {
-            EngagementRealtimeSession.shared.updateRetention(
-                ownerKey: "detail-reel:\(viewModel.reelID.rawValue)",
-                targets: []
-            )
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {
@@ -90,6 +82,16 @@ struct ClipDetailView: View {
         }
         .onDisappear {
             viewModel.tearDown()
+        }
+        .onChange(of: tabIsActive) { _, isActive in
+            if !isActive {
+                viewModel.suspendPlayback(reason: "tabChanged")
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase != .active {
+                viewModel.suspendPlayback(reason: "appBackgrounded")
+            }
         }
         .confirmationDialog(
             "Delete Clip?",

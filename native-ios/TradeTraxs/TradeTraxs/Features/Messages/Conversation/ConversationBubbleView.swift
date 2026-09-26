@@ -16,6 +16,7 @@ struct ConversationBubbleView: View {
     var isSharedContentUnavailable: Bool = false
     var reactionConfiguration: MessageReactionConfiguration? = nil
     var onLongPressForActionMenu: (() -> Void)? = nil
+    var isActionMenuAnchorActive: Bool = false
     var canDelete: Bool = false
     var deleteMenuTitle: String = "Delete"
     var onRetry: (() -> Void)?
@@ -208,6 +209,11 @@ struct ConversationBubbleView: View {
         .messageReactionInteractions(
             isEnabled: reactionInteractionsEnabled,
             onDoubleTapLike: { reactionConfiguration?.onToggle(MessageReactionSemantics.doubleTapLikeEmoji) }
+        )
+        .messageBubbleActionMenuAnchor(
+            messageID: item.id,
+            isOutgoing: item.isOutgoing,
+            isActive: isActionMenuAnchorActive
         )
     }
 

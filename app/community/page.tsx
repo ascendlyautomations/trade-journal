@@ -28,7 +28,8 @@ import VoiceMessageBubble from "@/app/components/messages/VoiceMessageBubble"
 import StoryShareMessageCard from "@/app/components/messages/StoryShareMessageCard"
 import { supabase } from "../../lib/supabaseClient"
 import { stableIdKey } from "@/lib/realtimeFilters"
-import { compressImage, compressScreenshot } from "@/lib/compressImage"
+import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { validateImageUpload } from "@/lib/uploadValidation"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
   createMonotonicReporter,
@@ -448,15 +449,7 @@ function CommunityContent() {
   const [composerPreviewUrl, setComposerPreviewUrl] = useState<string | null>(
     null
   )
-  const composerImageCrop = useImageCropUpload({
-    preset: "content",
-    onCropped: (file) => {
-      if (composerPreviewUrl) URL.revokeObjectURL(composerPreviewUrl)
-      setSelectedComposerImage(file)
-      setComposerPreviewUrl(URL.createObjectURL(file))
-    },
-    onValidationError: (message) => showPopup({ type: "error", message }),
-  })
+  const composerImageInputRef = useRef<HTMLInputElement | null>(null)
   const roomImageUploadRef = useRef<(file: File) => Promise<void>>(
     async () => {}
   )
@@ -2742,10 +2735,7 @@ function CommunityContent() {
         title: "Uploading Room Avatar",
         execute: async (report) => {
           report({ percent: 10, stage: "Processing…" })
-          let uploadFile: File = file
-          if (file.type?.startsWith("image/")) {
-            uploadFile = await compressImage(file)
-          }
+          const uploadFile = file
 
           const filePath = `room-images/${Date.now()}-${uploadFile.name}`
           report({ percent: 18, stage: "Uploading…" })
@@ -3207,8 +3197,8 @@ function CommunityContent() {
     setSelectedComposerImage(null)
     if (composerPreviewUrl) URL.revokeObjectURL(composerPreviewUrl)
     setComposerPreviewUrl(null)
-    if (composerImageCrop.fileInputRef.current) {
-      composerImageCrop.fileInputRef.current.value = ""
+    if (composerImageInputRef.current) {
+      composerImageInputRef.current.value = ""
     }
   }
 
@@ -3224,8 +3214,8 @@ function CommunityContent() {
       if (prev) URL.revokeObjectURL(prev)
       return null
     })
-    if (composerImageCrop.fileInputRef.current) {
-      composerImageCrop.fileInputRef.current.value = ""
+    if (composerImageInputRef.current) {
+      composerImageInputRef.current.value = ""
     }
   }, [selectedRoomId, selectedSectionId])
 
@@ -3234,7 +3224,17 @@ function CommunityContent() {
 
     const file = e.target.files?.[0]
     e.target.value = ""
-    composerImageCrop.handleFileSelected(file)
+    if (!file) return
+    const validationError = validateImageUpload(file)
+    if (validationError) {
+      showPopup({ type: "error", message: validationError })
+      return
+    }
+    setComposerPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
+    setSelectedComposerImage(file)
   }
 
   function scrollToRoomMessage(messageId: string): boolean {
@@ -3275,9 +3275,13 @@ function CommunityContent() {
             setSendingMessage(true)
 
             report({ percent: 10, stage: "Processing…" })
-            let uploadFile: File = imageFile
-            if (imageFile.type?.startsWith("image/")) {
-              uploadFile = await compressScreenshot(imageFile)
+            let uploadFile: File
+            try {
+              uploadFile = await prepareImageForUpload("chat", imageFile)
+            } catch (error) {
+              throw new Error(
+                error instanceof Error ? error.message : "Couldn't prepare that image."
+              )
             }
             const filePath = `room-images/${Date.now()}-${uploadFile.name}`
 
@@ -3801,7 +3805,7 @@ function CommunityContent() {
       <div
         data-tt-native-surface="community"
         data-tt-trade-rooms
-        className="flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white xl:px-8 2xl:px-12"
+        className="tt-phase2-dark flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white xl:px-8 2xl:px-12"
       >
         <div
           data-tt-trade-rooms-shell
@@ -4920,7 +4924,7 @@ function CommunityContent() {
                     }
                     onImageChange={handleComposerImageChange}
                     imageDisabled={!canPostInRoom}
-                    fileInputRef={composerImageCrop.fileInputRef}
+                    fileInputRef={composerImageInputRef}
                     onTradeClick={() => setSelectTrade(true)}
                     tradeDisabled={!canPostInRoom}
                     beforeRow={
@@ -4956,7 +4960,6 @@ function CommunityContent() {
             )}
           </section>
         </div>
-      </div>
 
       {showCreateSectionModal ? (
         <div
@@ -5600,13 +5603,7 @@ function CommunityContent() {
           </div>
         </div>
       ) : null}
-      <ImageCropModal
-        open={composerImageCrop.cropSourceFile != null}
-        file={composerImageCrop.cropSourceFile}
-        preset="content"
-        onCancel={composerImageCrop.handleCropCancel}
-        onSave={composerImageCrop.handleCropSave}
-      />
+      </div>
       <ImageCropModal
         open={roomImageCrop.cropSourceFile != null}
         file={roomImageCrop.cropSourceFile}
@@ -5658,7 +5655,7 @@ export default function CommunityPage() {
     <Suspense
       fallback={
         <>
-          <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-white md:p-6">
+          <div className="tt-phase2-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-white md:p-6">
             <SkeletonCommunityPage />
           </div>
         </>

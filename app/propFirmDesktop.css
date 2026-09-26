@@ -1,0 +1,61 @@
+/*
+ * Prop Firm Mode desktop layout only. Hidden below 1200px and on native iOS
+ * so tablet, mobile, and the native shell keep the existing page.
+ */
+
+.tt-propfirm-desktop {
+  display: none;
+}
+
+@media (min-width: 1200px) {
+  html:not(.tt-native-ios) .tt-propfirm-desktop {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    width: 100%;
+  }
+
+  html:not(.tt-native-ios) .tt-propfirm-legacy {
+    display: none !important;
+  }
+
+  html:not(.tt-native-ios) .tt-propfirm-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 0.42fr) minmax(0, 0.58fr);
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  html:not(.tt-native-ios) .tt-propfirm-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 0.75rem;
+  }
+
+  html:not(.tt-native-ios) .tt-propfirm-lower {
+    display: grid;
+    grid-template-columns: minmax(0, 0.42fr) minmax(0, 0.58fr);
+    gap: 1rem;
+    align-items: start;
+  }
+
+  html:not(.tt-native-ios) .tt-propfirm-lower-stack {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  html:not(.tt-native-ios) .tt-propfirm-analytics {
+    display: grid;
+    grid-template-columns: minmax(0, 0.62fr) minmax(0, 0.38fr);
+    gap: 1rem;
+    align-items: start;
+  }
+}
+
+@media (min-width: 1440px) {
+  html:not(.tt-native-ios) .tt-propfirm-hero {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+}
