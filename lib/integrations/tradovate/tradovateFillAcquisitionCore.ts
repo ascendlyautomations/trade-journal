@@ -26,6 +26,10 @@ export type TradovateFillAcquisitionStats = {
   fillListFailed: boolean
   fillItemsRepairCount: number
   fillItemsRepairRequested: number
+  initialBootstrapAttempted: boolean
+  initialBootstrapCashBalanceLogCount: number
+  initialBootstrapDiscoveredFillIds: number
+  initialBootstrapFillCount: number
 }
 
 export function dedupeTradovateFillsById(fills: TradovateFillRaw[]): TradovateFillRaw[] {
@@ -100,6 +104,10 @@ export function logTradovateFillAcquisitionSummary(params: {
       `fillLdepsBatchErrors=${stats.fillLdepsBatchErrors}`,
       `fillItemsRepairCount=${stats.fillItemsRepairCount}`,
       `fillItemsRepairRequested=${stats.fillItemsRepairRequested}`,
+      `initialBootstrapAttempted=${stats.initialBootstrapAttempted}`,
+      `initialBootstrapCashBalanceLogCount=${stats.initialBootstrapCashBalanceLogCount}`,
+      `initialBootstrapDiscoveredFillIds=${stats.initialBootstrapDiscoveredFillIds}`,
+      `initialBootstrapFillCount=${stats.initialBootstrapFillCount}`,
     ].join(" ")
   )
 }

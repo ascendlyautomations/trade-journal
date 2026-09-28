@@ -10,6 +10,8 @@ test("tradovateClientSyncOk rejects partial with zero fills", () => {
     tradovateClientSyncOk({
       acquisitionStatus: "IMPORT_SUCCESS_PARTIAL",
       fetchedFillCount: 0,
+      ledgerExecutionCountAtStart: 5,
+      historicalBackfillComplete: true,
     }),
     false
   )
@@ -17,6 +19,8 @@ test("tradovateClientSyncOk rejects partial with zero fills", () => {
     tradovateClientSyncOk({
       acquisitionStatus: "IMPORT_SUCCESS_PARTIAL",
       fetchedFillCount: 3,
+      ledgerExecutionCountAtStart: 5,
+      historicalBackfillComplete: false,
     }),
     true
   )
@@ -24,6 +28,8 @@ test("tradovateClientSyncOk rejects partial with zero fills", () => {
     tradovateClientSyncOk({
       acquisitionStatus: "IMPORT_SUCCESS_COMPLETE",
       fetchedFillCount: 0,
+      ledgerExecutionCountAtStart: 33,
+      historicalBackfillComplete: true,
     }),
     true
   )
@@ -35,7 +41,8 @@ test("tradovateClientSyncErrorForIncompletePartial", () => {
       acquisitionStatus: "IMPORT_SUCCESS_PARTIAL",
       fetchedFillCount: 0,
       ledgerExecutionCountAtStart: 0,
+      historicalBackfillComplete: false,
     })?.errorCode,
-    "import_incomplete_no_fills"
+    "import_incomplete_history"
   )
 })

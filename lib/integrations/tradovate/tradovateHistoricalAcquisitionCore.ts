@@ -16,8 +16,16 @@ import { fillTimestampWindow } from "./tradovateFillAcquisitionCore.ts"
  * - fillPair/ldeps / fillPair/list: validation-only; same recent-window behavior as fills/positions.
  * - user/syncrequest (WebSocket): incremental props stream — triggers sync; does not replace REST backfill.
  *
- * Therefore INITIAL BACKFILL = deps + list + ldeps + bounded fill/items repair + ledger merge.
- * INCREMENTAL = same pipeline with watermark; skip repair when coverage verified.
+ * - cashBalanceLog/deps?masterid={accountId}: CashBalanceLog dependents on Account — includes fillId
+ *   pointers for trade-related balance changes (supported initial bootstrap when list/deps are empty).
+ * - executionReport/list: ExecutionReport entities for the user — filter by accountId; order ids → fill/ldeps.
+ * - order/ldeps?masterids={accountIds}: orders for account entities (supplement to order/deps).
+ *
+ * fill/deps?masterid={orderId} is order-scoped, not account archival.
+ *
+ * Therefore INITIAL BACKFILL (empty ledger) = session deps/list/ldeps PLUS cashBalanceLog/deps → fill/items,
+ * executionReport/list → fill/ldeps, order/ldeps, then ledger merge.
+ * INCREMENTAL = same pipeline with watermark; skip initial bootstrap when ledger has executions.
  * REPAIR = fill/items (+ order/items) for hole candidates without deleting ledger rows.
  */
 
@@ -75,6 +83,7 @@ export function assessTradovateHistoricalCompleteness(params: {
   repairAttempted: boolean
   repairFillIdsRequested: string[]
   repairFillIdsRecovered: string[]
+  initialBootstrapAttempted?: boolean
   /** When set (initial backfill), remote window must cover this start. */
   requestedStart?: string | null
   requestedEnd?: string | null
@@ -82,12 +91,14 @@ export function assessTradovateHistoricalCompleteness(params: {
   const window = fillTimestampWindow(params.accountFills)
   const holes: string[] = []
 
-  for (const fillId of TRADOVATE_PERFORMANCE_MGC_RECOVERY_FILL_IDS) {
-    if (
-      !params.ledger.fillIds.has(fillId) &&
-      !params.accountFills.some((f) => String(f.id) === fillId)
-    ) {
-      holes.push(fillId)
+  if (params.ledger.executionCount > 0) {
+    for (const fillId of TRADOVATE_PERFORMANCE_MGC_RECOVERY_FILL_IDS) {
+      if (
+        !params.ledger.fillIds.has(fillId) &&
+        !params.accountFills.some((f) => String(f.id) === fillId)
+      ) {
+        holes.push(fillId)
+      }
     }
   }
 
@@ -113,9 +124,17 @@ export function assessTradovateHistoricalCompleteness(params: {
   }
 
   const historicalBackfillAttempted =
-    params.repairAttempted || params.repairFillIdsRequested.length > 0
+    params.initialBootstrapAttempted === true ||
+    params.repairAttempted ||
+    params.repairFillIdsRequested.length > 0
+
+  const initialBootstrapIncomplete =
+    params.ledger.executionCount === 0 &&
+    params.initialBootstrapAttempted === true &&
+    params.accountFills.length === 0
 
   const historicalBackfillComplete =
+    !initialBootstrapIncomplete &&
     holes.length === 0 &&
     !(
       params.ledger.executionCount > 0 &&
@@ -124,8 +143,18 @@ export function assessTradovateHistoricalCompleteness(params: {
       window.earliestFillTimestamp > params.ledger.earliestExecutedAt
     )
 
+  const requestedStart =
+    params.requestedStart ??
+    (params.ledger.executionCount === 0 && params.initialBootstrapAttempted
+      ? (() => {
+          const start = new Date()
+          start.setUTCDate(start.getUTCDate() - 365)
+          return start.toISOString()
+        })()
+      : params.ledger.earliestExecutedAt)
+
   return {
-    requestedStart: params.requestedStart ?? params.ledger.earliestExecutedAt,
+    requestedStart,
     requestedEnd: params.requestedEnd ?? new Date().toISOString(),
     retrievedEarliest: window.earliestFillTimestamp,
     retrievedLatest: window.latestFillTimestamp,

@@ -27,6 +27,8 @@ test("IMPORT_FAILED never client-ok", () => {
     tradovateClientSyncOk({
       acquisitionStatus: "IMPORT_FAILED",
       fetchedFillCount: 0,
+      ledgerExecutionCountAtStart: 0,
+      historicalBackfillComplete: false,
     }),
     false
   )
@@ -37,6 +39,8 @@ test("complete acquisition with zero new trades remains client-ok", () => {
     tradovateClientSyncOk({
       acquisitionStatus: "IMPORT_SUCCESS_COMPLETE",
       fetchedFillCount: 0,
+      ledgerExecutionCountAtStart: 10,
+      historicalBackfillComplete: true,
     }),
     true
   )

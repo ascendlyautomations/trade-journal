@@ -4,8 +4,17 @@ import type { TradovateImportAcquisitionStatus } from "./tradovateSyncCompletene
 export function tradovateClientSyncOk(params: {
   acquisitionStatus: TradovateImportAcquisitionStatus
   fetchedFillCount: number
+  ledgerExecutionCountAtStart: number
+  historicalBackfillComplete: boolean
 }): boolean {
   if (params.acquisitionStatus === "IMPORT_FAILED") return false
+  if (
+    params.ledgerExecutionCountAtStart === 0 &&
+    params.fetchedFillCount === 0 &&
+    !params.historicalBackfillComplete
+  ) {
+    return false
+  }
   if (
     params.acquisitionStatus === "IMPORT_SUCCESS_PARTIAL" &&
     params.fetchedFillCount === 0
@@ -19,13 +28,25 @@ export function tradovateClientSyncErrorForIncompletePartial(params: {
   acquisitionStatus: TradovateImportAcquisitionStatus
   fetchedFillCount: number
   ledgerExecutionCountAtStart: number
+  historicalBackfillComplete: boolean
 }): { errorCode: string; error: string } | null {
+  if (params.fetchedFillCount !== 0) return null
+
   if (
-    params.acquisitionStatus !== "IMPORT_SUCCESS_PARTIAL" ||
-    params.fetchedFillCount !== 0
+    params.ledgerExecutionCountAtStart === 0 &&
+    !params.historicalBackfillComplete
   ) {
+    return {
+      errorCode: "import_incomplete_history",
+      error:
+        "Initial trade history is not complete yet. Sync again to retry historical import.",
+    }
+  }
+
+  if (params.acquisitionStatus !== "IMPORT_SUCCESS_PARTIAL") {
     return null
   }
+
   if (params.ledgerExecutionCountAtStart > 0) {
     return {
       errorCode: "import_partial_no_new_fills",

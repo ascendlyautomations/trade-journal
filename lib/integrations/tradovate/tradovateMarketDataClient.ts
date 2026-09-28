@@ -59,6 +59,67 @@ export async function fetchTradovateFillList(
   return body.filter((row) => row && typeof row === "object") as TradovateFillRaw[]
 }
 
+/** Official Tradovate REST: GET /v1/cashBalanceLog/deps?masterid={accountId} */
+export async function fetchTradovateCashBalanceLogsByAccountDeps(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string,
+  accountId: string
+): Promise<
+  import("./tradovateCashBalanceLogModels.ts").TradovateCashBalanceLogRaw[]
+> {
+  const masterid = encodeURIComponent(String(accountId).trim())
+  const body = await tradovateAuthedJsonRequest<unknown>(
+    supabase,
+    userId,
+    connectionId,
+    `/v1/cashBalanceLog/deps?masterid=${masterid}`
+  )
+  if (!Array.isArray(body)) return []
+  return body.filter((row) => row && typeof row === "object") as import("./tradovateCashBalanceLogModels.ts").TradovateCashBalanceLogRaw[]
+}
+
+/** Official Tradovate REST: GET /v1/executionReport/list */
+export async function fetchTradovateExecutionReportList(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string
+): Promise<
+  Array<{ accountId?: number | string; orderId?: number | string }>
+> {
+  const body = await tradovateAuthedJsonRequest<unknown>(
+    supabase,
+    userId,
+    connectionId,
+    "/v1/executionReport/list"
+  )
+  if (!Array.isArray(body)) return []
+  return body.filter((row) => row && typeof row === "object") as Array<{
+    accountId?: number | string
+    orderId?: number | string
+  }>
+}
+
+/** Official Tradovate REST: GET /v1/order/ldeps?masterids={accountIds} */
+export async function fetchTradovateOrdersByAccountIdsLdeps(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string,
+  accountIds: string[]
+): Promise<TradovateOrderRaw[]> {
+  const unique = [...new Set(accountIds.filter(Boolean))]
+  if (unique.length === 0) return []
+  const path = `/v1/order/ldeps?masterids=${idsQuery(unique)}`
+  const body = await tradovateAuthedJsonRequest<unknown>(
+    supabase,
+    userId,
+    connectionId,
+    path
+  )
+  if (!Array.isArray(body)) return []
+  return body.filter((row) => row && typeof row === "object") as TradovateOrderRaw[]
+}
+
 /** Official Tradovate REST: GET /v1/order/deps?masterid={accountId} */
 export async function fetchTradovateOrdersByAccountDeps(
   supabase: SupabaseClient,

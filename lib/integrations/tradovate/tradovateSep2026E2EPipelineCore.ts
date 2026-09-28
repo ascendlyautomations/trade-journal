@@ -188,6 +188,10 @@ export function simulateAcquisitionStats(params: {
       fillListFailed: false,
       fillItemsRepairCount: 0,
       fillItemsRepairRequested: 0,
+      initialBootstrapAttempted: false,
+      initialBootstrapCashBalanceLogCount: 0,
+      initialBootstrapDiscoveredFillIds: 0,
+      initialBootstrapFillCount: 0,
     },
     acquisitionErrors,
   }

@@ -22,6 +22,7 @@ export type TradovateSyncFailureStage =
   | "reconstruct"
   | "fetch_fees"
   | "persist_trades"
+  | "historical_bootstrap"
   | "unknown"
 
 export type TradovateSyncLogContext = {

@@ -35,6 +35,7 @@ import {
   mergeAccountScopedTradovateFills,
   type TradovateFillAcquisitionStats,
 } from "./tradovateFillAcquisitionCore.ts"
+import { runTradovateInitialHistoricalBootstrap } from "./tradovateInitialHistoricalBootstrap.ts"
 
 export {
   TRADOVATE_FILL_ACQUISITION_VERSION,
@@ -241,12 +242,77 @@ export async function acquireTradovateFillsForAccount(
     orderAccountById,
   })
 
+  let initialBootstrapAttempted = false
+  let initialBootstrapCashBalanceLogCount = 0
+  let initialBootstrapDiscoveredFillIds = 0
+  let initialBootstrapFillCount = 0
+
+  if (ledgerSnapshot.executionCount === 0) {
+    const mergedBeforeBootstrap = new Set(
+      accountFills.map((f) => tradovateFillStableId(f))
+    )
+    const bootstrap = await runTradovateInitialHistoricalBootstrap(supabase, {
+      userId: params.userId,
+      connectionId: params.connectionId,
+      targetAccountId: params.targetAccountId,
+      alreadyMergedFillIds: mergedBeforeBootstrap,
+    })
+    initialBootstrapAttempted = bootstrap.attempted
+    initialBootstrapCashBalanceLogCount = bootstrap.cashBalanceLogCount
+    initialBootstrapDiscoveredFillIds = bootstrap.discoveredFillIds.length
+    initialBootstrapFillCount = bootstrap.fills.length
+    for (const err of bootstrap.errors) {
+      acquisitionErrors.push(err)
+    }
+
+    if (bootstrap.fills.length > 0) {
+      accountFills = mergeAccountScopedTradovateFills({
+        primaryFills: accountFills,
+        supplementalFills: bootstrap.fills,
+        targetAccountId: params.targetAccountId,
+        orderAccountById,
+      })
+    }
+
+    const bootstrapOrderIds = [
+      ...new Set(
+        bootstrap.fills
+          .filter((f) => f.orderId != null)
+          .map((f) => String(f.orderId))
+      ),
+    ].filter((id) => !orderAccountById.has(id))
+    if (bootstrapOrderIds.length > 0) {
+      try {
+        const hydrated = await fetchTradovateOrdersByIds(
+          supabase,
+          params.userId,
+          params.connectionId,
+          bootstrapOrderIds
+        )
+        mergeTradovateOrderAccountMap(orderAccountById, hydrated)
+      } catch (err) {
+        const detail =
+          err instanceof Error ? err.message.slice(0, 120) : "bootstrap_order_items_failed"
+        acquisitionErrors.push(`bootstrap_order_items:${detail}`)
+      }
+    }
+    for (const orderId of bootstrap.executionReportOrderIds) {
+      if (!orderAccountById.has(orderId)) {
+        orderAccountById.set(orderId, params.targetAccountId)
+      }
+    }
+  }
+
   const mergedBeforeRepair = new Set(
     accountFills.map((f) => tradovateFillStableId(f))
   )
   const repairCandidates = buildTradovateRepairFillIdCandidates({
     mergedFillIds: mergedBeforeRepair,
     ledgerFillIds: ledgerSnapshot.fillIds,
+    extraRecoveryFillIds:
+      ledgerSnapshot.executionCount === 0
+        ? []
+        : undefined,
   })
   let fillsFromItemsRepair: TradovateFillRaw[] = []
   let repairAttempted = false
@@ -319,6 +385,7 @@ export async function acquireTradovateFillsForAccount(
     repairAttempted,
     repairFillIdsRequested: repairCandidates,
     repairFillIdsRecovered: repairRecovered,
+    initialBootstrapAttempted,
   })
   logTradovateHistoricalCompleteness(historicalCompleteness)
 
@@ -335,6 +402,10 @@ export async function acquireTradovateFillsForAccount(
     fillListFailed,
     fillItemsRepairCount: fillsFromItemsRepair.length,
     fillItemsRepairRequested: repairCandidates.length,
+    initialBootstrapAttempted,
+    initialBootstrapCashBalanceLogCount,
+    initialBootstrapDiscoveredFillIds,
+    initialBootstrapFillCount,
   }
 
   if (

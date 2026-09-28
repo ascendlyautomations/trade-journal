@@ -1061,10 +1061,14 @@ export async function syncTradovateBrokerAccount(
       stageDurationsMs,
     })
 
+    const historicalBackfillComplete =
+      fillAcquisition.historicalCompleteness.historicalBackfillComplete
+
     const incompletePartial = tradovateClientSyncErrorForIncompletePartial({
       acquisitionStatus,
       fetchedFillCount: accountFills.length,
       ledgerExecutionCountAtStart: ledgerSnapshotAtStart.executionCount,
+      historicalBackfillComplete,
     })
     const partialErrorCode =
       incompletePartial?.errorCode ??
@@ -1094,26 +1098,43 @@ export async function syncTradovateBrokerAccount(
       provider: "tradovate",
     })
 
-    logTradovateSync("sync_success", {
-      userId,
-      connectionId,
-      mappingId: brokerIntegrationAccountId,
-      trigger,
-      durationMs,
-      fetched: accountFills.length,
-      newExecutions,
-      tradesCreated,
-      tradesUpdated,
-      tradesWithPnL,
-      tradesWithoutPnL,
-      tradesBuilt: completed.length,
-      numericTickersPersisted,
-    })
-
     const clientOk = tradovateClientSyncOk({
       acquisitionStatus,
       fetchedFillCount: accountFills.length,
+      ledgerExecutionCountAtStart: ledgerSnapshotAtStart.executionCount,
+      historicalBackfillComplete,
     })
+
+    if (clientOk) {
+      logTradovateSync("sync_success", {
+        userId,
+        connectionId,
+        mappingId: brokerIntegrationAccountId,
+        trigger,
+        durationMs,
+        fetched: accountFills.length,
+        newExecutions,
+        tradesCreated,
+        tradesUpdated,
+        tradesWithPnL,
+        tradesWithoutPnL,
+        tradesBuilt: completed.length,
+        numericTickersPersisted,
+      })
+    } else {
+      logTradovateSync("sync_error", {
+        userId,
+        connectionId,
+        mappingId: brokerIntegrationAccountId,
+        trigger,
+        failureCategory: "fill_retrieval_failure",
+        failureStage: "historical_bootstrap",
+        errorCode: incompletePartial?.errorCode ?? "import_incomplete_history",
+        detail: incompletePartial?.error ?? "historical_import_incomplete",
+        durationMs,
+        fetched: accountFills.length,
+      })
+    }
 
     return {
       ok: clientOk,
