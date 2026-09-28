@@ -2095,7 +2095,7 @@ final class ConversationViewModel {
         do {
             var resolvedImageURL = imageURL
             if let localImageData {
-                let path = "\(viewerID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+                let path = StorageOptimizedMedia.objectPath(prefix: viewerID.rawValue, fileExtension: "jpg")
                 resolvedImageURL = try await OptimisticOutboundImageSendSupport.uploadJPEG(
                     localImageData: localImageData,
                     storagePath: path,

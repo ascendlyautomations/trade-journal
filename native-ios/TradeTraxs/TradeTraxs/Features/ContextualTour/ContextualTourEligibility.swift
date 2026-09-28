@@ -78,6 +78,16 @@ enum ContextualTourGeometry {
         return .waiting
     }
 
+    /// Profile header targets stay at the top; autoscroll fights shell loading and causes flicker.
+    static func skipsTourAutoscroll(for target: ContextualTourTargetID) -> Bool {
+        switch target {
+        case .profileIdentity, .profileTradeRoom:
+            return true
+        default:
+            return false
+        }
+    }
+
     static func needsScroll(
         frame: CGRect,
         viewport: CGRect,

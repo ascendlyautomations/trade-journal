@@ -159,6 +159,37 @@ final class ProfileContentStore {
         }
     }
 
+    /// Owner Settings / session store published a new header avatar — no profile reload.
+    func adoptOwnerProfileHeader(from profile: Profile, localAvatar: UIImage?) {
+        guard isOwner else { return }
+        if let resolvedProfileID, resolvedProfileID != profile.id { return }
+
+        let resolved = Self.profileApplyingSessionPreferredAvatar(profile)
+        let previousReference = self.profile?.avatar
+        self.profile = resolved
+        detailCache.seed(resolved)
+        if phase != .loaded {
+            phase = .loaded
+        }
+
+        if let localAvatar {
+            avatarImage = Image(uiImage: localAvatar)
+            loadedAvatarKey = resolved.avatar?.id ?? loadedAvatarKey
+            return
+        }
+
+        let avatarChanged = previousReference?.id != resolved.avatar?.id
+        Task { [weak self] in
+            guard let self else { return }
+            await Self.invalidateAvatarCaches(
+                imagePipeline: self.imagePipeline,
+                previous: previousReference,
+                current: resolved.avatar
+            )
+            await self.loadAvatarIfNeeded(for: resolved, force: avatarChanged || previousReference != nil)
+        }
+    }
+
     func loadIfNeeded(force: Bool = false) {
         // Screen-owned Profile uses ``ProfileBootstrap`` — keep this path for unit tests
         // and any non-screen callers.
@@ -472,6 +503,7 @@ final class ProfileContentStore {
                 )
             )
             guard !Task.isCancelled else { return }
+            guard self.profile?.avatar?.id == reference.id else { return }
             guard let uiImage = UIImage(data: data) else {
                 avatarImage = nil
                 loadedAvatarKey = nil
@@ -480,8 +512,32 @@ final class ProfileContentStore {
             avatarImage = Image(uiImage: uiImage)
             loadedAvatarKey = reference.id
         } catch {
+            guard self.profile?.avatar?.id == reference.id else { return }
             avatarImage = nil
             loadedAvatarKey = nil
+        }
+    }
+
+    private static func profileApplyingSessionPreferredAvatar(_ profile: Profile) -> Profile {
+        let preferred = SessionBootstrapStore.shared.preferredAvatarURL(
+            profileID: profile.id,
+            incoming: profile.avatar?.id
+        )
+        let current = SessionBootstrapStore.normalizedAvatarURL(session: profile.avatar?.id, viewer: nil)
+        guard preferred != current else { return profile }
+        var copy = profile
+        copy.avatar = preferred.map { MediaReference(id: $0, kind: .image, altText: nil) }
+        return copy
+    }
+
+    private static func invalidateAvatarCaches(
+        imagePipeline: any ImagePipeline,
+        previous: MediaReference?,
+        current: MediaReference?
+    ) async {
+        for reference in [previous, current].compactMap({ $0 }) {
+            await imagePipeline.invalidate(reference: reference)
+            ProfileAvatarDisplayCache.remove(reference: reference)
         }
     }
 

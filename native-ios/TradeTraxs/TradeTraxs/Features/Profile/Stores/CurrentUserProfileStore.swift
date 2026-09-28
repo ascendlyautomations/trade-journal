@@ -39,6 +39,8 @@ final class CurrentUserProfileStore {
     private var loadTask: Task<Void, Never>?
     private var loadedProfileID: ProfileID?
     private var loadedAvatarKey: String?
+    private var confirmedOwnerProfile: Profile?
+    private var ownerProfileMutationRevision: UInt64 = 0
     private let loadGenerationCounter = LoadGenerationCounter()
 
     init(
@@ -86,21 +88,64 @@ final class CurrentUserProfileStore {
 
     /// Seeds profile header from session bootstrap without a duplicate fetch.
     func applyBootstrapResult(profile: Profile, stats: ProfileStats?) {
-        profileStoreSeed(profile: applyingPreferredAvatar(profile), stats: stats)
+        profileStoreSeed(profile: resolveOwnerProfileFromNetwork(profile), stats: stats)
         ensureTabAvatarLoaded()
+    }
+
+    /// Server-confirmed owner profile after Settings (all editable fields + optional local avatar bitmap).
+    func applyConfirmedOwnerProfile(_ profile: Profile, localAvatar: UIImage? = nil) {
+        if let existing = self.profile, existing.id != profile.id {
+            return
+        }
+
+        ownerProfileMutationRevision &+= 1
+        let previousAvatarRef = self.profile?.avatar
+        let resolved = resolveOwnerProfileFromNetwork(profile)
+        confirmedOwnerProfile = resolved
+
+        profileStoreSeed(profile: resolved, stats: stats)
+        SessionBootstrapStore.shared.applyOwnerProfileMutation(resolved)
+        cacheConfirmedOwnerProfileOnDisk(resolved)
+
+        if let localAvatar {
+            let key = resolved.avatar?.id ?? loadedAvatarKey ?? "pending-avatar"
+            assignAvatarImage(localAvatar, key: key)
+        } else {
+            Task { [weak self] in
+                await self?.invalidateAvatarCaches(previous: previousAvatarRef, current: resolved.avatar)
+            }
+            ensureTabAvatarLoaded()
+        }
+
+        propagateOwnerProfileHeaderUpdate(localAvatar: localAvatar ?? avatarUIImage)
+    }
+
+    /// Owner Profile screen bootstrap — merge session + confirmed Settings mutations.
+    func resolveOwnerProfileFromNetwork(_ network: Profile) -> Profile {
+        var resolved = applyingPreferredAvatar(network)
+        resolved = SessionBootstrapStore.shared.mergingAdoptedOwnerProfile(into: resolved)
+        if let confirmed = confirmedOwnerProfile, confirmed.id == resolved.id {
+            if OwnerProfileMutationEquivalence.ownerSettingsMatch(confirmed, resolved) {
+                confirmedOwnerProfile = nil
+            } else {
+                resolved = resolved.applyingConfirmedOwnerSettings(confirmed)
+            }
+        }
+        return resolved
     }
 
     /// Installs the onboarding crop immediately so the tab does not wait on a second download.
     func installLocalAvatar(_ image: UIImage, avatarID: String) {
         assignAvatarImage(image, key: avatarID)
+        propagateOwnerProfileHeaderUpdate(localAvatar: image)
     }
 
-    /// Owner profile screen / Edit Profile published a new `avatar_url`.
-    /// Reuses the shared session profile and the existing image pipeline (cache hit when warm).
+    /// Network/bootstrap avatar sync for tab bar — does not record a Settings mutation.
     func adoptDisplayedAvatar(from profile: Profile) {
         if let existing = self.profile, existing.id != profile.id {
             return
         }
+        let previousReference = self.profile?.avatar
         let incoming = SessionBootstrapStore.normalizedAvatarURL(session: profile.avatar?.id, viewer: nil)
         let current = SessionBootstrapStore.normalizedAvatarURL(session: self.profile?.avatar?.id, viewer: nil)
         if incoming != current {
@@ -114,6 +159,9 @@ final class CurrentUserProfileStore {
                 profileStoreSeed(profile: seeded, stats: stats)
             }
             SessionBootstrapStore.shared.applyAvatarChange(profileID: profile.id, avatarURL: incoming)
+        }
+        Task { [weak self] in
+            await self?.invalidateAvatarCaches(previous: previousReference, current: self?.profile?.avatar)
         }
         ensureTabAvatarLoaded()
     }
@@ -147,6 +195,8 @@ final class CurrentUserProfileStore {
         loadedProfileID = nil
         loadedAvatarKey = nil
         tabAvatarRevision = 0
+        confirmedOwnerProfile = nil
+        ownerProfileMutationRevision = 0
     }
 
     /// Patches owner following count after FollowMutationCoordinator edge changes.
@@ -192,6 +242,7 @@ final class CurrentUserProfileStore {
         }
 
         let profileID = ProfileID(userID.rawValue)
+        let mutationRevisionAtStart = ownerProfileMutationRevision
 
         do {
             let result: SessionBootstrapLoadResult
@@ -232,7 +283,13 @@ final class CurrentUserProfileStore {
                 return
             }
 
-            let loadedProfile = applyingPreferredAvatar(result.profile)
+            var loadedProfile = resolveOwnerProfileFromNetwork(result.profile)
+            if ownerProfileMutationRevision > mutationRevisionAtStart,
+               let confirmed = confirmedOwnerProfile,
+               confirmed.id == loadedProfile.id
+            {
+                loadedProfile = loadedProfile.applyingConfirmedOwnerSettings(confirmed)
+            }
             profile = loadedProfile
             stats = result.stats
             loadedProfileID = profileID
@@ -298,6 +355,34 @@ final class CurrentUserProfileStore {
         var copy = profile
         copy.avatar = preferred.map { MediaReference(id: $0, kind: .image, altText: nil) }
         return copy
+    }
+
+    private func propagateOwnerProfileHeaderUpdate(localAvatar: UIImage?) {
+        guard let profile else { return }
+        OwnerProfileOptimisticStore.shared.noteOwnerProfileHeaderUpdated(
+            profile: profile,
+            localAvatar: localAvatar
+        )
+    }
+
+    private func cacheConfirmedOwnerProfileOnDisk(_ profile: Profile) {
+        Task { [session] in
+            guard let userID = await session.currentUserID else { return }
+            let viewerID = ProfileID(userID.rawValue)
+            SocialEntityPersistedCacheCoordinator.saveProfile(
+                profile,
+                viewerID: viewerID,
+                source: .profile,
+                mergeMode: .merge
+            )
+        }
+    }
+
+    private func invalidateAvatarCaches(previous: MediaReference?, current: MediaReference?) async {
+        for reference in [previous, current].compactMap({ $0 }) {
+            await imagePipeline.invalidate(reference: reference)
+            ProfileAvatarDisplayCache.remove(reference: reference)
+        }
     }
 
     private func assignAvatarImage(_ image: UIImage, key: String) {

@@ -428,7 +428,11 @@ private struct TradeHistoryStubAchievementRepository: AchievementRepository {
         CursorPage(items: [], nextCursor: nil)
     }
 
-    func save(_ achievement: Achievement) async throws -> Achievement { achievement }
+    func save(_ achievement: Achievement, metadata: JSONValue?) async throws -> Achievement { achievement }
+
+    func withdrawalAchievementLinks(for profileID: ProfileID) async throws -> [WithdrawalAchievementLinkRow] {
+        []
+    }
 }
 
 private final class TradeHistoryStubTradeRepository: TradeRepository, @unchecked Sendable {

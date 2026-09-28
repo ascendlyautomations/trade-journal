@@ -10,6 +10,9 @@ import {
   CHAT_MAX_EDGE,
   planBoundedOriginal,
   planFixedCover,
+  REEL_POSTER_JPEG_QUALITY,
+  REEL_POSTER_MAX_HEIGHT,
+  REEL_POSTER_MAX_WIDTH,
   SEMANTIC_JPEG_MIME,
   semanticJpegFileName,
   type FixedCoverKind,
@@ -110,6 +113,35 @@ export async function renderBoundedJpeg(
     context.imageSmoothingEnabled = kind !== "attachment"
     context.drawImage(bitmap, 0, 0, output.width, output.height)
     const blob = await canvasToJpegBlob(canvas, quality)
+    return new File([blob], semanticJpegFileName(file.name), {
+      type: SEMANTIC_JPEG_MIME,
+    })
+  } finally {
+    bitmap.close()
+  }
+}
+
+/** 9:16 cover poster for reel thumbnails (~560×996). */
+export async function renderReelPosterCoverJpeg(file: File): Promise<File> {
+  const bitmap = await decodeOrientedImage(file)
+  try {
+    const targetW = REEL_POSTER_MAX_WIDTH
+    const targetH = REEL_POSTER_MAX_HEIGHT
+    const scale = Math.max(
+      targetW / Math.max(bitmap.width, 1),
+      targetH / Math.max(bitmap.height, 1)
+    )
+    const drawW = bitmap.width * scale
+    const drawH = bitmap.height * scale
+    const originX = (targetW - drawW) / 2
+    const originY = (targetH - drawH) / 2
+    const canvas = document.createElement("canvas")
+    canvas.width = targetW
+    canvas.height = targetH
+    const context = canvas.getContext("2d")
+    if (!context) throw new Error("Could not prepare image canvas.")
+    context.drawImage(bitmap, originX, originY, drawW, drawH)
+    const blob = await canvasToJpegBlob(canvas, REEL_POSTER_JPEG_QUALITY)
     return new File([blob], semanticJpegFileName(file.name), {
       type: SEMANTIC_JPEG_MIME,
     })

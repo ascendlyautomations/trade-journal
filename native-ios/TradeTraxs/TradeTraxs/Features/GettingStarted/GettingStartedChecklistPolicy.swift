@@ -37,7 +37,7 @@ nonisolated enum GettingStartedChecklistPolicy {
             GettingStartedTask(
                 id: .post,
                 label: GettingStartedTaskID.post.label,
-                isComplete: signals.profilePostCount > 0
+                isComplete: signals.hasCreatedProfilePost
             ),
         ]
 

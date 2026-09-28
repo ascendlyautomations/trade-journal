@@ -3,6 +3,12 @@ import Foundation
 #if DEBUG
 /// DEBUG-only Trade Room discovery tracing — no private room content.
 enum RoomDiscoveryProbe {
+    nonisolated enum DisplayedSource: String, Sendable {
+        case cache
+        case network
+        case refresh
+    }
+
     nonisolated static func logMemberRooms(
         serverReturned: Int,
         decoded: Int,
@@ -49,12 +55,13 @@ enum RoomDiscoveryProbe {
     nonisolated static func logDisplayed(
         memberCards: Int,
         discoveryRows: Int,
-        mode: String
+        mode: String,
+        source: DisplayedSource
     ) {
         print(
             """
             [ROOM_DISCOVERY] displayed memberCards=\(memberCards) \
-            discoveryRows=\(discoveryRows) mode=\(mode)
+            discoveryRows=\(discoveryRows) mode=\(mode) source=\(source.rawValue)
             """
         )
     }
@@ -76,6 +83,12 @@ enum RoomDiscoveryProbe {
 }
 #else
 enum RoomDiscoveryProbe {
+    nonisolated enum DisplayedSource: String, Sendable {
+        case cache
+        case network
+        case refresh
+    }
+
     nonisolated static func logMemberRooms(
         serverReturned: Int,
         decoded: Int,
@@ -84,7 +97,12 @@ enum RoomDiscoveryProbe {
     ) {}
     nonisolated static func logBootstrapSection(section: String, serverReturned: Int, decoded: Int) {}
     nonisolated static func logClientFilter(section: String, before: Int, after: Int, reason: String) {}
-    nonisolated static func logDisplayed(memberCards: Int, discoveryRows: Int, mode: String) {}
+    nonisolated static func logDisplayed(
+        memberCards: Int,
+        discoveryRows: Int,
+        mode: String,
+        source: DisplayedSource
+    ) {}
     nonisolated static func logDropped(roomID: String?, reason: String) {}
     nonisolated static func logMergedFromMembership(roomID: RoomID) {}
 }

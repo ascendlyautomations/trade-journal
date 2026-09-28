@@ -202,7 +202,7 @@ final class CreatePostViewModel {
                 if let finalImageData {
                     failedStage = .upload
                     isUploadingMedia = true
-                    let path = "\(viewerID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+                    let path = StorageOptimizedMedia.objectPath(prefix: viewerID.rawValue, fileExtension: "jpg")
                     PostPublishProbe.logUploadStarted(
                         storagePath: path,
                         bucket: StorageBucket.profilePosts.rawValue

@@ -66,3 +66,39 @@ enum ProfilePinnedMutation {
         items.sorted { $0.position < $1.position }
     }
 }
+
+/// Presentation-layer ordering — profile pins first within the active tab, no duplicates.
+enum ProfilePinnedOrdering {
+    static func pins(
+        for contentType: ProfilePinnedContentType,
+        in items: [ProfilePinnedItem]
+    ) -> [ProfilePinnedItem] {
+        items
+            .filter { $0.contentType == contentType }
+            .sorted { $0.position < $1.position }
+    }
+
+    static func displayItems<Item>(
+        _ items: [Item],
+        profilePins: [ProfilePinnedItem],
+        contentType: ProfilePinnedContentType,
+        contentID: (Item) -> String
+    ) -> [Item] {
+        let orderedPins = pins(for: contentType, in: profilePins)
+        guard !orderedPins.isEmpty else { return items }
+        let pinnedIDs = Set(orderedPins.map(\.contentID))
+        var head: [Item] = []
+        head.reserveCapacity(orderedPins.count)
+        for pin in orderedPins {
+            if let match = items.first(where: { contentID($0) == pin.contentID }) {
+                head.append(match)
+            }
+        }
+        var tail: [Item] = []
+        tail.reserveCapacity(max(0, items.count - head.count))
+        for item in items where !pinnedIDs.contains(contentID(item)) {
+            tail.append(item)
+        }
+        return head + tail
+    }
+}

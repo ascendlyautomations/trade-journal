@@ -6,6 +6,7 @@ struct AchievementsContainerView: View {
     let engagementStore: EngagementStore
     let vaultStore: VaultStore
     var profilePin: ProfilePinCallbacks? = nil
+    var profilePinnedItems: [ProfilePinnedItem] = []
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
@@ -20,7 +21,7 @@ struct AchievementsContainerView: View {
             onRetry: { Task { await viewModel.refresh() } }
         ) {
             LazyVStack(spacing: ExperienceSpacing.sm) {
-                ForEach(viewModel.items) { achievement in
+                ForEach(displayItems) { achievement in
                     ProfileAchievementCard(
                         achievement: achievement,
                         imagePipeline: imagePipeline,
@@ -29,7 +30,8 @@ struct AchievementsContainerView: View {
                         onOpen: { viewModel.openAchievement(achievement) },
                         isOwner: viewModel.isOwner,
                         onReport: reportAction(for: achievement),
-                        profilePin: profilePin
+                        profilePin: profilePin,
+                        isProfilePinned: isProfilePinned(achievement)
                     )
                     .transition(
                         reduceMotion
@@ -43,15 +45,30 @@ struct AchievementsContainerView: View {
             }
             .animation(
                 ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                value: viewModel.items.map(\.id)
+                value: displayItems.map(\.id)
             )
-            .onChange(of: viewModel.items.map(\.id)) { _, ids in
+            .onChange(of: displayItems.map(\.id)) { _, ids in
                 viewModel.prefetchEngagement(for: ids)
             }
             .onAppear {
-                viewModel.prefetchEngagement(for: viewModel.items.map(\.id))
+                viewModel.prefetchEngagement(for: displayItems.map(\.id))
             }
             .accessibilityIdentifier("profile.achievements.list")
+        }
+    }
+
+    private var displayItems: [Achievement] {
+        ProfilePinnedOrdering.displayItems(
+            viewModel.items,
+            profilePins: profilePinnedItems,
+            contentType: .achievement,
+            contentID: { $0.id.rawValue }
+        )
+    }
+
+    private func isProfilePinned(_ achievement: Achievement) -> Bool {
+        profilePinnedItems.contains {
+            $0.contentType == .achievement && $0.contentID == achievement.id.rawValue
         }
     }
 

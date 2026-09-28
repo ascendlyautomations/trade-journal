@@ -346,19 +346,22 @@ final class ManageAccountsViewModel {
     func createPayout(
         accountID: TradingAccountID,
         draft: AccountPayoutEntryDraft
-    ) async -> Bool {
-        await mutate {
+    ) async -> AccountPayoutEntryID? {
+        var createdEntryID: AccountPayoutEntryID?
+        let ok = await mutate {
             guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
             let created = try await trades.createPayoutEntry(
                 ownerID: viewerID,
                 accountID: accountID,
                 draft: draft
             )
+            createdEntryID = created.id
             WithdrawalsHistoryStore.shared.bindProfile(viewerID)
             WithdrawalsHistoryStore.shared.prependLedgerEntry(created, profileID: viewerID)
             AccountMutationStore.shared.notePayoutRecorded(accountID: accountID)
             ExperienceHaptics.play(.success)
         }
+        return ok ? createdEntryID : nil
     }
 
     func updatePayout(

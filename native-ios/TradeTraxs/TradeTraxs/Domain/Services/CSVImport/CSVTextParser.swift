@@ -2,14 +2,28 @@ import Foundation
 
 /// PapaParse-style CSV → rows of string dictionaries (header row required).
 ///
-/// Matches web `Papa.parse({ header: true, skipEmptyLines: true })` plus
-/// `normalizeParsedCsvRows`: RFC4180 quotes, auto delimiter, column alignment,
-/// empty header keys dropped only after cells are assigned.
+/// RFC4180 parsing uses `UnicodeScalar` (not Swift `Character`) so CRLF is two scalars,
+/// not one grapheme cluster — otherwise record boundaries are invisible to the parser.
 nonisolated enum CSVTextParser {
+    private static let comma = UnicodeScalar(0x2C)!
+    private static let quote = UnicodeScalar(0x22)!
+
     static func parse(text: String) throws -> (headers: [String], rows: [[String: String]]) {
-        let source = stripBOM(text)
-        let delimiter = detectDelimiter(source)
-        let records = parseRecords(source, delimiter: delimiter)
+        let scalars = unicodeScalars(strippingBOM: text)
+        #if DEBUG
+        CSVStringLineEndingCounts.logDecodeShape(byteCount: text.utf8.count, text: text)
+        #endif
+        let delimiter = detectDelimiter(scalars)
+        let records = parseRecords(scalars, delimiter: delimiter)
+        #if DEBUG
+        let headerColumnCount = records.first?.count ?? 0
+        let dataRowCount = max(0, records.filter { record in
+            record.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        }.count - 1)
+        print(
+            "[CSV] records=\(records.count) headerColumns=\(headerColumnCount) dataRows=\(dataRowCount)"
+        )
+        #endif
         let nonEmpty = records.filter { record in
             record.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         }
@@ -54,14 +68,29 @@ nonisolated enum CSVTextParser {
         return (headers, rows)
     }
 
-    /// Papa guesses `,`, tab, `;`, or `|` from the first non-empty record.
-    private static func detectDelimiter(_ text: String) -> Character {
-        let sample = firstRecordSample(text)
-        let candidates: [Character] = [",", "\t", ";", "|"]
-        var best: Character = ","
+    static func logDecodedShape(byteCount: Int, text: String) {
+        #if DEBUG
+        CSVStringLineEndingCounts.logDecodeShape(byteCount: byteCount, text: text)
+        let boundary = firstRecordBoundaryScalarOffset(in: text)
+        print("[CSV] firstRecordBoundaryScalarOffset=\(boundary.map(String.init) ?? "none")")
+        #endif
+    }
+
+    private static func unicodeScalars(strippingBOM text: String) -> [UnicodeScalar] {
+        var scalars = Array(text.unicodeScalars)
+        if scalars.first == "\u{FEFF}" {
+            scalars.removeFirst()
+        }
+        return scalars
+    }
+
+    private static func detectDelimiter(_ scalars: [UnicodeScalar]) -> UnicodeScalar {
+        let sample = firstRecordSample(scalars)
+        let candidates: [UnicodeScalar] = [comma, "\t", ";", "|"]
+        var best = comma
         var bestCount = 0
         for candidate in candidates {
-            let count = sample.filter { $0 == candidate }.count
+            let count = sample.unicodeScalars.reduce(0) { $0 + ($1 == candidate ? 1 : 0) }
             if count > bestCount {
                 bestCount = count
                 best = candidate
@@ -70,88 +99,131 @@ nonisolated enum CSVTextParser {
         return best
     }
 
-    private static func firstRecordSample(_ text: String) -> String {
+    private static func firstRecordSample(_ scalars: [UnicodeScalar]) -> String {
         var inQuotes = false
-        var index = text.startIndex
-        var sample = ""
+        var i = 0
+        var sampleScalars: [UnicodeScalar] = []
         var skippingLeadingBlank = true
-        while index < text.endIndex {
-            let ch = text[index]
-            if ch == "\"" {
+        while i < scalars.count {
+            let s = scalars[i]
+            if s == quote {
                 skippingLeadingBlank = false
-                let next = text.index(after: index)
-                if inQuotes, next < text.endIndex, text[next] == "\"" {
-                    sample.append(ch)
-                    index = next
+                if inQuotes, i + 1 < scalars.count, scalars[i + 1] == quote {
+                    sampleScalars.append(s)
+                    i += 1
                 } else {
                     inQuotes.toggle()
-                    sample.append(ch)
+                    sampleScalars.append(s)
                 }
-            } else if (ch == "\n" || ch == "\r") && !inQuotes {
-                if skippingLeadingBlank || sample.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    sample = ""
+                i += 1
+            } else if let advance = recordTerminatorAdvance(at: i, in: scalars, inQuotes: inQuotes) {
+                if skippingLeadingBlank || String(String.UnicodeScalarView(sampleScalars))
+                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                {
+                    sampleScalars = []
                     skippingLeadingBlank = true
-                    if ch == "\r" {
-                        let next = text.index(after: index)
-                        if next < text.endIndex, text[next] == "\n" { index = next }
-                    }
+                    i = advance
                 } else {
                     break
                 }
             } else {
-                if !ch.isWhitespace { skippingLeadingBlank = false }
-                sample.append(ch)
+                if !Character(s).isWhitespace { skippingLeadingBlank = false }
+                sampleScalars.append(s)
+                i += 1
             }
-            index = text.index(after: index)
         }
-        return sample
+        return String(String.UnicodeScalarView(sampleScalars))
     }
 
-    /// One pass so escaped quotes (`""`) stay inside a field and do not swallow later rows.
-    private static func parseRecords(_ text: String, delimiter: Character) -> [[String]] {
+    /// Index after consuming a record terminator, or nil if not at a terminator.
+    private static func recordTerminatorAdvance(
+        at i: Int,
+        in scalars: [UnicodeScalar],
+        inQuotes: Bool
+    ) -> Int? {
+        guard !inQuotes, i < scalars.count else { return nil }
+        let s = scalars[i]
+        if s == "\r" {
+            if i + 1 < scalars.count, scalars[i + 1] == "\n" {
+                return i + 2
+            }
+            return i + 1
+        }
+        if s == "\n" { return i + 1 }
+        if s == "\u{0085}" || s == "\u{2028}" || s == "\u{2029}" {
+            return i + 1
+        }
+        return nil
+    }
+
+    private static func parseRecords(_ scalars: [UnicodeScalar], delimiter: UnicodeScalar) -> [[String]] {
         var records: [[String]] = []
         var row: [String] = []
-        var current = ""
+        var currentScalars: [UnicodeScalar] = []
         var inQuotes = false
-        var index = text.startIndex
-        while index < text.endIndex {
-            let ch = text[index]
-            if ch == "\"" {
-                let next = text.index(after: index)
-                if inQuotes, next < text.endIndex, text[next] == "\"" {
-                    current.append("\"")
-                    index = next
-                } else {
-                    inQuotes.toggle()
+        var i = 0
+        while i < scalars.count {
+            let s = scalars[i]
+            if s == quote {
+                if inQuotes, i + 1 < scalars.count, scalars[i + 1] == quote {
+                    currentScalars.append(quote)
+                    i += 2
+                    continue
                 }
-            } else if ch == delimiter && !inQuotes {
-                row.append(current)
-                current = ""
-            } else if (ch == "\n" || ch == "\r") && !inQuotes {
-                if ch == "\r" {
-                    let next = text.index(after: index)
-                    if next < text.endIndex, text[next] == "\n" {
-                        index = next
-                    }
-                }
-                row.append(current)
+                inQuotes.toggle()
+                i += 1
+            } else if s == delimiter && !inQuotes {
+                row.append(String(String.UnicodeScalarView(currentScalars)))
+                currentScalars = []
+                i += 1
+            } else if let advance = recordTerminatorAdvance(at: i, in: scalars, inQuotes: inQuotes) {
+                row.append(String(String.UnicodeScalarView(currentScalars)))
                 records.append(row)
                 row = []
-                current = ""
+                currentScalars = []
+                i = advance
             } else {
-                current.append(ch)
+                currentScalars.append(s)
+                i += 1
             }
-            index = text.index(after: index)
         }
-        if !current.isEmpty || !row.isEmpty {
-            row.append(current)
+        if !currentScalars.isEmpty || !row.isEmpty {
+            row.append(String(String.UnicodeScalarView(currentScalars)))
             records.append(row)
         }
         return records
     }
 
     private static func stripBOM(_ s: String) -> String {
-        if s.first == "\u{FEFF}" { return String(s.dropFirst()) }
+        if s.unicodeScalars.first == "\u{FEFF}" {
+            return String(s.unicodeScalars.dropFirst())
+        }
         return s
     }
+
+    #if DEBUG
+    private static func firstRecordBoundaryScalarOffset(in text: String) -> Int? {
+        let scalars = unicodeScalars(strippingBOM: text)
+        var inQuotes = false
+        var i = 0
+        var offset = 0
+        while i < scalars.count {
+            let s = scalars[i]
+            if s == quote {
+                if inQuotes, i + 1 < scalars.count, scalars[i + 1] == quote {
+                    i += 2
+                } else {
+                    inQuotes.toggle()
+                    i += 1
+                }
+            } else if recordTerminatorAdvance(at: i, in: scalars, inQuotes: inQuotes) != nil {
+                return offset
+            } else {
+                i += 1
+            }
+            offset += 1
+        }
+        return nil
+    }
+    #endif
 }

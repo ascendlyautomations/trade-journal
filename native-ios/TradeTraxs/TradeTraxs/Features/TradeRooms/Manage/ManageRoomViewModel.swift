@@ -250,7 +250,12 @@ final class ManageRoomViewModel {
 
     func refreshTags() async {
         do {
-            try await tagStore.hydrate(roomID: roomID, repository: rooms)
+            _ = await tagStore.ensureDefaultTagsIfCanManage(
+                roomID: roomID,
+                canManage: canManageRoom,
+                repository: rooms
+            )
+            try await tagStore.hydrateTags(roomID: roomID, repository: rooms)
             tags = tagStore.tags(for: roomID)
             await refreshMembersAndBans()
         } catch {
@@ -277,7 +282,7 @@ final class ManageRoomViewModel {
             }
 
             if let imageData = pendingImageData {
-                let path = "room-images/\(Int(Date().timeIntervalSince1970))-avatar.jpg"
+                let path = StorageOptimizedMedia.objectPath(prefix: "room-images", fileExtension: "jpg")
                 let reference = try await uploadService.upload(
                     UploadRequest(
                         bucket: "avatars",
@@ -634,7 +639,12 @@ final class ManageRoomViewModel {
                 loadTask = nil
                 return
             }
-            try await tagStore.hydrate(roomID: roomID, repository: rooms)
+            _ = await tagStore.ensureDefaultTagsIfCanManage(
+                roomID: roomID,
+                canManage: canManageRoom,
+                repository: rooms
+            )
+            try await tagStore.hydrateTags(roomID: roomID, repository: rooms)
             tags = tagStore.tags(for: roomID)
             await refreshMembersAndBans()
             await refreshJoinRequests()

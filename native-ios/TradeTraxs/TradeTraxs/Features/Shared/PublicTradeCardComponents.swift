@@ -167,10 +167,17 @@ struct PublicTradeMetaChipRow: View {
     }
 }
 
+/// Capsule chip insets for trade metadata (MNQ, Long, RR, qty, etc.).
+nonisolated enum TradeMetaChipMetrics {
+    static let horizontalPadding: CGFloat = 7
+    static let verticalPadding: CGFloat = 3
+    static let spacing: CGFloat = 3
+}
+
 private enum PublicTradeMetaChipRowLayout {
-    static let chipSpacing: CGFloat = 3
-    static let chipHorizontalPadding: CGFloat = 4
-    static let chipVerticalPadding: CGFloat = 2
+    static let chipSpacing = TradeMetaChipMetrics.spacing
+    static let chipHorizontalPadding = TradeMetaChipMetrics.horizontalPadding
+    static let chipVerticalPadding = TradeMetaChipMetrics.verticalPadding
 }
 
 /// Compact intrinsic-width chip for public trade metadata rows.

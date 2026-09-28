@@ -68,6 +68,8 @@ final class SessionBootstrapStore {
 
     /// Local avatar that must win over a session payload still carrying the previous URL.
     private var adoptedAvatar: AdoptedAvatar?
+    /// Last owner Settings profile mutation — wins over stale bootstrap/REST until server matches.
+    private var adoptedOwnerProfile: AdoptedOwnerProfile?
 
     func seed(_ bootstrap: SessionBootstrapV1, source: String) {
         last = bootstrap
@@ -78,6 +80,10 @@ final class SessionBootstrapStore {
     }
 
     func applyUsernameChange(profileID: ProfileID, username: String) {
+        if var adopted = adoptedOwnerProfile, adopted.profileID == profileID.rawValue {
+            adopted.profile.username = username
+            adoptedOwnerProfile = adopted
+        }
         guard var bootstrap = last else { return }
         guard bootstrap.data.session_profile.id == profileID.rawValue
             || bootstrap.data.viewer.id == profileID.rawValue
@@ -89,6 +95,51 @@ final class SessionBootstrapStore {
             BackendV2BootstrapDiskCache.saveSession(bootstrap, viewerID: viewerID)
             ViewerSyncStateRuntime.noteLocalMutation(viewerID: profileID)
         }
+    }
+
+    /// Patches session bootstrap + disk after owner Settings saves (all editable header fields).
+    func applyOwnerProfileMutation(_ profile: Profile) {
+        adoptedOwnerProfile = AdoptedOwnerProfile(
+            profileID: profile.id.rawValue,
+            profile: profile
+        )
+        let avatarURL = Self.normalizedAvatarURL(session: profile.avatar?.id, viewer: nil)
+        recordAdoptedAvatar(profileID: profile.id, avatarURL: avatarURL)
+
+        guard var bootstrap = last else {
+            ViewerSyncStateRuntime.noteLocalMutation(viewerID: profile.id)
+            return
+        }
+        guard bootstrap.data.session_profile.id == profile.id.rawValue
+            || bootstrap.data.viewer.id == profile.id.rawValue
+        else {
+            ViewerSyncStateRuntime.noteLocalMutation(viewerID: profile.id)
+            return
+        }
+
+        bootstrap.data.session_profile.username = profile.username
+        bootstrap.data.session_profile.bio = profile.bio
+        bootstrap.data.session_profile.trading_style = profile.tradingStyle
+        bootstrap.data.session_profile.trader_type = profile.traderType?.rawValue
+        bootstrap.data.session_profile.primary_market = profile.primaryMarket
+        bootstrap.data.session_profile.is_private = profile.isPrivate
+        bootstrap.data.session_profile.avatar_url = avatarURL
+        bootstrap.data.viewer.username = profile.username
+        bootstrap.data.viewer.display_name = profile.displayName
+        bootstrap.data.viewer.avatar_url = avatarURL
+        last = bootstrap
+        if let viewerID = bootstrap.meta.viewer_id ?? Optional(bootstrap.data.viewer.id) {
+            BackendV2BootstrapDiskCache.saveSession(bootstrap, viewerID: viewerID)
+            ViewerSyncStateRuntime.noteLocalMutation(viewerID: profile.id)
+        }
+    }
+
+    /// Reconcile a network profile with the last owner Settings mutation.
+    func mergingAdoptedOwnerProfile(into network: Profile) -> Profile {
+        guard let adopted = adoptedOwnerProfile, adopted.profileID == network.id.rawValue else {
+            return network
+        }
+        return network.applyingConfirmedOwnerSettings(adopted.profile)
     }
 
     func applyOnboardingCompletion(profile: Profile, snapshot: ProfileOnboardingSnapshot) {
@@ -194,6 +245,12 @@ final class SessionBootstrapStore {
         last = nil
         source = nil
         adoptedAvatar = nil
+        adoptedOwnerProfile = nil
+    }
+
+    private struct AdoptedOwnerProfile {
+        var profileID: String
+        var profile: Profile
     }
 
     private struct AdoptedAvatar {

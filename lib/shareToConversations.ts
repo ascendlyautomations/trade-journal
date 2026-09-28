@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { compressScreenshot } from "./compressImage"
+import { prepareImageForUpload } from "./imagePreparation"
+import { optimizedStorageObjectPath } from "./storageOptimizedMedia"
 import { ensureDmConversation } from "./dmConversation"
 import { logSupabaseError } from "./logSupabaseError"
 import { assertSenderOwnsTrade } from "./tradeShareAccess"
@@ -467,14 +468,16 @@ export async function sendImageDataUrlToConversations(
     type: blob.type || "image/png",
   })
   if (uploadFile.type?.startsWith("image/")) {
-    uploadFile = await compressScreenshot(uploadFile)
+    uploadFile = await prepareImageForUpload("chat", uploadFile)
   }
-  const path = `${opts.senderId}/share-${Date.now()}-${uploadFile.name}`
+  const path = optimizedStorageObjectPath(opts.senderId, "jpg")
 
   const { error: upErr } = await supabase.storage
     .from("screenshots")
     .upload(path, uploadFile, {
-      contentType: uploadFile.type || "application/octet-stream",
+      contentType: uploadFile.type?.startsWith("image/")
+        ? "image/jpeg"
+        : uploadFile.type || "application/octet-stream",
       upsert: false,
     })
 

@@ -2,14 +2,17 @@ import SwiftUI
 
 /// Stocks-style equity centerpiece — period performance first, curve second.
 ///
-/// For a single prop account, title/value/curve use account value
-/// (starting balance + realized equity). Analytics stay on realized performance.
+/// For one selected account, title/value/curve use tracked account value
+/// (starting balance + lifetime realized P&L, prop payout-aware when available).
+/// All Accounts keeps cumulative equity. Analytics stay timeframe-based.
 struct DashboardEquityHero: View {
     let summary: DashboardChartMetrics.Summary
     let periodTitle: String
     var title: String = "Equity"
     var displayEquity: Decimal
     var chartPoints: [ProfileStatisticsMetrics.EquityPoint]
+    var withdrawalSummary: AccountTrackedBalanceSupport.WithdrawalSummary?
+    var onWithdrawalSummaryTap: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -20,13 +23,17 @@ struct DashboardEquityHero: View {
         periodTitle: String,
         title: String = "Equity",
         displayEquity: Decimal? = nil,
-        chartPoints: [ProfileStatisticsMetrics.EquityPoint]? = nil
+        chartPoints: [ProfileStatisticsMetrics.EquityPoint]? = nil,
+        withdrawalSummary: AccountTrackedBalanceSupport.WithdrawalSummary? = nil,
+        onWithdrawalSummaryTap: (() -> Void)? = nil
     ) {
         self.summary = summary
         self.periodTitle = periodTitle
         self.title = title
         self.displayEquity = displayEquity ?? summary.currentEquity
         self.chartPoints = chartPoints ?? summary.equityData
+        self.withdrawalSummary = withdrawalSummary
+        self.onWithdrawalSummaryTap = onWithdrawalSummaryTap
     }
 
     var body: some View {
@@ -89,8 +96,8 @@ struct DashboardEquityHero: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
                 Text(title)
                     .experienceStyle(.subheadline, color: colors.secondaryText)
                 Text("·")
@@ -110,6 +117,10 @@ struct DashboardEquityHero: View {
                 .lineLimit(1)
                 .contentTransition(.numericText())
                 .accessibilityLabel("Current \(title.lowercased()) \(DashboardViewModel.money(displayEquity))")
+
+            if numbersReady, let withdrawalSummary {
+                withdrawalSummaryLine(withdrawalSummary)
+            }
 
             HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
                 Text(numbersReady ? signedMoney(summary.netPnL) : "—")
@@ -157,5 +168,30 @@ struct DashboardEquityHero: View {
         if value > 0 { return colors.profit }
         if value < 0 { return colors.loss }
         return colors.secondaryText
+    }
+
+    @ViewBuilder
+    private func withdrawalSummaryLine(
+        _ summary: AccountTrackedBalanceSupport.WithdrawalSummary
+    ) -> some View {
+        let label = summary.compactLabel(formattedTotal: DashboardViewModel.money(summary.totalAmount))
+        if let onWithdrawalSummaryTap {
+            Button(action: onWithdrawalSummaryTap) {
+                Text(label)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+            .accessibilityHint("Opens withdrawal history")
+            .accessibilityIdentifier("dashboard.accountValue.withdrawalSummary")
+        } else {
+            Text(label)
+                .experienceStyle(.footnote, color: colors.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .accessibilityLabel(label)
+        }
     }
 }

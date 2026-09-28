@@ -9,5 +9,7 @@ nonisolated protocol AchievementRepository: Sendable {
         publicOnly: Bool
     ) async throws -> CursorPage<Achievement>
     func achievement(id: AchievementID) async throws -> Achievement
-    func save(_ achievement: Achievement) async throws -> Achievement
+    func save(_ achievement: Achievement, metadata: JSONValue?) async throws -> Achievement
+    /// One query for withdrawal ↔ achievement linkage (parses `achievements.metadata`).
+    func withdrawalAchievementLinks(for profileID: ProfileID) async throws -> [WithdrawalAchievementLinkRow]
 }

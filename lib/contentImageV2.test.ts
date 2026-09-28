@@ -50,7 +50,7 @@ function assertCovered(
   assert.ok(Math.max(output.width, output.height) <= CONTENT_IMAGE_V2_MAX_EDGE)
   assert.equal(plan.encodePasses, 1)
   assert.equal(plan.mime, "image/jpeg")
-  assert.equal(plan.quality, 0.92)
+  assert.equal(plan.quality, 0.85)
   return plan
 }
 
@@ -70,16 +70,16 @@ describe("content image v2 contract", () => {
 
   it("exports 1:1, 4:5, and 16:9 from the selected ratio", () => {
     const square = assertCovered(4000, 3000, "square", 1, { x: 0, y: 0 })
-    assert.equal(square.output.width, 2560)
-    assert.equal(square.output.height, 2560)
+    assert.equal(square.output.width, 1440)
+    assert.equal(square.output.height, 1440)
 
     const portrait = assertCovered(4000, 3000, "portrait", 1, { x: 0, y: 0 })
     assertAspect(portrait.output.width, portrait.output.height, 4 / 5)
-    assert.equal(Math.max(portrait.output.width, portrait.output.height), 2560)
+    assert.equal(Math.max(portrait.output.width, portrait.output.height), 1440)
 
     const wide = assertCovered(5000, 4000, "landscape", 1, { x: 0, y: 0 })
     assertAspect(wide.output.width, wide.output.height, 16 / 9)
-    assert.equal(wide.output.width, 2560)
+    assert.equal(wide.output.width, 1440)
   })
 
   it("does not upscale a small source", () => {
@@ -94,18 +94,18 @@ describe("content image v2 contract", () => {
     assert.equal(contentOutputSize(100, 100).scale, 1)
   })
 
-  it("caps a large source at a 2560 longest edge", () => {
+  it("caps a large source at a 1440 longest edge", () => {
     const huge = planContentImageExport(8000, 6000, "landscape")
-    assert.ok(Math.max(huge.output.width, huge.output.height) <= 2560)
-    assert.equal(huge.output.width, 2560)
+    assert.ok(Math.max(huge.output.width, huge.output.height) <= 1440)
+    assert.equal(huge.output.width, 1440)
     assert.ok(huge.output.scale < 1)
   })
 
-  it("encodes one JPEG at quality 0.92 with a .jpg name", () => {
+  it("encodes one JPEG at quality 0.85 with a .jpg name", () => {
     const plan = planContentImageExport(1200, 800, "portrait")
     assert.equal(plan.mime, CONTENT_IMAGE_V2_MIME)
     assert.equal(plan.quality, CONTENT_IMAGE_V2_JPEG_QUALITY)
-    assert.equal(plan.quality, 0.92)
+    assert.equal(plan.quality, 0.85)
     assert.equal(plan.encodePasses, CONTENT_IMAGE_V2_ENCODE_PASSES)
     assert.equal(contentJpegFileName("chart.PNG"), "chart.jpg")
     assert.equal(contentJpegFileName("photo.heic"), "photo.jpg")

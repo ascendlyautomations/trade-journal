@@ -326,7 +326,12 @@ struct ManageAccountEditorView: View {
                 )
             }
         }
-        if ok { dismiss() }
+        if ok {
+            SaveSuccessConfirmationCenter.shared.present(
+                mode.isCreate ? SaveSuccessToastMessage.changesSaved : SaveSuccessToastMessage.settingsSaved
+            )
+            dismiss()
+        }
     }
 
     private func bindingDecimal(_ keyPath: WritableKeyPath<PropFirmAccountRules, Decimal?>) -> Binding<String> {

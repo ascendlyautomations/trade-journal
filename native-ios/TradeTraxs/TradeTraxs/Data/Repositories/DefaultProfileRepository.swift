@@ -41,6 +41,9 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             return cached
         }
 
+        guard ProfileIDQueryPolicy.isQueryable(id) else {
+            throw MappingError.missingField("profiles.id")
+        }
         return try await ProfileRequestFlight.shared.profile(id: id) { [supabase, cache] in
             if let cached = cache.memory.value(forKey: cacheKey, as: Profile.self) {
                 return cached
@@ -60,7 +63,8 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
     }
 
     func profiles(ids: [ProfileID]) async throws -> [Profile] {
-        let unique = Array(Set(ids.map(\.rawValue))).filter { !$0.isEmpty }
+        let unique = Array(Set(ids.map(\.rawValue)))
+            .filter { !$0.isEmpty && ProfileIDQueryPolicy.isQueryable(ProfileID($0)) }
         guard !unique.isEmpty else { return [] }
 
         var cached: [Profile] = []
@@ -157,22 +161,18 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         let normalized = ProfileUsernamePolicy.normalize(username)
         guard !normalized.isEmpty else { return false }
 
-        guard let transport = supabase.transport else {
-            throw AppError.unknown(message: "Network transport unavailable")
-        }
-
-        let body = try transport.encodeJSON(
-            ProfileDTO.UsernameAvailabilityParams(check_username: normalized)
+        // Web Settings parity: profiles.username lookup excluding the current row (not RPC-only).
+        let rows: [ProfileDTO.ProfileIdRow] = try await supabase.database.select(
+            ProfileDTO.ProfileIdRow.self,
+            from: "profiles",
+            query: [
+                SupabaseQuery.select("id"),
+                SupabaseQuery.eq("username", normalized),
+                SupabaseQuery.neq("id", profileID.rawValue),
+                SupabaseQuery.limit(1),
+            ]
         )
-
-        let response = try await transport.send(
-            host: .supabase,
-            path: "/rest/v1/rpc/profile_username_is_taken",
-            method: .post,
-            body: body
-        )
-
-        return try parseUsernameAvailabilityRPC(response.data)
+        return rows.first != nil
     }
 
     private func parseUsernameAvailabilityRPC(_ data: Data) throws -> Bool {
@@ -287,12 +287,30 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             body.username = normalizedUsername
         }
 
-        _ = try await supabase.database.update(
-            body,
-            table: "profiles",
-            query: [SupabaseQuery.eq("id", update.profileID.rawValue)],
-            returning: ProfileDTO.Profile.self
+        #if DEBUG
+        print(
+            "[PROFILE_USERNAME] mutationSent changed=\(usernameChanged) " +
+                "usernameInBody=\(body.username != nil) " +
+                "countInBody=\(body.username_change_count != nil)"
         )
+        #endif
+
+        do {
+            _ = try await supabase.database.update(
+                body,
+                table: "profiles",
+                query: [SupabaseQuery.eq("id", update.profileID.rawValue)],
+                returning: ProfileDTO.Profile.self
+            )
+        } catch {
+            #if DEBUG
+            print("[PROFILE_USERNAME] mutationFailed code=transport")
+            #endif
+            if ProfileUsernamePolicy.isProfilesUsernameConflict(error) {
+                throw AppError.domain(.conflict(message: "Username already in use"))
+            }
+            throw error
+        }
 
         if usernameChanged {
             await mirrorAccountSettingsUsernameChangeCount(
@@ -305,6 +323,21 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         cache.memory.remove(forKey: "profile-stats:\(updated.id.rawValue)")
 
         if usernameChanged {
+            let persisted = ProfileUsernamePolicy.normalize(updated.username)
+            guard ProfileUsernamePolicy.profileUsernamesEqual(persisted, normalizedUsername) else {
+                #if DEBUG
+                print(
+                    "[PROFILE_USERNAME] mutationFailed code=username_not_persisted " +
+                        "expected=\(normalizedUsername) actual=\(persisted)"
+                )
+                #endif
+                throw AppError.domain(
+                    .conflict(message: "Username could not be updated. Try again.")
+                )
+            }
+            #if DEBUG
+            print("[PROFILE_USERNAME] mutationSuccess username=\(persisted)")
+            #endif
             await MainActor.run {
                 SessionBootstrapStore.shared.applyUsernameChange(
                     profileID: update.profileID,

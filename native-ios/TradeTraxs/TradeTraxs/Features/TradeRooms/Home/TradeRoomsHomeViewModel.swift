@@ -17,7 +17,7 @@ final class TradeRoomsHomeViewModel {
     var showsLeaveRoomConfirmation = false
     var showsCreateRoom = false
 
-    private let presentCreateOnAppear: Bool
+    private var presentCreateOnAppear: Bool
     private var didAutoPresentCreate = false
 
     private(set) var discoveryMode: TradeRoomDiscoveryMode = .yourRooms
@@ -47,6 +47,27 @@ final class TradeRoomsHomeViewModel {
     private let joinCoordinator: TradeRoomJoinActionCoordinator
 
     private var loadTask: Task<Void, Never>?
+    /// Hosting tab selected (Home / Feed / Profile). Narrow guard for home discovery RPC only.
+    private var isHostingTabActive = true
+
+#if DEBUG
+    private let lifecycleProbeID = String(UUID().uuidString.prefix(8))
+#endif
+
+    private struct BootstrapFingerprint: Equatable {
+        var your: [RoomID]
+        var suggested: [RoomID]
+        var popular: [RoomID]
+    }
+
+    private struct DisplayedSnapshot: Equatable {
+        var mode: String
+        var memberCards: Int
+        var discoveryRowIDs: [RoomID]
+    }
+
+    private var lastAppliedBootstrapFingerprint: BootstrapFingerprint?
+    private var lastLoggedDisplayedSnapshot: DisplayedSnapshot?
 
     init(
         messages: any MessageRepository,
@@ -90,6 +111,34 @@ final class TradeRoomsHomeViewModel {
             detailCache: detailCache,
             realtimeHub: realtimeHub
         )
+#if DEBUG
+        TradeRoomsHomeLifecycleProbe.viewModelInit(id: lifecycleProbeID)
+#endif
+    }
+
+    deinit {
+#if DEBUG
+        TradeRoomsHomeLifecycleProbe.viewModelDeinit(id: lifecycleProbeID)
+#endif
+    }
+
+    func setHostingTabActive(_ active: Bool) {
+        isHostingTabActive = active
+#if DEBUG
+        TradeRoomsHomeLifecycleProbe.hostingTabActive(id: lifecycleProbeID, active: active)
+#endif
+    }
+
+    func noteViewAppeared() {
+#if DEBUG
+        TradeRoomsHomeLifecycleProbe.viewAppear(id: lifecycleProbeID)
+#endif
+    }
+
+    func noteViewDisappeared() {
+#if DEBUG
+        TradeRoomsHomeLifecycleProbe.viewDisappear(id: lifecycleProbeID)
+#endif
     }
 
     /// Always derived from the shared inbox store so mark-read / realtime patches refresh badges.
@@ -190,6 +239,10 @@ final class TradeRoomsHomeViewModel {
     /// Viewer-owned Trade Room from bootstrap RPC (`is_owner`) — at most one.
     var viewerOwnedRoom: ExploreRoomSuggestion? {
         yourRoomsItems.first(where: \.viewerIsOwner)
+    }
+
+    func armPresentCreateOnAppear() {
+        presentCreateOnAppear = true
     }
 
     func consumePresentCreateIfNeeded() {
@@ -341,6 +394,9 @@ final class TradeRoomsHomeViewModel {
     }
 
     func releaseRealtime() {
+#if DEBUG
+        TradeRoomsHomeLifecycleProbe.realtime(id: lifecycleProbeID, event: "release")
+#endif
         domain.releaseRealtime()
     }
 
@@ -433,6 +489,14 @@ final class TradeRoomsHomeViewModel {
     }
 
     private func performLoad(forceNetwork: Bool) async {
+#if DEBUG
+        TradeRoomsHomeLifecycleProbe.performLoad(
+            id: lifecycleProbeID,
+            phase: String(describing: phase),
+            forceNetwork: forceNetwork,
+            event: "begin"
+        )
+#endif
         if phase != .loaded {
             phase = .loading
         }
@@ -449,13 +513,26 @@ final class TradeRoomsHomeViewModel {
         if viewerID == nil {
             viewerID = domain.state.viewerID
         }
-        reconcileYourRoomsWithMembership()
+        _ = reconcileYourRoomsWithMembership()
         latchInitialDiscoveryScopeIfNeeded()
         phase = domain.state.phase
         applyInitialDiscoveryModeIfNeeded()
-        logDisplayedRooms()
+        logDisplayedIfChanged(
+            source: forceNetwork ? .refresh : .cache
+        )
+#if DEBUG
+        TradeRoomsHomeLifecycleProbe.realtime(id: lifecycleProbeID, event: "retain")
+#endif
         await domain.retainRealtime()
         loadTask = nil
+#if DEBUG
+        TradeRoomsHomeLifecycleProbe.performLoad(
+            id: lifecycleProbeID,
+            phase: String(describing: phase),
+            forceNetwork: forceNetwork,
+            event: "end"
+        )
+#endif
     }
 
     private func applyInitialDiscoveryModeIfNeeded() {
@@ -488,6 +565,26 @@ final class TradeRoomsHomeViewModel {
     }
 
     private func loadHomeBootstrap(forceNetwork: Bool) async {
+#if DEBUG
+        TradeRoomsHomeLifecycleProbe.loadHomeBootstrap(
+            id: lifecycleProbeID,
+            event: "begin",
+            hostingTabActive: isHostingTabActive,
+            forceNetwork: forceNetwork
+        )
+#endif
+        guard isHostingTabActive else {
+#if DEBUG
+            TradeRoomsHomeLifecycleProbe.loadHomeBootstrap(
+                id: lifecycleProbeID,
+                event: "skip-inactive-tab",
+                hostingTabActive: false,
+                forceNetwork: forceNetwork
+            )
+#endif
+            return
+        }
+
         let sessionViewer = await session.currentUserID.map { ProfileID($0.rawValue) }
         guard let sessionViewer else {
             discoveryPhase = .loaded
@@ -518,7 +615,7 @@ final class TradeRoomsHomeViewModel {
                     ?? TradeRoomsFixtures.homeBootstrap(viewerID: sessionViewer, scope: bootstrapScope)
             }
             SessionTradeRoomsDiscoveryStore.shared.seed(bootstrap, for: sessionViewer)
-            applyHomeBootstrap(bootstrap, viewerID: sessionViewer)
+            applyHomeBootstrap(bootstrap, viewerID: sessionViewer, source: .network)
             discoveryPhase = .loaded
             #if DEBUG
             TradeRoomsHomeBootstrapProbe.bootstrapReturned(bootstrap)
@@ -533,6 +630,11 @@ final class TradeRoomsHomeViewModel {
 
         do {
             let cacheScope = discoveryScope.bootstrapCacheScope
+            let hadFreshCache = !forceNetwork
+                && SessionTradeRoomsDiscoveryStore.shared.cached(for: sessionViewer, scope: cacheScope) != nil
+            let bootstrapSource: RoomDiscoveryProbe.DisplayedSource = forceNetwork
+                ? .refresh
+                : (hadFreshCache ? .cache : .network)
             let bootstrap = try await SessionTradeRoomsDiscoveryStore.shared.coalesce(
                 viewerID: sessionViewer,
                 scope: cacheScope,
@@ -540,10 +642,27 @@ final class TradeRoomsHomeViewModel {
             ) { [explore, cacheScope] in
                 try await explore.tradeRoomsHomeBootstrap(scope: cacheScope, limit: 20)
             }
-            applyHomeBootstrap(bootstrap, viewerID: sessionViewer)
+            guard isHostingTabActive else {
+#if DEBUG
+                TradeRoomsHomeLifecycleProbe.loadHomeBootstrap(
+                    id: lifecycleProbeID,
+                    event: "cancel-after-fetch-inactive-tab",
+                    hostingTabActive: false,
+                    forceNetwork: forceNetwork
+                )
+#endif
+                return
+            }
+            applyHomeBootstrap(bootstrap, viewerID: sessionViewer, source: bootstrapSource)
             discoveryPhase = .loaded
             #if DEBUG
             TradeRoomsHomeBootstrapProbe.bootstrapReturned(bootstrap)
+            TradeRoomsHomeLifecycleProbe.loadHomeBootstrap(
+                id: lifecycleProbeID,
+                event: "end",
+                hostingTabActive: isHostingTabActive,
+                forceNetwork: forceNetwork
+            )
             #endif
         } catch {
             discoveryPhase = .loaded
@@ -551,17 +670,34 @@ final class TradeRoomsHomeViewModel {
         }
     }
 
-    private func applyHomeBootstrap(_ bootstrap: TradeRoomsHomeBootstrap, viewerID: ProfileID) {
+    private func applyHomeBootstrap(
+        _ bootstrap: TradeRoomsHomeBootstrap,
+        viewerID: ProfileID,
+        source: RoomDiscoveryProbe.DisplayedSource
+    ) {
         if let bootstrapViewer = bootstrap.viewerID {
             self.viewerID = bootstrapViewer
         } else {
             self.viewerID = viewerID
         }
-        yourRoomsItems = bootstrap.yourRooms
-        suggestedItems = bootstrap.suggested
-        popularItems = bootstrap.popular
-        reconcileYourRoomsWithMembership()
-        logDisplayedRooms()
+
+        let fingerprint = BootstrapFingerprint(
+            your: bootstrap.yourRooms.map(\.id),
+            suggested: bootstrap.suggested.map(\.id),
+            popular: bootstrap.popular.map(\.id)
+        )
+        let bootstrapChanged = fingerprint != lastAppliedBootstrapFingerprint
+        if bootstrapChanged {
+            lastAppliedBootstrapFingerprint = fingerprint
+            yourRoomsItems = bootstrap.yourRooms
+            suggestedItems = bootstrap.suggested
+            popularItems = bootstrap.popular
+        }
+
+        _ = reconcileYourRoomsWithMembership()
+        if bootstrapChanged {
+            logDisplayedIfChanged(source: source)
+        }
     }
 
     private func restoreCachedHomeBootstrap() {
@@ -570,7 +706,7 @@ final class TradeRoomsHomeViewModel {
         guard let bootstrap = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewerID, scope: .all) else {
             return
         }
-        applyHomeBootstrap(bootstrap, viewerID: viewerID)
+        applyHomeBootstrap(bootstrap, viewerID: viewerID, source: .cache)
         discoveryPhase = .loaded
     }
 
@@ -629,7 +765,9 @@ final class TradeRoomsHomeViewModel {
 
     /// Web sidebar parity — inbox member rooms must appear in Your Rooms even when
     /// bootstrap RPC omits private/non-profile rooms.
-    private func reconcileYourRoomsWithMembership() {
+    @discardableResult
+    private func reconcileYourRoomsWithMembership() -> Bool {
+        let beforeIDs = yourRoomsItems.map(\.id)
         let resolvedViewer = viewerID
         var merged = yourRoomsItems
         var ids = Set(merged.map(\.id))
@@ -652,19 +790,37 @@ final class TradeRoomsHomeViewModel {
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
         yourRoomsItems = merged
+        return beforeIDs != merged.map(\.id)
     }
 
-    private func logDisplayedRooms() {
-        RoomDiscoveryProbe.logDisplayed(
+    private func currentDisplayedSnapshot() -> DisplayedSnapshot {
+        DisplayedSnapshot(
+            mode: discoveryMode.rawValue,
             memberCards: showsDiscoverySection ? items.count : filteredItems.count,
-            discoveryRows: displayedDiscoveryRooms.count,
-            mode: discoveryMode.rawValue
+            discoveryRowIDs: displayedDiscoveryRooms.map(\.id)
+        )
+    }
+
+    private func logDisplayedIfChanged(source: RoomDiscoveryProbe.DisplayedSource) {
+        let snapshot = currentDisplayedSnapshot()
+        guard snapshot != lastLoggedDisplayedSnapshot else { return }
+        lastLoggedDisplayedSnapshot = snapshot
+        RoomDiscoveryProbe.logDisplayed(
+            memberCards: snapshot.memberCards,
+            discoveryRows: snapshot.discoveryRowIDs.count,
+            mode: snapshot.mode,
+            source: source
         )
     }
 
     private func buildItems() -> [TradeRoomInboxItem] {
         inboxStore.rooms.map { room in
-            let owner = domain.profile(id: room.ownerProfileID) ?? detailCache.profile(id: room.ownerProfileID)
+            let owner: Profile? = {
+                if !ProfileIDQueryPolicy.isQueryable(room.ownerProfileID) {
+                    return TradeRoomOfficialOwnerPresentation.systemOwnerProfile(roomID: room.id)
+                }
+                return domain.profile(id: room.ownerProfileID) ?? detailCache.profile(id: room.ownerProfileID)
+            }()
             return TradeRoomInboxItem(
                 room: room,
                 ownerName: owner?.displayName,

@@ -188,7 +188,7 @@ enum ContextualTourCatalog {
         ContextualTourStep(
             target: .profileIdentity,
             title: "Profile",
-            message: "Your identity, stats, and shared content.",
+            message: "Your identity, social info, and trading stats.",
             surface: .profile,
             presentsIfUnmeasured: true
         ),

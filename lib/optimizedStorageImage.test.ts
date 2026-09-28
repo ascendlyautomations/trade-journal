@@ -35,6 +35,15 @@ describe("optimizedStorageImage", () => {
     assert.ok(out.includes("width=800"))
   })
 
+  it("serves upload-optimized assets via object URLs without transforms", () => {
+    const optimized =
+      "https://abc.supabase.co/storage/v1/object/public/screenshots/user/opt/123.jpg"
+    const out = optimizeStorageImageUrl(optimized, "trade-thumb")
+    assert.ok(out)
+    assert.ok(out.includes("/storage/v1/object/public/"))
+    assert.ok(!out.includes("render/image/public"))
+  })
+
   it("passes through non-supabase http URLs unchanged", () => {
     const external = "https://picsum.photos/800/600"
     assert.equal(optimizeStorageImageUrl(external, "trade-thumb"), external)

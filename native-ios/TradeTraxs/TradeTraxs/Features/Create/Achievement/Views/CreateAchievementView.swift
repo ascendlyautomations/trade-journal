@@ -159,7 +159,7 @@ struct CreateAchievementView: View {
                         .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .input, colors: colors)
 
                     HStack(spacing: ExperienceSpacing.sm) {
-                        PhotosPicker(selection: $photoItem, matching: .images) {
+                        PhotosPicker(selection: $photoItem, matching: MediaPickerPolicy.imageOnly.matching) {
                             Text("Replace")
                                 .font(ExperienceTypography.subheadline.weight(.semibold))
                                 .foregroundStyle(colors.accent)
@@ -174,7 +174,7 @@ struct CreateAchievementView: View {
                     }
                     .tradeTraxsFormRowBackground(active: usesTradeTraxsFormSurfaces, layer: .surface, colors: colors)
                 } else {
-                    PhotosPicker(selection: $photoItem, matching: .images) {
+                    PhotosPicker(selection: $photoItem, matching: MediaPickerPolicy.imageOnly.matching) {
                         CreateComposerAttachmentAction(
                             systemImage: "photo.badge.plus",
                             title: "Add Photo"

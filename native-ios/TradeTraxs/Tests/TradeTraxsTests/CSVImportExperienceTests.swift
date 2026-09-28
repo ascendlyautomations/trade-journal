@@ -11,6 +11,74 @@ final class CSVImportExperienceTests: XCTestCase {
         XCTAssertEqual(store.presentedFullScreen, .importCSV)
     }
 
+    func testExplicitCRLFScalarRecordBoundaries() throws {
+        let csv =
+            "symbol,priceFormat,priceFormatType,tickSize,buyFillId,sellFillId,qty,buyPrice,sellPrice,pnl,boughtTimestamp,soldTimestamp,duration"
+            + "\r\n"
+            + "MGCM6,1,0,0.1,660290950163,660290950170,1,4348.4,4348.1,\"$(3.00)\",05/05/2026 20:11:36,05/05/2026 20:11:40,0:00:15"
+            + "\r\n"
+            + "MNQM6,1,0,0.25,660290950007,660290950014,1,28331.75,28320.25,$(69.00),05/05/2026 20:11:36,05/05/2026 20:13:52,0:02:16"
+        let parsed = try CSVTextParser.parse(text: csv)
+        XCTAssertEqual(parsed.headers.count, 13)
+        XCTAssertFalse(parsed.headers.contains("MGCM6"))
+        XCTAssertEqual(parsed.rows.count, 2)
+        XCTAssertEqual(parsed.rows[0]["symbol"], "MGCM6")
+        XCTAssertEqual(parsed.rows[0]["pnl"], "$(3.00)")
+    }
+
+    func testTradovatePerformanceExportCRLFRecordBoundaries() throws {
+        let parsed = try CSVTextParser.parse(text: CSVImportFixtures.tradovatePerformanceExportCRLF)
+        XCTAssertEqual(parsed.headers.count, 13)
+        XCTAssertEqual(parsed.rows.count, 2)
+        XCTAssertFalse(parsed.headers.contains("MGCM6"))
+        let summary = try CSVTradeBuilder.build(
+            fileName: "Performance__3_.csv",
+            text: CSVImportFixtures.tradovatePerformanceExportCRLF
+        )
+        XCTAssertEqual(summary.format, .tradovate)
+        XCTAssertEqual(summary.totalRows, 2)
+        XCTAssertEqual(summary.successCount, 2)
+    }
+
+    func testTradovatePerformanceExportUnicodeLineSeparators() throws {
+        let parsed = try CSVTextParser.parse(text: CSVImportFixtures.tradovatePerformanceExportUnicodeLines)
+        XCTAssertEqual(parsed.headers.count, 13)
+        XCTAssertEqual(parsed.rows.count, 2)
+        XCTAssertEqual(parsed.rows[0]["buyFillId"], "660290950163")
+        XCTAssertEqual(parsed.rows[0]["sellFillId"], "")
+        XCTAssertEqual(parsed.rows[1]["buyFillId"], "")
+    }
+
+    func testTradovatePerformanceExport24hTimestamps() throws {
+        let summary = try CSVTradeBuilder.build(
+            fileName: "performance.csv",
+            text: CSVImportFixtures.tradovatePerformanceRowCSV
+        )
+        XCTAssertEqual(summary.format, .tradovate)
+        XCTAssertEqual(summary.successCount, 1, "failures=\(summary.failures.map(\.reason))")
+        let trade = try XCTUnwrap(summary.trades.first)
+        XCTAssertEqual(trade.symbol, "MNQ")
+        XCTAssertEqual(trade.realizedPnL, Decimal(string: "-69"))
+        XCTAssertEqual(trade.side, .short)
+        let cal = Calendar.current
+        XCTAssertEqual(cal.component(.year, from: trade.entryAt), 2026)
+        XCTAssertEqual(cal.component(.month, from: trade.entryAt), 5)
+        XCTAssertEqual(cal.component(.day, from: trade.entryAt), 5)
+        XCTAssertEqual(cal.component(.hour, from: trade.entryAt), 20)
+        XCTAssertEqual(cal.component(.minute, from: trade.entryAt), 11)
+    }
+
+    func testTradovateRejectsPresentButInvalidTimestamp() throws {
+        let csv = """
+        symbol,buyPrice,sellPrice,qty,pnl,boughtTimestamp,soldTimestamp
+        MNQM6,28331.75,28320.25,1,$(69.00),not-a-date,05/05/2026 20:13:52
+        """
+        let summary = try CSVTradeBuilder.build(fileName: "bad.csv", text: csv)
+        XCTAssertEqual(summary.successCount, 0)
+        XCTAssertEqual(summary.failedCount, 1)
+        XCTAssertTrue(summary.failures[0].reason.contains("boughtTimestamp"))
+    }
+
     func testDetectTradovateFormatAndParseRows() throws {
         let summary = try CSVTradeBuilder.build(
             fileName: "tradovate.csv",
@@ -51,6 +119,115 @@ final class CSVImportExperienceTests: XCTestCase {
             "failures=\(summary.failures.map(\.reason))"
         )
         XCTAssertEqual(summary.trades.first?.symbol, "MNQ")
+    }
+
+    func testGoldenMathAudit24HourTimeOnlyCombinesWithDate() throws {
+        let summary = try CSVTradeBuilder.build(
+            fileName: "TradeTraxs_Golden_Math_Audit_2026.csv",
+            text: CSVImportFixtures.goldenMathAuditCSV(entryTime: "09:30:00")
+        )
+        XCTAssertEqual(summary.format, .enteredExited)
+        XCTAssertEqual(summary.successCount, 1, "failures=\(summary.failures.map(\.reason))")
+        let trade = try XCTUnwrap(summary.trades.first)
+        let cal = Calendar.current
+        XCTAssertEqual(cal.component(.year, from: trade.entryAt), 2026)
+        XCTAssertEqual(cal.component(.month, from: trade.entryAt), 1)
+        XCTAssertEqual(cal.component(.day, from: trade.entryAt), 5)
+        XCTAssertEqual(cal.component(.hour, from: trade.entryAt), 9)
+        XCTAssertEqual(cal.component(.minute, from: trade.entryAt), 30)
+        XCTAssertEqual(cal.component(.second, from: trade.entryAt), 0)
+        XCTAssertEqual(trade.durationSeconds, 44 * 60)
+    }
+
+    func testEnteredExitedAcceptsTimeOnly24And12HourFormats() throws {
+        let cases: [(String, Int, Int)] = [
+            ("09:30:00", 9, 30),
+            ("14:45:00", 14, 45),
+            ("21:05:00", 21, 5),
+            ("09:30", 9, 30),
+            ("14:45", 14, 45),
+            ("9:30 AM", 9, 30),
+            ("2:45 PM", 14, 45),
+        ]
+        let cal = Calendar.current
+        for (entryTime, hour, minute) in cases {
+            let summary = try CSVTradeBuilder.build(
+                fileName: "audit.csv",
+                text: CSVImportFixtures.goldenMathAuditCSV(entryTime: entryTime, exitTime: "10:00:00")
+            )
+            XCTAssertEqual(
+                summary.successCount,
+                1,
+                "entryTime=\(entryTime) failures=\(summary.failures.map(\.reason))"
+            )
+            let trade = try XCTUnwrap(summary.trades.first)
+            XCTAssertEqual(cal.component(.day, from: trade.entryAt), 5)
+            XCTAssertEqual(cal.component(.hour, from: trade.entryAt), hour)
+            XCTAssertEqual(cal.component(.minute, from: trade.entryAt), minute)
+        }
+    }
+
+    func testEnteredExitedRejectsPresentButInvalidEntryTime() throws {
+        let summary = try CSVTradeBuilder.build(
+            fileName: "bad-time.csv",
+            text: CSVImportFixtures.goldenMathAuditCSV(entryTime: "not-a-time")
+        )
+        XCTAssertEqual(summary.successCount, 0)
+        XCTAssertEqual(summary.failedCount, 1)
+        XCTAssertTrue(summary.failures[0].reason.contains("Invalid entry time"))
+    }
+
+    func testGoldenMathAuditFullFileParserHoldUnderFourHours() throws {
+        let path = "/Users/TradeTraxs/Downloads/TradeTraxs_Golden_Math_Audit_2026.csv"
+        guard FileManager.default.fileExists(atPath: path) else {
+            throw XCTSkip("Golden CSV not on this machine")
+        }
+        let text = try String(contentsOfFile: path, encoding: .utf8)
+        let summary = try CSVTradeBuilder.build(
+            fileName: "TradeTraxs_Golden_Math_Audit_2026.csv",
+            text: text
+        )
+        XCTAssertEqual(summary.format, .enteredExited)
+        XCTAssertEqual(summary.successCount, 190, "failures=\(summary.failures.map(\.reason))")
+        let maxHold = summary.trades.compactMap(\.durationSeconds).max() ?? 0
+        XCTAssertLessThanOrEqual(maxHold, 95 * 60)
+        XCTAssertEqual(summary.trades.filter { ($0.durationSeconds ?? 0) >= 14_400 }.count, 0)
+    }
+
+    func testGoldenMathAuditMidnightCrossDoesNotSwapTo22HourHold() throws {
+        let summary = try CSVTradeBuilder.build(
+            fileName: "audit-midnight.csv",
+            text: CSVImportFixtures.goldenMathAuditMidnightCrossCSV
+        )
+        XCTAssertEqual(summary.successCount, 1, "failures=\(summary.failures.map(\.reason))")
+        let trade = try XCTUnwrap(summary.trades.first)
+        XCTAssertEqual(trade.durationSeconds, 84 * 60)
+        let cal = Calendar.current
+        XCTAssertEqual(cal.component(.hour, from: trade.entryAt), 22)
+        XCTAssertEqual(cal.component(.minute, from: trade.entryAt), 50)
+        let exitDay = cal.component(.day, from: try XCTUnwrap(trade.exitAt))
+        let entryDay = cal.component(.day, from: trade.entryAt)
+        XCTAssertEqual(exitDay, entryDay + 1)
+    }
+
+    func testFlexiblePathUsesSameTimeOnlyParsing() throws {
+        let csv = """
+        \(CSVImportFixtures.goldenMathAuditHeader)
+        \(CSVImportFixtures.goldenMathAuditRow(entryTime: "14:45:00", exitTime: "15:30:00"))
+        """
+        let parsed = try CSVTextParser.parse(text: csv)
+        let summary = CSVTradeBuilder.build(
+            fileName: "flex.csv",
+            headers: parsed.headers,
+            rows: parsed.rows,
+            format: .flexible
+        )
+        XCTAssertEqual(summary.successCount, 1, "failures=\(summary.failures.map(\.reason))")
+        let trade = try XCTUnwrap(summary.trades.first)
+        let cal = Calendar.current
+        XCTAssertEqual(cal.component(.hour, from: trade.entryAt), 14)
+        XCTAssertEqual(cal.component(.minute, from: trade.entryAt), 45)
+        XCTAssertEqual(trade.durationSeconds, 45 * 60)
     }
 
     func testUnknownCSVNeedsManualMapping() throws {

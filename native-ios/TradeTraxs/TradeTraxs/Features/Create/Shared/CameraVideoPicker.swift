@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 /// Native camera record → temporary movie URL (UIImagePickerController).
 struct CameraVideoPicker: UIViewControllerRepresentable {
+    var maxDurationSeconds: Int = MediaVideoPreparation.maxDurationSeconds
     var onPicked: (URL) -> Void
     var onCancel: () -> Void
 
@@ -11,7 +12,7 @@ struct CameraVideoPicker: UIViewControllerRepresentable {
         let picker = UIImagePickerController()
         picker.sourceType = .camera
         picker.mediaTypes = [UTType.movie.identifier]
-        picker.videoMaximumDuration = TimeInterval(MediaVideoPreparation.maxDurationSeconds)
+        picker.videoMaximumDuration = TimeInterval(maxDurationSeconds)
         picker.videoQuality = .typeHigh
         picker.delegate = context.coordinator
         return picker

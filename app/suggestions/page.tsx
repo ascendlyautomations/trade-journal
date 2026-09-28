@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { optimizedStorageObjectPath } from "@/lib/storageOptimizedMedia"
 import { validateImageUpload } from "@/lib/uploadValidation"
 import { useToast } from "@/app/components/ui"
 import { useUserProfile } from "@/lib/useUserProfile"
@@ -41,7 +42,7 @@ export default function SuggestionsPage() {
       setLoading(false)
       return
     }
-    const fileName = `${user.id}-${Date.now()}-${uploadFile.name}`
+    const fileName = optimizedStorageObjectPath(user.id, "jpg")
 
     const { error: uploadError } = await supabase.storage
       .from("suggestions")

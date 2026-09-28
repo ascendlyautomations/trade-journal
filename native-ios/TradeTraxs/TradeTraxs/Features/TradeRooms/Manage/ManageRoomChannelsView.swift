@@ -129,34 +129,19 @@ struct ManageRoomChannelsView: View {
 
     @ViewBuilder
     private func permissionEditor(for channel: RoomChannel) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("WHO CAN POST")
-                .experienceStyle(.caption, color: colors.secondaryText)
-                .padding(.top, ExperienceSpacing.xxs)
-
-            let liveChannel = viewModel.channels.first(where: { $0.id == channel.id }) ?? channel
-            let selected = RoomChannelPostingPermission.from(allowMembersChat: liveChannel.allowMembersChat)
-            ForEach(RoomChannelPostingPermission.allCases, id: \.self) { option in
-                Button {
+        let liveChannel = viewModel.channels.first(where: { $0.id == channel.id }) ?? channel
+        RoomChannelPostingPermissionPicker(
+            allowMembersChat: Binding(
+                get: { liveChannel.allowMembersChat },
+                set: { newValue in
                     Task {
-                        await viewModel.setChannelPostingPermission(
-                            liveChannel,
-                            allowMembersChat: option.allowMembersChat
-                        )
-                    }
-                } label: {
-                    HStack(spacing: ExperienceSpacing.sm) {
-                        Image(systemName: selected == option ? "largecircle.fill.circle" : "circle")
-                            .foregroundStyle(selected == option ? colors.accent : colors.tertiaryText)
-                        Text(option.summaryLabel)
-                            .experienceStyle(.body, color: colors.primaryText)
-                        Spacer(minLength: 0)
+                        await viewModel.setChannelPostingPermission(liveChannel, allowMembersChat: newValue)
                     }
                 }
-                .buttonStyle(.plain)
-                .disabled(viewModel.savingChannelPermissionID == channel.id)
-            }
-        }
+            ),
+            isDisabled: viewModel.savingChannelPermissionID == channel.id
+        )
+        .padding(.top, ExperienceSpacing.xxs)
         .padding(.leading, ExperienceSpacing.xxs)
     }
 

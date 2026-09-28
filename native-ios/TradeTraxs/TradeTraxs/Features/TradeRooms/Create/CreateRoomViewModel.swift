@@ -113,7 +113,15 @@ final class CreateRoomViewModel {
 
     func addSubRoom() {
         guard configuration.channels.count < TradeRoomConfigurationValidation.maxChannels else { return }
-        configuration.channels.append(TradeRoomDraftChannel(name: ""))
+        configuration.channels.append(TradeRoomDraftChannel(name: "", allowMembersChat: true))
+    }
+
+    func bindingForChannel(id: UUID) -> Binding<TradeRoomDraftChannel>? {
+        guard let index = configuration.channels.firstIndex(where: { $0.id == id }) else { return nil }
+        return Binding(
+            get: { self.configuration.channels[index] },
+            set: { self.configuration.channels[index] = $0 }
+        )
     }
 
     func removeSubRoom(id: UUID) {
@@ -189,7 +197,7 @@ final class CreateRoomViewModel {
             if let imageData {
                 isUploadingImage = true
                 defer { isUploadingImage = false }
-                let path = "room-images/\(Int(Date().timeIntervalSince1970))-avatar.jpg"
+                let path = StorageOptimizedMedia.objectPath(prefix: "room-images", fileExtension: "jpg")
                 let reference = try await uploadService.upload(
                     UploadRequest(
                         bucket: "avatars",

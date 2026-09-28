@@ -15,7 +15,6 @@ final class SettingsProfileViewModel {
     private(set) var profile: Profile?
     private(set) var isLoading = false
     private(set) var errorMessage: String?
-    private(set) var saveMessage: String?
     var draftDisplayName = ""
     var draftBio = ""
     var draftTradingStyle = ""
@@ -103,7 +102,6 @@ final class SettingsProfileViewModel {
         guard let profile else { return }
         errorMessage = nil
         usernameError = nil
-        saveMessage = nil
 
         let normalizedUsername = ProfileUsernamePolicy.normalize(draftUsername)
         if let validationError = ProfileUsernamePolicy.validateNotEmpty(normalizedUsername) {
@@ -115,6 +113,12 @@ final class SettingsProfileViewModel {
             persistedUsername,
             normalizedUsername
         )
+        #if DEBUG
+        print(
+            "[PROFILE_USERNAME] saveBegin old=\(ProfileUsernamePolicy.normalize(persistedUsername)) " +
+                "new=\(normalizedUsername) changed=\(usernameChanged)"
+        )
+        #endif
         if usernameChanged, atUsernameChangeLimit {
             usernameError = "Maximum username changes reached."
             return
@@ -141,10 +145,18 @@ final class SettingsProfileViewModel {
         Task {
             do {
                 let updated = try await profiles.updateProfileSettings(update)
-                apply(updated)
-                profileStore?.adoptDisplayedAvatar(from: updated)
-                profileStore?.refresh()
-                saveMessage = "Profile saved"
+                if usernameChanged,
+                   !ProfileUsernamePolicy.profileUsernamesEqual(
+                       ProfileUsernamePolicy.normalize(updated.username),
+                       normalizedUsername
+                   )
+                {
+                    usernameError = "Username could not be updated. Try again."
+                    ExperienceHaptics.play(.warning)
+                    return
+                }
+                commitConfirmedProfileMutation(updated)
+                SaveSuccessConfirmationCenter.shared.present(SaveSuccessToastMessage.profileUpdated)
                 ExperienceHaptics.play(.success)
             } catch {
                 let message = UserFacingError.message(for: error)
@@ -167,10 +179,7 @@ final class SettingsProfileViewModel {
         Task {
             do {
                 let updated = try await profiles.updateProfile(current)
-                apply(updated)
-                profileStore?.adoptDisplayedAvatar(from: updated)
-                profileStore?.refresh()
-                saveMessage = nil
+                commitConfirmedProfileMutation(updated)
             } catch {
                 draftIsPrivate = previous
                 profile?.isPrivate = previous
@@ -191,10 +200,7 @@ final class SettingsProfileViewModel {
         Task {
             do {
                 let updated = try await profiles.updateProfile(current)
-                apply(updated)
-                profileStore?.adoptDisplayedAvatar(from: updated)
-                profileStore?.refresh()
-                saveMessage = nil
+                commitConfirmedProfileMutation(updated)
             } catch {
                 draftTraderType = previous
                 profile?.traderType = previous
@@ -215,7 +221,7 @@ final class SettingsProfileViewModel {
             return
         }
 
-        guard let jpegData = MediaImagePreparation.jpegData(from: image, maxDimension: 1200, quality: 0.92) else {
+        guard let jpegData = MediaImagePreparation.avatarJPEGData(from: image) else {
             avatarUploadError = "Couldn't prepare that photo. Try a different image."
             avatarPreview = nil
             return
@@ -237,12 +243,9 @@ final class SettingsProfileViewModel {
                 guard var updatedProfile = self.profile else { return }
                 updatedProfile.avatar = MediaReference(id: avatarURL, kind: .image, altText: nil)
                 let saved = try await profiles.updateProfile(updatedProfile)
-                apply(saved)
-                profileStore?.installLocalAvatar(image, avatarID: avatarURL)
-                profileStore?.adoptDisplayedAvatar(from: saved)
-                profileStore?.refresh()
+                commitConfirmedProfileMutation(saved, localAvatar: image)
                 avatarPreview = nil
-                saveMessage = nil
+                SaveSuccessConfirmationCenter.shared.present(SaveSuccessToastMessage.profileUpdated)
                 ExperienceHaptics.play(.success)
             } catch {
                 avatarUploadError = ProfileOnboardingErrorMapping.avatarUploadMessage(for: error)
@@ -251,7 +254,18 @@ final class SettingsProfileViewModel {
         }
     }
 
+    private func commitConfirmedProfileMutation(_ updated: Profile, localAvatar: UIImage? = nil) {
+        apply(updated)
+        profileStore?.applyConfirmedOwnerProfile(updated, localAvatar: localAvatar)
+    }
+
     private func apply(_ profile: Profile) {
+        let preserveUsernameDraft = !ProfileUsernamePolicy.profileUsernamesEqual(
+            persistedUsername,
+            ProfileUsernamePolicy.normalize(draftUsername)
+        )
+        let inFlightUsernameDraft = draftUsername
+
         self.profile = profile
         draftDisplayName = profile.displayName
         draftBio = profile.bio ?? ""
@@ -261,7 +275,11 @@ final class SettingsProfileViewModel {
         draftTraderType = profile.traderType
         usernameChangeCount = profile.usernameChangeCount
         persistedUsername = profile.username
-        draftUsername = ProfileUsernamePolicy.sanitizeForTyping(profile.username)
+        if preserveUsernameDraft {
+            draftUsername = inFlightUsernameDraft
+        } else {
+            draftUsername = ProfileUsernamePolicy.sanitizeForTyping(profile.username)
+        }
     }
 }
 

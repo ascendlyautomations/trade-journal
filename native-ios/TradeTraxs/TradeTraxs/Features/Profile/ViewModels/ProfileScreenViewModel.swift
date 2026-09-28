@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 /// Canonical Profile screen owner — one bootstrap, one ``ProfileState``, render-only children.
 ///
@@ -23,8 +24,11 @@ final class ProfileScreenViewModel {
     private var isReconcilingFromDisk = false
 
     var pinnedContent: [ProfilePinnedItem] { state.pinnedContent }
+
+    func pinnedItems(for contentType: ProfilePinnedContentType) -> [ProfilePinnedItem] {
+        ProfilePinnedOrdering.pins(for: contentType, in: state.pinnedContent)
+    }
     var showsPinReplaceSheet = false
-    var showsManagePinnedSheet = false
     private(set) var pendingPinRequest: ProfilePinRequest?
     private(set) var pendingPinPreview: ProfilePinnedPreview?
     private var pinnedMutationInFlight = false
@@ -766,6 +770,32 @@ final class ProfileScreenViewModel {
         return isOwnerTarget
     }
 
+    /// Shared session profile store published a new owner header (avatar / identity).
+    func applyOwnerProfileHeaderUpdate(profile: Profile, localAvatar: UIImage?) {
+        guard isOwnerTarget, matchesOwner(profile.id) else { return }
+        let resolved = currentUserProfile.resolveOwnerProfileFromNetwork(
+            profileApplyingSessionPreferredAvatar(profile)
+        )
+        var next = state
+        next.profile = resolved
+        next.lastUpdated = Date()
+        state = next
+        data.detailCache.seed(resolved)
+        contentStore.adoptOwnerProfileHeader(from: resolved, localAvatar: localAvatar)
+    }
+
+    private func profileApplyingSessionPreferredAvatar(_ profile: Profile) -> Profile {
+        let preferred = SessionBootstrapStore.shared.preferredAvatarURL(
+            profileID: profile.id,
+            incoming: profile.avatar?.id
+        )
+        let current = SessionBootstrapStore.normalizedAvatarURL(session: profile.avatar?.id, viewer: nil)
+        guard preferred != current else { return profile }
+        var copy = profile
+        copy.avatar = preferred.map { MediaReference(id: $0, kind: .image, altText: nil) }
+        return copy
+    }
+
     private func applyLocalState(
         _ next: ProfileState,
         skipPostsBootstrap: Bool = false,
@@ -924,6 +954,11 @@ final class ProfileScreenViewModel {
         )
         if isOwnerTarget {
             next = OwnerProfileOptimisticStore.shared.merging(into: next)
+            if let profile = next.profile {
+                next.profile = currentUserProfile.resolveOwnerProfileFromNetwork(
+                    profileApplyingSessionPreferredAvatar(profile)
+                )
+            }
         }
         if next.phase == .loaded {
             next.lastUpdated = Date()

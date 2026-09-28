@@ -193,8 +193,8 @@ enum ImageCropRenderer {
         preset: ImageCropEditorPreset,
         aspectOption: ImageCropAspectOption,
         transform: ImageCropTransform,
-        maxDimension: CGFloat = 2_560,
-        quality: CGFloat = 0.92
+        maxDimension: CGFloat = MediaImagePreparation.contentMaxLongEdge,
+        quality: CGFloat = MediaImagePreparation.contentJPEGQuality
     ) -> Data? {
         guard let rendered = render(
             sourceImage: sourceImage,

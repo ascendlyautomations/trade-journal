@@ -29,6 +29,14 @@ Settings → **Worker offline** means `listener_worker_heartbeat_at` is missing 
 | npm script | `npm run broker-sync-worker` |
 | Docker | `services/tradovate-sync-worker/Dockerfile` (build from repo root) |
 
+## Temporary acquisition trace (manual Sync)
+
+Set `TRADOVATE_ACQUISITION_TRACE=1` on the **web** deployment. Each sync logs one line:
+
+`[TRADOVATE_ACQUISITION_TRACE] mappingId=… environment=… baseHost=… orderDepsCount=… fillListRawCount=… mergedUniqueFillCount=… referenceInMerged=…`
+
+No tokens or credentials are logged. Remove the flag after diagnosing zero-fill imports.
+
 ## Required environment variable **names**
 
 Same as production web (service role + Tradovate OAuth secrets):

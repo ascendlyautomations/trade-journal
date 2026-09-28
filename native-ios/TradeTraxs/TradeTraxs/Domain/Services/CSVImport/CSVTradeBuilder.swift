@@ -218,9 +218,26 @@ nonisolated enum CSVTradeBuilder {
         )
         let sideRaw = CSVHeaderAliases.cell(in: row, aliases: ["side", "direction", "action"])
 
+        let boughtResolved = resolveTradovateTimestamp(
+            raw: boughtTsRaw,
+            fieldName: "boughtTimestamp"
+        )
+        let soldResolved = resolveTradovateTimestamp(
+            raw: soldTsRaw,
+            fieldName: "soldTimestamp"
+        )
+        let boughtOpt: Date?
+        let soldOpt: Date?
+        switch (boughtResolved, soldResolved) {
+        case (.failure(let error), _), (_, .failure(let error)):
+            return .failure(error)
+        case (.success(let bought), .success(let sold)):
+            boughtOpt = bought
+            soldOpt = sold
+        }
         let now = Date()
-        let bought = parseDate(boughtTsRaw) ?? now
-        let sold = parseDate(soldTsRaw) ?? bought
+        let bought = boughtOpt ?? now
+        let sold = soldOpt ?? bought
         let normalized = normalizeEntryExit(
             entry: bought,
             exit: sold,
@@ -242,7 +259,7 @@ nonisolated enum CSVTradeBuilder {
 
         var warnings: [String] = []
         if ticker.isEmpty { warnings.append("Missing Symbol") }
-        if boughtTsRaw == nil || soldTsRaw == nil { warnings.append("Timestamp fallback used") }
+        if boughtOpt == nil || soldOpt == nil { warnings.append("Timestamp fallback used") }
 
         return .success(
             makeTrade(
@@ -312,12 +329,11 @@ nonisolated enum CSVTradeBuilder {
         let exitTimeRaw = value(["close time"])
         let entryAt = combineDateTimeUTC(date: entryDate ?? baseRaw, time: entryTimeRaw) ?? baseDate
         let exitAt = combineDateTimeUTC(date: exitDate ?? baseRaw, time: exitTimeRaw) ?? entryAt
-        let normalized = normalizeEntryExit(
+        let normalized = normalizeExplicitEntryExit(
             entry: entryAt,
             exit: exitAt,
             entryPrice: entryPrice,
-            exitPrice: exitPrice,
-            swapPrices: false
+            exitPrice: exitPrice
         )
         let rr = parseRR(value(["reward ratio", "rr", "r:r"]))
         let points = CSVNumericParser.parse(value(["points"]))
@@ -374,13 +390,39 @@ nonisolated enum CSVTradeBuilder {
         let contracts = max(1, Int(truncating: (size ?? 1) as NSDecimalNumber))
         let symbolRaw = CSVHeaderAliases.cell(in: row, aliases: CSVHeaderAliases.enteredExitedSymbol) ?? ""
         let ticker = normalizeFuturesSymbol(symbolRaw)
-        let normalized = normalizeEntryExit(
+        #if DEBUG
+        if exit <= entry {
+            print(
+                """
+                [CSV_TIME_TRACE]
+                date=\(tradeDate ?? "")
+                rawEntry=\(enteredRaw)
+                rawExit=\(exitedRaw)
+                combinedEntry=\(entry)
+                combinedExitBeforeNormalization=\(exit)
+                """
+            )
+        }
+        #endif
+        let normalized = normalizeExplicitEntryExit(
             entry: entry,
             exit: exit,
             entryPrice: entryPrice,
-            exitPrice: exitPrice,
-            swapPrices: false
+            exitPrice: exitPrice
         )
+        #if DEBUG
+        if exit <= entry {
+            let durationSeconds = Int(normalized.exit.timeIntervalSince(normalized.entry).rounded())
+            print(
+                """
+                [CSV_TIME_TRACE]
+                normalizedEntry=\(normalized.entry)
+                normalizedExit=\(normalized.exit)
+                durationSeconds=\(durationSeconds)
+                """
+            )
+        }
+        #endif
         let side = normalizeDirection(
             CSVHeaderAliases.cell(in: row, aliases: CSVHeaderAliases.enteredExitedDirection)
         ) ?? inferSide(entry: normalized.entryPrice, exit: normalized.exitPrice) ?? .short
@@ -461,12 +503,11 @@ nonisolated enum CSVTradeBuilder {
         if let t = fields[.exitTime], let merged = combineLocalDateTime(date: dateIso, time: t) {
             exitAt = merged
         }
-        let normalized = normalizeEntryExit(
+        let normalized = normalizeExplicitEntryExit(
             entry: entryAt,
             exit: exitAt,
             entryPrice: entryN,
-            exitPrice: exitN,
-            swapPrices: false
+            exitPrice: exitN
         )
 
         var notesParts: [String] = []
@@ -653,6 +694,7 @@ nonisolated enum CSVTradeBuilder {
         var exitPrice: Decimal?
     }
 
+    /// Tradovate buy/sell timestamps may arrive out of order — swap to chronological execution.
     private static func normalizeEntryExit(
         entry: Date,
         exit: Date,
@@ -671,6 +713,42 @@ nonisolated enum CSVTradeBuilder {
         return NormalizedTimes(entry: entry, exit: exit, entryPrice: entryPrice, exitPrice: exitPrice)
     }
 
+    /// Explicit entry/exit columns (Golden, TopStep, flexible time fields): never swap open/close.
+    /// When exit clock time is earlier on the trade date, roll exit to the next calendar day (session crossed midnight).
+    private static func normalizeExplicitEntryExit(
+        entry: Date,
+        exit: Date,
+        entryPrice: Decimal?,
+        exitPrice: Decimal?
+    ) -> NormalizedTimes {
+        var adjustedExit = exit
+        if adjustedExit <= entry,
+           let rolled = Calendar.current.date(byAdding: .day, value: 1, to: adjustedExit)
+        {
+            adjustedExit = rolled
+        }
+        return NormalizedTimes(
+            entry: entry,
+            exit: adjustedExit,
+            entryPrice: entryPrice,
+            exitPrice: exitPrice
+        )
+    }
+
+    /// Tradovate Performance exports: missing/blank → `nil` (caller may fallback); present invalid → failure.
+    private static func resolveTradovateTimestamp(
+        raw: String?,
+        fieldName: String
+    ) -> Result<Date?, RowError> {
+        guard let raw else { return .success(nil) }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return .success(nil) }
+        guard let parsed = parseDate(trimmed) else {
+            return .failure(RowError(message: "Invalid \(fieldName): \"\(trimmed)\""))
+        }
+        return .success(parsed)
+    }
+
     private static func parseDate(_ raw: String?) -> Date? {
         guard let raw, !raw.isEmpty else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -679,9 +757,10 @@ nonisolated enum CSVTradeBuilder {
         if let d = iso.date(from: trimmed) { return d }
         iso.formatOptions = [.withInternetDateTime]
         if let d = iso.date(from: trimmed) { return d }
-        // Web `new Date(...)` accepts space-separated local datetimes (Entered/Exited exports).
+        // Web `new Date(...)` accepts space-separated local datetimes (Entered/Exited + Tradovate Performance).
         return DateFormatter.csvFlexible.date(from: trimmed)
             ?? DateFormatter.csvSpaceDateTime.date(from: trimmed)
+            ?? DateFormatter.csvTradovate24hDateTime.date(from: trimmed)
             ?? DateFormatter.csvFlexibleAlt.date(from: trimmed)
     }
 
@@ -700,19 +779,7 @@ nonisolated enum CSVTradeBuilder {
     }
 
     private static func combineLocalDateTime(date: Date, time: String) -> Date? {
-        let cal = Calendar.current
-        var comps = cal.dateComponents([.year, .month, .day], from: date)
-        let trimmed = time.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let full = parseDate(trimmed) { return full }
-        let tf = DateFormatter.csvTimeOnly
-        if let t = tf.date(from: trimmed) {
-            let tc = cal.dateComponents([.hour, .minute, .second], from: t)
-            comps.hour = tc.hour
-            comps.minute = tc.minute
-            comps.second = tc.second ?? 0
-            return cal.date(from: comps)
-        }
-        return nil
+        CSVTimeParsing.combineLocalDate(date, timeRaw: time, parseFullDateTime: parseDate)
     }
 
     private static func combineDateTimeUTC(date: String, time: String?) -> Date? {
@@ -761,6 +828,14 @@ private nonisolated extension DateFormatter {
         return f
     }()
 
+    /// Tradovate Performance CSV — `05/05/2026 20:11:36` (24-hour local).
+    nonisolated static let csvTradovate24hDateTime: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "M/d/yyyy HH:mm:ss"
+        return f
+    }()
+
     nonisolated static let csvFlexibleAlt: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -782,10 +857,4 @@ private nonisolated extension DateFormatter {
         return f
     }()
 
-    nonisolated static let csvTimeOnly: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "h:mm:ss a"
-        return f
-    }()
 }

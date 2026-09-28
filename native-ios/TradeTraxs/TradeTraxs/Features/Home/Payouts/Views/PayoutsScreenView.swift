@@ -3,16 +3,18 @@ import SwiftUI
 /// Dashboard / Settings withdrawal history — observes ``WithdrawalsHistoryStore`` directly.
 struct PayoutsScreenView: View {
     @Bindable private var withdrawalsHistory = WithdrawalsHistoryStore.shared
+    @Bindable private var withdrawalAchievementLinks = WithdrawalAchievementLinkStore.shared
     @State private var accountsViewModel: ManageAccountsViewModel
     @State private var isRevalidatingCycles = false
 
     @Environment(\.themeColors) private var colors
 
     private let data: DataEnvironment?
+    private let navigationCoordinator: NavigationCoordinator?
 
     init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator? = nil) {
         self.data = data
-        _ = navigationCoordinator
+        self.navigationCoordinator = navigationCoordinator
         _accountsViewModel = State(
             initialValue: ManageAccountsViewModel(
                 trades: data.trades,
@@ -24,6 +26,7 @@ struct PayoutsScreenView: View {
 
     init(viewModel: ManageAccountsViewModel) {
         self.data = nil
+        self.navigationCoordinator = nil
         _accountsViewModel = State(initialValue: viewModel)
     }
 
@@ -159,13 +162,7 @@ struct PayoutsScreenView: View {
 
             LazyVStack(spacing: 0) {
                 ForEach(items) { item in
-                    PayoutHistoryRowView(
-                        item: item,
-                        account: accountsByID[item.accountID]
-                    )
-                    .padding(.horizontal, ExperienceSpacing.md)
-                    .padding(.vertical, ExperienceSpacing.xxs)
-                    .background(colors.backgroundPrimary)
+                    withdrawalRowLink(item: item, account: accountsByID[item.accountID])
                     if item.id != items.last?.id {
                         Divider()
                             .padding(.leading, ExperienceSpacing.md)
@@ -177,6 +174,27 @@ struct PayoutsScreenView: View {
                 style: .continuous
             ))
             .padding(.horizontal, ExperienceSpacing.md)
+        }
+    }
+
+    @ViewBuilder
+    private func withdrawalRowLink(item: PayoutHistoryItem, account: TradingAccount?) -> some View {
+        let row = PayoutHistoryRowView(
+            item: item,
+            account: account,
+            showsPostedAsAchievement: withdrawalAchievementLinks.linkedAchievementID(for: item) != nil
+        )
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.vertical, ExperienceSpacing.xxs)
+        .background(colors.backgroundPrimary)
+
+        if navigationCoordinator != nil {
+            NavigationLink(value: HomeRoute.withdrawalDetail(item.id)) {
+                row
+            }
+            .buttonStyle(.plain)
+        } else {
+            row
         }
     }
 
@@ -197,6 +215,12 @@ struct PayoutsScreenView: View {
             "sessionLedgerHydrated",
             detail: "entries=\(withdrawalsHistory.ledgerEntryCount())"
         )
+        do {
+            let rows = try await data.achievements.withdrawalAchievementLinks(for: profileID)
+            withdrawalAchievementLinks.applyFetched(rows)
+        } catch {
+            WithdrawalsTrace.log("achievementLinksFetchFailed", detail: error.localizedDescription)
+        }
     }
 
     private func hydrateWithdrawalsScreen() async {

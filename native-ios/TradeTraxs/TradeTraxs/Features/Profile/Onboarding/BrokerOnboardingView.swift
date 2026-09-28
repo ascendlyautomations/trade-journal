@@ -197,50 +197,25 @@ struct BrokerOnboardingView: View {
             }
             .padding(.top, ExperienceSpacing.xs)
 
-            ForEach(unconnectedSupportedProviders, id: \.self) { provider in
-                connectBrokerButton(provider)
-            }
+            BrokerIntegrationProviderConnectOptionsStack(
+                providers: unconnectedSupportedProviders,
+                isConnectDisabled: isConnectDisabled(for:),
+                onConnect: connect
+            )
         }
     }
 
     private var brokerConnectOptionsSection: some View {
-        VStack(spacing: ExperienceSpacing.sm) {
-            if isProviderOfferedOnOnboarding(.tradovate) {
-                connectBrokerButton(.tradovate)
-                    .accessibilityIdentifier("onboarding.broker.tradovate")
-            }
-            if isProviderOfferedOnOnboarding(.rithmic) {
-                connectBrokerButton(.rithmic)
-                    .accessibilityIdentifier("onboarding.broker.rithmic")
-            }
-        }
+        BrokerIntegrationProviderConnectOptionsStack(
+            providers: onboardingConnectProviders,
+            isConnectDisabled: isConnectDisabled(for:),
+            onConnect: connect
+        )
+        .accessibilityIdentifier("onboarding.broker.connectOptions")
     }
 
-    private func connectBrokerButton(_ provider: BrokerIntegrationProvider) -> some View {
-        Button {
-            connect(provider)
-        } label: {
-            HStack(spacing: ExperienceSpacing.sm) {
-                Text("Connect \(BrokerIntegrationsCatalog.displayName(for: provider))")
-                    .font(ExperienceTypography.headline)
-                    .foregroundStyle(colors.primaryText)
-                Spacer(minLength: ExperienceSpacing.sm)
-                Image(systemName: "link")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(colors.secondaryText)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-            .padding(.horizontal, ExperienceSpacing.md)
-            .background(colors.surfacePrimary)
-            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
-                    .stroke(colors.border, lineWidth: ExperienceBorder.thin)
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(isConnectDisabled(for: provider))
+    private var onboardingConnectProviders: [BrokerIntegrationProvider] {
+        BrokerIntegrationsCatalog.providers.filter(isProviderOfferedOnOnboarding)
     }
 
     private func isConnectDisabled(for provider: BrokerIntegrationProvider) -> Bool {

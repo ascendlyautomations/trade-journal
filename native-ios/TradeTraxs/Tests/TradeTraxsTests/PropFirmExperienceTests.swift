@@ -411,5 +411,9 @@ private struct PropFirmStubAchievementRepository: AchievementRepository {
     ) async throws -> CursorPage<Achievement> {
         CursorPage(items: [], nextCursor: nil)
     }
-    func save(_ achievement: Achievement) async throws -> Achievement { achievement }
+    func save(_ achievement: Achievement, metadata: JSONValue?) async throws -> Achievement { achievement }
+
+    func withdrawalAchievementLinks(for profileID: ProfileID) async throws -> [WithdrawalAchievementLinkRow] {
+        []
+    }
 }

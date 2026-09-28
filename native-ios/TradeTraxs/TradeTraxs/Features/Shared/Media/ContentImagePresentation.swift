@@ -621,12 +621,13 @@ nonisolated struct AchievementInsertBody: Encodable, Sendable {
     var achieved_at: String
     var is_public: Bool
     var is_featured: Bool
+    var metadata: JSONValue
     var includeImageCropKey: Bool
 
     enum CodingKeys: String, CodingKey {
         case user_id, achievement_type, title, description, badge_key, category
         case value_numeric, value_text, currency, account_id, firm
-        case image_url, image_crop, achieved_at, is_public, is_featured
+        case image_url, image_crop, achieved_at, is_public, is_featured, metadata
     }
 
     func encode(to encoder: Encoder) throws {
@@ -649,6 +650,7 @@ nonisolated struct AchievementInsertBody: Encodable, Sendable {
         try container.encode(achieved_at, forKey: .achieved_at)
         try container.encode(is_public, forKey: .is_public)
         try container.encode(is_featured, forKey: .is_featured)
+        try container.encode(metadata, forKey: .metadata)
     }
 }
 

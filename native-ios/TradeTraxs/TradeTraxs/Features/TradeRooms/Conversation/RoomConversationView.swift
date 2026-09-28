@@ -101,6 +101,8 @@ struct RoomConversationView: View {
                         viewModel.presentTradePicker()
                     }
                 )
+            } else if viewModel.showsJoinToSendPrompt {
+                joinToSendBar
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -241,6 +243,29 @@ struct RoomConversationView: View {
             return "Message \(channel.displayTitle)"
         }
         return "Message the room"
+    }
+
+    private var joinToSendBar: some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            Text("Join this room to send messages")
+                .experienceStyle(.subheadline, color: colors.secondaryText)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                Task { await viewModel.toggleMembership() }
+            } label: {
+                Text(viewModel.joinButtonTitle)
+                    .experienceStyle(.subheadline, color: colors.onAccent)
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.vertical, ExperienceSpacing.sm)
+                    .background(colors.accent, in: Capsule())
+            }
+            .disabled(!viewModel.isJoinButtonEnabled)
+            .opacity(viewModel.isJoinButtonEnabled ? 1 : 0.6)
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.vertical, ExperienceSpacing.sm)
+        .background(colors.elevatedSurface)
     }
 
     @ViewBuilder

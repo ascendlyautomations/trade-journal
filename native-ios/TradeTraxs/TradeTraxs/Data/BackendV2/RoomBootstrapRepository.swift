@@ -99,6 +99,7 @@ enum RoomBootstrapLoader {
             roomID: roomID.rawValue,
             sectionID: nil
         )
+        let markRead = MessagesInboxStore.shared.rooms.contains { $0.id == roomID }
         let bootstrap: RoomsBootstrapV1
         do {
             let data = try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
@@ -107,7 +108,7 @@ enum RoomBootstrapLoader {
                     roomID: roomID.rawValue,
                     sectionID: nil,
                     messageLimit: 50,
-                    markRead: true
+                    markRead: markRead
                 )
                 return try JSONEncoder().encode(value)
             }

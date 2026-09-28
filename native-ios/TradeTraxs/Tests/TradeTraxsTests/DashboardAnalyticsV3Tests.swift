@@ -389,6 +389,39 @@ struct DashboardAnalyticsV3Tests {
         #expect(chart.currentEquity == 53_500)
     }
 
+    @Test("Lifetime realized P&L prefers all-preset charts equity over window metrics")
+    func lifetimeRealizedPnLFromAllPresetCharts() throws {
+        let bootstrap = try makeBootstrap()
+        let accountID = TradingAccountID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        #expect(
+            DashboardAnalyticsMapper.lifetimeRealizedPnL(
+                in: bootstrap,
+                accountID: accountID,
+                accountCharts: nil
+            ) == nil
+        )
+        let charts: [String: AnalyticsDashboardChartsPresetV1] = [
+            "all": AnalyticsDashboardChartsPresetV1(
+                preset: "all",
+                start: "2020-01-01",
+                end: "2026-09-21",
+                equity: AnalyticsDashboardEquityWireV1(
+                    points: [],
+                    max_drawdown: PostgresFlexibleDouble(0),
+                    current_equity: PostgresFlexibleDouble(53_500)
+                ),
+                distributions: Self.emptyDistributions,
+                insights: []
+            ),
+        ]
+        let lifetime = DashboardAnalyticsMapper.lifetimeRealizedPnL(
+            in: bootstrap,
+            accountID: accountID,
+            accountCharts: charts
+        )
+        #expect(lifetime == 53_500)
+    }
+
     @Test("All Accounts charts overlay supplies equity without changing KPI metrics")
     func aggregateChartsOverlay() throws {
         let bootstrap = try makeBootstrap()

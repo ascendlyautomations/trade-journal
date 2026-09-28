@@ -9,7 +9,14 @@ import {
   logTradovateEnvironmentSync,
   parseTradovateApiEnvironmentInput,
 } from "@/lib/integrations/tradovate/tradovateApiEnvironment"
-import { getTradovateRestBaseUrl } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
+import {
+  getTradovateRestBaseUrl,
+  readServerDefaultTradovateApiEnvironment,
+} from "@/lib/integrations/tradovate/tradovateOAuthEnv"
+import {
+  tradovateClientSyncErrorForIncompletePartial,
+  tradovateClientSyncOk,
+} from "@/lib/integrations/tradovate/tradovateClientSyncOutcome"
 import { TradovateApiError } from "@/lib/integrations/tradovate/tradovateApiClient"
 import {
   tradovateFillStableId,
@@ -387,6 +394,9 @@ export async function syncTradovateBrokerAccount(
 
     const acquisitionStarted = Date.now()
     failureStage = "fill_list"
+    const apiEnvironmentForSync =
+      storedEnvironment ?? readServerDefaultTradovateApiEnvironment()
+
     const fillAcquisition = await acquireTradovateFillsForAccount(supabase, {
       userId,
       connectionId,
@@ -395,6 +405,7 @@ export async function syncTradovateBrokerAccount(
       trigger,
       ledgerSnapshot: ledgerSnapshotAtStart,
       incrementalWatermark,
+      apiEnvironment: apiEnvironmentForSync,
     })
     stageDurationsMs.acquisition = Date.now() - acquisitionStarted
     acquisitionStatus = deriveTradovateImportAcquisitionStatus({
@@ -984,11 +995,25 @@ export async function syncTradovateBrokerAccount(
       stageDurationsMs,
     })
 
+    const incompletePartial = tradovateClientSyncErrorForIncompletePartial({
+      acquisitionStatus,
+      fetchedFillCount: accountFills.length,
+      ledgerExecutionCountAtStart: ledgerSnapshotAtStart.executionCount,
+    })
+    const partialErrorCode =
+      incompletePartial?.errorCode ??
+      (syncLockStatus === "partial" ? "import_partial" : null)
+    const partialErrorMessage =
+      incompletePartial?.error ??
+      (syncLockStatus === "partial"
+        ? "Some Tradovate fills could not be retrieved. Sync again to retry."
+        : null)
+
     await releaseBrokerSyncLock(supabase, brokerIntegrationAccountId, {
       lastSyncStatus: syncLockStatus,
       lastSyncSuccessAt: successAt,
-      lastSyncErrorCode: null,
-      lastSyncErrorMessage: null,
+      lastSyncErrorCode: partialErrorCode,
+      lastSyncErrorMessage: partialErrorMessage,
       maxExternalFillId: maxFillId != null ? String(maxFillId) : null,
       maxExecutedAt: maxExecutedAt,
       lastAutoSyncAt: trigger === "manual" ? undefined : successAt,
@@ -1019,8 +1044,13 @@ export async function syncTradovateBrokerAccount(
       numericTickersPersisted,
     })
 
+    const clientOk = tradovateClientSyncOk({
+      acquisitionStatus,
+      fetchedFillCount: accountFills.length,
+    })
+
     return {
-      ok: acquisitionStatus !== "IMPORT_FAILED",
+      ok: clientOk,
       status: syncLockStatus,
       acquisitionStatus,
       trigger,
@@ -1037,6 +1067,14 @@ export async function syncTradovateBrokerAccount(
       existingLifecycleCountAtStart,
       previewEligibleCount,
       persistCalled: persistTrades,
+      ...(incompletePartial && !clientOk
+        ? {
+            error: incompletePartial.error,
+            errorCode: incompletePartial.errorCode,
+            failureCategory: "provider_api_failure" as TradovateSyncFailureCategory,
+            failureStage: "fill_list" as TradovateSyncFailureStage,
+          }
+        : {}),
     }
   } catch (err) {
     let code = "sync_failed"

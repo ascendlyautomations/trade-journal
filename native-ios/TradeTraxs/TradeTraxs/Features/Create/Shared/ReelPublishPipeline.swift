@@ -199,7 +199,10 @@ enum ReelPublishPipeline {
         var thumbPath: String?
         var thumbURL: String?
         if let jpeg = draft.thumbnailJPEG {
-            let path = "\(authorID.rawValue)/thumbnails/\(stamp)-thumb.jpg"
+            let path = StorageOptimizedMedia.objectPath(
+                prefix: "\(authorID.rawValue)/thumbnails",
+                fileExtension: "jpg"
+            )
             ReelPublishDiagnostics.logThumbnailUploadStarted(
                 publishID: publishID,
                 objectIdentity: path

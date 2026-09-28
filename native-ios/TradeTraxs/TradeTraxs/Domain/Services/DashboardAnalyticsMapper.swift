@@ -427,6 +427,26 @@ nonisolated enum DashboardAnalyticsMapper {
         guard let value = wire.value else { return 0 }
         return Decimal(value)
     }
+
+    /// Lifetime realized P&L for one account (not the selected dashboard preset window).
+    static func lifetimeRealizedPnL(
+        in bootstrap: AnalyticsDashboardBootstrapV3,
+        accountID: TradingAccountID,
+        accountCharts: [String: AnalyticsDashboardChartsPresetV1]? = nil
+    ) -> Decimal? {
+        if let charts = accountCharts?["all"] {
+            return decimal(charts.equity.current_equity)
+        }
+        if let bundle = bundle(
+            in: bootstrap,
+            accountFilter: .account(accountID),
+            dateRange: .all,
+            accountCharts: accountCharts
+        ) {
+            return DashboardAnalyticsComposer.ingredients(from: bundle.metrics).netPnL
+        }
+        return nil
+    }
 }
 
 nonisolated private func parseBackendV2Timestamp(_ string: String) -> Date? {

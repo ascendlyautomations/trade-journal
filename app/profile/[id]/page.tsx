@@ -24,6 +24,7 @@ import { deleteUserTrade } from "@/lib/deleteTrade"
 import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
 import { CONTENT_IMAGE_V2_PRESET } from "@/lib/contentImageV2"
 import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "@/lib/storageCacheControl"
+import { optimizedStorageObjectPath } from "@/lib/storageOptimizedMedia"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
   createMonotonicReporter,
@@ -2252,7 +2253,7 @@ function ProfilePageContent() {
           if (snapshotImage) {
             report({ percent: 10, stage: "Processing image…" })
             const uploadFile: File = snapshotImage
-            const fileName = `${currentUserId}/${Date.now()}-${uploadFile.name}`
+            const fileName = optimizedStorageObjectPath(currentUserId, "jpg")
 
             report({ percent: 18, stage: "Uploading media…" })
             const mediaReport = createMonotonicReporter(report, {

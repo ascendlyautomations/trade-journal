@@ -50,8 +50,8 @@ final class SessionRoomMemberTagsStore {
 }
 
 extension SessionRoomMemberTagsStore {
+    /// Loads tags + assignments only — never seeds preset tags (manager-only).
     func hydrate(roomID: RoomID, repository: any RoomManagementRepository) async throws {
-        try await repository.ensureDefaultMemberTags(roomID: roomID)
         try await hydrateTags(roomID: roomID, repository: repository)
     }
 
@@ -66,13 +66,13 @@ extension SessionRoomMemberTagsStore {
         )
     }
 
-    /// Owner-only preset seed. Non-owners and already-seeded rooms must not block member rendering.
-    func ensureDefaultTagsIfOwner(
+    /// Manager-only preset seed (owner or platform admin on official rooms).
+    func ensureDefaultTagsIfCanManage(
         roomID: RoomID,
-        isOwner: Bool,
+        canManage: Bool,
         repository: any RoomManagementRepository
     ) async -> String {
-        guard isOwner else { return "skipped-not-owner" }
+        guard canManage else { return "skipped-not-manager" }
         do {
             try await repository.ensureDefaultMemberTags(roomID: roomID)
             return "204"

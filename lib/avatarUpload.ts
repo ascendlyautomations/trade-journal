@@ -7,6 +7,8 @@ import {
 import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
 import { validateImageUpload } from "./uploadValidation"
 import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "./storageCacheControl"
+import { prepareImageForUpload } from "./imagePreparation"
+import { optimizedStorageObjectPath } from "./storageOptimizedMedia"
 
 /** Upload to public `avatars` bucket; returns public URL or null on failure. */
 export async function uploadAvatarFile(
@@ -20,12 +22,23 @@ export async function uploadAvatarFile(
     return null
   }
 
-  const uploadFile = file
-  const fileName = `${userId}/${Date.now()}-${uploadFile.name}`
   const report = createMonotonicReporter(options?.onProgress)
-
   if (options?.onProgress) {
     report({ percent: 10, stage: "Processing…" })
+  }
+
+  let uploadFile: File
+  try {
+    uploadFile = await prepareImageForUpload("avatar", file)
+  } catch (error) {
+    console.error("Avatar upload preparation:", error)
+    return null
+  }
+
+  const fileName = optimizedStorageObjectPath(userId, "jpg")
+  report({ percent: 12, stage: "Processing…" })
+
+  if (options?.onProgress) {
     const { error } = await uploadToSupabaseStorageWithProgress(supabase, {
       bucket: "avatars",
       path: fileName,

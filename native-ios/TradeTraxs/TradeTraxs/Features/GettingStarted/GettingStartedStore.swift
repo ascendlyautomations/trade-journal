@@ -20,6 +20,10 @@ final class GettingStartedStore {
     private var pendingUserActionRefresh = false
     /// Monotonic checklist hints applied before first RPC load or merged after refresh.
     private var pendingLocalPatches = GettingStartedLocalPatches.empty
+    /// Device-local monotonic mirror for the active viewer — survives RPC refresh / restart.
+    private var persistedCompletion = GettingStartedSignals.empty
+    /// True after a local wall-post create until RPC confirms `profile_posts`.
+    private var trustLocalProfilePostHint = false
 
     var isCollapsed = false
 
@@ -84,6 +88,8 @@ final class GettingStartedStore {
         loadGeneration &+= 1
         pendingUserActionRefresh = false
         pendingLocalPatches = .empty
+        persistedCompletion = .empty
+        trustLocalProfilePostHint = false
         isCollapsed = false
     }
 
@@ -91,13 +97,17 @@ final class GettingStartedStore {
     func patchSignals(_ patch: GettingStartedLocalPatches) {
         guard BackendV2FeatureFlags.isEnabled(.gettingStarted) else { return }
         pendingLocalPatches.merge(patch)
-        guard signalsReady else { return }
-        let merged = pendingLocalPatches.apply(to: signals)
+        if pendingLocalPatches.markCreatedProfilePost {
+            trustLocalProfilePostHint = true
+        }
+        let patched = pendingLocalPatches.apply(to: signalsReady ? signals : .empty)
+        commitEffectiveSignals(
+            prior: signals,
+            server: patched,
+            persist: true,
+            authoritativeServer: nil
+        )
         pendingLocalPatches = .empty
-        guard merged != signals else { return }
-        signals = merged
-        progress = GettingStartedChecklistPolicy.computeProgress(from: merged)
-        reconcileServerCompletionIfNeeded()
     }
 
     func dismissForSession() {
@@ -135,6 +145,7 @@ final class GettingStartedStore {
         if viewerID != profileID {
             viewerID = profileID
             isCollapsed = GettingStartedPreferences.readCollapsed(userID: profileID.rawValue)
+            persistedCompletion = GettingStartedCompletionPersistence.load(userID: profileID.rawValue)
         }
 
         loadGeneration &+= 1
@@ -147,7 +158,7 @@ final class GettingStartedStore {
             await SessionNetworkGate.shared.awaitReady()
             let loaded = try await GettingStartedLoader.load(viewerID: profileID, rpc: rpc)
             guard generation == loadGeneration, !Task.isCancelled else { return }
-            apply(signals: loaded)
+            apply(signals: loaded, generation: generation)
         } catch GettingStartedLoader.LoaderError.flagOff,
                 GettingStartedLoader.LoaderError.rpcUnavailable {
             // Hide checklist quietly when RPC is unavailable.
@@ -161,13 +172,68 @@ final class GettingStartedStore {
         isRefreshing = false
     }
 
-    private func apply(signals loaded: GettingStartedSignals) {
-        let merged = pendingLocalPatches.apply(to: loaded)
+    private func apply(signals loaded: GettingStartedSignals, generation: UInt64) {
+        guard generation == loadGeneration else { return }
+        let patched = pendingLocalPatches.apply(to: loaded)
         pendingLocalPatches = .empty
-        signals = merged
-        progress = GettingStartedChecklistPolicy.computeProgress(from: merged)
+        commitEffectiveSignals(
+            prior: signals,
+            server: patched,
+            persist: true,
+            authoritativeServer: loaded
+        )
         signalsReady = true
         reconcileServerCompletionIfNeeded()
+    }
+
+    private func commitEffectiveSignals(
+        prior: GettingStartedSignals,
+        server: GettingStartedSignals,
+        persist: Bool,
+        authoritativeServer: GettingStartedSignals?
+    ) {
+        var merged = GettingStartedSignalsMonotonic.merge(prior: prior, server: server)
+        merged = GettingStartedSignalsMonotonic.merge(prior: persistedCompletion, server: merged)
+        merged = GettingStartedSignalsMonotonic.merge(
+            prior: merged,
+            server: localMembershipHints(viewerID: viewerID)
+        )
+        if let authoritativeServer {
+            merged = GettingStartedContentSignalReconcile.reconcilePostAgainstServer(
+                effective: merged,
+                server: authoritativeServer,
+                trustLocalProfilePostHint: trustLocalProfilePostHint
+            )
+            if authoritativeServer.hasCreatedProfilePost {
+                trustLocalProfilePostHint = false
+            }
+        }
+        merged = GettingStartedContentSignalReconcile.normalizedPostFlags(merged)
+        if merged != signals {
+            signals = merged
+            progress = GettingStartedChecklistPolicy.computeProgress(from: merged)
+            reconcileServerCompletionIfNeeded()
+        }
+        guard persist, let viewerID else { return }
+        persistedCompletion = GettingStartedSignalsMonotonic.merge(
+            prior: persistedCompletion,
+            server: merged
+        )
+        GettingStartedCompletionPersistence.save(
+            userID: viewerID.rawValue,
+            signals: persistedCompletion
+        )
+    }
+
+    private func localMembershipHints(viewerID: ProfileID?) -> GettingStartedSignals {
+        guard let viewerID else { return .empty }
+        let joinedOther = MessagesInboxStore.shared.rooms.contains {
+            $0.ownerProfileID != viewerID
+        }
+        guard joinedOther else { return .empty }
+        var hint = GettingStartedSignals.empty
+        hint.hasEverJoinedOtherRoom = true
+        return hint
     }
 
     private func reconcileServerCompletionIfNeeded() {
@@ -228,6 +294,7 @@ struct GettingStartedLocalPatches: Sendable, Equatable {
     var onboardingCompleted: Bool?
     var tradeCountDelta: Int = 0
     var profilePostCountDelta: Int = 0
+    var markCreatedProfilePost: Bool = false
     var markFollowed: Bool = false
     var markJoinedOtherRoom: Bool = false
     var markPublicTrade: Bool = false
@@ -239,6 +306,7 @@ struct GettingStartedLocalPatches: Sendable, Equatable {
         if other.onboardingCompleted == true { onboardingCompleted = true }
         tradeCountDelta += other.tradeCountDelta
         profilePostCountDelta += other.profilePostCountDelta
+        if other.markCreatedProfilePost { markCreatedProfilePost = true }
         if other.markFollowed { markFollowed = true }
         if other.markJoinedOtherRoom { markJoinedOtherRoom = true }
         if other.markPublicTrade { markPublicTrade = true }
@@ -253,6 +321,10 @@ struct GettingStartedLocalPatches: Sendable, Equatable {
         }
         if profilePostCountDelta > 0 {
             next.profilePostCount = max(next.profilePostCount, next.profilePostCount + profilePostCountDelta)
+        }
+        if markCreatedProfilePost {
+            next.hasCreatedProfilePost = true
+            next.profilePostCount = max(next.profilePostCount, 1)
         }
         if markFollowed {
             next.followCount = max(next.followCount, 1)
@@ -328,13 +400,29 @@ enum GettingStartedRefreshCenter {
         noteJoinedOtherTradeRoom(
             viewer: viewer,
             roomOwnerProfileID: room.ownerProfileID,
-            isViewerRoomOwner: room.isOwner == true
+            isViewerRoomOwner: room.viewerIsOwner
+        )
+    }
+
+    static func noteJoinedOtherTradeRoom(from room: TradeRoom, viewer: ProfileID) {
+        noteJoinedOtherTradeRoom(
+            viewer: viewer,
+            roomOwnerProfileID: room.ownerProfileID,
+            isViewerRoomOwner: room.ownerProfileID == viewer
+        )
+    }
+
+    /// Reconcile room task when member-room cache/inbox already shows membership.
+    static func noteMemberRoomsLoaded(viewer: ProfileID, rooms: [TradeRoom]) {
+        guard rooms.contains(where: { $0.ownerProfileID != viewer }) else { return }
+        GettingStartedStore.shared.patchSignals(
+            GettingStartedLocalPatches(markJoinedOtherRoom: true)
         )
     }
 
     static func noteProfilePostCreated() {
         GettingStartedStore.shared.patchSignals(
-            GettingStartedLocalPatches(profilePostCountDelta: 1)
+            GettingStartedLocalPatches(markCreatedProfilePost: true)
         )
     }
 

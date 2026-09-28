@@ -59,17 +59,19 @@ test("story cover is 1080x1920 and bakes the pan into the crop", () => {
   assert.equal(shifted.output.height, 1920)
 })
 
-test("chat and attachments keep aspect, cap at 2560, and do not upscale", () => {
-  const large = planBoundedOriginal(4032, 3024, CHAT_MAX_EDGE)
-  assert.ok(Math.max(large.width, large.height) <= 2560)
-  assert.ok(Math.abs(large.width / large.height - 4032 / 3024) < 0.01)
-  assert.ok(large.scale < 1)
+test("chat and attachments keep aspect, cap at 1280/2560, and do not upscale", () => {
+  const largeChat = planBoundedOriginal(4032, 3024, CHAT_MAX_EDGE)
+  assert.ok(Math.max(largeChat.width, largeChat.height) <= 1280)
+  assert.ok(Math.abs(largeChat.width / largeChat.height - 4032 / 3024) < 0.01)
+  assert.ok(largeChat.scale < 1)
+
+  const largeAttachment = planBoundedOriginal(4032, 3024, ATTACHMENT_MAX_EDGE)
+  assert.ok(Math.max(largeAttachment.width, largeAttachment.height) <= 2560)
 
   const small = planBoundedOriginal(800, 600, ATTACHMENT_MAX_EDGE)
   assert.equal(small.width, 800)
   assert.equal(small.height, 600)
   assert.equal(small.scale, 1)
-  assert.equal(CHAT_MAX_EDGE, ATTACHMENT_MAX_EDGE)
   assert.equal(CHAT_JPEG_QUALITY, 0.82)
   assert.equal(ATTACHMENT_JPEG_QUALITY, 0.82)
   assert.equal(semanticJpegFileName("Screen.PNG"), "Screen.jpg")

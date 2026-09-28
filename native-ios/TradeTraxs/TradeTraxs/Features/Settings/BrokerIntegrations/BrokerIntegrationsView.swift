@@ -91,13 +91,17 @@ struct BrokerIntegrationsView: View {
                 }
             }
 
-            ForEach(visibleBrokerProviders, id: \.self) { provider in
-                Section {
+            Section {
+                ForEach(visibleBrokerProviders, id: \.self) { provider in
                     brokerCollapsibleSection(provider)
                 }
+                BrokerIntegrationComingSoonFooter()
+                    .listRowBackground(colors.groupedBackground)
+                    .listRowSeparator(.hidden)
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(BrokerIntegrationProviderOptionsLayout.listSectionSpacing)
         .experienceDashboardGroupedRows()
         .scrollContentBackground(.hidden)
         .background(colors.groupedBackground.ignoresSafeArea())

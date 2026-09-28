@@ -193,14 +193,13 @@ final class ContextualTourCoordinator {
         guard phase == .measuring || phase == .presenting, currentStep != nil else { return }
 
         if phase == .presenting {
-            if let frame, ContextualTourGeometry.isRenderableSpotlight(frame, in: viewport) {
-                spotlightFrame = frame
-            }
             return
         }
 
         if let frame,
            ContextualTourGeometry.isUsable(frame),
+           let target = spotlightTarget,
+           !ContextualTourGeometry.skipsTourAutoscroll(for: target),
            ContextualTourGeometry.needsScroll(
             frame: frame,
             viewport: viewport,
@@ -282,6 +281,13 @@ final class ContextualTourCoordinator {
             if isWaitingForRequestedSurface() {
                 logDecision("waiting.surface")
                 ContextualTourDebug.logAppTour("waiting surface=\(currentStep?.surface.rawValue ?? "none")")
+                return
+            }
+            if hasPresentedStep,
+               phase == .measuring || phase == .presenting,
+               currentStep?.surface == .profile {
+                logDecision("waiting.profile-shell")
+                ContextualTourDebug.logAppTour("waiting profile-shell")
                 return
             }
             if gates.sceneActive && gates.unobstructed,
@@ -412,6 +418,12 @@ final class ContextualTourCoordinator {
 
     private func issueScroll(now: Date) {
         scrollIssuedForStep = stepIndex
+        if let target = spotlightTarget, ContextualTourGeometry.skipsTourAutoscroll(for: target) {
+            previousFrame = nil
+            resolveStartedAt = now
+            scheduleTimeout()
+            return
+        }
         scrollTarget = spotlightTarget
         previousFrame = nil
         resolveStartedAt = now

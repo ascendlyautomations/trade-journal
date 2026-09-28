@@ -54,4 +54,14 @@ enum ProfileSection: String, CaseIterable, Identifiable, Sendable {
     var accessibilityHint: String {
         "Show \(title.lowercased()) on your profile"
     }
+
+    /// Cross-type profile showcase pin bucket for this tab, if any.
+    var pinnedContentType: ProfilePinnedContentType? {
+        switch self {
+        case .posts: return .profilePost
+        case .trades: return .trade
+        case .achievements: return .achievement
+        case .clips, .stats: return nil
+        }
+    }
 }

@@ -5,9 +5,11 @@ struct TradeRoomsHomeView: View {
     @State private var viewModel: TradeRoomsHomeViewModel
     private let data: DataEnvironment?
     private let imagePipeline: any ImagePipeline
+    private let armPresentCreateOnAppear: Bool
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.tabIsActive) private var tabIsActive
 
     init(
         data: DataEnvironment,
@@ -15,20 +17,22 @@ struct TradeRoomsHomeView: View {
         navigationHost: TradeRoomNavigationHost = .messages,
         presentCreateOnAppear: Bool = false
     ) {
+        self.armPresentCreateOnAppear = presentCreateOnAppear
         _viewModel = State(
-            initialValue: TradeRoomsHomeViewModel(
-                messages: data.messages,
-                rooms: data.rooms,
-                explore: data.explore,
-                profiles: data.profiles,
-                session: data.session,
-                detailCache: data.detailCache,
-                navigationCoordinator: navigationCoordinator,
-                navigationHost: navigationHost,
-                realtimeHub: data.realtimeHub,
-                presentCreateOnAppear: presentCreateOnAppear
-                    || TradeRoomCreationIntent.shared.consumePresentCreate()
-            )
+            initialValue: TradeRoomsHomeScreenStore.viewModel(host: navigationHost) {
+                TradeRoomsHomeViewModel(
+                    messages: data.messages,
+                    rooms: data.rooms,
+                    explore: data.explore,
+                    profiles: data.profiles,
+                    session: data.session,
+                    detailCache: data.detailCache,
+                    navigationCoordinator: navigationCoordinator,
+                    navigationHost: navigationHost,
+                    realtimeHub: data.realtimeHub,
+                    presentCreateOnAppear: false
+                )
+            }
         )
         self.data = data
         self.imagePipeline = data.imagePipeline
@@ -39,6 +43,7 @@ struct TradeRoomsHomeView: View {
         _viewModel = State(initialValue: viewModel)
         self.data = nil
         self.imagePipeline = imagePipeline
+        self.armPresentCreateOnAppear = false
     }
 
     var body: some View {
@@ -89,13 +94,25 @@ struct TradeRoomsHomeView: View {
         }
         .onAppear {
             ActiveScreenBootstrapPriorityGate.tradeRooms.setScreenActive(true)
-        }
-        .task {
-            viewModel.loadIfNeeded()
+            viewModel.setHostingTabActive(tabIsActive)
+            viewModel.noteViewAppeared()
+            if armPresentCreateOnAppear || TradeRoomCreationIntent.shared.consumePresentCreate() {
+                viewModel.armPresentCreateOnAppear()
+            }
+            viewModel.consumePresentCreateIfNeeded()
         }
         .onDisappear {
             ActiveScreenBootstrapPriorityGate.tradeRooms.setScreenActive(false)
+            viewModel.setHostingTabActive(false)
+            viewModel.noteViewDisappeared()
             viewModel.releaseRealtime()
+        }
+        .onChange(of: tabIsActive) { _, isActive in
+            viewModel.setHostingTabActive(isActive)
+            ActiveScreenBootstrapPriorityGate.tradeRooms.setScreenActive(isActive)
+        }
+        .task {
+            viewModel.loadIfNeeded()
         }
         .onChange(of: viewModel.phase) { _, _ in
             viewModel.consumePresentCreateIfNeeded()

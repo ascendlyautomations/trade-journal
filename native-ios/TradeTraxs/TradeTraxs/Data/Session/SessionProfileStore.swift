@@ -26,7 +26,7 @@ final class SessionProfileStore {
         forceNetwork: Bool = false,
         acceptCached: ((Profile) -> Bool)? = nil
     ) async throws -> [Profile] {
-        let unique = Array(Set(ids)).filter { !$0.rawValue.isEmpty }
+        let unique = Array(Set(ids)).filter { ProfileIDQueryPolicy.isQueryable($0) }
         guard !unique.isEmpty else { return [] }
 
         var hit: [Profile] = []

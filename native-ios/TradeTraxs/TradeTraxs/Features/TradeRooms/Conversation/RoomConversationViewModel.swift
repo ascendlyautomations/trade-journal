@@ -207,13 +207,23 @@ final class RoomConversationViewModel {
         return inboxStore.rooms.contains { $0.id == resolvedRoomID }
     }
 
-    /// Approval-policy rooms hide member-only content until membership is granted.
+    /// Public open-join rooms are readable without membership; private/approval stay gated.
     var canViewMessages: Bool {
         if isOwner || isMember { return true }
         guard let room else { return false }
+        if room.isPrivate { return false }
         if room.joinPolicy == .approval { return false }
         if joinRequestState == .pending { return false }
         return true
+    }
+
+    /// Read-only public preview — join CTA at composer instead of send shell.
+    var showsJoinToSendPrompt: Bool {
+        phase == .loaded
+            && canViewMessages
+            && !showsJoinPreviewPlaceholder
+            && !canShowComposer
+            && !isOwner
     }
 
     var showsJoinPreviewPlaceholder: Bool {
@@ -958,6 +968,8 @@ final class RoomConversationViewModel {
                     isViewerRoomOwner: isOwner
                 )
                 TradeRoomJoinActionCoordinator.shared.patchJoined(resolvedRoomID)
+                SessionMemberRoomsStore.shared.invalidate(viewerID: viewerID)
+                upsertJoinedRoomInInbox()
                 await reconcileMemberCount(source: .mutation)
             } else {
                 try await rooms.leave(roomID: roomID, profileID: viewerID)
@@ -1022,7 +1034,9 @@ final class RoomConversationViewModel {
     private func performInitialLoad() async {
         phase = .loading
         // Web optimistic clear when the room is selected — badge drops before history finishes.
-        inboxStore.markRoomRead(roomID: roomID)
+        if isMember || isOwner {
+            inboxStore.markRoomRead(roomID: roomID)
+        }
         inboxStore.setActiveRoom(roomID)
 
         let current = await session.currentUserID
@@ -1092,6 +1106,7 @@ final class RoomConversationViewModel {
 
     /// Web `markAllRoomMessagesSeenForUser` + room Activity notification clear.
     private func markRoomSeenIfNeeded(force: Bool) async {
+        guard isMember || isOwner else { return }
         inboxStore.markRoomRead(roomID: roomID)
         if didMarkReadThisOpen, !force { return }
         didMarkReadThisOpen = true
@@ -1305,16 +1320,13 @@ final class RoomConversationViewModel {
             )
             room = applied.room
             membership = applied.membership
-            if let cached = detailCache.profile(id: applied.room.ownerProfileID) {
-                ownerProfile = cached
-                mergeSenderProfiles([cached], source: "ownerCache")
-            } else if let owner = try? await SessionProfileStore.shared.profiles(
-                ids: [applied.room.ownerProfileID],
+            if let owner = await TradeRoomOwnerProfileLoader.loadOwnerProfile(
+                for: applied.room,
                 detailCache: detailCache,
-                repository: profiles
-            ).first {
+                profiles: profiles
+            ) {
                 ownerProfile = owner
-                mergeSenderProfiles([owner], source: "ownerBatch")
+                mergeSenderProfiles([owner], source: "ownerResolve")
             }
             channels = applied.channels
             channelMetadataCached = true
@@ -1377,23 +1389,20 @@ final class RoomConversationViewModel {
                     joinRequestState = nil
                 }
             }
-            if let cached = detailCache.profile(id: loaded.ownerProfileID) {
-                ownerProfile = cached
-                mergeSenderProfiles([cached], source: "ownerCache")
-            } else if let owner = try? await SessionProfileStore.shared.profiles(
-                ids: [loaded.ownerProfileID],
+            if let owner = await TradeRoomOwnerProfileLoader.loadOwnerProfile(
+                for: loaded,
                 detailCache: detailCache,
-                repository: profiles
-            ).first {
+                profiles: profiles
+            ) {
                 ownerProfile = owner
-                mergeSenderProfiles([owner], source: "ownerBatch")
+                mergeSenderProfiles([owner], source: "ownerResolve")
             }
             channels = try await rooms.channels(roomID: activeRoomID)
             channelMetadataCached = true
             if isMember || isOwner,
                let management = rooms as? any RoomManagementRepository
             {
-                try? await tagStore.hydrate(roomID: activeRoomID, repository: management)
+                try? await tagStore.hydrateTags(roomID: activeRoomID, repository: management)
             }
             applyPendingDeepLinkFocusSelectingChannel()
             if selectedChannelID == nil || !channels.contains(where: { $0.id == selectedChannelID }) {
@@ -2070,7 +2079,10 @@ final class RoomConversationViewModel {
         do {
             var resolvedImageURL = imageURL
             if let localImageData {
-                let path = "\(viewerID.rawValue)/rooms/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+                let path = StorageOptimizedMedia.objectPath(
+                    prefix: "\(viewerID.rawValue)/rooms",
+                    fileExtension: "jpg"
+                )
                 resolvedImageURL = try await OptimisticOutboundImageSendSupport.uploadJPEG(
                     localImageData: localImageData,
                     storagePath: path,
@@ -2291,7 +2303,14 @@ final class RoomConversationViewModel {
         }
     }
 
+    private func upsertJoinedRoomInInbox() {
+        guard let room, isMember || isOwner else { return }
+        guard !inboxStore.rooms.contains(where: { $0.id == room.id }) else { return }
+        inboxStore.replaceRooms(inboxStore.rooms + [room])
+    }
+
     private func patchInboxPreview(with message: Message) {
+        guard isMember || isOwner else { return }
         let preview: String = {
             if message.kind == .tradeShare {
                 return "Shared a trade"

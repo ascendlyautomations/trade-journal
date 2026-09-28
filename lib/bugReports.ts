@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient"
 import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { optimizedStorageObjectPath } from "@/lib/storageOptimizedMedia"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 import {
   toUserFacingErrorMessage,
@@ -90,7 +91,7 @@ export async function submitBugReport(
       }
     }
     const safeName = uploadFile.name.replace(/[^\w.\-()+]/g, "_")
-    const filePath = `bug-reports/${userId}/${Date.now()}-${safeName}`
+    const filePath = optimizedStorageObjectPath(`bug-reports/${userId}`, "jpg")
     const { error: uploadError } = await supabase.storage
       .from("screenshots")
       .upload(filePath, uploadFile, { upsert: false })

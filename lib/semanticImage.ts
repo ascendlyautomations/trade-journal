@@ -10,19 +10,19 @@ import {
 
 /** Square avatar, room picture, and group avatar. Circle is display-only. */
 export const AVATAR_OUTPUT_SIZE = 512
-export const AVATAR_JPEG_QUALITY = 0.92
+export const AVATAR_JPEG_QUALITY = 0.85
 
 /** Story canvas. 9:16, not the legacy 400/700 preview frame. */
 export const STORY_OUTPUT_WIDTH = 1080
 export const STORY_OUTPUT_HEIGHT = 1920
 export const STORY_ASPECT = STORY_OUTPUT_WIDTH / STORY_OUTPUT_HEIGHT
-export const STORY_JPEG_QUALITY = 0.92
+export const STORY_JPEG_QUALITY = 0.85
 
 /**
  * Chat photos keep their aspect. 2560 is the web cap.
  * Native chat is still uncapped; that difference is intentional.
  */
-export const CHAT_MAX_EDGE = 2560
+export const CHAT_MAX_EDGE = 1280
 export const CHAT_JPEG_QUALITY = 0.82
 
 /**
@@ -32,6 +32,11 @@ export const CHAT_JPEG_QUALITY = 0.82
  */
 export const ATTACHMENT_MAX_EDGE = 2560
 export const ATTACHMENT_JPEG_QUALITY = 0.82
+
+/** Reel poster thumbnails — parity with native `MediaImagePreparation.reelPosterJPEGData`. */
+export const REEL_POSTER_MAX_WIDTH = 560
+export const REEL_POSTER_MAX_HEIGHT = 996
+export const REEL_POSTER_JPEG_QUALITY = 0.82
 
 export const SEMANTIC_JPEG_MIME = CONTENT_IMAGE_V2_MIME
 

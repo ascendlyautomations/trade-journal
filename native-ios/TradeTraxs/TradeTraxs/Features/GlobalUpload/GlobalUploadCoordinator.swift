@@ -108,7 +108,10 @@ final class GlobalUploadCoordinator {
         let jobID = UUID().uuidString
         var checkpoint = PostUploadCheckpoint()
         if spec.imageData != nil {
-            checkpoint.imageStoragePath = "\(spec.authorID.rawValue)/\(jobID).jpg"
+            checkpoint.imageStoragePath = StorageOptimizedMedia.objectPath(
+                prefix: spec.authorID.rawValue,
+                fileExtension: "jpg"
+            )
         }
         insertJob(
             UploadJob(
@@ -580,7 +583,7 @@ final class GlobalUploadCoordinator {
                 if imageURL == nil, let imageData = spec.imageData {
                     updateJob(jobID) { $0.phase = .uploading; $0.progress = 0.05 }
                     let path = checkpoint.imageStoragePath
-                        ?? "\(spec.authorID.rawValue)/\(jobID).jpg"
+                        ?? StorageOptimizedMedia.objectPath(prefix: spec.authorID.rawValue, fileExtension: "jpg")
                     checkpoint.imageStoragePath = path
                     persistPostRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
                     let ref = try await UploadProgressContext.$jobID.withValue(jobID) {
@@ -691,8 +694,35 @@ final class GlobalUploadCoordinator {
                 )
             } else {
                 story = try await UploadProgressContext.$jobID.withValue(jobID) {
-                    try await StoryPublishPipeline.publish(
-                        imageData: spec.imageData,
+                    if let videoURL = spec.localVideoFileURL {
+                        return try await StoryPublishPipeline.publishVideo(
+                            fileURL: videoURL,
+                            contentType: spec.contentType,
+                            originalFileName: spec.originalFileName ?? "story.mp4",
+                            authorID: spec.authorID,
+                            feed: services.feed,
+                            uploadService: services.uploadService,
+                            objectStorage: services.objectStorage,
+                            predeterminedStoragePath: spec.storagePath
+                        ) { [weak self] progress in
+                            Task { @MainActor in
+                                self?.updateJob(jobID) { job in
+                                    if progress < 0.85 {
+                                        job.phase = .uploading
+                                        job.progress = 0.1 + progress * 0.75
+                                    } else {
+                                        job.phase = .publishing
+                                        job.progress = 0.85 + (progress - 0.85) * 1.0
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    guard let imageData = spec.imageData else {
+                        throw AppError.unknown(message: "Missing story media.")
+                    }
+                    return try await StoryPublishPipeline.publish(
+                        imageData: imageData,
                         contentType: spec.contentType,
                         originalFileName: spec.originalFileName ?? "story.jpg",
                         authorID: spec.authorID,
@@ -763,7 +793,10 @@ final class GlobalUploadCoordinator {
                 imageRef = MediaReference(id: publicURL, kind: .image, altText: nil)
             } else if let imageData = spec.imageData, !imageData.isEmpty {
                 updateJob(jobID) { $0.phase = .uploading; $0.progress = 0.05 }
-                let path = "achievements/\(spec.authorID.rawValue)/\(spec.jobID).jpg"
+                let path = StorageOptimizedMedia.objectPath(
+                    prefix: "achievements/\(spec.authorID.rawValue)",
+                    fileExtension: "jpg"
+                )
                 let reference = try await UploadProgressContext.$jobID.withValue(jobID) {
                     try await services.uploadService.upload(
                         UploadRequest(
@@ -841,7 +874,8 @@ final class GlobalUploadCoordinator {
                 fixture.achievedAt = draft.achievedAt
                 saved = fixture
             } else {
-                saved = try await achievements.save(draft)
+                let metadata = WithdrawalAchievementLinkage.metadata(for: spec.withdrawalLink)
+                saved = try await achievements.save(draft, metadata: metadata)
                 checkpoint.savedAchievementID = saved.id
                 persistAchievementRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
                 AchievementUploadDiagnostics.logDatabaseCreated(achievementID: saved.id.rawValue)
@@ -851,6 +885,9 @@ final class GlobalUploadCoordinator {
                     event: .publishCompleted,
                     taskCancelled: Task.isCancelled
                 )
+                if let link = spec.withdrawalLink {
+                    WithdrawalAchievementLinkStore.shared.register(achievementID: saved.id, source: link)
+                }
             }
 
             OwnerProfileOptimisticStore.shared.noteAchievementCreated(saved)
@@ -993,7 +1030,7 @@ final class GlobalUploadCoordinator {
             {
                 await UploadProgressRelay.shared.setActiveSegment(jobID: jobID, segmentID: "screenshot")
                 let path = checkpoint.uploadedScreenshotStoragePath
-                    ?? "\(spec.authorID.rawValue)/\(spec.jobID).jpg"
+                    ?? StorageOptimizedMedia.objectPath(prefix: spec.authorID.rawValue, fileExtension: "jpg")
                 checkpoint.uploadedScreenshotStoragePath = path
                 persistTradeRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
                 let reference = try await UploadProgressContext.$jobID.withValue(jobID) {
@@ -1055,7 +1092,10 @@ final class GlobalUploadCoordinator {
 
                 if let jpeg = snapshot.thumbnailJPEG {
                     let thumbPath = checkpoint.reelThumbnailStoragePath
-                        ?? "\(spec.authorID.rawValue)/thumbnails/\(spec.jobID)-thumb.jpg"
+                        ?? StorageOptimizedMedia.objectPath(
+                            prefix: "\(spec.authorID.rawValue)/thumbnails",
+                            fileExtension: "jpg"
+                        )
                     checkpoint.reelThumbnailStoragePath = thumbPath
                     persistTradeRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
                     await UploadProgressRelay.shared.setActiveSegment(jobID: jobID, segmentID: "reelThumb")

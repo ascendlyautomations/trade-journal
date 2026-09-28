@@ -8,6 +8,7 @@ final class GettingStartedChecklistTests: XCTestCase {
             hasSeenGettingStartedIntro: false,
             hasSeenOnboardingCompletePopup: false,
             tradeCount: 0,
+            hasCreatedProfilePost: false,
             profilePostCount: 0,
             followCount: 0,
             hasEverJoinedOtherRoom: false,
@@ -56,9 +57,67 @@ final class GettingStartedChecklistTests: XCTestCase {
     func testProfilePostCountCompletesPostTask() {
         var signals = GettingStartedSignals.empty
         signals.onboardingCompleted = true
+        signals.hasCreatedProfilePost = true
         signals.profilePostCount = 1
         let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
         XCTAssertTrue(progress.tasks.first(where: { $0.id == .post })?.isComplete == true)
+    }
+
+    func testPublicTradeDoesNotCompletePostTask() {
+        var signals = GettingStartedSignals.empty
+        signals.onboardingCompleted = true
+        signals.tradeCount = 1
+        signals.hasPublicTrade = true
+        let progress = GettingStartedChecklistPolicy.computeProgress(from: signals)
+        XCTAssertTrue(progress.tasks.first(where: { $0.id == .publicTrade })?.isComplete == true)
+        XCTAssertFalse(progress.tasks.first(where: { $0.id == .post })?.isComplete == true)
+    }
+
+    func testServerReconcileClearsFalsePostCompletion() {
+        var effective = GettingStartedSignals.empty
+        effective.hasCreatedProfilePost = true
+        effective.profilePostCount = 1
+        let server = GettingStartedSignals.empty
+        let repaired = GettingStartedContentSignalReconcile.reconcilePostAgainstServer(
+            effective: effective,
+            server: server,
+            trustLocalProfilePostHint: false
+        )
+        XCTAssertFalse(repaired.hasCreatedProfilePost)
+        XCTAssertEqual(repaired.profilePostCount, 0)
+    }
+
+    func testLocalPostHintPreservesOptimisticPostUntilRpcConfirms() {
+        var effective = GettingStartedSignals.empty
+        effective.hasCreatedProfilePost = true
+        effective.profilePostCount = 1
+        let server = GettingStartedSignals.empty
+        let retained = GettingStartedContentSignalReconcile.reconcilePostAgainstServer(
+            effective: effective,
+            server: server,
+            trustLocalProfilePostHint: true
+        )
+        XCTAssertTrue(retained.hasCreatedProfilePost)
+    }
+
+    func testMonotonicMergeNeverRegressesRoomCompletion() {
+        let prior = GettingStartedSignals(
+            onboardingCompleted: true,
+            hasSeenGettingStartedIntro: false,
+            hasSeenOnboardingCompletePopup: false,
+            tradeCount: 0,
+            hasCreatedProfilePost: false,
+            profilePostCount: 0,
+            followCount: 0,
+            hasEverJoinedOtherRoom: true,
+            hasPublicTrade: false,
+            hasCompletedDailyCheckIn: false,
+            firstPrivateTradeID: nil
+        )
+        var stale = prior
+        stale.hasEverJoinedOtherRoom = false
+        let merged = GettingStartedSignalsMonotonic.merge(prior: prior, server: stale)
+        XCTAssertTrue(merged.hasEverJoinedOtherRoom)
     }
 
     func testDailyCheckInSignalCompletesDailyCheckInTask() {
@@ -75,6 +134,7 @@ final class GettingStartedChecklistTests: XCTestCase {
             hasSeenGettingStartedIntro: true,
             hasSeenOnboardingCompletePopup: true,
             tradeCount: 3,
+            hasCreatedProfilePost: true,
             profilePostCount: 1,
             followCount: 2,
             hasEverJoinedOtherRoom: true,
@@ -94,6 +154,7 @@ final class GettingStartedChecklistTests: XCTestCase {
             hasSeenGettingStartedIntro: false,
             hasSeenOnboardingCompletePopup: false,
             tradeCount: 1,
+            hasCreatedProfilePost: false,
             profilePostCount: 0,
             followCount: 0,
             hasEverJoinedOtherRoom: false,
@@ -118,6 +179,7 @@ final class GettingStartedChecklistTests: XCTestCase {
             hasSeenGettingStartedIntro: true,
             hasSeenOnboardingCompletePopup: false,
             tradeCount: 5,
+            hasCreatedProfilePost: true,
             profilePostCount: 1,
             followCount: 2,
             hasEverJoinedOtherRoom: true,
@@ -143,6 +205,7 @@ final class GettingStartedChecklistTests: XCTestCase {
             hasSeenGettingStartedIntro: true,
             hasSeenOnboardingCompletePopup: true,
             tradeCount: 0,
+            hasCreatedProfilePost: false,
             profilePostCount: 0,
             followCount: 0,
             hasEverJoinedOtherRoom: false,
@@ -177,6 +240,7 @@ final class GettingStartedChecklistTests: XCTestCase {
             hasSeenGettingStartedIntro: true,
             hasSeenOnboardingCompletePopup: false,
             tradeCount: 1,
+            hasCreatedProfilePost: true,
             profilePostCount: 1,
             followCount: 1,
             hasEverJoinedOtherRoom: true,
@@ -210,6 +274,7 @@ final class GettingStartedChecklistTests: XCTestCase {
           "has_seen_onboarding_complete_popup": false,
           "trade_count": 2,
           "profile_post_count": 1,
+          "has_created_profile_post": true,
           "follow_count": 3,
           "has_ever_joined_other_room": true,
           "has_public_trade": false,
@@ -221,6 +286,7 @@ final class GettingStartedChecklistTests: XCTestCase {
         XCTAssertTrue(signals.onboardingCompleted)
         XCTAssertEqual(signals.tradeCount, 2)
         XCTAssertEqual(signals.profilePostCount, 1)
+        XCTAssertTrue(signals.hasCreatedProfilePost)
         XCTAssertEqual(signals.followCount, 3)
         XCTAssertTrue(signals.hasEverJoinedOtherRoom)
         XCTAssertTrue(signals.hasCompletedDailyCheckIn)

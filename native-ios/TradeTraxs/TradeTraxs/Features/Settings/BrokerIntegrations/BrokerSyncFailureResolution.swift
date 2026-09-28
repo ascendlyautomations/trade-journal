@@ -46,7 +46,11 @@ nonisolated enum BrokerSyncFailureResolution: Equatable, Sendable {
     static func isRetryable(_ response: TradovateAccountSyncResponse) -> Bool {
         if isSyncInProgress(response) { return true }
         if response.resolvedClientCode == "BROKER_TEMPORARILY_UNAVAILABLE" { return true }
+        if response.resolvedClientCode == "BROKER_IMPORT_INCOMPLETE" { return true }
         if response.summary.errorCode == "provider_unavailable" { return true }
+        if response.summary.errorCode == "import_incomplete_no_fills" { return true }
+        if response.summary.errorCode == "import_partial_no_new_fills" { return true }
+        if response.summary.status == "partial" { return true }
         return false
     }
 }
@@ -74,6 +78,10 @@ nonisolated enum BrokerSyncPresentation {
         "Unable to import trades right now."
     }
 
+    static func partialImportMessage() -> String {
+        "Import finished, but some Tradovate history may still be missing. Sync again to retry."
+    }
+
     static func syncInProgressMessage() -> String {
         "Sync already in progress."
     }
@@ -95,6 +103,13 @@ nonisolated enum BrokerSyncPresentation {
         case .retryable:
             if BrokerSyncFailureResolution.isSyncInProgress(response) {
                 return syncInProgressMessage()
+            }
+            if response.resolvedClientCode == "BROKER_IMPORT_INCOMPLETE"
+                || response.summary.errorCode == "import_incomplete_no_fills"
+                || response.summary.errorCode == "import_partial_no_new_fills"
+                || (response.summary.status == "partial" && !response.summary.ok)
+            {
+                return partialImportMessage()
             }
             return temporaryFailureMessage()
         case .importFailed:

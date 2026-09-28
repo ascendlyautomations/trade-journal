@@ -73,17 +73,6 @@ struct ProfileView: View {
                     .experiencePadding(.horizontal, .lg)
                     .padding(.top, ExperienceSpacing.sm)
 
-                if !screen.pinnedContent.isEmpty {
-                    ProfilePinnedSectionView(
-                        items: screen.pinnedContent,
-                        isOwner: contentStore.isOwner,
-                        imagePipeline: appEnvironment.data.imagePipeline,
-                        onOpen: { screen.openPinnedItem($0) },
-                        onManage: { screen.showsManagePinnedSheet = true }
-                    )
-                    .experiencePadding(.horizontal, .lg)
-                }
-
                 if let shellViewModel = screen.shellViewModel {
                     ProfileSectionPicker(
                         selection: Binding(
@@ -218,36 +207,11 @@ struct ProfileView: View {
                 onCancel: { screen.cancelReplacePin() }
             )
         }
-        .sheet(isPresented: $screen.showsManagePinnedSheet) {
-            ProfileManagePinnedSheet(
-                items: screen.pinnedContent,
-                onOpen: { item in
-                    screen.showsManagePinnedSheet = false
-                    screen.openPinnedItem(item)
-                },
-                onUnpin: { item in
-                    Task {
-                        await screen.unpin(
-                            contentType: item.contentType,
-                            contentID: item.contentID
-                        )
-                    }
-                },
-                onMoveUp: { screen.movePinnedItemUp($0) },
-                onMoveDown: { screen.movePinnedItemDown($0) },
-                onDismiss: { screen.showsManagePinnedSheet = false }
-            )
-        }
         .accessibilityIdentifier(contentStore.isOwner ? "profile.root.owner" : "profile.root.other")
         .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
             guard let target else { return }
-            if reduceMotion {
-                tourProxy.scrollTo(target, anchor: .center)
-            } else {
-                withAnimation(ExperienceMotion.navigation) {
-                    tourProxy.scrollTo(target, anchor: .center)
-                }
-            }
+            guard !ContextualTourGeometry.skipsTourAutoscroll(for: target) else { return }
+            tourProxy.scrollTo(target, anchor: .center)
         }
         }
     }
@@ -263,7 +227,8 @@ struct ProfileView: View {
     @ViewBuilder
     private func sectionBody(_ shell: ProfileShellViewModel) -> some View {
         let profilePin = ownerProfilePinCallbacks
-        switch shell.selectedSection {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            switch shell.selectedSection {
         case .trades:
             if let viewModel = shell.trades {
                 TradesContainerView(
@@ -271,7 +236,8 @@ struct ProfileView: View {
                     imagePipeline: appEnvironment.data.imagePipeline,
                     engagementStore: appEnvironment.data.engagementStore,
                     vaultStore: appEnvironment.data.vaultStore,
-                    profilePin: profilePin
+                    profilePin: profilePin,
+                    profilePinnedItems: screen.pinnedContent
                 )
             } else {
                 sectionLoadingPlaceholder(shell: shell, section: .trades)
@@ -283,7 +249,8 @@ struct ProfileView: View {
                     imagePipeline: appEnvironment.data.imagePipeline,
                     engagementStore: appEnvironment.data.engagementStore,
                     vaultStore: appEnvironment.data.vaultStore,
-                    profilePin: profilePin
+                    profilePin: profilePin,
+                    profilePinnedItems: screen.pinnedContent
                 )
             } else {
                 sectionLoadingPlaceholder(shell: shell, section: .posts)
@@ -313,11 +280,13 @@ struct ProfileView: View {
                     imagePipeline: appEnvironment.data.imagePipeline,
                     engagementStore: appEnvironment.data.engagementStore,
                     vaultStore: appEnvironment.data.vaultStore,
-                    profilePin: profilePin
+                    profilePin: profilePin,
+                    profilePinnedItems: screen.pinnedContent
                 )
             } else {
                 sectionLoadingPlaceholder(shell: shell, section: .achievements)
             }
+        }
         }
     }
 

@@ -1130,7 +1130,7 @@ final class AddTradeViewModel {
         guard let viewerID else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
-        let path = "\(viewerID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+        let path = StorageOptimizedMedia.objectPath(prefix: viewerID.rawValue, fileExtension: "jpg")
         let reference = try await uploadService.upload(
             UploadRequest(
                 bucket: StorageBucket.screenshots.rawValue,

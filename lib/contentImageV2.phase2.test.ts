@@ -47,7 +47,7 @@ test("jpeg filename matches the jpeg MIME", () => {
   assert.equal(CONTENT_IMAGE_V2_PRESET, "contentV2")
 })
 
-test("ratios stay within 2560 and do not upscale a small image", () => {
+test("ratios stay within max edge and do not upscale a small image", () => {
   for (const aspect of ["square", "portrait", "landscape"] as const) {
     const large = planContentImageExport(4000, 3000, aspect, {
       zoom: 1,
@@ -55,7 +55,10 @@ test("ratios stay within 2560 and do not upscale a small image", () => {
     })
     assert.ok(large.output.width <= CONTENT_IMAGE_V2_MAX_EDGE)
     assert.ok(large.output.height <= CONTENT_IMAGE_V2_MAX_EDGE)
-    assert.equal(Math.max(large.output.width, large.output.height) <= 2560, true)
+    assert.equal(
+      Math.max(large.output.width, large.output.height) <= CONTENT_IMAGE_V2_MAX_EDGE,
+      true
+    )
 
     const small = planContentImageExport(640, 480, aspect, {
       zoom: 1,

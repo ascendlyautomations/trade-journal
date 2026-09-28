@@ -29,6 +29,7 @@ import StoryShareMessageCard from "@/app/components/messages/StoryShareMessageCa
 import { supabase } from "../../lib/supabaseClient"
 import { stableIdKey } from "@/lib/realtimeFilters"
 import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { optimizedStorageObjectPath } from "@/lib/storageOptimizedMedia"
 import { validateImageUpload } from "@/lib/uploadValidation"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
@@ -2735,9 +2736,16 @@ function CommunityContent() {
         title: "Uploading Room Avatar",
         execute: async (report) => {
           report({ percent: 10, stage: "Processing…" })
-          const uploadFile = file
+          let uploadFile: File
+          try {
+            uploadFile = await prepareImageForUpload("room", file)
+          } catch (error) {
+            throw new Error(
+              error instanceof Error ? error.message : "Couldn't prepare that image."
+            )
+          }
 
-          const filePath = `room-images/${Date.now()}-${uploadFile.name}`
+          const filePath = optimizedStorageObjectPath("room-images", "jpg")
           report({ percent: 18, stage: "Uploading…" })
           const mediaReport = createMonotonicReporter(report, { min: 18, max: 72 })
           const { error: upErr } = await uploadToSupabaseStorageWithProgress(
@@ -3283,7 +3291,7 @@ function CommunityContent() {
                 error instanceof Error ? error.message : "Couldn't prepare that image."
               )
             }
-            const filePath = `room-images/${Date.now()}-${uploadFile.name}`
+            const filePath = optimizedStorageObjectPath("room-images", "jpg")
 
             report({ percent: 18, stage: "Uploading…" })
             const mediaReport = createMonotonicReporter(report, {

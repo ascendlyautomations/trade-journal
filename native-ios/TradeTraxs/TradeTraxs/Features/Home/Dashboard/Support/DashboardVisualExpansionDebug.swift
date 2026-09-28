@@ -36,7 +36,6 @@ enum DashboardVisualExpansionDebug {
     }
 
     static func logSectionVisibility(summary: DashboardChartMetrics.Summary) {
-        let consistency = summary.dailyPerformance != nil || summary.streaks != nil
         let longShort = summary.longShortComparison.map {
             $0.long != nil || $0.short != nil
         } ?? false
@@ -47,7 +46,6 @@ enum DashboardVisualExpansionDebug {
         print(
             """
             [DashboardVisualExpansion][sections]
-            consistencyAndStreaks=\(consistency)
             sessionPnLBars=\(!summary.sessionPerformance.isEmpty)
             longShortComparison=\(longShort)
             symbolPerformance=\(symbols)

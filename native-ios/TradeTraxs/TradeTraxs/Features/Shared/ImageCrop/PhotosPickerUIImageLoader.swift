@@ -45,7 +45,7 @@ nonisolated enum ProfilePhotoDebugLog {
 
 /// Profile avatars — still images only (no Live Photo motion components in the picker).
 enum ProfilePhotoPickerFilter {
-    static let matching: PHPickerFilter = .any(of: [.images, .not(.livePhotos)])
+    static var matching: PHPickerFilter { MediaPickerPolicy.profilePhoto.matching }
 }
 
 /// PhotosPicker → UIImage for crop flows (HEIC/HEIF/JPEG/PNG, ImageIO fallback).

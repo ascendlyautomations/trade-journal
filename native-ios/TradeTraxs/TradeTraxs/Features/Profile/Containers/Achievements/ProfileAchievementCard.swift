@@ -9,12 +9,13 @@ struct ProfileAchievementCard: View {
     var isOwner: Bool = true
     var onReport: (() -> Void)? = nil
     var profilePin: ProfilePinCallbacks? = nil
+    var isProfilePinned: Bool = false
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
 
     private var isPinnedToProfile: Bool {
-        profilePin?.isPinned(.achievement, achievement.id.rawValue) ?? false
+        isProfilePinned || (profilePin?.isPinned(.achievement, achievement.id.rawValue) ?? false)
     }
 
     private var target: InteractionTarget { .achievement(achievement.id) }
@@ -34,11 +35,15 @@ struct ProfileAchievementCard: View {
                         if achievement.isFeatured {
                             ExperienceTag(title: "Featured", tone: .success)
                         }
-
-                        Text(achievement.title)
-                            .experienceStyle(.headline, color: colors.primaryText)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
+                        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+                            Text(achievement.title)
+                                .experienceStyle(.headline, color: colors.primaryText)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                            if isPinnedToProfile {
+                                ProfileContentPinIndicator()
+                            }
+                        }
 
                         if let description = achievement.description?
                             .trimmingCharacters(in: .whitespacesAndNewlines),

@@ -1274,12 +1274,12 @@ struct AddTradeNewClipComposerView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("addTrade.newClip.preview")
 
-                    PhotosPicker(selection: $videoItem, matching: .videos) {
+                    PhotosPicker(selection: $videoItem, matching: MediaPickerPolicy.videoOnly.matching) {
                         Label("Replace Video", systemImage: "arrow.triangle.2.circlepath")
                     }
                     Button("Remove Video", role: .destructive, action: onClear)
                 } else {
-                    PhotosPicker(selection: $videoItem, matching: .videos) {
+                    PhotosPicker(selection: $videoItem, matching: MediaPickerPolicy.videoOnly.matching) {
                         Label("Choose Video", systemImage: "photo.on.rectangle")
                     }
                     .accessibilityIdentifier("addTrade.newClip.choose")
@@ -1327,7 +1327,7 @@ private struct AddTradeScreenshotPicker: View {
     @Binding var photoItem: PhotosPickerItem?
 
     var body: some View {
-        PhotosPicker(selection: $photoItem, matching: .images) {
+        PhotosPicker(selection: $photoItem, matching: MediaPickerPolicy.imageOnly.matching) {
             ScreenshotPickerLabel(hasPreview: hasPreview)
         }
     }

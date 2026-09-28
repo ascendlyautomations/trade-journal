@@ -619,33 +619,164 @@ final class DashboardExperienceTests: XCTestCase {
             canAddTrades: true
         )
 
-        let propBalance = DashboardEquityHeroPresentation.propStartingBalance(forSelectedAccount: prop)
+        let propBalance = DashboardEquityHeroPresentation.accountStartingBalance(forSelectedAccount: prop)
         XCTAssertEqual(propBalance, 50_000)
+        XCTAssertTrue(DashboardEquityHeroPresentation.showsAccountValue(forSelectedAccount: prop))
         XCTAssertEqual(
-            DashboardEquityHeroPresentation.title(propStartingBalance: propBalance),
+            DashboardEquityHeroPresentation.title(showsAccountValue: true),
             "Account Value"
         )
         XCTAssertEqual(
-            DashboardEquityHeroPresentation.displayEquity(currentEquity: 2_435, propStartingBalance: propBalance),
+            DashboardEquityHeroPresentation.trackedAccountValue(
+                authoritativeBalance: nil,
+                lifetimeRealizedPnL: 2_435,
+                startingBalance: propBalance
+            ),
             52_435
         )
         let offset = DashboardEquityHeroPresentation.chartPoints(points, propStartingBalance: propBalance)
         XCTAssertEqual(offset.map(\.equity), [50_500, 50_800, 50_650])
         XCTAssertEqual(offset.map(\.index), points.map(\.index), "Shape preserved — indexes unchanged")
 
-        let liveBalance = DashboardEquityHeroPresentation.propStartingBalance(forSelectedAccount: live)
-        XCTAssertNil(liveBalance)
-        XCTAssertEqual(DashboardEquityHeroPresentation.title(propStartingBalance: liveBalance), "Equity")
+        let liveBalance = DashboardEquityHeroPresentation.accountStartingBalance(forSelectedAccount: live)
+        XCTAssertEqual(liveBalance, 25_000)
         XCTAssertEqual(
-            DashboardEquityHeroPresentation.displayEquity(currentEquity: 2_435, propStartingBalance: liveBalance),
-            2_435
+            DashboardEquityHeroPresentation.title(showsAccountValue: true),
+            "Account Value"
+        )
+        XCTAssertEqual(
+            DashboardEquityHeroPresentation.trackedAccountValue(
+                authoritativeBalance: nil,
+                lifetimeRealizedPnL: 1_250,
+                startingBalance: liveBalance
+            ),
+            26_250
         )
         XCTAssertEqual(
             DashboardEquityHeroPresentation.chartPoints(points, propStartingBalance: liveBalance).map(\.equity),
-            points.map(\.equity)
+            [25_500, 25_800, 25_650]
         )
 
-        XCTAssertNil(DashboardEquityHeroPresentation.propStartingBalance(forSelectedAccount: nil))
+        XCTAssertFalse(DashboardEquityHeroPresentation.showsAccountValue(forSelectedAccount: nil))
+        XCTAssertEqual(
+            DashboardEquityHeroPresentation.title(showsAccountValue: false),
+            "Equity"
+        )
+        XCTAssertEqual(
+            DashboardEquityHeroPresentation.headlineValue(
+                showsAccountValue: false,
+                timeframeCurrentEquity: 2_435,
+                authoritativeBalance: nil,
+                lifetimeRealizedPnL: 9_999,
+                startingBalance: nil
+            ),
+            2_435,
+            "All Accounts headline stays timeframe equity, not lifetime"
+        )
+    }
+
+    func testAccountValueWithdrawalSummaryUsesAuthoritativeRecords() {
+        let accountID = TradingAccountID("prop-funded")
+        let fundedProp = TradingAccount(
+            id: accountID,
+            ownerProfileID: ProfileID("dev.dashboard"),
+            name: "Funded 50K",
+            category: .propFirm,
+            mode: .funded,
+            size: Money(amount: 50_000),
+            isActive: true,
+            canAddTrades: true
+        )
+        let live = TradingAccount(
+            id: TradingAccountID("live-1"),
+            ownerProfileID: ProfileID("dev.dashboard"),
+            name: "Live",
+            category: .personal,
+            mode: .live,
+            size: Money(amount: 10_000),
+            isActive: true,
+            canAddTrades: true
+        )
+        let payoutDate = ISO8601DateFormatter().date(from: "2026-06-01T12:00:00Z")!
+        let cycles = [
+            AccountPayoutCycle(
+                id: "c1",
+                accountID: accountID,
+                startedAt: payoutDate,
+                endedAt: payoutDate,
+                cycleStartBalance: 52_000,
+                payoutAmount: 2_000,
+                note: nil,
+                balanceBeforePayout: 54_000,
+                balanceAfterPayout: 52_000,
+                drawdownBehavior: .resetToAccount,
+                drawdownFloorAfterPayout: 50_000,
+                cycleNumber: 1
+            ),
+            AccountPayoutCycle(
+                id: "c2",
+                accountID: accountID,
+                startedAt: payoutDate,
+                endedAt: payoutDate,
+                cycleStartBalance: 52_000,
+                payoutAmount: 1_000,
+                note: nil,
+                balanceBeforePayout: 53_000,
+                balanceAfterPayout: 52_000,
+                drawdownBehavior: .resetToAccount,
+                drawdownFloorAfterPayout: 50_000,
+                cycleNumber: 2
+            ),
+        ]
+        let propSummary = AccountTrackedBalanceSupport.withdrawalSummary(
+            account: fundedProp,
+            payoutCycles: cycles,
+            ledgerEntries: []
+        )
+        XCTAssertEqual(propSummary?.count, 2)
+        XCTAssertEqual(propSummary?.totalAmount, 3_000)
+        XCTAssertEqual(propSummary?.terminology, .payouts)
+        XCTAssertEqual(
+            propSummary?.compactLabel(formattedTotal: "$3,000"),
+            "2 Payouts • $3,000"
+        )
+
+        let ledger = [
+            AccountPayoutEntry(
+                id: AccountPayoutEntryID("e1"),
+                accountID: live.id,
+                amount: Money(amount: 750),
+                payoutDate: payoutDate,
+                note: nil
+            ),
+            AccountPayoutEntry(
+                id: AccountPayoutEntryID("e2"),
+                accountID: live.id,
+                amount: Money(amount: 1_250),
+                payoutDate: payoutDate,
+                note: nil
+            ),
+        ]
+        let liveSummary = AccountTrackedBalanceSupport.withdrawalSummary(
+            account: live,
+            payoutCycles: [],
+            ledgerEntries: ledger
+        )
+        XCTAssertEqual(liveSummary?.count, 2)
+        XCTAssertEqual(liveSummary?.totalAmount, 2_000)
+        XCTAssertEqual(liveSummary?.terminology, .withdrawals)
+        XCTAssertEqual(
+            liveSummary?.compactLabel(formattedTotal: "$2,000"),
+            "2 Withdrawals • $2,000"
+        )
+
+        XCTAssertNil(
+            AccountTrackedBalanceSupport.withdrawalSummary(
+                account: live,
+                payoutCycles: [],
+                ledgerEntries: []
+            )
+        )
     }
 
     func testViewModelLoadsFixturesAndFiltersLocally() async {
@@ -1038,7 +1169,11 @@ private struct DashboardStubAchievementRepository: AchievementRepository {
         CursorPage(items: [], nextCursor: nil)
     }
 
-    func save(_ achievement: Achievement) async throws -> Achievement { achievement }
+    func save(_ achievement: Achievement, metadata: JSONValue?) async throws -> Achievement { achievement }
+
+    func withdrawalAchievementLinks(for profileID: ProfileID) async throws -> [WithdrawalAchievementLinkRow] {
+        []
+    }
 }
 
 private final class DashboardCountingHomeRepository: HomeRepository, @unchecked Sendable {
@@ -1126,5 +1261,9 @@ private final class DashboardCountingAchievementRepository: AchievementRepositor
         )
     }
 
-    func save(_ achievement: Achievement) async throws -> Achievement { achievement }
+    func save(_ achievement: Achievement, metadata: JSONValue?) async throws -> Achievement { achievement }
+
+    func withdrawalAchievementLinks(for profileID: ProfileID) async throws -> [WithdrawalAchievementLinkRow] {
+        []
+    }
 }

@@ -11,7 +11,7 @@ enum ProfileAvatarUpload {
         supabaseURL: URL?
     ) async throws -> String {
         let payload = try jpegUploadPayload(from: jpegData)
-        let path = "\(profileID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+        let path = StorageOptimizedMedia.objectPath(prefix: profileID.rawValue, fileExtension: "jpg")
         let reference = try await uploadService.upload(
             UploadRequest(
                 bucket: StorageBucket.avatars.rawValue,
@@ -38,7 +38,7 @@ enum ProfileAvatarUpload {
             return data
         }
         guard let image = UIImage(data: data),
-              let jpeg = MediaImagePreparation.jpegData(from: image, maxDimension: 1200, quality: 0.92)
+              let jpeg = MediaImagePreparation.avatarJPEGData(from: image)
         else {
             struct InvalidAvatarPayload: Error {}
             throw InvalidAvatarPayload()

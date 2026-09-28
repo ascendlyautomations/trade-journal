@@ -64,10 +64,13 @@ nonisolated enum TradeRoomJoinPolicy: String, Codable, Sendable, Hashable {
 nonisolated struct TradeRoomDraftChannel: Hashable, Identifiable, Sendable, Codable {
     var id: UUID
     var name: String
+    /// Per sub-room post permission — `room_sections.allow_members_chat`.
+    var allowMembersChat: Bool
 
-    init(id: UUID = UUID(), name: String) {
+    init(id: UUID = UUID(), name: String, allowMembersChat: Bool = true) {
         self.id = id
         self.name = name
+        self.allowMembersChat = allowMembersChat
     }
 }
 
@@ -235,7 +238,13 @@ nonisolated struct TradeRoomConfiguration: Hashable, Sendable {
         membersCanShareMedia = room.membersCanShareMedia
         self.channels = channels
             .sorted { $0.position < $1.position }
-            .map { TradeRoomDraftChannel(id: UUID(uuidString: $0.id.rawValue) ?? UUID(), name: $0.name) }
+            .map {
+                TradeRoomDraftChannel(
+                    id: UUID(uuidString: $0.id.rawValue) ?? UUID(),
+                    name: $0.name,
+                    allowMembersChat: $0.allowMembersChat
+                )
+            }
         if self.channels.isEmpty {
             self.channels = [TradeRoomDraftChannel(name: "General")]
         }
@@ -273,5 +282,6 @@ nonisolated struct TradeRoomConfiguration: Hashable, Sendable {
             || membersCanShareTrades == false
             || membersCanShareMedia == false
             || channels != [TradeRoomDraftChannel(name: "General")]
+            || channels.contains { !$0.allowMembersChat }
     }
 }

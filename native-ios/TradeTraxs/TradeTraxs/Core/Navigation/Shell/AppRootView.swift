@@ -391,7 +391,18 @@ struct AppRootView: View {
     private var fullScreenBinding: Binding<FullScreenDestination?> {
         Binding(
             get: { navigation.store.presentedFullScreen },
-            set: { navigation.store.presentedFullScreen = $0 }
+            set: { newValue in
+                if newValue == nil,
+                   navigation.store.presentedFullScreen == .importCSV,
+                   CSVImportPresentationGuard.isActive
+                {
+                    #if DEBUG
+                    print("[CSV_IMPORT] blockedIncidentalFullScreenDismiss")
+                    #endif
+                    return
+                }
+                navigation.store.presentedFullScreen = newValue
+            }
         )
     }
 
@@ -611,8 +622,12 @@ struct AppRootView: View {
             navigation.coordinator.selectTab(.feed)
             navigation.coordinator.popToRoot(.feed)
         case .profile:
-            navigation.coordinator.selectTab(.profile)
-            navigation.coordinator.popToRoot(.profile)
+            if navigation.store.selectedTab != .profile {
+                navigation.coordinator.selectTab(.profile)
+            }
+            if !navigation.store.paths.profile.isEmpty {
+                navigation.coordinator.popToRoot(.profile)
+            }
         case .settings:
             navigation.coordinator.selectTab(.profile)
             if navigation.store.paths.profile != [.settings(.home)] {

@@ -57,6 +57,12 @@ struct TradeImportPreviewContent: View {
                             accounts: eligibleAccounts,
                             profileID: ownerProfileID
                         )
+                        #if DEBUG
+                        print(
+                            "[CSV_IMPORT] previewAccountPickerShown accounts=\(eligibleAccounts.count) " +
+                                "selected=\(selectedAccountID?.rawValue ?? "nil") canImport=\(canImport)"
+                        )
+                        #endif
                     }
                 }
                 Button("Manage Accounts", action: onManageAccounts)
@@ -125,6 +131,9 @@ struct TradeImportPreviewContent: View {
                 isLoading: isImporting,
                 accessibilityIdentifier: "\(config.accessibilityPrefix).confirm"
             ) {
+                #if DEBUG
+                print("[CSV_IMPORT] confirmButtonTapped importable=\(importableTrades.count)")
+                #endif
                 onImport()
             }
             .padding(ExperienceSpacing.md)

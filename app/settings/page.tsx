@@ -457,24 +457,6 @@ export default function SettingsPage() {
     return sessionData.session?.access_token ?? null
   }
 
-  async function uploadAvatar(): Promise<string | null> {
-    if (!avatarFile || !user) return null
-
-    const uploadFile = avatarFile
-    const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
-
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(fileName, uploadFile, { upsert: true })
-
-    if (uploadError) {
-      console.error("Avatar upload:", uploadError.message)
-      return null
-    }
-
-    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/avatars/${fileName}`
-  }
-
   async function saveProfileTab() {
     if (isDemoModeActive()) {
       requestDemoSignup("save")

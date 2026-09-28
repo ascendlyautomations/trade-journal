@@ -310,10 +310,9 @@ final class RoomMembersViewModel {
         guard generation == loadGeneration else { return }
         guard let management = rooms as? any RoomManagementRepository else { return }
 
-        let isOwner = viewerID == room.ownerProfileID
-        let ensureStatus = await tagStore.ensureDefaultTagsIfOwner(
+        let ensureStatus = await tagStore.ensureDefaultTagsIfCanManage(
             roomID: roomID,
-            isOwner: isOwner,
+            canManage: canManageRoom,
             repository: management
         )
         RoomMembersLoadProbe.ensureDefaults(status: ensureStatus)

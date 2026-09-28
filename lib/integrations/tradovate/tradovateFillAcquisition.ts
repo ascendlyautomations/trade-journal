@@ -26,6 +26,8 @@ import {
   mergeTradovateOrderAccountMap,
   missingOrderIdsForTradovateFills,
 } from "./tradovateOrderAccountMap.ts"
+import { logTradovateAcquisitionTrace } from "./tradovateAcquisitionTrace.ts"
+import type { TradovateApiEnvironment } from "./tradovateOAuthEnv.ts"
 import { logTradovateSync } from "./tradovateSyncLogger.ts"
 import {
   dedupeTradovateFillsById,
@@ -71,6 +73,7 @@ export async function acquireTradovateFillsForAccount(
     trigger: string
     ledgerSnapshot?: TradovateLedgerAcquisitionSnapshot
     incrementalWatermark?: string | null
+    apiEnvironment: TradovateApiEnvironment
   }
 ): Promise<TradovateFillAcquisitionResult> {
   const ledgerSnapshot = params.ledgerSnapshot ?? {
@@ -343,6 +346,27 @@ export async function acquireTradovateFillsForAccount(
   ) {
     acquisitionErrors.push("fill_ldeps:all_batches_failed_with_orders_present")
   }
+
+  await logTradovateAcquisitionTrace({
+    supabase,
+    mappingId: params.mappingId,
+    connectionId: params.connectionId,
+    userId: params.userId,
+    externalAccountId: params.targetAccountId,
+    apiEnvironment: params.apiEnvironment,
+    ordersFromDeps,
+    orderIdsFromDeps,
+    fillsFromLdeps,
+    fillsFromList,
+    ordersFromList,
+    fillsFromItemsRepair,
+    orderAccountById,
+    mergedAccountFills: accountFills,
+    acquisitionErrors,
+    orderDepsFailed,
+    fillListFailed,
+    fillLdepsBatchErrors,
+  })
 
   return {
     accountFills,

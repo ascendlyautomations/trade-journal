@@ -6,6 +6,8 @@ nonisolated struct GettingStartedSignals: Sendable, Equatable {
     var hasSeenGettingStartedIntro: Bool
     var hasSeenOnboardingCompletePopup: Bool
     var tradeCount: Int
+    /// Authoritative social post (`profile_posts`) — not trades, reels, or feed trade rows.
+    var hasCreatedProfilePost: Bool
     var profilePostCount: Int
     var followCount: Int
     var hasEverJoinedOtherRoom: Bool
@@ -18,6 +20,7 @@ nonisolated struct GettingStartedSignals: Sendable, Equatable {
         hasSeenGettingStartedIntro: false,
         hasSeenOnboardingCompletePopup: false,
         tradeCount: 0,
+        hasCreatedProfilePost: false,
         profilePostCount: 0,
         followCount: 0,
         hasEverJoinedOtherRoom: false,
@@ -78,6 +81,7 @@ nonisolated struct GettingStartedSignalsWire: Codable, Sendable {
     var has_seen_onboarding_complete_popup: Bool?
     var trade_count: Int?
     var profile_post_count: Int?
+    var has_created_profile_post: Bool?
     var follow_count: Int?
     var has_ever_joined_other_room: Bool?
     var has_public_trade: Bool?
@@ -97,6 +101,7 @@ nonisolated enum GettingStartedSignalsDecoder {
             hasSeenGettingStartedIntro: wire.has_seen_getting_started_intro == true,
             hasSeenOnboardingCompletePopup: wire.has_seen_onboarding_complete_popup == true,
             tradeCount: max(0, wire.trade_count ?? 0),
+            hasCreatedProfilePost: Self.hasCreatedProfilePost(from: wire),
             profilePostCount: max(0, wire.profile_post_count ?? 0),
             followCount: max(0, wire.follow_count ?? 0),
             hasEverJoinedOtherRoom: wire.has_ever_joined_other_room == true,
@@ -104,5 +109,10 @@ nonisolated enum GettingStartedSignalsDecoder {
             hasCompletedDailyCheckIn: wire.has_completed_daily_check_in == true,
             firstPrivateTradeID: wire.first_private_trade_id.flatMap { TradeID($0) }
         )
+    }
+
+    private static func hasCreatedProfilePost(from wire: GettingStartedSignalsWire) -> Bool {
+        if wire.has_created_profile_post == true { return true }
+        return (wire.profile_post_count ?? 0) > 0
     }
 }

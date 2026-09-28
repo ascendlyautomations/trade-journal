@@ -1,5 +1,29 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+/** Must match `broker_integration_account_sync_status_check` (see migrations). */
+export const BROKER_ACCOUNT_SYNC_STATUSES = [
+  "never",
+  "syncing",
+  "success",
+  "partial",
+  "error",
+  "reconnect_required",
+] as const
+
+export type BrokerAccountSyncStatus = (typeof BROKER_ACCOUNT_SYNC_STATUSES)[number]
+
+const BROKER_ACCOUNT_SYNC_STATUS_SET = new Set<string>(BROKER_ACCOUNT_SYNC_STATUSES)
+
+export function normalizeBrokerAccountSyncStatus(
+  status: string
+): BrokerAccountSyncStatus {
+  const trimmed = status.trim()
+  if (BROKER_ACCOUNT_SYNC_STATUS_SET.has(trimmed)) {
+    return trimmed as BrokerAccountSyncStatus
+  }
+  return "error"
+}
+
 export type BrokerAccountSyncView = {
   lastSyncAttemptAt: string | null
   lastSyncSuccessAt: string | null
@@ -111,18 +135,42 @@ export async function releaseBrokerSyncLock(
   }
 ): Promise<void> {
   const nowIso = new Date().toISOString()
+  const lastSyncStatus = normalizeBrokerAccountSyncStatus(patch.lastSyncStatus)
+  const payload = {
+    last_sync_status: lastSyncStatus,
+    last_sync_success_at: patch.lastSyncSuccessAt ?? undefined,
+    last_sync_error_code: patch.lastSyncErrorCode ?? null,
+    last_sync_error_message: patch.lastSyncErrorMessage ?? null,
+    max_external_fill_id:
+      patch.maxExternalFillId != null ? String(patch.maxExternalFillId) : undefined,
+    provider_sync_state: patch.providerSyncState ?? undefined,
+    max_executed_at: patch.maxExecutedAt ?? undefined,
+    last_auto_sync_at: patch.lastAutoSyncAt ?? undefined,
+    sync_lock_until: null,
+    pending_sync_after_current: false,
+    updated_at: nowIso,
+  }
+
+  const { error } = await supabase
+    .from("broker_integration_account_sync")
+    .update(payload)
+    .eq("broker_integration_account_id", mappingId)
+
+  if (!error) return
+
+  console.error(
+    "[broker_sync] releaseBrokerSyncLock failed",
+    mappingId,
+    error.code,
+    error.message
+  )
+
   await supabase
     .from("broker_integration_account_sync")
     .update({
-      last_sync_status: patch.lastSyncStatus,
-      last_sync_success_at: patch.lastSyncSuccessAt ?? undefined,
-      last_sync_error_code: patch.lastSyncErrorCode ?? null,
-      last_sync_error_message: patch.lastSyncErrorMessage ?? null,
-      max_external_fill_id:
-        patch.maxExternalFillId != null ? String(patch.maxExternalFillId) : undefined,
-      provider_sync_state: patch.providerSyncState ?? undefined,
-      max_executed_at: patch.maxExecutedAt ?? undefined,
-      last_auto_sync_at: patch.lastAutoSyncAt ?? undefined,
+      last_sync_status: "error",
+      last_sync_error_code: "sync_state_persist_failed",
+      last_sync_error_message: error.message.slice(0, 500),
       sync_lock_until: null,
       pending_sync_after_current: false,
       updated_at: nowIso,

@@ -15,6 +15,7 @@ struct ProfileHeaderView: View {
                 loadedHeader(profile)
             } else if store.showsHeaderLoadingPresentation {
                 ProfileHeaderSkeleton()
+                    .contextualTourTarget(.profileIdentity)
             } else {
                 errorState
             }
@@ -57,10 +58,7 @@ struct ProfileHeaderView: View {
         let stats = store.stats
 
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            identityBlock(profile, stats: stats)
-                .contextualTourTarget(.profileIdentity)
-
-            ProfileStatisticsRow(metrics: ProfileDisplay.headerMetrics(from: stats))
+            profileIdentityAndStats(profile, stats: stats)
 
             if let bio = profile.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty {
                 Text(bio)
@@ -104,6 +102,16 @@ struct ProfileHeaderView: View {
                 ShareSheet(items: [viewModel.shareText])
             }
         }
+    }
+
+    /// Identity block + header statistics — single App Walkthrough spotlight.
+    @ViewBuilder
+    private func profileIdentityAndStats(_ profile: Profile, stats: ProfileStats?) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            identityBlock(profile, stats: stats)
+            ProfileStatisticsRow(metrics: ProfileDisplay.headerMetrics(from: stats))
+        }
+        .contextualTourTarget(.profileIdentity)
     }
 
     /// Avatar + name / username / metadata / followers as one identity block.

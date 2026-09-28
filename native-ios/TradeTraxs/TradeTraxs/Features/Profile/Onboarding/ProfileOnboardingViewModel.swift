@@ -94,11 +94,7 @@ final class ProfileOnboardingViewModel {
             return
         }
         avatarPreview = image
-        pendingAvatarData = MediaImagePreparation.jpegData(
-            from: image,
-            maxDimension: 1200,
-            quality: 0.92
-        )
+        pendingAvatarData = MediaImagePreparation.avatarJPEGData(from: image)
         if pendingAvatarData == nil {
             avatarUploadError = "Couldn't prepare that photo. Try a different image."
             avatarPreview = nil

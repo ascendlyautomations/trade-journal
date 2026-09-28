@@ -179,7 +179,7 @@ struct CreateReelView: View {
                 .padding(.vertical, ExperienceSpacing.sm)
             } else {
                 HStack(spacing: ExperienceSpacing.sm) {
-                    PhotosPicker(selection: $videoItem, matching: .videos) {
+                    PhotosPicker(selection: $videoItem, matching: MediaPickerPolicy.videoOnly.matching) {
                         CreateComposerAttachmentAction(
                             systemImage: "video",
                             title: "Choose Video"
@@ -239,7 +239,7 @@ struct CreateReelView: View {
                 }
 
                 HStack(spacing: ExperienceSpacing.md) {
-                    PhotosPicker(selection: $videoItem, matching: .videos) {
+                    PhotosPicker(selection: $videoItem, matching: MediaPickerPolicy.videoOnly.matching) {
                         Text("Change")
                             .font(ExperienceTypography.subheadline.weight(.semibold))
                             .foregroundStyle(colors.accent)

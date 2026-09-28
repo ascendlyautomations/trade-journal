@@ -74,6 +74,42 @@ extension Profile {
         merged.isCreator = incoming.isCreator || merged.isCreator
         return merged
     }
+
+    /// Applies a server-confirmed owner Settings mutation over a possibly stale network read.
+    nonisolated func applyingConfirmedOwnerSettings(_ confirmed: Profile) -> Profile {
+        guard id == confirmed.id else { return self }
+        var merged = self
+        merged.username = confirmed.username
+        merged.displayName = confirmed.displayName
+        merged.bio = confirmed.bio
+        merged.traderType = confirmed.traderType
+        merged.tradingStyle = confirmed.tradingStyle
+        merged.primaryMarket = confirmed.primaryMarket
+        merged.startedTradingAt = confirmed.startedTradingAt
+        merged.isPrivate = confirmed.isPrivate
+        merged.usernameChangeCount = confirmed.usernameChangeCount
+        if let avatar = confirmed.avatar {
+            merged.avatar = avatar
+        }
+        return merged
+    }
+}
+
+enum OwnerProfileMutationEquivalence {
+    nonisolated static func ownerSettingsMatch(_ lhs: Profile, _ rhs: Profile) -> Bool {
+        guard lhs.id == rhs.id else { return false }
+        let lhsAvatar = lhs.avatar?.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rhsAvatar = rhs.avatar?.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        return lhs.username == rhs.username
+            && lhs.displayName == rhs.displayName
+            && lhs.bio == rhs.bio
+            && lhs.tradingStyle == rhs.tradingStyle
+            && lhs.primaryMarket == rhs.primaryMarket
+            && lhs.traderType == rhs.traderType
+            && lhs.isPrivate == rhs.isPrivate
+            && lhs.usernameChangeCount == rhs.usernameChangeCount
+            && lhsAvatar == rhsAvatar
+    }
 }
 
 nonisolated struct Creator: Hashable, Codable, Sendable, Identifiable {

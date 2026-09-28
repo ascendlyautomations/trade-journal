@@ -178,7 +178,7 @@ struct ProfileOnboardingView: View {
                         : "Change photo"
                     PhotosPicker(
                         selection: $photoItem,
-                        matching: ProfilePhotoPickerFilter.matching,
+                        matching: MediaPickerPolicy.profilePhoto.matching,
                         preferredItemEncoding: .compatible
                     ) {
                         Text(avatarButtonTitle)

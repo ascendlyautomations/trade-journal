@@ -45,6 +45,7 @@ final class InboxMarkReadCoordinator {
     }
 
     func prepareOpenRoom(_ roomID: RoomID) {
+        guard MessagesInboxStore.shared.rooms.contains(where: { $0.id == roomID }) else { return }
         let previousUnread = MessagesInboxStore.shared.roomUnread[roomID] ?? 0
         MessagesInboxStore.shared.markRoomRead(roomID: roomID)
         Task { await confirmRoomRead(roomID, previousUnread: previousUnread) }

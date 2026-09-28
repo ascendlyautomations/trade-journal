@@ -399,10 +399,14 @@ private struct CreateStubAchievementRepository: AchievementRepository {
         CursorPage(items: [], nextCursor: nil)
     }
     func achievement(id: AchievementID) async throws -> Achievement { throw AppError.unknown(message: "stub") }
-    func save(_ achievement: Achievement) async throws -> Achievement {
+    func save(_ achievement: Achievement, metadata: JSONValue?) async throws -> Achievement {
         var copy = achievement
         copy.id = AchievementID("saved-ach")
         return copy
+    }
+
+    func withdrawalAchievementLinks(for profileID: ProfileID) async throws -> [WithdrawalAchievementLinkRow] {
+        []
     }
 }
 

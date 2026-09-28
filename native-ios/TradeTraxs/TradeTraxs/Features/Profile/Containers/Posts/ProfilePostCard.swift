@@ -11,9 +11,10 @@ struct ProfilePostCard: View {
     var isOwner: Bool = true
     var onReport: (() -> Void)? = nil
     var profilePin: ProfilePinCallbacks? = nil
+    var isProfilePinned: Bool = false
 
     private var isPinnedToProfile: Bool {
-        profilePin?.isPinned(.profilePost, post.id.rawValue) ?? false
+        isProfilePinned || (profilePin?.isPinned(.profilePost, post.id.rawValue) ?? false)
     }
 
     private var target: InteractionTarget { .profilePost(post.id) }
@@ -43,7 +44,7 @@ struct ProfilePostCard: View {
                             PostCardTextPreview(
                                 text: caption,
                                 maxHeight: nil,
-                                isPinned: post.isPinned,
+                                showsProfilePin: isPinnedToProfile,
                                 dateText: TradeDisplay.dateText(post.createdAt)
                             )
                         }
@@ -51,7 +52,7 @@ struct ProfilePostCard: View {
                         PostCardTextPreview(
                             text: caption,
                             maxHeight: nil,
-                            isPinned: post.isPinned,
+                            showsProfilePin: isPinnedToProfile,
                             dateText: TradeDisplay.dateText(post.createdAt)
                         )
                     }
@@ -109,7 +110,7 @@ struct ProfilePostCard: View {
 
     private var accessibilityLabel: String {
         var parts = [caption, TradeDisplay.dateText(post.createdAt)]
-        if post.isPinned { parts.insert("Pinned", at: 0) }
+        if isPinnedToProfile { parts.insert("Pinned to profile", at: 0) }
         return parts.joined(separator: ", ")
     }
 }
@@ -120,7 +121,7 @@ struct ProfilePostCard: View {
 private struct PostCardTextPreview: View {
     let text: String
     let maxHeight: CGFloat?
-    let isPinned: Bool
+    let showsProfilePin: Bool
     let dateText: String
 
     @Environment(\.themeColors) private var colors
@@ -137,12 +138,7 @@ private struct PostCardTextPreview: View {
     private var mediaLessPreview: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             previewHeader
-
-            Text(text)
-                .experienceStyle(.body, color: colors.primaryText)
-                .multilineTextAlignment(.leading)
-                .lineLimit(4)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            captionWithOptionalPin(lineLimit: 4)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
@@ -150,12 +146,7 @@ private struct PostCardTextPreview: View {
     private func thumbnailAlignedPreview(maxHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             previewHeader
-
-            Text(text)
-                .experienceStyle(.body, color: colors.primaryText)
-                .multilineTextAlignment(.leading)
-                .lineLimit(isTruncated ? 3 : nil)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            captionWithOptionalPin(lineLimit: isTruncated ? 3 : nil)
 
             if isTruncated {
                 Text("See more...")
@@ -175,29 +166,45 @@ private struct PostCardTextPreview: View {
 
     private var previewHeader: some View {
         HStack(spacing: ExperienceSpacing.xs) {
-            if isPinned {
-                ExperienceTag(title: "Pinned", tone: .info)
-            }
             Text(dateText)
                 .experienceStyle(.caption, color: colors.secondaryText)
             Spacer(minLength: 0)
         }
     }
 
+    @ViewBuilder
+    private func captionWithOptionalPin(lineLimit: Int?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+            Text(text)
+                .experienceStyle(.body, color: colors.primaryText)
+                .multilineTextAlignment(.leading)
+                .lineLimit(lineLimit)
+            if showsProfilePin {
+                ProfileContentPinIndicator()
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     /// Invisible full-height probe at the same width as the visible text column.
     private var measurementProbe: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             HStack(spacing: ExperienceSpacing.xs) {
-                if isPinned {
-                    ExperienceTag(title: "Pinned", tone: .info)
-                }
                 Text(dateText)
                     .experienceStyle(.caption, color: .clear)
                 Spacer(minLength: 0)
             }
-            Text(text)
-                .experienceStyle(.body, color: .clear)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+                Text(text)
+                    .experienceStyle(.body, color: .clear)
+                    .fixedSize(horizontal: false, vertical: true)
+                if showsProfilePin {
+                    Text("📌")
+                        .font(.system(size: 13))
+                        .hidden()
+                }
+            }
         }
         .hidden()
         .background(

@@ -24,6 +24,7 @@ final class RecordPayoutFlowViewModel {
     private(set) var setupContext: PropFirmPayoutSetupContext?
     private(set) var lastRecordedAmount: Decimal?
     private(set) var lastRecordedDate: Date = .now
+    private(set) var lastRecordedCycleID: String?
 
     var payoutAmountDigits = ""
     var balanceAfterDigits = ""
@@ -153,6 +154,7 @@ final class RecordPayoutFlowViewModel {
             let result = try await trades.recordAccountPayout(accountID: accountID, input: input)
             lastRecordedAmount = payoutAmount
             lastRecordedDate = payoutDate
+            lastRecordedCycleID = result.cycleID
             if let profileID = await session.currentUserID.map({ ProfileID($0.rawValue) }) {
                 let completedCycle = AccountPayoutCycle(
                     id: result.cycleID,
@@ -194,15 +196,21 @@ final class RecordPayoutFlowViewModel {
         }
     }
 
-    func openShareAchievementFlow(onDismissSheet: () -> Void) {
+    func openShareAchievementFlow(
+        onDismissSheet: () -> Void,
+        onWithdrawalFlowComplete: (() -> Void)? = nil
+    ) {
         guard let context = setupContext, let amount = lastRecordedAmount else { return }
+        let link = lastRecordedCycleID.map { WithdrawalAchievementLinkage.Source.payoutCycle($0) }
         let prefill = PropFirmPayoutCycleSupport.milestoneAchievementPrefill(
             account: context.account,
             payoutAmount: amount,
-            payoutDate: lastRecordedDate
+            payoutDate: lastRecordedDate,
+            withdrawalLink: link
         )
         CreateAchievementPrefillStore.shared.stage(prefill)
         onDismissSheet()
+        onWithdrawalFlowComplete?()
         navigationCoordinator.openComposeAchievement()
     }
 

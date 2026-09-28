@@ -21,6 +21,8 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case reports
     /// Owner withdrawal history (live ledger + prop cycles).
     case payouts
+    /// Single withdrawal / payout history row (`PayoutHistoryItem.id`).
+    case withdrawalDetail(String)
     /// Single report detail (generated or notification deep-link).
     case report(ReportID)
     /// Owner-only psychology analytics detail.

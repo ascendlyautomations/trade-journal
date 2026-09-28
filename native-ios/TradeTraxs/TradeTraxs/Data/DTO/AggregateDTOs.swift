@@ -420,6 +420,10 @@ nonisolated enum ProfileDTO {
         var username_change_count: Int
     }
 
+    struct ProfileIdRow: Decodable, Sendable {
+        var id: String?
+    }
+
     struct UsernameAvailabilityParams: Encodable, Sendable {
         var check_username: String
     }

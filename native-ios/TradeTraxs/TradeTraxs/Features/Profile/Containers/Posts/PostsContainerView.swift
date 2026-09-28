@@ -6,6 +6,7 @@ struct PostsContainerView: View {
     @Bindable var engagementStore: EngagementStore
     @Bindable var vaultStore: VaultStore
     var profilePin: ProfilePinCallbacks? = nil
+    var profilePinnedItems: [ProfilePinnedItem] = []
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
@@ -20,7 +21,7 @@ struct PostsContainerView: View {
             onRetry: { Task { await viewModel.refresh() } }
         ) {
             LazyVStack(spacing: ExperienceSpacing.sm) {
-                ForEach(viewModel.items) { post in
+                ForEach(displayItems) { post in
                     ProfilePostCard(
                         post: post,
                         imagePipeline: imagePipeline,
@@ -29,7 +30,8 @@ struct PostsContainerView: View {
                         onOpen: { viewModel.openPost(post) },
                         isOwner: viewModel.isOwner,
                         onReport: reportAction(for: post),
-                        profilePin: profilePin
+                        profilePin: profilePin,
+                        isProfilePinned: isProfilePinned(post)
                     )
                     .transition(
                         reduceMotion
@@ -43,15 +45,30 @@ struct PostsContainerView: View {
             }
             .animation(
                 ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                value: viewModel.items.map(\.id)
+                value: displayItems.map(\.id)
             )
-            .onChange(of: viewModel.items.map(\.id)) { _, ids in
+            .onChange(of: displayItems.map(\.id)) { _, ids in
                 viewModel.prefetchEngagement(for: ids)
             }
             .onAppear {
-                viewModel.prefetchEngagement(for: viewModel.items.map(\.id))
+                viewModel.prefetchEngagement(for: displayItems.map(\.id))
             }
             .accessibilityIdentifier("profile.posts.list")
+        }
+    }
+
+    private var displayItems: [Post] {
+        ProfilePinnedOrdering.displayItems(
+            viewModel.items,
+            profilePins: profilePinnedItems,
+            contentType: .profilePost,
+            contentID: { $0.id.rawValue }
+        )
+    }
+
+    private func isProfilePinned(_ post: Post) -> Bool {
+        profilePinnedItems.contains {
+            $0.contentType == .profilePost && $0.contentID == post.id.rawValue
         }
     }
 

@@ -90,18 +90,75 @@ nonisolated enum PropFirmPayoutCycleSupport {
     static func milestoneAchievementPrefill(
         account: TradingAccount,
         payoutAmount: Decimal,
-        payoutDate: Date
+        payoutDate: Date,
+        note: String? = nil,
+        withdrawalLink: WithdrawalAchievementLinkage.Source? = nil
     ) -> CreateAchievementPrefill {
         let firm = TradingAccountDisplay.propFirmName(for: account) ?? account.name
         let title = firm.isEmpty ? "\(account.name) Payout" : "\(firm) Payout"
         return CreateAchievementPrefill(
             kind: .propFirmPayout,
             titleText: title,
+            descriptionText: trimmedAchievementNote(note),
             payoutAmountText: NSDecimalNumber(decimal: payoutAmount).stringValue,
             achievedAt: payoutDate,
             selectedAccountID: account.id,
             isPublic: true,
-            lockKind: true
+            lockKind: true,
+            withdrawalLink: withdrawalLink
         )
+    }
+
+    /// Manual ledger withdrawal (`account_payout_entries`) — social achievement only; ledger row already saved.
+    static func liveWithdrawalAchievementPrefill(
+        account: TradingAccount,
+        draft: AccountPayoutEntryDraft,
+        withdrawalLink: WithdrawalAchievementLinkage.Source? = nil
+    ) -> CreateAchievementPrefill {
+        let title = TradingAccountDisplay.title(for: account, audience: .owner)
+        return CreateAchievementPrefill(
+            kind: .liveTradingPayout,
+            titleText: title.isEmpty ? "Live Withdrawal" : "\(title) Withdrawal",
+            descriptionText: trimmedAchievementNote(draft.note),
+            payoutAmountText: draft.amountDigits.trimmingCharacters(in: .whitespacesAndNewlines),
+            achievedAt: draft.payoutDate,
+            selectedAccountID: account.id,
+            isPublic: true,
+            lockKind: true,
+            withdrawalLink: withdrawalLink
+        )
+    }
+
+    /// Prefill for Dashboard withdrawal detail or post-record prompts (read-only history → social post).
+    static func achievementPrefill(
+        for item: PayoutHistoryItem,
+        account: TradingAccount
+    ) -> CreateAchievementPrefill? {
+        guard let link = WithdrawalAchievementLinkage.source(for: item) else { return nil }
+        if PayoutHistorySupport.isPropPayout(item, account: account) {
+            return milestoneAchievementPrefill(
+                account: account,
+                payoutAmount: item.amount,
+                payoutDate: item.date,
+                note: item.note,
+                withdrawalLink: link
+            )
+        }
+        let title = TradingAccountDisplay.title(for: account, audience: .owner)
+        return CreateAchievementPrefill(
+            kind: .liveTradingPayout,
+            titleText: title.isEmpty ? "Live Withdrawal" : "\(title) Withdrawal",
+            descriptionText: trimmedAchievementNote(item.note),
+            payoutAmountText: NSDecimalNumber(decimal: item.amount).stringValue,
+            achievedAt: item.date,
+            selectedAccountID: account.id,
+            isPublic: true,
+            lockKind: true,
+            withdrawalLink: link
+        )
+    }
+
+    private static func trimmedAchievementNote(_ raw: String?) -> String {
+        raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 }

@@ -710,6 +710,9 @@ final class BrokerIntegrationsViewModel {
         if response.summary.ok {
             importReconnectPrompt = nil
             importRetryPrompt = nil
+            let partialSync =
+                response.summary.status == "partial"
+                || response.summary.errorCode == "import_partial"
             if let userID = await session.currentUserID {
                 let owner = ProfileID(userID.rawValue)
                 let reconciliation = await BrokerImportReconciliation.apply(
@@ -720,19 +723,22 @@ final class BrokerIntegrationsViewModel {
                 )
                 let count = reconciliation.authoritativeNewImportCount
                 noteBrokerIntegrationChanged()
-                presentMessage(BrokerIntegrationDisplay.importResultMessage(newTradeCount: count), error: false)
+                let resultMessage = partialSync
+                    ? BrokerSyncPresentation.partialImportMessage()
+                    : BrokerIntegrationDisplay.importResultMessage(newTradeCount: count)
+                presentMessage(resultMessage, error: partialSync)
                 if !reconciliation.newTradeIDs.isEmpty {
                     pendingReviewTradeIDs = reconciliation.newTradeIDs
                     showsReviewImportedTrades = true
                 }
             } else {
                 noteBrokerIntegrationChanged()
-                presentMessage(
-                    BrokerIntegrationDisplay.importResultMessage(
+                let resultMessage = partialSync
+                    ? BrokerSyncPresentation.partialImportMessage()
+                    : BrokerIntegrationDisplay.importResultMessage(
                         newTradeCount: response.summary.authoritativeNewImportCount
-                    ),
-                    error: false
-                )
+                    )
+                presentMessage(resultMessage, error: partialSync)
             }
             return
         }

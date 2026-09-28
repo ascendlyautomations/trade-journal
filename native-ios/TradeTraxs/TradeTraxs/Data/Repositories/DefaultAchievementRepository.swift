@@ -107,9 +107,10 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
         return try await fetchAchievementRow(id: AchievementID(achievementID))
     }
 
-    func save(_ achievement: Achievement) async throws -> Achievement {
+    func save(_ achievement: Achievement, metadata: JSONValue?) async throws -> Achievement {
         let kind = achievement.kind.rawValue
         let imageCrop = achievement.image?.imagePresentation
+        let resolvedMetadata = metadata ?? .object([:])
         let body = AchievementInsertBody(
             user_id: achievement.ownerProfileID.rawValue,
             achievement_type: kind,
@@ -130,6 +131,7 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
             achieved_at: ISO8601.string(from: achievement.achievedAt),
             is_public: achievement.isPublic,
             is_featured: achievement.isFeatured,
+            metadata: resolvedMetadata,
             includeImageCropKey: imageCrop != nil
         )
         let dto = try await ImageCropWireInsert.insertAchievement(
@@ -137,6 +139,42 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
             body: body
         )
         return (try? Self.mapAchievement(dto)) ?? achievement
+    }
+
+    func withdrawalAchievementLinks(for profileID: ProfileID) async throws -> [WithdrawalAchievementLinkRow] {
+        struct Row: Codable, Sendable {
+            var id: String?
+            var metadata: JSONValue?
+        }
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "achievements",
+            query: [
+                SupabaseQuery.select("id,metadata"),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                URLQueryItem(name: "achievement_type", value: "in.(prop_firm_payout,live_trading_payout)"),
+            ]
+        )
+        return rows.compactMap { row -> WithdrawalAchievementLinkRow? in
+            guard let id = row.id?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !id.isEmpty,
+                  let source = WithdrawalAchievementLinkage.source(from: row.metadata)
+            else { return nil }
+            switch source {
+            case .ledgerEntry(let entryID):
+                return WithdrawalAchievementLinkRow(
+                    achievementID: AchievementID(id),
+                    ledgerEntryID: entryID,
+                    payoutCycleID: nil
+                )
+            case .payoutCycle(let cycleID):
+                return WithdrawalAchievementLinkRow(
+                    achievementID: AchievementID(id),
+                    ledgerEntryID: nil,
+                    payoutCycleID: cycleID
+                )
+            }
+        }
     }
 
     // MARK: - Mapping (web achievement_type → Domain)

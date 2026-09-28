@@ -59,6 +59,20 @@ nonisolated enum ProfileAvatarDisplayCache {
         }
     }
 
+    /// Drops decoded list/header avatars for a reference (all common profile sizes).
+    static func remove(reference: MediaReference, maxPixelSizes: [Int] = [128, 512]) {
+        for size in maxPixelSizes {
+            let key = ImageCacheKey.make(
+                for: ImageRequest(
+                    reference: reference,
+                    purpose: .profileAvatar,
+                    maxPixelSize: size
+                )
+            )
+            remove(forKey: key)
+        }
+    }
+
     private static func touch(_ key: String, in cache: inout State) {
         cache.order.removeAll { $0 == key }
         cache.order.append(key)

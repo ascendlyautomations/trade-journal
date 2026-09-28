@@ -1,7 +1,8 @@
 /** Client-side reel video validation, upload-time thumbnail capture, and storage upload. */
 
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { compressImage } from "@/lib/compressImage"
+import { renderReelPosterCoverJpeg } from "@/lib/renderSemanticImage"
+import { optimizedStorageObjectPath } from "@/lib/storageOptimizedMedia"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
   createMonotonicReporter,
@@ -476,15 +477,15 @@ export async function uploadReelThumbnailBlob(
   const rawFile = new File([blob], "thumbnail.jpg", { type: "image/jpeg" })
   const report = createMonotonicReporter(options?.onProgress)
   report({ percent: 90, stage: "Saving thumbnail…" })
-  const uploadFile = await compressImage(rawFile)
-  const storagePath = `${userId}/thumbnails/${Date.now()}-thumb.jpg`
+  const uploadFile = await renderReelPosterCoverJpeg(rawFile)
+  const storagePath = optimizedStorageObjectPath(`${userId}/thumbnails`, "jpg")
 
   if (options?.onProgress) {
     const { error } = await uploadToSupabaseStorageWithProgress(supabase, {
       bucket: "reels",
       path: storagePath,
       file: uploadFile,
-      contentType: uploadFile.type || "image/jpeg",
+      contentType: "image/jpeg",
       cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
       onProgress: (loaded, total) => {
         report({
@@ -501,7 +502,7 @@ export async function uploadReelThumbnailBlob(
     const { error } = await supabase.storage
       .from("reels")
       .upload(storagePath, uploadFile, {
-        contentType: uploadFile.type || "image/jpeg",
+        contentType: "image/jpeg",
         cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
         upsert: false,
       })

@@ -11,6 +11,7 @@ struct SettingsProfileView: View {
     @Environment(\.appEnvironment) private var appEnvironment
 
     private let imagePipeline: any ImagePipeline
+    private let avatarSize: CGFloat = 52
 
     init(
         data: DataEnvironment,
@@ -36,7 +37,7 @@ struct SettingsProfileView: View {
     }
 
     var body: some View {
-        Form {
+        List {
             if let error = viewModel.errorMessage {
                 Section {
                     SettingsInlineError(message: error) {
@@ -46,11 +47,7 @@ struct SettingsProfileView: View {
             }
 
             Section {
-                profilePhotoRow
-            }
-
-            Section {
-                usernameField
+                identitySection
                 SettingsLabeledField(title: "Display Name") {
                     TextField("Your name", text: $viewModel.draftDisplayName)
                         .textInputAutocapitalization(.words)
@@ -59,13 +56,12 @@ struct SettingsProfileView: View {
                     TextField("Tell traders about yourself", text: $viewModel.draftBio, axis: .vertical)
                         .lineLimit(3...6)
                 }
+            } header: {
+                Text("Profile")
             }
 
             Section {
                 traderTypeRow
-            }
-
-            Section {
                 SettingsLabeledField(title: "Trading Style") {
                     TextField("e.g. Scalper, Swing", text: $viewModel.draftTradingStyle)
                         .textInputAutocapitalization(.words)
@@ -91,13 +87,10 @@ struct SettingsProfileView: View {
                 Text("Privacy")
             }
 
-            if let saveMessage = viewModel.saveMessage {
-                Section {
-                    Text(saveMessage)
-                        .experienceStyle(.footnote, color: colors.success)
-                }
-            }
         }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(ExperienceSpacing.xxs)
+        .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .experienceDashboardGroupedRows()
         .scrollDismissesKeyboard(.interactively)
@@ -139,20 +132,22 @@ struct SettingsProfileView: View {
         .accessibilityIdentifier("settings.profile")
     }
 
-    private var profilePhotoRow: some View {
-        HStack(spacing: ExperienceSpacing.md) {
+    private var identitySection: some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
             avatarThumbnail
-                .frame(width: 64, height: 64)
+                .frame(width: avatarSize, height: avatarSize)
 
             VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                usernameEditor
+
                 if viewModel.canChangeAvatar {
                     PhotosPicker(
                         selection: $photoItem,
-                        matching: ProfilePhotoPickerFilter.matching,
+                        matching: MediaPickerPolicy.profilePhoto.matching,
                         preferredItemEncoding: .compatible
                     ) {
                         Text("Change Photo")
-                            .experienceStyle(.body, color: colors.accent)
+                            .experienceStyle(.footnote, color: colors.accent)
                     }
                     .disabled(viewModel.isUploadingAvatar)
                     .accessibilityIdentifier("settings.profile.avatarPicker")
@@ -168,10 +163,8 @@ struct SettingsProfileView: View {
                         .experienceStyle(.caption, color: colors.error)
                 }
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(.vertical, ExperienceSpacing.xxs)
+        .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
@@ -187,7 +180,7 @@ struct SettingsProfileView: View {
                     imagePipeline: imagePipeline,
                     purpose: .profileAvatar,
                     contentMode: .fill,
-                    side: 64
+                    side: avatarSize
                 )
             } else if let uiImage = appEnvironment.currentUserProfile.avatarUIImage {
                 Image(uiImage: uiImage)
@@ -195,7 +188,7 @@ struct SettingsProfileView: View {
                     .scaledToFill()
             } else {
                 Image(systemName: "person.crop.circle.fill")
-                    .font(.system(size: 48))
+                    .font(.system(size: avatarSize * 0.85))
                     .foregroundStyle(colors.secondaryText.opacity(0.45))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -205,9 +198,9 @@ struct SettingsProfileView: View {
     }
 
     private var traderTypeRow: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             Text("Trader Type")
-                .experienceStyle(.caption, color: colors.secondaryText)
+                .experienceStyle(.footnote, color: colors.secondaryText)
 
             HStack(spacing: ExperienceSpacing.xs) {
                 ForEach([TraderType.futures, .options, .investor], id: \.self) { type in
@@ -221,14 +214,13 @@ struct SettingsProfileView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, ExperienceSpacing.xxs)
         .accessibilityIdentifier("settings.profile.traderType")
     }
 
-    private var usernameField: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+    private var usernameEditor: some View {
+        VStack(alignment: .leading, spacing: 2) {
             Text("Username")
-                .experienceStyle(.caption, color: colors.secondaryText)
+                .experienceStyle(.footnote, color: colors.secondaryText)
 
             HStack(spacing: ExperienceSpacing.xxs) {
                 Text("@")
@@ -249,7 +241,6 @@ struct SettingsProfileView: View {
                         viewModel.clearUsernameError()
                     }
             }
-            .padding(.vertical, ExperienceSpacing.xxs)
 
             if let usernameError = viewModel.usernameError {
                 Text(usernameError)
@@ -261,7 +252,6 @@ struct SettingsProfileView: View {
                     .experienceStyle(.caption2, color: colors.tertiaryText)
             }
         }
-        .padding(.vertical, ExperienceSpacing.xxs)
         .accessibilityIdentifier("settings.profile.username")
     }
 

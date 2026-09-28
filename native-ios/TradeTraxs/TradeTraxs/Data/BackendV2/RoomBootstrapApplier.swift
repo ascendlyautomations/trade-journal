@@ -3,7 +3,7 @@ import Foundation
 nonisolated enum RoomBootstrapApplier {
     struct Applied: Sendable {
         var room: TradeRoom
-        var membership: RoomMembership
+        var membership: RoomMembership?
         var channels: [RoomChannel]
         var selectedChannelID: RoomChannelID
         var channelCache: ChannelThreadCache
@@ -29,7 +29,13 @@ nonisolated enum RoomBootstrapApplier {
 
         let roomWire = bootstrap.data.room
         let resolvedRoomID = RoomID(roomWire.id)
-        let ownerID = ProfileID(roomWire.owner_user_id ?? "")
+        let ownerID: ProfileID = {
+            let raw = roomWire.owner_user_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if raw.isEmpty {
+                return ProfileIDQueryPolicy.officialRoomSystemOwner(roomID: resolvedRoomID)
+            }
+            return ProfileID(raw)
+        }()
         let memberCount = RoomMemberCountAuthority.resolve(
             memberStats: bootstrap.data.member_stats,
             activeMemberCount: bootstrap.data.active_member_count
@@ -47,17 +53,21 @@ nonisolated enum RoomBootstrapApplier {
             },
             memberCount: memberCount,
             showsOnProfile: roomWire.show_on_profile ?? true,
+            isPrivate: roomWire.is_private ?? false,
+            joinPolicy: TradeRoomJoinPolicy(rawValue: roomWire.join_policy ?? "") ?? .open,
             createdAt: ISO8601.date(from: roomWire.created_at ?? "") ?? .now
         )
 
         let membershipWire = bootstrap.data.membership
-        let membership = RoomMembership(
-            roomID: resolvedRoomID,
-            profileID: viewerID,
-            role: membershipWire.is_owner ? .owner : .member,
-            joinedAt: .now,
-            notificationsEnabled: membershipWire.notification_enabled
-        )
+        let membership: RoomMembership? = membershipWire.is_member
+            ? RoomMembership(
+                roomID: resolvedRoomID,
+                profileID: viewerID,
+                role: membershipWire.is_owner ? .owner : .member,
+                joinedAt: .now,
+                notificationsEnabled: membershipWire.notification_enabled
+            )
+            : nil
 
         let channels = bootstrap.data.sections.compactMap { section -> RoomChannel? in
             let name = section.name.trimmingCharacters(in: .whitespacesAndNewlines)

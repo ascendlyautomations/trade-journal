@@ -1,11 +1,14 @@
+import AVKit
 import PhotosUI
 import SwiftUI
+import UIKit
 
-/// Native story composer — photo pick → full-screen editor → publish.
+/// Native story composer — photo or short video → publish.
 struct CreateStoryView: View {
     @State private var viewModel: CreateStoryViewModel
-    @State private var photoItem: PhotosPickerItem?
-    @State private var showsPhotoPicker = false
+    @State private var mediaItem: PhotosPickerItem?
+    @State private var showsMediaPicker = false
+    @State private var showsStoryCamera = false
     @State private var didAutoPresentPhotoPicker = false
     @State private var showsDiscardConfirm = false
 
@@ -77,17 +80,31 @@ struct CreateStoryView: View {
         .experienceProtectedFormDismiss()
         .task { viewModel.loadIfNeeded() }
         .photosPicker(
-            isPresented: $showsPhotoPicker,
-            selection: $photoItem,
-            matching: .images
+            isPresented: $showsMediaPicker,
+            selection: $mediaItem,
+            matching: MediaPickerPolicy.storyMedia.matching
         )
-        .onChange(of: photoItem) { _, item in
-            Task { await loadPhoto(item) }
+        .onChange(of: mediaItem) { _, item in
+            Task { await loadPickedMedia(item) }
         }
         .onChange(of: viewModel.phase) { _, phase in
             if phase == .ready {
-                autoPresentPhotoPickerIfNeeded()
+                autoPresentMediaPickerIfNeeded()
             }
+        }
+        .fullScreenCover(isPresented: $showsStoryCamera) {
+            CameraStoryPicker(
+                onPickedPhoto: { image in
+                    showsStoryCamera = false
+                    viewModel.setSourceImage(image)
+                },
+                onPickedVideo: { url in
+                    showsStoryCamera = false
+                    Task { await viewModel.setSourceVideo(fileURL: url) }
+                },
+                onCancel: { showsStoryCamera = false }
+            )
+            .ignoresSafeArea()
         }
         .accessibilityIdentifier("createStory.root")
     }
@@ -104,12 +121,14 @@ struct CreateStoryView: View {
                 isPosting: viewModel.isPostingStory,
                 onCancel: {
                     viewModel.clearImage()
-                    photoItem = nil
+                    mediaItem = nil
                 },
                 onPostStory: { rendered in
                     viewModel.postRenderedStory(rendered)
                 }
             )
+        } else if viewModel.localVideoFileURL != nil && viewModel.imagePreview == nil && viewModel.phase != .publishing {
+            videoReadyContent
         } else if viewModel.imagePreview == nil && viewModel.phase != .publishing {
             emptyComposer
         } else {
@@ -126,26 +145,42 @@ struct CreateStoryView: View {
                     .font(.system(size: 40, weight: .light))
                     .foregroundStyle(colors.accent)
 
-                Text("Add a photo to your story")
+                Text("Add a photo or video to your story")
                     .experienceStyle(.headline, color: colors.primaryText)
 
-                Text("Stories are visible for 24 hours.")
+                Text("Stories are visible for 24 hours. Videos can be up to 10 seconds.")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
             .multilineTextAlignment(.center)
             .padding(.horizontal, ExperienceSpacing.lg)
 
-            Button {
-                showsPhotoPicker = true
-            } label: {
-                CreateComposerAttachmentAction(
-                    systemImage: "photo",
-                    title: "Choose Photo"
-                )
+            HStack(spacing: ExperienceSpacing.sm) {
+                Button {
+                    showsMediaPicker = true
+                } label: {
+                    CreateComposerAttachmentAction(
+                        systemImage: "photo.on.rectangle",
+                        title: "Choose Media"
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.phase == .publishing)
+                .accessibilityIdentifier("createStory.media.picker")
+
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    Button {
+                        showsStoryCamera = true
+                    } label: {
+                        CreateComposerAttachmentAction(
+                            systemImage: "camera",
+                            title: "Camera"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.phase == .publishing)
+                    .accessibilityIdentifier("createStory.media.camera")
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(viewModel.phase == .publishing)
-            .accessibilityIdentifier("createStory.media.picker")
 
             if let formError = viewModel.formError {
                 Text(formError)
@@ -160,8 +195,36 @@ struct CreateStoryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, ExperienceSpacing.md)
         .onAppear {
-            autoPresentPhotoPickerIfNeeded()
+            autoPresentMediaPickerIfNeeded()
         }
+    }
+
+    private var videoReadyContent: some View {
+        VStack(spacing: ExperienceSpacing.md) {
+            if let url = viewModel.localVideoFileURL {
+                VideoPlayer(player: AVPlayer(url: url))
+                    .aspectRatio(StoryCanvasState.canvasAspectRatio, contentMode: .fit)
+                    .frame(maxWidth: 280)
+                    .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+                    .accessibilityIdentifier("createStory.videoPreview")
+            }
+
+            Button("Choose Different Media") {
+                viewModel.clearImage()
+                mediaItem = nil
+                showsMediaPicker = true
+            }
+            .font(ExperienceTypography.subheadline.weight(.semibold))
+            .foregroundStyle(colors.accent)
+
+            if let formError = viewModel.formError {
+                Text(formError)
+                    .experienceStyle(.footnote, color: colors.loss)
+                    .accessibilityIdentifier("createStory.formError")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, ExperienceSpacing.lg)
     }
 
     private var publishingContent: some View {
@@ -206,7 +269,7 @@ struct CreateStoryView: View {
 
     @ViewBuilder
     private var publishBar: some View {
-        if viewModel.imageData != nil || viewModel.phase == .publishing {
+        if viewModel.canPublish || viewModel.phase == .publishing {
             CreateComposerPublishBar(
                 title: "Post Story",
                 loadingTitle: "Posting Story…",
@@ -220,12 +283,15 @@ struct CreateStoryView: View {
         }
     }
 
-    private func autoPresentPhotoPickerIfNeeded() {
+    private func autoPresentMediaPickerIfNeeded() {
         guard !didAutoPresentPhotoPicker else { return }
         guard viewModel.phase == .ready else { return }
-        guard viewModel.sourceImage == nil, viewModel.imagePreview == nil else { return }
+        guard viewModel.sourceImage == nil,
+              viewModel.imagePreview == nil,
+              viewModel.localVideoFileURL == nil
+        else { return }
         didAutoPresentPhotoPicker = true
-        showsPhotoPicker = true
+        showsMediaPicker = true
     }
 
     private func requestDismiss() {
@@ -237,11 +303,27 @@ struct CreateStoryView: View {
         }
     }
 
-    private func loadPhoto(_ item: PhotosPickerItem?) async {
+    private func loadPickedMedia(_ item: PhotosPickerItem?) async {
         guard let item else { return }
+        mediaItem = nil
+        if item.isVideoPickerItem {
+            do {
+                guard let movie = try await item.loadTransferable(type: MovieFileTransferable.self) else {
+                    viewModel.reportPickerError("Couldn't load video.")
+                    return
+                }
+                await viewModel.setSourceVideo(fileURL: movie.url)
+            } catch {
+                viewModel.reportPickerError(UserFacingError.message(for: error))
+            }
+            return
+        }
+
         if let data = try? await item.loadTransferable(type: Data.self),
            let image = UIImage(data: data)
         {
+            viewModel.setSourceImage(image, fileName: "story.jpg")
+        } else if let image = await ImageCropSelectionSupport.loadUIImage(from: item) {
             viewModel.setSourceImage(image, fileName: "story.jpg")
         } else {
             viewModel.reportPickerError("Couldn't load image.")

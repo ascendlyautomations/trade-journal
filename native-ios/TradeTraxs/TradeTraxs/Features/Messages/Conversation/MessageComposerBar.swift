@@ -60,7 +60,7 @@ struct MessageComposerBar: View {
                 .accessibilityIdentifier("conversation.composer.trade")
             }
 
-            PhotosPicker(selection: $photoItem, matching: .images) {
+            PhotosPicker(selection: $photoItem, matching: MediaPickerPolicy.imageOnly.matching) {
                 ExperienceIcon(icon: .photo, size: .md, color: colors.accent)
                     .frame(width: 36, height: 36)
                     .contentShape(Rectangle())

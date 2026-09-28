@@ -4,6 +4,7 @@ import { formatEST } from "@/lib/formatEST"
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { optimizedStorageObjectPath } from "@/lib/storageOptimizedMedia"
 import { validateImageUpload } from "@/lib/uploadValidation"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
@@ -93,7 +94,7 @@ export default function ChatPage() {
         })
         return
       }
-      const fileName = `${Date.now()}-${uploadFile.name}`
+      const fileName = optimizedStorageObjectPath(user.id, "jpg")
 
       await supabase.storage
         .from("screenshots")

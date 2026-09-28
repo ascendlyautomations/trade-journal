@@ -38,6 +38,7 @@ final class CreateAchievementViewModel {
     private var viewerID: ProfileID?
     private var hasPrepared = false
     private var hasLoadedAccounts = false
+    private var pendingWithdrawalLink: WithdrawalAchievementLinkage.Source?
 
     init(
         achievements: any AchievementRepository,
@@ -231,7 +232,8 @@ final class CreateAchievementViewModel {
             accountID: selectedAccountID,
             imageData: finalImageData,
             isPublic: isPublic,
-            achievedAt: achievedAt
+            achievedAt: achievedAt,
+            withdrawalLink: pendingWithdrawalLink
         )
         let jobID = GlobalUploadCoordinator.shared.enqueueAchievement(spec: spec, services: uploadServices)
         clearImage()
@@ -274,6 +276,7 @@ final class CreateAchievementViewModel {
         selectedAccountID = prefill.selectedAccountID
         isPublic = prefill.isPublic
         lockKind = prefill.lockKind
+        pendingWithdrawalLink = prefill.withdrawalLink
     }
 
     private func loadAccounts() async {

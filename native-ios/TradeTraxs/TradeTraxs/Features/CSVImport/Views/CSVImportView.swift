@@ -20,7 +20,10 @@ struct CSVImportView: View {
                 trades: data.trades,
                 session: data.session,
                 detailCache: data.detailCache,
-                onDismiss: onDismiss
+                onDismiss: {
+                    CSVImportPresentationGuard.leaveFlow()
+                    onDismiss()
+                }
             )
         )
     }
@@ -61,27 +64,27 @@ struct CSVImportView: View {
             embeddedInTradeEntryHub: embeddedInTradeEntryHub,
             onClose: { viewModel.dismiss() }
         ))
-        .fileImporter(
-            isPresented: $showsFileImporter,
-            allowedContentTypes: viewModel.acceptedContentTypes,
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else {
-                    viewModel.fail("Unable to read this CSV file.")
-                    return
+        .sheet(isPresented: $showsFileImporter) {
+            CSVDocumentPicker(
+                contentTypes: viewModel.acceptedContentTypes,
+                onPick: { url in
+                    showsFileImporter = false
+                    let read = CSVPickedFileReader.read(url)
+                    switch read {
+                    case .success(let file):
+                        viewModel.ingestPickedFile(data: file.data, fileName: file.name)
+                    case .failure:
+                        viewModel.fail("Unable to read this CSV file.")
+                    }
+                },
+                onCancel: {
+                    showsFileImporter = false
                 }
-                let read = CSVPickedFileReader.read(url)
-                switch read {
-                case .success(let file):
-                    viewModel.ingestPickedFile(data: file.data, fileName: file.name)
-                case .failure:
-                    viewModel.fail("Unable to read this CSV file.")
-                }
-            case .failure:
-                viewModel.fail("Unable to read this CSV file.")
-            }
+            )
+            .ignoresSafeArea()
+        }
+        .onAppear {
+            CSVImportPresentationGuard.enterFlow()
         }
         .task { viewModel.loadAccountsIfNeeded() }
         .accessibilityIdentifier("csvImport.root")
@@ -150,7 +153,10 @@ nonisolated enum CSVPickedFileReader {
         }
         do {
             let data = try Data(contentsOf: url)
-            print("[CSV] bytes read")
+            print("[CSV] bytes read count=\(data.count)")
+            #if DEBUG
+            CSVRawFileDiagnostics.logAfterRead(data: data, url: url, securityScopedAccess: scoped)
+            #endif
             let name = url.lastPathComponent
             return .success(File(name: name.isEmpty ? "import.csv" : name, data: data))
         } catch {

@@ -10,6 +10,8 @@ nonisolated struct CreateAchievementPrefill: Hashable, Sendable {
     var selectedAccountID: TradingAccountID
     var isPublic: Bool
     var lockKind: Bool
+    /// When set, saved achievement metadata links to this withdrawal record.
+    var withdrawalLink: WithdrawalAchievementLinkage.Source? = nil
 }
 
 @Observable

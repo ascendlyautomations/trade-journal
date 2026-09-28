@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 /// Session-scoped optimistic overlays for the **owner** Profile.
 ///
@@ -51,6 +52,11 @@ final class OwnerProfileOptimisticStore {
 
     func syncOwnerAchievementsState(_ achievements: [Achievement]) {
         ownerScreen?.syncAchievementsFromSection(achievements)
+    }
+
+    /// Settings / onboarding avatar commit — owner Profile header without bootstrap refresh.
+    func noteOwnerProfileHeaderUpdated(profile: Profile, localAvatar: UIImage?) {
+        ownerScreen?.applyOwnerProfileHeaderUpdate(profile: profile, localAvatar: localAvatar)
     }
 
     func notePostCreated(_ post: Post) {

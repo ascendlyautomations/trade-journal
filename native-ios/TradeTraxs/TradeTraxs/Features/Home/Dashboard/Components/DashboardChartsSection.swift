@@ -42,18 +42,6 @@ struct DashboardChartsSection: View {
 
     private var behaviorGroup: some View {
         sectionGroup(title: "Behavior") {
-            if summary.dailyPerformance != nil || summary.streaks != nil {
-                chartBlock(title: "Consistency & Streaks", subtitle: "Daily rhythm and momentum") {
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                        if let daily = summary.dailyPerformance {
-                            DashboardDailyConsistencyView(snapshot: daily)
-                        }
-                        if let streaks = summary.streaks {
-                            DashboardStreakCompactView(streaks: streaks)
-                        }
-                    }
-                }
-            }
             chartBlock(
                 title: "Trading Sessions",
                 subtitle: "Tap a session to browse those trades"

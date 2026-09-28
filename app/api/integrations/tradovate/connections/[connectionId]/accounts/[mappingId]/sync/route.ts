@@ -50,6 +50,13 @@ function brokerClientCode(summary: TradovateSyncSummary): string | undefined {
   if (errorCode === "account_mapping_required") {
     return "BROKER_ACCOUNT_MAPPING_REQUIRED"
   }
+  if (
+    errorCode === "import_incomplete_no_fills" ||
+    errorCode === "import_partial_no_new_fills" ||
+    summary.status === "partial"
+  ) {
+    return "BROKER_IMPORT_INCOMPLETE"
+  }
   return "BROKER_SYNC_FAILED"
 }
 

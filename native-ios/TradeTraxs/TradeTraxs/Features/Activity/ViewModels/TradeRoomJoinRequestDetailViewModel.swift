@@ -121,7 +121,7 @@ final class TradeRoomJoinRequestDetailViewModel {
             if let roomWire = detail.room, let roomID = roomWire.id {
                 room = TradeRoom(
                     id: RoomID(roomID),
-                    ownerProfileID: ProfileID("official.\(roomID)"),
+                    ownerProfileID: ProfileIDQueryPolicy.officialRoomSystemOwner(roomID: RoomID(roomID)),
                     name: roomWire.name ?? "Trade Room",
                     slug: roomWire.slug ?? roomID,
                     description: nil,

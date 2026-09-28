@@ -134,6 +134,26 @@ struct FeedHomeView: View {
                     )
                 )
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    navigationEnvironment.coordinator.open(.feed(.explore))
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .contextualTourTarget(.feedExplore)
+                }
+                .accessibilityLabel("Explore")
+                .accessibilityIdentifier("feed.explore")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    navigationEnvironment.coordinator.open(.feed(.rooms))
+                } label: {
+                    Image(systemName: "person.3")
+                        .contextualTourTarget(.feedTradeRooms)
+                }
+                .accessibilityLabel("Trade Rooms")
+                .accessibilityIdentifier("feed.rooms")
+            }
         }
         .modifier(
             FeedClipsViewportLayoutModifier(

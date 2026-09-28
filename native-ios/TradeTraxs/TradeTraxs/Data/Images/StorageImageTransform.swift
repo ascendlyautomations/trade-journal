@@ -38,6 +38,19 @@ nonisolated enum StorageImageTransform {
     static func optimizedURL(for url: URL, preset: Preset) -> URL {
         guard isSupabaseStoragePublicURL(url) else { return url }
 
+        if StorageOptimizedMedia.isOptimizedStorageURL(url) {
+            let objectURL = StorageOptimizedMedia.objectPublicURL(from: url)
+            #if DEBUG
+            StorageOptimizedMedia.logDelivery(
+                url: objectURL,
+                assetPolicy: "optimizedObject",
+                delivery: "object",
+                preset: String(describing: preset)
+            )
+            #endif
+            return objectURL
+        }
+
         let renderBase: String
         if url.path.contains(renderPublic) {
             renderBase = url.absoluteString.split(separator: "?").first.map(String.init) ?? url.absoluteString
@@ -94,7 +107,16 @@ nonisolated enum StorageImageTransform {
 
         var components = URLComponents(string: renderBase)
         components?.queryItems = query
-        return components?.url ?? url
+        let transformed = components?.url ?? url
+        #if DEBUG
+        StorageOptimizedMedia.logDelivery(
+            url: transformed,
+            assetPolicy: "legacy",
+            delivery: "transform",
+            preset: String(describing: preset)
+        )
+        #endif
+        return transformed
     }
 
     static func preset(for purpose: ImagePurpose, delivery: ImageDeliveryQuality) -> Preset? {

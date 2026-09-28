@@ -100,7 +100,7 @@ struct SharedTradeMessageCard: View {
 
     private func sharedTradeMetaRow(_ trade: Trade) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: ExperienceSpacing.xxs) {
+            HStack(spacing: TradeMetaChipMetrics.spacing) {
                 metaChip(TradeDisplay.sideTitle(trade.side), emphasized: true)
                 if let mode = modeLabel(for: trade) {
                     metaChip(mode)
@@ -137,8 +137,8 @@ struct SharedTradeMessageCard: View {
             .lineLimit(1)
             .minimumScaleFactor(0.85)
             .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
+            .padding(.horizontal, TradeMetaChipMetrics.horizontalPadding)
+            .padding(.vertical, TradeMetaChipMetrics.verticalPadding)
             .background(
                 (isOutgoing ? colors.onAccent : colors.primaryText)
                     .opacity(emphasized ? 0.14 : 0.08)

@@ -9,8 +9,12 @@ struct WithdrawalFlowView: View {
     @State private var viewModel: ManageAccountsViewModel
     @State private var selectedAccountID: TradingAccountID?
     @State private var draft = AccountPayoutEntryDraft(amountDigits: "", payoutDate: .now, note: "")
-    @State private var didRecord = false
     @State private var recordPayoutAccountID: TradingAccountID?
+    @State private var pendingLiveAchievementPrompt: (
+        accountID: TradingAccountID,
+        draft: AccountPayoutEntryDraft,
+        ledgerEntryID: AccountPayoutEntryID
+    )?
 
     @Environment(\.themeColors) private var colors
 
@@ -37,8 +41,12 @@ struct WithdrawalFlowView: View {
 
     var body: some View {
         Group {
-            if didRecord {
-                successContent
+            if let pending = pendingLiveAchievementPrompt {
+                liveAchievementPrompt(
+                    accountID: pending.accountID,
+                    draft: pending.draft,
+                    ledgerEntryID: pending.ledgerEntryID
+                )
             } else if let accountID = selectedAccountID {
                 liveLedgerForm(accountID: accountID)
             } else {
@@ -49,7 +57,7 @@ struct WithdrawalFlowView: View {
         .experienceNavigationTitle("Withdrawal")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button(didRecord ? "Done" : "Close", action: onDismiss)
+                Button(pendingLiveAchievementPrompt != nil ? "Done" : "Close", action: onDismiss)
             }
         }
         .sheet(isPresented: recordPayoutPresented) {
@@ -57,7 +65,8 @@ struct WithdrawalFlowView: View {
                 RecordPayoutFlowView(
                     accountID: accountID,
                     data: data,
-                    navigationCoordinator: navigationCoordinator
+                    navigationCoordinator: navigationCoordinator,
+                    onWithdrawalFlowComplete: onDismiss
                 )
             }
         }
@@ -206,10 +215,10 @@ struct WithdrawalFlowView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     Task {
-                        let ok = await viewModel.createPayout(accountID: accountID, draft: draft)
-                        if ok {
-                            didRecord = true
+                        let savedDraft = draft
+                        if let entryID = await viewModel.createPayout(accountID: accountID, draft: savedDraft) {
                             selectedAccountID = nil
+                            pendingLiveAchievementPrompt = (accountID, savedDraft, entryID)
                         }
                     }
                 }
@@ -219,19 +228,33 @@ struct WithdrawalFlowView: View {
         .experienceProtectedFormDismiss()
     }
 
-    private var successContent: some View {
-        VStack(spacing: ExperienceSpacing.md) {
-            ExperienceIcon(icon: .checkmark, size: .xl, color: colors.accent)
-                .padding(.top, ExperienceSpacing.xl)
-            Text("Withdrawal recorded")
-                .experienceStyle(.title3, color: colors.primaryText)
-            payoutHistoryLink
-            Spacer(minLength: ExperienceSpacing.md)
-            ExperienceButton(title: "Done", kind: .primary, action: onDismiss)
-                .padding(.bottom, ExperienceSpacing.md)
-        }
-        .padding(.horizontal, ExperienceSpacing.lg)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    private func liveAchievementPrompt(
+        accountID: TradingAccountID,
+        draft: AccountPayoutEntryDraft,
+        ledgerEntryID: AccountPayoutEntryID
+    ) -> some View {
+        PostWithdrawalAchievementPrompt(
+            onCreateAchievement: {
+                guard let account = viewModel.accounts.first(where: { $0.id == accountID }) else {
+                    pendingLiveAchievementPrompt = nil
+                    onDismiss()
+                    return
+                }
+                let prefill = PropFirmPayoutCycleSupport.liveWithdrawalAchievementPrefill(
+                    account: account,
+                    draft: draft,
+                    withdrawalLink: .ledgerEntry(ledgerEntryID)
+                )
+                CreateAchievementPrefillStore.shared.stage(prefill)
+                pendingLiveAchievementPrompt = nil
+                onDismiss()
+                navigationCoordinator.openComposeAchievement()
+            },
+            onNotNow: {
+                pendingLiveAchievementPrompt = nil
+                onDismiss()
+            }
+        )
     }
 
     private func accountSubtitle(for account: TradingAccount) -> String {

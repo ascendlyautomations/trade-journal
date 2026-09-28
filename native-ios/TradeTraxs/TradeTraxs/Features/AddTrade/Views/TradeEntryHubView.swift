@@ -14,6 +14,7 @@ struct TradeEntryHubView: View {
     let onDismiss: () -> Void
 
     @State private var tab: Tab
+    @State private var csvImportViewModel: CSVImportViewModel
     @Environment(\.themeColors) private var colors
 
     init(
@@ -25,6 +26,17 @@ struct TradeEntryHubView: View {
         self.initialTab = initialTab
         self.onDismiss = onDismiss
         _tab = State(initialValue: initialTab)
+        _csvImportViewModel = State(
+            initialValue: CSVImportViewModel(
+                trades: data.trades,
+                session: data.session,
+                detailCache: data.detailCache,
+                onDismiss: {
+                    CSVImportPresentationGuard.leaveFlow()
+                    onDismiss()
+                }
+            )
+        )
     }
 
     var body: some View {
@@ -43,9 +55,8 @@ struct TradeEntryHubView: View {
                     .accessibilityIdentifier("tradeEntry.manual")
                 case .csv:
                     CSVImportView(
-                        data: data,
-                        embeddedInTradeEntryHub: true,
-                        onDismiss: onDismiss
+                        viewModel: csvImportViewModel,
+                        embeddedInTradeEntryHub: true
                     )
                     .accessibilityIdentifier("tradeEntry.importCSV")
                 }
@@ -56,10 +67,18 @@ struct TradeEntryHubView: View {
         .experienceNavigationTitle("Add Trade")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel", action: onDismiss)
+                Button("Cancel") {
+                    CSVImportPresentationGuard.leaveFlow()
+                    onDismiss()
+                }
             }
         }
         .experienceProtectedFormDismiss()
+        .onAppear {
+            if initialTab == .csv {
+                CSVImportPresentationGuard.enterFlow()
+            }
+        }
         .accessibilityIdentifier("tradeEntry.hub")
     }
 

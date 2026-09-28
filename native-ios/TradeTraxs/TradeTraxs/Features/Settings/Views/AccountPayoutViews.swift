@@ -161,16 +161,19 @@ struct AccountPayoutEditorSheet: View {
     }
 
     private func save() async {
-        let ok: Bool
+        let succeeded: Bool
         if let editingEntryID {
-            ok = await viewModel.updatePayout(
+            succeeded = await viewModel.updatePayout(
                 entryID: editingEntryID,
                 accountID: accountID,
                 draft: draft
             )
         } else {
-            ok = await viewModel.createPayout(accountID: accountID, draft: draft)
+            succeeded = await viewModel.createPayout(accountID: accountID, draft: draft) != nil
         }
-        if ok { isPresented = false }
+        if succeeded {
+            SaveSuccessConfirmationCenter.shared.present(SaveSuccessToastMessage.changesSaved)
+            isPresented = false
+        }
     }
 }

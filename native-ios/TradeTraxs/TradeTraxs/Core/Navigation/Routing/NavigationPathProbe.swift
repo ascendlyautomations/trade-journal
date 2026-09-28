@@ -59,6 +59,7 @@ nonisolated enum NavigationPathProbeFormatter {
         case .streaks: return "streaks"
         case .reports: return "reports"
         case .payouts: return "payouts"
+        case .withdrawalDetail: return "withdrawalDetail"
         case .report: return "report"
         case .psychologyAnalytics: return "psychologyAnalytics"
         case .psychologyCoach: return "psychologyCoach"

@@ -401,8 +401,12 @@ nonisolated struct DemoAchievementRepository: AchievementRepository {
         throw AppError.domain(.notFound(entity: "achievement", id: id.rawValue))
     }
 
-    func save(_ achievement: Achievement) async throws -> Achievement {
+    func save(_ achievement: Achievement, metadata: JSONValue?) async throws -> Achievement {
         throw DemoAuthRequired.error
+    }
+
+    func withdrawalAchievementLinks(for profileID: ProfileID) async throws -> [WithdrawalAchievementLinkRow] {
+        []
     }
 }
 

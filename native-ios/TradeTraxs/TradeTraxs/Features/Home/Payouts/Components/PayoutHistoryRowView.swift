@@ -3,19 +3,32 @@ import SwiftUI
 struct PayoutHistoryRowView: View {
     let item: PayoutHistoryItem
     let account: TradingAccount?
+    var showsPostedAsAchievement: Bool = false
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(amountText)
-                .font(.system(.body, design: .rounded).weight(.semibold).monospacedDigit())
-                .foregroundStyle(colors.primaryText)
-            Text(accountContextLine)
-                .experienceStyle(.footnote, color: colors.secondaryText)
-                .lineLimit(2)
-            Text(TradeDisplay.dateText(item.date))
-                .experienceStyle(.caption, color: colors.tertiaryText)
+        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(amountText)
+                    .font(.system(.body, design: .rounded).weight(.semibold).monospacedDigit())
+                    .foregroundStyle(colors.primaryText)
+                Text(accountContextLine)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .lineLimit(2)
+                HStack(spacing: ExperienceSpacing.xs) {
+                    Text(TradeDisplay.dateText(item.date))
+                        .experienceStyle(.caption, color: colors.tertiaryText)
+                    if showsPostedAsAchievement {
+                        Text("· Posted")
+                            .experienceStyle(.caption, color: colors.tertiaryText)
+                    }
+                }
+            }
+            Spacer(minLength: ExperienceSpacing.xs)
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(colors.tertiaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, ExperienceSpacing.xs)

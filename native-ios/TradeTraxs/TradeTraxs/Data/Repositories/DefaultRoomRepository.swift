@@ -66,6 +66,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     ) async throws -> TradeRoom {
         struct ChannelWire: Encodable, Sendable {
             var name: String
+            var allow_members_chat: Bool
         }
 
         struct Params: Encodable, Sendable {
@@ -90,7 +91,10 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         }
 
         let channels = configuration.channels.map {
-            ChannelWire(name: TradeRoomConfigurationValidation.normalizedChannelName($0.name))
+            ChannelWire(
+                name: TradeRoomConfigurationValidation.normalizedChannelName($0.name),
+                allow_members_chat: $0.allowMembersChat
+            )
         }
 
         let params = Params(
@@ -638,8 +642,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         if let owner {
             ownerProfileID = ProfileID(owner)
         } else if roomKind == .official {
-            // System-owned official rooms have no profile owner — use stable room-scoped placeholder.
-            ownerProfileID = ProfileID("official.\(id)")
+            ownerProfileID = ProfileIDQueryPolicy.officialRoomSystemOwner(roomID: RoomID(id))
         } else {
             throw MappingError.missingField("owner_user_id")
         }

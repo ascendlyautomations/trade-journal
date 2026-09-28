@@ -712,11 +712,23 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         return Story(
             id: StoryID(id),
             authorProfileID: ProfileID(author),
-            media: MediaReference(id: media, kind: .image, altText: nil),
+            media: MediaReference(
+                id: media,
+                kind: Self.storyMediaKind(forPublicURL: media),
+                altText: nil
+            ),
             expiresAt: created.addingTimeInterval(ActiveStorySemantics.window),
             createdAt: created,
             viewerHasSeen: false
         )
+    }
+
+    private static func storyMediaKind(forPublicURL url: String) -> MediaKind {
+        let path = url.lowercased()
+        for ext in [".mp4", ".mov", ".m4v", ".webm"] where path.hasSuffix(ext) {
+            return .video
+        }
+        return .image
     }
 
     func deleteStory(id: StoryID) async throws {

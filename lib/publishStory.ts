@@ -8,6 +8,8 @@ import {
 import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
 import { validateImageUpload } from "@/lib/uploadValidation"
 import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "@/lib/storageCacheControl"
+import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { optimizedStorageObjectPath } from "@/lib/storageOptimizedMedia"
 
 export async function publishStory(
   supabase: SupabaseClient,
@@ -28,7 +30,18 @@ export async function publishStory(
     return { ok: false, message: validationError }
   }
 
-  const fileName = `${userId}/${Date.now()}-${file.name}`
+  let uploadFile: File
+  try {
+    uploadFile = await prepareImageForUpload("story", file)
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error ? error.message : "Couldn't prepare that story image.",
+    }
+  }
+
+  const fileName = optimizedStorageObjectPath(userId, "jpg")
 
   report({ percent: 15, stage: "Uploading media…" })
 
@@ -38,7 +51,7 @@ export async function publishStory(
       {
         bucket: "stories",
         path: fileName,
-        file,
+        file: uploadFile,
         upsert: true,
         cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
         onProgress: (loaded, total) => {
@@ -64,7 +77,7 @@ export async function publishStory(
   } else {
     const { error: uploadError } = await supabase.storage
       .from("stories")
-      .upload(fileName, file, {
+      .upload(fileName, uploadFile, {
         upsert: true,
         cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
       })

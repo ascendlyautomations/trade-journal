@@ -16,7 +16,8 @@ struct ProfileTradeCard: View {
         onEdit: @escaping () -> Void,
         onDelete: @escaping () -> Void,
         onReport: (() -> Void)? = nil,
-        profilePin: ProfilePinCallbacks? = nil
+        profilePin: ProfilePinCallbacks? = nil,
+        isProfilePinned: Bool = false
     ) {
         self.init(
             summary: TradeSummaryMapper.summary(fromPartialListTrade: trade),
@@ -29,7 +30,8 @@ struct ProfileTradeCard: View {
             onEdit: onEdit,
             onDelete: onDelete,
             onReport: onReport,
-            profilePin: profilePin
+            profilePin: profilePin,
+            isProfilePinned: isProfilePinned
         )
     }
 
@@ -42,6 +44,7 @@ struct ProfileTradeCard: View {
     let onDelete: () -> Void
     var onReport: (() -> Void)? = nil
     var profilePin: ProfilePinCallbacks? = nil
+    var isProfilePinned: Bool = false
 
     init(
         summary: TradeSummary,
@@ -54,7 +57,8 @@ struct ProfileTradeCard: View {
         onEdit: @escaping () -> Void,
         onDelete: @escaping () -> Void,
         onReport: (() -> Void)? = nil,
-        profilePin: ProfilePinCallbacks? = nil
+        profilePin: ProfilePinCallbacks? = nil,
+        isProfilePinned: Bool = false
     ) {
         self.summary = summary
         self.imagePipeline = imagePipeline
@@ -67,12 +71,13 @@ struct ProfileTradeCard: View {
         self.onDelete = onDelete
         self.onReport = onReport
         self.profilePin = profilePin
+        self.isProfilePinned = isProfilePinned
     }
 
     @Environment(\.themeColors) private var colors
 
     private var isPinnedToProfile: Bool {
-        profilePin?.isPinned(.trade, summary.id.rawValue) ?? false
+        isProfilePinned || (profilePin?.isPinned(.trade, summary.id.rawValue) ?? false)
     }
 
     private var target: InteractionTarget { .trade(summary.id) }
@@ -173,8 +178,13 @@ struct ProfileTradeCard: View {
             }
         } preview: {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text(summary.symbol.ticker)
-                    .experienceStyle(.headline, color: colors.primaryText)
+                HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+                    Text(summary.symbol.ticker)
+                        .experienceStyle(.headline, color: colors.primaryText)
+                    if isPinnedToProfile {
+                        ProfileContentPinIndicator()
+                    }
+                }
                 Text(TradeDisplay.pnlText(summary.realizedPnL))
                     .experienceStyle(.metric, color: colors.primaryText)
                 Text(TradeDisplay.sideTitle(summary.side))
@@ -198,7 +208,8 @@ struct ProfileTradeCard: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             ProfileTradeHeadlineRow(
                 ticker: summary.symbol.ticker,
-                realizedPnL: summary.realizedPnL
+                realizedPnL: summary.realizedPnL,
+                showsProfilePin: isPinnedToProfile
             )
             .accessibilityIdentifier("profile.trade.headline")
 
@@ -237,7 +248,8 @@ struct ProfileTradeCard: View {
     private var accessibilitySummary: String {
         let pnl = TradeDisplay.pnlText(summary.realizedPnL)
         let side = TradeDisplay.sideTitle(summary.side)
-        return "\(pnl), \(summary.symbol.ticker), \(side)"
+        let pin = isPinnedToProfile ? "Pinned to profile, " : ""
+        return "\(pin)\(pnl), \(summary.symbol.ticker), \(side)"
     }
 }
 
@@ -245,6 +257,7 @@ struct ProfileTradeCard: View {
 private struct ProfileTradeHeadlineRow: View {
     let ticker: String
     let realizedPnL: Money?
+    var showsProfilePin: Bool = false
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
@@ -272,6 +285,10 @@ private struct ProfileTradeHeadlineRow: View {
                 .foregroundStyle(colors.primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
+
+            if showsProfilePin {
+                ProfileContentPinIndicator()
+            }
         }
         .padding(.trailing, ExperienceAccessibility.minTouchTarget + ExperienceSpacing.xxs)
         .frame(maxWidth: .infinity, alignment: .leading)

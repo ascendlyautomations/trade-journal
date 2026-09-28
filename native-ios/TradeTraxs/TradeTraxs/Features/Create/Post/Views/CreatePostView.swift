@@ -210,7 +210,7 @@ struct CreatePostView: View {
 
     private var attachmentToolbar: some View {
         HStack(spacing: ExperienceSpacing.sm) {
-            PhotosPicker(selection: $photoItem, matching: .images) {
+            PhotosPicker(selection: $photoItem, matching: MediaPickerPolicy.imageOnly.matching) {
                 CreateComposerAttachmentAction(
                     systemImage: "photo",
                     title: "Add photo"

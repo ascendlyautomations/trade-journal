@@ -1,7 +1,15 @@
 /**
  * Supabase Storage image transforms — serve appropriately sized images
  * via /storage/v1/render/image/public/ (falls back to original URL on error).
+ *
+ * Upload-time optimized assets (`/opt/` in the storage path) use object/public URLs only.
  */
+
+import {
+  debugLogStorageImageDelivery,
+  isOptimizedStorageObjectPath,
+  toSupabaseObjectPublicUrl,
+} from "./storageOptimizedMedia"
 
 const STORAGE_OBJECT_PUBLIC = "/storage/v1/object/public/"
 const STORAGE_RENDER_PUBLIC = "/storage/v1/render/image/public/"
@@ -124,12 +132,20 @@ export function optimizeStorageImageUrl(
 
   if (!isSupabaseStoragePublicUrl(resolved)) return resolved
 
-  return toSupabaseRenderUrl(resolved, {
+  if (isOptimizedStorageObjectPath(resolved)) {
+    const objectUrl = toSupabaseObjectPublicUrl(resolved)
+    debugLogStorageImageDelivery(objectUrl, "optimizedObject", "object", preset)
+    return objectUrl
+  }
+
+  const transformed = toSupabaseRenderUrl(resolved, {
     width,
     height,
     quality: base.quality,
     ...(base.resize ? { resize: base.resize } : {}),
   })
+  debugLogStorageImageDelivery(transformed, "legacy", "transform", preset)
+  return transformed
 }
 
 export function optimizeAvatarUrl(
@@ -139,6 +155,12 @@ export function optimizeAvatarUrl(
   const raw = normalizeImageSrc(src)
   if (!raw) return null
   if (!isSupabaseStoragePublicUrl(raw)) return raw
+
+  if (isOptimizedStorageObjectPath(raw)) {
+    const objectUrl = toSupabaseObjectPublicUrl(raw)
+    debugLogStorageImageDelivery(objectUrl, "optimizedObject", "object", "avatar")
+    return objectUrl
+  }
 
   const pixelSize = displaySizePx ?? 80
   return optimizeStorageImageUrl(raw, "avatar", {

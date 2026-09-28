@@ -75,6 +75,7 @@ struct MainTabShellView: View {
             Text(reflectionError ?? "")
         }
         .vaultConfirmationOverlay(store: appEnvironment.data.vaultStore)
+        .saveSuccessToastOverlay()
         .onChange(of: store.selectedTab) { _, tab in
             MainThreadOperationTracker.push("tab.select.\(tab.rawValue)")
             defer { MainThreadOperationTracker.pop("tab.select.\(tab.rawValue)") }
@@ -242,6 +243,14 @@ struct HomeNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .withdrawalDetail(let historyItemID):
+            WithdrawalDetailView(
+                historyItemID: historyItemID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .achievementDetail(let achievementID):
+            AchievementDetailView(achievementID: achievementID, data: appEnvironment.data)
         case .report(let reportID):
             if PsychologyReportPeriodRef.parse(reportID: reportID) != nil {
                 PsychologyReportDetailView(reportID: reportID, data: appEnvironment.data)
@@ -396,6 +405,7 @@ struct HomeNavigationStack: View {
         case .streaks: return "Streaks"
         case .reports: return "Reports"
         case .payouts: return "Withdrawals"
+        case .withdrawalDetail: return "Withdrawal"
         case .report: return "Report"
         case .psychologyAnalytics: return "Psychology Analytics"
         case .psychologyCoach: return "Psychology Coach"
@@ -428,21 +438,6 @@ struct FeedNavigationStack: View {
                 navigationCoordinator: coordinator,
                 currentUserProfile: appEnvironment.currentUserProfile
             )
-            .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Explore", systemImage: "magnifyingglass") {
-                        coordinator.open(.feed(.explore))
-                    }
-                    .accessibilityIdentifier("feed.explore")
-                    .contextualTourTarget(.feedExplore)
-
-                    Button("Trade Rooms", systemImage: "person.3") {
-                        coordinator.open(.feed(.rooms))
-                    }
-                    .accessibilityIdentifier("feed.rooms")
-                    .contextualTourTarget(.feedTradeRooms)
-                }
-            }
             .navigationDestination(for: FeedRoute.self) { route in
                 feedDestination(route)
             }

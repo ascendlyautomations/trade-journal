@@ -9,6 +9,11 @@ struct CreateRoomView: View {
     @State private var cropSourceImage: UIImage?
     @State private var showsCategoryPicker = false
     @State private var showsTagsPicker = false
+    @State private var channelPermissionsSelection: ChannelPermissionsSelection?
+
+    private struct ChannelPermissionsSelection: Identifiable {
+        var id: UUID
+    }
 
     @Environment(\.themeColors) private var colors
     @FocusState private var focusedField: Field?
@@ -93,6 +98,9 @@ struct CreateRoomView: View {
             .sheet(isPresented: $showsTagsPicker) {
                 tagsPickerSheet
             }
+            .sheet(item: $channelPermissionsSelection) { selection in
+                createChannelPermissionsSheet(channelID: selection.id)
+            }
         }
         .accessibilityIdentifier("createRoom.root")
     }
@@ -115,7 +123,6 @@ struct CreateRoomView: View {
                 accessSection
                 subRoomsSection
                 rulesSection
-                permissionsSection
 
                 if let formError = viewModel.formError {
                     Section {
@@ -160,7 +167,7 @@ struct CreateRoomView: View {
                     }
                 }
             }
-            PhotosPicker(selection: $photoItem, matching: .images) {
+            PhotosPicker(selection: $photoItem, matching: MediaPickerPolicy.imageOnly.matching) {
                 Label(roomPhotoPickerLabel, systemImage: "photo")
             }
             .disabled(viewModel.isSubmitting)
@@ -259,6 +266,23 @@ struct CreateRoomView: View {
                     TextField("Sub-room name", text: $channel.name)
                         .focused($focusedField, equals: .subRoom(channel.id))
                         .textInputAutocapitalization(.words)
+                    Button {
+                        channelPermissionsSelection = ChannelPermissionsSelection(id: channel.id)
+                    } label: {
+                        HStack(spacing: ExperienceSpacing.xxs) {
+                            Text(
+                                RoomChannelPostingPermission.from(allowMembersChat: channel.allowMembersChat)
+                                    .summaryLabel
+                            )
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(colors.tertiaryText)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Permissions for \(channel.name.isEmpty ? "sub-room" : channel.name)")
+                    .accessibilityIdentifier("createRoom.channelPermissions.\(channel.id.uuidString)")
                 }
             }
             .onMove(perform: viewModel.moveSubRooms)
@@ -280,7 +304,32 @@ struct CreateRoomView: View {
         } header: {
             Text("Sub-Rooms")
         } footer: {
-            Text("Configure channels before creating. You can edit them later in Manage Room.")
+            Text("Each sub-room has its own post permissions. Room-wide trade and media sharing use defaults until you edit the room later.")
+        }
+    }
+
+    @ViewBuilder
+    private func createChannelPermissionsSheet(channelID: UUID) -> some View {
+        if let binding = viewModel.bindingForChannel(id: channelID) {
+            NavigationStack {
+                Form {
+                    Section {
+                        RoomChannelPostingPermissionPicker(allowMembersChat: binding.allowMembersChat)
+                    } footer: {
+                        Text("These settings are enforced by the messaging system for this sub-room only.")
+                    }
+                }
+                .scrollContentBackground(.hidden)
+                .experienceDashboardGroupedRows()
+                .experienceScreenBackground()
+                .experienceNavigationTitle(binding.wrappedValue.name.isEmpty ? "Permissions" : binding.wrappedValue.name)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { channelPermissionsSelection = nil }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
         }
     }
 
@@ -299,18 +348,6 @@ struct CreateRoomView: View {
             .accessibilityIdentifier("createRoom.rules")
         } header: {
             Text("Room Rules")
-        }
-    }
-
-    private var permissionsSection: some View {
-        Section {
-            Toggle("Members can send messages", isOn: $viewModel.configuration.membersCanMessage)
-            Toggle("Members can share trades", isOn: $viewModel.configuration.membersCanShareTrades)
-            Toggle("Members can share images/media", isOn: $viewModel.configuration.membersCanShareMedia)
-        } header: {
-            Text("Member Permissions")
-        } footer: {
-            Text("These settings are enforced by the messaging system.")
         }
     }
 

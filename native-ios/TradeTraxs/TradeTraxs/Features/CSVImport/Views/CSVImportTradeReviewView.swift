@@ -43,25 +43,14 @@ struct CSVImportTradeReviewView: View {
     var body: some View {
         Form {
             Section("Trade") {
-                TextField("Symbol", text: $draft.symbol)
-                    .textInputAutocapitalization(.characters)
-                Picker("Direction", selection: $draft.side) {
-                    Text("Long").tag(TradeSide.long)
-                    Text("Short").tag(TradeSide.short)
-                }
-                TextField("P&L", text: $pnlText.numericInput(.signedPnL))
-                    .keyboardType(.decimalPad)
-                    .focused($isPnlFocused)
-                TextField("Contracts", text: $quantityText.numericInput(.tradeQuantity))
-                    .keyboardType(.decimalPad)
-                TextField("Entry Price", text: $entryText.numericInput(.tradePrice))
-                    .keyboardType(.decimalPad)
-                TextField("Exit Price", text: $exitText.numericInput(.tradePrice))
-                    .keyboardType(.decimalPad)
-                TextField("Points", text: $pointsText.numericInput(.tradeQuantity))
-                    .keyboardType(.decimalPad)
-                TextField("R:R", text: $rrText.numericInput(.riskReward))
-                    .keyboardType(.decimalPad)
+                symbolRow
+                directionRow
+                pnlRow
+                quantityRow
+                entryPriceRow
+                exitPriceRow
+                pointsRow
+                riskRewardRow
             }
 
             if !draft.warningMessages.isEmpty {
@@ -91,6 +80,91 @@ struct CSVImportTradeReviewView: View {
         }
         .experienceProtectedFormDismiss()
         .accessibilityIdentifier("csvImport.review")
+    }
+
+    private var symbolRow: some View {
+        TradeReviewFormRow(label: "Symbol") {
+            TextField("Symbol", text: $draft.symbol)
+                .textInputAutocapitalization(.characters)
+                .tradeReviewTrailingControlStyle()
+                .foregroundStyle(colors.primaryText)
+        }
+        .listRowInsets(TradeReviewFormRowMetrics.rowInsets)
+    }
+
+    private var directionRow: some View {
+        TradeReviewFormRow(label: "Direction") {
+            Picker("", selection: $draft.side) {
+                Text("Long").tag(TradeSide.long)
+                Text("Short").tag(TradeSide.short)
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .tradeReviewTrailingControlStyle()
+            .foregroundStyle(colors.primaryText)
+        }
+        .listRowInsets(TradeReviewFormRowMetrics.rowInsets)
+    }
+
+    private var pnlRow: some View {
+        TradeReviewFormRow(label: "P&L") {
+            TextField("P&L", text: $pnlText.numericInput(.signedPnL))
+                .keyboardType(.decimalPad)
+                .focused($isPnlFocused)
+                .tradeReviewTrailingControlStyle()
+                .foregroundStyle(colors.primaryText)
+        }
+        .listRowInsets(TradeReviewFormRowMetrics.rowInsets)
+    }
+
+    private var quantityRow: some View {
+        TradeReviewFormRow(label: "Contracts") {
+            TextField("Contracts", text: $quantityText.numericInput(.tradeQuantity))
+                .keyboardType(.decimalPad)
+                .tradeReviewTrailingControlStyle()
+                .foregroundStyle(colors.primaryText)
+        }
+        .listRowInsets(TradeReviewFormRowMetrics.rowInsets)
+    }
+
+    private var entryPriceRow: some View {
+        TradeReviewFormRow(label: "Entry Price") {
+            TextField("Entry Price", text: $entryText.numericInput(.tradePrice))
+                .keyboardType(.decimalPad)
+                .tradeReviewTrailingControlStyle()
+                .foregroundStyle(colors.primaryText)
+        }
+        .listRowInsets(TradeReviewFormRowMetrics.rowInsets)
+    }
+
+    private var exitPriceRow: some View {
+        TradeReviewFormRow(label: "Exit Price") {
+            TextField("Exit Price", text: $exitText.numericInput(.tradePrice))
+                .keyboardType(.decimalPad)
+                .tradeReviewTrailingControlStyle()
+                .foregroundStyle(colors.primaryText)
+        }
+        .listRowInsets(TradeReviewFormRowMetrics.rowInsets)
+    }
+
+    private var pointsRow: some View {
+        TradeReviewFormRow(label: "Points") {
+            TextField("Points", text: $pointsText.numericInput(.tradeQuantity))
+                .keyboardType(.decimalPad)
+                .tradeReviewTrailingControlStyle()
+                .foregroundStyle(colors.primaryText)
+        }
+        .listRowInsets(TradeReviewFormRowMetrics.rowInsets)
+    }
+
+    private var riskRewardRow: some View {
+        TradeReviewFormRow(label: "R:R") {
+            TextField("R:R", text: $rrText.numericInput(.riskReward))
+                .keyboardType(.decimalPad)
+                .tradeReviewTrailingControlStyle()
+                .foregroundStyle(colors.primaryText)
+        }
+        .listRowInsets(TradeReviewFormRowMetrics.rowInsets)
     }
 
     private func saveTrade() {

@@ -1,28 +1,73 @@
 import Foundation
 
-/// Presentation-only hero overlay for a single prop-firm account.
+/// Presentation-only hero overlay for a single selected trading account.
 ///
-/// Analytics (`DashboardChartMetrics`) stay realized-performance based.
-/// Only the hero title, hero number, and displayed equity series receive
-/// a starting-balance offset — sourced from ``TradingAccount.size`` via
-/// ``PropFirmMetrics.parseAccountSize`` (same SoT as Prop Firm Mode).
+/// Analytics (`DashboardChartMetrics`) stay timeframe-based realized performance.
+/// The hero title, headline value, and equity curve offset use tracked account
+/// value when one account is selected; All Accounts keeps cumulative equity (P&L).
 nonisolated enum DashboardEquityHeroPresentation {
-    /// `nil` for All Accounts / live / non-prop selection.
-    /// Non-`nil` (including `0`) means a single prop account is selected.
-    static func propStartingBalance(forSelectedAccount account: TradingAccount?) -> Decimal? {
-        guard let account, account.isPropFirmAccount else { return nil }
+    /// `nil` for All Accounts; non-`nil` (including `0`) for any single account.
+    static func accountStartingBalance(forSelectedAccount account: TradingAccount?) -> Decimal? {
+        guard let account else { return nil }
         return PropFirmMetrics.parseAccountSize(account.size)
     }
 
+    @available(*, deprecated, renamed: "accountStartingBalance(forSelectedAccount:)")
+    static func propStartingBalance(forSelectedAccount account: TradingAccount?) -> Decimal? {
+        accountStartingBalance(forSelectedAccount: account)
+    }
+
+    static func showsAccountValue(forSelectedAccount account: TradingAccount?) -> Bool {
+        account != nil
+    }
+
+    static func title(showsAccountValue: Bool) -> String {
+        showsAccountValue ? "Account Value" : "Equity"
+    }
+
     static func title(propStartingBalance: Decimal?) -> String {
-        propStartingBalance == nil ? "Equity" : "Account Value"
+        title(showsAccountValue: propStartingBalance != nil)
+    }
+
+    /// Tracked balance for one account — prefers payout-aware prop metrics when supplied.
+    static func trackedAccountValue(
+        authoritativeBalance: Decimal?,
+        lifetimeRealizedPnL: Decimal,
+        startingBalance: Decimal?,
+        manualWithdrawalsTotal: Decimal = 0
+    ) -> Decimal {
+        if let authoritativeBalance { return authoritativeBalance }
+        return (startingBalance ?? 0) + lifetimeRealizedPnL - manualWithdrawalsTotal
+    }
+
+    /// All Accounts: timeframe cumulative realized equity. Single account: tracked value.
+    static func headlineValue(
+        showsAccountValue: Bool,
+        timeframeCurrentEquity: Decimal,
+        authoritativeBalance: Decimal?,
+        lifetimeRealizedPnL: Decimal,
+        startingBalance: Decimal?
+    ) -> Decimal {
+        guard showsAccountValue else { return timeframeCurrentEquity }
+        return trackedAccountValue(
+            authoritativeBalance: authoritativeBalance,
+            lifetimeRealizedPnL: lifetimeRealizedPnL,
+            startingBalance: startingBalance,
+            manualWithdrawalsTotal: 0
+        )
     }
 
     static func displayEquity(
         currentEquity: Decimal,
         propStartingBalance: Decimal?
     ) -> Decimal {
-        currentEquity + (propStartingBalance ?? 0)
+        headlineValue(
+            showsAccountValue: propStartingBalance != nil,
+            timeframeCurrentEquity: currentEquity,
+            authoritativeBalance: nil,
+            lifetimeRealizedPnL: currentEquity,
+            startingBalance: propStartingBalance
+        )
     }
 
     static func chartPoints(

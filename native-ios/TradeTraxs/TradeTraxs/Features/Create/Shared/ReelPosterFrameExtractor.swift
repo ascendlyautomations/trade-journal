@@ -16,7 +16,7 @@ enum ReelPosterFrameExtractor {
 
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: 1080, height: 1920)
+        generator.maximumSize = CGSize(width: 560, height: 996)
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = CMTime(seconds: 0.25, preferredTimescale: 600)
 
@@ -34,7 +34,7 @@ enum ReelPosterFrameExtractor {
             throw AppError.unknown(message: "Could not read this video file.")
         }
         let image = UIImage(cgImage: cgImage)
-        let jpeg = image.jpegData(compressionQuality: 0.82)
+        let jpeg = MediaImagePreparation.reelPosterJPEGData(from: image)
         return PosterFrame(image: image, jpegData: jpeg, durationSeconds: durationSeconds)
     }
 }

@@ -61,7 +61,7 @@ nonisolated enum PayoutHistorySupport {
                         accountID: accountID,
                         ledgerEntryID: nil,
                         source: .fundedCycle,
-                        note: nil
+                        note: cycle.note
                     )
                 )
             }

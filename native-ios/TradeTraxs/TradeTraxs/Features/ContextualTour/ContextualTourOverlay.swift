@@ -121,7 +121,12 @@ private struct ContextualTourOverlay: View {
             let retainedHole = ContextualTourGeometry.isRenderableSpotlight(coordinator.spotlightFrame, in: viewport)
                 ? coordinator.spotlightFrame
                 : nil
-            let holeFrame = liveHole ?? (coordinator.phase == .measuring ? retainedHole : nil)
+            let holeFrame: CGRect? = {
+                if coordinator.phase == .presenting {
+                    return retainedHole
+                }
+                return liveHole ?? (coordinator.phase == .measuring ? retainedHole : nil)
+            }()
             let hole = holeFrame.map { spotlightHole(around: $0, in: viewport) } ?? .zero
             let topInset = proxy.safeAreaInsets.top + ExperienceSpacing.sm
             let bottomInset = bottomChrome(safeBottom: proxy.safeAreaInsets.bottom)
@@ -156,6 +161,11 @@ private struct ContextualTourOverlay: View {
                 }
                 if showsHole {
                     spotlight(hole: hole, size: proxy.size)
+                        .transaction { transaction in
+                            if coordinator.phase == .presenting {
+                                transaction.animation = nil
+                            }
+                        }
                 }
                 if showsExplanationCard, let step = coordinator.visibleStep {
                     explanationCard(
@@ -179,7 +189,7 @@ private struct ContextualTourOverlay: View {
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
             .allowsHitTesting(showsChrome)
             .onChange(of: resolved, initial: true) { _, frame in
-                guard coordinator.phase == .measuring || coordinator.phase == .presenting else { return }
+                guard coordinator.phase == .measuring else { return }
                 let accepted = frame.flatMap { candidate in
                     ContextualTourGeometry.isMeasurableTarget(candidate, in: viewport) ? candidate : nil
                 }

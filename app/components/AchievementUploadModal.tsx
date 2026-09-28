@@ -51,6 +51,7 @@ import PayoutSetupModal, {
   type PayoutSetupValues,
 } from "@/app/components/PayoutSetupModal"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
+import { optimizedStorageObjectPath } from "@/lib/storageOptimizedMedia"
 import {
   createMonotonicReporter,
   mapUploadBytesToPercent,
@@ -522,20 +523,11 @@ export default function AchievementUploadModal({
 
             report({ percent: 10, stage: "Optimizing image…" })
 
-            const ext = snapshotFile.name.includes(".")
-              ? snapshotFile.name.split(".").pop()?.toLowerCase() || "jpg"
-              : "bin"
-            const safeBase = snapshotFile.name
-              .replace(/\.[^/.]+$/, "")
-              .toLowerCase()
-              .replace(/[^a-z0-9-_]+/g, "-")
-              .replace(/-+/g, "-")
-              .replace(/^-|-$/g, "")
             const uploadFile: File = snapshotFile
-            const uploadName = uploadFile.type?.startsWith("image/")
-              ? uploadFile.name
-              : `${safeBase || "image"}.${ext}`
-            const filePath = `achievements/${userId}/${Date.now()}-${uploadName}`
+            const filePath = optimizedStorageObjectPath(
+              `achievements/${userId}`,
+              "jpg"
+            )
 
             report({ percent: 18, stage: "Preparing upload…" })
             const stageReport = createMonotonicReporter(report, {

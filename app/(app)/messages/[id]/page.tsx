@@ -26,6 +26,7 @@ import {
 import { supabase } from "@/lib/supabaseClient"
 import { devLog } from "@/lib/devLog"
 import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { optimizedStorageObjectPath } from "@/lib/storageOptimizedMedia"
 import { validateImageUpload } from "@/lib/uploadValidation"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { LOADING_COPY } from "@/lib/loadingCopy"
@@ -1110,8 +1111,14 @@ export default function DMPage() {
       if (pageAccess !== "allowed" || !user?.id || !conversation?.id) return
 
       setGroupImage(file)
-      const uploadFile = file
-      const fileName = `${conversation.id}-${Date.now()}-${uploadFile.name}`
+      let uploadFile: File
+      try {
+        uploadFile = await prepareImageForUpload("avatar", file)
+      } catch (error) {
+        console.error("Group avatar preparation:", error)
+        return
+      }
+      const fileName = optimizedStorageObjectPath(conversation.id, "jpg")
       const { error: uploadError } = await supabase.storage
         .from("group-avatars")
         .upload(fileName, uploadFile, {
@@ -2746,7 +2753,7 @@ export default function DMPage() {
           setSendingMessage(false)
           return
         }
-        const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
+        const fileName = optimizedStorageObjectPath(user.id, "jpg")
 
         const { error: uploadError } = await supabase.storage
           .from("screenshots")

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { prepareImageForUpload } from "@/lib/imagePreparation"
+import { optimizedStorageObjectPath } from "@/lib/storageOptimizedMedia"
 import { validateImageUpload } from "@/lib/uploadValidation"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
@@ -114,7 +115,7 @@ export default function FeedbackPage() {
           )
           return
         }
-        const filePath = `feedback/${user.id}/${Date.now()}-${uploadFile.name}`
+        const filePath = optimizedStorageObjectPath(`feedback/${user.id}`, "jpg")
         const { error: uploadError } = await supabase.storage
           .from("screenshots")
           .upload(filePath, uploadFile, { upsert: false })

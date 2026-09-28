@@ -109,6 +109,7 @@ final class RoomInfoViewModel {
     func openOwner() {
         guard let ownerProfile else { return }
         ExperienceHaptics.play(.selection)
+        guard ProfileIDQueryPolicy.isQueryable(ownerProfile.id) else { return }
         navigationCoordinator?.open(navigationHost.profile(ownerProfile.id))
     }
 
@@ -131,7 +132,7 @@ final class RoomInfoViewModel {
         do {
             var imageURL: String?
             if let imageData = pendingImageData {
-                let path = "room-images/\(Int(Date().timeIntervalSince1970))-avatar.jpg"
+                let path = StorageOptimizedMedia.objectPath(prefix: "room-images", fileExtension: "jpg")
                 let reference = try await uploadService.upload(
                     UploadRequest(
                         bucket: "avatars",
@@ -260,15 +261,11 @@ final class RoomInfoViewModel {
             editName = loaded.name
             editDescription = loaded.description ?? ""
             editShowsOnProfile = loaded.showsOnProfile
-            if let cached = detailCache.profile(id: loaded.ownerProfileID) {
-                ownerProfile = cached
-            } else if let owner = try? await SessionProfileStore.shared.profiles(
-                ids: [loaded.ownerProfileID],
+            ownerProfile = await TradeRoomOwnerProfileLoader.loadOwnerProfile(
+                for: loaded,
                 detailCache: detailCache,
-                repository: profiles
-            ).first {
-                ownerProfile = owner
-            }
+                profiles: profiles
+            )
             if let viewer {
                 membership = try? await rooms.membership(roomID: roomID, profileID: viewer)
             }

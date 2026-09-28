@@ -21,6 +21,7 @@ final class CreateStoryViewModel {
     private(set) var imageData: Data?
     /// Original picked image — preserved separately from the rendered upload.
     private(set) var sourceImage: UIImage?
+    private(set) var localVideoFileURL: URL?
     private(set) var contentType = "image/jpeg"
     private(set) var originalFileName = "story.jpg"
 
@@ -64,11 +65,11 @@ final class CreateStoryViewModel {
     }
 
     var hasUnsavedChanges: Bool {
-        sourceImage != nil || imageData != nil
+        sourceImage != nil || imageData != nil || localVideoFileURL != nil
     }
 
     var canPublish: Bool {
-        phase == .ready && imageData != nil
+        phase == .ready && (imageData != nil || localVideoFileURL != nil)
     }
 
     var canChangeMedia: Bool {
@@ -90,6 +91,7 @@ final class CreateStoryViewModel {
     func setSourceImage(_ image: UIImage, fileName: String = "story.jpg") {
         guard canChangeMedia else { return }
         formError = nil
+        localVideoFileURL = nil
         sourceImage = image
         imagePreview = nil
         imageData = nil
@@ -104,14 +106,32 @@ final class CreateStoryViewModel {
         }
     }
 
+    func setSourceVideo(fileURL: URL) async {
+        guard canChangeMedia else { return }
+        formError = nil
+        do {
+            _ = try await StoryMediaDuration.validatedDurationSeconds(at: fileURL)
+        } catch {
+            formError = UserFacingError.message(for: error)
+            return
+        }
+        sourceImage = nil
+        imagePreview = nil
+        imageData = nil
+        localVideoFileURL = fileURL
+        contentType = "video/mp4"
+        originalFileName = "story.mp4"
+        if case .idle = phase {
+            phase = .ready
+        } else if case .failed = phase {
+            phase = .ready
+        }
+    }
+
     func submitRenderedStory(_ rendered: UIImage) {
         guard canChangeMedia else { return }
         formError = nil
-        guard let prepared = MediaImagePreparation.jpegData(
-            from: rendered,
-            maxDimension: 1920,
-            quality: 0.92
-        ) else {
+        guard let prepared = MediaImagePreparation.storyJPEGData(from: rendered) else {
             formError = "Couldn't prepare story image."
             return
         }
@@ -147,6 +167,7 @@ final class CreateStoryViewModel {
         sourceImage = nil
         imagePreview = nil
         imageData = nil
+        localVideoFileURL = nil
         formError = nil
     }
 
@@ -157,7 +178,36 @@ final class CreateStoryViewModel {
     func publish() {
         guard canPublish, publishTask == nil else { return }
         formError = nil
-        guard let viewerID, let imageData else {
+        guard let viewerID else {
+            formError = "Missing story media."
+            return
+        }
+
+        if let localVideoFileURL {
+            let jobID = GlobalUploadCoordinator.shared.enqueueStory(
+                spec: StoryUploadSpec(
+                    authorID: viewerID,
+                    imageData: nil,
+                    localVideoFileURL: localVideoFileURL,
+                    contentType: contentType,
+                    originalFileName: originalFileName
+                ),
+                services: uploadServices,
+                onSuccess: onPublished
+            )
+            clearImage()
+            phase = .ready
+            onDismiss()
+            GlobalUploadJobDiagnostics.log(
+                id: jobID,
+                kind: .story,
+                event: .composerDismissed,
+                taskCancelled: Task.isCancelled
+            )
+            return
+        }
+
+        guard let imageData else {
             formError = "Missing story image."
             return
         }
@@ -174,6 +224,7 @@ final class CreateStoryViewModel {
             spec: StoryUploadSpec(
                 authorID: viewerID,
                 imageData: imageData,
+                localVideoFileURL: nil,
                 contentType: contentType,
                 originalFileName: originalFileName
             ),
@@ -216,87 +267,6 @@ final class CreateStoryViewModel {
             detailCache.seed(loaded)
         }
 
-        if imageData != nil {
-            phase = .ready
-        } else {
-            phase = .ready
-        }
-    }
-
-    private func performPublish() async {
-        formError = nil
-        guard let viewerID, let imageData else {
-            formError = "Missing story image."
-            publishTask = nil
-            return
-        }
-        if let message = StoryUploadValidation.validate(
-            data: imageData,
-            contentType: contentType,
-            fileName: originalFileName
-        ) {
-            formError = message
-            publishTask = nil
-            return
-        }
-
-        phase = .publishing
-        uploadProgress = 0
-        uploadStage = "Preparing story…"
-
-        do {
-            let story: Story
-            if viewerID.rawValue.hasPrefix("dev.") {
-                story = Story(
-                    id: StoryID("dev-story-\(UUID().uuidString.prefix(8))"),
-                    authorProfileID: viewerID,
-                    media: MediaReference(
-                        id: "dev/story-preview.jpg",
-                        kind: .image,
-                        altText: nil
-                    ),
-                    expiresAt: Date().addingTimeInterval(ActiveStorySemantics.window),
-                    createdAt: Date(),
-                    viewerHasSeen: false
-                )
-                uploadProgress = 1
-            } else {
-                story = try await StoryPublishPipeline.publish(
-                    imageData: imageData,
-                    contentType: contentType,
-                    originalFileName: originalFileName,
-                    authorID: viewerID,
-                    feed: feed,
-                    uploadService: uploadService,
-                    objectStorage: objectStorage
-                ) { [weak self] progress in
-                    Task { @MainActor in
-                        self?.uploadProgress = progress
-                        if progress < 0.2 {
-                            self?.uploadStage = "Preparing story…"
-                        } else if progress < 0.85 {
-                            self?.uploadStage = "Uploading media…"
-                        } else if progress < 0.98 {
-                            self?.uploadStage = "Publishing story…"
-                        } else {
-                            self?.uploadStage = "Finishing…"
-                        }
-                    }
-                }
-            }
-
-            detailCache.seed(story)
-            ContentMutationStore.shared.noteStoryCreated(story)
-            ExperienceHaptics.play(.success)
-            phase = .ready
-            onPublished(story)
-        } catch let error as AppError {
-            phase = .ready
-            formError = UserFacingError.message(for: error)
-        } catch {
-            phase = .ready
-            formError = UserFacingError.message(for: error)
-        }
-        publishTask = nil
+        phase = .ready
     }
 }

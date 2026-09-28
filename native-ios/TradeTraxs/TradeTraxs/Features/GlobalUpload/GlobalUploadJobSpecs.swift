@@ -97,7 +97,9 @@ struct PostUploadCheckpoint: Sendable, Equatable {
 
 struct StoryUploadSpec: Sendable {
     var authorID: ProfileID
-    var imageData: Data
+    var imageData: Data?
+    /// When set, ``imageData`` is ignored and the story is uploaded as video.
+    var localVideoFileURL: URL?
     var contentType: String
     var originalFileName: String?
     /// Deterministic object key — filled by ``GlobalUploadCoordinator`` at enqueue.
@@ -127,6 +129,7 @@ struct AchievementUploadSpec: Sendable {
     var imageData: Data?
     var isPublic: Bool
     var achievedAt: Date
+    var withdrawalLink: WithdrawalAchievementLinkage.Source? = nil
 }
 
 enum TradeSaveUploadMode: Sendable, Equatable {

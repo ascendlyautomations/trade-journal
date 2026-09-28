@@ -74,7 +74,14 @@ final class CSVImportViewModel {
             && (phase == .preview)
     }
 
-    var acceptedContentTypes: [UTType] { [.commaSeparatedText, .plainText] }
+    var acceptedContentTypes: [UTType] {
+        var types: [UTType] = [.commaSeparatedText, .plainText, .data]
+        if let csv = UTType(filenameExtension: "csv") {
+            types.append(csv)
+        }
+        var seen = Set<String>()
+        return types.filter { seen.insert($0.identifier).inserted }
+    }
 
     func loadAccountsIfNeeded() {
         Task { await loadAccounts() }
@@ -92,6 +99,9 @@ final class CSVImportViewModel {
     func selectAccount(_ id: TradingAccountID) {
         selectedAccountID = id
         ExperienceHaptics.play(.selection)
+        #if DEBUG
+        print("[CSV_IMPORT] accountSelected accountID=\(id.rawValue)")
+        #endif
     }
 
     func ingestPickedFile(data: Data, fileName: String) {
@@ -102,12 +112,13 @@ final class CSVImportViewModel {
                 phase = .failed("CSV must be 10 MB or smaller.")
                 return
             }
-            guard let text = String(data: data, encoding: .utf8)
-                ?? String(data: data, encoding: .isoLatin1)
-            else {
+            guard let text = CSVTextDecoding.decode(from: data) else {
                 phase = .failed("Unable to read this CSV file.")
                 return
             }
+            #if DEBUG
+            CSVTextParser.logDecodedShape(byteCount: data.count, text: text)
+            #endif
             rawCSVText = text
             sourceFileName = fileName.isEmpty ? "import.csv" : fileName
             print("[CSV] parser started")
@@ -167,32 +178,86 @@ final class CSVImportViewModel {
     }
 
     func importTrades() {
-        guard canImport, let account = selectedAccount else { return }
+        #if DEBUG
+        print(
+            "[CSV_IMPORT] confirmTapped trades=\(importableTrades.count) " +
+                "accountID=\(selectedAccountID?.rawValue ?? "nil") canImport=\(canImport) " +
+                "phase=\(String(describing: phase))"
+        )
+        #endif
+        guard canImport, let account = selectedAccount else {
+            #if DEBUG
+            print(
+                "[CSV_IMPORT] failed stage=confirmGuard canImport=\(canImport) " +
+                    "account=\(selectedAccount != nil) importable=\(importableTrades.count)"
+            )
+            #endif
+            if importableTrades.isEmpty {
+                phase = .failed("No trades are ready to import.")
+            }
+            return
+        }
         isImporting = true
         phase = .importing
-        print("[CSV] persistence started")
         let tradesToImport = importableTrades
+        #if DEBUG
+        print(
+            "[CSV_IMPORT] persistenceStarted trades=\(tradesToImport.count) " +
+                "format=\(summary?.format.rawValue ?? "nil")"
+        )
+        #endif
         Task {
             do {
                 let drafts = tradesToImport.map { Self.draft(from: $0, account: account) }
+                #if DEBUG
+                for draft in drafts where draft.exitAt != nil {
+                    let seconds = draft.exitAt!.timeIntervalSince(draft.entryAt)
+                    if seconds >= 14_400 {
+                        print(
+                            """
+                            [CSV_IMPORT][HOLD_TRACE]
+                            symbol=\(draft.symbol.ticker)
+                            entryAt=\(draft.entryAt)
+                            exitAt=\(draft.exitAt!)
+                            durationSeconds=\(Int(seconds.rounded()))
+                            """
+                        )
+                    }
+                }
+                #endif
                 let count = try await trades.importCSVTrades(drafts, isInitialImport: true)
+                guard count > 0 else {
+                    throw AppError.unknown(message: "No trades were saved. Try again.")
+                }
+                #if DEBUG
+                print("[CSV_IMPORT] cacheInvalidationStarted inserted=\(count)")
+                #endif
                 TradeJournalMutationStore.shared.noteBulkImport(
                     owner: account.ownerProfileID,
                     source: .csv,
                     persistedTradeCount: count
                 )
+                let skipped = (summary?.failedCount ?? 0)
+                    + (summary?.trades.filter { $0.status == .invalid }.count ?? 0)
                 let result = CSVImportResult(
                     importedCount: count,
                     netPnL: tradesToImport.reduce(0) { $0 + $1.realizedPnL },
-                    skippedInvalidCount: (summary?.failedCount ?? 0)
-                        + (summary?.trades.filter { $0.status == .invalid }.count ?? 0),
+                    skippedInvalidCount: skipped,
                     failureMessage: nil
                 )
                 ExperienceHaptics.play(.success)
-                print("[CSV] completed")
+                #if DEBUG
+                print(
+                    "[CSV_IMPORT] persistenceCompleted inserted=\(count) skipped=\(skipped) failed=0"
+                )
+                print("[CSV_IMPORT] completed")
+                #endif
                 phase = .result(result)
             } catch {
                 ExperienceHaptics.play(.warning)
+                #if DEBUG
+                print("[CSV_IMPORT] failed stage=persistence error=\(UserFacingError.message(for: error))")
+                #endif
                 phase = .failed(UserFacingError.message(for: error))
             }
             isImporting = false
@@ -289,6 +354,12 @@ final class CSVImportViewModel {
                     print("[CSV] account mapping started")
                     preselectAccountFromCSVIfPossible()
                     phase = .preview
+                    #if DEBUG
+                    print(
+                        "[CSV_IMPORT] mappingPresented importable=\(importableTrades.count) " +
+                            "accountID=\(selectedAccountID?.rawValue ?? "nil")"
+                    )
+                    #endif
                 }
             } else if mappings == nil, CSVTradeBuilder.needsManualMapping(summary: summary) {
                 columnMappings = CSVHeaderAliases.suggestedMappings(for: summary.headers)

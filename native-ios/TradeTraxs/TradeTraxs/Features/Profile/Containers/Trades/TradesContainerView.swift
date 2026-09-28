@@ -6,6 +6,7 @@ struct TradesContainerView: View {
     @Bindable var engagementStore: EngagementStore
     @Bindable var vaultStore: VaultStore
     var profilePin: ProfilePinCallbacks? = nil
+    var profilePinnedItems: [ProfilePinnedItem] = []
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -54,6 +55,21 @@ struct TradesContainerView: View {
         }
     }
 
+    private var displayItems: [TradeSummary] {
+        ProfilePinnedOrdering.displayItems(
+            viewModel.visibleItems,
+            profilePins: profilePinnedItems,
+            contentType: .trade,
+            contentID: { $0.id.rawValue }
+        )
+    }
+
+    private func isProfilePinned(_ summary: TradeSummary) -> Bool {
+        profilePinnedItems.contains {
+            $0.contentType == .trade && $0.contentID == summary.id.rawValue
+        }
+    }
+
     @ViewBuilder
     private var tradesContent: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
@@ -65,7 +81,7 @@ struct TradesContainerView: View {
                     .accessibilityIdentifier("profile.trades.filterEmpty")
             } else {
                 LazyVStack(spacing: ExperienceSpacing.sm) {
-                    ForEach(viewModel.visibleItems) { summary in
+                    ForEach(displayItems) { summary in
                         ProfileTradeCard(
                             summary: summary,
                             imagePipeline: imagePipeline,
@@ -77,7 +93,8 @@ struct TradesContainerView: View {
                             onEdit: { viewModel.editTrade(summary) },
                             onDelete: { viewModel.requestDelete(summary) },
                             onReport: reportAction(for: summary),
-                            profilePin: profilePin
+                            profilePin: profilePin,
+                            isProfilePinned: isProfilePinned(summary)
                         )
                         .transition(
                             reduceMotion
@@ -91,13 +108,13 @@ struct TradesContainerView: View {
                 }
                 .animation(
                     ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                    value: viewModel.visibleItems.map(\.id)
+                    value: displayItems.map(\.id)
                 )
-                .onChange(of: viewModel.visibleItems.map(\.id)) { _, ids in
+                .onChange(of: displayItems.map(\.id)) { _, ids in
                     viewModel.prefetchEngagement(for: ids)
                 }
                 .onAppear {
-                    viewModel.prefetchEngagement(for: viewModel.visibleItems.map(\.id))
+                    viewModel.prefetchEngagement(for: displayItems.map(\.id))
                 }
                 .accessibilityIdentifier("profile.trades.list")
 

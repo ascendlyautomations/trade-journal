@@ -197,7 +197,7 @@ struct ManageRoomView: View {
                     marksForRemoval: viewModel.marksImageForRemoval,
                     imagePipeline: imagePipeline
                 )
-                PhotosPicker(selection: $photoItem, matching: .images) {
+                PhotosPicker(selection: $photoItem, matching: MediaPickerPolicy.imageOnly.matching) {
                     Label(editRoomPhotoPickerLabel, systemImage: "photo")
                 }
                 if viewModel.hasDisplayImage {

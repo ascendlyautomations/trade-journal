@@ -10,6 +10,7 @@ import type { UploadProgressReporter } from "./uploadProgress/types"
 import { validateImageUpload } from "./uploadValidation"
 import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "./userFacingError"
 import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "./storageCacheControl"
+import { optimizedStorageObjectPath } from "./storageOptimizedMedia"
 
 /**
  * Legacy crop preset (`content` = 4:3 at 1200×900 WebP).
@@ -76,7 +77,9 @@ export async function uploadContentImageToStorage(
     options?.prepared,
     compressContentImage
   )
-  const fileName = `${userId}/${Date.now()}-${uploadFile.name}`
+  const fileName = options?.prepared
+    ? optimizedStorageObjectPath(userId, "jpg")
+    : `${userId}/${Date.now()}-${uploadFile.name}`
 
   report?.({
     percent: options?.uploadingPercent ?? 18,

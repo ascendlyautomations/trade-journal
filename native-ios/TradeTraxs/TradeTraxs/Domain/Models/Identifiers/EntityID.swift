@@ -100,6 +100,24 @@ nonisolated struct RoomID: Hashable, Codable, Sendable, RawRepresentable {
     init(_ rawValue: String) { self.rawValue = rawValue }
 }
 
+nonisolated enum ProfileIDQueryPolicy {
+    static let officialRoomOwnerPrefix = "official."
+
+    static func isQueryable(_ id: ProfileID) -> Bool {
+        let trimmed = id.rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return !trimmed.hasPrefix(officialRoomOwnerPrefix)
+    }
+
+    static func isOfficialRoomSystemOwner(_ id: ProfileID) -> Bool {
+        id.rawValue.hasPrefix(officialRoomOwnerPrefix)
+    }
+
+    static func officialRoomSystemOwner(roomID: RoomID) -> ProfileID {
+        ProfileID("\(officialRoomOwnerPrefix)\(roomID.rawValue)")
+    }
+}
+
 nonisolated struct RoomMessageID: Hashable, Codable, Sendable, RawRepresentable {
     let rawValue: String
     init(rawValue: String) { self.rawValue = rawValue }

@@ -383,12 +383,34 @@ nonisolated struct RoomsBootstrapV1: Codable, Sendable {
         var image_url: String?
         var owner_user_id: String?
         var show_on_profile: Bool?
+        var is_private: Bool?
+        var join_policy: String?
         var created_at: String?
     }
 
     nonisolated struct MembershipWire: Codable, Sendable, Equatable {
         var notification_enabled: Bool
         var is_owner: Bool
+        var is_member: Bool
+
+        init(notification_enabled: Bool, is_owner: Bool, is_member: Bool = true) {
+            self.notification_enabled = notification_enabled
+            self.is_owner = is_owner
+            self.is_member = is_member
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            notification_enabled = try container.decode(Bool.self, forKey: .notification_enabled)
+            is_owner = try container.decode(Bool.self, forKey: .is_owner)
+            is_member = try container.decodeIfPresent(Bool.self, forKey: .is_member) ?? true
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case notification_enabled
+            case is_owner
+            case is_member
+        }
     }
 
     nonisolated struct MemberStatsWire: Codable, Sendable, Equatable {

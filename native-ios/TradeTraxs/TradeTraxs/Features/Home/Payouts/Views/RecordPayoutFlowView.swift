@@ -5,12 +5,15 @@ struct RecordPayoutFlowView: View {
     @State private var viewModel: RecordPayoutFlowViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColors) private var colors
+    private let onWithdrawalFlowComplete: (() -> Void)?
 
     init(
         accountID: TradingAccountID,
         data: DataEnvironment,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        onWithdrawalFlowComplete: (() -> Void)? = nil
     ) {
+        self.onWithdrawalFlowComplete = onWithdrawalFlowComplete
         _viewModel = State(
             initialValue: RecordPayoutFlowViewModel(
                 accountID: accountID,
@@ -22,7 +25,11 @@ struct RecordPayoutFlowView: View {
         )
     }
 
-    init(viewModel: RecordPayoutFlowViewModel) {
+    init(
+        viewModel: RecordPayoutFlowViewModel,
+        onWithdrawalFlowComplete: (() -> Void)? = nil
+    ) {
+        self.onWithdrawalFlowComplete = onWithdrawalFlowComplete
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -64,7 +71,15 @@ struct RecordPayoutFlowView: View {
         case .confirm:
             confirmStep
         case .sharePrompt:
-            sharePrompt
+            PostWithdrawalAchievementPrompt(
+                onCreateAchievement: {
+                    viewModel.openShareAchievementFlow(
+                        onDismissSheet: { dismiss() },
+                        onWithdrawalFlowComplete: onWithdrawalFlowComplete
+                    )
+                },
+                onNotNow: { dismiss() }
+            )
         }
     }
 
@@ -170,23 +185,29 @@ struct RecordPayoutFlowView: View {
         .padding(ExperienceSpacing.lg)
     }
 
-    private var sharePrompt: some View {
+}
+
+/// Shown only after a withdrawal/payout row is persisted — optional Achievement composer entry.
+struct PostWithdrawalAchievementPrompt: View {
+    let onCreateAchievement: () -> Void
+    let onNotNow: () -> Void
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-            Text("Payout recorded")
+            Text("Withdrawal recorded")
                 .experienceStyle(.title3, color: colors.primaryText)
-            Text("Your payout cycle was updated. Share this payout as a public Achievement?")
+            Text("Create an achievement post?")
                 .experienceStyle(.subheadline, color: colors.secondaryText)
 
             Spacer(minLength: 0)
 
-            ExperienceButton(title: "Share as Achievement", kind: .primary) {
-                viewModel.openShareAchievementFlow { dismiss() }
-            }
-            ExperienceButton(title: "Not now", kind: .secondary) {
-                dismiss()
-            }
+            ExperienceButton(title: "Create Achievement", kind: .primary, action: onCreateAchievement)
+            ExperienceButton(title: "Not Now", kind: .secondary, action: onNotNow)
         }
         .padding(ExperienceSpacing.lg)
+        .accessibilityIdentifier("withdrawal.achievementPrompt")
     }
 }
 

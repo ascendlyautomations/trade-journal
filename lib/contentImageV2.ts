@@ -6,8 +6,9 @@
 
 export const CONTENT_IMAGE_V2_MIN_ZOOM = 1
 export const CONTENT_IMAGE_V2_MAX_ZOOM = 4
-export const CONTENT_IMAGE_V2_MAX_EDGE = 2560
-export const CONTENT_IMAGE_V2_JPEG_QUALITY = 0.92
+/** Phase 1: single delivery asset (~1440px long edge); no feed/detail variant pair yet. */
+export const CONTENT_IMAGE_V2_MAX_EDGE = 1440
+export const CONTENT_IMAGE_V2_JPEG_QUALITY = 0.85
 export const CONTENT_IMAGE_V2_MIME = "image/jpeg"
 
 /** Crop-modal preset id for trades, posts, and achievements. */

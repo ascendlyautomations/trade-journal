@@ -251,13 +251,21 @@ final class DashboardViewModel {
         return accounts.first(where: { $0.id == id })
     }
 
-    /// Starting balance for a single prop account — presentation offset only.
-    var equityHeroPropStartingBalance: Decimal? {
-        DashboardEquityHeroPresentation.propStartingBalance(forSelectedAccount: selectedAccount)
+    var equityHeroShowsAccountValue: Bool {
+        DashboardEquityHeroPresentation.showsAccountValue(forSelectedAccount: selectedAccount)
+    }
+
+    /// Starting balance for the selected account — chart offset and fallback tracked value.
+    var equityHeroAccountStartingBalance: Decimal? {
+        DashboardEquityHeroPresentation.accountStartingBalance(forSelectedAccount: selectedAccount)
     }
 
     var equityHeroTitle: String {
-        DashboardEquityHeroPresentation.title(propStartingBalance: equityHeroPropStartingBalance)
+        DashboardEquityHeroPresentation.title(showsAccountValue: equityHeroShowsAccountValue)
+    }
+
+    func payoutCyclesForAccountValueSummary(accountID: TradingAccountID) -> [AccountPayoutCycle] {
+        resolvedPayoutCycles(for: accountID)
     }
 
     var equityHeroSummary: DashboardChartMetrics.Summary? {
@@ -267,12 +275,15 @@ final class DashboardViewModel {
 
     var equityHeroDisplayValue: Decimal {
         guard let heroSummary = equityHeroSummary ?? summary else { return 0 }
-        if usesDashboardAnalyticsV3, !selectedChartOverlayLoaded {
+        if usesDashboardAnalyticsV3, !selectedChartOverlayLoaded, !equityHeroShowsAccountValue {
             return heroSummary.netPnL
         }
-        return DashboardEquityHeroPresentation.displayEquity(
-            currentEquity: heroSummary.currentEquity,
-            propStartingBalance: equityHeroPropStartingBalance
+        return DashboardEquityHeroPresentation.headlineValue(
+            showsAccountValue: equityHeroShowsAccountValue,
+            timeframeCurrentEquity: heroSummary.currentEquity,
+            authoritativeBalance: equityHeroAuthoritativeBalance,
+            lifetimeRealizedPnL: equityHeroLifetimeRealizedPnL,
+            startingBalance: equityHeroAccountStartingBalance
         )
     }
 
@@ -285,8 +296,84 @@ final class DashboardViewModel {
         guard let chartSummary else { return [] }
         return DashboardEquityHeroPresentation.chartPoints(
             chartSummary.equityData,
-            propStartingBalance: equityHeroPropStartingBalance
+            propStartingBalance: equityHeroAccountStartingBalance
         )
+    }
+
+    /// Payout-aware tracked balance (prop cycles or live manual ledger).
+    private var equityHeroAuthoritativeBalance: Decimal? {
+        guard let account = selectedAccount else { return nil }
+        if account.isPropFirmAccount {
+            return propFirmStatus?.currentBalance
+        }
+        guard AccountTrackedBalanceSupport.usesManualLedgerForTrackedBalance(account: account) else {
+            return nil
+        }
+        let starting = equityHeroAccountStartingBalance ?? 0
+        let entries = manualPayoutEntries(for: account.id)
+        return AccountTrackedBalanceSupport.ledgerTrackedBalance(
+            startingBalance: starting,
+            lifetimeRealizedPnL: equityHeroLifetimeRealizedPnL,
+            payoutEntries: entries
+        )
+    }
+
+    private func manualPayoutEntries(for accountID: TradingAccountID) -> [AccountPayoutEntry] {
+        WithdrawalsHistoryStore.shared.ledgerByAccount[accountID] ?? []
+    }
+
+    private func resolvedPayoutCycles(for accountID: TradingAccountID) -> [AccountPayoutCycle] {
+        let fromStore = WithdrawalsHistoryStore.shared.cyclesByAccount[accountID] ?? []
+        if !fromStore.isEmpty { return fromStore }
+        return payoutCyclesByAccount[accountID] ?? []
+    }
+
+    /// Keeps prop balance/summary aligned after local withdrawal store mutations.
+    func syncAfterWithdrawalStoreMutation() {
+        guard case .account(let accountID) = accountFilter else { return }
+        if let cycles = WithdrawalsHistoryStore.shared.cyclesByAccount[accountID] {
+            payoutCyclesByAccount[accountID] = cycles
+        }
+    }
+
+    private var equityHeroLifetimeRealizedPnL: Decimal {
+        if usesDashboardAnalyticsV3,
+           let bootstrap = analyticsV3Bootstrap,
+           case .account(let id) = accountFilter,
+           let lifetime = DashboardAnalyticsMapper.lifetimeRealizedPnL(
+               in: bootstrap,
+               accountID: id,
+               accountCharts: chartOverlayIncludingAllPreset()
+           )
+        {
+            return lifetime
+        }
+        guard case .account = accountFilter else { return 0 }
+        let trades = DashboardChartMetrics.filteredTrades(
+            from: tradeInputs,
+            accountFilter: accountFilter,
+            dateRange: .all,
+            now: Date()
+        )
+        return trades.reduce(Decimal(0)) { partial, input in
+            partial + (input.realizedPnL?.amount ?? 0)
+        }
+    }
+
+    /// Charts for the selected filter, including the `all` preset when cached (lifetime P&L).
+    private func chartOverlayIncludingAllPreset() -> [String: AnalyticsDashboardChartsPresetV1]? {
+        switch accountFilter {
+        case .all:
+            return nil
+        case .account(let id):
+            if let cached = DashboardAnalyticsAccountChartsStore.shared.charts(
+                accountID: id,
+                revision: analyticsV3Revision
+            ) {
+                return cached
+            }
+            return chartOverlayForFilter()
+        }
     }
 
     private var selectedChartOverlayLoaded: Bool {
@@ -501,6 +588,10 @@ final class DashboardViewModel {
     func handleAccountMutation() {
         switch AccountMutationStore.shared.latestKind {
         case .payoutRecorded(let accountID):
+            if let cycles = WithdrawalsHistoryStore.shared.cyclesByAccount[accountID] {
+                payoutCyclesByAccount[accountID] = cycles
+            }
+            syncAfterWithdrawalStoreMutation()
             Task { await reloadAfterPayout(accountID: accountID) }
         case .generic:
             patchAccountsFromSessionStore()
@@ -1344,12 +1435,19 @@ final class DashboardViewModel {
         guard let profileID else { return }
         SessionAccountsStore.shared.invalidate(profileID: profileID)
         SessionPayoutCyclesStore.shared.invalidate(accountID: accountID, profileID: profileID)
+        SessionPayoutEntriesStore.shared.invalidate(profileID: profileID)
         await ensureFullOwnerAccounts(profileID: profileID, forceNetwork: true)
         await hydratePropFirmPayoutCycles(
             profileID: profileID,
             accountIDs: [accountID],
             forceNetwork: true
         )
+        await hydrateManualPayoutLedgerEntries(
+            profileID: profileID,
+            accountIDs: [accountID],
+            forceNetwork: true
+        )
+        recompute()
         #if DEBUG
         if let snapshot = propFirmStatus {
             PayoutCycleRefreshProbe.logDashboardReload(
@@ -2085,12 +2183,60 @@ final class DashboardViewModel {
         if !skipPayouts {
             await hydratePayouts(profileID: profileID, forceNetwork: forceNetwork)
         }
+        WithdrawalsHistoryStore.shared.bindProfile(profileID)
+        WithdrawalsHistoryStore.shared.hydrateFromSessionCaches(profileID: profileID)
+        let ledgerAccountIDs = accounts
+            .filter { AccountTrackedBalanceSupport.usesManualLedgerForTrackedBalance(account: $0) }
+            .map(\.id)
+        if !ledgerAccountIDs.isEmpty {
+            await hydrateManualPayoutLedgerEntries(
+                profileID: profileID,
+                accountIDs: ledgerAccountIDs,
+                forceNetwork: forceNetwork
+            )
+        }
         // Payout cycles load on demand when a prop account is selected (prop firm card).
         await hydrateCheckIns(profileID: profileID, forceNetwork: forceNetwork)
     }
 
     private func fundedPropAccountIDs() -> [TradingAccountID] {
         accounts.filter { PropFirmPayoutPolicy.supportsRecordPayout(for: $0) }.map(\.id)
+    }
+
+    /// One batched fetch for `account_payout_entries` — drives live Account Value.
+    private func hydrateManualPayoutLedgerEntries(
+        profileID: ProfileID,
+        accountIDs: [TradingAccountID],
+        forceNetwork: Bool
+    ) async {
+        let unique = Array(Set(accountIDs))
+        guard !unique.isEmpty else { return }
+
+        if !forceNetwork {
+            WithdrawalsHistoryStore.shared.hydrateFromSessionCaches(profileID: profileID)
+            let cached = WithdrawalsHistoryStore.shared.ledgerByAccount
+            if WithdrawalsHistoryStore.shared.profileID == profileID,
+               unique.allSatisfy({ cached[$0] != nil })
+            {
+                recompute()
+                return
+            }
+        }
+
+        do {
+            let rows = try await trades.payoutEntries(for: unique)
+            var grouped: [TradingAccountID: [AccountPayoutEntry]] = [:]
+            for accountID in unique {
+                grouped[accountID] = []
+            }
+            for entry in rows {
+                grouped[entry.accountID, default: []].append(entry)
+            }
+            WithdrawalsHistoryStore.shared.applyLedgerSnapshot(grouped, profileID: profileID)
+            recompute()
+        } catch {
+            WithdrawalsTrace.log("dashboardLedgerFetchFailed", detail: error.localizedDescription)
+        }
     }
 
     private func hydratePropFirmPayoutCycles(
@@ -2106,6 +2252,10 @@ final class DashboardViewModel {
                let cached = SessionPayoutCyclesStore.shared.cached(for: accountID, profileID: profileID)
             {
                 payoutCyclesByAccount[accountID] = cached
+                WithdrawalsHistoryStore.shared.hydrateCyclesFromSessionStore(
+                    profileID: profileID,
+                    accountIDs: [accountID]
+                )
             } else {
                 pending.append(accountID)
             }
@@ -2126,6 +2276,7 @@ final class DashboardViewModel {
                 payoutCyclesByAccount[accountID] = accountCycles
                 SessionPayoutCyclesStore.shared.seed(accountCycles, for: accountID, profileID: profileID)
             }
+            WithdrawalsHistoryStore.shared.applyCyclesSnapshot(grouped, profileID: profileID)
             PayoutBatchDiagnostics.logCycles(
                 accounts: pending.count,
                 requests: 1,

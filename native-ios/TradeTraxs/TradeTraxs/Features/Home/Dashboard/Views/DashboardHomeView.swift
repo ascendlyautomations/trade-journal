@@ -9,6 +9,7 @@ struct DashboardHomeView: View {
     @State private var gettingStartedStore = GettingStartedStore.shared
     @State private var dailyCheckInStore = TraderDailyCheckInStore.shared
     @Bindable private var brokerImportEligibilityStore = BrokerImportEligibilityStore.shared
+    @Bindable private var withdrawalsHistory = WithdrawalsHistoryStore.shared
     private let navigationCoordinator: NavigationCoordinator
     private let data: DataEnvironment?
 
@@ -151,6 +152,12 @@ struct DashboardHomeView: View {
             viewModel.handleAccountMutation()
             brokerImportEligibilityStore.refreshIfStale(fromUserAction: false)
         }
+        .onChange(of: withdrawalsHistory.ledgerEntryCount()) { _, _ in
+            viewModel.syncAfterWithdrawalStoreMutation()
+        }
+        .onChange(of: withdrawalsHistory.completedPropCycleCount()) { _, _ in
+            viewModel.syncAfterWithdrawalStoreMutation()
+        }
         .onChange(of: BrokerIntegrationMutationStore.shared.revision) { _, _ in
             brokerImportEligibilityStore.refresh(fromUserAction: true)
         }
@@ -187,6 +194,15 @@ struct DashboardHomeView: View {
         let trades = viewModel.summary?.tradeCount
         let summary = viewModel.summary != nil
         return "analytics tab=\(tabIsActive) revealed=\(contentRevealed) summary=\(summary) trades=\(trades.map(String.init) ?? "nil") gettingStarted=\(gettingStartedStore.shouldShowDashboardCard) ready=\(dashboardTourAnalyticsReady)"
+    }
+
+    private var accountValueWithdrawalSummary: AccountTrackedBalanceSupport.WithdrawalSummary? {
+        guard let account = viewModel.selectedAccount else { return nil }
+        return AccountTrackedBalanceSupport.withdrawalSummary(
+            account: account,
+            payoutCycles: viewModel.payoutCyclesForAccountValueSummary(accountID: account.id),
+            ledgerEntries: withdrawalsHistory.ledgerByAccount[account.id] ?? []
+        )
     }
 
     private var emptyDashboardContent: some View {
@@ -238,7 +254,9 @@ struct DashboardHomeView: View {
                             periodTitle: viewModel.dateRange.title,
                             title: viewModel.equityHeroTitle,
                             displayEquity: viewModel.equityHeroDisplayValue,
-                            chartPoints: viewModel.equityHeroChartPoints
+                            chartPoints: viewModel.equityHeroChartPoints,
+                            withdrawalSummary: accountValueWithdrawalSummary,
+                            onWithdrawalSummaryTap: viewModel.openWithdrawalsHistory
                         )
 
                         DashboardMetricStrip(chips: viewModel.metricChips)
