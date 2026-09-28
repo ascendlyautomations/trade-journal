@@ -276,29 +276,76 @@ async function ensureValidAccessToken(
   return credentials.access_token
 }
 
-export async function tradovateAuthedJsonRequest<T>(
+export type TradovateAuthedFetchCategory =
+  | "ok"
+  | "unauthorized"
+  | "client_error"
+  | "server_error"
+  | "network_error"
+
+export type TradovateAuthedFetchResult = {
+  status: number
+  ok: boolean
+  category: TradovateAuthedFetchCategory
+  json: unknown | null
+  /** Full response body (probe/diagnostics only — do not log). */
+  fullText: string
+  textSnippet: string
+}
+
+function categorizeTradovateHttpStatus(status: number): TradovateAuthedFetchCategory {
+  if (status >= 200 && status < 300) return "ok"
+  if (status === 401 || status === 403) return "unauthorized"
+  if (status >= 400 && status < 500) return "client_error"
+  if (status >= 500) return "server_error"
+  return "client_error"
+}
+
+/** Read-only fetch with status metadata (optional alternate API base, e.g. rpt-demo). */
+export async function tradovateAuthedFetch(
   supabase: SupabaseClient,
   userId: string,
   connectionId: string,
   path: string,
-  init?: { method?: "GET" | "POST"; retried?: boolean }
-): Promise<T> {
+  init?: {
+    method?: "GET" | "POST"
+    jsonBody?: unknown
+    retried?: boolean
+    baseUrlOverride?: string
+  }
+): Promise<TradovateAuthedFetchResult> {
   const owned = await loadOwnedBrokerConnection(supabase, {
     userId,
     connectionId,
     provider: "tradovate",
   })
   if (!owned || !isUsableConnectionStatus(owned.status)) {
-    throw new TradovateApiError("not_connected")
+    return {
+      status: 0,
+      ok: false,
+      category: "client_error",
+      json: null,
+      fullText: "",
+      textSnippet: "not_connected",
+    }
   }
 
   const connection = await loadConnectedConnection(supabase, userId, connectionId)
   if (!connection) {
-    throw new TradovateApiError("not_connected")
+    return {
+      status: 0,
+      ok: false,
+      category: "client_error",
+      json: null,
+      fullText: "",
+      textSnippet: "not_connected",
+    }
   }
 
   const accessToken = await ensureValidAccessToken(supabase, connection)
-  const base = getTradovateRestBaseUrl(connection.api_environment)
+  const base =
+    init?.baseUrlOverride?.trim() ||
+    getTradovateRestBaseUrl(connection.api_environment)
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}`
   const method = init?.method ?? "GET"
   const headers: Record<string, string> = {
@@ -314,10 +361,20 @@ export async function tradovateAuthedJsonRequest<T>(
     response = await fetch(url, {
       method,
       headers,
-      body: method === "POST" ? "{}" : undefined,
+      body:
+        method === "POST"
+          ? JSON.stringify(init?.jsonBody ?? {})
+          : undefined,
     })
   } catch {
-    throw new TradovateApiError("provider_unavailable")
+    return {
+      status: 0,
+      ok: false,
+      category: "network_error",
+      json: null,
+      fullText: "",
+      textSnippet: "network_error",
+    }
   }
 
   if (response.status === 401 && !init?.retried) {
@@ -327,34 +384,72 @@ export async function tradovateAuthedJsonRequest<T>(
       connectionId,
       accessToken
     )
-    if (recovery === "reconnect_required") {
-      throw new TradovateApiError("reconnect_required")
+    if (recovery === "retry") {
+      return tradovateAuthedFetch(supabase, userId, connectionId, path, {
+        ...init,
+        retried: true,
+      })
     }
-    if (recovery === "provider_unavailable") {
-      throw new TradovateApiError("provider_unavailable")
-    }
-    return tradovateAuthedJsonRequest(supabase, userId, connectionId, path, {
-      ...init,
-      retried: true,
-    })
   }
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new TradovateApiError("unauthorized", undefined, response.status)
+  const text = await response.text()
+  const textSnippet = text.slice(0, 240).replace(/\s+/g, " ")
+  let json: unknown | null = null
+  if (text.trim()) {
+    try {
+      json = JSON.parse(text) as unknown
+    } catch {
+      json = null
     }
-    throw new TradovateApiError(
-      "provider_unavailable",
-      undefined,
-      response.status
-    )
   }
 
-  try {
-    return (await response.json()) as T
-  } catch {
+  return {
+    status: response.status,
+    ok: response.ok,
+    category: categorizeTradovateHttpStatus(response.status),
+    json,
+    fullText: text,
+    textSnippet,
+  }
+}
+
+export async function tradovateAuthedJsonRequest<T>(
+  supabase: SupabaseClient,
+  userId: string,
+  connectionId: string,
+  path: string,
+  init?: { method?: "GET" | "POST"; retried?: boolean; jsonBody?: unknown }
+): Promise<T> {
+  const owned = await loadOwnedBrokerConnection(supabase, {
+    userId,
+    connectionId,
+    provider: "tradovate",
+  })
+  if (!owned || !isUsableConnectionStatus(owned.status)) {
+    throw new TradovateApiError("not_connected")
+  }
+
+  const connection = await loadConnectedConnection(supabase, userId, connectionId)
+  if (!connection) {
+    throw new TradovateApiError("not_connected")
+  }
+
+  const fetched = await tradovateAuthedFetch(supabase, userId, connectionId, path, {
+    method: init?.method,
+    jsonBody: init?.jsonBody,
+    retried: init?.retried,
+  })
+
+  if (fetched.category === "network_error" || fetched.status === 0) {
     throw new TradovateApiError("provider_unavailable")
   }
+  if (fetched.category === "unauthorized") {
+    throw new TradovateApiError("unauthorized", undefined, fetched.status)
+  }
+  if (!fetched.ok) {
+    throw new TradovateApiError("provider_unavailable", undefined, fetched.status)
+  }
+  return fetched.json as T
 }
 
 export async function fetchTradovateAccountListRaw(

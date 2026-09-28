@@ -246,6 +246,19 @@ export async function acquireTradovateFillsForAccount(
   let initialBootstrapCashBalanceLogCount = 0
   let initialBootstrapDiscoveredFillIds = 0
   let initialBootstrapFillCount = 0
+  let executionReportListRawCount = 0
+  let executionReportAccountMatchedCount = 0
+  let executionReportAccountOrderIdCount = 0
+  let orderLdepsRawCount = 0
+  let orderLdepsAccountMatchedCount = 0
+  let cashBalanceLogDepsRawCount = 0
+  let cashBalanceLogFillIdCount = 0
+  let bootstrapCashBalanceLogDepsHttpStatus = 0
+  let bootstrapExecutionReportListHttpStatus = 0
+  let bootstrapOrderLdepsHttpStatus = 0
+  let bootstrapCashBalanceLogDepsHttpCategory = "skipped"
+  let bootstrapExecutionReportListHttpCategory = "skipped"
+  let bootstrapOrderLdepsHttpCategory = "skipped"
 
   if (ledgerSnapshot.executionCount === 0) {
     const mergedBeforeBootstrap = new Set(
@@ -261,6 +274,23 @@ export async function acquireTradovateFillsForAccount(
     initialBootstrapCashBalanceLogCount = bootstrap.cashBalanceLogCount
     initialBootstrapDiscoveredFillIds = bootstrap.discoveredFillIds.length
     initialBootstrapFillCount = bootstrap.fills.length
+    executionReportListRawCount = bootstrap.executionReportListRawCount
+    executionReportAccountMatchedCount = bootstrap.executionReportAccountMatchedCount
+    executionReportAccountOrderIdCount = bootstrap.executionReportAccountOrderIdCount
+    orderLdepsRawCount = bootstrap.orderLdepsRawCount
+    orderLdepsAccountMatchedCount = bootstrap.orderLdepsAccountMatchedCount
+    cashBalanceLogDepsRawCount = bootstrap.cashBalanceLogDepsRawCount
+    cashBalanceLogFillIdCount = bootstrap.cashBalanceLogFillIdCount
+    bootstrapCashBalanceLogDepsHttpStatus =
+      bootstrap.httpDiagnostics.cashBalanceLogDeps.httpStatus
+    bootstrapExecutionReportListHttpStatus =
+      bootstrap.httpDiagnostics.executionReportList.httpStatus
+    bootstrapOrderLdepsHttpStatus = bootstrap.httpDiagnostics.orderLdeps.httpStatus
+    bootstrapCashBalanceLogDepsHttpCategory =
+      bootstrap.httpDiagnostics.cashBalanceLogDeps.category
+    bootstrapExecutionReportListHttpCategory =
+      bootstrap.httpDiagnostics.executionReportList.category
+    bootstrapOrderLdepsHttpCategory = bootstrap.httpDiagnostics.orderLdeps.category
     for (const err of bootstrap.errors) {
       acquisitionErrors.push(err)
     }
@@ -406,6 +436,19 @@ export async function acquireTradovateFillsForAccount(
     initialBootstrapCashBalanceLogCount,
     initialBootstrapDiscoveredFillIds,
     initialBootstrapFillCount,
+    executionReportListRawCount,
+    executionReportAccountMatchedCount,
+    executionReportAccountOrderIdCount,
+    orderLdepsRawCount,
+    orderLdepsAccountMatchedCount,
+    cashBalanceLogDepsRawCount,
+    cashBalanceLogFillIdCount,
+    bootstrapCashBalanceLogDepsHttpStatus,
+    bootstrapExecutionReportListHttpStatus,
+    bootstrapOrderLdepsHttpStatus,
+    bootstrapCashBalanceLogDepsHttpCategory,
+    bootstrapExecutionReportListHttpCategory,
+    bootstrapOrderLdepsHttpCategory,
   }
 
   if (

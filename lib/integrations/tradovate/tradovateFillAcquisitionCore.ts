@@ -30,6 +30,19 @@ export type TradovateFillAcquisitionStats = {
   initialBootstrapCashBalanceLogCount: number
   initialBootstrapDiscoveredFillIds: number
   initialBootstrapFillCount: number
+  executionReportListRawCount: number
+  executionReportAccountMatchedCount: number
+  executionReportAccountOrderIdCount: number
+  orderLdepsRawCount: number
+  orderLdepsAccountMatchedCount: number
+  cashBalanceLogDepsRawCount: number
+  cashBalanceLogFillIdCount: number
+  bootstrapCashBalanceLogDepsHttpStatus: number
+  bootstrapExecutionReportListHttpStatus: number
+  bootstrapOrderLdepsHttpStatus: number
+  bootstrapCashBalanceLogDepsHttpCategory: string
+  bootstrapExecutionReportListHttpCategory: string
+  bootstrapOrderLdepsHttpCategory: string
 }
 
 export function dedupeTradovateFillsById(fills: TradovateFillRaw[]): TradovateFillRaw[] {
@@ -108,6 +121,16 @@ export function logTradovateFillAcquisitionSummary(params: {
       `initialBootstrapCashBalanceLogCount=${stats.initialBootstrapCashBalanceLogCount}`,
       `initialBootstrapDiscoveredFillIds=${stats.initialBootstrapDiscoveredFillIds}`,
       `initialBootstrapFillCount=${stats.initialBootstrapFillCount}`,
+      `executionReportListRawCount=${stats.executionReportListRawCount}`,
+      `executionReportAccountMatchedCount=${stats.executionReportAccountMatchedCount}`,
+      `executionReportAccountOrderIdCount=${stats.executionReportAccountOrderIdCount}`,
+      `orderLdepsRawCount=${stats.orderLdepsRawCount}`,
+      `orderLdepsAccountMatchedCount=${stats.orderLdepsAccountMatchedCount}`,
+      `cashBalanceLogDepsRawCount=${stats.cashBalanceLogDepsRawCount}`,
+      `cashBalanceLogFillIdCount=${stats.cashBalanceLogFillIdCount}`,
+      `bootstrapCashBalanceLogDepsHttp=${stats.bootstrapCashBalanceLogDepsHttpStatus}:${stats.bootstrapCashBalanceLogDepsHttpCategory}`,
+      `bootstrapExecutionReportListHttp=${stats.bootstrapExecutionReportListHttpStatus}:${stats.bootstrapExecutionReportListHttpCategory}`,
+      `bootstrapOrderLdepsHttp=${stats.bootstrapOrderLdepsHttpStatus}:${stats.bootstrapOrderLdepsHttpCategory}`,
     ].join(" ")
   )
 }

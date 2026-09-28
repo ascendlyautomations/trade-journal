@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { TradovateApiError } from "./tradovateApiClient.ts"
-import type { TradovateFillRaw } from "./tradovateFillModels.ts"
+import {
+  tradovateAuthedFetch,
+  TradovateApiError,
+} from "./tradovateApiClient.ts"
+import type { TradovateFillRaw, TradovateOrderRaw } from "./tradovateFillModels.ts"
 import { tradovateFillStableId } from "./tradovateFillModels.ts"
 import {
   collectFillIdsFromCashBalanceLogs,
@@ -8,16 +11,18 @@ import {
   type TradovateCashBalanceLogRaw,
 } from "./tradovateCashBalanceLogModels.ts"
 import {
-  fetchTradovateCashBalanceLogsByAccountDeps,
-  fetchTradovateExecutionReportList,
   fetchTradovateFillsByIds,
   fetchTradovateFillsByOrderIdsLdeps,
-  fetchTradovateOrdersByAccountIdsLdeps,
 } from "./tradovateMarketDataClient.ts"
 import { dedupeTradovateFillsById } from "./tradovateFillAcquisitionCore.ts"
 
 /** Product default when Tradovate does not accept explicit date ranges on REST deps. */
 export const TRADOVATE_INITIAL_BOOTSTRAP_LOOKBACK_DAYS = 365
+
+export type TradovateBootstrapHttpDiagnostic = {
+  httpStatus: number
+  category: string
+}
 
 export type TradovateInitialHistoricalBootstrapResult = {
   attempted: boolean
@@ -28,12 +33,29 @@ export type TradovateInitialHistoricalBootstrapResult = {
   discoveredFillIds: string[]
   fills: TradovateFillRaw[]
   errors: string[]
+  executionReportListRawCount: number
+  executionReportAccountMatchedCount: number
+  executionReportAccountOrderIdCount: number
+  orderLdepsRawCount: number
+  orderLdepsAccountMatchedCount: number
+  cashBalanceLogDepsRawCount: number
+  cashBalanceLogFillIdCount: number
+  httpDiagnostics: {
+    cashBalanceLogDeps: TradovateBootstrapHttpDiagnostic
+    executionReportList: TradovateBootstrapHttpDiagnostic
+    orderLdeps: TradovateBootstrapHttpDiagnostic
+  }
 }
 
 function bootstrapLookbackStartIso(now = new Date()): string {
   const start = new Date(now)
   start.setUTCDate(start.getUTCDate() - TRADOVATE_INITIAL_BOOTSTRAP_LOOKBACK_DAYS)
   return start.toISOString()
+}
+
+function parseObjectArray(body: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(body)) return []
+  return body.filter((row) => row && typeof row === "object") as Record<string, unknown>[]
 }
 
 export function collectOrderIdsFromExecutionReports(params: {
@@ -52,12 +74,6 @@ export function collectOrderIdsFromExecutionReports(params: {
 
 /**
  * Initial ledger bootstrap when list/deps return no recent orders/fills.
- *
- * Supported Tradovate REST (OAuth bearer):
- * - GET cashBalanceLog/deps?masterid={accountId} — accounting logs with fillId pointers (archival).
- * - GET executionReport/list — user-visible execution reports; filter by accountId → order ids → fill/ldeps.
- * - GET order/ldeps?masterids={accountId} — supplemental order discovery for account entity.
- * - GET fill/items?ids= — hydrate fills discovered via logs or ldeps.
  */
 export async function runTradovateInitialHistoricalBootstrap(
   supabase: SupabaseClient,
@@ -70,77 +86,110 @@ export async function runTradovateInitialHistoricalBootstrap(
 ): Promise<TradovateInitialHistoricalBootstrapResult> {
   const errors: string[] = []
   const lookbackStart = bootstrapLookbackStartIso()
+  const target = String(params.targetAccountId).trim()
+  const masterid = encodeURIComponent(target)
+
+  const emptyHttp = { httpStatus: 0, category: "skipped" as const }
+
+  let cashBalanceLogDepsRawCount = 0
+  let cashBalanceLogFillIdCount = 0
   let cashBalanceLogCount = 0
   let cashBalanceLogs: TradovateCashBalanceLogRaw[] = []
+  let cashBalanceHttp: TradovateBootstrapHttpDiagnostic = emptyHttp
 
-  try {
-    cashBalanceLogs = await fetchTradovateCashBalanceLogsByAccountDeps(
-      supabase,
-      params.userId,
-      params.connectionId,
-      params.targetAccountId
-    )
+  const cashBalanceFetch = await tradovateAuthedFetch(
+    supabase,
+    params.userId,
+    params.connectionId,
+    `/v1/cashBalanceLog/deps?masterid=${masterid}`
+  )
+  cashBalanceHttp = {
+    httpStatus: cashBalanceFetch.status,
+    category: cashBalanceFetch.category,
+  }
+  if (cashBalanceFetch.ok) {
+    cashBalanceLogs = parseObjectArray(cashBalanceFetch.json) as TradovateCashBalanceLogRaw[]
+    cashBalanceLogDepsRawCount = cashBalanceLogs.length
     cashBalanceLogCount = cashBalanceLogs.length
     cashBalanceLogs = filterCashBalanceLogsWithinLookback(
       cashBalanceLogs,
       lookbackStart
     )
-  } catch (err) {
-    const detail =
-      err instanceof TradovateApiError
-        ? `${err.code}:${err.message}`
-        : err instanceof Error
-          ? err.message
-          : "cash_balance_log_deps_failed"
-    errors.push(`cash_balance_log_deps:${detail}`)
+    cashBalanceLogFillIdCount = collectFillIdsFromCashBalanceLogs(cashBalanceLogs).length
+  } else {
+    errors.push(
+      `cash_balance_log_deps:http_${cashBalanceFetch.status}:${cashBalanceFetch.category}`
+    )
   }
 
   const cashBalanceLogFillIds = collectFillIdsFromCashBalanceLogs(cashBalanceLogs)
 
+  let executionReportListRawCount = 0
+  let executionReportAccountMatchedCount = 0
   let executionReportOrderIds: string[] = []
-  try {
-    const reports = await fetchTradovateExecutionReportList(
-      supabase,
-      params.userId,
-      params.connectionId
-    )
+  let executionReportHttp: TradovateBootstrapHttpDiagnostic = emptyHttp
+
+  const executionReportFetch = await tradovateAuthedFetch(
+    supabase,
+    params.userId,
+    params.connectionId,
+    "/v1/executionReport/list"
+  )
+  executionReportHttp = {
+    httpStatus: executionReportFetch.status,
+    category: executionReportFetch.category,
+  }
+  if (executionReportFetch.ok) {
+    const reports = parseObjectArray(executionReportFetch.json) as Array<{
+      accountId?: number | string
+      orderId?: number | string
+    }>
+    executionReportListRawCount = reports.length
+    executionReportAccountMatchedCount = reports.filter(
+      (r) => r.accountId != null && String(r.accountId).trim() === target
+    ).length
     executionReportOrderIds = collectOrderIdsFromExecutionReports({
       reports,
       targetAccountId: params.targetAccountId,
     })
-  } catch (err) {
-    const detail =
-      err instanceof TradovateApiError
-        ? `${err.code}:${err.message}`
-        : err instanceof Error
-          ? err.message
-          : "execution_report_list_failed"
-    errors.push(`execution_report_list:${detail}`)
+  } else {
+    errors.push(
+      `execution_report_list:http_${executionReportFetch.status}:${executionReportFetch.category}`
+    )
   }
 
+  let orderLdepsRawCount = 0
+  let orderLdepsAccountMatchedCount = 0
   let orderLdepsCount = 0
   let orderIdsFromLdeps: string[] = []
-  try {
-    const orders = await fetchTradovateOrdersByAccountIdsLdeps(
-      supabase,
-      params.userId,
-      params.connectionId,
-      [params.targetAccountId]
-    )
+  let orderLdepsHttp: TradovateBootstrapHttpDiagnostic = emptyHttp
+
+  const orderLdepsFetch = await tradovateAuthedFetch(
+    supabase,
+    params.userId,
+    params.connectionId,
+    `/v1/order/ldeps?masterids=${masterid}`
+  )
+  orderLdepsHttp = {
+    httpStatus: orderLdepsFetch.status,
+    category: orderLdepsFetch.category,
+  }
+  if (orderLdepsFetch.ok) {
+    const orders = parseObjectArray(orderLdepsFetch.json) as TradovateOrderRaw[]
+    orderLdepsRawCount = orders.length
+    orderLdepsAccountMatchedCount = orders.filter(
+      (o) => o.accountId != null && String(o.accountId).trim() === target
+    ).length
     orderLdepsCount = orders.length
     orderIdsFromLdeps = [
       ...new Set(
         orders.filter((o) => o.id != null).map((o) => String(o.id))
       ),
     ]
-  } catch (err) {
-    const detail =
-      err instanceof TradovateApiError
-        ? `${err.code}:${err.message}`
-        : err instanceof Error
-          ? err.message
-          : "order_ldeps_failed"
-    errors.push(`order_ldeps:${detail}`)
+  } else {
+    errors.push(
+      `order_ldeps:http_${orderLdepsFetch.status}:${orderLdepsFetch.category}`
+    )
   }
 
   const orderIdsForLdeps = [
@@ -215,5 +264,17 @@ export async function runTradovateInitialHistoricalBootstrap(
     discoveredFillIds,
     fills,
     errors,
+    executionReportListRawCount,
+    executionReportAccountMatchedCount,
+    executionReportAccountOrderIdCount: executionReportOrderIds.length,
+    orderLdepsRawCount,
+    orderLdepsAccountMatchedCount,
+    cashBalanceLogDepsRawCount,
+    cashBalanceLogFillIdCount,
+    httpDiagnostics: {
+      cashBalanceLogDeps: cashBalanceHttp,
+      executionReportList: executionReportHttp,
+      orderLdeps: orderLdepsHttp,
+    },
   }
 }
