@@ -13,6 +13,7 @@ import {
 type ToggleItem = {
   key: NotificationPreferenceKey
   label: string
+  description?: string
 }
 
 type ToggleSection = {

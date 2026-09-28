@@ -473,6 +473,8 @@ export type DashboardAnalyticsResult = {
   bestTrade: number
   avgWin: number
   avgLoss: number
+  winCount: number
+  lossCount: number
   bestDay: number
   worstDay: number
   symbolPerformanceRows: DashboardSymbolPerformanceRow[]
