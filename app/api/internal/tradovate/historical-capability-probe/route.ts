@@ -91,13 +91,18 @@ export async function POST(req: Request) {
   })
 
   console.info(
-    "[TradovateHistoricalProbe] completed",
-    `connectionId=${connectionId}`,
-    `syncHttp=${syncProbe.httpStatus}`,
-    `syncFillsAccount=${syncProbe.accountScoped.fills.count}`,
-    `referencePresent=${syncProbe.referenceFillIdsPresent.length}`,
-    `reportDefsHttp=${reportingProbe.definitions.httpStatus}`,
-    `performanceHttp=${reportingProbe.performanceReport?.httpStatus ?? "skipped"}`
+    [
+      "[TradovateHistoricalProbe] completed",
+      `connectionId=${connectionId}`,
+      `syncHttp=${syncProbe.httpStatus}`,
+      `syncFillsTotal=${syncProbe.counts.fills ?? 0}`,
+      `syncFillsAccount=${syncProbe.accountScoped.fills.count}`,
+      `referencePresent=${syncProbe.referenceFillIdsPresentCount}/${syncProbe.referenceFillIdCount}`,
+      `reportDefsHttp=${reportingProbe.definitions.httpStatus}`,
+      `reportNames=${reportingProbe.definitions.reportNames.join("|")}`,
+      `performanceRows=${reportingProbe.performanceReport?.rowCount ?? 0}`,
+      `performanceFillIds=${reportingProbe.performanceReport?.referenceFillIdsFoundCount ?? 0}`,
+    ].join(" ")
   )
 
   return Response.json({
