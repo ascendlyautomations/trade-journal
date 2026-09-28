@@ -29,25 +29,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export function extractReportDefinitionsFromResponse(
-  json: unknown
-): TradovateReportDefinitionSummary[] {
-  let rows: unknown[] = []
-  if (json && typeof json === "object") {
-    const record = json as Record<string, unknown>
-    if (Array.isArray(record.reports)) {
-      rows = record.reports
-    } else if (Array.isArray(record.reportDefinitions)) {
-      rows = record.reportDefinitions
-    } else if (Array.isArray(json)) {
-      rows = json
-    }
-  }
-  return rows
-    .map((d) => summarizeReportDefinition(d))
-    .filter((d): d is TradovateReportDefinitionSummary => Boolean(d))
-}
-
 function accountIdOf(row: EntityRow): string | null {
   const raw = row.accountId
   if (raw == null) return null
