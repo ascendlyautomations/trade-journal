@@ -11,12 +11,13 @@ enum BrokerTradovateReconnectImport {
     static func reconnectAndSync(
         broker: BrokerIntegrationRepository,
         connectionId: String,
-        mappingId: String
+        mappingId: String,
+        apiEnvironment: String? = nil
     ) async -> Outcome {
         do {
             let url = try await broker.beginTradovateNativeOAuth(
                 reconnectConnectionId: connectionId,
-                apiEnvironment: nil
+                apiEnvironment: apiEnvironment
             )
             let oauth = await TradovateBrokerOAuthSession.connect(authorizeURL: url)
             switch oauth {

@@ -286,11 +286,7 @@ final class BrokerIntegrationsViewModel {
 
     func promptConnectTradovate(reconnectConnectionId: String? = nil) {
         guard !isBrokerConnectionMutationActive else { return }
-        if reconnectConnectionId != nil {
-            connectTradovate(reconnectConnectionId: reconnectConnectionId, apiEnvironment: nil)
-            return
-        }
-        pendingTradovateReconnectConnectionId = nil
+        pendingTradovateReconnectConnectionId = reconnectConnectionId
         showsTradovateEnvironmentPicker = true
     }
 

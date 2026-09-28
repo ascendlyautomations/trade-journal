@@ -160,6 +160,9 @@ export async function GET(request: NextRequest) {
   console.info("[tradovate/callback] connection_established", {
     userId: boundUser.user_id,
     hasProviderUserId: Boolean(providerUserId),
+    apiEnvironment,
+    oauthIntent: boundUser.oauth_intent,
+    targetConnectionId: boundUser.target_connection_id ?? null,
   })
 
   const { runTradovateAccountDiscovery } = await import(

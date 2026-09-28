@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   getTradovateOAuthConfigForEnvironment,
   getTradovateRestBaseUrl,
-  readServerDefaultTradovateApiEnvironment,
+  readTradovateOAuthConnectDefaultEnvironment,
   TRADOVATE_REST_BASE_BY_ENV,
   type TradovateApiEnvironment,
 } from "./tradovateOAuthEnv.ts"
@@ -57,6 +57,9 @@ export async function resolveTradovateApiEnvironmentForOAuth(params: {
   requestedEnvironment?: TradovateApiEnvironment | null
 }): Promise<TradovateApiEnvironment> {
   if (params.oauthIntent === "reconnect" && params.targetConnectionId) {
+    if (params.requestedEnvironment) {
+      return params.requestedEnvironment
+    }
     const { data } = await params.supabase
       .from("broker_integration_connections")
       .select("api_environment")
@@ -72,7 +75,7 @@ export async function resolveTradovateApiEnvironmentForOAuth(params: {
 
   if (params.requestedEnvironment) return params.requestedEnvironment
 
-  return readServerDefaultTradovateApiEnvironment()
+  return readTradovateOAuthConnectDefaultEnvironment()
 }
 
 export function logTradovateEnvironmentSync(params: {

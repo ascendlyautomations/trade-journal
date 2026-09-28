@@ -51,6 +51,17 @@ export function readServerDefaultTradovateApiEnvironment(): TradovateApiEnvironm
   return "demo"
 }
 
+/**
+ * OAuth connect default when the client does not pass apiEnvironment.
+ * Intentionally NOT tied to TRADOVATE_API_ENV (worker/sync misc), which must not
+ * silently pick live vs demo for user OAuth token exchange.
+ */
+export function readTradovateOAuthConnectDefaultEnvironment(): TradovateApiEnvironment {
+  const raw = process.env.TRADOVATE_OAUTH_DEFAULT_ENV?.trim().toLowerCase()
+  if (raw === "live" || raw === "demo") return raw
+  return "demo"
+}
+
 export function getTradovateOAuthConfigForEnvironment(
   apiEnvironment: TradovateApiEnvironment
 ) {

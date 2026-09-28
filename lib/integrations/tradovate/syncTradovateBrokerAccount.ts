@@ -11,8 +11,14 @@ import {
 } from "@/lib/integrations/tradovate/tradovateApiEnvironment"
 import {
   getTradovateRestBaseUrl,
-  readServerDefaultTradovateApiEnvironment,
+  readTradovateOAuthConnectDefaultEnvironment,
 } from "@/lib/integrations/tradovate/tradovateOAuthEnv"
+import { markBrokerConnectionReconnectRequired } from "@/lib/integrations/brokerIntegrationConnection"
+import {
+  resolveTradovateSyncAcquisitionFailure,
+  type TradovateSyncAcquisitionFailure,
+} from "@/lib/integrations/tradovate/tradovateSyncAcquisitionFailure"
+import { tradovateAcquisitionErrorsIndicateAuthFailure } from "@/lib/integrations/tradovate/tradovateAcquisitionAuth"
 import {
   tradovateClientSyncErrorForIncompletePartial,
   tradovateClientSyncOk,
@@ -395,7 +401,7 @@ export async function syncTradovateBrokerAccount(
     const acquisitionStarted = Date.now()
     failureStage = "fill_list"
     const apiEnvironmentForSync =
-      storedEnvironment ?? readServerDefaultTradovateApiEnvironment()
+      storedEnvironment ?? readTradovateOAuthConnectDefaultEnvironment()
 
     const fillAcquisition = await acquireTradovateFillsForAccount(supabase, {
       userId,
@@ -414,6 +420,66 @@ export async function syncTradovateBrokerAccount(
       mergedFillCount: fillAcquisition.accountFills.length,
       historicalCompleteness: fillAcquisition.historicalCompleteness,
     })
+
+    const acquisitionFailure = resolveTradovateSyncAcquisitionFailure({
+      acquisitionStatus,
+      acquisitionErrors: fillAcquisition.acquisitionErrors,
+    })
+    if (
+      acquisitionFailure ||
+      tradovateAcquisitionErrorsIndicateAuthFailure(
+        fillAcquisition.acquisitionErrors
+      )
+    ) {
+      const failure =
+        acquisitionFailure ??
+        ({
+          authFailure: true,
+          status: "reconnect_required" as const,
+          errorCode: "reconnect_required",
+          error:
+            "Tradovate authorization failed for this connection. Reconnect and choose the environment (Demo or Live) that matches your account.",
+          failureCategory: "token_refresh_failure" as TradovateSyncFailureCategory,
+          failureStage: "order_deps" as TradovateSyncFailureStage,
+        } satisfies TradovateSyncAcquisitionFailure)
+
+      if (failure.authFailure) {
+        await markBrokerConnectionReconnectRequired(
+          supabase,
+          connectionId,
+          userId
+        )
+      }
+
+      await releaseBrokerSyncLock(supabase, brokerIntegrationAccountId, {
+        lastSyncStatus: failure.status,
+        lastSyncErrorCode: failure.errorCode,
+        lastSyncErrorMessage: failure.error,
+      })
+
+      logTradovateSync("sync_error", {
+        userId,
+        connectionId,
+        mappingId: brokerIntegrationAccountId,
+        trigger,
+        durationMs: Date.now() - started,
+        errorCode: failure.errorCode,
+        failureCategory: failure.failureCategory,
+        failureStage: failure.failureStage,
+        detail: `${failure.error.slice(0, 120)} acquisitionStatus=${acquisitionStatus}`,
+      })
+
+      return emptySummary(trigger, {
+        ok: false,
+        status: failure.status,
+        acquisitionStatus,
+        error: failure.error,
+        errorCode: failure.errorCode,
+        failureCategory: failure.failureCategory,
+        failureStage: failure.failureStage,
+        durationMs: Date.now() - started,
+      })
+    }
 
     traceTradovateFillListStage({
       targetAccountId,
