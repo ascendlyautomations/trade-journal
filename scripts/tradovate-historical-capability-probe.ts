@@ -115,6 +115,8 @@ async function main(): Promise<void> {
     accountId,
     startDate: "09/14/2026",
     endDate: "09/23/2026",
+    reportAccountEntityId: syncProbe.reportAccountEntityIdUsed,
+    syncAccounts: syncProbe.accountsFromSync,
   })
 
   console.info(

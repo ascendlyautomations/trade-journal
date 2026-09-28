@@ -88,20 +88,29 @@ export async function POST(req: Request) {
     accountId,
     startDate,
     endDate,
+    reportAccountEntityId: syncProbe.reportAccountEntityIdUsed,
+    syncAccounts: syncProbe.accountsFromSync,
   })
+
+  const matchedSyncAccount = syncProbe.accountsFromSync.find((a) => a.matchesRequestedAccountId)
 
   console.info(
     [
       "[TradovateHistoricalProbe] completed",
       `connectionId=${connectionId}`,
       `syncHttp=${syncProbe.httpStatus}`,
-      `syncFillsTotal=${syncProbe.counts.fills ?? 0}`,
+      `syncAccountId=${matchedSyncAccount?.id ?? "missing"}`,
+      `syncAccountName=${matchedSyncAccount?.name ?? "missing"}`,
+      `reportAccountEntityId=${reportingProbe.accountEncoding.reportAccountEntityId ?? "null"}`,
       `syncFillsAccount=${syncProbe.accountScoped.fills.count}`,
       `referencePresent=${syncProbe.referenceFillIdsPresentCount}/${syncProbe.referenceFillIdCount}`,
       `reportDefsHttp=${reportingProbe.definitions.httpStatus}`,
-      `reportNames=${reportingProbe.definitions.reportNames.join("|")}`,
+      `performanceError=${reportingProbe.performanceReport?.errorText ?? "none"}`,
       `performanceRows=${reportingProbe.performanceReport?.rowCount ?? 0}`,
       `performanceFillIds=${reportingProbe.performanceReport?.referenceFillIdsFoundCount ?? 0}`,
+      `fillsError=${reportingProbe.fillsReport?.errorText ?? "none"}`,
+      `fillsRows=${reportingProbe.fillsReport?.rowCount ?? 0}`,
+      `fillsFillIds=${reportingProbe.fillsReport?.referenceFillIdsFoundCount ?? 0}`,
     ].join(" ")
   )
 
