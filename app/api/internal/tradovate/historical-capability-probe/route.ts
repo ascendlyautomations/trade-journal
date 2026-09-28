@@ -8,7 +8,7 @@ import {
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const maxDuration = 120
+export const maxDuration = 300
 
 const integrationDb = supabaseServiceRole as SupabaseClient
 
@@ -105,12 +105,11 @@ export async function POST(req: Request) {
       `syncFillsAccount=${syncProbe.accountScoped.fills.count}`,
       `referencePresent=${syncProbe.referenceFillIdsPresentCount}/${syncProbe.referenceFillIdCount}`,
       `reportDefsHttp=${reportingProbe.definitions.httpStatus}`,
-      `performanceError=${reportingProbe.performanceReport?.errorText ?? "none"}`,
-      `performanceRows=${reportingProbe.performanceReport?.rowCount ?? 0}`,
-      `performanceFillIds=${reportingProbe.performanceReport?.referenceFillIdsFoundCount ?? 0}`,
-      `fillsError=${reportingProbe.fillsReport?.errorText ?? "none"}`,
-      `fillsRows=${reportingProbe.fillsReport?.rowCount ?? 0}`,
-      `fillsFillIds=${reportingProbe.fillsReport?.referenceFillIdsFoundCount ?? 0}`,
+      `encodingTests=${reportingProbe.performanceAccountEncodingTests.length}`,
+      `winningEncoding=${reportingProbe.winningAccountEncoding ?? "none"}`,
+      `referenceFillIds=${reportingProbe.referenceFillIdAudit.uniqueFillIdCount}`,
+      `fillsNoAccountRows=${reportingProbe.fillsWithoutAccount?.rowCount ?? 0}`,
+      `fillsNoAccountRefIds=${reportingProbe.fillsWithoutAccount?.referenceFillIdsFoundCount ?? 0}`,
     ].join(" ")
   )
 

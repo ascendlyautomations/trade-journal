@@ -1,14 +1,24 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { tradovateAuthedFetch } from "./tradovateApiClient.ts"
-import { tradovatePerformanceSep2026ReconstructionFills } from "./tradovatePerformanceSep2026Fixture.ts"
 import {
   extractReportDefinitionsFromResponse,
   type TradovateReportDefinitionSummary,
 } from "./tradovateReportDefinitionsParse.ts"
 import {
+  auditTradovateReferenceSep2026FillIds,
+  tradovateReferenceSep2026FillIds,
+  type TradovateReferenceSep2026FillIdAudit,
+} from "./tradovateReferenceSep2026FillIds.ts"
+import {
+  buildDateRangeParams,
+  buildPerformanceAccountEncodingVariants,
   buildTradovateDateRangeAccountReportParams,
+  buildTradovateReportRequestBody,
   describeReportParamValue,
+  errorTextIndicatesAccountIdZero,
   parseTradovateAccountEntityId,
+  sanitizeReportRequestBodyForLog,
+  type TradovateReportRequestBody,
   type TradovateReportRequestParamJson,
 } from "./tradovateReportRequestParams.ts"
 
@@ -19,11 +29,9 @@ const RPT_DEMO_BASE = "https://rpt-demo.tradovateapi.com"
 const REPORT_POLL_MS = 2_000
 const REPORT_POLL_MAX_ATTEMPTS = 45
 
-export const TRADOVATE_REFERENCE_SEP2026_FILL_IDS = [
-  ...new Set(
-    tradovatePerformanceSep2026ReconstructionFills().map((f) => f.fillId)
-  ),
-]
+export const TRADOVATE_REFERENCE_SEP2026_FILL_IDS = tradovateReferenceSep2026FillIds()
+
+export { auditTradovateReferenceSep2026FillIds } from "./tradovateReferenceSep2026FillIds.ts"
 
 type EntityRow = Record<string, unknown>
 
@@ -260,8 +268,8 @@ export type TradovateSyncRequestProbeResult = {
 
 export type TradovateReportParamUsed = {
   name: string
-  value: string | number
-  jsonType: "string" | "number"
+  value: unknown
+  jsonType: string
   jsonLiteral: string
 }
 
@@ -319,12 +327,50 @@ export type TradovateFillsReportProbeResult = TradovateCsvReportProbeResult & {
   }
 }
 
+export type TradovateReportEncodingProbeAttempt = {
+  encodingName: string
+  description: string
+  sanitizedRequestBody: TradovateReportRequestBody
+  httpStatus: number
+  errorText: string | null
+  accountIdZeroError: boolean
+  reportId: string | null
+  reportCompleted: boolean
+  rowCount: number
+  stoppedEarlyBecauseSucceeded: boolean
+}
+
+export type TradovateFillsWithoutAccountProbeResult = {
+  sanitizedRequestBody: TradovateReportRequestBody
+  httpStatus: number
+  errorText: string | null
+  reportCompleted: boolean
+  rowCount: number
+  columnNames: string[]
+  accountIdColumn: string | null
+  rowsForRequestedAccount: number
+  referenceFillIdsFoundCount: number
+  referenceFillIdsFoundInCsv: string[]
+  workflow: {
+    reportId: string | null
+    pollAttempts: number
+    getReportHttpStatus: number | null
+    completionHint: string | null
+  }
+  textSnippet: string
+}
+
 export type TradovateReportingProbeResult = {
+  referenceFillIdAudit: TradovateReferenceSep2026FillIdAudit
+  sanitizedDefaultPerformanceRequestBody: TradovateReportRequestBody | null
+  performanceAccountEncodingTests: TradovateReportEncodingProbeAttempt[]
+  winningAccountEncoding: string | null
+  fillsWithoutAccount?: TradovateFillsWithoutAccountProbeResult
   accountEncoding: {
     requestedAccountId: string
+    syncAccountName: string | null
     reportAccountEntityId: number | null
-    accountsParamRule: string
-    stringValueWouldParseAsIdZero: boolean
+    investigationNote: string
   }
   definitions: {
     httpStatus: number
@@ -425,14 +471,15 @@ function resolveCsvFromFetch(fullText: string, json: unknown): string {
 async function pollTradovateReportCsv(
   supabase: SupabaseClient,
   params: { userId: string; connectionId: string },
-  reportId: string
+  reportId: string,
+  pollMaxAttempts: number = REPORT_POLL_MAX_ATTEMPTS
 ): Promise<{ csv: string; getReportHttpStatus: number | null; pollAttempts: number; completionHint: string | null }> {
   let pollAttempts = 0
   let lastStatus: number | null = null
   let completionHint: string | null = null
   let csv = ""
 
-  for (let i = 0; i < REPORT_POLL_MAX_ATTEMPTS; i += 1) {
+  for (let i = 0; i < pollMaxAttempts; i += 1) {
     pollAttempts = i + 1
     const fetched = await tradovateAuthedFetch(
       supabase,
@@ -470,8 +517,8 @@ async function requestTradovateCsvReport(
   params: {
     userId: string
     connectionId: string
-    reportName: string
-    reportParams: TradovateReportRequestParamJson[]
+    reportBody: TradovateReportRequestBody
+    pollMaxAttempts?: number
   }
 ): Promise<{
   reportFetch: Awaited<ReturnType<typeof tradovateAuthedFetch>>
@@ -482,12 +529,7 @@ async function requestTradovateCsvReport(
   completionHint: string | null
   errorText: string | null
 }> {
-  const reportBody = {
-    name: params.reportName,
-    representationType: "csv",
-    timezone: -240,
-    params: params.reportParams,
-  }
+  const sanitizedBody = sanitizeReportRequestBodyForLog(params.reportBody)
 
   const reportFetch = await tradovateAuthedFetch(
     supabase,
@@ -496,7 +538,7 @@ async function requestTradovateCsvReport(
     "/v1/reports/requestReport",
     {
       method: "POST",
-      jsonBody: reportBody,
+      jsonBody: sanitizedBody,
       baseUrlOverride: RPT_DEMO_BASE,
     }
   )
@@ -508,11 +550,14 @@ async function requestTradovateCsvReport(
   let completionHint: string | null = null
   let errorText = extractReportErrorText(reportFetch.fullText, reportFetch.json)
 
+  const pollCap = params.pollMaxAttempts ?? REPORT_POLL_MAX_ATTEMPTS
+
   if ((!csvText || !looksLikeReportCsv(csvText)) && reportId && !errorText) {
     const polled = await pollTradovateReportCsv(
       supabase,
       { userId: params.userId, connectionId: params.connectionId },
-      reportId
+      reportId,
+      pollCap
     )
     csvText = polled.csv
     pollAttempts = polled.pollAttempts
@@ -547,6 +592,70 @@ function countReferenceIdsInCsv(csvText: string, reference: readonly string[]): 
     if (csvText.includes(fillId)) found.push(fillId)
   }
   return found
+}
+
+function countRowsMatchingAccount(
+  columnNames: string[],
+  rows: string[][],
+  accountId: string
+): number {
+  const acctCol = findHeaderColumn(
+    columnNames,
+    "accountid",
+    "account id",
+    "account"
+  )
+  if (!acctCol) return 0
+  const idx = columnIndex(columnNames, acctCol)
+  if (idx < 0) return 0
+  const target = accountId.trim()
+  let count = 0
+  for (const row of rows) {
+    const cell = (row[idx] ?? "").trim()
+    if (cell === target || cell.endsWith(target)) count += 1
+  }
+  return count
+}
+
+async function probePerformanceEncodingVariant(
+  supabase: SupabaseClient,
+  ctx: { userId: string; connectionId: string },
+  variant: {
+    encodingName: string
+    description: string
+    params: TradovateReportRequestParamJson[]
+  }
+): Promise<TradovateReportEncodingProbeAttempt> {
+  const sanitizedRequestBody = sanitizeReportRequestBodyForLog(
+    buildTradovateReportRequestBody({
+      reportName: "Performance",
+      params: variant.params,
+    })
+  )
+
+  const run = await requestTradovateCsvReport(supabase, {
+    userId: ctx.userId,
+    connectionId: ctx.connectionId,
+    reportBody: sanitizedRequestBody,
+    pollMaxAttempts: 10,
+  })
+
+  const { rows } = parseCsvRows(run.csvText)
+  const rowCount = rows.length
+  const reportCompleted = run.errorText == null && rowCount > 0
+
+  return {
+    encodingName: variant.encodingName,
+    description: variant.description,
+    sanitizedRequestBody,
+    httpStatus: run.reportFetch.status,
+    errorText: run.errorText,
+    accountIdZeroError: errorTextIndicatesAccountIdZero(run.errorText),
+    reportId: run.reportId,
+    reportCompleted,
+    rowCount,
+    stoppedEarlyBecauseSucceeded: false,
+  }
 }
 
 export async function runTradovateSyncRequestProbe(
@@ -704,13 +813,36 @@ export async function runTradovateReportingProbe(
       ? resolveReportAccountEntityId(params.syncAccounts, params.accountId)
       : parseTradovateAccountEntityId(params.accountId))
 
+  const matchedSyncAccount = params.syncAccounts?.find((a) => a.matchesRequestedAccountId)
+  const syncAccountName = matchedSyncAccount?.name ?? null
+
+  const referenceFillIdAudit = auditTradovateReferenceSep2026FillIds()
+
+  const sanitizedDefaultPerformanceRequestBody =
+    reportAccountEntityId != null
+      ? sanitizeReportRequestBodyForLog(
+          buildTradovateReportRequestBody({
+            reportName: "Performance",
+            params: buildTradovateDateRangeAccountReportParams({
+              startDate: params.startDate,
+              endDate: params.endDate,
+              accountEntityId: reportAccountEntityId,
+            }),
+          })
+        )
+      : null
+
   const result: TradovateReportingProbeResult = {
+    referenceFillIdAudit,
+    sanitizedDefaultPerformanceRequestBody,
+    performanceAccountEncodingTests: [],
+    winningAccountEncoding: null,
     accountEncoding: {
       requestedAccountId: params.accountId,
+      syncAccountName,
       reportAccountEntityId,
-      accountsParamRule:
-        'param name "account", paramType "accounts": JSON number account entity id (not a string)',
-      stringValueWouldParseAsIdZero: true,
+      investigationNote:
+        'paramType "accounts" encoding is under probe; scalar JSON number did not fix ID:0 in production.',
     },
     definitions: {
       httpStatus: definitionsFetch.status,
@@ -730,19 +862,44 @@ export async function runTradovateReportingProbe(
     return result
   }
 
-  const reportParams = buildTradovateDateRangeAccountReportParams({
+  const ctx = { userId: params.userId, connectionId: params.connectionId }
+  const encodingVariants = buildPerformanceAccountEncodingVariants({
     startDate: params.startDate,
     endDate: params.endDate,
     accountEntityId: reportAccountEntityId,
+    accountName: syncAccountName,
   })
+
+  let winningParams: TradovateReportRequestParamJson[] | null = null
+
+  for (const variant of encodingVariants) {
+    const attempt = await probePerformanceEncodingVariant(supabase, ctx, variant)
+    result.performanceAccountEncodingTests.push(attempt)
+    if (attempt.reportCompleted) {
+      attempt.stoppedEarlyBecauseSucceeded = true
+      result.winningAccountEncoding = variant.encodingName
+      winningParams = variant.params
+      break
+    }
+  }
+
+  const reportParams =
+    winningParams ??
+    buildTradovateDateRangeAccountReportParams({
+      startDate: params.startDate,
+      endDate: params.endDate,
+      accountEntityId: reportAccountEntityId,
+    })
   const paramsUsed = mapParamsUsed(reportParams)
 
   if (performance) {
     const perf = await requestTradovateCsvReport(supabase, {
-      userId: params.userId,
-      connectionId: params.connectionId,
-      reportName: "Performance",
-      reportParams,
+      userId: ctx.userId,
+      connectionId: ctx.connectionId,
+      reportBody: buildTradovateReportRequestBody({
+        reportName: "Performance",
+        params: reportParams,
+      }),
     })
 
     const { header: columnNames, rows } = parseCsvRows(perf.csvText)
@@ -780,8 +937,9 @@ export async function runTradovateReportingProbe(
       reportCompleted,
       reportName: "Performance",
       paramsUsed,
-      priorEncodingIssue:
-        'Sending `"value":"65788591"` (string) yields errorText account is not found (ID:0); use JSON number.',
+      priorEncodingIssue: result.winningAccountEncoding
+        ? undefined
+        : "See performanceAccountEncodingTests — scalar string and JSON number both failed with ID:0 in production.",
       errorText: perf.errorText,
       responseFormat: looksLikePerformanceCsv(perf.csvText) ? "csv" : "unknown",
       rowCount,
@@ -806,11 +964,65 @@ export async function runTradovateReportingProbe(
   }
 
   if (fills) {
+    const fillsNoAccountBody = sanitizeReportRequestBodyForLog(
+      buildTradovateReportRequestBody({
+        reportName: "Fills",
+        params: buildDateRangeParams({
+          startDate: params.startDate,
+          endDate: params.endDate,
+        }),
+      })
+    )
+    const fillsNoAccountRun = await requestTradovateCsvReport(supabase, {
+      userId: ctx.userId,
+      connectionId: ctx.connectionId,
+      reportBody: fillsNoAccountBody,
+    })
+    const { header: noAcctCols, rows: noAcctRows } = parseCsvRows(
+      fillsNoAccountRun.csvText
+    )
+    const noAcctReferenceFound = countReferenceIdsInCsv(
+      fillsNoAccountRun.csvText,
+      reference
+    )
+    const accountIdColumnNoAcct = findHeaderColumn(
+      noAcctCols,
+      "accountid",
+      "account id",
+      "account"
+    )
+    result.fillsWithoutAccount = {
+      sanitizedRequestBody: fillsNoAccountBody,
+      httpStatus: fillsNoAccountRun.reportFetch.status,
+      errorText: fillsNoAccountRun.errorText,
+      reportCompleted:
+        fillsNoAccountRun.errorText == null && noAcctRows.length > 0,
+      rowCount: noAcctRows.length,
+      columnNames: noAcctCols,
+      accountIdColumn: accountIdColumnNoAcct,
+      rowsForRequestedAccount: countRowsMatchingAccount(
+        noAcctCols,
+        noAcctRows,
+        params.accountId
+      ),
+      referenceFillIdsFoundCount: noAcctReferenceFound.length,
+      referenceFillIdsFoundInCsv: noAcctReferenceFound,
+      workflow: {
+        reportId: fillsNoAccountRun.reportId,
+        pollAttempts: fillsNoAccountRun.pollAttempts,
+        getReportHttpStatus: fillsNoAccountRun.getReportHttpStatus,
+        completionHint: fillsNoAccountRun.completionHint,
+      },
+      textSnippet: fillsNoAccountRun.csvText.slice(0, 280).replace(/\s+/g, " "),
+    }
+
     const fillsRun = await requestTradovateCsvReport(supabase, {
-      userId: params.userId,
-      connectionId: params.connectionId,
-      reportName: "Fills",
-      reportParams,
+      userId: ctx.userId,
+      connectionId: ctx.connectionId,
+      reportBody: buildTradovateReportRequestBody({
+        reportName: "Fills",
+        params: reportParams,
+      }),
     })
 
     const { header: columnNames, rows } = parseCsvRows(fillsRun.csvText)
