@@ -30,6 +30,16 @@ struct AdminPlatformUpdatesView: View {
             && !bodyText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    private var upcomingAlerts: [AdminPlatformUpdateRow] {
+        rows
+            .filter { $0.status == "scheduled" }
+            .sorted { lhs, rhs in
+                let l = lhs.publishAt.flatMap(PlatformUpdateDateFormat.date(from:)) ?? .distantFuture
+                let r = rhs.publishAt.flatMap(PlatformUpdateDateFormat.date(from:)) ?? .distantFuture
+                return l < r
+            }
+    }
+
     var body: some View {
         List {
             Section("Composer") {
@@ -77,9 +87,9 @@ struct AdminPlatformUpdatesView: View {
                     Text(errorMessage).foregroundStyle(colors.error)
                 }
             }
-            section("Upcoming Alerts", filter: "scheduled")
-            section("Drafts", filter: "draft")
-            section("Published", filter: "published")
+            upcomingAlertsSection
+            draftsSection
+            publishedSection
         }
         .adminScreenHeading("Updates")
         .experienceInsetGroupedListStyle(pageBackground: true)
@@ -100,30 +110,102 @@ struct AdminPlatformUpdatesView: View {
     }
 
     @ViewBuilder
-    private func section(_ title: String, filter: String) -> some View {
-        let items = rows.filter { $0.status == filter }
-        if !items.isEmpty {
-            Section(title) {
-                ForEach(items) { row in
+    private var upcomingAlertsSection: some View {
+        Section("Upcoming Alerts") {
+            if upcomingAlerts.isEmpty {
+                Text("No upcoming alerts")
+                    .font(.footnote)
+                    .foregroundStyle(colors.tertiaryText)
+            } else {
+                ForEach(upcomingAlerts) { row in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(row.title).font(.headline)
-                        if filter == "scheduled", let iso = row.publishAt,
+                        Text(row.title)
+                            .font(.headline)
+                        Text(bodyPreview(row.body))
+                            .font(.caption)
+                            .foregroundStyle(colors.secondaryText)
+                            .lineLimit(2)
+                        Text(categoryLabel(row.category))
+                            .font(.caption2)
+                            .foregroundStyle(colors.accent)
+                        if let iso = row.publishAt,
                            let date = PlatformUpdateDateFormat.date(from: iso) {
                             Text(date.formatted(date: .abbreviated, time: .shortened))
                                 .font(.caption)
                                 .foregroundStyle(colors.secondaryText)
                         }
-                        if filter == "published", let b = row.broadcast, row.sendPush {
+                        Text("Opens to \(destinationLabel(row.destination)) · Push \(row.sendPush ? "ON" : "OFF")")
+                            .font(.caption2)
+                            .foregroundStyle(colors.tertiaryText)
+                        HStack(spacing: 12) {
+                            Button("Edit") { loadEditor(row) }
+                            Button("Cancel", role: .destructive) {
+                                Task { await cancelScheduled(row.id) }
+                            }
+                        }
+                        .font(.caption.weight(.semibold))
+                        .padding(.top, 2)
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var draftsSection: some View {
+        let items = rows.filter { $0.status == "draft" }
+        if !items.isEmpty {
+            Section("Drafts") {
+                ForEach(items) { row in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(row.title).font(.headline)
+                        Button("Edit") { loadEditor(row) }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var publishedSection: some View {
+        let items = rows.filter { $0.status == "published" }
+        if !items.isEmpty {
+            Section("Published") {
+                ForEach(items) { row in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(row.title).font(.headline)
+                        if let b = row.broadcast, row.sendPush {
                             Text("Push: \(b.status) · ok \(b.successCount) · fail \(b.failedCount)")
                                 .font(.caption)
                                 .foregroundStyle(colors.secondaryText)
                         }
-                        if filter != "published" {
-                            Button("Edit") { loadEditor(row) }
-                        }
                     }
                 }
             }
+        }
+    }
+
+    private func bodyPreview(_ text: String) -> String {
+        let trimmed = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "—" }
+        if trimmed.count <= 120 { return trimmed }
+        return String(trimmed.prefix(120)) + "…"
+    }
+
+    private func categoryLabel(_ raw: String) -> String {
+        raw.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    private func destinationLabel(_ raw: String) -> String {
+        switch raw {
+        case "whats_new": return "What's New"
+        case "trade_rooms": return "Trade Rooms"
+        case "broker_integrations": return "Broker Integrations"
+        case "subscription": return "TraxPro / Subscription"
+        default:
+            return raw.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
 
@@ -229,6 +311,26 @@ struct AdminPlatformUpdatesView: View {
                 self.editingID = created.id
             }
             clearComposer()
+            await reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func cancelScheduled(_ id: String) async {
+        guard let transport = data.supabase.transport else { return }
+        isBusy = true
+        defer { isBusy = false }
+        errorMessage = nil
+        do {
+            try await AdminPlatformUpdatesClient.patch(
+                transport: transport,
+                id: id,
+                body: ["status": "cancelled"]
+            )
+            if editingID == id {
+                clearComposer()
+            }
             await reload()
         } catch {
             errorMessage = error.localizedDescription

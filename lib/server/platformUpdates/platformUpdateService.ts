@@ -1,4 +1,3 @@
-import { after } from "next/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types.ts"
 import {
@@ -8,7 +7,7 @@ import {
   type PlatformUpdateCategoryId,
   type PlatformUpdateDestinationId,
 } from "@/lib/platformUpdateDestinations"
-import { processPlatformUpdateBroadcasts } from "@/lib/server/platformUpdates/broadcastWorker"
+import { deliverPlatformUpdateBroadcastNow } from "@/lib/server/platformUpdates/broadcastWorker"
 
 export type PlatformUpdateRecord = {
   id: string
@@ -204,13 +203,6 @@ export async function publishPlatformUpdateNow(params: {
     } else {
       broadcastId = broadcast?.id ?? null
     }
-
-    if (broadcastId) {
-      const id = broadcastId
-      after(async () => {
-        await processPlatformUpdateBroadcasts({ broadcastId: id })
-      })
-    }
   }
 
   return { ok: true, update: row, broadcastId }
@@ -240,7 +232,12 @@ export async function publishDueScheduledPlatformUpdates(
       updateId: String(row.id),
       adminUserId: String(row.created_by ?? ""),
     })
-    if (result.ok) published += 1
+    if (result.ok) {
+      published += 1
+      if (result.broadcastId) {
+        await deliverPlatformUpdateBroadcastNow(result.broadcastId)
+      }
+    }
   }
   return { published }
 }

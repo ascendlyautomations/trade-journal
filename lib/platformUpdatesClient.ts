@@ -121,7 +121,20 @@ export async function deleteAdminPlatformUpdateDraft(id: string): Promise<void> 
 }
 
 export async function publishAdminPlatformUpdate(id: string): Promise<{
-  broadcastQueued: boolean
+  publishSucceeded: boolean
+  pushSucceeded: boolean
+  pushDelivery: {
+    broadcastId: string
+    status: string
+    attemptedCount: number
+    successCount: number
+    failedCount: number
+    apnsConfigured: boolean
+    apnsProduction: boolean
+    iosTokenRows: number
+    incomplete: boolean
+    lastApnsFailureReason: string | null
+  } | null
 }> {
   const res = await fetch(`/api/admin/platform-updates/${id}/publish`, {
     method: "POST",
@@ -130,6 +143,19 @@ export async function publishAdminPlatformUpdate(id: string): Promise<{
   const json = await parseJson(res)
   if (!res.ok) throw new Error(String(json.error ?? "Publish failed"))
   return {
-    broadcastQueued: Boolean(json.broadcastQueued),
+    publishSucceeded: Boolean(json.publishSucceeded ?? json.ok),
+    pushSucceeded: Boolean(json.pushSucceeded),
+    pushDelivery: (json.pushDelivery as {
+      broadcastId: string
+      status: string
+      attemptedCount: number
+      successCount: number
+      failedCount: number
+      apnsConfigured: boolean
+      apnsProduction: boolean
+      iosTokenRows: number
+      incomplete: boolean
+      lastApnsFailureReason: string | null
+    } | null) ?? null,
   }
 }

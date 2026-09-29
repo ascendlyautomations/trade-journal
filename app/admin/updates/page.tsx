@@ -56,6 +56,7 @@ export default function AdminUpdatesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [confirmPublish, setConfirmPublish] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [publishNotice, setPublishNotice] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const rows = await fetchAdminPlatformUpdates()
@@ -78,9 +79,16 @@ export default function AdminUpdatesPage() {
   }, [load])
 
   const grouped = useMemo(() => {
+    const upcomingAlerts = updates
+      .filter((u) => u.status === "scheduled")
+      .sort((a, b) => {
+        const ta = a.publishAt ? new Date(a.publishAt).getTime() : 0
+        const tb = b.publishAt ? new Date(b.publishAt).getTime() : 0
+        return ta - tb
+      })
     return {
+      upcomingAlerts,
       drafts: updates.filter((u) => u.status === "draft"),
-      scheduled: updates.filter((u) => u.status === "scheduled"),
       published: updates.filter((u) => u.status === "published"),
     }
   }, [updates])
@@ -148,11 +156,38 @@ export default function AdminUpdatesPage() {
     if (!editingId) return
     setBusy(true)
     setError(null)
+    setPublishNotice(null)
     try {
-      await publishAdminPlatformUpdate(editingId)
+      const result = await publishAdminPlatformUpdate(editingId)
       setConfirmPublish(false)
       await load()
       startCreate()
+      if (result.pushDelivery) {
+        const d = result.pushDelivery
+        if (d.successCount > 0) {
+          setPublishNotice(
+            `Published. Push delivered to ${d.successCount} device(s)` +
+              (d.failedCount > 0 ? ` (${d.failedCount} failed).` : ".")
+          )
+        } else {
+          setError(
+            `Published to What's New, but push did not deliver. ` +
+              `Broadcast ${d.status}; tokens in DB: ${d.iosTokenRows}; ` +
+              `attempted ${d.attemptedCount}; ` +
+              (d.lastApnsFailureReason
+                ? `reason: ${d.lastApnsFailureReason}`
+                : "check Vercel logs for [platform-update-broadcast].")
+          )
+        }
+        if (d.incomplete) {
+          setPublishNotice(
+            (prev) =>
+              `${prev ?? ""} Broadcast still sending (large audience) — resume via cron when enabled.`.trim()
+          )
+        }
+      } else {
+        setPublishNotice("Published (no push requested).")
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Publish failed")
     } finally {
@@ -191,6 +226,11 @@ export default function AdminUpdatesPage() {
         {error && (
           <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             {error}
+          </p>
+        )}
+        {publishNotice && (
+          <p className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+            {publishNotice}
           </p>
         )}
 
@@ -337,17 +377,104 @@ export default function AdminUpdatesPage() {
           )}
         </section>
 
-        <UpdateSection title="Drafts" rows={grouped.drafts} onEdit={startEdit} onDelete={async (id) => {
-          await deleteAdminPlatformUpdateDraft(id)
-          await load()
-        }} />
-        <UpdateSection title="Scheduled" rows={grouped.scheduled} onEdit={startEdit} onCancel={async (id) => {
-          await patchAdminPlatformUpdate(id, { status: "cancelled" })
-          await load()
-        }} />
+        <UpcomingAlertsSection
+          rows={grouped.upcomingAlerts}
+          onEdit={startEdit}
+          onCancel={async (id) => {
+            await patchAdminPlatformUpdate(id, { status: "cancelled" })
+            await load()
+          }}
+        />
+        <UpdateSection
+          title="Drafts"
+          rows={grouped.drafts}
+          onEdit={startEdit}
+          onDelete={async (id) => {
+            await deleteAdminPlatformUpdateDraft(id)
+            await load()
+          }}
+        />
         <UpdateSection title="Published" rows={grouped.published} published />
       </div>
     </div>
+  )
+}
+
+function previewBody(text: string, max = 140) {
+  const t = text.replace(/\s+/g, " ").trim()
+  if (!t) return "—"
+  return t.length > max ? `${t.slice(0, max)}…` : t
+}
+
+function UpcomingAlertsSection({
+  rows,
+  onEdit,
+  onCancel,
+}: {
+  rows: AdminPlatformUpdate[]
+  onEdit: (row: AdminPlatformUpdate) => void
+  onCancel: (id: string) => Promise<void>
+}) {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold text-blue-200">Upcoming Alerts</h2>
+      {rows.length === 0 ? (
+        <p className="text-sm text-gray-500">No upcoming alerts</p>
+      ) : (
+        <ul className="space-y-2">
+          {rows.map((row) => (
+            <li
+              key={row.id}
+              className="rounded-lg border border-amber-500/20 bg-black/20 px-3 py-2.5 text-sm"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="font-semibold text-white">{row.title}</p>
+                  <p className="line-clamp-2 text-xs text-gray-400">
+                    {previewBody(row.body)}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {PLATFORM_UPDATE_CATEGORY_LABELS[row.category]}
+                    {row.publishAt && (
+                      <>
+                        {" · "}
+                        <span className="text-amber-200/90">
+                          {new Date(row.publishAt).toLocaleString(undefined, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Opens to {PLATFORM_UPDATE_DESTINATION_LABELS[row.destination]}
+                    {" · "}
+                    Push {row.sendPush ? "ON" : "OFF"}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    className="rounded bg-white/10 px-2 py-1 text-xs"
+                    onClick={() => onEdit(row)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded bg-amber-500/20 px-2 py-1 text-xs text-amber-100"
+                    onClick={() => void onCancel(row.id)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 
@@ -384,17 +511,12 @@ function UpdateSection({
                   {PLATFORM_UPDATE_DESTINATION_LABELS[row.destination]}
                   {row.sendPush ? " · push" : ""}
                 </p>
-                {row.publishAt && row.status === "scheduled" && (
-                  <p className="text-xs text-amber-200">
-                    Scheduled {new Date(row.publishAt).toLocaleString()}
-                  </p>
-                )}
                 {row.publishedAt && (
                   <p className="text-xs text-gray-500">
                     Published {new Date(row.publishedAt).toLocaleString()}
                   </p>
                 )}
-                {row.broadcast && (
+                {published && row.broadcast && (
                   <p className="mt-1 text-xs text-gray-400">
                     Broadcast: {row.broadcast.status} · attempted{" "}
                     {row.broadcast.attemptedCount} · success{" "}
