@@ -201,6 +201,7 @@ private struct SubscriptionComplianceStubStoreKit: StoreKitSubscriptionServicing
     func restorePurchases() async throws -> Bool { false }
     func syncVerifiedTransactionsToServer() async throws {}
     func startTransactionListenerIfNeeded() async {}
+    func presentOfferCodeRedemption() async throws {}
 }
 
 private struct SubscriptionComplianceStubSession: SessionProviding {

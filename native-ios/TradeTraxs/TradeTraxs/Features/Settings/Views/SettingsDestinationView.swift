@@ -151,6 +151,8 @@ struct SettingsDestinationView: View {
                     navigationCoordinator: navigationCoordinator,
                     currentUserProfile: currentUserProfile
                 )
+            case .whatsNew:
+                PlatformWhatsNewView(data: data)
             case .about:
                 SettingsAboutView()
             case .legalTerms, .legalPrivacy, .legalCommunityGuidelines, .legalRefund:

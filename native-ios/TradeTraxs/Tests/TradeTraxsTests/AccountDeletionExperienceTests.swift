@@ -15,28 +15,71 @@ final class AccountDeletionExperienceTests: XCTestCase {
         XCTAssertTrue(viewModel.deleteAccountExplainerMessage.contains("This cannot be undone."))
     }
 
-    func testDeleteAccountExplainerIncludesAppleSubscriptionNotice() async {
-        var status = SettingsFixtures.billingStatus()
-        status.entitlementSource = .apple
+    func testAppleSubscriberShowsDedicatedDeletionWarning() async {
+        let context = await makeContext(billing: appleBillingStatus())
+        let viewModel = context.viewModel
+        await viewModel.refresh()
+        viewModel.requestDeleteAccount()
+        XCTAssertTrue(viewModel.showsAppleSubscriptionDeletionWarning)
+        XCTAssertFalse(viewModel.showsDeleteAccountExplainer)
+        XCTAssertTrue(viewModel.appleSubscriptionDeletionWarningMessage.contains("does not cancel your Apple subscription"))
+    }
+
+    func testManualTraxProUsesStandardDeleteConfirmation() async {
+        var status = freeBillingStatus()
+        status.serverTraxProActive = true
+        status.entitlementSource = .manual
         status.plan = .pro
         status.lifecycle = .active
-        status.isProEntitled = true
         let context = await makeContext(billing: status)
         let viewModel = context.viewModel
         await viewModel.refresh()
-        let message = viewModel.deleteAccountExplainerMessage
-        XCTAssertTrue(message.contains("Apple App Store"))
-        XCTAssertTrue(message.contains("does not cancel your Apple subscription"))
+        viewModel.requestDeleteAccount()
+        XCTAssertFalse(viewModel.shouldShowAppleSubscriptionDeletionWarning)
+        XCTAssertTrue(viewModel.showsDeleteAccountExplainer)
+        XCTAssertFalse(viewModel.deleteAccountExplainerMessage.localizedCaseInsensitiveContains("apple subscription"))
     }
 
-    func testDeleteAccountExplainerIncludesSubscriptionNoticeWhenProActive() async {
-        let context = await makeContext(billing: SettingsFixtures.billingStatus())
+    func testFreeUserUsesStandardDeleteConfirmation() async {
+        let context = await makeContext(billing: freeBillingStatus())
+        let viewModel = context.viewModel
+        await viewModel.refresh()
+        viewModel.requestDeleteAccount()
+        XCTAssertFalse(viewModel.shouldShowAppleSubscriptionDeletionWarning)
+        XCTAssertTrue(viewModel.showsDeleteAccountExplainer)
+    }
+
+    func testStripeSubscriberKeepsStripeNoticeInExplainer() async {
+        var status = SettingsFixtures.billingStatus()
+        status.entitlementSource = .stripe
+        status.serverTraxProActive = true
+        let context = await makeContext(billing: status)
         let viewModel = context.viewModel
         await viewModel.refresh()
         let message = viewModel.deleteAccountExplainerMessage
         XCTAssertTrue(message.contains("TraxPro trial"))
         XCTAssertTrue(message.localizedCaseInsensitiveContains("stripe"))
-        XCTAssertTrue(message.localizedCaseInsensitiveContains("apple app store"))
+        XCTAssertFalse(message.contains("does not cancel your Apple subscription"))
+    }
+
+    func testAppleSubscriberCanProceedToFinalDeletionConfirmation() async {
+        let context = await makeContext(billing: appleBillingStatus())
+        let viewModel = context.viewModel
+        await viewModel.refresh()
+        viewModel.requestDeleteAccount()
+        viewModel.proceedFromAppleSubscriptionDeletionWarning()
+        XCTAssertFalse(viewModel.showsAppleSubscriptionDeletionWarning)
+        XCTAssertTrue(viewModel.showsDeleteAccountConfirmation)
+    }
+
+    func testCancelDeleteAccountFlowClearsAppleWarning() async {
+        let context = await makeContext(billing: appleBillingStatus())
+        let viewModel = context.viewModel
+        await viewModel.refresh()
+        viewModel.requestDeleteAccount()
+        viewModel.cancelDeleteAccountFlow()
+        XCTAssertFalse(viewModel.showsAppleSubscriptionDeletionWarning)
+        XCTAssertFalse(viewModel.showsDeleteAccountConfirmation)
     }
 
     func testDeleteAccountExplainerIncludesAppleNoticeWhenSignedInWithApple() async throws {
@@ -163,6 +206,18 @@ final class AccountDeletionExperienceTests: XCTestCase {
             dailyMessageLimit: 50,
             maxTradeEntryAccounts: 3
         )
+    }
+
+    private func appleBillingStatus() -> BillingStatus {
+        var status = freeBillingStatus()
+        status.serverTraxProActive = true
+        status.entitlementSource = .apple
+        status.plan = .pro
+        status.lifecycle = .active
+        status.billingInterval = .monthly
+        status.appleSubscriptionStatus = "active"
+        status.appleProductID = "com.tradetraxs.traxspro.monthly"
+        return status
     }
 
     private func waitFor(

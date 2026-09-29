@@ -1,6 +1,7 @@
 import Foundation
 import OSLog
 import StoreKit
+import UIKit
 
 /// StoreKit 2 TraxPro subscription foundation — purchase, restore, and server sync.
 protocol StoreKitEntitlementSyncing: Sendable {
@@ -12,6 +13,8 @@ protocol StoreKitSubscriptionServicing: StoreKitEntitlementSyncing, Sendable {
     func loadProducts() async throws -> [StoreKitTraxProProduct]
     func purchase(productID: String, appAccountToken: UUID?) async -> StoreKitPurchaseOutcome
     func restorePurchases() async throws -> Bool
+    /// Presents Apple's native offer-code redemption sheet (`AppStore.presentOfferCodeRedeemSheet`).
+    func presentOfferCodeRedemption() async throws
 }
 
 struct StoreKitTraxProProduct: Sendable, Identifiable, Hashable {
@@ -141,6 +144,14 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         return syncedAny
     }
 
+    func presentOfferCodeRedemption() async throws {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return }
+        guard let scene = Self.foregroundWindowScene() else {
+            throw AppError.unknown(message: "Offer code redemption is unavailable right now.")
+        }
+        try await AppStore.presentOfferCodeRedeemSheet(in: scene)
+    }
+
     func syncVerifiedTransactionsToServer() async throws {
         guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return }
         var syncedAny = false
@@ -162,6 +173,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         _ = try await syncClient.sync(transactionID: transactionID)
     }
 
+    /// Offer-code redemptions and purchases both arrive on ``Transaction.updates``; sync then finish only after server verification.
     private func handle(
         _ update: VerificationResult<Transaction>,
         syncClient: any AppleSubscriptionSyncClienting
@@ -175,6 +187,13 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
                 "StoreKit transaction update failed: \(error.localizedDescription, privacy: .public)"
             )
         }
+    }
+
+    nonisolated private static func foregroundWindowScene() -> UIWindowScene? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive })
+            ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
     }
 
     nonisolated private static func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {

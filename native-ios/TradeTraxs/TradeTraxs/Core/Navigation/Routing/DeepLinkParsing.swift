@@ -132,6 +132,8 @@ struct DeepLinkParser: DeepLinkParsing {
             return .profile(.affiliate)
         case "settings":
             return parseSettings(Array(parts.dropFirst()))
+        case "whats-new", "whats_new":
+            return .settingsStack([.home, .whatsNew])
         case "app", "input-trade", "input":
             return .compose(.trade)
         case "import":
@@ -146,6 +148,8 @@ struct DeepLinkParser: DeepLinkParsing {
         switch second {
         case "trades":
             return .home(.trades)
+        case "psychology", "psychology-analytics", "analytics":
+            return .home(.psychologyAnalytics)
         default:
             return .tab(.home)
         }

@@ -1510,6 +1510,21 @@ export default function SettingsPage() {
 
                 <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
+                    Product
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-400">
+                    Release notes and announcements
+                  </p>
+                  <a
+                    href="/whats-new"
+                    className="mt-4 inline-block text-sm font-medium text-emerald-300 underline hover:text-emerald-200"
+                  >
+                    What&apos;s New →
+                  </a>
+                </section>
+
+                <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
                     Legal
                   </h3>
                   <p className="mt-1 text-sm text-gray-400">

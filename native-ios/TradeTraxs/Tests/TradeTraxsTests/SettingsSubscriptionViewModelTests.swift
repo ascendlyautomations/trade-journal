@@ -117,15 +117,111 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         status.entitlementSource = .apple
         status.appleSubscriptionStatus = "active"
         status.appleExpiresAt = Date().addingTimeInterval(86_400 * 30)
+        status.appleProductID = "com.tradetraxs.traxspro.monthly"
+        status.billingInterval = .monthly
         let viewModel = makeViewModel(
             billing: StubBilling(status: status),
-            storeKit: StubStoreKit()
+            storeKit: StubStoreKit(products: [sampleProduct()])
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.status != nil }
+        await waitFor { viewModel.activePlanStoreKitPrice != nil }
+
+        XCTAssertTrue(viewModel.showsManageSubscription)
+        XCTAssertFalse(viewModel.showsApplePurchaseSection)
+        XCTAssertEqual(viewModel.activePlanStoreKitPrice, "$23.99")
+        XCTAssertEqual(viewModel.activePlanBillingIntervalLabel, "Monthly")
+        XCTAssertTrue(viewModel.renewalDetail?.hasPrefix("Renews") == true)
+    }
+
+    func testAppleProCancelAtPeriodEndUsesExpiresCopy() {
+        var status = SettingsFixtures.billingStatus()
+        status.entitlementSource = .apple
+        status.appleExpiresAt = Date().addingTimeInterval(86_400 * 30)
+        status.cancelAtPeriodEnd = true
+        let detail = SubscriptionPresentationPolicy.renewalDetail(for: status)
+        XCTAssertEqual(detail?.hasPrefix("Expires"), true)
+    }
+
+    func testAppleProLoadsStoreKitProductsWhenEntitled() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
+        var status = SettingsFixtures.billingStatus()
+        status.entitlementSource = .apple
+        status.appleProductID = "com.tradetraxs.traxspro.monthly"
+        let storeKit = StubStoreKit(products: [sampleProduct()])
+        let viewModel = makeViewModel(billing: StubBilling(status: status), storeKit: storeKit)
+        viewModel.loadIfNeeded()
+        await waitFor { if case .loaded = viewModel.productsState { return true }; return false }
+        XCTAssertTrue(viewModel.shouldLoadStoreKitProductsForDisplay)
+    }
+
+    func testRedeemOfferCodeInvokesStoreKitRedemptionPath() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
+        let metrics = StoreKitStubMetrics()
+        let viewModel = makeViewModel(
+            billing: StubBilling(status: freeStatus()),
+            storeKit: StubStoreKit(metrics: metrics)
         )
         viewModel.loadIfNeeded()
         await waitFor { viewModel.status != nil }
 
-        XCTAssertTrue(viewModel.showsManageSubscription)
-        XCTAssertFalse(viewModel.showsApplePurchaseSection)
+        await viewModel.redeemOfferCode()
+
+        XCTAssertTrue(metrics.offerCodeRedemptionPresented)
+        XCTAssertTrue(metrics.listenerStarted)
+        XCTAssertGreaterThanOrEqual(metrics.syncVerifiedCalls, 1)
+    }
+
+    func testRedeemOfferCodeDismissWithoutEntitlementDoesNotGrantPro() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
+        let viewModel = makeViewModel(
+            billing: StubBilling(status: freeStatus()),
+            storeKit: StubStoreKit(metrics: StoreKitStubMetrics())
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.status != nil }
+
+        await viewModel.redeemOfferCode()
+
+        XCTAssertFalse(viewModel.showsProMembership)
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertNil(viewModel.actionMessage)
+    }
+
+    func testRedeemOfferCodeSyncsEntitlementsAfterRedemptionSheet() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
+        let billing = MutableBillingRepository(initial: freeStatus())
+        let metrics = StoreKitStubMetrics()
+        let viewModel = makeViewModel(
+            billing: billing,
+            storeKit: StubStoreKit(metrics: metrics)
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.status != nil }
+        billing.nextStatus = proBilling(source: .apple)
+
+        await viewModel.redeemOfferCode()
+
+        XCTAssertTrue(metrics.offerCodeRedemptionPresented)
+        XCTAssertGreaterThanOrEqual(metrics.syncVerifiedCalls, 1)
+        XCTAssertGreaterThanOrEqual(billing.refreshCount, 1)
+        XCTAssertTrue(viewModel.showsProMembership)
+    }
+
+    func testRedeemOfferCodeServerSyncFailureDoesNotGrantPro() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
+        let metrics = StoreKitStubMetrics()
+        metrics.syncVerifiedShouldFail = true
+        let viewModel = makeViewModel(
+            billing: StubBilling(status: freeStatus()),
+            storeKit: StubStoreKit(metrics: metrics)
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.status != nil }
+
+        await viewModel.redeemOfferCode()
+
+        XCTAssertFalse(viewModel.showsProMembership)
     }
 
     func testGrantedProShowsActiveWithoutPurchaseCTA() async {
@@ -320,11 +416,20 @@ final class PurchaseCapture: @unchecked Sendable {
     var appAccountToken: UUID?
 }
 
+final class StoreKitStubMetrics: @unchecked Sendable {
+    var offerCodeRedemptionPresented = false
+    var syncVerifiedCalls = 0
+    var listenerStarted = false
+    var syncVerifiedShouldFail = false
+}
+
 private struct StubStoreKit: StoreKitSubscriptionServicing {
     var products: [StoreKitTraxProProduct] = []
     var purchaseOutcome: StoreKitPurchaseOutcome = .success
     var restoreFindsEntitlement = false
     var capture: PurchaseCapture? = nil
+    var metrics: StoreKitStubMetrics? = nil
+    var offerCodeRedemptionError: Error? = nil
 
     func loadProducts() async throws -> [StoreKitTraxProProduct] { products }
     func purchase(productID: String, appAccountToken: UUID?) async -> StoreKitPurchaseOutcome {
@@ -332,6 +437,19 @@ private struct StubStoreKit: StoreKitSubscriptionServicing {
         return purchaseOutcome
     }
     func restorePurchases() async throws -> Bool { restoreFindsEntitlement }
-    func syncVerifiedTransactionsToServer() async throws {}
-    func startTransactionListenerIfNeeded() async {}
+    func syncVerifiedTransactionsToServer() async throws {
+        metrics?.syncVerifiedCalls += 1
+        if metrics?.syncVerifiedShouldFail == true {
+            throw AppError.unknown(message: "sync failed")
+        }
+    }
+    func startTransactionListenerIfNeeded() async {
+        metrics?.listenerStarted = true
+    }
+    func presentOfferCodeRedemption() async throws {
+        metrics?.offerCodeRedemptionPresented = true
+        if let offerCodeRedemptionError {
+            throw offerCodeRedemptionError
+        }
+    }
 }

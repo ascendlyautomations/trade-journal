@@ -130,6 +130,29 @@ struct SettingsAccountView: View {
             Button("Log Out", role: .destructive) { viewModel.logout() }
             Button("Cancel", role: .cancel) {}
         }
+        .sheet(isPresented: Binding(
+            get: { viewModel.showsAppleSubscriptionDeletionWarning },
+            set: { isPresented in
+                if !isPresented, !viewModel.showsDeleteAccountConfirmation {
+                    viewModel.cancelDeleteAccountFlow()
+                }
+            }
+        )) {
+            AppleSubscriptionDeletionWarningSheet(
+                message: viewModel.appleSubscriptionDeletionWarningMessage,
+                onManageSubscription: {
+                    Task { await viewModel.manageAppleSubscription() }
+                },
+                onContinueDeleting: {
+                    viewModel.proceedFromAppleSubscriptionDeletionWarning()
+                },
+                onCancel: {
+                    viewModel.cancelDeleteAccountFlow()
+                }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
         .confirmationDialog(
             "Delete your account?",
             isPresented: Binding(
@@ -181,6 +204,68 @@ struct SettingsAccountView: View {
             }
         }
         .accessibilityIdentifier("settings.account")
+    }
+}
+
+private struct AppleSubscriptionDeletionWarningSheet: View {
+    let message: String
+    let onManageSubscription: () -> Void
+    let onContinueDeleting: () -> Void
+    let onCancel: () -> Void
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.title3)
+                            .foregroundStyle(colors.warning)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                            Text("Apple Subscription")
+                                .experienceStyle(.headline, color: colors.primaryText)
+                            Text(message)
+                                .experienceStyle(.footnote, color: colors.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.vertical, ExperienceSpacing.xxs)
+                }
+
+                Section {
+                    Button(action: onManageSubscription) {
+                        SettingsPrimaryActionLabel(
+                            title: "Manage Subscription",
+                            systemImage: "arrow.up.right.square"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.account.deleteApple.manageSubscription")
+
+                    Button(action: onContinueDeleting) {
+                        Text("Continue Deleting Account")
+                            .experienceStyle(.body, color: colors.loss)
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, ExperienceSpacing.xxs)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.account.deleteApple.continue")
+                }
+
+                Section {
+                    Button("Cancel", role: .cancel, action: onCancel)
+                        .accessibilityIdentifier("settings.account.deleteApple.cancel")
+                }
+            }
+            .experienceInsetGroupedListStyle(pageBackground: true)
+            .experienceNavigationTitle("Delete Account")
+        }
+        .accessibilityIdentifier("settings.account.deleteApple.warning")
     }
 }
 

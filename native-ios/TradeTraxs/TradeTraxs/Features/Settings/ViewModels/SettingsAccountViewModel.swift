@@ -1,5 +1,7 @@
 import Foundation
 import Observation
+import StoreKit
+import UIKit
 
 @Observable
 @MainActor
@@ -23,6 +25,7 @@ final class SettingsAccountViewModel {
     private(set) var passwordResetMessage: String?
     var confirmsLogout = false
     var showsDeleteAccountExplainer = false
+    var showsAppleSubscriptionDeletionWarning = false
     var showsDeleteAccountConfirmation = false
     var showsDeleteAccountSuccess = false
     init(
@@ -64,6 +67,25 @@ final class SettingsAccountViewModel {
 
     var deleteAccountConfirmationMessage: String {
         "This permanently deletes your TradeTraxs account and associated data. This action cannot be undone."
+    }
+
+    var appleSubscriptionDeletionWarningMessage: String {
+        """
+        Deleting your TradeTraxs account does not cancel your Apple subscription. Apple manages billing separately, and you may continue to be charged unless you cancel in your Apple ID Subscriptions.
+        """
+    }
+
+    /// Apple App Store subscription that may continue billing after account deletion.
+    var shouldShowAppleSubscriptionDeletionWarning: Bool {
+        guard let billingStatus else { return false }
+        guard billingStatus.entitlementSource == .apple else { return false }
+        if billingStatus.hasTraxProAccess {
+            return true
+        }
+        guard let appleStatus = billingStatus.appleSubscriptionStatus?.lowercased() else {
+            return false
+        }
+        return ["active", "grace_period", "billing_retry"].contains(appleStatus)
     }
 
     func loadIfNeeded() {
@@ -146,7 +168,11 @@ final class SettingsAccountViewModel {
 
     func requestDeleteAccount() {
         deleteErrorMessage = nil
-        showsDeleteAccountExplainer = true
+        if shouldShowAppleSubscriptionDeletionWarning {
+            showsAppleSubscriptionDeletionWarning = true
+        } else {
+            showsDeleteAccountExplainer = true
+        }
 #if DEBUG
         AccountDeletionDebugLog.confirmationPresented()
 #endif
@@ -155,13 +181,37 @@ final class SettingsAccountViewModel {
     func proceedToDeleteConfirmation() {
         showsDeleteAccountConfirmation = true
         showsDeleteAccountExplainer = false
+        showsAppleSubscriptionDeletionWarning = false
+    }
+
+    func proceedFromAppleSubscriptionDeletionWarning() {
+        showsDeleteAccountConfirmation = true
+        showsAppleSubscriptionDeletionWarning = false
     }
 
     func cancelDeleteAccountFlow() {
         showsDeleteAccountExplainer = false
+        showsAppleSubscriptionDeletionWarning = false
         showsDeleteAccountConfirmation = false
         showsDeleteAccountSuccess = false
         clearDeleteError()
+    }
+
+    func manageAppleSubscription() async {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive })
+            ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first
+        else {
+            deleteErrorMessage = "Subscription management is unavailable right now."
+            return
+        }
+
+        do {
+            try await AppStore.showManageSubscriptions(in: scene)
+        } catch {
+            deleteErrorMessage = "Couldn't open subscription management."
+        }
     }
 
     func clearDeleteError() {
@@ -231,17 +281,7 @@ final class SettingsAccountViewModel {
     private var subscriptionNoticeForDeletion: String? {
         guard let billingStatus else { return nil }
         guard billingStatus.hasTraxProAccess else { return nil }
-
-        if billingStatus.entitlementSource == .apple {
-            let manageInApp = IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled
-                ? ", or use Manage Subscription in TradeTraxs Settings"
-                : ""
-            return """
-            You have an active TraxPro subscription through the Apple App Store. Deleting your TradeTraxs account \
-            removes your profile and data here, but does not cancel your Apple subscription. Manage or cancel it in \
-            Settings → Apple ID → Subscriptions\(manageInApp).
-            """
-        }
+        guard billingStatus.entitlementSource == .stripe else { return nil }
 
         switch billingStatus.lifecycle {
         case .active, .trialing, .pastDue:

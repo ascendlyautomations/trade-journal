@@ -214,6 +214,12 @@ export default function AdminPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <AdminModuleCard
+              href="/admin/updates"
+              title="Updates"
+              description="What's New entries and optional broadcast push to all iOS users."
+              variant="emerald"
+            />
+            <AdminModuleCard
               href="/admin/analytics"
               title="Analytics"
               description="Users, activity, content volume, and daily trend charts."

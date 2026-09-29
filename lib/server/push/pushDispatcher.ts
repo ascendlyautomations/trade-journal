@@ -126,7 +126,7 @@ async function loadSenderProfile(senderId: string | null | undefined): Promise<{
   }
 }
 
-async function removeInvalidToken(
+export async function removeInvalidDevicePushToken(
   tokenId: string,
   deviceToken: string,
   reason: string
@@ -410,7 +410,7 @@ export async function dispatchPushNotification(
         }
         if (!result.ok && result.invalidToken) {
           console.info("[push] Removing stale APNs token:", result.reason)
-          await removeInvalidToken(tokenId, deviceToken, result.reason)
+          await removeInvalidDevicePushToken(tokenId, deviceToken, result.reason)
         } else if (!result.ok && result.reason !== "apns_not_configured") {
           console.error("[push] APNs send failed", {
             status: result.status,

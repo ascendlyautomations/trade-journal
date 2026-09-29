@@ -54,7 +54,13 @@ nonisolated enum SubscriptionPresentationPolicy {
         switch status.entitlementSource {
         case .apple:
             if let expires = status.appleExpiresAt {
-                return expires > now ? "Renews \(Self.format(date: expires))" : "Expired \(Self.format(date: expires))"
+                if expires <= now {
+                    return "Expired \(Self.format(date: expires))"
+                }
+                if status.cancelAtPeriodEnd {
+                    return "Expires \(Self.format(date: expires))"
+                }
+                return "Renews \(Self.format(date: expires))"
             }
             return nil
         case .stripe:
@@ -87,6 +93,24 @@ nonisolated enum SubscriptionPresentationPolicy {
     static func showsAppleManageSubscription(for status: BillingStatus?) -> Bool {
         guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return false }
         return status?.entitlementSource == .apple && status?.hasTraxProAccess == true
+    }
+
+    /// Billing interval label for the current plan card (product ID / server interval — not price).
+    static func planBillingIntervalLabel(for status: BillingStatus) -> String? {
+        if let interval = status.billingInterval {
+            return billingIntervalDisplay(interval)
+        }
+        if status.entitlementSource == .apple,
+           let productID = status.appleProductID,
+           let interval = TraxProProductConfiguration.billingInterval(for: productID)
+        {
+            return billingIntervalDisplay(interval)
+        }
+        return nil
+    }
+
+    static func billingIntervalDisplay(_ interval: BillingInterval) -> String {
+        interval.displayLabel
     }
 
     static func autoRenewDisclosure(selectedProduct: StoreKitTraxProProduct?) -> String {

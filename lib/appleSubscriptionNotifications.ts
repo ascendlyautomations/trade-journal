@@ -121,9 +121,9 @@ export async function processAppleSubscriptionNotification(params: {
     signedDateMs,
   })
 
-  if (idempotency.duplicate) {
-    return { ok: true, duplicate: true }
-  }
+  // Apple retries the same notificationUUID after transient 500s. Dedupe logging only —
+  // subscription apply remains idempotent via shouldApplyAppleSubscriptionUpdate.
+  const isDuplicateDelivery = idempotency.duplicate
 
   if (notificationType === NotificationTypeV2.TEST) {
     return {
@@ -223,9 +223,21 @@ export async function processAppleSubscriptionNotification(params: {
     return { ok: false, status: 500, reason: applied.reason }
   }
 
+  console.info(
+    "[apple/subscription/notifications] processed type=%s subtype=%s env=%s productId=%s originalTransactionId=%s applied=%s skipped=%s duplicateDelivery=%s",
+    notificationType,
+    subtype ?? "—",
+    dataEnvironment,
+    transaction.productId,
+    transaction.originalTransactionId,
+    !applied.skipped,
+    applied.skipped,
+    isDuplicateDelivery
+  )
+
   return {
     ok: true,
-    duplicate: false,
+    duplicate: isDuplicateDelivery,
     applied: !applied.skipped,
     originalTransactionId: transaction.originalTransactionId,
   }

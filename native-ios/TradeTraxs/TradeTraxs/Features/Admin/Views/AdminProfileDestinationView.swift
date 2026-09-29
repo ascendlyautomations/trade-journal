@@ -77,6 +77,8 @@ enum AdminProfileDestinationView {
                 snapshot: snapshot,
                 navigationCoordinator: navigationCoordinator
             )
+        case .updates:
+            AdminPlatformUpdatesView(data: data)
         }
     }
 }

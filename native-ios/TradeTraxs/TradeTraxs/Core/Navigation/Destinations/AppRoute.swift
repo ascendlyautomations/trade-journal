@@ -151,6 +151,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case supportFeedback = "support-feedback"
     case supportBugReport = "support-bug-report"
     case admin
+    case whatsNew = "whats-new"
     case about
     case legalTerms = "legal-terms"
     case legalPrivacy = "legal-privacy"
@@ -187,6 +188,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .supportFeedback: return "Product Feedback"
         case .supportBugReport: return "Report a Bug"
         case .admin: return ""
+        case .whatsNew: return "What's New"
         case .about: return "About TradeTraxs"
         case .legalTerms: return "Terms & Conditions"
         case .legalPrivacy: return "Privacy Policy"

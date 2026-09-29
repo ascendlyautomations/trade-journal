@@ -19,6 +19,7 @@ enum AdminRoute: Hashable, Codable {
     case bugReportDetail(AdminBugReportSnapshot)
     case productFeedback
     case productFeedbackDetail(AdminProductFeedbackSnapshot)
+    case updates
 }
 
 extension View {

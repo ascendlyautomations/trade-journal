@@ -1444,6 +1444,98 @@ export type Database = {
           },
         ]
       }
+      platform_update_broadcasts: {
+        Row: {
+          attempted_count: number
+          completed_at: string | null
+          created_at: string
+          cursor_token_id: string | null
+          failed_count: number
+          id: string
+          started_at: string | null
+          status: string
+          success_count: number
+          update_id: string
+        }
+        Insert: {
+          attempted_count?: number
+          completed_at?: string | null
+          created_at?: string
+          cursor_token_id?: string | null
+          failed_count?: number
+          id?: string
+          started_at?: string | null
+          status?: string
+          success_count?: number
+          update_id: string
+        }
+        Update: {
+          attempted_count?: number
+          completed_at?: string | null
+          created_at?: string
+          cursor_token_id?: string | null
+          failed_count?: number
+          id?: string
+          started_at?: string | null
+          status?: string
+          success_count?: number
+          update_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_update_broadcasts_update_id_fkey"
+            columns: ["update_id"]
+            isOneToOne: true
+            referencedRelation: "platform_updates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_updates: {
+        Row: {
+          body: string
+          category: string
+          created_at: string
+          created_by: string | null
+          destination: string
+          id: string
+          publish_at: string | null
+          published_at: string | null
+          send_push: boolean
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          category: string
+          created_at?: string
+          created_by?: string | null
+          destination: string
+          id?: string
+          publish_at?: string | null
+          published_at?: string | null
+          send_push?: boolean
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          destination?: string
+          id?: string
+          publish_at?: string | null
+          published_at?: string | null
+          send_push?: boolean
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       direct_messages: {
         Row: {
           content: string | null

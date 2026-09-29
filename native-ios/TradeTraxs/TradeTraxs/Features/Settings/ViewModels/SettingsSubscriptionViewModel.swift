@@ -80,6 +80,10 @@ final class SettingsSubscriptionViewModel {
         return showsFreePlanDetails || status?.entitlementSource == .apple
     }
 
+    var showsRedeemOfferCode: Bool {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled
+    }
+
     var showsManageSubscription: Bool {
         SubscriptionPresentationPolicy.showsAppleManageSubscription(for: status)
     }
@@ -99,6 +103,41 @@ final class SettingsSubscriptionViewModel {
     var renewalDetail: String? {
         guard let status else { return nil }
         return SubscriptionPresentationPolicy.renewalDetail(for: status)
+    }
+
+    /// Load StoreKit catalog to resolve ``displayPrice`` for an active App Store subscription.
+    var shouldLoadStoreKitProductsForDisplay: Bool {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return false }
+        if showsFreePlanDetails { return true }
+        return showsActiveAppleBillingDetails
+    }
+
+    var showsActiveAppleBillingDetails: Bool {
+        status?.entitlementSource == .apple && status?.hasTraxProAccess == true
+    }
+
+    var activeEntitledStoreProduct: StoreKitTraxProProduct? {
+        guard let productID = status?.appleProductID,
+              case .loaded(let products) = productsState
+        else { return nil }
+        return products.first { $0.id == productID }
+    }
+
+    var activePlanStoreKitPrice: String? {
+        activeEntitledStoreProduct?.displayPrice
+    }
+
+    var activePlanBillingIntervalLabel: String? {
+        guard let status else { return nil }
+        if let product = activeEntitledStoreProduct {
+            let interval = product.billingInterval
+                ?? status.billingInterval
+                ?? status.appleProductID.flatMap(TraxProProductConfiguration.billingInterval(for:))
+            if let interval {
+                return SubscriptionPresentationPolicy.billingIntervalDisplay(interval)
+            }
+        }
+        return SubscriptionPresentationPolicy.planBillingIntervalLabel(for: status)
     }
 
     var selectedProduct: StoreKitTraxProProduct? {
@@ -229,6 +268,35 @@ final class SettingsSubscriptionViewModel {
         actionState = .idle
     }
 
+    func redeemOfferCode() async {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return }
+        guard actionState == .idle else { return }
+        errorMessage = nil
+        actionMessage = nil
+
+        await storeKit.startTransactionListenerIfNeeded()
+
+        do {
+            try await storeKit.presentOfferCodeRedemption()
+        } catch {
+            errorMessage = "Couldn't open offer code redemption."
+            return
+        }
+
+        let hadProBefore = status?.hasTraxProAccess == true
+        actionState = .synchronizing
+        if !hadProBefore {
+            actionMessage = "Confirming your TraxPro access…"
+        }
+        await reconcileEntitlements()
+        if status?.hasTraxProAccess == true, !hadProBefore {
+            actionMessage = "TraxPro is now active on your account."
+        } else if !hadProBefore {
+            actionMessage = nil
+        }
+        actionState = .idle
+    }
+
     func manageSubscription() async {
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
@@ -269,9 +337,7 @@ final class SettingsSubscriptionViewModel {
 
         await reconcileEntitlements(profileID: ProfileID(userID.rawValue))
         logSubscriptionScreen()
-        let shouldLoadProducts = IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled
-            && reloadProducts
-            && showsFreePlanDetails
+        let shouldLoadProducts = reloadProducts && shouldLoadStoreKitProductsForDisplay
         logProductLoadStarted(shouldLoadProducts)
         if shouldLoadProducts {
             await loadProductsIfNeeded(force: false)

@@ -51,6 +51,7 @@ enum SettingsHomeModel {
                 items: [
                     SettingsHomeItem(route: .support, systemImage: "questionmark.circle"),
                     SettingsHomeItem(route: .productFeedback, systemImage: "text.bubble"),
+                    SettingsHomeItem(route: .whatsNew, systemImage: "sparkles"),
                     SettingsHomeItem(route: .about, systemImage: "info.circle"),
                 ]
             ),

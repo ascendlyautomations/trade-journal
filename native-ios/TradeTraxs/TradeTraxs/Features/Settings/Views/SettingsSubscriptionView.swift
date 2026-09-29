@@ -48,12 +48,9 @@ struct SettingsSubscriptionView: View {
 
             if viewModel.showsApplePurchaseSection {
                 productsSection
-                legalSection
             }
 
-            if viewModel.showsRestorePurchases {
-                restoreSection
-            }
+            subscriptionFooterSection
         }
         .listSectionSpacing(ExperienceSpacing.xxs)
         .environment(\.defaultMinListHeaderHeight, 0)
@@ -81,7 +78,7 @@ struct SettingsSubscriptionView: View {
 
     private var currentPlanSection: some View {
         Section {
-            HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+            HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                     Text(viewModel.planTitle)
                         .experienceStyle(.headline, color: colors.primaryText)
@@ -92,21 +89,14 @@ struct SettingsSubscriptionView: View {
                             Text("Updating plan…")
                                 .experienceStyle(.caption, color: colors.secondaryText)
                         }
+                    } else if let renewal = viewModel.renewalDetail, viewModel.showsProMembership {
+                        Text(renewal)
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer(minLength: ExperienceSpacing.sm)
-                if !currentPlanAmount.isEmpty {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(currentPlanAmount)
-                            .experienceStyle(.headline, color: colors.primaryText)
-                            .multilineTextAlignment(.trailing)
-                        if let detail = currentPlanDetail {
-                            Text(detail)
-                                .experienceStyle(.caption, color: colors.secondaryText)
-                                .multilineTextAlignment(.trailing)
-                        }
-                    }
-                }
+                currentPlanTrailingColumn
             }
             .padding(.vertical, ExperienceSpacing.xxs)
             .accessibilityElement(children: .combine)
@@ -115,36 +105,42 @@ struct SettingsSubscriptionView: View {
         }
     }
 
-    private var currentPlanAmount: String {
-        if viewModel.showsProMembership {
-            if let storePrice = currentStoreKitPrice {
-                return storePrice
-            }
-            if let billing = compactBillingStatus {
-                return billing
-            }
-            return "Active"
-        }
+    @ViewBuilder
+    private var currentPlanTrailingColumn: some View {
         if viewModel.planTitle == "Free" {
-            return "$0"
+            Text("$0")
+                .experienceStyle(.headline, color: colors.primaryText)
+        } else if viewModel.showsReleaseIncludedPlanDetails {
+            Text("Included")
+                .experienceStyle(.subheadline, color: colors.primaryText)
+                .fontWeight(.semibold)
+        } else if viewModel.showsActiveAppleBillingDetails {
+            VStack(alignment: .trailing, spacing: ExperienceSpacing.xxs) {
+                if let price = viewModel.activePlanStoreKitPrice {
+                    Text(price)
+                        .experienceStyle(.subheadline, color: colors.primaryText)
+                        .fontWeight(.semibold)
+                        .multilineTextAlignment(.trailing)
+                }
+                if let interval = viewModel.activePlanBillingIntervalLabel {
+                    Text(interval)
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+        } else if viewModel.showsProMembership {
+            Text(nonAppleProTrailingStatus)
+                .experienceStyle(.subheadline, color: colors.primaryText)
+                .fontWeight(.semibold)
+                .multilineTextAlignment(.trailing)
         }
-        if viewModel.showsReleaseIncludedPlanDetails {
-            return "Included"
-        }
-        return ""
     }
 
-    /// StoreKit `displayPrice` for the entitled product, only when that product is already loaded.
-    private var currentStoreKitPrice: String? {
-        guard let productID = viewModel.status?.appleProductID,
-              case .loaded(let products) = viewModel.productsState,
-              let product = products.first(where: { $0.id == productID }) else {
-            return nil
+    private var nonAppleProTrailingStatus: String {
+        if let billing = compactBillingStatus {
+            return billing
         }
-        if let suffix = pricePeriodSuffix(for: viewModel.status?.billingInterval) {
-            return "\(product.displayPrice)/\(suffix)"
-        }
-        return product.displayPrice
+        return "Active"
     }
 
     private var compactBillingStatus: String? {
@@ -154,24 +150,6 @@ struct SettingsSubscriptionView: View {
             return String(detail.dropFirst(prefix.count))
         }
         return detail
-    }
-
-    private var currentPlanDetail: String? {
-        guard viewModel.showsProMembership else { return nil }
-        return viewModel.renewalDetail
-    }
-
-    private func pricePeriodSuffix(for interval: BillingInterval?) -> String? {
-        switch interval {
-        case .monthly:
-            return "mo"
-        case .sixMonth:
-            return "6 mo"
-        case .yearly:
-            return "yr"
-        case nil:
-            return nil
-        }
     }
 
     private var includedDisclosureTitle: String {
@@ -381,27 +359,73 @@ struct SettingsSubscriptionView: View {
         }
     }
 
-    private var legalSection: some View {
+    private var subscriptionFooterSection: some View {
         Section {
-            legalLink(title: "Terms of Use", url: LegalDocuments.terms)
-            legalLink(title: "Privacy Policy", url: LegalDocuments.privacy)
+            if viewModel.showsRestorePurchases {
+                Button {
+                    Task { await viewModel.restorePurchases() }
+                } label: {
+                    SettingsPrimaryActionLabel(
+                        title: viewModel.actionState == .restoring ? "Restoring…" : "Restore Purchases",
+                        systemImage: "arrow.clockwise"
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(subscriptionFooterActionsDisabled)
+                .accessibilityIdentifier("settings.subscription.restore")
+            }
+
+            if viewModel.showsRedeemOfferCode {
+                Button {
+                    Task { await viewModel.redeemOfferCode() }
+                } label: {
+                    SettingsPrimaryActionLabel(
+                        title: "Redeem Offer Code",
+                        systemImage: "giftcard"
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(subscriptionFooterActionsDisabled)
+                .accessibilityIdentifier("settings.subscription.redeemOfferCode")
+            }
+
+            compactLegalLinksRow
         }
     }
 
-    private var restoreSection: some View {
-        Section {
+    private var subscriptionFooterActionsDisabled: Bool {
+        viewModel.actionState == .restoring
+            || viewModel.actionState == .purchasing
+            || viewModel.actionState == .synchronizing
+    }
+
+    private var compactLegalLinksRow: some View {
+        HStack(spacing: ExperienceSpacing.xs) {
+            Spacer(minLength: 0)
             Button {
-                Task { await viewModel.restorePurchases() }
+                openURL(LegalDocuments.privacy)
             } label: {
-                SettingsPrimaryActionLabel(
-                    title: viewModel.actionState == .restoring ? "Restoring…" : "Restore Purchases",
-                    systemImage: "arrow.clockwise"
-                )
+                Text("Privacy Policy")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
             }
             .buttonStyle(.plain)
-            .disabled(viewModel.actionState == .restoring || viewModel.actionState == .purchasing)
-            .accessibilityIdentifier("settings.subscription.restore")
+            .accessibilityIdentifier("settings.subscription.privacy")
+
+            Text("•")
+                .experienceStyle(.footnote, color: colors.tertiaryText)
+
+            Button {
+                openURL(LegalDocuments.terms)
+            } label: {
+                Text("Terms of Use")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.subscription.terms")
+
+            Spacer(minLength: 0)
         }
+        .padding(.vertical, ExperienceSpacing.xxs)
     }
 
     private func sectionHeading(_ title: String) -> some View {
@@ -439,15 +463,6 @@ struct SettingsSubscriptionView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-    }
-
-    private func legalLink(title: String, url: URL) -> some View {
-        Button {
-            openURL(url)
-        } label: {
-            SettingsNavigationRow(title: title, showsChevron: true)
-        }
-        .buttonStyle(.plain)
     }
 
     private func dailyTrades(_ status: BillingStatus) -> Int {
